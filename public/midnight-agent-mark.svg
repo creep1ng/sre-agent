@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">midnight.agent mark</title>
+  <rect width="128" height="128" rx="24" fill="#1E2749"/>
+  <circle cx="60" cy="60" r="34" fill="none" stroke="#E4D9FF" stroke-width="7"/>
+  <circle cx="77" cy="45" r="29" fill="#1E2749"/>
+  <circle cx="43" cy="76" r="5" fill="#E4D9FF"/>
+  <circle cx="58" cy="74" r="3" fill="#E4D9FF" opacity=".55"/>
+  <path d="M80 65h21" stroke="#E4D9FF" stroke-width="6" stroke-linecap="round"/>
+</svg>
