@@ -1,0 +1,229 @@
+/* Semantic and component tokens. Components should consume this layer only. */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ma-color-bg-canvas: var(--ma-color-ghost-white);
+  --ma-color-bg-subtle: var(--ma-color-indigo-50);
+  --ma-color-bg-surface: var(--ma-color-white);
+  --ma-color-bg-raised: var(--ma-color-white);
+  --ma-color-bg-inverse: var(--ma-color-space-indigo);
+  --ma-color-bg-overlay: rgb(17 22 44 / 68%);
+
+  --ma-color-text-primary: var(--ma-color-space-indigo);
+  --ma-color-text-secondary: var(--ma-color-slate-600);
+  --ma-color-text-tertiary: var(--ma-color-slate-550);
+  --ma-color-text-inverse: var(--ma-color-ghost-white);
+  --ma-color-text-link: var(--ma-color-twilight-indigo);
+  --ma-color-text-disabled: var(--ma-color-slate-400);
+
+  --ma-color-border-subtle: var(--ma-color-slate-200);
+  --ma-color-border-default: var(--ma-color-slate-300);
+  --ma-color-border-strong: var(--ma-color-slate-500);
+  --ma-color-border-brand: var(--ma-color-indigo-300);
+
+  --ma-color-interactive-primary: var(--ma-color-twilight-indigo);
+  --ma-color-interactive-primary-hover: var(--ma-color-space-indigo);
+  --ma-color-interactive-primary-text: var(--ma-color-ghost-white);
+  --ma-color-interactive-secondary: var(--ma-color-indigo-50);
+  --ma-color-interactive-secondary-hover: var(--ma-color-periwinkle);
+  --ma-color-interactive-secondary-text: var(--ma-color-space-indigo);
+  --ma-color-focus: #6655c7;
+
+  --ma-color-info-surface: var(--ma-color-blue-50);
+  --ma-color-info-border: var(--ma-color-blue-100);
+  --ma-color-info-strong: var(--ma-color-blue-700);
+  --ma-color-success-surface: var(--ma-color-green-50);
+  --ma-color-success-border: var(--ma-color-green-100);
+  --ma-color-success-strong: var(--ma-color-green-700);
+  --ma-color-warning-surface: var(--ma-color-amber-50);
+  --ma-color-warning-border: var(--ma-color-amber-100);
+  --ma-color-warning-strong: var(--ma-color-amber-700);
+  --ma-color-critical-surface: var(--ma-color-red-50);
+  --ma-color-critical-border: var(--ma-color-red-100);
+  --ma-color-critical-strong: var(--ma-color-red-700);
+
+  --ma-shadow-xs: 0 1px 2px rgb(30 39 73 / 8%);
+  --ma-shadow-sm: 0 2px 8px rgb(30 39 73 / 9%), 0 1px 2px rgb(30 39 73 / 7%);
+  --ma-shadow-md: 0 12px 30px rgb(30 39 73 / 12%), 0 3px 8px rgb(30 39 73 / 8%);
+  --ma-shadow-focus: 0 0 0 3px rgb(102 85 199 / 25%);
+
+  --ma-button-primary-bg: var(--ma-color-interactive-primary);
+  --ma-button-primary-bg-hover: var(--ma-color-interactive-primary-hover);
+  --ma-button-primary-text: var(--ma-color-interactive-primary-text);
+  --ma-button-secondary-bg: var(--ma-color-interactive-secondary);
+  --ma-button-secondary-bg-hover: var(--ma-color-interactive-secondary-hover);
+  --ma-button-secondary-text: var(--ma-color-interactive-secondary-text);
+  --ma-input-bg: var(--ma-color-bg-surface);
+  --ma-input-border: var(--ma-color-border-default);
+  --ma-panel-bg: var(--ma-color-bg-surface);
+  --ma-panel-border: var(--ma-color-border-subtle);
+  --ma-table-row-hover: var(--ma-color-indigo-50);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ma-color-bg-canvas: var(--ma-color-indigo-950);
+  --ma-color-bg-subtle: var(--ma-color-indigo-900);
+  --ma-color-bg-surface: #171d36;
+  --ma-color-bg-raised: var(--ma-color-space-indigo);
+  --ma-color-bg-inverse: var(--ma-color-ghost-white);
+  --ma-color-bg-overlay: rgb(4 6 14 / 78%);
+
+  --ma-color-text-primary: var(--ma-color-ghost-white);
+  --ma-color-text-secondary: var(--ma-color-slate-300);
+  --ma-color-text-tertiary: var(--ma-color-slate-400);
+  --ma-color-text-inverse: var(--ma-color-space-indigo);
+  --ma-color-text-link: var(--ma-color-indigo-200);
+  --ma-color-text-disabled: var(--ma-color-slate-500);
+
+  --ma-color-border-subtle: #2b3455;
+  --ma-color-border-default: #3b466a;
+  --ma-color-border-strong: #647092;
+  --ma-color-border-brand: var(--ma-color-indigo-400);
+
+  --ma-color-interactive-primary: var(--ma-color-periwinkle);
+  --ma-color-interactive-primary-hover: var(--ma-color-indigo-200);
+  --ma-color-interactive-primary-text: var(--ma-color-space-indigo);
+  --ma-color-interactive-secondary: #283354;
+  --ma-color-interactive-secondary-hover: #354268;
+  --ma-color-interactive-secondary-text: var(--ma-color-ghost-white);
+  --ma-color-focus: #b4a2f2;
+
+  --ma-color-info-surface: #122b46;
+  --ma-color-info-border: #23547f;
+  --ma-color-info-strong: #91c9ff;
+  --ma-color-success-surface: #102d25;
+  --ma-color-success-border: #236149;
+  --ma-color-success-strong: #88dcb9;
+  --ma-color-warning-surface: #32250f;
+  --ma-color-warning-border: #71511b;
+  --ma-color-warning-strong: #ffd083;
+  --ma-color-critical-surface: #361621;
+  --ma-color-critical-border: #782c42;
+  --ma-color-critical-strong: #ff9eb2;
+
+  --ma-shadow-xs: 0 1px 2px rgb(0 0 0 / 26%);
+  --ma-shadow-sm: 0 4px 12px rgb(0 0 0 / 25%), 0 1px 3px rgb(0 0 0 / 30%);
+  --ma-shadow-md: 0 16px 38px rgb(0 0 0 / 34%), 0 4px 10px rgb(0 0 0 / 24%);
+  --ma-shadow-focus: 0 0 0 3px rgb(180 162 242 / 30%);
+
+  --ma-button-primary-bg: var(--ma-color-interactive-primary);
+  --ma-button-primary-bg-hover: var(--ma-color-interactive-primary-hover);
+  --ma-button-primary-text: var(--ma-color-interactive-primary-text);
+  --ma-button-secondary-bg: var(--ma-color-interactive-secondary);
+  --ma-button-secondary-bg-hover: var(--ma-color-interactive-secondary-hover);
+  --ma-button-secondary-text: var(--ma-color-interactive-secondary-text);
+  --ma-input-bg: #12182f;
+  --ma-input-border: var(--ma-color-border-default);
+  --ma-panel-bg: var(--ma-color-bg-surface);
+  --ma-panel-border: var(--ma-color-border-subtle);
+  --ma-table-row-hover: #202a49;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --ma-color-bg-canvas: var(--ma-color-indigo-950);
+    --ma-color-bg-subtle: var(--ma-color-indigo-900);
+    --ma-color-bg-surface: #171d36;
+    --ma-color-bg-raised: var(--ma-color-space-indigo);
+    --ma-color-bg-inverse: var(--ma-color-ghost-white);
+    --ma-color-bg-overlay: rgb(4 6 14 / 78%);
+    --ma-color-text-primary: var(--ma-color-ghost-white);
+    --ma-color-text-secondary: var(--ma-color-slate-300);
+    --ma-color-text-tertiary: var(--ma-color-slate-400);
+    --ma-color-text-inverse: var(--ma-color-space-indigo);
+    --ma-color-text-link: var(--ma-color-indigo-200);
+    --ma-color-text-disabled: var(--ma-color-slate-500);
+    --ma-color-border-subtle: #2b3455;
+    --ma-color-border-default: #3b466a;
+    --ma-color-border-strong: #647092;
+    --ma-color-border-brand: var(--ma-color-indigo-400);
+    --ma-color-interactive-primary: var(--ma-color-periwinkle);
+    --ma-color-interactive-primary-hover: var(--ma-color-indigo-200);
+    --ma-color-interactive-primary-text: var(--ma-color-space-indigo);
+    --ma-color-interactive-secondary: #283354;
+    --ma-color-interactive-secondary-hover: #354268;
+    --ma-color-interactive-secondary-text: var(--ma-color-ghost-white);
+    --ma-color-focus: #b4a2f2;
+    --ma-color-info-surface: #122b46;
+    --ma-color-info-border: #23547f;
+    --ma-color-info-strong: #91c9ff;
+    --ma-color-success-surface: #102d25;
+    --ma-color-success-border: #236149;
+    --ma-color-success-strong: #88dcb9;
+    --ma-color-warning-surface: #32250f;
+    --ma-color-warning-border: #71511b;
+    --ma-color-warning-strong: #ffd083;
+    --ma-color-critical-surface: #361621;
+    --ma-color-critical-border: #782c42;
+    --ma-color-critical-strong: #ff9eb2;
+    --ma-shadow-xs: 0 1px 2px rgb(0 0 0 / 26%);
+    --ma-shadow-sm: 0 4px 12px rgb(0 0 0 / 25%), 0 1px 3px rgb(0 0 0 / 30%);
+    --ma-shadow-md: 0 16px 38px rgb(0 0 0 / 34%), 0 4px 10px rgb(0 0 0 / 24%);
+    --ma-shadow-focus: 0 0 0 3px rgb(180 162 242 / 30%);
+    --ma-button-primary-bg: var(--ma-color-interactive-primary);
+    --ma-button-primary-bg-hover: var(--ma-color-interactive-primary-hover);
+    --ma-button-primary-text: var(--ma-color-interactive-primary-text);
+    --ma-button-secondary-bg: var(--ma-color-interactive-secondary);
+    --ma-button-secondary-bg-hover: var(--ma-color-interactive-secondary-hover);
+    --ma-button-secondary-text: var(--ma-color-interactive-secondary-text);
+    --ma-input-bg: #12182f;
+    --ma-input-border: var(--ma-color-border-default);
+    --ma-panel-bg: var(--ma-color-bg-surface);
+    --ma-panel-border: var(--ma-color-border-subtle);
+    --ma-table-row-hover: #202a49;
+  }
+}
+
+:root {
+  --ma-font-display: "Offside", "Trebuchet MS", sans-serif;
+  --ma-font-body: "Spline Sans", "Segoe UI", sans-serif;
+  --ma-font-mono: "Monaspace Neon", "SFMono-Regular", Consolas, monospace;
+
+  --ma-font-size-xs: 0.75rem;
+  --ma-font-size-sm: 0.875rem;
+  --ma-font-size-md: 1rem;
+  --ma-font-size-lg: 1.125rem;
+  --ma-font-size-xl: 1.375rem;
+  --ma-font-size-2xl: clamp(1.75rem, 4vw, 2.5rem);
+  --ma-font-size-3xl: clamp(2.5rem, 7vw, 4.75rem);
+
+  --ma-line-height-tight: 1.15;
+  --ma-line-height-heading: 1.28;
+  --ma-line-height-body: 1.55;
+
+  --ma-space-0: 0;
+  --ma-space-1: 0.25rem;
+  --ma-space-2: 0.5rem;
+  --ma-space-3: 0.75rem;
+  --ma-space-4: 1rem;
+  --ma-space-5: 1.25rem;
+  --ma-space-6: 1.5rem;
+  --ma-space-8: 2rem;
+  --ma-space-10: 2.5rem;
+  --ma-space-12: 3rem;
+  --ma-space-16: 4rem;
+  --ma-space-20: 5rem;
+  --ma-space-24: 6rem;
+
+  --ma-radius-xs: 0.25rem;
+  --ma-radius-sm: 0.5rem;
+  --ma-radius-md: 0.75rem;
+  --ma-radius-lg: 1rem;
+  --ma-radius-xl: 1.5rem;
+  --ma-radius-round: 999px;
+
+  --ma-duration-fast: 120ms;
+  --ma-duration-normal: 220ms;
+  --ma-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  --ma-content-max: 78rem;
+  --ma-sidebar-width: 17rem;
+  --ma-control-height-sm: 2rem;
+  --ma-control-height-md: 2.5rem;
+  --ma-control-height-lg: 3rem;
+}

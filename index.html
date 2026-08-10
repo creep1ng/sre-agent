@@ -1,0 +1,1577 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="The midnight.agent design system foundations, components, and operational patterns."
+    />
+    <meta name="theme-color" content="#1e2749" />
+    <link rel="icon" href="./public/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="stylesheet" href="./styles/design-system.css" />
+    <link rel="stylesheet" href="./styles/showcase.css" />
+    <script>
+      try {
+        const preference = localStorage.getItem("ma-theme");
+        if (preference && preference !== "system")
+          document.documentElement.dataset.theme = preference;
+      } catch (_) {}
+    </script>
+    <title>midnight.agent - Design system</title>
+  </head>
+  <body>
+    <a class="ma-skip-link" href="#main-content">Skip to content</a>
+
+    <svg class="ma-sr-only" aria-hidden="true" width="0" height="0">
+      <symbol
+        id="icon-sun"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="4"></circle>
+        <path
+          d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"
+        ></path>
+      </symbol>
+      <symbol
+        id="icon-moon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z"
+        ></path>
+      </symbol>
+      <symbol
+        id="icon-system"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <rect x="3" y="4" width="18" height="12" rx="2"></rect>
+        <path d="M8 20h8M12 16v4"></path>
+      </symbol>
+      <symbol
+        id="icon-arrow"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M5 12h14M13 6l6 6-6 6"></path>
+      </symbol>
+      <symbol
+        id="icon-search"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="11" cy="11" r="7"></circle>
+        <path d="m20 20-4-4"></path>
+      </symbol>
+      <symbol
+        id="icon-plus"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+      >
+        <path d="M12 5v14M5 12h14"></path>
+      </symbol>
+      <symbol
+        id="icon-close"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+      >
+        <path d="m6 6 12 12M18 6 6 18"></path>
+      </symbol>
+      <symbol
+        id="icon-shield"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path>
+        <path d="m9 12 2 2 4-4"></path>
+      </symbol>
+      <symbol
+        id="icon-alert"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M10.3 3.6 2.2 18a2 2 0 0 0 1.8 3h16a2 2 0 0 0 1.8-3L13.7 3.6a2 2 0 0 0-3.4 0Z"
+        ></path>
+        <path d="M12 9v4M12 17h.01"></path>
+      </symbol>
+      <symbol
+        id="icon-check"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="m5 12 4 4L19 6"></path>
+      </symbol>
+      <symbol
+        id="icon-model"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M12 3 4 7v10l8 4 8-4V7l-8-4Z"></path>
+        <path d="m4 7 8 4 8-4M12 11v10"></path>
+      </symbol>
+      <symbol
+        id="icon-tool"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M14.7 6.3a4 4 0 0 0-5-5l2.1 2.1-2.4 2.4-2.1-2.1a4 4 0 0 0 5 5l6.9 6.9a2 2 0 0 0 2.8-2.8l-7.3-6.5Z"
+        ></path>
+        <path d="m5 13-3 3 6 6 3-3"></path>
+      </symbol>
+      <symbol
+        id="icon-book"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+        <path
+          d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"
+        ></path>
+      </symbol>
+      <symbol
+        id="icon-skill"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"
+        ></path>
+        <circle cx="12" cy="12" r="4"></circle>
+      </symbol>
+      <symbol
+        id="icon-clock"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="9"></circle>
+        <path d="M12 7v5l3 2"></path>
+      </symbol>
+      <symbol
+        id="icon-key"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="8" cy="15" r="4"></circle>
+        <path d="m11 12 8-8M17 6l2 2M14 9l2 2"></path>
+      </symbol>
+      <symbol
+        id="icon-evidence"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path
+          d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"
+        ></path>
+        <path d="M14 2v6h6M8 13h8M8 17h5"></path>
+      </symbol>
+    </svg>
+
+    <div class="catalog">
+      <div class="catalog-shell">
+        <aside class="catalog-sidebar" aria-label="Design system navigation">
+          <a
+            class="catalog-brand"
+            href="#overview"
+            aria-label="midnight.agent design system home"
+          >
+            <img
+              class="brand-logo--light"
+              src="./public/midnight-agent-logo-light.svg"
+              alt="midnight.agent"
+            />
+            <img
+              class="brand-logo--dark"
+              src="./public/midnight-agent-logo-dark.svg"
+              alt="midnight.agent"
+            />
+          </a>
+
+          <nav class="catalog-nav">
+            <p class="catalog-nav__label">Field manual</p>
+            <a href="#overview" aria-current="true">Overview</a>
+            <a href="#brand">Brand</a>
+            <a href="#color">Color</a>
+            <a href="#type">Typography</a>
+            <a href="#components">Components</a>
+            <a href="#operations">Operations</a>
+            <a href="#governance">Governance</a>
+            <a href="#usage">Usage</a>
+          </nav>
+
+          <div class="catalog-sidebar__footer">
+            <div class="catalog-version">
+              <span>Version 0.1.0</span>
+              <span>Web core</span>
+            </div>
+            <div
+              class="ma-segmented theme-switcher"
+              role="group"
+              aria-label="Color theme"
+            >
+              <button
+                class="ma-segmented__item"
+                type="button"
+                data-theme-option="light"
+                aria-label="Use light theme"
+                aria-pressed="false"
+              >
+                <svg class="ma-icon" aria-hidden="true">
+                  <use href="#icon-sun"></use>
+                </svg>
+                <span>Light</span>
+              </button>
+              <button
+                class="ma-segmented__item"
+                type="button"
+                data-theme-option="system"
+                aria-label="Use system theme"
+                aria-pressed="true"
+              >
+                <svg class="ma-icon" aria-hidden="true">
+                  <use href="#icon-system"></use>
+                </svg>
+                <span>Auto</span>
+              </button>
+              <button
+                class="ma-segmented__item"
+                type="button"
+                data-theme-option="dark"
+                aria-label="Use dark theme"
+                aria-pressed="false"
+              >
+                <svg class="ma-icon" aria-hidden="true">
+                  <use href="#icon-moon"></use>
+                </svg>
+                <span>Dark</span>
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        <main class="catalog-main" id="main-content">
+          <div class="catalog-content">
+            <section
+              class="catalog-hero"
+              id="overview"
+              aria-labelledby="overview-title"
+            >
+              <div class="catalog-hero__content">
+                <p class="ma-eyebrow" data-reveal="1">Field manual / 01</p>
+                <h1 class="ma-display" id="overview-title" data-reveal="2">
+                  Clarity after midnight.
+                </h1>
+                <p class="catalog-hero__lead" data-reveal="3">
+                  A calm, evidence-first interface language for governed AI and
+                  incident response. Built for operators making consequential
+                  decisions under pressure.
+                </p>
+                <div class="ma-button-row" data-reveal="3">
+                  <a
+                    class="ma-button ma-button--primary ma-button--large"
+                    href="#components"
+                  >
+                    Explore components
+                    <svg class="ma-icon" aria-hidden="true">
+                      <use href="#icon-arrow"></use>
+                    </svg>
+                  </a>
+                  <a
+                    class="ma-button ma-button--secondary ma-button--large"
+                    href="#usage"
+                    >Implementation guide</a
+                  >
+                </div>
+              </div>
+              <div class="catalog-hero__mark" data-reveal="2">
+                <img
+                  src="./public/midnight-agent-mark.svg"
+                  alt="midnight.agent crescent and signal mark"
+                />
+                <p class="catalog-hero__annotation">
+                  CONTROL PLANE<br />STATUS / NOMINAL
+                </p>
+              </div>
+            </section>
+
+            <section class="catalog-principles" aria-label="Design principles">
+              <article class="catalog-principle">
+                <span class="catalog-principle__number">01 / EVIDENCE</span>
+                <h2>Show the proof</h2>
+                <p>
+                  Every diagnosis, permission, and transition stays attached to
+                  its source.
+                </p>
+              </article>
+              <article class="catalog-principle">
+                <span class="catalog-principle__number">02 / CONTROL</span>
+                <h2>Make authority visible</h2>
+                <p>
+                  Allowed, denied, and approval-required states are explicit
+                  before action.
+                </p>
+              </article>
+              <article class="catalog-principle">
+                <span class="catalog-principle__number">03 / CALM</span>
+                <h2>Reduce incident noise</h2>
+                <p>
+                  Dense information uses hierarchy, not decoration, to stay
+                  scannable.
+                </p>
+              </article>
+            </section>
+
+            <section
+              class="catalog-section"
+              id="brand"
+              aria-labelledby="brand-title"
+            >
+              <div class="catalog-section__intro">
+                <div>
+                  <p class="ma-eyebrow">01 / Identity</p>
+                  <h2 id="brand-title">Brand system</h2>
+                </div>
+                <p>
+                  The crescent represents investigation in incomplete
+                  information; the signal marks evidence entering the control
+                  plane. Preserve generous clear space and use the approved
+                  contrast pair only.
+                </p>
+              </div>
+
+              <div class="catalog-grid">
+                <div class="catalog-specimen">
+                  <div class="catalog-specimen__meta">
+                    <p class="catalog-specimen__label">Light surface</p>
+                    <span class="ma-badge ma-badge--plain">Primary</span>
+                  </div>
+                  <div class="logo-stage">
+                    <img
+                      src="./public/midnight-agent-logo-light.svg"
+                      alt="midnight.agent dark logo on a light surface"
+                    />
+                  </div>
+                </div>
+                <div class="catalog-specimen">
+                  <div class="catalog-specimen__meta">
+                    <p class="catalog-specimen__label">Dark surface</p>
+                    <span class="ma-badge ma-badge--plain">Inverse</span>
+                  </div>
+                  <div class="logo-stage logo-stage--dark">
+                    <img
+                      src="./public/midnight-agent-logo-dark.svg"
+                      alt="midnight.agent light logo on a dark surface"
+                    />
+                  </div>
+                </div>
+              </div>
+              <div class="logo-rules">
+                <div class="logo-rule">
+                  <strong>Clear space</strong
+                  ><span>Minimum: one mark-dot around all sides.</span>
+                </div>
+                <div class="logo-rule">
+                  <strong>Minimum width</strong
+                  ><span>Wordmark: 160px. Mark: 24px.</span>
+                </div>
+                <div class="logo-rule">
+                  <strong>Never recolor</strong
+                  ><span>Use the provided light and dark assets.</span>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="catalog-section"
+              id="color"
+              aria-labelledby="color-title"
+            >
+              <div class="catalog-section__intro">
+                <div>
+                  <p class="ma-eyebrow">02 / Foundations</p>
+                  <h2 id="color-title">Color and tokens</h2>
+                </div>
+                <p>
+                  Brand primitives remain stable while semantic tokens adapt to
+                  theme and purpose. Operational states add accessible
+                  functional colors and always pair color with text or
+                  iconography.
+                </p>
+              </div>
+
+              <div class="catalog-specimen">
+                <div class="catalog-specimen__meta">
+                  <p class="catalog-specimen__label">
+                    Brand primitives / click to copy
+                  </p>
+                  <code>palette.css</code>
+                </div>
+                <div class="catalog-specimen__body">
+                  <div class="swatch-grid">
+                    <button
+                      class="swatch"
+                      type="button"
+                      style="--swatch-color: #30343f"
+                      data-copy="#30343f"
+                      aria-label="Copy Jet Black hex value"
+                    >
+                      <span class="swatch__color"></span
+                      ><span class="swatch__meta"
+                        ><span class="swatch__name">Jet Black</span
+                        ><span class="swatch__value">#30343f</span></span
+                      >
+                    </button>
+                    <button
+                      class="swatch"
+                      type="button"
+                      style="--swatch-color: #fafaff"
+                      data-copy="#fafaff"
+                      aria-label="Copy Ghost White hex value"
+                    >
+                      <span class="swatch__color"></span
+                      ><span class="swatch__meta"
+                        ><span class="swatch__name">Ghost White</span
+                        ><span class="swatch__value">#fafaff</span></span
+                      >
+                    </button>
+                    <button
+                      class="swatch"
+                      type="button"
+                      style="--swatch-color: #e4d9ff"
+                      data-copy="#e4d9ff"
+                      aria-label="Copy Periwinkle hex value"
+                    >
+                      <span class="swatch__color"></span
+                      ><span class="swatch__meta"
+                        ><span class="swatch__name">Periwinkle</span
+                        ><span class="swatch__value">#e4d9ff</span></span
+                      >
+                    </button>
+                    <button
+                      class="swatch"
+                      type="button"
+                      style="--swatch-color: #273469"
+                      data-copy="#273469"
+                      aria-label="Copy Twilight Indigo hex value"
+                    >
+                      <span class="swatch__color"></span
+                      ><span class="swatch__meta"
+                        ><span class="swatch__name">Twilight Indigo</span
+                        ><span class="swatch__value">#273469</span></span
+                      >
+                    </button>
+                    <button
+                      class="swatch"
+                      type="button"
+                      style="--swatch-color: #1e2749"
+                      data-copy="#1e2749"
+                      aria-label="Copy Space Indigo hex value"
+                    >
+                      <span class="swatch__color"></span
+                      ><span class="swatch__meta"
+                        ><span class="swatch__name">Space Indigo</span
+                        ><span class="swatch__value">#1e2749</span></span
+                      >
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="catalog-specimen">
+                <div class="catalog-specimen__meta">
+                  <p class="catalog-specimen__label">Semantic map</p>
+                  <code>styles/tokens.css</code>
+                </div>
+                <div class="catalog-specimen__body semantic-map">
+                  <div class="semantic-row">
+                    <code>--ma-color-bg-canvas</code
+                    ><span
+                      class="semantic-row__preview"
+                      style="--semantic-color: var(--ma-color-bg-canvas)"
+                    ></span
+                    ><span class="semantic-row__use">App canvas</span>
+                  </div>
+                  <div class="semantic-row">
+                    <code>--ma-color-bg-surface</code
+                    ><span
+                      class="semantic-row__preview"
+                      style="--semantic-color: var(--ma-color-bg-surface)"
+                    ></span
+                    ><span class="semantic-row__use">Panels</span>
+                  </div>
+                  <div class="semantic-row">
+                    <code>--ma-color-text-primary</code
+                    ><span
+                      class="semantic-row__preview"
+                      style="--semantic-color: var(--ma-color-text-primary)"
+                    ></span
+                    ><span class="semantic-row__use">Primary text</span>
+                  </div>
+                  <div class="semantic-row">
+                    <code>--ma-color-success-strong</code
+                    ><span
+                      class="semantic-row__preview"
+                      style="--semantic-color: var(--ma-color-success-strong)"
+                    ></span
+                    ><span class="semantic-row__use">Allowed / stable</span>
+                  </div>
+                  <div class="semantic-row">
+                    <code>--ma-color-warning-strong</code
+                    ><span
+                      class="semantic-row__preview"
+                      style="--semantic-color: var(--ma-color-warning-strong)"
+                    ></span
+                    ><span class="semantic-row__use">Approval / risk</span>
+                  </div>
+                  <div class="semantic-row">
+                    <code>--ma-color-critical-strong</code
+                    ><span
+                      class="semantic-row__preview"
+                      style="--semantic-color: var(--ma-color-critical-strong)"
+                    ></span
+                    ><span class="semantic-row__use">Denied / SEV-1</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="catalog-section"
+              id="type"
+              aria-labelledby="type-title"
+            >
+              <div class="catalog-section__intro">
+                <div>
+                  <p class="ma-eyebrow">03 / Foundations</p>
+                  <h2 id="type-title">Typography</h2>
+                </div>
+                <p>
+                  Offside is reserved for identity and memorable display
+                  moments. Spline Sans carries headings and interface content.
+                  Monaspace Neon separates telemetry, IDs, timestamps, and
+                  policy data.
+                </p>
+              </div>
+              <div class="catalog-specimen">
+                <div class="catalog-specimen__meta">
+                  <p class="catalog-specimen__label">Type roles</p>
+                  <span class="ma-badge ma-badge--plain">3 families</span>
+                </div>
+                <div class="catalog-specimen__body">
+                  <div class="type-specimen">
+                    <span class="type-specimen__token">Display / Offside</span>
+                    <p
+                      class="type-specimen__sample type-specimen__sample--display"
+                    >
+                      Trace the unknown.
+                    </p>
+                  </div>
+                  <div class="type-specimen">
+                    <span class="type-specimen__token"
+                      >Heading / Spline Sans</span
+                    >
+                    <p
+                      class="type-specimen__sample type-specimen__sample--heading"
+                    >
+                      Payment service degradation
+                    </p>
+                  </div>
+                  <div class="type-specimen">
+                    <span class="type-specimen__token">Body / Spline Sans</span>
+                    <p
+                      class="type-specimen__sample type-specimen__sample--body"
+                    >
+                      Prometheus shows a sustained increase in failed payment
+                      spans after the latest deployment. Investigation is active
+                      and customer impact is confirmed.
+                    </p>
+                  </div>
+                  <div class="type-specimen">
+                    <span class="type-specimen__token"
+                      >Data / Monaspace Neon</span
+                    >
+                    <p
+                      class="type-specimen__sample type-specimen__sample--mono"
+                    >
+                      INC-2481 / p95 184ms / workflow v1.4.2
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="catalog-section"
+              id="components"
+              aria-labelledby="components-title"
+            >
+              <div class="catalog-section__intro">
+                <div>
+                  <p class="ma-eyebrow">04 / Components</p>
+                  <h2 id="components-title">Core controls</h2>
+                </div>
+                <p>
+                  Controls use a consistent 40px default height, persistent
+                  keyboard focus, explicit labels, and restrained motion.
+                  Dangerous actions are visually distinct but never visually
+                  dominant by default.
+                </p>
+              </div>
+
+              <div class="catalog-grid">
+                <div class="catalog-specimen">
+                  <div class="catalog-specimen__meta">
+                    <p class="catalog-specimen__label">Actions</p>
+                    <code>.ma-button</code>
+                  </div>
+                  <div class="catalog-specimen__body">
+                    <div class="button-demo">
+                      <p class="component-label">Variants</p>
+                      <div class="ma-button-row">
+                        <button
+                          class="ma-button ma-button--primary"
+                          type="button"
+                        >
+                          Start investigation
+                        </button>
+                        <button
+                          class="ma-button ma-button--secondary"
+                          type="button"
+                        >
+                          Assign owner
+                        </button>
+                        <button
+                          class="ma-button ma-button--ghost"
+                          type="button"
+                        >
+                          View policy
+                        </button>
+                        <button
+                          class="ma-button ma-button--danger"
+                          type="button"
+                        >
+                          Revoke access
+                        </button>
+                      </div>
+                    </div>
+                    <div class="button-demo">
+                      <p class="component-label">Sizes and state</p>
+                      <div class="ma-button-row">
+                        <button
+                          class="ma-button ma-button--secondary ma-button--small"
+                          type="button"
+                        >
+                          Small
+                        </button>
+                        <button
+                          class="ma-button ma-button--primary ma-button--large"
+                          type="button"
+                        >
+                          <svg class="ma-icon" aria-hidden="true">
+                            <use href="#icon-plus"></use></svg
+                          >Create incident
+                        </button>
+                        <button
+                          class="ma-button ma-button--primary"
+                          type="button"
+                          disabled
+                        >
+                          Unavailable
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="catalog-specimen">
+                  <div class="catalog-specimen__meta">
+                    <p class="catalog-specimen__label">Form controls</p>
+                    <code>.ma-field</code>
+                  </div>
+                  <div class="catalog-specimen__body control-stack">
+                    <div class="ma-field">
+                      <label class="ma-field__label" for="resource-search"
+                        >Resource search</label
+                      >
+                      <div class="ma-input-group">
+                        <svg class="ma-icon" aria-hidden="true">
+                          <use href="#icon-search"></use></svg
+                        ><input
+                          class="ma-input"
+                          id="resource-search"
+                          type="search"
+                          placeholder="Search model, MCP, Skill, or BoK"
+                        />
+                      </div>
+                      <p class="ma-field__hint">
+                        Search only returns resources visible to this identity.
+                      </p>
+                    </div>
+                    <div class="ma-field">
+                      <label class="ma-field__label" for="role-select"
+                        >Access role</label
+                      >
+                      <select class="ma-select" id="role-select">
+                        <option>Incident responder</option>
+                        <option>Gateway administrator</option>
+                        <option>Restricted observer</option>
+                      </select>
+                    </div>
+                    <label class="ma-switch"
+                      ><input type="checkbox" checked /><span
+                        class="ma-switch__track"
+                        aria-hidden="true"
+                      ></span
+                      ><span class="ma-switch__label"
+                        >Require human approval</span
+                      ></label
+                    >
+                  </div>
+                </div>
+
+                <div class="catalog-specimen">
+                  <div class="catalog-specimen__meta">
+                    <p class="catalog-specimen__label">Status</p>
+                    <code>.ma-badge</code>
+                  </div>
+                  <div class="catalog-specimen__body">
+                    <p class="component-label">Lifecycle and severity</p>
+                    <div class="badge-demo">
+                      <span class="ma-badge" data-tone="info"
+                        >Investigating</span
+                      ><span class="ma-badge" data-tone="warning"
+                        >Approval required</span
+                      ><span class="ma-badge" data-tone="success">Stable</span
+                      ><span class="ma-badge" data-tone="critical">SEV-1</span>
+                    </div>
+                    <p
+                      class="component-label"
+                      style="margin-top: var(--ma-space-6)"
+                    >
+                      Policy decision
+                    </p>
+                    <div class="badge-demo">
+                      <span class="ma-badge" data-decision="allow">Allowed</span
+                      ><span class="ma-badge" data-decision="deny">Denied</span
+                      ><span class="ma-badge">Not evaluated</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="catalog-specimen">
+                  <div class="catalog-specimen__meta">
+                    <p class="catalog-specimen__label">Feedback</p>
+                    <code>.ma-alert</code>
+                  </div>
+                  <div class="catalog-specimen__body feedback-stack">
+                    <div class="ma-alert" data-tone="success">
+                      <svg class="ma-icon" aria-hidden="true">
+                        <use href="#icon-check"></use>
+                      </svg>
+                      <div>
+                        <p class="ma-alert__title">Policy updated</p>
+                        <p class="ma-alert__detail">
+                          New access rules apply immediately.
+                        </p>
+                      </div>
+                    </div>
+                    <div class="ma-alert" data-tone="warning">
+                      <svg class="ma-icon" aria-hidden="true">
+                        <use href="#icon-alert"></use>
+                      </svg>
+                      <div>
+                        <p class="ma-alert__title">Approval required</p>
+                        <p class="ma-alert__detail">
+                          Rollback affects a production service.
+                        </p>
+                      </div>
+                      <button
+                        class="ma-icon-button"
+                        type="button"
+                        data-dismiss
+                        aria-label="Dismiss warning"
+                      >
+                        <svg class="ma-icon" aria-hidden="true">
+                          <use href="#icon-close"></use>
+                        </svg>
+                      </button>
+                    </div>
+                    <div class="ma-alert" data-tone="critical">
+                      <svg class="ma-icon" aria-hidden="true">
+                        <use href="#icon-shield"></use>
+                      </svg>
+                      <div>
+                        <p class="ma-alert__title">Request denied</p>
+                        <p class="ma-alert__detail">
+                          This identity cannot invoke deploy.production.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="catalog-section"
+              id="operations"
+              aria-labelledby="operations-title"
+            >
+              <div class="catalog-section__intro">
+                <div>
+                  <p class="ma-eyebrow">05 / Patterns</p>
+                  <h2 id="operations-title">Incident operations</h2>
+                </div>
+                <p>
+                  The war room keeps impact, state, current hypothesis,
+                  evidence, and the next controlled action in one scan path.
+                  Timeline entries distinguish human actions, system events, and
+                  governed agent calls.
+                </p>
+              </div>
+
+              <div class="catalog-specimen">
+                <div class="catalog-specimen__meta">
+                  <p class="catalog-specimen__label">
+                    War room / active incident
+                  </p>
+                  <span class="ma-live-state">Live updates</span>
+                </div>
+                <div class="catalog-specimen__body incident-workbench">
+                  <div class="incident-workbench__main">
+                    <article class="ma-card ma-incident-summary">
+                      <div class="ma-card__body">
+                        <div class="ma-incident-summary__topline">
+                          <div class="badge-demo">
+                            <span class="ma-badge" data-tone="critical"
+                              >SEV-1</span
+                            ><span class="ma-badge" data-tone="info"
+                              >Investigating</span
+                            >
+                          </div>
+                          <span
+                            class="ma-mono ma-muted"
+                            style="font-size: var(--ma-font-size-xs)"
+                            >INC-2481</span
+                          >
+                        </div>
+                        <h3 class="ma-incident-summary__title">
+                          Payment requests failing in checkout
+                        </h3>
+                        <p class="ma-incident-summary__description">
+                          Error rate reached 18.4% after payment-service
+                          deployment 7fd21b. Customer checkout is degraded in
+                          all regions.
+                        </p>
+                        <dl class="ma-incident-summary__meta">
+                          <div>
+                            <dt>Started</dt>
+                            <dd>21:42 UTC</dd>
+                          </div>
+                          <div>
+                            <dt>Commander</dt>
+                            <dd>Maya Chen</dd>
+                          </div>
+                          <div>
+                            <dt>Service</dt>
+                            <dd>payment-service</dd>
+                          </div>
+                          <div>
+                            <dt>Workflow</dt>
+                            <dd>v1.4.2</dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </article>
+
+                    <article class="ma-panel">
+                      <div class="ma-panel__header">
+                        <div>
+                          <h3 class="ma-panel__title">Investigation record</h3>
+                          <p class="ma-panel__description">
+                            Curated evidence and decisions from this run.
+                          </p>
+                        </div>
+                        <button
+                          class="ma-button ma-button--secondary ma-button--small"
+                          type="button"
+                        >
+                          Add event
+                        </button>
+                      </div>
+                      <div class="ma-panel__body" style="padding-top: 0">
+                        <div
+                          class="ma-tabs"
+                          role="tablist"
+                          aria-label="Investigation record"
+                        >
+                          <button
+                            class="ma-tab"
+                            type="button"
+                            role="tab"
+                            id="tab-timeline"
+                            aria-selected="true"
+                            aria-controls="panel-timeline"
+                          >
+                            Timeline
+                          </button>
+                          <button
+                            class="ma-tab"
+                            type="button"
+                            role="tab"
+                            id="tab-evidence"
+                            aria-selected="false"
+                            aria-controls="panel-evidence"
+                            tabindex="-1"
+                          >
+                            Evidence
+                          </button>
+                          <button
+                            class="ma-tab"
+                            type="button"
+                            role="tab"
+                            id="tab-decisions"
+                            aria-selected="false"
+                            aria-controls="panel-decisions"
+                            tabindex="-1"
+                          >
+                            Decisions
+                          </button>
+                        </div>
+                        <div
+                          class="ma-tab-panel"
+                          id="panel-timeline"
+                          role="tabpanel"
+                          aria-labelledby="tab-timeline"
+                          style="padding-top: var(--ma-space-5)"
+                        >
+                          <ol class="ma-timeline">
+                            <li class="ma-timeline__item">
+                              <time class="ma-timeline__time">21:42:08</time
+                              ><span
+                                class="ma-timeline__marker"
+                                data-tone="critical"
+                              ></span>
+                              <div class="ma-timeline__content">
+                                <h4 class="ma-timeline__title">
+                                  Alert promoted to incident
+                                </h4>
+                                <p class="ma-timeline__detail">
+                                  paymentFailure exceeded the declaration
+                                  threshold for 5 minutes.
+                                </p>
+                                <span class="ma-timeline__source"
+                                  ><svg class="ma-icon" aria-hidden="true">
+                                    <use href="#icon-alert"></use></svg
+                                  >flagd / alert-901</span
+                                >
+                              </div>
+                            </li>
+                            <li class="ma-timeline__item">
+                              <time class="ma-timeline__time">21:44:31</time
+                              ><span class="ma-timeline__marker"></span>
+                              <div class="ma-timeline__content">
+                                <h4 class="ma-timeline__title">
+                                  Prometheus evidence attached
+                                </h4>
+                                <p class="ma-timeline__detail">
+                                  Failures isolate to payment-service and begin
+                                  after deployment 7fd21b.
+                                </p>
+                                <span class="ma-timeline__source"
+                                  ><svg class="ma-icon" aria-hidden="true">
+                                    <use href="#icon-tool"></use></svg
+                                  >query_prometheus / audit-7d91</span
+                                >
+                              </div>
+                            </li>
+                            <li class="ma-timeline__item">
+                              <time class="ma-timeline__time">21:47:02</time
+                              ><span
+                                class="ma-timeline__marker"
+                                data-tone="warning"
+                              ></span>
+                              <div class="ma-timeline__content">
+                                <h4 class="ma-timeline__title">
+                                  Rollback proposed
+                                </h4>
+                                <p class="ma-timeline__detail">
+                                  Hypothesis confidence is 0.84. Human approval
+                                  is required before simulation.
+                                </p>
+                                <span class="ma-timeline__source"
+                                  ><svg class="ma-icon" aria-hidden="true">
+                                    <use href="#icon-shield"></use></svg
+                                  >incident-response / decision-18</span
+                                >
+                              </div>
+                            </li>
+                          </ol>
+                        </div>
+                        <div
+                          class="ma-tab-panel"
+                          id="panel-evidence"
+                          role="tabpanel"
+                          aria-labelledby="tab-evidence"
+                          hidden
+                          style="padding-top: var(--ma-space-5)"
+                        >
+                          <div class="ma-resource-list">
+                            <article class="ma-resource">
+                              <span class="ma-resource__icon"
+                                ><svg class="ma-icon" aria-hidden="true">
+                                  <use href="#icon-evidence"></use></svg
+                              ></span>
+                              <div>
+                                <h4 class="ma-resource__name">
+                                  Payment error rate by service
+                                </h4>
+                                <p class="ma-resource__meta">
+                                  Prometheus / 21:37-21:47 UTC
+                                </p>
+                              </div>
+                              <span class="ma-badge" data-tone="success"
+                                >Verified</span
+                              >
+                            </article>
+                            <article class="ma-resource">
+                              <span class="ma-resource__icon"
+                                ><svg class="ma-icon" aria-hidden="true">
+                                  <use href="#icon-book"></use></svg
+                              ></span>
+                              <div>
+                                <h4 class="ma-resource__name">
+                                  Payment rollback runbook
+                                </h4>
+                                <p class="ma-resource__meta">
+                                  BoK / sre-runbooks / v3
+                                </p>
+                              </div>
+                              <span class="ma-badge" data-tone="info"
+                                >Cited</span
+                              >
+                            </article>
+                          </div>
+                        </div>
+                        <div
+                          class="ma-tab-panel"
+                          id="panel-decisions"
+                          role="tabpanel"
+                          aria-labelledby="tab-decisions"
+                          hidden
+                          style="padding-top: var(--ma-space-5)"
+                        >
+                          <div class="ma-alert" data-tone="warning">
+                            <svg class="ma-icon" aria-hidden="true">
+                              <use href="#icon-shield"></use>
+                            </svg>
+                            <div>
+                              <p class="ma-alert__title">
+                                Rollback payment-service@7fd21b
+                              </p>
+                              <p class="ma-alert__detail">
+                                Pending approval from the incident commander.
+                                Risk: low. Expected result: restore payment
+                                success rate above 99%.
+                              </p>
+                            </div>
+                            <button
+                              class="ma-button ma-button--primary ma-button--small"
+                              type="button"
+                            >
+                              Review
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  </div>
+
+                  <section
+                    class="incident-workbench__aside"
+                    aria-label="Governed resources and responders"
+                  >
+                    <article class="ma-panel">
+                      <div class="ma-panel__header">
+                        <div>
+                          <h3 class="ma-panel__title">Authorized resources</h3>
+                          <p class="ma-panel__description">
+                            Resolved for Maya Chen.
+                          </p>
+                        </div>
+                        <span class="ma-badge" data-decision="allow"
+                          >4 available</span
+                        >
+                      </div>
+                      <div class="ma-panel__body ma-resource-list">
+                        <article class="ma-resource">
+                          <span class="ma-resource__icon"
+                            ><svg class="ma-icon" aria-hidden="true">
+                              <use href="#icon-model"></use></svg
+                          ></span>
+                          <div>
+                            <h4 class="ma-resource__name">reasoning-primary</h4>
+                            <p class="ma-resource__meta">LLM / routed</p>
+                          </div>
+                          <span class="ma-badge" data-tone="success"
+                            >Ready</span
+                          >
+                        </article>
+                        <article class="ma-resource">
+                          <span class="ma-resource__icon"
+                            ><svg class="ma-icon" aria-hidden="true">
+                              <use href="#icon-tool"></use></svg
+                          ></span>
+                          <div>
+                            <h4 class="ma-resource__name">grafana-observe</h4>
+                            <p class="ma-resource__meta">MCP / 7 tools</p>
+                          </div>
+                          <span class="ma-badge" data-tone="success"
+                            >Ready</span
+                          >
+                        </article>
+                        <article class="ma-resource">
+                          <span class="ma-resource__icon"
+                            ><svg class="ma-icon" aria-hidden="true">
+                              <use href="#icon-skill"></use></svg
+                          ></span>
+                          <div>
+                            <h4 class="ma-resource__name">incident-triage</h4>
+                            <p class="ma-resource__meta">Skill / v2.3</p>
+                          </div>
+                          <span class="ma-badge" data-tone="success"
+                            >Ready</span
+                          >
+                        </article>
+                        <article class="ma-resource">
+                          <span class="ma-resource__icon"
+                            ><svg class="ma-icon" aria-hidden="true">
+                              <use href="#icon-book"></use></svg
+                          ></span>
+                          <div>
+                            <h4 class="ma-resource__name">sre-runbooks</h4>
+                            <p class="ma-resource__meta">BoK / 42 docs</p>
+                          </div>
+                          <span class="ma-badge" data-tone="success"
+                            >Ready</span
+                          >
+                        </article>
+                      </div>
+                    </article>
+                    <article class="ma-panel">
+                      <div class="ma-panel__header">
+                        <div>
+                          <h3 class="ma-panel__title">Responders</h3>
+                          <p class="ma-panel__description">
+                            3 active in this war room.
+                          </p>
+                        </div>
+                        <div
+                          class="ma-avatar-group"
+                          role="group"
+                          aria-label="Maya Chen, Nico Ortiz, and agent runtime"
+                        >
+                          <span class="ma-avatar">MC</span
+                          ><span class="ma-avatar" style="background: #805000"
+                            >NO</span
+                          ><span class="ma-avatar" style="background: #176247"
+                            >AI</span
+                          >
+                        </div>
+                      </div>
+                      <div class="ma-panel__footer">
+                        <span
+                          class="ma-muted"
+                          style="font-size: var(--ma-font-size-sm)"
+                          >Last sync 8s ago</span
+                        ><button
+                          class="ma-button ma-button--ghost ma-button--small"
+                          type="button"
+                        >
+                          Manage
+                        </button>
+                      </div>
+                    </article>
+                  </section>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="catalog-section"
+              id="governance"
+              aria-labelledby="governance-title"
+            >
+              <div class="catalog-section__intro">
+                <div>
+                  <p class="ma-eyebrow">06 / Patterns</p>
+                  <h2 id="governance-title">Gateway governance</h2>
+                </div>
+                <p>
+                  Administrative surfaces foreground policy outcomes, resource
+                  identity, ownership, latency, and spend. Filtering never hides
+                  the reason for a denial or the upstream resource for an
+                  allowed request.
+                </p>
+              </div>
+
+              <div class="stat-grid" style="margin-bottom: var(--ma-space-5)">
+                <article class="ma-card">
+                  <div class="ma-card__body">
+                    <div class="ma-stat">
+                      <p class="ma-stat__label">Requests / 24h</p>
+                      <p class="ma-stat__value">12.8k</p>
+                      <p class="ma-stat__meta">+8.4% from prior period</p>
+                    </div>
+                  </div>
+                </article>
+                <article class="ma-card">
+                  <div class="ma-card__body">
+                    <div class="ma-stat">
+                      <p class="ma-stat__label">Policy denied</p>
+                      <p class="ma-stat__value">184</p>
+                      <p class="ma-stat__meta">1.4% of all requests</p>
+                    </div>
+                  </div>
+                </article>
+                <article class="ma-card">
+                  <div class="ma-card__body">
+                    <div class="ma-stat">
+                      <p class="ma-stat__label">Gateway p95</p>
+                      <p class="ma-stat__value">
+                        184<span style="font-size: 0.45em">ms</span>
+                      </p>
+                      <p class="ma-stat__meta">Within 300ms objective</p>
+                    </div>
+                  </div>
+                </article>
+                <article class="ma-card">
+                  <div class="ma-card__body">
+                    <div class="ma-stat">
+                      <p class="ma-stat__label">Estimated spend</p>
+                      <p class="ma-stat__value">$42.6</p>
+                      <div
+                        class="ma-meter"
+                        role="progressbar"
+                        aria-label="Daily budget used"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow="71"
+                        style="margin-top: var(--ma-space-3)"
+                      >
+                        <div
+                          class="ma-meter__bar"
+                          style="--ma-meter-value: 71%"
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </div>
+
+              <article class="ma-panel">
+                <div class="ma-panel__header">
+                  <div>
+                    <h3 class="ma-panel__title">Audit log</h3>
+                    <p class="ma-panel__description">
+                      Every policy decision remains explainable and correlated.
+                    </p>
+                  </div>
+                  <div
+                    class="audit-filters"
+                    role="group"
+                    aria-label="Filter audit decisions"
+                  >
+                    <button
+                      class="ma-button ma-button--secondary ma-button--small"
+                      type="button"
+                      data-audit-filter="all"
+                      aria-pressed="true"
+                    >
+                      All</button
+                    ><button
+                      class="ma-button ma-button--ghost ma-button--small"
+                      type="button"
+                      data-audit-filter="allow"
+                      aria-pressed="false"
+                    >
+                      Allowed</button
+                    ><button
+                      class="ma-button ma-button--ghost ma-button--small"
+                      type="button"
+                      data-audit-filter="deny"
+                      aria-pressed="false"
+                    >
+                      Denied
+                    </button>
+                  </div>
+                </div>
+                <div class="ma-table-wrap">
+                  <table class="ma-table">
+                    <caption class="ma-sr-only">
+                      Recent governed gateway requests
+                    </caption>
+                    <thead>
+                      <tr>
+                        <th scope="col">Request</th>
+                        <th scope="col">Identity</th>
+                        <th scope="col">Resource</th>
+                        <th scope="col">Decision</th>
+                        <th scope="col">Latency</th>
+                        <th scope="col">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr data-audit-row data-decision-value="allow">
+                        <td>
+                          <span class="ma-table__primary ma-mono">req_8f21</span
+                          ><span class="ma-table__secondary"
+                            >INC-2481 / run-42</span
+                          >
+                        </td>
+                        <td>
+                          Maya Chen<span class="ma-table__secondary"
+                            >incident-responder</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-table__primary">query_prometheus</span
+                          ><span class="ma-table__secondary"
+                            >MCP / grafana-observe</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-badge" data-decision="allow"
+                            >Allowed</span
+                          >
+                        </td>
+                        <td class="ma-mono">112ms</td>
+                        <td class="ma-mono">21:44:31</td>
+                      </tr>
+                      <tr data-audit-row data-decision-value="deny">
+                        <td>
+                          <span class="ma-table__primary ma-mono">req_8f20</span
+                          ><span class="ma-table__secondary"
+                            >INC-2481 / run-41</span
+                          >
+                        </td>
+                        <td>
+                          Alex Reed<span class="ma-table__secondary"
+                            >restricted-observer</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-table__primary"
+                            >deploy.production</span
+                          ><span class="ma-table__secondary"
+                            >MCP / platform-write</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-badge" data-decision="deny"
+                            >Denied</span
+                          >
+                        </td>
+                        <td class="ma-mono">8ms</td>
+                        <td class="ma-mono">21:43:58</td>
+                      </tr>
+                      <tr data-audit-row data-decision-value="allow">
+                        <td>
+                          <span class="ma-table__primary ma-mono">req_8f19</span
+                          ><span class="ma-table__secondary"
+                            >INC-2481 / run-42</span
+                          >
+                        </td>
+                        <td>
+                          Maya Chen<span class="ma-table__secondary"
+                            >incident-responder</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-table__primary"
+                            >reasoning-primary</span
+                          ><span class="ma-table__secondary"
+                            >LLM / provider-a</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-badge" data-decision="allow"
+                            >Allowed</span
+                          >
+                        </td>
+                        <td class="ma-mono">1.8s</td>
+                        <td class="ma-mono">21:43:11</td>
+                      </tr>
+                      <tr data-audit-row data-decision-value="deny">
+                        <td>
+                          <span class="ma-table__primary ma-mono">req_8f18</span
+                          ><span class="ma-table__secondary">No incident</span>
+                        </td>
+                        <td>
+                          svc-reports<span class="ma-table__secondary"
+                            >service-account</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-table__primary"
+                            >security-postmortems</span
+                          ><span class="ma-table__secondary"
+                            >BoK / restricted</span
+                          >
+                        </td>
+                        <td>
+                          <span class="ma-badge" data-decision="deny"
+                            >Denied</span
+                          >
+                        </td>
+                        <td class="ma-mono">6ms</td>
+                        <td class="ma-mono">21:40:04</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div class="ma-panel__footer">
+                  <span
+                    class="ma-muted"
+                    style="font-size: var(--ma-font-size-xs)"
+                    >Metadata only. Prompt content storage is disabled.</span
+                  ><button
+                    class="ma-button ma-button--ghost ma-button--small"
+                    type="button"
+                  >
+                    View all requests<svg class="ma-icon" aria-hidden="true">
+                      <use href="#icon-arrow"></use>
+                    </svg>
+                  </button>
+                </div>
+              </article>
+            </section>
+
+            <section
+              class="catalog-section"
+              id="usage"
+              aria-labelledby="usage-title"
+            >
+              <div class="catalog-section__intro">
+                <div>
+                  <p class="ma-eyebrow">07 / Implementation</p>
+                  <h2 id="usage-title">Use the system</h2>
+                </div>
+                <p>
+                  Import the complete CSS entry point, build with semantic
+                  tokens, and compose domain patterns from the core classes.
+                  Framework adapters can wrap these contracts later without
+                  redefining the visual language.
+                </p>
+              </div>
+              <div class="usage-path">
+                <article class="usage-step">
+                  <h3>Import one entry point</h3>
+                  <p>
+                    Load <code>styles/design-system.css</code> before
+                    product-specific layout styles.
+                  </p>
+                </article>
+                <article class="usage-step">
+                  <h3>Use semantic intent</h3>
+                  <p>
+                    Choose <code>--ma-color-text-primary</code>, never a
+                    primitive such as Space Indigo.
+                  </p>
+                </article>
+                <article class="usage-step">
+                  <h3>Compose domain patterns</h3>
+                  <p>
+                    Combine cards, badges, alerts, and timelines instead of
+                    adding one-off components.
+                  </p>
+                </article>
+              </div>
+              <div class="ma-alert" style="margin-top: var(--ma-space-6)">
+                <svg class="ma-icon" aria-hidden="true">
+                  <use href="#icon-evidence"></use>
+                </svg>
+                <div>
+                  <p class="ma-alert__title">Architecture boundary</p>
+                  <p class="ma-alert__detail">
+                    This release is framework-agnostic because the solution
+                    design leaves the frontend framework open. A React, Vue, or
+                    mobile adapter should consume the same token and behavior
+                    contracts.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <footer class="catalog-footer">
+              <span>midnight.agent design system / version 0.1.0</span
+              ><span
+                >Built for governed action and explainable incident
+                response.</span
+              >
+            </footer>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <div class="ma-sr-only" id="live-region" aria-live="polite"></div>
+    <script src="./scripts/showcase.js" defer></script>
+  </body>
+</html>
