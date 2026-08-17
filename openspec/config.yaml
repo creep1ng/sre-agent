@@ -1,0 +1,13 @@
+schema: spec-driven
+
+context: |
+  Project: sre-agent
+  OpenSpec is the authoritative store for SDD artifacts.
+  Execution mode: interactive.
+  Current implementation: framework-agnostic HTML, CSS, and browser JavaScript design-system catalog; no product backend, persistence, containers, CI, or project test runner exists yet.
+  Backend direction for downstream issues: Python, FastAPI, and Pydantic; issue #9 remains contract-first and does not implement them.
+  MVP governance: single workspace; Principal kind is human or agent; API-key authentication; direct principal-action-resource grants; absence of a grant denies access.
+  Shared contract location: /schemas at the repository root.
+  Contract versioning: follow the Semantic Versioning 2.0.0 standard; initial contract version is 1.0.0.
+  Testing: strict TDD is disabled until the repository has an executable project test runner; contract fixtures and validation remain required when introduced.
+  Delivery: force-chained using stacked-to-main; the ordinary limit is at most 400 changed lines per review slice, while 800 is a session ceiling allowed only with explicit approval and `size:exception` when applicable.
