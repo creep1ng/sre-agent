@@ -6,8 +6,8 @@ Planning only. No backend, database, FastAPI runtime, production CLI, real authe
 
 - Artifact store: OpenSpec; execution: autonomous for remaining work units; delivery: `force-chained`; chain: `stacked-to-main`.
 - Before S1, local `main` was safely fast-forwarded by five commits to GitHub `main` at `71112f9`, including `.github/pull_request_template.md`, after checking incoming paths for untracked collisions.
-- Issue-first is resolved: #9 and native subissues #58–#67 retain `status:approved`; S1–S3 are closed by merged PRs, S4 is the current slice, and A–F remain open. Each PR uses its real slice issue in `Closes #N` plus `Refs #9`; closing #9 remains reserved until every slice satisfies the tracker.
-- Every PR uses exactly label `type:feature`, appends Chain Context to the repository template, and targets updated `main`. Remaining work units execute autonomously and merge only after applicable checks pass, without admin bypass, force, or starting the next slice before confirmed merge.
+- Issue-first is resolved: #9 plus native subissues #58–#67 and #72 retain `status:approved`; S1–S4 are closed by merged PRs, while A1/A2/B–F remain open. Each PR uses its real slice issue in `Closes #N` plus `Refs #9`; closing #9 remains reserved until every slice satisfies the tracker.
+- Every PR uses exactly label `type:feature`, appends Chain Context to the repository template, and targets updated `main`. A1/A2/B–E execute autonomously and merge only after applicable checks pass, without admin bypass or force; F/#67 is opened last and remains unmerged for manual review.
 - S1 isolated-INDEX gate: `openspec doctor --json` is healthy; `openspec status --change issue-9-gateway-boundary-contracts-and-adrs --json` is partial (proposal ready; specs/design/tasks blocked); strict validation must fail honestly with `Change must have at least one delta` until S2. `.atl/skill-registry.md`, backend/runtime code, generated bundles, `node_modules`, and secrets are excluded.
 
 ## Issue-first check
@@ -15,16 +15,16 @@ Planning only. No backend, database, FastAPI runtime, production CLI, real authe
 | Check | Read-only evidence | Gate/effect |
 |---|---|---|
 | Issue #9 | [Open and approved](https://github.com/creep1ng/sre-agent/issues/9); existing labels preserved | **Pass** |
-| Premature closure | Ten unique native subissues [#58](https://github.com/creep1ng/sre-agent/issues/58)–[#67](https://github.com/creep1ng/sre-agent/issues/67) are approved and parented by #9; only a merged slice PR closes its own issue | Each PR closes only its real slice issue and references #9 |
+| Premature closure | Eleven unique native subissues [#58](https://github.com/creep1ng/sre-agent/issues/58)–[#67](https://github.com/creep1ng/sre-agent/issues/67) plus [#72](https://github.com/creep1ng/sre-agent/issues/72) are approved and parented by #9; only a merged slice PR closes its own issue | Each PR closes only its real slice issue and references #9 |
 | PR template | Exists on GitHub `main` at `.github/pull_request_template.md`; local `main` was five commits behind | Fast-forwarded safely before S1; preserve all template sections |
 | Labels | `status:approved`, `size:exception`, and `type:feature` exist | Use exactly `type:feature`; no exception is currently justified |
 | Rules/checks | Active ruleset requires a PR to default branch and merge commits; no required status checks/workflows or classic branch protection are visible | PR/merge gate applies; policy checks still require approved issue and one type label |
 
-Gate evidence: S1=#58, S2=#59, S3=#60, S4=#61, A=#62, B=#63, C=#64, D=#65, E=#66, F=#67. GitHub GraphQL and REST both report exactly ten native subissues with parent #9; after S4 merge, no further decision is needed before autonomous slice A.
+Gate evidence: S1=#58, S2=#59, S3=#60, S4=#61, A1=#62, A2=#72, B=#63, C=#64, D=#65, E=#66, F=#67. GitHub reports exactly eleven native subissues with parent #9; after S4 merge, no further decision is needed before autonomous slice A1.
 
 ## Review Workload Forecast
 
-Estimated changed lines total: **3,220–3,570** (`additions + deletions`), including **1,240 OpenSpec planning lines across S1–S4** (1,022 dependency lines plus this 218-line plan) and six contract slices. Tracked generated dependency cost is currently about **126 lockfile lines** for pinned Ajv/Redocly/Ajv-formats/YAML; OpenAPI bundles remain reproducible temporary output, not review-noise committed to Git.
+Estimated changed lines total: **3,420–3,800** (`additions + deletions`), including **1,240 OpenSpec planning lines across S1–S4** and seven remaining contract work units. The combined A candidate reached **400 staged/416 native** and had a bounded historical exception, but a fresh rereview after its one correction found the unguarded `externalValue` resolver surface. The split supersedes that candidate: A is not approved, and neither A1 nor A2 is forecast to require `size:exception`.
 
 Decision needed before apply: No
 Chained PRs recommended: Yes
@@ -37,18 +37,19 @@ Chain strategy: stacked-to-main
 | S2 SDD core specs | +319 / -0 | 4 / 0 | Medium / 35–45m | S1 merged → proposal+3 specs → revert docs commit | Medium | Low | No after gate | No |
 | S3 SDD audit/design | +315 / -0 | 3 / 0 | Medium / 35–45m | S2 merged → 2 specs+design → reverse dependent rollback before reverting S3 | Medium | Low | No after gate | No |
 | S4 SDD tasks | +218 / -0 | 1 / 0 | Medium / 35–45m | S3 merged → executable plan tracked → revert docs commit | Low | Low | No after gate | No |
-| A Tooling | +280–335 / -0–5 | 8–10 / ~126 | Medium / 45–55m | S4 merged → dev validator harness → revert A | Medium | Low | No | No; isolate lock only if regenerated >400 |
-| B Shared schemas | +345–390 / -0–10 | 16–20 / 0 | High / 50–60m | A merged → shared authority validated → revert B | High | Low | No | No; split identity/policy if >400 |
+| A1 Schema tooling | +190–230 / -0–10 | 10 / ~110–115 lockfile | Medium / 35–45m | S4 merged → Ajv schema/fixture validator only → revert A1 | Medium | Low | No | No |
+| A2 OpenAPI tooling | +285–380 / -0–10 | 10–15 / ~15 lockfile delta | High / 50–60m | A1 merged → offline all-locator OpenAPI gate + semantic diff → revert A2 | High | Low | No | No; split before 400 |
+| B Shared schemas | +345–390 / -0–10 | 16–20 / 0 | High / 50–60m | A2 merged → shared authority validated → revert B | High | Low | No | No; split identity/policy if >400 |
 | C Audit boundary | +325–380 / -0–10 | 11–14 / 0 | High / 50–60m | B merged → fail-closed audit contract → revert C | High | Low | No | No; split fixtures if >400 |
 | D Control plane | +350–390 / -0–10 | 16–20 / 0 | High / 50–60m | C merged → complete control OAS/bootstrap → revert D | High | Low | No | No; split credential/bootstrap if >400 |
 | E Responses | +350–390 / -0–10 | 14–18 / 0 | High / 50–60m | D merged → Responses/OpenRouter boundary → revert E | High | Low | No | No; split provider drift if >400 |
 | F Conformance | +330–390 / -0–10 | 16–20 / 20–40 compact evidence | High / 50–60m | E merged → release manifest/evidence → revert F | High | Low | No | No; split projection evidence if >400 |
 
-`Chained PRs recommended: Yes`. Any actual slice above 400 changed lines must be split before review or receive an explicit maintainer-approved `size:exception`; no slice may exceed 800 without new approval. The current 126-line lock estimate does not justify a generated-dependency exception.
+`Chained PRs recommended: Yes`. Any staged slice above 400 changed lines must split before review; no slice may exceed 800 without new approval. The historical combined-A exception documents prior accounting only and MUST NOT be applied to A1 or A2. Both require fresh review and an authored diff `<=400` with exactly one `type:*` label.
 
 ## Serial PR map
 
-All branch names match `^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)/[a-z0-9._-]+$`. The issue numbers below are distinct approved native subissues of #9.
+Planned PR count: **11**. All branch names match `^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)/[a-z0-9._-]+$`. The issue numbers below are distinct approved native subissues of #9.
 
 | PR | Branch | Suggested work-unit commit(s) | Exactly one label / issue linkage | Chain diagram |
 |---|---|---|---|---|
@@ -56,18 +57,19 @@ All branch names match `^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|
 | S2 | `feat/issue-9-sdd-core-specs` | `feat(sdd): publish core gateway contract specs` | `type:feature`; `Closes #59`; `Refs #9` | `main+S1 ← 📍 S2` |
 | S3 | `feat/issue-9-sdd-audit-design` | `feat(sdd): publish audit specs and contract design` | `type:feature`; `Closes #60`; `Refs #9` | `main+S1+S2 ← 📍 S3` |
 | S4 | `feat/issue-9-sdd-tasks` | `feat(sdd): publish gateway contract task plan` | `type:feature`; `Closes #61`; `Refs #9` | `main+S1..S3 ← 📍 S4` |
-| A | `feat/issue-9-contract-tooling` | `feat(contracts): add pinned validation tooling` | `type:feature`; `Closes #62`; `Refs #9` | `main+S1..S4 ← 📍 A` |
-| B | `feat/issue-9-shared-contracts` | `feat(contracts): add shared governance schemas` | `type:feature`; `Closes #63`; `Refs #9` | `main+…+A ← 📍 B` |
+| A1 | `feat/issue-9-contract-tooling` | `feat(contracts): add schema validation tooling` | `type:feature`; `Closes #62`; `Refs #9` | `main+S1..S4 ← 📍 A1` |
+| A2 | `feat/issue-9-openapi-tooling` | `feat(contracts): add offline openapi tooling` | `type:feature`; `Closes #72`; `Refs #9` | `main+…+A1 ← 📍 A2` |
+| B | `feat/issue-9-shared-contracts` | `feat(contracts): add shared governance schemas` | `type:feature`; `Closes #63`; `Refs #9` | `main+…+A2 ← 📍 B` |
 | C | `feat/issue-9-audit-contract` | `feat(contracts): define audit redaction boundary` | `type:feature`; `Closes #64`; `Refs #9` | `main+…+B ← 📍 C` |
 | D | `feat/issue-9-control-plane-contract` | `feat(contracts): define control plane contract` | `type:feature`; `Closes #65`; `Refs #9` | `main+…+C ← 📍 D` |
 | E | `feat/issue-9-responses-contract` | `feat(contracts): define responses gateway contract` | `type:feature`; `Closes #66`; `Refs #9` | `main+…+D ← 📍 E` |
 | F | `feat/issue-9-conformance-evidence` | `feat(contracts): publish release conformance evidence` | `type:feature`; `Closes #67`; `Refs #9` | `main+…+E ← 📍 F` |
 
-The design forecast is dependency-adjusted: audit schema C precedes control/Responses OAS so external references resolve in every autonomous slice. Tooling A includes the lockfile because a clean temporary generation measured 126 lines; if apply produces >400 generated lines, extract an isolated generated-dependency PR and require `size:exception`.
+The design forecast is dependency-adjusted: A1 establishes only Ajv schema/fixture validation; A2 adds every OpenAPI resolver surface and semantic diff under a fresh review context; then B–F proceed unchanged. Audit schema C still precedes control/Responses OAS so external references resolve in every autonomous slice. The final chain is `S1–S4 → A1 → A2 → B → C → D → E → F`.
 
 ## Future per-slice delivery protocol
 
-For each slice only: (1) fetch and fast-forward `main`; (2) create its branch from updated `main`; (3) implement only that work unit; (4) run exact validation below; (5) inspect requirements, diff, generated/semantic boundaries, and secrets before commit/push/PR; (6) apply at most the authorized correction budget and create conventional commit(s) without `Co-Authored-By`; (7) push and open one template-based PR with Chain Context, approved issue, and exactly `type:feature`; (8) wait boundedly for applicable checks, then merge by repository policy without admin/bypass/force and verify updated `main` before the next slice. Stop with state preserved if checks or GitHub fail; never open the next PR against stale `main`.
+For each slice only: (1) fetch and fast-forward `main`; (2) create its branch from updated `main`; (3) implement only that work unit; (4) run exact validation below; (5) inspect requirements, diff, generated/semantic boundaries, and secrets in fresh context before commit/push/PR; (6) apply at most the authorized correction budget and create conventional commit(s) without `Co-Authored-By`; (7) push and open one template-based PR with Chain Context, approved issue, and exactly `type:feature`; (8) for A1/A2/B–E, wait boundedly for checks, merge by policy without admin/bypass/force, and verify updated `main` before the next slice. For F/#67, open the validated PR and stop for manual review without merging. Stop with state preserved if checks or GitHub fail; never open the next PR against stale `main`.
 
 ## PR S1 — OpenSpec context
 
@@ -90,30 +92,33 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
 ## PR S4 — Executable task plan
 
 - [x] **4.1 Track this plan without implementation.** File: `tasks.md`; coverage: traceability and executable ordering for all requirements/scenarios; depends on S3.
-  - Steps: stage only `tasks.md`, recount checkboxes/forecast, and confirm all ten PR boundaries; verify: `openspec status --change issue-9-gateway-boundary-contracts-and-adrs` shows `4/4`, strict validation passes, and `git diff --cached --check` passes.
-  - Done: tasks are `done` and the next apply boundary is A after confirmed S4 merge; rollback: revert S4; commit/PR: `feat(sdd): publish gateway contract task plan` / S4.
+  - Steps: stage only `tasks.md`, recount checkboxes/forecast, and confirm all eleven PR boundaries after the A1/A2 split; verify: `openspec status --change issue-9-gateway-boundary-contracts-and-adrs` shows `4/4`, strict validation passes, and `git diff --cached --check` passes.
+  - Done: tasks are `done` and the next apply boundary is A1 after confirmed S4 merge; rollback: revert S4; commit/PR: `feat(sdd): publish gateway contract task plan` / S4.
 
-## PR A — Development-only contract tooling
+## PR A1 — Schema/fixture tooling
 
-- [ ] **5.1 Add a reproducible Node toolchain.** Files: `schemas/tooling/{package.json,package-lock.json,redocly.yaml,.gitignore}`; coverage: Versioned shared schemas/Portable evidence/Technology independence; depends on S4.
-  - Steps: pin dev-only `ajv@8.20.0`, `ajv-formats@3.0.1`, `yaml@2.9.0`, `@redocly/cli@2.46.1`, Node engines, scripts, and lockfile; verify: `npm ci --prefix schemas/tooling && npm audit --prefix schemas/tooling --audit-level=moderate`.
-  - Done: clean install has no production dependency or tracked `node_modules`; rollback: revert 5.1; commit/PR: A commit `feat(contracts): add pinned validation tooling` / A.
+- [ ] **5.1 Add the minimal reproducible schema toolchain.** Files: `schemas/tooling/{package.json,package-lock.json,.gitignore}`; coverage: Versioned shared schemas/Portable evidence/Technology independence; depends on S4.
+  - Steps: pin only dev-only `ajv@8.20.0` and `ajv-formats@3.0.1`, plus Node engines, schema scripts, and lockfile; no YAML parser is required because A1 consumes JSON-only schemas/fixtures; exclude Redocly, OpenAPI scripts/config/fixtures, semantic diff, locators, and `externalValue`; verify: `npm ci --prefix schemas/tooling && npm audit --prefix schemas/tooling --audit-level=moderate`.
+  - Done: clean install has no production dependency or tracked `node_modules`, A1 is `<=400` without exception, and no OpenAPI surface exists; rollback: revert only A1 manifest/lock/config; commit/PR: `feat(contracts): add schema validation tooling` / A1 #62.
 
-- [ ] **5.2 Build strict Draft 2020-12 schema/fixture validation.** Files: `schemas/tooling/{validate.mjs,lib/schema-validation.mjs,test/schema-validation.test.mjs,test/fixtures/*}`; coverage: Positive fixture drifts, Negative fixture validates, Canonical vocabulary; depends on 5.1.
+- [ ] **5.2 Build strict Draft 2020-12 schema/fixture validation.** Files: `schemas/tooling/{validate.mjs,lib/schema-validation.mjs,test/schema-validation.test.mjs,test/fixtures/schema/*}`; coverage: Positive fixture drifts, Negative fixture validates, Canonical vocabulary; depends on 5.1.
   - Steps: use Ajv2020 strict mode, formats, immutable `$id` registry, closed schemas, and fixture metadata (`target/rule/status/version`); verify: `npm --prefix schemas/tooling test -- --test-name-pattern="schema|fixture"`.
-  - Done: positives must validate and named negatives must fail for the expected rule; rollback: revert 5.2; commit: `feat(contracts): validate schemas and fixtures strictly` / A.
+  - Done: positives validate, named negatives fail for the expected rule, runtime harness is N/A, and A2 can add OpenAPI without changing A1 behavior; rollback: revert validator/fixtures independently from later OpenAPI tooling; commit: `feat(contracts): validate schemas and fixtures strictly` / A1 #62.
 
-- [ ] **5.3 Add deterministic OpenAPI lint/bundle support.** Files: `schemas/tooling/{lib/openapi-validation.mjs,test/openapi-validation.test.mjs}`; coverage: Versioned shared schemas/Technology independence; depends on 5.1.
-  - Steps: require OAS 3.1.0, resolve external refs, lint before bundle, and write bundles only under ignored `.tmp/`; verify: `npm --prefix schemas/tooling test -- --test-name-pattern="openapi"`.
-  - Done: unresolved refs, wrong OAS/version, and lint errors fail without committing generated bundles; rollback: revert 5.3; commit: `feat(contracts): lint and bundle canonical openapi` / A.
+## PR A2 — Offline OpenAPI tooling and semantic diff
+
+- [ ] **5.3 Add deterministic offline OpenAPI lint/bundle with complete locator policy.** Files: `schemas/tooling/{package.json,package-lock.json,redocly.yaml,lib/openapi-validation.mjs,test/openapi-validation.test.mjs,test/fixtures/openapi/*}`; coverage: Versioned shared schemas/Technology independence plus the `externalValue` blocker; depends on A1.
+  - Steps: add and pin `yaml@2.9.0` together with `@redocly/cli@2.46.1` only in A2; require OAS 3.1.0 and preflight every resolver-visible locator recursively before Redocly, including `$ref` and nested `externalValue`; reject network/protocol-relative/`file:`/absolute/parent traversal (direct or encoded) and `realpath`/symlink escapes, allow only fragments or regular files contained under the approved root, lint before bundle, and confine output to ignored `.tmp/`.
+  - Verify: `npm --prefix schemas/tooling test -- --test-name-pattern="openapi|locator|externalValue"` plus independent probes proving zero remote request, zero outside-root sentinel read, rejection of parent/file/absolute/symlink cases, and acceptance of contained local files.
+  - Done: unresolved locators, wrong OAS/version, lint errors, `externalValue` bypasses, network access, and containment escapes fail before Redocly; A2 remains `<=400` without exception; rollback: revert Redocly/config/preflight/tests while A1 remains installable; commit/PR: `feat(contracts): add offline openapi tooling` / A2 #72.
 
 - [ ] **5.4 Add the semantic projection-diff harness.** Files: `schemas/tooling/{diff-openapi.mjs,lib/openapi-normalize.mjs,test/openapi-diff.test.mjs,test/fixtures/openapi/*}`; coverage: Consumers conform/Internal model is shared/Adapter changes; depends on 5.3.
   - Steps: normalize ordering/format, compare paths, methods, inputs, statuses, media types, and schemas, and reject missing/extra behavior; verify: `npm --prefix schemas/tooling test -- --test-name-pattern="semantic diff"`.
-  - Done: toy match passes and missing/extra fixtures fail; no FastAPI backend exists; rollback: revert 5.4; commit: `feat(contracts): compare canonical and projected openapi` / A.
+  - Done: toy match passes; missing/extra and parameter/security/media/status/schema drift fail; runtime harness is N/A because the projection is a fixture and no FastAPI backend exists; rollback: revert diff/normalizer/fixtures without removing A1; commit: `feat(contracts): compare canonical and projected openapi` / A2 #72.
 
 ## PR B — Shared governance schemas and ADR-002/003/004
 
-- [ ] **6.1 Define Principal and credential boundaries.** Files: domain `principal`, `credential-reference`, `principal-context` schemas, identity fixtures, `adrs/ADR-002-principal.md`, `ADR-003-api-keys.md`; coverage: Principal/credential schemas and its four scenarios; depends on A.
+- [ ] **6.1 Define Principal and credential boundaries.** Files: domain `principal`, `credential-reference`, `principal-context` schemas, identity fixtures, `adrs/ADR-002-principal.md`, `ADR-003-api-keys.md`; coverage: Principal/credential schemas and its four scenarios; depends on A2.
   - Steps: enforce human/agent, single workspace, entity-specific status/lifecycle, and reject key/Authorization from shared/persistent identity representations while reserving the dedicated one-time issuance exception for 8.3; verify: `npm --prefix schemas/tooling run validate -- --scope identity`.
   - Done: valid identities pass and legacy/secret fixtures fail; rollback: revert 6.1; commit: `feat(contracts): add principal and credential schemas` / B.
 
@@ -201,7 +206,7 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
   - Steps: map #10 transport, #11 schema/persistence, #13 Bearer/context/401, #14 ordered flow/errors/audit, harness execution OAS, and UI control OAS to named fixtures/commands; verify: `npm --prefix schemas/tooling run conformance -- --check coverage`.
   - Done: no requirement/operation/type lacks an owner and no internal DTO/ORM/provider type is authority; rollback: revert 10.2; commit: `feat(contracts): map consumer conformance obligations` / F.
 
-- [ ] **10.3 Add future FastAPI projection harness fixtures.** Files: normalized matching/missing/extra projection fixtures under `fixtures/{positive,negative}` and diff tests; coverage: Consumer conformance/Technology independence/Adapter changes; depends on A and both OAS files.
+- [ ] **10.3 Add future FastAPI projection harness fixtures.** Files: normalized matching/missing/extra projection fixtures under `fixtures/{positive,negative}` and diff tests; coverage: Consumer conformance/Technology independence/Adapter changes; depends on A2 and both OAS files.
   - Steps: model future FastAPI `/openapi.json` as input fixture only, normalize semantic signatures, and test missing/extra behavior; verify: `npm --prefix schemas/tooling run diff:openapi -- --projection-fixture future-fastapi`.
   - Done: canonical-vs-projection match passes and drift fixtures fail without creating FastAPI/Python code; rollback: revert 10.3; commit: `feat(contracts): add fastapi projection conformance fixture` / F.
 
@@ -215,4 +220,4 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
 
 ## Next autonomous apply slice
 
-S1–S4 are complete after this task-plan publication. The next autonomous work unit is **only PR A / tasks 5.1–5.4** after S4 merge is confirmed: start from freshly fast-forwarded `main`, create `feat/issue-9-contract-tooling`, include only development tooling and its focused tests, exclude `.atl/` and contract slices B–F, enforce the 400-line review budget, and preserve state without starting B if checks or GitHub fail.
+S1–S4 are complete. The next autonomous work unit is **only PR A1/#62 / tasks 5.1–5.2**: preserve branch `feat/issue-9-contract-tooling`, include only minimal package/lock/config plus Ajv schema/fixture validation, remove every OpenAPI/Redocly/semantic-diff/locator/`externalValue` surface from A1, keep authored change `<=400` without exception, and obtain fresh review before delivery. A2/#72 starts from updated `main` only after A1 merges; B cannot start before A2 merges.
