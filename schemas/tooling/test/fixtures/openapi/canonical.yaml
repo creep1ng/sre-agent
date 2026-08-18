@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info: { title: Offline fixture, version: 1.0.0 }
+servers: [{ url: https://api.example.test }]
+paths:
+  /widgets/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      operationId: replaceWidget
+      summary: Replace a widget
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: components.json#/$defs/Widget }
+            examples:
+              local: { externalValue: example.json }
+      responses:
+        "200":
+          description: Replaced
+          content:
+            application/json:
+              schema: { $ref: components.json#/$defs/Widget }
+        "404": { description: Missing }
+components:
+  securitySchemes:
+    apiKey: { type: apiKey, in: header, name: Authorization }
