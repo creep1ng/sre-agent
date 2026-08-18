@@ -61,7 +61,7 @@ Planned PR count: **11**. All branch names match `^(feat|fix|chore|docs|style|re
 | A2 | `feat/issue-9-openapi-tooling` | `feat(contracts): add offline openapi tooling` | `type:feature`; `Closes #72`; `Refs #9` | `main+…+A1 ← 📍 A2` |
 | B | `feat/issue-9-shared-contracts` | `feat(contracts): add shared governance schemas` | `type:feature`; `Closes #63`; `Refs #9` | `main+…+A2 ← 📍 B` |
 | C | `feat/issue-9-audit-contract` | `feat(contracts): define audit redaction boundary` | `type:feature`; `Closes #64`; `Refs #9` | `main+…+B ← 📍 C` |
-| D | `feat/issue-9-control-plane-contract` | `feat(contracts): define control plane contract` | `type:feature`; `Closes #65`; `Refs #9` | `main+…+C ← 📍 D` |
+| D | `feat/issue-9-control-plane` | `feat(contracts): define control plane contract` | `type:feature`; `Closes #65`; `Refs #9` | `main+…+C ← 📍 D` |
 | E | `feat/issue-9-responses-contract` | `feat(contracts): define responses gateway contract` | `type:feature`; `Closes #66`; `Refs #9` | `main+…+D ← 📍 E` |
 | F | `feat/issue-9-conformance-evidence` | `feat(contracts): publish release conformance evidence` | `type:feature`; `Closes #67`; `Refs #9` | `main+…+E ← 📍 F` |
 
@@ -136,19 +136,19 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
 
 ## PR C — Audit/redaction foundation and ADR-005
 
-- [ ] **7.1 Define complete stage-aware AuditEvent/redaction shape.** Files: domain `audit-event.schema.json` and audit examples; coverage: Correlated AuditEvent, Metadata/content separable, append-only requirements and their scenarios; depends on B.
-  - Steps: separate mandatory event/stage/outcome/redaction/correlation metadata from stage-conditional identity, authorization, routing, safe credential ID, optional redacted content, and correction link; verify: `npm --prefix schemas/tooling run validate -- --scope audit`.
+- [x] **7.1 Define complete stage-aware AuditEvent/redaction shape.** Files: domain `audit-event.schema.json` and audit examples; coverage: Correlated AuditEvent, Metadata/content separable, append-only requirements and their scenarios; depends on B.
+  - Steps: define a closed audit-local projection: release-literal vocabularies plus domain-separated HMAC `auditRef` envelopes for every source identity/credential/resource/model/policy/grant/routing/correlation/untrusted value, stage-conditional evidence, structural fully-redacted content, and disjoint correction linkage; verify with plain strict Ajv, malformed-envelope probes, 33 carrier probes, and the stage/exporter matrices under `npm --prefix schemas/tooling run validate -- --scope audit`.
   - Done: allow, pre-route deny, pre-auth 422, unresolved-identity 401, metadata-only, and absent-content examples validate without fabricated authority, provider objects, or secrets; rollback: revert 7.1; commit: `feat(contracts): add correlated audit event schema` / C.
 
-- [ ] **7.2 Add pre-sink redaction fixtures.** Files: audit fixtures for LLM/MCP/sandbox/command/tool/free-content success and prohibited direct-sink/embedded-secret negatives; coverage: all Redaction precedes every sink scenarios; depends on 7.1.
+- [x] **7.2 Add pre-sink redaction fixtures.** Files: audit fixtures for LLM/MCP/sandbox/command/tool/free-content success and prohibited direct-sink/embedded-secret negatives; coverage: all Redaction precedes every sink scenarios; depends on 7.1.
   - Steps: encode structural removal, known-secret matching, pattern detection, and scanning outcomes; verify: `npm --prefix schemas/tooling run validate -- --scope redaction-success`.
   - Done: only redacted content reaches fixture sinks and raw values are absent; rollback: revert 7.2; commit: `feat(contracts): add pre-sink redaction fixtures` / C.
 
-- [ ] **7.3 Add fail-closed and audit-store fixtures.** Files: audit negative/positive fixtures for uncertain/error, partial payload, mutation/delete, durable acceptance failure, and downstream exporter failure; coverage: Redaction succeeds/fails, Event mutation, Audit store rejects, Exporter fails; depends on 7.1.
+- [x] **7.3 Add fail-closed and audit-store fixtures.** Files: audit negative/positive fixtures for uncertain/error, partial payload, mutation/delete, durable acceptance failure, and downstream exporter failure; coverage: Redaction succeeds/fails, Event mutation, Audit store rejects, Exporter fails; depends on 7.1.
   - Steps: require metadata-only `redaction_failed`, discard raw/partial data, gate ordinary results on authoritative acceptance, map rejection/unavailability to safe retryable 503 `audit_unavailable`, and keep exporters downstream; verify: `npm --prefix schemas/tooling run validate -- --scope redaction-failure`.
   - Done: every failure fixture proves no raw payload or false persistence claim survives, while exporter failure does not alter an already audited response; rollback: revert 7.3; commit: `feat(contracts): prove fail-closed redaction behavior` / C.
 
-- [ ] **7.4 Record audit decision and ownership.** Files: `adrs/ADR-005-audit-redaction.md`, `releases/1.0.0/conformance/ownership-matrix.yaml`; coverage: Accepted ADRs, Ownership matrix/Content is misplaced; depends on 7.1–7.3.
+- [x] **7.4 Record audit decision and ownership.** Files: `adrs/ADR-005-audit-redaction.md`, `releases/1.0.0/conformance/ownership-matrix.yaml`; coverage: Accepted ADRs, Ownership matrix/Content is misplaced; depends on 7.1–7.3.
   - Steps: mark the stage-aware redaction/durable-acceptance ADR accepted with deferred retention/access and encode Git/DB/secret-store required/prohibited placement; verify: `npm --prefix schemas/tooling run validate -- --scope governance`.
   - Done: ownership violations and secret placement fail; rollback: revert 7.4; commit: `feat(contracts): record audit and ownership governance` / C.
 
@@ -220,4 +220,4 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
 
 ## Next autonomous apply slice
 
-S1–S4 are complete. The next autonomous work unit is **only PR A1/#62 / tasks 5.1–5.2**: preserve branch `feat/issue-9-contract-tooling`, include only minimal package/lock/config plus Ajv schema/fixture validation, remove every OpenAPI/Redocly/semantic-diff/locator/`externalValue` surface from A1, keep authored change `<=400` without exception, and obtain fresh review before delivery. A2/#72 starts from updated `main` only after A1 merges; B cannot start before A2 merges.
+S1–S4 and A1–C are complete through the current staged C candidate. The next autonomous work unit is **only PR D/#65 / tasks 8.1–8.5** on branch `feat/issue-9-control-plane`, and it starts from updated `main` only after C merges. Do not begin D from this unmerged C worktree.
