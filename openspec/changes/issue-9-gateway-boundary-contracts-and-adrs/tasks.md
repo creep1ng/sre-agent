@@ -97,22 +97,22 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
 
 ## PR A1 — Schema/fixture tooling
 
-- [ ] **5.1 Add the minimal reproducible schema toolchain.** Files: `schemas/tooling/{package.json,package-lock.json,.gitignore}`; coverage: Versioned shared schemas/Portable evidence/Technology independence; depends on S4.
+- [x] **5.1 Add the minimal reproducible schema toolchain.** Files: `schemas/tooling/{package.json,package-lock.json,.gitignore}`; coverage: Versioned shared schemas/Portable evidence/Technology independence; depends on S4.
   - Steps: pin only dev-only `ajv@8.20.0` and `ajv-formats@3.0.1`, plus Node engines, schema scripts, and lockfile; no YAML parser is required because A1 consumes JSON-only schemas/fixtures; exclude Redocly, OpenAPI scripts/config/fixtures, semantic diff, locators, and `externalValue`; verify: `npm ci --prefix schemas/tooling && npm audit --prefix schemas/tooling --audit-level=moderate`.
   - Done: clean install has no production dependency or tracked `node_modules`, A1 is `<=400` without exception, and no OpenAPI surface exists; rollback: revert only A1 manifest/lock/config; commit/PR: `feat(contracts): add schema validation tooling` / A1 #62.
 
-- [ ] **5.2 Build strict Draft 2020-12 schema/fixture validation.** Files: `schemas/tooling/{validate.mjs,lib/schema-validation.mjs,test/schema-validation.test.mjs,test/fixtures/schema/*}`; coverage: Positive fixture drifts, Negative fixture validates, Canonical vocabulary; depends on 5.1.
+- [x] **5.2 Build strict Draft 2020-12 schema/fixture validation.** Files: `schemas/tooling/{validate.mjs,lib/schema-validation.mjs,test/schema-validation.test.mjs,test/fixtures/schema/*}`; coverage: Positive fixture drifts, Negative fixture validates, Canonical vocabulary; depends on 5.1.
   - Steps: use Ajv2020 strict mode, formats, immutable `$id` registry, closed schemas, and fixture metadata (`target/rule/status/version`); verify: `npm --prefix schemas/tooling test -- --test-name-pattern="schema|fixture"`.
   - Done: positives validate, named negatives fail for the expected rule, runtime harness is N/A, and A2 can add OpenAPI without changing A1 behavior; rollback: revert validator/fixtures independently from later OpenAPI tooling; commit: `feat(contracts): validate schemas and fixtures strictly` / A1 #62.
 
 ## PR A2 — Offline OpenAPI tooling and semantic diff
 
-- [ ] **5.3 Add deterministic offline OpenAPI lint/bundle with complete locator policy.** Files: `schemas/tooling/{package.json,package-lock.json,redocly.yaml,lib/openapi-validation.mjs,test/openapi-validation.test.mjs,test/fixtures/openapi/*}`; coverage: Versioned shared schemas/Technology independence plus the `externalValue` blocker; depends on A1.
+- [x] **5.3 Add deterministic offline OpenAPI lint/bundle with complete locator policy.** Files: `schemas/tooling/{package.json,package-lock.json,redocly.yaml,lib/openapi-validation.mjs,test/openapi-validation.test.mjs,test/fixtures/openapi/*}`; coverage: Versioned shared schemas/Technology independence plus the `externalValue` blocker; depends on A1.
   - Steps: add and pin `yaml@2.9.0` together with `@redocly/cli@2.46.1` only in A2; require OAS 3.1.0 and preflight every resolver-visible locator recursively before Redocly, including `$ref` and nested `externalValue`; reject network/protocol-relative/`file:`/absolute/parent traversal (direct or encoded) and `realpath`/symlink escapes, allow only fragments or regular files contained under the approved root, lint before bundle, and confine output to ignored `.tmp/`.
   - Verify: `npm --prefix schemas/tooling test -- --test-name-pattern="openapi|locator|externalValue"` plus independent probes proving zero remote request, zero outside-root sentinel read, rejection of parent/file/absolute/symlink cases, and acceptance of contained local files.
   - Done: unresolved locators, wrong OAS/version, lint errors, `externalValue` bypasses, network access, and containment escapes fail before Redocly; A2 remains `<=400` without exception; rollback: revert Redocly/config/preflight/tests while A1 remains installable; commit/PR: `feat(contracts): add offline openapi tooling` / A2 #72.
 
-- [ ] **5.4 Add the semantic projection-diff harness.** Files: `schemas/tooling/{diff-openapi.mjs,lib/openapi-normalize.mjs,test/openapi-diff.test.mjs,test/fixtures/openapi/*}`; coverage: Consumers conform/Internal model is shared/Adapter changes; depends on 5.3.
+- [x] **5.4 Add the semantic projection-diff harness.** Files: `schemas/tooling/{diff-openapi.mjs,lib/openapi-normalize.mjs,test/openapi-diff.test.mjs,test/fixtures/openapi/*}`; coverage: Consumers conform/Internal model is shared/Adapter changes; depends on 5.3.
   - Steps: normalize ordering/format, compare paths, methods, inputs, statuses, media types, and schemas, and reject missing/extra behavior; verify: `npm --prefix schemas/tooling test -- --test-name-pattern="semantic diff"`.
   - Done: toy match passes; missing/extra and parameter/security/media/status/schema drift fail; runtime harness is N/A because the projection is a fixture and no FastAPI backend exists; rollback: revert diff/normalizer/fixtures without removing A1; commit: `feat(contracts): compare canonical and projected openapi` / A2 #72.
 
