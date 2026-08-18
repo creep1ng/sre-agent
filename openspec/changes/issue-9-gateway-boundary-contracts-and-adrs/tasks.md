@@ -118,19 +118,19 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
 
 ## PR B — Shared governance schemas and ADR-002/003/004
 
-- [ ] **6.1 Define Principal and credential boundaries.** Files: domain `principal`, `credential-reference`, `principal-context` schemas, identity fixtures, `adrs/ADR-002-principal.md`, `ADR-003-api-keys.md`; coverage: Principal/credential schemas and its four scenarios; depends on A2.
+- [x] **6.1 Define Principal and credential boundaries.** Files: domain `principal`, `credential-reference`, `principal-context` schemas, identity fixtures, `adrs/ADR-002-principal.md`, `ADR-003-api-keys.md`; coverage: Principal/credential schemas and its four scenarios; depends on A2.
   - Steps: enforce human/agent, single workspace, entity-specific status/lifecycle, and reject key/Authorization from shared/persistent identity representations while reserving the dedicated one-time issuance exception for 8.3; verify: `npm --prefix schemas/tooling run validate -- --scope identity`.
   - Done: valid identities pass and legacy/secret fixtures fail; rollback: revert 6.1; commit: `feat(contracts): add principal and credential schemas` / B.
 
-- [ ] **6.2 Define governed model/resource boundaries.** Files: domain `model-alias` and `resource` schemas plus positive/negative fixtures; coverage: Model/resource/Grant requirement, Routing enters a Grant; depends on 6.1.
+- [x] **6.2 Define governed model/resource boundaries.** Files: domain `model-alias` and `resource` schemas plus positive/negative fixtures; coverage: Model/resource/Grant requirement, Routing enters a Grant; depends on 6.1.
   - Steps: separate alias, concrete model, router, provider, status, and allowed resource types; verify: `npm --prefix schemas/tooling run validate -- --scope model-resource`.
   - Done: routing stays on ModelAlias and outside Principal/Resource authority; rollback: revert 6.2; commit: `feat(contracts): add model alias and resource schemas` / B.
 
-- [ ] **6.3 Define direct Grant and PolicyDecision.** Files: domain `grant` and `policy-decision` schemas, allow/default-deny fixtures, `adrs/ADR-004-grants.md`; coverage: Direct grant validates, Routing enters a Grant, No grant matches, Grant allows; depends on 6.2.
+- [x] **6.3 Define direct Grant and PolicyDecision.** Files: domain `grant` and `policy-decision` schemas, allow/default-deny fixtures, `adrs/ADR-004-grants.md`; coverage: Direct grant validates, Routing enters a Grant, No grant matches, Grant allows; depends on 6.2.
   - Steps: constrain direct allow, `active|revoked` Grant lifecycle with active-only matching, nullable persisted `policy_id`, and `no_matching_grant`; verify: `npm --prefix schemas/tooling run validate -- --scope policy`.
   - Done: allow references its Grant and default deny has null policy ID; rollback: revert 6.3; commit: `feat(contracts): add grant and policy decision schemas` / B.
 
-- [ ] **6.4 Add safe shared envelopes and vocabulary guards.** Files: domain `correlation` plus HTTP `error-envelope`/`list-envelope` schemas and safe/legacy fixtures; coverage: Audit/error/correlation, Safe error, Correlation claims authority, Legacy vocabulary scenarios; depends on 6.1–6.3.
+- [x] **6.4 Add safe shared envelopes and vocabulary guards.** Files: domain `correlation` plus HTTP `error-envelope`/`list-envelope` schemas and safe/legacy fixtures; coverage: Audit/error/correlation, Safe error, Correlation claims authority, Legacy vocabulary scenarios; depends on 6.1–6.3.
   - Steps: close payloads, bound details/lists, separate IDs, and permit prohibited words only in marked negative fixtures; verify: `npm --prefix schemas/tooling run validate -- --scope shared && npm --prefix schemas/tooling test`.
   - Done: shared schema authority passes with no organization/tenant/user/role/scope fields; rollback: revert 6.4; commit: `feat(contracts): add safe envelopes and vocabulary lint` / B.
 

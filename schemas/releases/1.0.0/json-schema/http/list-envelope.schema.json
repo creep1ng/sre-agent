@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:sre-agent:schema:list-envelope:1.0.0","title":"ListEnvelope","type":"object","additionalProperties":false,"required":["items","limit","truncated"],"properties":{"items":{"type":"array","maxItems":100,"items":true},"limit":{"type":"integer","minimum":1,"maximum":100},"truncated":{"type":"boolean"}}}
