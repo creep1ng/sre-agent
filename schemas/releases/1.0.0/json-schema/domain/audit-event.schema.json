@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:audit-event:1.0.0",
+  "title": "AuditEvent",
+  "type": "object",
+  "unevaluatedProperties": false,
+  "required": ["event_id", "occurred_at", "operation", "action", "stage", "outcome", "reason_code", "response_status", "retryable", "correlation", "redaction", "content_state", "authoritative_acceptance", "ordinary_result", "exporter_result"],
+  "properties": {
+    "event_id": { "type": "string", "oneOf": [{ "format": "uuid" }, { "pattern": "^cor_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" }] },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "operation": { "enum": ["audit.accept", "audit.export", "audit.project", "audit.redact", "credentials.authenticate", "responses.create"] },
+    "action": { "enum": ["authenticate", "export", "invoke", "persist", "read_metadata", "redact"] },
+    "stage": { "enum": ["validation", "authentication", "authorization", "routing", "upstream", "response", "audit"] },
+    "outcome": { "enum": ["success", "denied", "error"] },
+    "reason_code": { "enum": [null, "audit_unavailable", "authentication_failed", "contract_validation_failed", "grant_matched", "no_matching_grant", "redaction_failed", "redaction_uncertain", "routing_unavailable", "upstream_failed", "upstream_invalid", "upstream_unavailable"] },
+    "response_status": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "retryable": { "type": "boolean" },
+    "correlation": { "$ref": "#/$defs/correlation" },
+    "identity": { "oneOf": [{ "$ref": "#/$defs/partial401Identity" }, { "$ref": "#/$defs/authenticatedIdentity" }] },
+    "resource": { "$ref": "#/$defs/resourceEvidence" },
+    "model_alias_ref": { "$ref": "#/$defs/auditRef" },
+    "policy_decision": { "oneOf": [{ "$ref": "#/$defs/allowDecision" }, { "$ref": "#/$defs/denyDecision" }] },
+    "routing": { "$ref": "#/$defs/routing" },
+    "untrusted_input": {
+      "type": "object", "additionalProperties": false,
+      "required": ["trust", "identifiers"],
+      "properties": {
+        "trust": { "const": "untrusted" },
+        "identifiers": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "$ref": "#/$defs/untrustedIdentifier" } }
+      }
+    },
+    "redaction": { "oneOf": [{ "$ref": "#/$defs/absentRedaction" }, { "$ref": "#/$defs/successfulRedaction" }, { "$ref": "#/$defs/failedRedaction" }] },
+    "content_state": { "enum": ["absent", "redacted", "redaction_failed"] },
+    "redacted_content": { "$ref": "#/$defs/redactedContent" },
+    "authoritative_acceptance": { "enum": ["accepted", "rejected"] },
+    "ordinary_result": { "enum": ["released", "suppressed"] },
+    "exporter_result": { "enum": ["not_attempted", "succeeded", "failed"] },
+    "correction_of_event_id": { "type": "string", "format": "uuid" }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        { "properties": { "stage": { "const": "validation" }, "outcome": { "const": "error" }, "reason_code": { "type": "string" }, "response_status": { "enum": [400, 422] }, "retryable": { "const": false } } },
+        { "properties": { "stage": { "const": "authentication" } }, "oneOf": [{ "properties": { "outcome": { "const": "success" }, "reason_code": { "type": "null" }, "response_status": { "type": "integer", "minimum": 200, "maximum": 299 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string" }, "response_status": { "const": 401 }, "retryable": { "const": false }, "identity": { "$ref": "#/$defs/partial401Identity" } } }] },
+        { "properties": { "stage": { "const": "authorization" } }, "oneOf": [{ "properties": { "outcome": { "const": "success" }, "reason_code": { "const": "grant_matched" }, "response_status": { "type": "integer", "minimum": 200, "maximum": 299 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "denied" }, "reason_code": { "const": "no_matching_grant" }, "response_status": { "const": 403 }, "retryable": { "const": false } } }] },
+        { "properties": { "stage": { "const": "routing" } }, "oneOf": [{ "properties": { "outcome": { "const": "success" }, "reason_code": { "type": "null" }, "response_status": { "type": "integer", "minimum": 200, "maximum": 299 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string" }, "response_status": { "const": 502 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string" }, "response_status": { "enum": [503, 504] }, "retryable": { "const": true } } }] },
+        { "properties": { "stage": { "const": "upstream" } }, "oneOf": [{ "properties": { "outcome": { "const": "success" }, "reason_code": { "type": "null" }, "response_status": { "type": "integer", "minimum": 200, "maximum": 299 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string" }, "response_status": { "const": 502 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string" }, "response_status": { "enum": [503, 504] }, "retryable": { "const": true } } }] },
+        { "properties": { "stage": { "const": "response" } }, "oneOf": [{ "properties": { "outcome": { "const": "success" }, "reason_code": { "type": "null" }, "response_status": { "type": "integer", "minimum": 200, "maximum": 299 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string", "not": { "enum": ["grant_matched", "no_matching_grant"] } }, "response_status": { "const": 502 }, "retryable": { "const": false } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string", "not": { "enum": ["grant_matched", "no_matching_grant"] } }, "response_status": { "enum": [503, 504] }, "retryable": { "const": true } } }] },
+        { "properties": { "stage": { "const": "audit" } }, "oneOf": [{ "properties": { "outcome": { "const": "success" }, "reason_code": { "type": ["string", "null"] }, "response_status": { "type": "integer", "minimum": 200, "maximum": 299 }, "retryable": { "const": false }, "authoritative_acceptance": { "const": "accepted" } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "type": "string" }, "response_status": { "anyOf": [{ "type": "integer", "minimum": 200, "maximum": 299 }, { "enum": [400, 401, 403, 404, 409, 422, 502] }] }, "retryable": { "const": false }, "authoritative_acceptance": { "const": "accepted" } } }, { "properties": { "outcome": { "const": "error" }, "reason_code": { "const": "audit_unavailable" }, "response_status": { "const": 503 }, "retryable": { "const": true }, "authoritative_acceptance": { "const": "rejected" } } }] }
+      ]
+    },
+    { "if": { "properties": { "stage": { "enum": ["validation", "audit"] } }, "required": ["stage"] }, "then": { "properties": { "identity": false, "resource": false, "model_alias_ref": false, "policy_decision": false, "routing": false } } },
+    { "if": { "properties": { "stage": { "const": "authentication" } }, "required": ["stage"] }, "then": { "properties": { "resource": false, "model_alias_ref": false, "policy_decision": false, "routing": false } } },
+    { "if": { "properties": { "stage": { "const": "authentication" }, "outcome": { "const": "success" } }, "required": ["stage", "outcome"] }, "then": { "properties": { "identity": { "$ref": "#/$defs/authenticatedIdentity" } }, "required": ["identity"] } },
+    { "if": { "properties": { "stage": { "enum": ["authorization", "routing", "upstream", "response"] } }, "required": ["stage"] }, "then": { "properties": { "identity": { "$ref": "#/$defs/authenticatedIdentity" }, "resource": true, "model_alias_ref": true }, "required": ["identity", "resource", "model_alias_ref"] } },
+    { "if": { "properties": { "stage": { "const": "authorization" } }, "required": ["stage"] }, "then": { "properties": { "routing": false }, "oneOf": [{ "properties": { "outcome": { "const": "success" }, "reason_code": { "const": "grant_matched" }, "policy_decision": { "$ref": "#/$defs/allowDecision" } }, "required": ["outcome", "reason_code", "policy_decision"] }, { "properties": { "outcome": { "const": "denied" }, "reason_code": { "const": "no_matching_grant" }, "policy_decision": { "$ref": "#/$defs/denyDecision" } }, "required": ["outcome", "reason_code", "policy_decision"] }] } },
+    { "if": { "properties": { "stage": { "const": "routing" } }, "required": ["stage"] }, "then": { "oneOf": [{ "properties": { "outcome": { "const": "success" }, "policy_decision": { "$ref": "#/$defs/allowDecision" }, "routing": true }, "required": ["outcome", "policy_decision", "routing"] }, { "properties": { "outcome": { "const": "error" }, "policy_decision": { "$ref": "#/$defs/allowDecision" }, "routing": false }, "required": ["outcome", "policy_decision"] }] } },
+    { "if": { "properties": { "stage": { "enum": ["upstream", "response"] } }, "required": ["stage"] }, "then": { "properties": { "outcome": { "enum": ["success", "error"] }, "policy_decision": { "$ref": "#/$defs/allowDecision" }, "routing": true }, "required": ["outcome", "policy_decision", "routing"] } },
+    { "if": { "properties": { "ordinary_result": { "const": "released" } }, "required": ["ordinary_result"] }, "then": { "properties": { "authoritative_acceptance": { "const": "accepted" } } } },
+    { "if": { "properties": { "authoritative_acceptance": { "const": "rejected" } }, "required": ["authoritative_acceptance"] }, "then": { "properties": { "stage": { "const": "audit" }, "outcome": { "const": "error" }, "reason_code": { "const": "audit_unavailable" }, "response_status": { "const": 503 }, "retryable": { "const": true }, "ordinary_result": { "const": "suppressed" }, "exporter_result": { "const": "not_attempted" } } } },
+    { "if": { "properties": { "reason_code": { "const": "audit_unavailable" } }, "required": ["reason_code"] }, "then": { "properties": { "stage": { "const": "audit" }, "outcome": { "const": "error" }, "response_status": { "const": 503 }, "retryable": { "const": true }, "authoritative_acceptance": { "const": "rejected" }, "ordinary_result": { "const": "suppressed" }, "exporter_result": { "const": "not_attempted" } } } },
+    { "if": { "properties": { "exporter_result": { "enum": ["succeeded", "failed"] } }, "required": ["exporter_result"] }, "then": { "properties": { "authoritative_acceptance": { "const": "accepted" } } } },
+    { "if": { "properties": { "correction_of_event_id": true }, "required": ["correction_of_event_id"] }, "then": { "properties": { "event_id": { "type": "string", "pattern": "^cor_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" }, "correction_of_event_id": { "type": "string", "format": "uuid" } }, "required": ["event_id", "correction_of_event_id"] }, "else": { "properties": { "event_id": { "type": "string", "format": "uuid" }, "correction_of_event_id": false } } }
+  ],
+  "oneOf": [
+    { "properties": { "content_state": { "const": "absent" }, "redaction": { "$ref": "#/$defs/absentRedaction" } }, "not": { "properties": { "redacted_content": true }, "required": ["redacted_content"] } },
+    { "properties": { "content_state": { "const": "redacted" }, "redaction": { "$ref": "#/$defs/successfulRedaction" } } },
+    { "properties": { "content_state": { "const": "redaction_failed" }, "redaction": { "$ref": "#/$defs/failedRedaction" } }, "not": { "properties": { "redacted_content": true }, "required": ["redacted_content"] } }
+  ],
+  "$defs": {
+    "auditRef": { "type": "object", "additionalProperties": false, "required": ["algorithm", "key_version", "digest"], "properties": { "algorithm": { "const": "hmac-sha-256" }, "key_version": { "type": "integer", "minimum": 1, "maximum": 2147483647 }, "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" } } },
+    "correlation": { "type": "object", "additionalProperties": false, "required": ["request_id"], "properties": { "request_id": { "type": "string", "format": "uuid" }, "incident_ref": { "$ref": "#/$defs/auditRef" }, "run_ref": { "$ref": "#/$defs/auditRef" }, "task_ref": { "$ref": "#/$defs/auditRef" }, "trace_ref": { "$ref": "#/$defs/auditRef" } } },
+    "partial401Identity": { "type": "object", "unevaluatedProperties": false, "properties": { "principal_ref": { "$ref": "#/$defs/auditRef" }, "principal_kind": { "enum": ["human", "agent"] }, "principal_status": { "enum": ["active", "inactive"] }, "credential_ref": { "$ref": "#/$defs/auditRef" } }, "oneOf": [{ "required": ["principal_ref", "principal_kind", "principal_status"], "properties": { "principal_ref": true, "principal_kind": true, "principal_status": true, "credential_ref": true } }, { "required": ["credential_ref"], "properties": { "principal_ref": false, "principal_kind": false, "principal_status": false, "credential_ref": true } }] },
+    "authenticatedIdentity": { "type": "object", "additionalProperties": false, "required": ["principal_ref", "principal_kind", "principal_status", "credential_ref", "authenticated_at"], "properties": { "principal_ref": { "$ref": "#/$defs/auditRef" }, "principal_kind": { "enum": ["human", "agent"] }, "principal_status": { "enum": ["active", "inactive"] }, "credential_ref": { "$ref": "#/$defs/auditRef" }, "authenticated_at": { "type": "string", "format": "date-time" } } },
+    "resourceEvidence": { "type": "object", "additionalProperties": false, "required": ["resource_type", "resource_ref"], "properties": { "resource_type": { "enum": ["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"] }, "resource_ref": { "$ref": "#/$defs/auditRef" } } },
+    "routing": { "type": "object", "additionalProperties": false, "required": ["model_ref", "router", "provider_ref"], "properties": { "model_ref": { "$ref": "#/$defs/auditRef" }, "router": { "const": "openrouter" }, "provider_ref": { "$ref": "#/$defs/auditRef" } } },
+    "untrustedIdentifier": { "type": "object", "additionalProperties": false, "required": ["kind", "ref"], "properties": { "kind": { "enum": ["incident", "model_alias", "resource", "run", "task", "trace"] }, "ref": { "$ref": "#/$defs/auditRef" } } },
+    "redactedContent": { "type": "object", "additionalProperties": false, "required": ["representation"], "properties": { "representation": { "const": "fully_redacted" } } },
+    "allowDecision": { "type": "object", "additionalProperties": false, "required": ["decision", "reason_code", "grant_ref"], "properties": { "decision": { "const": "allow" }, "reason_code": { "const": "grant_matched" }, "policy_ref": { "$ref": "#/$defs/auditRef" }, "grant_ref": { "$ref": "#/$defs/auditRef" } } },
+    "denyDecision": { "type": "object", "additionalProperties": false, "required": ["decision", "reason_code"], "properties": { "decision": { "const": "deny" }, "reason_code": { "const": "no_matching_grant" } } },
+    "absentRedaction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["policy_version", "result", "source_class", "categories", "match_count", "sink_eligible"],
+      "properties": {
+        "policy_version": { "const": "redaction-1.0.0" },
+        "result": { "const": "success" }, "source_class": { "const": "none" },
+        "categories": { "type": "array", "maxItems": 0 }, "match_count": { "const": 0 }, "sink_eligible": { "const": false }
+      }
+    },
+    "successfulRedaction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["policy_version", "result", "source_class", "categories", "match_count", "sink_eligible"],
+      "properties": {
+        "policy_version": { "const": "redaction-1.0.0" }, "result": { "const": "success" },
+        "source_class": { "enum": ["llm_input", "llm_response", "mcp_log", "sandbox_output", "command_output", "tool_arguments", "tool_result", "free_content"] },
+        "categories": { "$ref": "#/$defs/categories" }, "match_count": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "sink_eligible": { "const": true }, "tool_schema_version": { "const": "1.0.0" }
+      }
+    },
+    "failedRedaction": {
+      "type": "object", "additionalProperties": false,
+      "required": ["policy_version", "result", "source_class", "categories", "match_count", "sink_eligible"],
+      "properties": {
+        "policy_version": { "const": "redaction-1.0.0" }, "result": { "const": "failed" },
+        "source_class": { "enum": ["llm_input", "llm_response", "mcp_log", "sandbox_output", "command_output", "tool_arguments", "tool_result", "free_content"] },
+        "categories": { "$ref": "#/$defs/categories" }, "match_count": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "sink_eligible": { "const": false }, "tool_schema_version": { "const": "1.0.0" }
+      }
+    },
+    "categories": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "enum": ["credential", "personal_data", "provider_secret", "configured_pattern", "unsafe_structure", "uncertain"] } }
+  }
+}

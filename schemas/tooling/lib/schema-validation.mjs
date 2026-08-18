@@ -45,6 +45,11 @@ export function validateFixtures(schemas, fixtures) {
     if (fixture.status === "negative" && !validate.errors?.some(({ keyword }) => keyword === fixture.rule)) throw new Error(`Negative fixture ${fixture.name} did not fail rule ${fixture.rule}`);
   }
 }
+export function validateExamples(schemas, examples) {
+  const ajv = createSchemaRegistry(schemas), validate = ajv.getSchema("urn:sre-agent:schema:audit-event:1.0.0");
+  if (!examples.length || !validate) throw new Error("Audit examples require the registered AuditEvent schema");
+  for (const example of examples) if (!validate(example.data)) throw new Error(`Audit example ${example.name} failed: ${ajv.errorsText(validate.errors)}`);
+}
 function prohibitedFields(value, path = "$") {
   if (!value || typeof value !== "object") return [];
   if (Array.isArray(value)) return value.flatMap((item, index) => prohibitedFields(item, `${path}/${index}`));
@@ -71,8 +76,9 @@ export async function loadReleaseDirectory(directory, group = "shared") {
   const schemas = (await readJsonTree(new URL("json-schema/", base), ".schema.json")).map(({ value }) => value);
   const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).map(({ name, value }) => ({ name, ...value }));
   const fixtures = group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
+  const examples = group === "audit" ? (await readJsonTree(new URL("examples/audit/", base), ".example.json")).map(({ name, value: data }) => ({ name, data })) : [];
   if (!fixtures.length) throw new Error(`Unknown or empty fixture scope: ${group}`);
-  return { schemas, fixtures };
+  return { schemas, fixtures, examples };
 }
 export async function loadFixtureDirectory(directory) {
   const base = directory instanceof URL ? directory : pathToFileURL(`${resolve(directory)}/`), names = (await readdir(base)).sort();
