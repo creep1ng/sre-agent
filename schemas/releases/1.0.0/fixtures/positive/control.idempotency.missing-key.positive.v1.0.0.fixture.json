@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:control-http-case:1.0.0","rule":"valid","status":"positive","version":"1.0.0","group":"idempotency","data":{"operation":"principals.create","request":{"method":"POST","path":"/v1/principals","parameters":[]},"expected":{"status":400,"error_code":"invalid_idempotency_key","retryable":false,"mutated":false}}}

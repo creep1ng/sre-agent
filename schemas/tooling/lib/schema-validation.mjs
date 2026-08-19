@@ -31,6 +31,11 @@ export function createSchemaRegistry(schemas) {
   }
   for (const id of ids) ajv.getSchema(id); return ajv;
 }
+function semanticFixtureValid(fixture) {
+  if (fixture.target !== "urn:sre-agent:schema:bootstrap-seed:1.0.0" || fixture.data?.output?.result !== "success") return true;
+  const { seed, output } = fixture.data, principal = output.principal, grants = new Map(output.grants.map((grant) => [grant.grant_id, grant]));
+  return principal.principal_id === seed.principal.principal_id && principal.kind === seed.principal.kind && principal.display_name === seed.principal.display_name && output.credential.credential.principal_id === seed.principal.principal_id && output.grants.length === seed.grants.length && seed.grants.every((expected) => { const actual = grants.get(expected.grant_id); return actual?.principal_id === seed.principal.principal_id && actual.action === expected.action && JSON.stringify(actual.resource) === JSON.stringify(expected.resource); });
+}
 export function validateFixtures(schemas, fixtures) {
   const ajv = createSchemaRegistry(schemas);
   if (!fixtures.length) throw new Error("At least one fixture is required");
@@ -39,16 +44,16 @@ export function validateFixtures(schemas, fixtures) {
     for (const field of ["target", "rule", "status", "version", "data"]) if (!(field in fixture)) throw new Error(`Fixture ${fixture.name ?? "<unknown>"} lacks ${field}`);
     if (!/^(?:positive|negative)$/.test(fixture.status) || !SEMVER.test(fixture.version)) throw new Error(`Fixture ${fixture.name} has invalid metadata`);
     const target = schemas.find(({ $id }) => $id === fixture.target), validate = target && ajv.getSchema(fixture.target); if (!validate) throw new Error(`Fixture ${fixture.name} targets unknown schema ${fixture.target}`);
-    const targetVersion = schemaVersion(target.$id); if (fixture.version !== targetVersion) throw new Error(`Fixture ${fixture.name} version ${fixture.version} does not match target schema version ${targetVersion}`); const valid = validate(fixture.data);
+    const targetVersion = schemaVersion(target.$id); if (fixture.version !== targetVersion) throw new Error(`Fixture ${fixture.name} version ${fixture.version} does not match target schema version ${targetVersion}`); const shapeValid = validate(fixture.data), semanticValid = semanticFixtureValid(fixture), valid = shapeValid && semanticValid;
     if (fixture.status === "positive" && !valid) throw new Error(`Positive fixture ${fixture.name} failed: ${ajv.errorsText(validate.errors)}`);
     if (fixture.status === "negative" && valid) throw new Error(`Negative fixture ${fixture.name} for rule ${fixture.rule} validated unexpectedly`);
-    if (fixture.status === "negative" && !validate.errors?.some(({ keyword }) => keyword === fixture.rule)) throw new Error(`Negative fixture ${fixture.name} did not fail rule ${fixture.rule}`);
+    if (fixture.status === "negative" && !(fixture.rule === "semantic" ? !semanticValid : validate.errors?.some(({ keyword }) => keyword === fixture.rule))) throw new Error(`Negative fixture ${fixture.name} did not fail rule ${fixture.rule}`);
   }
 }
 export function validateExamples(schemas, examples) {
-  const ajv = createSchemaRegistry(schemas), validate = ajv.getSchema("urn:sre-agent:schema:audit-event:1.0.0");
-  if (!examples.length || !validate) throw new Error("Audit examples require the registered AuditEvent schema");
-  for (const example of examples) if (!validate(example.data)) throw new Error(`Audit example ${example.name} failed: ${ajv.errorsText(validate.errors)}`);
+  const ajv = createSchemaRegistry(schemas);
+  if (!examples.length) throw new Error("At least one example is required");
+  for (const example of examples) { const validate = ajv.getSchema(example.target); if (!validate || !validate(example.data)) throw new Error(`Example ${example.name} failed: ${ajv.errorsText(validate?.errors)}`); }
 }
 function prohibitedFields(value, path = "$") {
   if (!value || typeof value !== "object") return [];
@@ -76,7 +81,8 @@ export async function loadReleaseDirectory(directory, group = "shared") {
   const schemas = (await readJsonTree(new URL("json-schema/", base), ".schema.json")).map(({ value }) => value);
   const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).map(({ name, value }) => ({ name, ...value }));
   const fixtures = group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
-  const examples = group === "audit" ? (await readJsonTree(new URL("examples/audit/", base), ".example.json")).map(({ name, value: data }) => ({ name, data })) : [];
+  const exampleTarget = group === "audit" ? () => "urn:sre-agent:schema:audit-event:1.0.0" : group === "control" ? (name) => name.startsWith("credential-") ? "urn:sre-agent:schema:credential-issuance:1.0.0" : "urn:sre-agent:schema:bootstrap-seed:1.0.0" : null;
+  const examples = exampleTarget ? (await readJsonTree(new URL(`examples/${group}/`, base), ".example.json")).map(({ name, value: data }) => ({ name, data, target: exampleTarget(name) })) : [];
   if (!fixtures.length) throw new Error(`Unknown or empty fixture scope: ${group}`);
   return { schemas, fixtures, examples };
 }

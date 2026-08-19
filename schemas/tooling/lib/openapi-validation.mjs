@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
 import { constants } from "node:fs";
-import { access, lstat, mkdir, readFile, realpath, stat } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, win32 } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseDocument } from "yaml";
 const toolingRoot = fileURLToPath(new URL("../", import.meta.url)), schemaRoot = resolve(toolingRoot, ".."), config = join(toolingRoot, "redocly.yaml"), redocly = join(toolingRoot, "node_modules/@redocly/cli/bin/cli.js");
+const API_ENTRIES = { "control-plane": join(schemaRoot, "releases/1.0.0/openapi/control-plane.yaml") };
 const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const inside = (root, target) => { const path = relative(root, target); return path === "" || (!path.startsWith("..") && !isAbsolute(path)); };
 export function parseContractSource(source, extension = ".yaml") {
@@ -21,6 +22,7 @@ async function checkedFile(path, root, label) {
 }
 function locatorPath(locator) {
   if (typeof locator !== "string" || !locator) throw new Error("Locator must be a non-empty string");
+  if (/^urn:sre-agent:schema:[a-z-]+:1\.0\.0(?:#.*)?$/.test(locator)) return null;
   if (/[\x00-\x1f\x7f]/.test(locator)) throw new Error("Locator control character rejected");
   if (locator.includes("\\")) throw new Error("Locator backslash ambiguity rejected");
   const [path, ...fragments] = locator.split("#"); if (!path) return null;
@@ -46,9 +48,15 @@ async function checkedOutput(output) {
   try { const targetInfo = await lstat(target); if (targetInfo.isSymbolicLink()) throw new Error("Bundle output symlink rejected"); if (!targetInfo.isFile()) throw new Error("Bundle output must be a regular file"); if (targetInfo.nlink !== 1) throw new Error("Bundle output hard-link rejected"); } catch (error) { if (error.code !== "ENOENT") throw error; } return target;
 }
 function invoke(args) { const result = spawnSync(process.execPath, [redocly, ...args, `--config=${config}`], { cwd: toolingRoot, encoding: "utf8" }); if (result.status !== 0) throw new Error(`Redocly ${args[0]} failed (${result.status}):\n${result.stdout}${result.stderr}`); return result.stdout + result.stderr; }
+const rewriteUrns = (value) => JSON.parse(JSON.stringify(value, (key, item) => { const match = key === "$ref" && typeof item === "string" && /^urn:sre-agent:schema:([a-z-]+):1\.0\.0(.*)$/.exec(item); return match ? `./${match[1]}.schema.json${match[2]}` : item; }));
+async function materializeRelease(entry) {
+  await preflightOpenapi(entry); const temporary = join(toolingRoot, ".tmp/control-plane-resolved"), release = join(schemaRoot, "releases/1.0.0/json-schema"), approved = await realpath(schemaRoot); await rm(temporary, { recursive: true, force: true }); await mkdir(temporary, { recursive: true });
+  for (const kind of ["domain", "http"]) for (const name of await readdir(join(release, kind))) if (name.endsWith(".schema.json")) { const file = await checkedFile(join(release, kind, name), approved, `Schema ${name}`); await writeFile(join(temporary, name), JSON.stringify(rewriteUrns(JSON.parse(await readFile(file, "utf8"))))); }
+  const target = join(temporary, "control-plane.json"); await writeFile(target, JSON.stringify(rewriteUrns(await readContractFile(entry)))); return target;
+}
 export async function runOpenapi(mode, entry, output) {
   if (!['lint', 'bundle'].includes(mode)) throw new Error("Mode must be lint or bundle"); const source = resolve(entry); await preflightOpenapi(source); const target = mode === "bundle" ? await checkedOutput(output) : null;
   const logs = [invoke(["lint", source])]; if (mode === "bundle") logs.push(invoke(["bundle", source, "-o", target])); return logs.join("");
 }
 export async function readContractFile(path) { return parseContractSource(await readFile(path, "utf8"), extname(path)); }
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) { const [mode, entry, output, ...extra] = process.argv.slice(2); if (!entry || extra.length || (mode === "bundle") !== Boolean(output)) { console.error("Usage: node lib/openapi-validation.mjs lint <api> | bundle <api> <schemas/tooling/.tmp/output>"); process.exitCode = 2; } else try { process.stdout.write(await runOpenapi(mode, entry, output)); } catch (error) { console.error(`OpenAPI tooling failed: ${error.message}`); process.exitCode = 1; } }
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) { const [mode, entry, output, ...extra] = process.argv.slice(2); try { if (mode === "check" && entry === "--api" && output && !extra.length) { const source = API_ENTRIES[output]; if (!source) throw new Error(`Unknown API: ${output}`); process.stdout.write(await runOpenapi("bundle", await materializeRelease(source), join(toolingRoot, ".tmp", `${output}.yaml`))); } else if (!entry || extra.length || (mode === "bundle") !== Boolean(output)) { console.error("Usage: node lib/openapi-validation.mjs lint <api> | bundle <api> <schemas/tooling/.tmp/output> | check --api <name>"); process.exitCode = 2; } else process.stdout.write(await runOpenapi(mode, entry, output)); } catch (error) { console.error(`OpenAPI tooling failed: ${error.message}`); process.exitCode = 1; } }
