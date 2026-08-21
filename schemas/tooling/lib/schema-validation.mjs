@@ -32,9 +32,21 @@ export function createSchemaRegistry(schemas) {
   for (const id of ids) ajv.getSchema(id); return ajv;
 }
 function semanticFixtureValid(fixture) {
+  if (fixture.target === "urn:sre-agent:schema:responses-http-case:1.0.0") return responsesHttpCaseValid(fixture.data);
   if (fixture.target !== "urn:sre-agent:schema:bootstrap-seed:1.0.0" || fixture.data?.output?.result !== "success") return true;
   const { seed, output } = fixture.data, principal = output.principal, grants = new Map(output.grants.map((grant) => [grant.grant_id, grant]));
   return principal.principal_id === seed.principal.principal_id && principal.kind === seed.principal.kind && principal.display_name === seed.principal.display_name && output.credential.credential.principal_id === seed.principal.principal_id && output.grants.length === seed.grants.length && seed.grants.every((expected) => { const actual = grants.get(expected.grant_id); return actual?.principal_id === seed.principal.principal_id && actual.action === expected.action && JSON.stringify(actual.resource) === JSON.stringify(expected.resource); });
+}
+function responsesHttpCaseValid(value) {
+  const credentials = value.condition?.startsWith("credential-"), alias = value.condition?.startsWith("alias-"), trace = value.condition?.startsWith("trace-"), upstream = value.condition?.startsWith("upstream-");
+  const envelope = (status, code, message, retryable) => value.status === status && value.public?.error?.code === code && value.public?.error?.message === message && value.public?.retryable === retryable;
+  const noLater = !value.routed && !value.upstream_attempted, headerNames = Object.keys(value.headers ?? {}), challenge = headerNames.length === 1 && value.headers["WWW-Authenticate"] === "Bearer";
+  if (value.condition === "invalid-request-and-credential") return value.stage === "validation" && envelope(422, "validation_error", "The request is invalid.", false) && !headerNames.length && !value.alias_evaluated && noLater;
+  if (credentials) return value.stage === "authentication" && envelope(401, "authentication_failed", "Authentication failed.", false) && challenge && !value.alias_evaluated && noLater;
+  if (alias) return value.stage === "authorization" && envelope(403, "resource_unavailable", "The requested resource is unavailable.", false) && !headerNames.length && value.alias_evaluated && noLater;
+  if (trace) { const expectedMode = ["trace-missing", "trace-invalid"].includes(value.condition) ? "new" : "bounded-child"; return value.stage === "tracing" && value.status === 200 && !value.public && !value.alias_evaluated && noLater && value.trace?.mode === expectedMode && value.trace.incoming_flags_trusted === false && value.trace.tracestate_propagated === false && headerNames.length === 1 && "traceparent" in value.headers; }
+  if (upstream) { const taxonomy = { "upstream-malformed": [502, "upstream_invalid_response", "The upstream response was invalid.", false], "upstream-unavailable": [503, "upstream_unavailable", "The upstream service is unavailable.", true], "upstream-timeout": [504, "upstream_timeout", "The upstream request timed out.", true] }[value.condition], hasRetry = "Retry-After" in (value.headers ?? {}); return value.stage === "upstream" && value.alias_evaluated && value.routed && envelope(...taxonomy) && headerNames.every((name) => name === "Retry-After") && hasRetry === (value.retry_after_reliable === true) && (!hasRetry || value.public.retryable); }
+  return false;
 }
 export function validateFixtures(schemas, fixtures) {
   const ajv = createSchemaRegistry(schemas);
@@ -79,7 +91,7 @@ async function readJsonTree(directory, suffix, prefix = "") {
 export async function loadReleaseDirectory(directory, group = "shared") {
   const base = directory instanceof URL ? directory : pathToFileURL(`${resolve(directory)}/`);
   const schemas = (await readJsonTree(new URL("json-schema/", base), ".schema.json")).map(({ value }) => value);
-  const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).map(({ name, value }) => ({ name, ...value }));
+  const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).flatMap(({ name, value }) => value.cases ? value.cases.map((data, index) => ({ name: `${name}#${index + 1}`, target: value.target, rule: value.rule, status: value.status, version: value.version, group: value.group, data })) : [{ name, ...value }]);
   const fixtures = group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
   const exampleTarget = group === "audit" ? () => "urn:sre-agent:schema:audit-event:1.0.0" : group === "control" ? (name) => name.startsWith("credential-") ? "urn:sre-agent:schema:credential-issuance:1.0.0" : "urn:sre-agent:schema:bootstrap-seed:1.0.0" : group === "responses" ? (name) => name.startsWith("minimal-request") ? "urn:sre-agent:schema:responses-request:1.0.0" : "urn:sre-agent:schema:responses-response:1.0.0" : null;
   const examples = exampleTarget ? (await readJsonTree(new URL(`examples/${group}/`, base), ".example.json")).map(({ name, value: data }) => ({ name, data, target: exampleTarget(name) })) : [];
