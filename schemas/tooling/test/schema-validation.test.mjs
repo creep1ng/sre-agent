@@ -20,7 +20,7 @@ test("closed-object policy handles nullable, composed, and non-object schemas", 
 test("conditional schema branches inherit outer unevaluatedProperties closure", () => { const value = { $id: "urn:sre-agent:test:conditional:1.0.0", type: "object", properties: { kind: { enum: ["simple", "detailed"] } }, required: ["kind"], if: { type: "object", properties: { kind: { const: "detailed" } } }, then: { type: "object", properties: { detail: { type: "string" } }, required: ["detail"] }, unevaluatedProperties: false }, validate = createSchemaRegistry([value]).getSchema(value.$id); assert.equal(validate({ kind: "detailed", detail: "ok" }), true); assert.equal(validate({ kind: "simple", extra: true }), false); assert.ok(validate.errors.some(({ keyword }) => keyword === "unevaluatedProperties")); });
 test("empty schema or fixture evidence fails closed", () => { assert.throws(() => createSchemaRegistry([]), /schema is required/i); assert.throws(() => validateFixtures(loaded.schemas, []), /fixture is required/i); assert.equal(cli(fileURLToPath(new URL("fixtures/", import.meta.url))).status, 1); });
 test("schema validate CLI separates validation failures from usage errors", () => { assert.equal(cli(fixtureDirectory).status, 0); assert.equal(cli(`${fixtureDirectory}/missing`).status, 1); assert.equal(cli("--unknown").status, 2); assert.equal(cli(fixtureDirectory, "extra").status, 2); });
-test("release validates every published schema scope", async () => { for (const group of ["identity", "model-resource", "policy", "shared", "audit", "redaction-success", "redaction-failure", "idempotency", "credentials", "bootstrap", "control"]) { const release = await loadReleaseDirectory(new URL("../../releases/1.0.0/", import.meta.url), group); assert.equal(release.schemas.length, 20); assert.doesNotThrow(() => validateFixtures(release.schemas, release.fixtures)); assert.equal(cli("--scope", group).status, 0, group); } });
+test("release validates every published schema scope", async () => { for (const group of ["identity", "model-resource", "policy", "shared", "audit", "redaction-success", "redaction-failure", "idempotency", "credentials", "bootstrap", "control"]) { const release = await loadReleaseDirectory(new URL("../../releases/1.0.0/", import.meta.url), group); assert.equal(release.schemas.length, 21); assert.doesNotThrow(() => validateFixtures(release.schemas, release.fixtures)); assert.equal(cli("--scope", group).status, 0, group); } });
 test("Responses examples reject unsupported requests and non-concrete routing output", async () => { const release = await loadReleaseDirectory(new URL("../../releases/1.0.0/", import.meta.url), "responses"), examples = Object.fromEntries(release.examples.map((example) => [example.name, example])), invalid = (name, mutate) => { const example = structuredClone(examples[name]); mutate(example.data); assert.throws(() => validateExamples(release.schemas, [example]), /example.*failed/i); }; assert.doesNotThrow(() => validateExamples(release.schemas, release.examples)); invalid("minimal-request.example.json", (value) => { value.unknown = true; }); invalid("minimal-request.example.json", (value) => { value.input = 42; }); invalid("minimal-request.example.json", (value) => { value.input = "😀".repeat(16385); }); invalid("minimal-request.example.json", (value) => { value.stream = false; }); invalid("completed-response.example.json", (value) => { value.model = "triage-agent"; }); invalid("completed-response.example.json", (value) => { value.metadata.router = { name: "openrouter" }; }); invalid("completed-response.example.json", (value) => { value.metadata.inference_provider = 7; }); });
 const responsesFixture = async (scope) => { const release = await loadReleaseDirectory(new URL("../../releases/1.0.0/", import.meta.url), scope); return { ...release, named: Object.fromEntries(release.fixtures.map((fixture) => [fixture.data.condition, fixture])) }; };
 const rejectResponseMutation = ({ schemas, named }, condition, mutate) => { const fixture = structuredClone(named[condition]); mutate(fixture.data); assert.throws(() => validateFixtures(schemas, [fixture]), /positive fixture.*failed/i, condition); };
@@ -48,6 +48,36 @@ test("Responses upstream errors reject leakage and retry inversions", async () =
   for (const condition of ["upstream-unavailable", "upstream-timeout"]) rejectResponseMutation(release, condition, (v) => { v.public.retryable = false; });
   rejectResponseMutation(release, "upstream-unavailable", (v) => { v.headers["Retry-After"] = "60"; v.retry_after_reliable = false; });
   rejectResponseMutation(release, "upstream-timeout", (v) => { delete v.headers["Retry-After"]; });
+});
+const openRouterFixture = async () => responsesFixture("openrouter-metadata");
+test("OpenRouter evidence rejects model and endpoint substitution", async () => {
+  const release = await openRouterFixture();
+  assert.doesNotThrow(() => validateFixtures(release.schemas, release.fixtures));
+  rejectResponseMutation(release, "metadata-success", (v) => { v.model = "triage-agent"; });
+  rejectResponseMutation(release, "metadata-success", (v) => { v.selected_endpoints = []; });
+  rejectResponseMutation(release, "metadata-success", (v) => { v.selected_endpoints.push({ provider: "anthropic" }); });
+  rejectResponseMutation(release, "metadata-success", (v) => { v.effective_provider = "openrouter"; v.selected_endpoints[0].provider = "openrouter"; });
+});
+test("OpenRouter evidence rejects metadata drift and public leakage", async () => {
+  const release = await openRouterFixture();
+  rejectResponseMutation(release, "metadata-success", (v) => { delete v.effective_provider; });
+  rejectResponseMutation(release, "metadata-success", (v) => { v.effective_provider = "Open AI"; });
+  rejectResponseMutation(release, "metadata-success", (v) => { v.selected_endpoints[0].provider = "anthropic"; });
+  rejectResponseMutation(release, "metadata-success", (v) => { v.raw_metadata = { upstream_id: "internal-42" }; });
+  for (const condition of ["metadata-missing", "metadata-malformed", "metadata-contradictory"]) {
+    rejectResponseMutation(release, condition, (v) => { v.status = 200; });
+    rejectResponseMutation(release, condition, (v) => { v.public.retryable = true; });
+    rejectResponseMutation(release, condition, (v) => { v.public.error.message = "provider_name=openai request_id=req-42 cost=0.01"; });
+  }
+});
+test("OpenRouter generation lookup never confuses public Response IDs", async () => {
+  const release = await openRouterFixture();
+  rejectResponseMutation(release, "lookup-success", (v) => { v.generation.lookup_key = v.public_response_id; });
+  rejectResponseMutation(release, "lookup-success", (v) => { delete v.generation.response_header; });
+  rejectResponseMutation(release, "lookup-success", (v) => { v.generation.response_header = "bad id"; });
+  rejectResponseMutation(release, "lookup-success", (v) => { v.generation.attempts = 2; });
+  rejectResponseMutation(release, "lookup-success", (v) => { v.generation.lookup_key = v.public_response_id; v.generation.response_header = v.public_response_id; });
+  for (const condition of ["generation-header-missing", "generation-header-malformed", "generation-lookup-failed", "generation-lookup-ambiguous"]) rejectResponseMutation(release, condition, (v) => { v.public.retryable = true; });
 });
 test("control fixture pairs preserve replay, secrecy, convergence, and non-enumeration invariants", async () => {
   const load = async (scope) => (await loadReleaseDirectory(new URL("../../releases/1.0.0/", import.meta.url), scope)).fixtures, named = (fixtures, part) => fixtures.find(({ name }) => name.includes(part)).data;
