@@ -53,12 +53,12 @@ export function validateFixtures(schemas, fixtures) {
 export function validateExamples(schemas, examples) {
   const ajv = createSchemaRegistry(schemas);
   if (!examples.length) throw new Error("At least one example is required");
-  for (const example of examples) { const validate = ajv.getSchema(example.target); if (!validate || !validate(example.data)) throw new Error(`Example ${example.name} failed: ${ajv.errorsText(validate?.errors)}`); }
+  for (const example of examples) { const validate = ajv.getSchema(example.target), input = example.data?.input, bytesValid = example.target !== "urn:sre-agent:schema:responses-request:1.0.0" || typeof input !== "string" || Buffer.byteLength(input, "utf8") <= 65536; if (!validate || !validate(example.data) || !bytesValid) throw new Error(`Example ${example.name} failed: ${bytesValid ? ajv.errorsText(validate?.errors) : "input exceeds 65,536 UTF-8 bytes"}`); }
 }
 function prohibitedFields(value, path = "$") {
   if (!value || typeof value !== "object") return [];
   if (Array.isArray(value)) return value.flatMap((item, index) => prohibitedFields(item, `${path}/${index}`));
-  return Object.entries(value).flatMap(([key, child]) => [...(PROHIBITED_FIELDS.has(key) ? [`${path}/${key}`] : []), ...prohibitedFields(child, `${path}/${key}`)]);
+  return Object.entries(value).flatMap(([key, child]) => [...(PROHIBITED_FIELDS.has(key) && !(key === "role" && (child === "assistant" || child?.const === "assistant")) ? [`${path}/${key}`] : []), ...prohibitedFields(child, `${path}/${key}`)]);
 }
 export function assertCanonicalVocabulary(schemas, fixtures) {
   for (const schema of schemas) { const found = prohibitedFields(schema); if (found.length) throw new Error(`Schema ${schema.$id} contains prohibited field ${found[0]}`); }
@@ -81,9 +81,9 @@ export async function loadReleaseDirectory(directory, group = "shared") {
   const schemas = (await readJsonTree(new URL("json-schema/", base), ".schema.json")).map(({ value }) => value);
   const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).map(({ name, value }) => ({ name, ...value }));
   const fixtures = group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
-  const exampleTarget = group === "audit" ? () => "urn:sre-agent:schema:audit-event:1.0.0" : group === "control" ? (name) => name.startsWith("credential-") ? "urn:sre-agent:schema:credential-issuance:1.0.0" : "urn:sre-agent:schema:bootstrap-seed:1.0.0" : null;
+  const exampleTarget = group === "audit" ? () => "urn:sre-agent:schema:audit-event:1.0.0" : group === "control" ? (name) => name.startsWith("credential-") ? "urn:sre-agent:schema:credential-issuance:1.0.0" : "urn:sre-agent:schema:bootstrap-seed:1.0.0" : group === "responses" ? (name) => name.startsWith("minimal-request") ? "urn:sre-agent:schema:responses-request:1.0.0" : "urn:sre-agent:schema:responses-response:1.0.0" : null;
   const examples = exampleTarget ? (await readJsonTree(new URL(`examples/${group}/`, base), ".example.json")).map(({ name, value: data }) => ({ name, data, target: exampleTarget(name) })) : [];
-  if (!fixtures.length) throw new Error(`Unknown or empty fixture scope: ${group}`);
+  if (!fixtures.length && !examples.length) throw new Error(`Unknown or empty fixture scope: ${group}`);
   return { schemas, fixtures, examples };
 }
 export async function loadFixtureDirectory(directory) {

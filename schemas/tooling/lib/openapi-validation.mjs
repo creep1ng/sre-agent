@@ -5,7 +5,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve, win32 } from "no
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseDocument } from "yaml";
 const toolingRoot = fileURLToPath(new URL("../", import.meta.url)), schemaRoot = resolve(toolingRoot, ".."), config = join(toolingRoot, "redocly.yaml"), redocly = join(toolingRoot, "node_modules/@redocly/cli/bin/cli.js");
-const API_ENTRIES = { "control-plane": join(schemaRoot, "releases/1.0.0/openapi/control-plane.yaml") };
+const API_ENTRIES = { "control-plane": join(schemaRoot, "releases/1.0.0/openapi/control-plane.yaml"), responses: join(schemaRoot, "releases/1.0.0/openapi/responses.yaml") };
 const SEMVER = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const inside = (root, target) => { const path = relative(root, target); return path === "" || (!path.startsWith("..") && !isAbsolute(path)); };
 export function parseContractSource(source, extension = ".yaml") {
