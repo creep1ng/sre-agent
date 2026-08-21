@@ -154,70 +154,70 @@ For each slice only: (1) fetch and fast-forward `main`; (2) create its branch fr
 
 ## PR D — Control plane and bootstrap contract
 
-- [ ] **8.1 Publish canonical control-plane OAS.** Files: `releases/1.0.0/openapi/control-plane.yaml`, control examples; coverage: Control-plane matrix/Matrix operation succeeds, Safe errors/audit reads; depends on C.
+- [x] **8.1 Publish canonical control-plane OAS.** Files: `releases/1.0.0/openapi/control-plane.yaml`, control examples; coverage: Control-plane matrix/Matrix operation succeeds, Safe errors/audit reads; depends on C.
   - Steps: define every Principal/Credential/ModelAlias/Grant/Audit operation, statuses, auth, errors, and external refs; verify: `npm --prefix schemas/tooling run lint:openapi -- --api control-plane`.
   - Done: Redocly lints/bundles the complete control OAS with no unresolved refs; rollback: revert 8.1; commit: `feat(contracts): publish control plane openapi` / D.
 
-- [ ] **8.2 Contract POST/HTTP idempotency.** Files: HTTP `idempotency-record.schema.json` and replay/conflict/missing-key/repeated-delete fixtures; coverage: every POST idempotency and HTTP idempotency scenario; depends on 8.1.
+- [x] **8.2 Contract POST/HTTP idempotency.** Files: HTTP `idempotency-record.schema.json` and replay/conflict/missing-key/repeated-delete fixtures; coverage: every POST idempotency and HTTP idempotency scenario; depends on 8.1.
   - Steps: encode scope/key digest, RFC-8785 payload hash, outcomes, 24h/lifetime binding, and convergent PUT/DELETE; verify: `npm --prefix schemas/tooling run validate -- --scope idempotency`.
   - Done: same-hash replay is stable, mismatch is 409, missing key is 400; rollback: revert 8.2; commit: `feat(contracts): define idempotent control mutations` / D.
 
-- [ ] **8.3 Contract credential issuance and rotation.** Files: HTTP `credential-issuance.schema.json`, issue/list/revoke/rotate/replay/failure fixtures; coverage: Credential secrecy/rotation scenarios; depends on 8.2.
+- [x] **8.3 Contract credential issuance and rotation.** Files: HTTP `credential-issuance.schema.json`, issue/list/revoke/rotate/replay/failure fixtures; coverage: Credential secrecy/rotation scenarios; depends on 8.2.
   - Steps: model one-time reveal, metadata-only replay, atomic replacement, and retained old credential on failure; verify: `npm --prefix schemas/tooling run validate -- --scope credentials`.
   - Done: no fixture stores hash/raw key and rotation replay mints nothing; rollback: revert 8.3; commit: `feat(contracts): define credential issuance and rotation` / D.
 
-- [ ] **8.4 Add bootstrap seed/CLI contract fixtures only.** Files: HTTP `bootstrap-seed.schema.json`, bootstrap first/repeat/conflict fixtures and examples; coverage: Offline bootstrap/Bootstrap repeats/conflicts; depends on 8.3.
+- [x] **8.4 Add bootstrap seed/CLI contract fixtures only.** Files: HTTP `bootstrap-seed.schema.json`, bootstrap first/repeat/conflict fixtures and examples; coverage: Offline bootstrap/Bootstrap repeats/conflicts; depends on 8.3.
   - Steps: encode stable identity, first Principal/credential/direct Grants, one reveal, convergence, and secret-free conflict; verify: `npm --prefix schemas/tooling run validate -- --scope bootstrap`.
   - Done: fixture describes offline CLI I/O without executable product CLI; rollback: revert 8.4; commit: `feat(contracts): add bootstrap cli contract fixtures` / D.
 
-- [ ] **8.5 Prove bounded lists and safe metadata-only audit reads.** Files: control fixtures for sort/limit/truncation, forbidden pagination, required filters, hidden resource, and unsupported audit-content retrieval; coverage: both bounded-list scenarios and both safe-error/audit-read scenarios; depends on 8.1.
+- [x] **8.5 Prove bounded lists and safe metadata-only audit reads.** Files: control fixtures for sort/limit/truncation, forbidden pagination, required filters, hidden resource, and unsupported audit-content retrieval; coverage: both bounded-list scenarios and both safe-error/audit-read scenarios; depends on 8.1.
   - Steps: encode limit 100/no continuation, deterministic order, 422 unsafe queries, indistinguishable 404, metadata/redaction-state-only audit reads, and uniform 422 for every content-retrieval parameter/field; verify: `npm --prefix schemas/tooling run validate -- --scope control && npm --prefix schemas/tooling run lint:openapi -- --api control-plane`.
   - Done: all control operations/examples/negative rules validate together; rollback: revert 8.5; commit: `feat(contracts): add control plane conformance fixtures` / D.
 
 ## PR E — Responses/OpenRouter boundary and ADR-001
 
-- [ ] **9.1 Publish canonical Responses OAS and schemas.** Files: `openapi/responses.yaml`, HTTP `responses-request`/`responses-response` schemas, request/success examples; coverage: Textual subset and Non-streaming success scenarios; depends on D.
+- [x] **9.1 Publish canonical Responses OAS and schemas.** Files: `openapi/responses.yaml`, HTTP `responses-request`/`responses-response` schemas, request/success examples; coverage: Textual subset and Non-streaming success scenarios; depends on D.
   - Steps: define OAS 3.1.0 POST only, textual limits, server request ID, completed response, concrete model, and flat routing metadata; verify: `npm --prefix schemas/tooling run lint:openapi -- --api responses`.
   - Done: minimal request/200 response bundle cleanly and streaming/nested metadata are absent; rollback: revert 9.1; commit: `feat(contracts): publish responses openapi` / E.
 
-- [ ] **9.2 Add validation/auth/non-enumeration fixtures.** Files: Responses fixtures for unknown/unsupported fields, bad IDs/input, uniform 401, missing/inactive/unauthorized alias, and spoofed correlation; coverage: Unsupported field, Credential cannot authenticate, Missing versus unauthorized alias, Correlation spoofed; depends on 9.1.
+- [x] **9.2 Add validation/auth/non-enumeration fixtures.** Files: Responses fixtures for unknown/unsupported fields, bad IDs/input, uniform 401, missing/inactive/unauthorized alias, and spoofed correlation; coverage: Unsupported field, Credential cannot authenticate, Missing versus unauthorized alias, Correlation spoofed; depends on 9.1.
   - Steps: encode 422-before-auth/upstream, 401-before-alias, and indistinguishable 403-before-routing; verify: `npm --prefix schemas/tooling run validate -- --scope responses-boundary`.
   - Done: fixtures prove validation/auth/allow ordering without runtime code; rollback: revert 9.2; commit: `feat(contracts): prove responses boundary ordering` / E.
 
-- [ ] **9.3 Contract OpenRouter effective-provider extraction.** Files: selected-provider success, `X-Generation-Id` fallback, and missing/invalid/ambiguous/malformed metadata 502 fixtures; coverage: Allowed alias routes, Provider executes through router, OpenRouter alias boundary; depends on 9.1.
+- [x] **9.3 Contract OpenRouter effective-provider extraction.** Files: selected-provider success, `X-Generation-Id` fallback, and missing/invalid/ambiguous/malformed metadata 502 fixtures; coverage: Allowed alias routes, Provider executes through router, OpenRouter alias boundary; depends on 9.1.
   - Steps: require opt-in metadata, concrete upstream model, exactly one selected endpoint on no-cache metadata success or one bounded `GET /api/v1/generation` keyed exclusively by upstream `X-Generation-Id`; map only provider, retain `router=openrouter`, distinguish Response body `id`, and reject raw metadata leakage; verify: `npm --prefix schemas/tooling run validate -- --scope openrouter-metadata`.
   - Done: missing/invalid header, failed/ambiguous lookup, and provider drift normalize to safe non-retryable 502 while successful dimensions remain separate; rollback: revert 9.3; commit: `feat(contracts): define openrouter metadata boundary` / E.
 
-- [ ] **9.4 Add tracing and upstream-error fixtures.** Files: valid/invalid trace and 502/503/504/Retry-After fixtures; coverage: both Trace Context and all Error taxonomy scenarios; depends on 9.1.
+- [x] **9.4 Add tracing and upstream-error fixtures.** Files: valid/invalid trace and 502/503/504/Retry-After fixtures; coverage: both Trace Context and all Error taxonomy scenarios; depends on 9.1.
   - Steps: encode bounded child/new trace behavior, safe envelopes, retryability, trustworthy Retry-After only, and upstream 503/504 paths that require neither selected-provider metadata nor generation lookup; verify: `npm --prefix schemas/tooling run validate -- --scope responses-errors`.
   - Done: no upstream body/URL/stack/secret/internal denial cause serializes; rollback: revert 9.4; commit: `feat(contracts): add responses tracing and error fixtures` / E.
 
-- [ ] **9.5 Record accepted Responses decision.** File: `adrs/ADR-001-responses.md`; coverage: Accepted ADRs/ADR set checked; depends on 9.1–9.4.
+- [x] **9.5 Record accepted Responses decision.** File: `adrs/ADR-001-responses.md`; coverage: Accepted ADRs/ADR set checked; depends on 9.1–9.4.
   - Steps: document non-streaming subset, authorization-before-resolution, OpenRouter adapter boundary, alternatives/deferred work/supersession; verify: `npm --prefix schemas/tooling run validate -- --scope governance`.
   - Done: ADR-001..005 are accepted and linked to specs/evidence; rollback: revert 9.5; commit: `feat(contracts): record responses gateway decision` / E.
 
 ## PR F — Release manifest and cross-consumer conformance
 
-- [ ] **10.1 Publish the immutable 1.0.0 manifest.** Files: `releases/1.0.0/{manifest.yaml,conformance/evidence.json}`; coverage: Versioned schemas, SemVer change process, Portable evidence; depends on E.
+- [x] **10.1 Publish the immutable 1.0.0 manifest.** Files: `releases/1.0.0/{manifest.yaml,conformance/evidence.json}`; coverage: Versioned schemas, SemVer change process, Portable evidence; depends on E.
   - Steps: inventory every OAS/schema/example/fixture/ADR, dialect/version/`$id`, API major, hashes, and baseline; generate evidence first and manifest last to avoid circular hashes; verify: `npm --prefix schemas/tooling run validate:release -- --release 1.0.0`.
   - Done: release is complete, immutable, hash-consistent, and previous-major rules are testable; rollback: revert 10.1 (unpublishes only unreleased contracts); commit: `feat(contracts): publish release 1.0.0 manifest` / F.
 
-- [ ] **10.2 Map every consumer to executable obligations.** Files: `conformance/{suite.yaml,consumers.yaml}` and coverage evidence; coverage: Consumers conform/Internal model is shared; depends on 10.1.
+- [x] **10.2 Map every consumer to executable obligations.** Files: `conformance/{suite.yaml,consumers.yaml}` and coverage evidence; coverage: Consumers conform/Internal model is shared; depends on 10.1.
   - Steps: map #10 transport, #11 schema/persistence, #13 Bearer/context/401, #14 ordered flow/errors/audit, harness execution OAS, and UI control OAS to named fixtures/commands; verify: `npm --prefix schemas/tooling run conformance -- --check coverage`.
   - Done: no requirement/operation/type lacks an owner and no internal DTO/ORM/provider type is authority; rollback: revert 10.2; commit: `feat(contracts): map consumer conformance obligations` / F.
 
-- [ ] **10.3 Add future FastAPI projection harness fixtures.** Files: normalized matching/missing/extra projection fixtures under `fixtures/{positive,negative}` and diff tests; coverage: Consumer conformance/Technology independence/Adapter changes; depends on A2 and both OAS files.
+- [x] **10.3 Add future FastAPI projection harness fixtures.** Files: normalized matching/missing/extra projection fixtures under `fixtures/{positive,negative}` and diff tests; coverage: Consumer conformance/Technology independence/Adapter changes; depends on A2 and both OAS files.
   - Steps: model future FastAPI `/openapi.json` as input fixture only, normalize semantic signatures, and test missing/extra behavior; verify: `npm --prefix schemas/tooling run diff:openapi -- --projection-fixture future-fastapi`.
   - Done: canonical-vs-projection match passes and drift fixtures fail without creating FastAPI/Python code; rollback: revert 10.3; commit: `feat(contracts): add fastapi projection conformance fixture` / F.
 
-- [ ] **10.4 Generate compact, reproducible semantic evidence.** Files: `conformance/evidence.json`; temporary bundles: `schemas/tooling/.tmp/*` (generated, ignored); coverage: Portable evidence and SemVer scenarios; depends on 10.1–10.3.
+- [x] **10.4 Generate compact, reproducible semantic evidence.** Files: `conformance/evidence.json`; temporary bundles: `schemas/tooling/.tmp/*` (generated, ignored); coverage: Portable evidence and SemVer scenarios; depends on 10.1–10.3.
   - Steps: lint/bundle both OAS, normalize, hash semantic outputs/ADRs/fixtures, run positive/negative checks, and record tool versions/results without timestamps or raw bundle text; verify: run `npm --prefix schemas/tooling run evidence` twice and `git diff --exit-code -- schemas/releases/1.0.0/conformance/evidence.json` after the second run.
   - Done: deterministic evidence changes only when semantics change; rollback: revert generated evidence with F; commit: `feat(contracts): generate deterministic conformance evidence` / F.
 
-- [ ] **10.5 Run the complete release gate and inspect scope.** Files: all `schemas/**` plus OpenSpec artifacts already merged; coverage: every requirement/scenario across five specs; depends on 10.1–10.4.
+- [x] **10.5 Run the complete release gate and inspect scope.** Files: all `schemas/**` plus OpenSpec artifacts already merged; coverage: every requirement/scenario across five specs; depends on 10.1–10.4.
   - Steps: run clean install, audit, tests, strict schema/fixture validation, Redocly lint/bundle, semantic diff, vocabulary/ownership/hash/coverage checks, OpenSpec strict/status, and secret scan; verify: `npm ci --prefix schemas/tooling && npm audit --prefix schemas/tooling --audit-level=moderate && npm --prefix schemas/tooling test && npm --prefix schemas/tooling run validate:release -- --release 1.0.0 && openspec validate issue-9-gateway-boundary-contracts-and-adrs --strict && openspec status --change issue-9-gateway-boundary-contracts-and-adrs`.
   - Done: all gates pass, status is 4/4, only compact evidence/lockfile are generated tracked lines, and #10/#11/#13/#14/harness/UI have explicit evidence; rollback: revert F only, preserving validated prior slices; commit: `feat(contracts): complete gateway contract conformance` / F.
 
 ## Next autonomous apply slice
 
-S1–S4 and A1–C are complete through the current staged C candidate. The next autonomous work unit is **only PR D/#65 / tasks 8.1–8.5** on branch `feat/issue-9-control-plane`, and it starts from updated `main` only after C merges. Do not begin D from this unmerged C worktree.
+S1–S4 and A1–F are complete. The full release gate passed in a clean verification copy, including dependency audit, 61 tests, release validation, conformance coverage, semantic diff, OpenSpec strict/status, and secret scanning. Archive and tracker closure remain delivery-time actions.

@@ -101,9 +101,9 @@ export async function loadReleaseDirectory(directory, group = "shared") {
   const base = directory instanceof URL ? directory : pathToFileURL(`${resolve(directory)}/`);
   const schemas = (await readJsonTree(new URL("json-schema/", base), ".schema.json")).map(({ value }) => value);
   const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).flatMap(({ name, value }) => value.cases ? value.cases.map((data, index) => ({ name: `${name}#${index + 1}`, target: value.target, rule: value.rule, status: value.status, version: value.version, group: value.group, data })) : [{ name, ...value }]);
-  const fixtures = group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
-  const exampleTarget = group === "audit" ? () => "urn:sre-agent:schema:audit-event:1.0.0" : group === "control" ? (name) => name.startsWith("credential-") ? "urn:sre-agent:schema:credential-issuance:1.0.0" : "urn:sre-agent:schema:bootstrap-seed:1.0.0" : group === "responses" ? (name) => name.startsWith("minimal-request") ? "urn:sre-agent:schema:responses-request:1.0.0" : "urn:sre-agent:schema:responses-response:1.0.0" : null;
-  const examples = exampleTarget ? (await readJsonTree(new URL(`examples/${group}/`, base), ".example.json")).map(({ name, value: data }) => ({ name, data, target: exampleTarget(name) })) : [];
+  const fixtures = group === "all" || group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
+  const exampleTarget = (scope, name) => scope === "audit" ? "urn:sre-agent:schema:audit-event:1.0.0" : scope === "control" ? name.startsWith("credential-") ? "urn:sre-agent:schema:credential-issuance:1.0.0" : "urn:sre-agent:schema:bootstrap-seed:1.0.0" : name.startsWith("minimal-request") ? "urn:sre-agent:schema:responses-request:1.0.0" : "urn:sre-agent:schema:responses-response:1.0.0";
+  const scopes = group === "all" ? ["audit", "control", "responses"] : [group], examples = (await Promise.all(scopes.filter((scope) => ["audit", "control", "responses"].includes(scope)).map(async (scope) => (await readJsonTree(new URL(`examples/${scope}/`, base), ".example.json")).map(({ name, value: data }) => ({ name: group === "all" ? `${scope}/${name}` : name, data, target: exampleTarget(scope, name) }))))).flat();
   if (!fixtures.length && !examples.length) throw new Error(`Unknown or empty fixture scope: ${group}`);
   return { schemas, fixtures, examples };
 }
