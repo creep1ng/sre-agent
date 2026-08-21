@@ -1,8 +1,15 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { parse } from "yaml";
 
 const OWNERS = ["git", "db", "secret_store"], LABELS = { git: "Git", db: "Database", secret_store: "Secret store or environment" }, HEADINGS = ["Context", "Decision", "Consequences", "Alternatives", "Deferred", "Supersedes", "Links"];
 const CONTENT = { git: { required: ["openapi", "schemas", "adrs", "examples", "fixtures", "seeds", "conformance"], prohibited: ["raw_keys", "authorization", "runtime_records"] }, db: { required: ["principals", "credential_records", "model_aliases", "grants", "audit_events", "idempotency_records"], prohibited: ["raw_keys", "upstream_secrets", "contract_definitions"] }, secret_store: { required: ["provider_secrets", "deployment_secrets"], prohibited: ["policy", "grants", "schemas", "audit_content"] } };
+const ADRS = {
+  "ADR-001-responses.md": { id: "001", decision: ["text-only", "non-streaming", "post /v1/responses", "validation", "authentication", "authorization", "alias and model resolution", "openrouter", "concrete", "effective provider", "x-generation-id", "trace context", "502", "503", "504"], deferred: ["runtime implementation", "streaming", "tools", "conversations", "provider sdk choice", "credentials and secrets", "persistence", "broader openai and openrouter surfaces"] },
+  "ADR-002-principal.md": { id: "002", decision: ["principal", "kind=human|agent", "organization", "role", "scope"], deferred: ["workspace tenancy", "memberships", "roles", "federation", "oauth", "jwt identity"] },
+  "ADR-003-api-keys.md": { id: "003", decision: ["bearer api keys", "principalcontext", "one-way hash", "exactly once"], deferred: ["hash algorithm selection", "secret-store implementation", "rotation transactions", "authentication runtime"] },
+  "ADR-004-grants.md": { id: "004", decision: ["direct `allow`", "no match returns `deny`", "authorization completes before model routing", "policy_id=null"], deferred: ["policy engine selection", "condition languages", "delegation", "hierarchical resources", "explicit deny rules"] },
+  "ADR-005-audit-redaction.md": { id: "005", decision: ["stage-aware", "pre-sink", "fail-closed", "durable acceptance", "append-only", "downstream exporters"], deferred: ["retention", "content-read authorization", "product sink selection", "database design", "exporters", "operational retry policy", "runtime redactor implementation"] }
+};
 function assertKeys(value, expected, path) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== expected.length || Object.keys(value).some((key) => !expected.includes(key))) throw new Error(`${path} contains unknown or missing fields`);
 }
@@ -43,16 +50,33 @@ export function validateOwnershipEvidence(matrix, evidence) {
   return evidence.placements.length;
 }
 
+function section(text, heading) {
+  return text.match(new RegExp(`^## ${heading}\\s*$([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, "m"))?.[1].toLowerCase() ?? "";
+}
+
+export function validateAdr(text, policy) {
+  const name = `ADR-${policy.id}`;
+  if (!new RegExp(`^# ${name}:`, "m").test(text) || !/^\s*- \*\*Status:\*\* Accepted\s*$/m.test(text)) throw new Error(`${name} must be accepted`);
+  for (const heading of HEADINGS) if (!new RegExp(`^## ${heading}$`, "m").test(text)) throw new Error(`${name} lacks ${heading}`);
+  for (const term of policy.decision) if (!section(text, "Decision").includes(term)) throw new Error(`${name} lacks approved decision: ${term}`);
+  for (const term of policy.deferred) if (!section(text, "Deferred").includes(term)) throw new Error(`${name} lacks approved deferral: ${term}`);
+}
+
 export function validateAuditAdr(text) {
-  if (!/^# ADR-005:/m.test(text) || !/\*\*Status:\*\* Accepted/.test(text)) throw new Error("ADR-005 must be accepted");
-  for (const heading of HEADINGS) if (!new RegExp(`^## ${heading}$`, "m").test(text)) throw new Error(`ADR-005 lacks ${heading}`);
-  for (const term of ["stage-aware", "pre-sink", "fail-closed", "durable acceptance", "append-only", "downstream exporters", "retention", "content-read authorization"]) if (!text.toLowerCase().includes(term)) throw new Error(`ADR-005 lacks required decision: ${term}`);
+  validateAdr(text, ADRS["ADR-005-audit-redaction.md"]);
+}
+
+export async function validateAdrs(adrs) {
+  const expected = Object.keys(ADRS), actual = (await readdir(adrs)).filter((file) => /^ADR-\d{3}-.*\.md$/.test(file)).sort();
+  if (actual.length !== expected.length || actual.some((file, index) => file !== expected[index])) throw new Error(`ADR governance must contain exactly ${expected.join(", ")}`);
+  for (const file of expected) validateAdr(await readFile(new URL(file, adrs), "utf8"), ADRS[file]);
+  return expected.length;
 }
 
 export async function validateGovernance(release, adrs) {
   const matrix = validateOwnershipMatrix(parse(await readFile(new URL("conformance/ownership-matrix.yaml", release), "utf8")));
   const evidence = JSON.parse(await readFile(new URL("conformance/ownership-evidence.json", release), "utf8"));
   const placements = validateOwnershipEvidence(matrix, evidence);
-  validateAuditAdr(await readFile(new URL("ADR-005-audit-redaction.md", adrs), "utf8"));
-  return { authorities: OWNERS.length, placements };
+  const adrCount = await validateAdrs(adrs);
+  return { authorities: OWNERS.length, placements, adrs: adrCount };
 }
