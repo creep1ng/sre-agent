@@ -33,9 +33,18 @@ export function createSchemaRegistry(schemas) {
 }
 function semanticFixtureValid(fixture) {
   if (fixture.target === "urn:sre-agent:schema:responses-http-case:1.0.0") return responsesHttpCaseValid(fixture.data);
+  if (fixture.target === "urn:sre-agent:schema:openrouter-metadata-case:1.0.0") return openRouterMetadataValid(fixture.data);
   if (fixture.target !== "urn:sre-agent:schema:bootstrap-seed:1.0.0" || fixture.data?.output?.result !== "success") return true;
   const { seed, output } = fixture.data, principal = output.principal, grants = new Map(output.grants.map((grant) => [grant.grant_id, grant]));
   return principal.principal_id === seed.principal.principal_id && principal.kind === seed.principal.kind && principal.display_name === seed.principal.display_name && output.credential.credential.principal_id === seed.principal.principal_id && output.grants.length === seed.grants.length && seed.grants.every((expected) => { const actual = grants.get(expected.grant_id); return actual?.principal_id === seed.principal.principal_id && actual.action === expected.action && JSON.stringify(actual.resource) === JSON.stringify(expected.resource); });
+}
+function openRouterMetadataValid(value) {
+  const success = ["metadata-success", "lookup-success"].includes(value.condition), selected = value.selected_endpoints ?? [], generation = value.generation;
+  if (!success) return value.outcome === "error" && value.status === 502 && Object.keys(value).every((key) => ["condition", "outcome", "status", "public"].includes(key)) && value.public?.error?.code === "provider_evidence_invalid" && value.public?.error?.message === "Provider evidence was invalid." && value.public?.retryable === false;
+  const consistent = value.outcome === "success" && value.status === 200 && !value.public && value.router === "openrouter" && value.effective_provider !== "openrouter" && selected.length === 1 && selected[0].provider === value.effective_provider;
+  if (!consistent) return false;
+  if (value.condition === "metadata-success") return generation === undefined;
+  return generation?.attempts === 1 && generation.response_header === generation.lookup_key && generation.lookup_key !== value.public_response_id;
 }
 function responsesHttpCaseValid(value) {
   const credentials = value.condition?.startsWith("credential-"), alias = value.condition?.startsWith("alias-"), trace = value.condition?.startsWith("trace-"), upstream = value.condition?.startsWith("upstream-");
