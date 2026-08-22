@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(git rev-parse --show-toplevel)
+
+if [ ! -f "$ROOT/.env.worktree" ]; then
+  echo "Run scripts/bootstrap-worktree.py first." >&2
+  exit 2
+fi
+
+if docker compose \
+  --project-directory "$ROOT" \
+  --env-file "$ROOT/.env" \
+  --env-file "$ROOT/.env.worktree" \
+  -f "$ROOT/compose.yaml" \
+  "$@"; then
+  exit 0
+else
+  result=$?
+fi
+
+case " $* " in
+  *" up "*)
+    echo "If Compose failed because a published port is occupied, regenerate with explicit free ports:" >&2
+    echo "scripts/bootstrap-worktree.py --api-port 28100 --web-port 28101 --db-port 28102" >&2
+    ;;
+esac
+exit "$result"
