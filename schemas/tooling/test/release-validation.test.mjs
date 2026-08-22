@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { parse, stringify } from "yaml";
-import { assertImmutableManifest, assertReleaseMetadata, runConsumer, validateCoverage, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
+import { assertImmutableManifest, assertReleaseMetadata, runConsumer, validateCompatibility, validateCoverage, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
 
 test("consumer coverage pins every owner, fixture, command, and non-authority boundary", async () => { const result = await validateCoverage(); assert.equal(result.consumers.consumers.length, 6); assert.equal(result.suite.obligations.length, 6); });
 test("coverage rejects YAML command substitution without executing it", async () => {
@@ -19,3 +19,4 @@ test("immutable release comparison rejects any hash drift", () => { assert.doesN
 test("generation is byte-deterministic and fails closed on drift or corrupt state", async () => { const root = await mkdtemp(join(tmpdir(), "release-generate-")), path = join(root, "evidence.json"), value = { contract_version: "1.0.0", results: ["passed"] }; try { const first = await writeImmutable(path, value), bytes = await readFile(path, "utf8"), second = await writeImmutable(path, structuredClone(value)); assert.equal(first, second); assert.equal(await readFile(path, "utf8"), bytes); await assert.rejects(writeImmutable(path, { ...value, results: ["drift"] }), /immutable/); await writeFile(path, "{"); await assert.rejects(writeImmutable(path, value), /JSON/); } finally { await rm(root, { recursive: true, force: true }); } });
 test("validation rejects corrupt baseline, dialect, and API major metadata", async () => { const manifest = parse(await readFile(new URL("../../releases/1.0.0/manifest.yaml", import.meta.url), "utf8")), cases = [["baseline", (value) => value.baseline.previous_release = "0.9.0"], ["dialects", (value) => value.dialects.json_schema = "draft-07"], ["API major", (value) => value.inventory.openapi[0].api_major = 9]]; for (const [label, mutate] of cases) { const value = structuredClone(manifest); mutate(value); assert.throws(() => assertReleaseMetadata(value), new RegExp(label, "i")); } });
 test("published projection goldens cannot be regenerated", async () => { await assert.rejects(writeProjectionFixtures(), /immutable/); });
+test("minor release preserves every positive 1.0.0 instance", async () => assert.deepEqual(await validateCompatibility(), { previous_release: "1.0.0", current_release: "1.1.0", positive_fixtures: 81, examples: 10, status: "passed" }));

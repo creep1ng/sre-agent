@@ -8,15 +8,17 @@ const ADRS = {
   "ADR-002-principal.md": { id: "002", decision: ["principal", "kind=human|agent", "organization", "role", "scope"], deferred: ["workspace tenancy", "memberships", "roles", "federation", "oauth", "jwt identity"] },
   "ADR-003-api-keys.md": { id: "003", decision: ["bearer api keys", "principalcontext", "one-way hash", "exactly once"], deferred: ["hash algorithm selection", "secret-store implementation", "rotation transactions", "authentication runtime"] },
   "ADR-004-grants.md": { id: "004", decision: ["direct `allow`", "no match returns `deny`", "authorization completes before model routing", "policy_id=null"], deferred: ["policy engine selection", "condition languages", "delegation", "hierarchical resources", "explicit deny rules"] },
-  "ADR-005-audit-redaction.md": { id: "005", decision: ["stage-aware", "pre-sink", "fail-closed", "durable acceptance", "append-only", "downstream exporters"], deferred: ["retention", "content-read authorization", "product sink selection", "database design", "exporters", "operational retry policy", "runtime redactor implementation"] }
+  "ADR-005-audit-redaction.md": { id: "005", decision: ["stage-aware", "pre-sink", "fail-closed", "durable acceptance", "append-only", "downstream exporters"], deferred: ["retention", "content-read authorization", "product sink selection", "database design", "exporters", "operational retry policy", "runtime redactor implementation"] },
+  "ADR-006-sanitized-audit-content.md": { id: "006", decision: ["sanitized_text", "llm_input", "llm_response", "fully_redacted", "65,536", "fail-closed"], deferred: ["retention", "content-read authorization", "runtime redactor implementation"] }
 };
+const ADR_FILES_BY_VERSION = { "1.0.0": Object.keys(ADRS).slice(0, 5), "1.1.0": Object.keys(ADRS) };
 function assertKeys(value, expected, path) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== expected.length || Object.keys(value).some((key) => !expected.includes(key))) throw new Error(`${path} contains unknown or missing fields`);
 }
 
 export function validateOwnershipMatrix(matrix) {
   assertKeys(matrix, ["contract_version", "authorities"], "Ownership matrix"); assertKeys(matrix.authorities, OWNERS, "Ownership authorities");
-  if (matrix.contract_version !== "1.0.0") throw new Error("Ownership matrix must define contract version 1.0.0");
+  if (!/^(?:1\.0\.0|1\.1\.0)$/.test(matrix.contract_version)) throw new Error("Ownership matrix must define a supported contract version");
   for (const owner of OWNERS) {
     const row = matrix.authorities[owner];
     assertKeys(row, ["label", "required", "prohibited"], `Ownership authority ${owner}`);
@@ -66,17 +68,19 @@ export function validateAuditAdr(text) {
   validateAdr(text, ADRS["ADR-005-audit-redaction.md"]);
 }
 
-export async function validateAdrs(adrs) {
-  const expected = Object.keys(ADRS), actual = (await readdir(adrs)).filter((file) => /^ADR-\d{3}-.*\.md$/.test(file)).sort();
-  if (actual.length !== expected.length || actual.some((file, index) => file !== expected[index])) throw new Error(`ADR governance must contain exactly ${expected.join(", ")}`);
+export async function validateAdrs(adrs, version = "1.0.0") {
+  const expected = ADR_FILES_BY_VERSION[version]; if (!expected) throw new Error(`Unsupported governance version ${version}`);
+  const actual = (await readdir(adrs)).filter((file) => /^ADR-\d{3}-.*\.md$/.test(file)).sort(), unknown = actual.filter((file) => !(file in ADRS));
+  if (unknown.length || expected.some((file) => !actual.includes(file))) throw new Error(`ADR governance for ${version} must contain ${expected.join(", ")} and no unknown ADRs`);
   for (const file of expected) validateAdr(await readFile(new URL(file, adrs), "utf8"), ADRS[file]);
   return expected.length;
 }
 
-export async function validateGovernance(release, adrs) {
+export async function validateGovernance(release, adrs, version = "1.0.0") {
   const matrix = validateOwnershipMatrix(parse(await readFile(new URL("conformance/ownership-matrix.yaml", release), "utf8")));
+  if (matrix.contract_version !== version) throw new Error(`Ownership matrix must define contract version ${version}`);
   const evidence = JSON.parse(await readFile(new URL("conformance/ownership-evidence.json", release), "utf8"));
   const placements = validateOwnershipEvidence(matrix, evidence);
-  const adrCount = await validateAdrs(adrs);
+  const adrCount = await validateAdrs(adrs, version);
   return { authorities: OWNERS.length, placements, adrs: adrCount };
 }

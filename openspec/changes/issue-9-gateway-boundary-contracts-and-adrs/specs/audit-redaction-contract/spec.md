@@ -53,12 +53,22 @@ Prompts/LLM input, LLM responses, MCP logs, sandbox/command output, tool-call ar
 - **THEN** output is rejected without persistence
 
 ### Requirement: Fail-closed redaction result
-Redaction SHALL emit policy version, `success|failed`, source class, and safe category/count summary. Success SHALL store only redacted content with `content_state=redacted`. Error or uncertainty SHALL discard raw content and form only safe metadata with `content_state=redaction_failed`; execution MAY continue only after that safe event is durably accepted under the audit release gate.
+Redaction SHALL emit policy version, `success|failed`, source class, and safe category/count summary. Success SHALL store only closed redacted content with `content_state=redacted`: bounded `sanitized_text` is available only for complete sanitized `llm_input|llm_response`, while `fully_redacted` remains available when no safe text survives. Error or uncertainty SHALL discard raw and partial content, forbid every content representation, and form only safe metadata with `content_state=redaction_failed`; execution MAY continue only after that safe event is durably accepted under the audit release gate.
 
 #### Scenario: Redaction succeeds
 - **GIVEN** a successful pass
 - **WHEN** evidence persists
 - **THEN** only redacted content and safe metadata persist
+
+#### Scenario: Complete sanitized LLM text survives
+- **GIVEN** a successful LLM input or response redaction with safe text remaining
+- **WHEN** evidence persists
+- **THEN** the complete bounded text uses the closed `sanitized_text` representation
+
+#### Scenario: No safe LLM text survives
+- **GIVEN** a successful redaction that removes all content
+- **WHEN** evidence persists
+- **THEN** `fully_redacted` remains valid without a text field
 
 #### Scenario: Redaction fails
 - **GIVEN** redactor error or uncertainty

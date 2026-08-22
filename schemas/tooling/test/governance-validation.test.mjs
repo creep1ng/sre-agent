@@ -44,6 +44,7 @@ async function withAdrMutation(mutate) {
 const replaceIn = async (directory, file, before, after = "") => { const path = join(directory, file), text = await readFile(path, "utf8"); assert.notEqual(text.includes(before), false, `${file} mutation anchor missing: ${before}`); await writeFile(path, text.replace(before, after)); };
 
 test("governance validates ADR-001 through ADR-005 and normative ownership evidence", async () => assert.deepEqual(await validateGovernance(release, adrs), { authorities: 3, placements: 66, adrs: 5 }));
+test("release 1.1.0 adds accepted ADR-006 without changing historical ADR membership", async () => assert.deepEqual(await validateGovernance(new URL("../../releases/1.1.0/", import.meta.url), adrs, "1.1.0"), { authorities: 3, placements: 66, adrs: 6 }));
 test("governance pins exact ADR-001 through ADR-005 membership", async () => {
   await Promise.all(adrFiles.map((file) => assert.rejects(withAdrMutation((directory) => rm(join(directory, file))), /ADR|governance/i)));
   await assert.rejects(withAdrMutation((directory) => writeFile(join(directory, "ADR-006-unapproved.md"), provisionalAdr001.replace("ADR-001", "ADR-006"))), /ADR|governance/i);
