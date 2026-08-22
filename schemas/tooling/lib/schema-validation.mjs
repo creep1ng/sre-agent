@@ -32,9 +32,10 @@ export function createSchemaRegistry(schemas) {
   for (const id of ids) ajv.getSchema(id); return ajv;
 }
 function semanticFixtureValid(fixture) {
-  if (fixture.target === "urn:sre-agent:schema:responses-http-case:1.0.0") return responsesHttpCaseValid(fixture.data);
-  if (fixture.target === "urn:sre-agent:schema:openrouter-metadata-case:1.0.0") return openRouterMetadataValid(fixture.data);
-  if (fixture.target !== "urn:sre-agent:schema:bootstrap-seed:1.0.0" || fixture.data?.output?.result !== "success") return true;
+  const name = /^urn:sre-agent:schema:([a-z-]+):/.exec(fixture.target)?.[1];
+  if (name === "responses-http-case") return responsesHttpCaseValid(fixture.data);
+  if (name === "openrouter-metadata-case") return openRouterMetadataValid(fixture.data);
+  if (name !== "bootstrap-seed" || fixture.data?.output?.result !== "success") return true;
   const { seed, output } = fixture.data, principal = output.principal, grants = new Map(output.grants.map((grant) => [grant.grant_id, grant]));
   return principal.principal_id === seed.principal.principal_id && principal.kind === seed.principal.kind && principal.display_name === seed.principal.display_name && output.credential.credential.principal_id === seed.principal.principal_id && output.grants.length === seed.grants.length && seed.grants.every((expected) => { const actual = grants.get(expected.grant_id); return actual?.principal_id === seed.principal.principal_id && actual.action === expected.action && JSON.stringify(actual.resource) === JSON.stringify(expected.resource); });
 }
@@ -102,7 +103,7 @@ export async function loadReleaseDirectory(directory, group = "shared") {
   const schemas = (await readJsonTree(new URL("json-schema/", base), ".schema.json")).map(({ value }) => value);
   const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).flatMap(({ name, value }) => value.cases ? value.cases.map((data, index) => ({ name: `${name}#${index + 1}`, target: value.target, rule: value.rule, status: value.status, version: value.version, group: value.group, data })) : [{ name, ...value }]);
   const fixtures = group === "all" || group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
-  const exampleTarget = (scope, name) => scope === "audit" ? "urn:sre-agent:schema:audit-event:1.0.0" : scope === "control" ? name.startsWith("credential-") ? "urn:sre-agent:schema:credential-issuance:1.0.0" : "urn:sre-agent:schema:bootstrap-seed:1.0.0" : name.startsWith("minimal-request") ? "urn:sre-agent:schema:responses-request:1.0.0" : "urn:sre-agent:schema:responses-response:1.0.0";
+  const version = schemaVersion(schemas[0]?.$id), schemaId = (name) => `urn:sre-agent:schema:${name}:${version}`, exampleTarget = (scope, name) => scope === "audit" ? schemaId("audit-event") : scope === "control" ? name.startsWith("credential-") ? schemaId("credential-issuance") : schemaId("bootstrap-seed") : name.startsWith("minimal-request") ? schemaId("responses-request") : schemaId("responses-response");
   const scopes = group === "all" ? ["audit", "control", "responses"] : [group], examples = (await Promise.all(scopes.filter((scope) => ["audit", "control", "responses"].includes(scope)).map(async (scope) => (await readJsonTree(new URL(`examples/${scope}/`, base), ".example.json")).map(({ name, value: data }) => ({ name: group === "all" ? `${scope}/${name}` : name, data, target: exampleTarget(scope, name) }))))).flat();
   if (!fixtures.length && !examples.length) throw new Error(`Unknown or empty fixture scope: ${group}`);
   return { schemas, fixtures, examples };

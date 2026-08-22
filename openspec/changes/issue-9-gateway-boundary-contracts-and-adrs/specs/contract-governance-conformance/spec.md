@@ -19,11 +19,11 @@ Artifacts SHALL follow this authority matrix; lower-authority stores SHALL NOT r
 - **THEN** placement outside its row fails
 
 ### Requirement: Accepted ADRs
-Git SHALL contain accepted: ADR-001 non-streaming `/v1/responses`, pre-resolution authorization, initial OpenRouter adapter; ADR-002 single workspace and `Principal(human|agent)` without organization/role/scope; ADR-003 Bearer key to PrincipalContext, one-time reveal, hash/prefix storage; ADR-004 direct allow Grants/default deny, engine-independent; ADR-005 stage-aware safe AuditEvents without fabricated authority, pre-sink fail-closed redaction, durable authoritative acceptance before ordinary-result release, append-only events, downstream exporters, and deferred retention/access. Accepted ADRs SHALL be superseded, never silently rewritten.
+Git SHALL contain accepted: ADR-001 non-streaming `/v1/responses`, pre-resolution authorization, initial OpenRouter adapter; ADR-002 single workspace and `Principal(human|agent)` without organization/role/scope; ADR-003 Bearer key to PrincipalContext, one-time reveal, hash/prefix storage; ADR-004 direct allow Grants/default deny, engine-independent; ADR-005 stage-aware safe AuditEvents without fabricated authority, pre-sink fail-closed redaction, durable authoritative acceptance before ordinary-result release, append-only events, downstream exporters, and deferred retention/access; ADR-006 additive bounded `sanitized_text` for LLM inputs/responses while failed redaction remains metadata-only. Accepted ADRs SHALL be superseded, never silently rewritten.
 
 #### Scenario: ADR set is checked
 - **GIVEN** governance artifacts
-- **WHEN** ADR-001..005 are validated
+- **WHEN** the version-pinned ADR set is validated through ADR-006 for release 1.1.0
 - **THEN** each is accepted with its approved decision and deferrals
 
 ### Requirement: Portable evidence
