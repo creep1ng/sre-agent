@@ -1,0 +1,14 @@
+.git
+.github
+.atl
+.codex
+.agents
+.env
+.env.worktree
+.pytest_cache
+.ruff_cache
+.venv
+**/__pycache__
+**/*.pyc
+schemas/tooling/node_modules
+schemas/tooling/.tmp

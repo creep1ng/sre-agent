@@ -1,0 +1,13 @@
+.env
+.env.worktree
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+schemas/tooling/node_modules/
+schemas/tooling/.tmp/
+/.atl/
