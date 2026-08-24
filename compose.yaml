@@ -26,8 +26,8 @@ services:
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
-      db:
-        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
@@ -40,6 +40,31 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
+    networks: [runtime]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime]
+
+  seed:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["python", "-m", "sre_agent.persistence.seeds"]
+    env_file: .env
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
     networks: [runtime]
 
   web:

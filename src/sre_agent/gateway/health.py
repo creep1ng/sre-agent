@@ -13,10 +13,10 @@ def postgres_readiness_probe(database_url: str) -> ReadinessProbe:
         connection = await psycopg.AsyncConnection.connect(database_url, connect_timeout=2)
         async with connection:
             async with connection.cursor() as cursor:
-                await cursor.execute("SELECT 1")
+                await cursor.execute("SELECT version_num FROM alembic_version")
                 row = await cursor.fetchone()
-                if row != (1,):
-                    raise RuntimeError("PostgreSQL readiness query returned an unexpected result")
+                if row != ("20260822_01",):
+                    raise RuntimeError("PostgreSQL schema prerequisite is unavailable")
 
     return probe
 

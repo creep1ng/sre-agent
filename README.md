@@ -4,10 +4,28 @@ The repository runs a minimal FastAPI composition root, PostgreSQL, and the exis
 
 ## Quick path
 
+Create the ignored local environment file, then replace every angle-bracket placeholder with
+your own value. Do not commit the file or print its API keys.
+
 ```bash
 cp .env.example .env
+docker compose run --rm migrate
+docker compose run --rm seed
 docker compose up --build --wait
 ```
+
+The required seed inputs are `ADMIN_HUMAN_API_KEY`, `DEMO_HUMAN_API_KEY`,
+`INCIDENT_HARNESS_API_KEY`, `RESTRICTED_HARNESS_API_KEY`, `TRIAGE_AGENT_MODEL`, and
+`TRIAGE_AGENT_PROVIDER`. Each API key must be unique, begin with `sre_`, contain at least 32
+characters, and have a unique first eight characters. The model uses `<lab>/<model>` syntax;
+the provider uses the HT-01 provider vocabulary. `.env.example` intentionally contains only
+nonfunctional placeholders.
+
+Migrate and seed are explicit one-shot operations. The API process never creates tables, runs
+Alembic, or seeds data at startup; readiness returns a sanitized `503` until its schema exists.
+An identical seed rerun prints `seed converged` and preserves stable IDs, counts, assignments,
+grants, and credential hashes. Partial or incompatible seed-owned state fails atomically with a
+secret-free `seed_state_conflict` diagnostic.
 
 Open the web catalog at <http://127.0.0.1:8080>. API liveness and readiness are available at <http://127.0.0.1:8000/health/live> and <http://127.0.0.1:8000/health/ready>.
 
@@ -24,6 +42,21 @@ docker compose down -v --remove-orphans
 ```
 
 Re-running `docker compose up --build --wait` requires no undocumented recovery step. PostgreSQL data persists in a project-scoped volume until the explicit `down -v` teardown. Harness dependencies are locked into its image and copied to an ephemeral filesystem for each run; rebuilding the image is sufficient after a tooling lockfile change.
+
+## Database lifecycle and rollback
+
+Run `docker compose run --rm migrate` before `docker compose run --rm seed`. Repeating either
+command is safe when the migration history and seed-owned rows match. Before any durable data is
+accepted, the schema can be removed with:
+
+```bash
+docker compose run --rm migrate alembic downgrade base
+```
+
+Rollback delivery slices in reverse order: CI/docs, seed/runtime wiring, repositories, schema,
+then DTOs. Once durable data or audit events exist, do **not** downgrade destructively. Back up
+the five tables and audit history, revert application/runtime code first, and preserve the
+database until an operator-approved migration or restore plan exists.
 
 ## System structure
 
@@ -54,10 +87,15 @@ npm --prefix schemas/tooling run validate:release -- --release 1.0.0
 npm --prefix schemas/tooling run validate:release -- --release 1.1.0
 npm --prefix schemas/tooling run lint:openapi
 npm --prefix schemas/tooling run conformance -- --consumer issue-10
+npm --prefix schemas/tooling run conformance -- --consumer issue-11
 node --check scripts/showcase.js
+
+uv lock --check
+alembic check
 ```
 
-Direct Python dependencies are pinned exactly in `pyproject.toml`. The repository does not yet carry a verified transitive Python lock, so package indexes may resolve different compatible transitive versions over time. Create and review a standard lock in a network-enabled dependency update rather than fabricating one without resolver evidence.
+Direct Python dependencies are pinned exactly in `pyproject.toml`, and `uv.lock` is the reviewed
+transitive lock. `uv lock --check` verifies that project metadata and the lock remain aligned.
 
 ## Web design system
 
