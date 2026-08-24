@@ -21,7 +21,11 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
-      - run: pytest
+      - name: Run database-independent Python tests
+        run: >-
+          pytest
+          --ignore=tests/test_migrations.py
+          --ignore=tests/test_persistence_repositories.py
 
   contracts:
     runs-on: ubuntu-latest
@@ -43,6 +47,49 @@ jobs:
       - run: npm run lint:openapi
       - run: npm run conformance -- --consumer issue-10
 
+  issue-11-postgresql:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.4-alpine
+        env:
+          POSTGRES_DB: sre_agent
+          POSTGRES_USER: sre_agent
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sre_agent -d sre_agent"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://sre_agent@127.0.0.1:5432/sre_agent
+      TEST_DATABASE_URL: postgresql://sre_agent@127.0.0.1:5432/sre_agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.14"
+          cache: npm
+          cache-dependency-path: schemas/tooling/package-lock.json
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e ".[dev]"
+      - run: alembic upgrade head && alembic upgrade head
+      - name: Run PostgreSQL-backed Python tests
+        run: >-
+          pytest -q
+          tests/test_migrations.py
+          tests/test_persistence_repositories.py
+          tests/test_health.py
+      - run: alembic check
+      - run: npm --prefix schemas/tooling ci
+      - run: npm --prefix schemas/tooling run conformance -- --consumer issue-11
+
   static-web:
     runs-on: ubuntu-latest
     steps:
@@ -57,8 +104,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Create ephemeral seed inputs
+        run: |
+          cp .env.example .env
+          python - <<'PY'
+          from pathlib import Path
+          from secrets import token_hex
+
+          path = Path(".env")
+          content = path.read_text()
+          replacements = {
+              "<set-unique-sre_-prefixed-key-with-32-plus-characters>": (
+                  f"sre_admn_{token_hex(16)}",
+                  f"sre_demo_{token_hex(16)}",
+                  f"sre_inci_{token_hex(16)}",
+                  f"sre_rest_{token_hex(16)}",
+              ),
+              "<lab/model>": ("openai/gpt-4o-mini",),
+              "<provider>": ("openai",),
+          }
+          for placeholder, values in replacements.items():
+              for value in values:
+                  content = content.replace(placeholder, value, 1)
+          path.write_text(content)
+          PY
       - name: Start the local stack
-        run: cp .env.example .env && docker compose up --build --wait
+        run: docker compose up --build --wait
       - name: Verify API, web, and contract harness
         run: |
           curl --fail --silent http://127.0.0.1:8000/health/live
