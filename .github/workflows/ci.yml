@@ -56,7 +56,7 @@ jobs:
         env:
           POSTGRES_DB: sre_agent
           POSTGRES_USER: sre_agent
-          POSTGRES_PASSWORD: ci-only
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
         ports:
           - 5432:5432
         options: >-
@@ -65,8 +65,8 @@ jobs:
           --health-timeout 3s
           --health-retries 20
     env:
-      DATABASE_URL: postgresql://sre_agent:ci-only@127.0.0.1:5432/sre_agent
-      TEST_DATABASE_URL: postgresql://sre_agent:ci-only@127.0.0.1:5432/sre_agent
+      DATABASE_URL: postgresql://sre_agent:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/sre_agent
+      TEST_DATABASE_URL: postgresql://sre_agent:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/sre_agent
       TRIAGE_AGENT_MODEL: openai/gpt-4o-mini
       TRIAGE_AGENT_PROVIDER: openai
     steps:
