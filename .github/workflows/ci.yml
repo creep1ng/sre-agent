@@ -29,6 +29,7 @@ jobs:
           --ignore=tests/test_demo_seeds.py
           --ignore=tests/test_api_key_persistence.py
           --ignore=tests/test_authentication.py
+          --ignore=tests/test_responses.py
 
   contracts:
     runs-on: ubuntu-latest
@@ -112,6 +113,7 @@ jobs:
           tests/test_api_key_persistence.py
           tests/test_authentication.py
           tests/test_health.py
+          tests/test_responses.py
       - run: alembic check
       - run: npm --prefix schemas/tooling ci
       - run: npm --prefix schemas/tooling run conformance -- --consumer issue-11
