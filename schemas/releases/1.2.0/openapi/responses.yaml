@@ -1,0 +1,40 @@
+openapi: 3.1.0
+info:
+  title: SRE Agent Responses API
+  version: 1.2.0
+  description: Bounded textual, non-streaming Responses contract.
+servers: [{ url: / }]
+security: [{ bearerAuth: [] }]
+paths:
+  /v1/responses:
+    post:
+      summary: Create a completed textual response
+      operationId: createResponse
+      description: Validation precedes authentication and alias authorization; routing occurs only after authorization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: 'urn:sre-agent:schema:responses-request:1.2.0' }
+      responses:
+        '200':
+          description: Completed textual response
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:responses-response:1.2.0' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '403': { $ref: '#/components/responses/ResourceUnavailable' }
+        '502': { $ref: '#/components/responses/BadGateway' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '504': { $ref: '#/components/responses/Timeout' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  responses:
+    ValidationError: { description: Contract validation failed before authentication, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } } }
+    AuthenticationFailed: { description: Authentication failed, headers: { WWW-Authenticate: { schema: { type: string, const: Bearer } } }, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } } }
+    ResourceUnavailable: { description: Alias is unavailable without enumeration, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } } }
+    BadGateway: { description: Upstream output could not be safely adapted, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } } }
+    Unavailable: { description: Upstream is temporarily unavailable, headers: { Retry-After: { schema: { type: string } } }, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } } }
+    Timeout: { description: Upstream timed out, headers: { Retry-After: { schema: { type: string } } }, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } } }

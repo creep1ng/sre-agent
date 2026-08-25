@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:sre-agent:schema:resource:1.2.0","title":"Resource","type":"object","additionalProperties":false,"required":["resource_type","resource_id"],"properties":{"resource_type":{"enum":["llm_model","mcp_server","mcp_tool","skill","bok_collection"]},"resource_id":{"type":"string","minLength":1,"maxLength":200}}}
