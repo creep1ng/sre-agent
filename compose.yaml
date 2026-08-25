@@ -23,6 +23,9 @@ services:
       dockerfile: docker/api.Dockerfile
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-30}
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:-}
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
@@ -60,7 +63,14 @@ services:
       context: .
       dockerfile: docker/api.Dockerfile
     command: ["python", "-m", "sre_agent.persistence.seeds"]
-    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      INCIDENT_HARNESS_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
+      RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+      TRIAGE_AGENT_MODEL: ${TRIAGE_AGENT_MODEL:?TRIAGE_AGENT_MODEL is required}
+      TRIAGE_AGENT_PROVIDER: ${TRIAGE_AGENT_PROVIDER:?TRIAGE_AGENT_PROVIDER is required}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -112,6 +122,58 @@ services:
       - ./scripts:/source/scripts:ro
     tmpfs:
       - /workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0755
+    restart: "no"
+    networks: [runtime]
+
+  issue-14-db:
+    profiles: ["issue-14"]
+    image: postgres:17.4-alpine
+    environment:
+      POSTGRES_DB: sre_agent_issue14
+      POSTGRES_USER: sre_agent
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sre_agent -d sre_agent_issue14"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks: [runtime]
+
+  issue-14-harness:
+    profiles: ["issue-14"]
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: checks
+    command: ["pytest", "-q", "tests/test_responses.py"]
+    environment:
+      PYTEST_ADDOPTS: -p no:cacheprovider
+      TEST_DATABASE_URL: postgresql://sre_agent@issue-14-db:5432/sre_agent_issue14
+    depends_on:
+      issue-14-db:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime]
+
+  live-smoke:
+    profiles: ["live-smoke"]
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: checks
+    command: ["pytest", "-q", "tests/test_openrouter_live.py"]
+    environment:
+      RUN_OPENROUTER_LIVE_SMOKE: ${RUN_OPENROUTER_LIVE_SMOKE:-0}
+      OPENROUTER_API_CONFIGURED: ${OPENROUTER_API_KEY:+1}
+      AUDIT_HMAC_CONFIGURED: ${AUDIT_HMAC_KEY:+1}
+      OPENROUTER_LIVE_API_URL: http://api:8000
+      INCIDENT_HARNESS_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
+      TRIAGE_AGENT_MODEL: ${TRIAGE_AGENT_MODEL:?TRIAGE_AGENT_MODEL is required}
+      TRIAGE_AGENT_PROVIDER: ${TRIAGE_AGENT_PROVIDER:?TRIAGE_AGENT_PROVIDER is required}
+    depends_on:
+      api:
+        condition: service_healthy
     restart: "no"
     networks: [runtime]
 

@@ -38,3 +38,17 @@ def test_all_repository_checks_have_containerized_compose_interfaces() -> None:
     assert "FROM base AS checks" in dockerfile
     assert "COPY tests ./tests" in dockerfile
     assert "docker compose --profile checks" in readme
+
+
+def test_issue_14_harness_is_deterministic_and_provider_secret_free() -> None:
+    compose = (ROOT / "compose.yaml").read_text()
+    harness = compose.split("  issue-14-harness:", 1)[1].split("  live-smoke:", 1)[0]
+    live_smoke = compose.split("  live-smoke:", 1)[1].split("volumes:", 1)[0]
+
+    assert '["pytest", "-q", "tests/test_responses.py"]' in harness
+    assert "issue-14-db" in harness
+    assert not any(line.strip().startswith("OPENROUTER_API_KEY:") for line in harness.splitlines())
+    assert not any(
+        line.strip().startswith("OPENROUTER_API_KEY:") for line in live_smoke.splitlines()
+    )
+    assert "OPENROUTER_API_CONFIGURED" in live_smoke
