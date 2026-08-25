@@ -84,20 +84,34 @@ services:
     restart: unless-stopped
     networks: [runtime]
 
+  python-checks:
+    profiles: ["checks"]
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: checks
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PYTEST_ADDOPTS: -p no:cacheprovider
+      TEST_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+    networks: [runtime]
+
   harness:
-    profiles: ["harness"]
+    profiles: ["harness", "checks"]
     build:
       context: .
       dockerfile: docker/harness.Dockerfile
     command:
       ["npm", "--prefix", "schemas/tooling", "run", "conformance", "--", "--consumer", "issue-10"]
     volumes:
-      - ./schemas:/workspace/schemas:ro
+      - ./schemas:/source/schemas:ro
+      - ./scripts:/source/scripts:ro
     tmpfs:
-      - /workspace/node_modules:rw,nosuid,size=384m
-    depends_on:
-      api:
-        condition: service_healthy
+      - /workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0755
     restart: "no"
     networks: [runtime]
 

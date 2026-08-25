@@ -7,8 +7,9 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
+from sre_agent.persistence.api_keys import verify_api_key
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.seeds import SeedConflict, SeedSettings, seed
+from sre_agent.persistence.seeds import KEY_ENV, SeedConflict, SeedSettings, seed
 from sre_agent.settings import Settings
 
 DATABASE_URL = os.environ.get(
@@ -43,10 +44,13 @@ def test_seed_settings_reject_placeholders_and_malformed_values() -> None:
         ("TRIAGE_AGENT_MODEL", "missing-slash"),
         ("TRIAGE_AGENT_PROVIDER", "<provider>"),
         ("ADMIN_HUMAN_API_KEY", "change-me"),
+        ("ADMIN_HUMAN_API_KEY", "sre_" + "a" * 129),
     )
     for field, value in invalid:
         with pytest.raises(ValueError):
             SeedSettings.from_environment(ENV | {field: value})
+    exact_maximum = SeedSettings.from_environment(ENV | {"ADMIN_HUMAN_API_KEY": "sre_" + "a" * 128})
+    assert len(exact_maximum.keys[0]) == 132
 
 
 @pytest.mark.asyncio
@@ -75,6 +79,17 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
     await database.dispose()
     assert counts == [4, 4, 1, 1]
     assert before == after
+    by_id = dict(before)
+    seeded_principals = (
+        "admin-human",
+        "demo-human",
+        "incident-harness",
+        "restricted-harness",
+    )
+    assert all(
+        verify_api_key(ENV[name], by_id[f"credential-{principal}"])
+        for name, principal in zip(KEY_ENV, seeded_principals, strict=True)
+    )
     assert grant == ("incident-harness", "invoke")
     assert resource == ("openai/gpt-4o-mini", "openai")
     assert all(secret not in stored for secret in ENV.values())

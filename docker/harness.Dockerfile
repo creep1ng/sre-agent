@@ -9,5 +9,6 @@ RUN chmod 755 /usr/local/bin/harness-entrypoint \
     && mkdir -p /workspace/node_modules
 
 WORKDIR /workspace
+USER node
 ENTRYPOINT ["harness-entrypoint"]
 CMD ["npm", "--prefix", "schemas/tooling", "run", "conformance", "--", "--consumer", "issue-10"]

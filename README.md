@@ -74,28 +74,41 @@ See [runtime boundaries](docs/architecture.md) and the [Codex worktree workflow]
 
 ## Local verification
 
+All verification runs inside Compose containers. In a linked worktree, replace
+`docker compose` below with `scripts/worktree-compose` so the generated project name and ports
+remain isolated.
+
+Run the complete Python suite, lint, formatting, lock consistency, and Alembic drift check:
+
 ```bash
-python -m pip install -e ".[dev]"
-ruff check .
-ruff format --check .
-pytest
+docker compose --profile checks run --build --rm python-checks
+```
 
-npm --prefix schemas/tooling ci
-npm --prefix schemas/tooling test
-npm --prefix schemas/tooling run validate
-npm --prefix schemas/tooling run validate:release -- --release 1.0.0
-npm --prefix schemas/tooling run validate:release -- --release 1.1.0
-npm --prefix schemas/tooling run lint:openapi
-npm --prefix schemas/tooling run conformance -- --consumer issue-10
-npm --prefix schemas/tooling run conformance -- --consumer issue-11
-node --check scripts/showcase.js
+Run the complete contract and JavaScript verification set:
 
-uv lock --check
-alembic check
+```bash
+docker compose --profile checks run --build --rm harness npm --prefix schemas/tooling test
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.0.0
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.1.0
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run lint:openapi
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-10
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-11
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-13
+docker compose --profile checks run --rm harness node --check scripts/showcase.js
+```
+
+To verify issue #13 only, run its HTTP behavior tests and pinned contract obligation:
+
+```bash
+scripts/worktree-compose --profile checks run --build --rm python-checks pytest tests/test_authentication.py
+scripts/worktree-compose --profile checks run --build --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-13
 ```
 
 Direct Python dependencies are pinned exactly in `pyproject.toml`, and `uv.lock` is the reviewed
-transitive lock. `uv lock --check` verifies that project metadata and the lock remain aligned.
+transitive lock. The `python-checks` image pins its verification tools and `uv lock --check`
+verifies that project metadata and the lock remain aligned without installing anything on the
+host.
 
 ## Web design system
 

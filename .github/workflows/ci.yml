@@ -27,6 +27,8 @@ jobs:
           --ignore=tests/test_migrations.py
           --ignore=tests/test_persistence_repositories.py
           --ignore=tests/test_demo_seeds.py
+          --ignore=tests/test_api_key_persistence.py
+          --ignore=tests/test_authentication.py
 
   contracts:
     runs-on: ubuntu-latest
@@ -107,6 +109,8 @@ jobs:
           tests/test_migrations.py
           tests/test_persistence_repositories.py
           tests/test_demo_seeds.py
+          tests/test_api_key_persistence.py
+          tests/test_authentication.py
           tests/test_health.py
       - run: alembic check
       - run: npm --prefix schemas/tooling ci

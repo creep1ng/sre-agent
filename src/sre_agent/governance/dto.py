@@ -46,6 +46,12 @@ class CredentialReference(StrictDTO):
     revoked_at: AwareDatetime | None
 
 
+class PrincipalContext(StrictDTO):
+    principal: Principal
+    credential_id: Identifier
+    authenticated_at: AwareDatetime
+
+
 class Resource(StrictDTO):
     resource_type: ResourceType
     resource_id: Annotated[str, Field(min_length=1, max_length=200)]
