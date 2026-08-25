@@ -98,6 +98,13 @@ docker compose --profile checks run --rm harness npm --prefix schemas/tooling ru
 docker compose --profile checks run --rm harness node --check scripts/showcase.js
 ```
 
+To verify issue #13 only, run its HTTP behavior tests and pinned contract obligation:
+
+```bash
+scripts/worktree-compose --profile checks run --build --rm python-checks pytest tests/test_authentication.py
+scripts/worktree-compose --profile checks run --build --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-13
+```
+
 Direct Python dependencies are pinned exactly in `pyproject.toml`, and `uv.lock` is the reviewed
 transitive lock. The `python-checks` image pins its verification tools and `uv lock --check`
 verifies that project metadata and the lock remain aligned without installing anything on the
