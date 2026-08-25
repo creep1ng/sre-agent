@@ -23,6 +23,18 @@ def migrated_database() -> None:
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "20260822_01")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              response_status, retryable, correlation, redaction, content_state,
+              authoritative_acceptance, ordinary_result, exporter_result)
+            VALUES ('00000000-0000-4000-8000-000000000000', now(), 'audit.accept',
+              'persist', 'audit', 'success', NULL, 200, false, '{}', '{}', 'absent',
+              'accepted', 'released', 'not_attempted')"""
+        )
+        connection.commit()
     command.upgrade(config, "head")
     command.upgrade(config, "head")
 
@@ -40,6 +52,37 @@ def test_repeated_head_has_exactly_five_domain_tables() -> None:
         "principals",
         "resources",
     }
+
+
+def test_latency_migration_backfills_without_a_server_default() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT latency_ms FROM audit_events WHERE event_id=%s",
+            ("00000000-0000-4000-8000-000000000000",),
+        ).fetchone() == (0,)
+        metadata = connection.execute(
+            """SELECT is_nullable, column_default FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='audit_events'
+              AND column_name='latency_ms'"""
+        ).fetchone()
+        assert metadata == ("NO", None)
+        constraints = {
+            row[0]
+            for row in connection.execute(
+                "SELECT conname FROM pg_constraint WHERE conrelid='audit_events'::regclass"
+            )
+        }
+        assert "ck_audit_events_latency" in constraints
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(
+                """INSERT INTO audit_events (
+                  event_id, occurred_at, operation, action, stage, outcome, reason_code,
+                  response_status, retryable, latency_ms, correlation, redaction, content_state,
+                  authoritative_acceptance, ordinary_result, exporter_result)
+                VALUES ('00000000-0000-4000-8000-000000000099', now(), 'audit.accept',
+                  'persist', 'audit', 'success', NULL, 200, false, -1, '{}', '{}', 'absent',
+                  'accepted', 'released', 'not_attempted')"""
+            )
 
 
 @pytest.mark.asyncio
@@ -69,14 +112,17 @@ def test_schema_exposes_required_constraints_and_rejects_invalid_rows() -> None:
 
 
 def test_database_trigger_rejects_audit_updates_and_deletes() -> None:
-    insert = """INSERT INTO audit_events VALUES (
-      '00000000-0000-4000-8000-000000000001', now(), 'audit.accept', 'persist', 'audit',
-      'success', NULL, 200, false, '{}', NULL, NULL, NULL, NULL, NULL, NULL, '{}',
-      'absent', NULL, 'accepted', 'released', 'not_attempted', NULL)"""
+    insert = """INSERT INTO audit_events (
+      event_id, occurred_at, operation, action, stage, outcome, reason_code, response_status,
+      retryable, latency_ms, correlation, redaction, content_state, authoritative_acceptance,
+      ordinary_result, exporter_result)
+    VALUES ('00000000-0000-4000-8000-000000000001', now(), 'audit.accept', 'persist',
+      'audit', 'success', NULL, 200, false, 4, '{}', '{}', 'absent', 'accepted',
+      'released', 'not_attempted')"""
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(insert)
         connection.commit()
         for statement in ("UPDATE audit_events SET retryable=true", "DELETE FROM audit_events"):
             with pytest.raises(psycopg.errors.RaiseException), connection.transaction():
                 connection.execute(statement)
-        assert connection.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 1
+        assert connection.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 2

@@ -58,3 +58,17 @@ def test_row_projections_copy_only_contract_fields(path: Path) -> None:
 
     assert projected == dto
     assert not {"raw_key", "key_hash", "provider"} & projected.model_fields_set
+
+
+def test_audit_projection_preserves_zero_latency() -> None:
+    data = json.loads(
+        (
+            ROOT / "schemas/releases/1.2.0/fixtures/positive/"
+            "audit.responses.allowed.positive.v1.2.0.fixture.json"
+        ).read_text()
+    )["data"]
+    data["latency_ms"] = 0
+
+    projected = projections.project_audit_event(data)
+
+    assert projected.latency_ms == 0

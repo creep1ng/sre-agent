@@ -29,8 +29,6 @@ jobs:
           --ignore=tests/test_demo_seeds.py
           --ignore=tests/test_api_key_persistence.py
           --ignore=tests/test_authentication.py
-          --ignore=tests/test_governance_dto.py
-          --ignore=tests/test_persistence_projections.py
 
   contracts:
     runs-on: ubuntu-latest

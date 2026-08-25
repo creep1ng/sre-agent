@@ -128,6 +128,7 @@ class AuditEventRow(Base):
             name="ck_audit_events_reason_code",
         ),
         CK("response_status BETWEEN 100 AND 599", name="ck_audit_events_response"),
+        CK("latency_ms >= 0", name="ck_audit_events_latency"),
         CK(
             "content_state IN ('absent','redacted','redaction_failed')",
             name="ck_audit_events_content_state",
@@ -150,6 +151,7 @@ class AuditEventRow(Base):
     reason_code = mapped_column(String(64), nullable=True)
     response_status = required(Integer)
     retryable = required(Boolean)
+    latency_ms = required(Integer)
     correlation = required(JSONB)
     identity = mapped_column(JSONB, nullable=True)
     resource = mapped_column(JSONB, nullable=True)
