@@ -1,7 +1,8 @@
 # Runtime and persistence boundaries
 
-Issue 10 establishes the deployable FastAPI runtime. Issue 11 adds a PostgreSQL adapter for the
-HT-01 governance contracts without making ORM or DTO models authoritative.
+Issue 10 establishes the deployable FastAPI runtime. Issues 11–14 add PostgreSQL governance,
+bearer authentication, and one governed HT-01 response path without making ORM, DTO, or provider
+models authoritative.
 
 ## Composition
 
@@ -10,13 +11,21 @@ HT-01 governance contracts without making ORM or DTO models authoritative.
 | Control plane | `sre_agent.control` | Reserved boundary for governed configuration and administration |
 | Incident-resolution plane | `sre_agent.incident` | Reserved boundary for incident analysis and remediation |
 | Harness | `sre_agent.harness` | Contract and fixture execution boundary |
-| Gateway | `sre_agent.gateway` | HTTP transport and health probes |
+| Gateway | `sre_agent.gateway` | Health, authentication, governed responses, provider and audit adapters |
 
-`sre_agent.application.create_application` is the only composition root. The current runtime exposes infrastructure health routes only:
+`sre_agent.application.create_application` is the only composition root:
 
 - `GET /health/live` is dependency-free and proves the Python process can serve requests.
-- `GET /health/ready` verifies that `alembic_version` contains revision `20260822_01`. Failures
+- `GET /health/ready` verifies that `alembic_version` contains revision `20260825_02`. Failures
   return a fixed `503` response that excludes driver messages, DSNs, and credentials.
+- `POST /v1/responses` validates and authenticates before logical-resource authorization, resolves
+  routing only after allow, makes at most one OpenRouter request, commits a protected terminal
+  audit event, then releases the normalized result.
+
+The provider secret and timeout are API-only Compose settings. Seed services receive an explicit
+allow-list of bootstrap variables instead of the whole `.env`; contract and deterministic harness
+containers receive no provider credential. The optional live-smoke client receives only a safe
+presence flag and calls the API boundary, so the OpenRouter key never crosses into a client image.
 
 The schema releases remain the contract authority. Runtime models must not replace or rewrite files under `schemas/releases/`.
 
@@ -33,7 +42,8 @@ or seed schema. Operators own the lifecycle explicitly:
 ```bash
 docker compose run --rm migrate
 docker compose run --rm seed
-npm --prefix schemas/tooling run conformance -- --consumer issue-11
+docker compose --profile issue-14 run --build --rm issue-14-harness
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-14
 ```
 
 Seed configuration comes only from the ignored `.env` file. Required names are
@@ -58,7 +68,13 @@ migration or restore plan. Audit history must not be rewritten to simplify rollb
 
 ## Verification path
 
-CI keeps the existing Python, contract, static-web, and Compose gates. The issue 11 job adds a
-real PostgreSQL 17.4 service, repeated migrations and seeds, focused persistence suites,
-`alembic check`, and the issue 11 conformance consumer. Locally, run the same focused suites plus
-full `pytest`, Ruff check/format check, `uv lock --check`, and the Compose harness before delivery.
+CI keeps the Python, contract, static-web, and Compose gates. The PostgreSQL job owns migrations,
+seeds, persistence, authentication, governed-response and audit suites; the contract job owns the
+immutable 1.2.0 release and issue-14 conformance. Compose smoke additionally runs the isolated
+recording-provider harness. Ordinary CI explicitly excludes the secret-gated live smoke.
+
+The deterministic harness is authoritative for allow, 403 deny with zero provider calls,
+normalized failures, protected audit readback, and release gating. The separately named live smoke
+makes one bounded provider request only with operator enablement and API-owned secrets; it asserts
+the normalized response envelope and protected routing metadata, never provider bodies or raw
+audit rows.

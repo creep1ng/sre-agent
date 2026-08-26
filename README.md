@@ -1,6 +1,8 @@
 # SRE agent local foundation
 
-The repository runs a minimal FastAPI composition root, PostgreSQL, and the existing framework-agnostic web catalog as one reproducible local stack. The control plane, incident-resolution plane, harness, and gateway remain explicit boundaries without introducing domain endpoints prematurely.
+The repository runs a governed, non-streaming `POST /v1/responses`, PostgreSQL, and the existing
+framework-agnostic web catalog as one reproducible local stack. Authorization precedes provider
+routing, and every released response or denial is gated by metadata-only audit persistence.
 
 ## Quick path
 
@@ -21,6 +23,11 @@ characters, and have a unique first eight characters. The model uses `<lab>/<mod
 the provider uses the HT-01 provider vocabulary. `.env.example` intentionally contains only
 nonfunctional placeholders.
 
+`AUDIT_HMAC_KEY` protects audit references. `OPENROUTER_API_KEY` is optional for ordinary local
+and deterministic checks; when set, Compose passes it only to `api`. Set
+`OPENROUTER_TIMEOUT_SECONDS` between 0 and 120 seconds. The seed, contract harness, deterministic
+issue-14 harness, and live-smoke client never receive the provider secret.
+
 Migrate and seed are explicit one-shot operations. The API process never creates tables, runs
 Alembic, or seeds data at startup; readiness returns a sanitized `503` until its schema exists.
 An identical seed rerun prints `seed converged` and preserves stable IDs, counts, assignments,
@@ -34,6 +41,23 @@ Run the contract harness as a one-shot profile:
 ```bash
 docker compose --profile harness run --rm harness
 ```
+
+Prove issue #14 deterministically against an isolated PostgreSQL container and recording provider:
+
+```bash
+docker compose --profile issue-14 run --build --rm issue-14-harness
+```
+
+The live smoke is deliberately separate from ordinary CI. It sends exactly one request through
+the running API only when both explicit enablement and API-owned secrets are configured:
+
+```bash
+# Set OPENROUTER_API_KEY and a non-placeholder AUDIT_HMAC_KEY in the ignored .env first.
+RUN_OPENROUTER_LIVE_SMOKE=1 docker compose --profile live-smoke run --build --rm live-smoke
+```
+
+The client receives only a provider-secret presence flag, its harness credential, and non-secret
+routing expectations. A missing enable flag or provider/audit secret produces a pytest skip.
 
 Remove every project-owned container, network, and volume with:
 
@@ -91,10 +115,12 @@ docker compose --profile checks run --build --rm harness npm --prefix schemas/to
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.0.0
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.1.0
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.2.0
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run lint:openapi
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-10
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-11
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-13
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-14
 docker compose --profile checks run --rm harness node --check scripts/showcase.js
 ```
 
@@ -104,6 +130,10 @@ To verify issue #13 only, run its HTTP behavior tests and pinned contract obliga
 scripts/worktree-compose --profile checks run --build --rm python-checks pytest tests/test_authentication.py
 scripts/worktree-compose --profile checks run --build --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-13
 ```
+
+The issue #14 deterministic harness is the release gate for allow, deny, zero-call, normalized
+failure, protected readback, and audit-commit behavior. The live smoke is optional evidence, not a
+replacement for those deterministic checks.
 
 Direct Python dependencies are pinned exactly in `pyproject.toml`, and `uv.lock` is the reviewed
 transitive lock. The `python-checks` image pins its verification tools and `uv lock --check`

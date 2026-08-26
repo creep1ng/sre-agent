@@ -12,6 +12,7 @@ from sre_agent.governance.dto import (
     AuditEvent,
     CredentialReference,
     Grant,
+    ModelAlias,
     PolicyDecision,
     Principal,
     PrincipalContext,
@@ -35,6 +36,7 @@ from sre_agent.persistence.projections import (
     project_audit_event,
     project_credential,
     project_grant,
+    project_model_alias,
     project_principal,
     project_resource,
 )
@@ -142,9 +144,55 @@ class ResourceRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def authorization_view(
+        self, resource_type: str, resource_id: str
+    ) -> "ResourceAuthorizationView | None":
+        row = (
+            await self._session.execute(
+                select(
+                    ResourceRow.resource_type,
+                    ResourceRow.resource_id,
+                    ResourceRow.status,
+                ).where(
+                    ResourceRow.resource_type == resource_type,
+                    ResourceRow.resource_id == resource_id,
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            return None
+        return ResourceAuthorizationView(*row)
+
     async def get(self, resource_type: str, resource_id: str) -> Resource | None:
-        row = await self._session.get(ResourceRow, (resource_type, resource_id))
-        return project_resource(row) if row is not None else None
+        view = await self.authorization_view(resource_type, resource_id)
+        return project_resource(view) if view is not None else None
+
+    async def resolve_assignment(self, resource_type: str, resource_id: str) -> ModelAlias | None:
+        row = (
+            await self._session.execute(
+                select(
+                    ResourceRow.model_alias_id,
+                    ResourceRow.alias,
+                    ResourceRow.concrete_model,
+                    ResourceRow.router,
+                    ResourceRow.inference_provider,
+                    ResourceRow.status,
+                ).where(
+                    ResourceRow.resource_type == resource_type,
+                    ResourceRow.resource_id == resource_id,
+                    ResourceRow.resource_type == "llm_model",
+                    ResourceRow.status == "active",
+                )
+            )
+        ).one_or_none()
+        return project_model_alias(row._mapping) if row is not None else None
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceAuthorizationView:
+    resource_type: str
+    resource_id: str
+    status: str
 
 
 class GrantRepository:
@@ -199,6 +247,8 @@ class AuditRepository:
         self._session = session
 
     async def append(self, event: AuditEvent) -> None:
+        if event.latency_ms is None:
+            raise ValueError("latency_ms is required for persistence")
         values = event.model_dump(mode="json")
         values["occurred_at"] = event.occurred_at
         self._session.add(AuditEventRow(**values))

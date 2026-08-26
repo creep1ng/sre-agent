@@ -11,14 +11,14 @@ const ADRS = {
   "ADR-005-audit-redaction.md": { id: "005", decision: ["stage-aware", "pre-sink", "fail-closed", "durable acceptance", "append-only", "downstream exporters"], deferred: ["retention", "content-read authorization", "product sink selection", "database design", "exporters", "operational retry policy", "runtime redactor implementation"] },
   "ADR-006-sanitized-audit-content.md": { id: "006", decision: ["sanitized_text", "llm_input", "llm_response", "fully_redacted", "65,536", "fail-closed"], deferred: ["retention", "content-read authorization", "runtime redactor implementation"] }
 };
-const ADR_FILES_BY_VERSION = { "1.0.0": Object.keys(ADRS).slice(0, 5), "1.1.0": Object.keys(ADRS) };
+const ADR_FILES_BY_VERSION = { "1.0.0": Object.keys(ADRS).slice(0, 5), "1.1.0": Object.keys(ADRS), "1.2.0": Object.keys(ADRS) };
 function assertKeys(value, expected, path) {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== expected.length || Object.keys(value).some((key) => !expected.includes(key))) throw new Error(`${path} contains unknown or missing fields`);
 }
 
 export function validateOwnershipMatrix(matrix) {
   assertKeys(matrix, ["contract_version", "authorities"], "Ownership matrix"); assertKeys(matrix.authorities, OWNERS, "Ownership authorities");
-  if (!/^(?:1\.0\.0|1\.1\.0)$/.test(matrix.contract_version)) throw new Error("Ownership matrix must define a supported contract version");
+  if (!/^(?:1\.0\.0|1\.1\.0|1\.2\.0)$/.test(matrix.contract_version)) throw new Error("Ownership matrix must define a supported contract version");
   for (const owner of OWNERS) {
     const row = matrix.authorities[owner];
     assertKeys(row, ["label", "required", "prohibited"], `Ownership authority ${owner}`);

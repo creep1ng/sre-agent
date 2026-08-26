@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:error-envelope:1.2.0","rule":"pattern","status":"negative","version":"1.2.0","group":"shared","data":{"error":{"code":"authentication_failed","message":"Authorization: Bearer sk-sensitive"},"request_id":"9d47db9a-5b15-4f9f-a86a-a0ce507c6161","retryable":false}}
