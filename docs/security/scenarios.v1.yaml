@@ -1,0 +1,68 @@
+catalog_version: "v1"
+scenarios:
+  - id: "SEC-001"
+    maturity: "current"
+    threat: "authorized model invocation"
+    preconditions: ["seeded governance graph", "active exact grant"]
+    credential_state: "valid"
+    principal: "incident-harness"
+    action: "invoke"
+    resource: {type: "llm_model", id: "triage-agent"}
+    request: {method: "POST", path: "/v1/responses", content_redaction: "off"}
+    expected: {http_status: 200, code: "ok", policy_decision: "allow", upstream_calls: 1, tool_calls: 0, audit: "on"}
+    automation: {status: "executable", test_locator: "tests/test_responses.py::test_allow_calls_once_outside_transactions_and_commits_protected_readback"}
+  - id: "SEC-002"
+    maturity: "current"
+    threat: "unauthorized principal invocation"
+    preconditions: ["seeded governance graph", "grant absent"]
+    credential_state: "valid"
+    principal: "restricted-harness"
+    action: "invoke"
+    resource: {type: "llm_model", id: "triage-agent"}
+    request: {method: "POST", path: "/v1/responses", content_redaction: "off"}
+    expected: {http_status: 403, code: "resource_unavailable", policy_decision: "deny", upstream_calls: 0, tool_calls: 0, audit: "on"}
+    automation: {status: "executable", test_locator: "tests/test_responses.py::test_deny_and_missing_resources_are_indistinguishable_without_routing"}
+  - id: "SEC-003"
+    maturity: "current"
+    threat: "resource enumeration"
+    preconditions: ["authenticated principal", "resource absent"]
+    credential_state: "valid"
+    principal: "incident-harness"
+    action: "invoke"
+    resource: {type: "llm_model", id: "missing-agent"}
+    request: {method: "POST", path: "/v1/responses", content_redaction: "off"}
+    expected: {http_status: 403, code: "resource_unavailable", policy_decision: "deny", upstream_calls: 0, tool_calls: 0, audit: "on"}
+    automation: {status: "executable", test_locator: "tests/test_responses.py::test_deny_and_missing_resources_are_indistinguishable_without_routing"}
+  - id: "SEC-004"
+    maturity: "contracted_future"
+    threat: "sensitive content exposure"
+    preconditions: ["redaction contract accepted"]
+    credential_state: "valid"
+    principal: "incident-harness"
+    action: "invoke"
+    resource: {type: "llm_model", id: "triage-agent"}
+    request: {method: "POST", path: "/v1/responses", content_redaction: "on"}
+    expected: {http_status: 200, code: "not_evaluated", policy_decision: "not_evaluated", upstream_calls: 0, tool_calls: 0, audit: "off"}
+    automation: {status: "non_executable", evidence_required: "runtime redactor and sanitized-content contract"}
+  - id: "SEC-005"
+    maturity: "future"
+    threat: "unauthorized MCP tool execution"
+    preconditions: ["MCP runtime implemented", "exact tool grant absent"]
+    credential_state: "valid"
+    principal: "restricted-harness"
+    action: "tool.execute"
+    resource: {type: "mcp_tool", id: "future-tool"}
+    request: {method: "POST", path: "/future/mcp", content_redaction: "off"}
+    expected: {http_status: 403, code: "not_evaluated", policy_decision: "not_evaluated", upstream_calls: 0, tool_calls: 0, audit: "off"}
+    automation: {status: "non_executable", evidence_required: "MCP authorization runtime and audit evidence"}
+  - id: "SEC-006"
+    maturity: "future"
+    threat: "unauthorized administrative control-plane action"
+    preconditions: ["administrative runtime implemented", "exact grant absent"]
+    credential_state: "valid"
+    principal: "demo-human"
+    action: "admin.write"
+    resource: {type: "administrative_control", id: "future-control"}
+    request: {method: "POST", path: "/future/admin", content_redaction: "off"}
+    expected: {http_status: 403, code: "not_evaluated", policy_decision: "not_evaluated", upstream_calls: 0, tool_calls: 0, audit: "off"}
+    automation: {status: "non_executable", evidence_required: "administrative authorization runtime and audit evidence"}

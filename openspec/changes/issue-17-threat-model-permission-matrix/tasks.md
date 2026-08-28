@@ -33,9 +33,9 @@ Chain strategy: stacked-to-main
 
 ## Phase 2: Catalog foundation (PR 2)
 
-- [ ] 2.1 Add `pyyaml==6.0.3` to dev dependencies and update `uv.lock`.
-- [ ] 2.2 Write RED structural tests, then create both v1 YAML catalogs with all required fields, four seeded principals, one resource, and exactly one active incident-harness grant.
-- [ ] 2.3 Quote YAML 1.1-sensitive scalars (`on`/`off`/`true`/`false`) and assert strict Python scalar types after `safe_load`; enforce seed parity, unique IDs, and actionable drift failures.
+- [x] 2.1 Add `pyyaml==6.0.3` to dev dependencies and update `uv.lock`.
+- [x] 2.2 Write RED structural tests, then create both v1 YAML catalogs with all required fields, four seeded principals, one resource, and exactly one active incident-harness grant.
+- [x] 2.3 Quote YAML 1.1-sensitive scalars (`on`/`off`/`true`/`false`) and assert strict Python scalar types after `safe_load`; enforce seed parity, unique IDs, and actionable drift failures.
 
 ## Phase 3: Security evidence completion (PR 3)
 
