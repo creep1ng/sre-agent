@@ -4,7 +4,7 @@
 - **Type:** Spike
 - **Timebox:** one effective working day
 - **Owner:** @papiarcacamilo
-- **Outcome:** [ADR-007](../../schemas/adrs/ADR-007-harness.md)
+- **Outcome:** [ADR-007](../adrs/ADR-007-harness.md)
 - **Reproducible evidence:** `python scripts/ht06_harness_poc.py`
 
 ## Question

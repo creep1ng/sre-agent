@@ -2,6 +2,11 @@
 
 - **Status:** Accepted
 - **Contract version:** 1.2.0
+- **Location:** `docs/adrs/`, not `schemas/adrs/`. The latter holds the normative ADR set
+  pinned to each contract release and validated by `schemas/tooling` governance
+  conformance. This decision concerns harness selection, not the frozen contract, so
+  registering it there would alter the historical ADR membership of releases 1.1.0 and
+  1.2.0.
 
 ## Context
 
