@@ -258,12 +258,12 @@ def check_workflow_state_alignment(workflow: dict[str, Any], schema: dict[str, A
 
 
 def check_process_stage_mapping(workflow: dict[str, Any]) -> list[str]:
-    """Enforce the deliverable "mapeo estados operativos <-> etapas 0-11".
+    """Enforce the deliverable "mapeo estados operativos <-> fases del flujo".
 
-    While the mapping is declared pending, empty lists are tolerated so the contract
-    can ship before the canonical stage labels are available. The moment it is
-    declared complete, every stage in the range must be claimed by exactly one state,
-    so the status cannot be flipped without doing the work.
+    While the mapping is declared pending, empty lists are tolerated. Once it is
+    declared complete, every phase in the range must be covered by at least one
+    state, and no state may claim a phase outside the range. Several states may
+    share a phase (e.g. dismissed and linked both belong to alert management).
     """
     errors: list[str] = []
 
@@ -288,10 +288,6 @@ def check_process_stage_mapping(workflow: dict[str, Any]) -> list[str]:
                 )
                 continue
             claimed.setdefault(stage, []).append(name)
-
-    for stage, owners in sorted(claimed.items()):
-        if len(owners) > 1:
-            errors.append(f"process stage {stage} is claimed by more than one state: {owners}")
 
     if status == "complete":
         missing = sorted(expected - set(claimed))

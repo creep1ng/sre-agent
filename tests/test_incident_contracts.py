@@ -189,8 +189,8 @@ def test_capabilities_use_the_governed_resource_vocabulary(state_schema: dict) -
 
 
 def test_process_stage_mapping_is_declared_and_bounded(workflow: dict) -> None:
-    """Deliverable: mapeo estados operativos <-> etapas 0-11."""
-    assert workflow["process_stage_range"] == [0, 11]
+    """Deliverable: mapeo estados operativos <-> fases del flujo (1-7)."""
+    assert workflow["process_stage_range"] == [1, 7]
     assert workflow["process_stage_mapping_status"] in {"pending_reconciliation", "complete"}
     for name, definition in workflow["states"].items():
         assert "process_stages" in (definition or {}), f"state '{name}' declares no stage list"
@@ -201,10 +201,13 @@ def test_completing_the_stage_mapping_requires_actually_mapping_it() -> None:
     from validate_incident_contracts import check_process_stage_mapping
 
     workflow = load_yaml(WORKFLOW_PATH)
+    for definition in workflow["states"].values():
+        definition["process_stages"] = []
     workflow["process_stage_mapping_status"] = "complete"
     assert check_process_stage_mapping(workflow), "an empty mapping was accepted as complete"
 
-    workflow["states"]["detected"]["process_stages"] = [12]
+    workflow = load_yaml(WORKFLOW_PATH)
+    workflow["states"]["detected"]["process_stages"] = [8]
     assert check_process_stage_mapping(workflow)
 
 
@@ -212,8 +215,8 @@ def test_process_stage_is_typed_as_a_bounded_index(state_schema: dict) -> None:
     """The runtime state carries a stage index, not a free-form label."""
     stage = state_schema["properties"]["process_stage"]
     assert stage["type"] == ["integer", "null"]
-    assert stage["minimum"] == 0
-    assert stage["maximum"] == 11
+    assert stage["minimum"] == 1
+    assert stage["maximum"] == 7
 
 
 def test_runtime_state_machine_is_not_implemented_yet() -> None:
