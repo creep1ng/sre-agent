@@ -1,0 +1,64 @@
+# Deterministic fixture — OpenTelemetry Demo payment failure
+#
+# Validates against agent/schemas/incident-state.schema.yaml.
+# Mirrors the reference scenario: flagd enables paymentFailure while the load
+# generator keeps synthetic traffic running.
+#
+# This fixture is the Sprint 1 acceptance artifact for HT-INC-01 and the seed
+# state for HT-INC-02 (#26) and HT-DEMO-01 (#51).
+---
+workflow_id: incident-response
+workflow_version: 1.0.0
+incident_id: inc-otel-payment-failure
+run_id: null
+state: detected
+process_stage: null
+severity: null
+impact: null
+
+alert:
+  alert_id: alt-payment-error-rate
+  service: paymentservice
+  severity: sev2
+  status: new
+  observed_at: '2026-08-24T14:05:00Z'
+  summary: >-
+    Elevated error rate on paymentservice calls originating from checkoutservice.
+    Synthetic checkout traffic is failing at the payment step.
+  source: grafana-alerting
+  origin:
+    signal: traces_span_metrics_calls_total
+    condition: error rate above threshold over a five minute window
+    detector: webstore-metrics
+    observed_at: '2026-08-24T14:04:30Z'
+
+hypotheses: []
+mitigation_strategy: null
+postmortem: null
+evidence: []
+decisions: []
+approvals: []
+
+timeline:
+  - event_id: evt_alert_received
+    kind: state_change
+    from_state: null
+    to_state: detected
+    reference_id: alt-payment-error-rate
+    actor: system
+    audit_id: null
+    note: Alert ingested from fixture source.
+    occurred_at: '2026-08-24T14:05:00Z'
+
+authorized_capabilities:
+  - resource_type: llm_model
+    resource_id: triage-agent
+    action: invoke
+  - resource_type: mcp_tool
+    resource_id: query_prometheus
+    action: invoke
+  - resource_type: mcp_tool
+    resource_id: query_elasticsearch
+    action: invoke
+
+updated_at: '2026-08-24T14:05:00Z'
