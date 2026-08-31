@@ -157,9 +157,7 @@ def test_scenario_outcomes_reject_contradictory_policy_and_audit_claims() -> Non
 
 def test_not_evaluated_outcome_rejects_denial_http_and_code_mutation() -> None:
     scenario = next(
-        item
-        for item in load_catalog(SCENARIOS_PATH)["scenarios"]
-        if item["id"] == "SEC-004"
+        item for item in load_catalog(SCENARIOS_PATH)["scenarios"] if item["id"] == "SEC-004"
     )
     contradictory = deepcopy(scenario)
     contradictory["expected"] |= {"http_status": 403, "code": "resource_unavailable"}
