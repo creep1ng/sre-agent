@@ -1,0 +1,28 @@
+schema_version: "v1"
+default_decision: "deny"
+names_confer_roles: false
+principals:
+  - id: "admin-human"
+    kind: "human"
+    status: "active"
+  - id: "demo-human"
+    kind: "human"
+    status: "active"
+  - id: "incident-harness"
+    kind: "agent"
+    status: "active"
+  - id: "restricted-harness"
+    kind: "agent"
+    status: "active"
+resources:
+  - type: "llm_model"
+    id: "triage-agent"
+    status: "active"
+grants:
+  - id: "grant-incident-harness-invoke-triage-agent"
+    principal_id: "incident-harness"
+    action: "invoke"
+    resource_type: "llm_model"
+    resource_id: "triage-agent"
+    effect: "allow"
+    status: "active"

@@ -46,6 +46,12 @@ class CredentialReference(StrictDTO):
     revoked_at: AwareDatetime | None
 
 
+class PrincipalContext(StrictDTO):
+    principal: Principal
+    credential_id: Identifier
+    authenticated_at: AwareDatetime
+
+
 class Resource(StrictDTO):
     resource_type: ResourceType
     resource_id: Annotated[str, Field(min_length=1, max_length=200)]
@@ -243,6 +249,7 @@ class AuditEvent(StrictDTO):
     reason_code: ReasonCode | None
     response_status: Annotated[int, Field(ge=100, le=599)]
     retryable: bool
+    latency_ms: Annotated[int, Field(ge=0, le=2_147_483_647)] | None = None
     correlation: Correlation
     identity: AuthenticatedIdentity | PartialPrincipalIdentity | CredentialOnlyIdentity | None = (
         None

@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:sre-agent:schema:audit-event-metadata:1.2.0","title":"AuditEventMetadata","type":"object","unevaluatedProperties":false,"allOf":[{"$ref":"urn:sre-agent:schema:audit-event:1.2.0"},{"not":{"properties":{"redacted_content":true},"required":["redacted_content"]}}]}

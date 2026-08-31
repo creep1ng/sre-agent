@@ -6,7 +6,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
 from sre_agent.governance.dto import AuditEvent
@@ -63,7 +63,7 @@ def repository_database() -> None:
         connection.commit()
 
 
-def audit_event(*, allowed: bool) -> AuditEvent:
+def audit_event(*, allowed: bool, latency_ms: int | None = None) -> AuditEvent:
     digest = "a" * 64
     reference = {"algorithm": "hmac-sha-256", "key_version": 1, "digest": digest}
     policy_decision = (
@@ -85,6 +85,7 @@ def audit_event(*, allowed: bool) -> AuditEvent:
         reason_code="grant_matched" if allowed else "no_matching_grant",
         response_status=200 if allowed else 403,
         retryable=False,
+        latency_ms=latency_ms,
         correlation={"request_id": UUID(int=11 if allowed else 12)},
         identity={
             "principal_ref": reference,
@@ -138,6 +139,63 @@ async def test_lookup_round_trips_are_secret_and_routing_safe() -> None:
 
 
 @pytest.mark.asyncio
+async def test_resource_authorization_view_precedes_assignment_resolution() -> None:
+    database = Database(DATABASE_URL)
+    statements: list[str] = []
+
+    def record_statement(
+        _connection: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: object,
+    ) -> None:
+        statements.append(statement)
+
+    event.listen(database.engine.sync_engine, "before_cursor_execute", record_statement)
+    try:
+        async with database.transaction() as session:
+            repository = ResourceRepository(session)
+            view = await repository.authorization_view("llm_model", "triage-agent")
+            assert view is not None
+            assert (view.resource_type, view.resource_id, view.status) == (
+                "llm_model",
+                "triage-agent",
+                "active",
+            )
+            assert not hasattr(view, "concrete_model")
+            assert await repository.authorization_view("llm_model", "missing") is None
+
+        authorization_sql = next(
+            statement for statement in statements if "FROM resources" in statement
+        )
+        assert "resources.status" in authorization_sql
+        assert "model_alias_id" not in authorization_sql
+        assert "concrete_model" not in authorization_sql
+        assert "inference_provider" not in authorization_sql
+
+        statements.clear()
+        async with database.transaction() as session:
+            assignment = await ResourceRepository(session).resolve_assignment(
+                "llm_model", "triage-agent"
+            )
+            assert assignment is not None
+            assert assignment.model_alias_id == "triage-agent"
+            assert assignment.concrete_model == "openai/gpt-4o-mini"
+            assert assignment.inference_provider == "openai"
+
+        assignment_sql = next(
+            statement for statement in statements if "FROM resources" in statement
+        )
+        assert "concrete_model" in assignment_sql
+        assert "inference_provider" in assignment_sql
+    finally:
+        event.remove(database.engine.sync_engine, "before_cursor_execute", record_statement)
+        await database.dispose()
+
+
+@pytest.mark.asyncio
 async def test_grant_decision_matches_only_the_active_exact_direct_grant() -> None:
     database = Database(DATABASE_URL)
     async with database.transaction() as session:
@@ -172,8 +230,8 @@ async def test_audits_commit_read_with_a_bound_and_reject_raw_mutation() -> None
     database = Database(DATABASE_URL)
     async with database.transaction() as session:
         repository = AuditRepository(session)
-        await repository.append(audit_event(allowed=True))
-        await repository.append(audit_event(allowed=False))
+        await repository.append(audit_event(allowed=True, latency_ms=17))
+        await repository.append(audit_event(allowed=False, latency_ms=3))
 
     async with database.transaction() as session:
         repository = AuditRepository(session)
@@ -181,7 +239,9 @@ async def test_audits_commit_read_with_a_bound_and_reject_raw_mutation() -> None
         all_events = await repository.read_recent(limit=2)
         assert latest[0].policy_decision is not None
         assert latest[0].policy_decision.decision == "deny"
+        assert latest[0].latency_ms == 3
         assert {event.outcome for event in all_events} == {"success", "denied"}
+        assert {event.latency_ms for event in all_events} == {3, 17}
         for invalid_limit in (0, 101):
             with pytest.raises(ValueError, match="limit must be between 1 and 100"):
                 await repository.read_recent(limit=invalid_limit)
@@ -198,4 +258,13 @@ async def test_audits_commit_read_with_a_bound_and_reject_raw_mutation() -> None
         events = await AuditRepository(session).read_recent(limit=10)
         assert len(events) == 2
         assert all(event.retryable is False for event in events)
+    await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_audit_repository_requires_latency_before_flush() -> None:
+    database = Database(DATABASE_URL)
+    with pytest.raises(ValueError, match="latency_ms is required"):
+        async with database.transaction() as session:
+            await AuditRepository(session).append(audit_event(allowed=True))
     await database.dispose()

@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:correlation:1.2.0","rule":"valid","status":"positive","version":"1.2.0","group":"shared","data":{"request_id":"9d47db9a-5b15-4f9f-a86a-a0ce507c6161","incident_id":"incident-42","run_id":"run-7","task_id":"task-3","trace_id":"0af7651916cd43dd8448eb211c80319c"}}

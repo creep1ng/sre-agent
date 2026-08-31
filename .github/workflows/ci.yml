@@ -27,6 +27,10 @@ jobs:
           --ignore=tests/test_migrations.py
           --ignore=tests/test_persistence_repositories.py
           --ignore=tests/test_demo_seeds.py
+          --ignore=tests/test_api_key_persistence.py
+          --ignore=tests/test_authentication.py
+          --ignore=tests/test_responses.py
+          --ignore=tests/test_openrouter_live.py
 
   contracts:
     runs-on: ubuntu-latest
@@ -45,8 +49,10 @@ jobs:
       - run: npm run validate
       - run: npm run validate:release -- --release 1.0.0
       - run: npm run validate:release -- --release 1.1.0
+      - run: npm run validate:release -- --release 1.2.0
       - run: npm run lint:openapi
       - run: npm run conformance -- --consumer issue-10
+      - run: npm run conformance -- --consumer issue-14
 
   issue-11-postgresql:
     runs-on: ubuntu-latest
@@ -107,7 +113,11 @@ jobs:
           tests/test_migrations.py
           tests/test_persistence_repositories.py
           tests/test_demo_seeds.py
+          tests/test_api_key_persistence.py
+          tests/test_authentication.py
           tests/test_health.py
+          tests/test_audit.py
+          tests/test_responses.py
       - run: alembic check
       - run: npm --prefix schemas/tooling ci
       - run: npm --prefix schemas/tooling run conformance -- --consumer issue-11
@@ -158,6 +168,7 @@ jobs:
           curl --fail --silent http://127.0.0.1:8000/health/ready
           curl --fail --silent http://127.0.0.1:8080/health
           docker compose --profile harness run --rm harness
+          docker compose --profile issue-14 run --build --rm issue-14-harness
       - name: Collect service logs
         if: failure()
         run: docker compose ps && docker compose logs --no-color

@@ -72,3 +72,30 @@ def test_invalid_identifiers_are_rejected(model: type, field: str) -> None:
 
     with pytest.raises(ValidationError):
         model.model_validate_json(json.dumps(data))
+
+
+def test_audit_latency_is_additive_and_non_negative() -> None:
+    data = fixture("1.1.0", "positive", "audit.responses.allowed")["data"]
+    data["latency_ms"] = 17
+
+    dto = AuditEvent.model_validate_json(json.dumps(data))
+
+    assert dto.latency_ms == 17
+    assert dto.model_dump(mode="json", exclude_unset=True)["latency_ms"] == 17
+
+
+@pytest.mark.parametrize("latency_ms", (-1, True, 1.5))
+def test_invalid_audit_latency_is_rejected(latency_ms: object) -> None:
+    data = fixture("1.1.0", "positive", "audit.responses.allowed")["data"]
+    data["latency_ms"] = latency_ms
+
+    with pytest.raises(ValidationError):
+        AuditEvent.model_validate_json(json.dumps(data))
+
+
+def test_previous_release_audit_event_without_latency_remains_valid() -> None:
+    data = fixture("1.1.0", "positive", "audit.responses.allowed")["data"]
+
+    dto = AuditEvent.model_validate_json(json.dumps(data))
+
+    assert dto.model_dump(mode="json", exclude_unset=True) == data

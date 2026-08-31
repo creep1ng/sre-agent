@@ -1,10 +1,6 @@
 """Explicit, deterministic bootstrap for the local governance store."""
 
 import asyncio
-import hashlib
-import hmac
-import re
-import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -15,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.governance.dto import ModelAlias
+from sre_agent.persistence.api_keys import hash_api_key, is_api_key, verify_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.models import CredentialRow, GrantRow, PrincipalRow, ResourceRow
 
@@ -51,7 +48,7 @@ class SeedSettings:
         if missing:
             raise ValueError(f"required seed setting is missing: {missing}")
         keys = tuple(values[name] for name in KEY_ENV)
-        if any(not re.fullmatch(r"sre_[A-Za-z0-9_-]{28,}", key) or "<" in key for key in keys):
+        if any(not is_api_key(key) or "<" in key for key in keys):
             raise ValueError("development API keys must use the required non-placeholder shape")
         if len({key[:8] for key in keys}) != len(keys):
             raise ValueError("development API key prefixes must be unique")
@@ -70,22 +67,6 @@ class SeedSettings:
         except ValueError:
             raise ValueError("triage assignment has an invalid HT-01 shape") from None
         return cls(keys=keys, model=model, provider=provider)
-
-
-def _hash_key(key: str) -> str:
-    salt = secrets.token_bytes(16)
-    digest = hashlib.scrypt(key.encode(), salt=salt, n=16384, r=8, p=1, dklen=64)
-    return f"scrypt$16384$8$1${salt.hex()}${digest.hex()}"
-
-
-def _matches_hash(key: str, encoded: str) -> bool:
-    try:
-        algorithm, n, r, p, salt, expected = encoded.split("$")
-        salt_bytes = bytes.fromhex(salt)
-        actual = hashlib.scrypt(key.encode(), salt=salt_bytes, n=int(n), r=int(r), p=int(p))
-        return algorithm == "scrypt" and hmac.compare_digest(actual.hex(), expected)
-    except (ValueError, TypeError):
-        return False
 
 
 def _require(
@@ -120,7 +101,7 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
             for pid, kind, name in PRINCIPALS])
         await session.execute(insert(CredentialRow), [
             dict(credential_id=f"credential-{pid}", principal_id=pid, prefix=key[:8],
-                 key_hash=_hash_key(key), status="active", created_at=SEED_TIME,
+                 key_hash=hash_api_key(key), status="active", created_at=SEED_TIME,
                  expires_at=None, revoked_at=None)
             for (pid, _, _), key in zip(PRINCIPALS, settings.keys, strict=True)])
         await session.execute(insert(ResourceRow).values(
@@ -156,7 +137,7 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
             (f"credential-{pid}", key[:8], "active", SEED_TIME, None, None),
             "credentials",
         )
-        if not _matches_hash(key, credential.key_hash):
+        if not verify_api_key(key, credential.key_hash):
             raise SeedConflict("seed_state_conflict: credentials.key_material")
     assert resource is not None and grant is not None
     _require(
