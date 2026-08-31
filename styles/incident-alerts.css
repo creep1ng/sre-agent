@@ -219,7 +219,7 @@
 
 .alert-list__status {
   color: var(--ma-color-text-tertiary);
-  font-family: var(--ma-font-mono);
+  font-family: var(--ma-font-body);
   font-size: var(--ma-font-size-xs);
 }
 
@@ -348,7 +348,7 @@
 .alert-detail__origin-list dt {
   margin-bottom: var(--ma-space-1);
   color: var(--ma-color-text-tertiary);
-  font-family: var(--ma-font-mono);
+  font-family: var(--ma-font-body);
   font-size: var(--ma-font-size-xs);
   font-weight: 600;
   letter-spacing: 0.04em;

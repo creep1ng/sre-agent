@@ -208,7 +208,7 @@
       summary.textContent = alert.summary;
 
       metadata.className = "alert-list__metadata";
-      service.className = "ma-mono";
+      service.className = "";
       service.textContent = alert.service;
       timestamp.dateTime = alert.timestamp;
       timestamp.textContent = formatTimestamp(alert.timestamp);
