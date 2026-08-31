@@ -13,6 +13,14 @@ Definir wireframes de baja/media fidelidad para el plano de control administrati
 
 La revisión v2 corrige la fragmentación de pantallas y el uso excesivo de cards de la primera propuesta. El diseño resultante prioriza tablas, detalles contextuales, diálogos, drawers, comboboxes y color semántico.
 
+## Revisión v3: alineación con MA
+
+Los siete SVG se alinearon con los tokens semánticos de tema claro de MA, conservando el alcance y los contratos de producto definidos para v2.
+
+Los 19 indicadores de estado, ciclo de vida y decisión de política usan la anatomía canónica de `.ma-badge`: píldora de 24 px, punto de 6.72 px, separación de 6 px, padding horizontal de 8.8 px y etiqueta monoespaciada vectorizada. Los tonos continúan siendo semánticos por contexto (`success`, `warning`, `critical`, `info`, `allow` y `deny`).
+
+La revisión validó el XML de los siete SVG, renders a 1600×900, aislamiento de cambios, inventario de color/tipografía y ausencia de solapamientos de badges o elementos de primer plano.
+
 ## Arquitectura de información revisada
 
 Las superficies principales del producto quedan reducidas a cuatro:
