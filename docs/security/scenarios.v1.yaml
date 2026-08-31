@@ -53,7 +53,7 @@ scenarios:
     action: "tool.execute"
     resource: {type: "mcp_tool", id: "future-tool"}
     request: {method: "POST", path: "/future/mcp", content_redaction: "off"}
-    expected: {http_status: 403, code: "not_evaluated", policy_decision: "not_evaluated", upstream_calls: 0, tool_calls: 0, audit: "off"}
+    expected: {http_status: 403, code: "resource_unavailable", policy_decision: "deny", upstream_calls: 0, tool_calls: 0, audit: "on"}
     automation: {status: "non_executable", evidence_required: "MCP authorization runtime and audit evidence"}
   - id: "SEC-006"
     maturity: "future"
@@ -64,5 +64,5 @@ scenarios:
     action: "admin.write"
     resource: {type: "administrative_control", id: "future-control"}
     request: {method: "POST", path: "/future/admin", content_redaction: "off"}
-    expected: {http_status: 403, code: "not_evaluated", policy_decision: "not_evaluated", upstream_calls: 0, tool_calls: 0, audit: "off"}
+    expected: {http_status: 403, code: "resource_unavailable", policy_decision: "deny", upstream_calls: 0, tool_calls: 0, audit: "on"}
     automation: {status: "non_executable", evidence_required: "administrative authorization runtime and audit evidence"}

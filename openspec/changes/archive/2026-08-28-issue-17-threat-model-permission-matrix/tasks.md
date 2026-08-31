@@ -39,6 +39,6 @@ Chain strategy: stacked-to-main
 
 ## Phase 3: Security evidence completion (PR 3)
 
-- [ ] 3.1 Create `docs/security/threat-model.md` with assets, boundaries, maturity, mitigations, residual risks, exclusions, ADR links, metadata-only audit, and unimplemented redactor.
-- [ ] 3.2 Add semantic checks for 403 `resource_unavailable` equivalence, zero upstream calls, current locator resolution, and future-only MCP/admin expectations; run existing runtime evidence tests.
-- [ ] 3.3 Verify catalog/Markdown links and locators resolve; do not implement redactor, MCP, or admin runtime.
+- [x] 3.1 Create `docs/security/threat-model.md` with assets, boundaries, maturity, mitigations, residual risks, exclusions, ADR links, metadata-only audit, and unimplemented redactor.
+- [x] 3.2 Add semantic checks for 403 `resource_unavailable` equivalence, zero upstream calls, current locator resolution, and future-only MCP/admin expectations; run existing runtime evidence tests.
+- [x] 3.3 Verify catalog/Markdown links and locators resolve; do not implement redactor, MCP, or admin runtime.
