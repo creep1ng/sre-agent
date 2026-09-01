@@ -14,7 +14,6 @@ additionalProperties: false
 required:
   - workflow_id
   - workflow_version
-  - incident_id
   - state
   - alert
   - updated_at
@@ -23,27 +22,48 @@ properties:
   workflow_id:
     const: incident-response
   workflow_version:
-    type: string
-    pattern: '^\d+\.\d+\.\d+$'
-    description: Exact workflow version executed, required for reproducibility.
+    const: 1.0.0
+    description: >-
+      Exact workflow version executed. Pinned with `const` because this schema is
+      itself incident-state 1.0.0, and a permissive pattern would accept a snapshot
+      produced by a different workflow version, breaking the reproducibility
+      guarantee. A new workflow version requires a new schema version.
   incident_id:
-    type: string
+    type: [string, "null"]
     pattern: '^[a-z][a-z0-9_-]{2,63}$'
-    description: Canonical session identifier.
+    default: null
+    description: Canonical session identifier. Null before the incident is declared,
+      because `detected` and `triage` act on an alert that has no session yet.
+      Required from `active` onward, enforced by the conditional rules below.
+  linked_incident_id:
+    type: [string, "null"]
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+    default: null
+    description: Target incident this alert was attached to. Only meaningful in the
+      `linked` terminal state, where the alert joins an existing session instead of
+      opening one of its own.
   run_id:
     type: [string, "null"]
     pattern: '^[a-z][a-z0-9_-]{2,63}$'
-    description: Current harness execution inside this session.
+    default: null
+    description: Current harness execution inside this session. Second dimension of
+      the gateway correlation triple.
+  task_id:
+    type: [string, "null"]
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+    default: null
+    description: Current step inside the harness execution. Third dimension of the
+      gateway correlation triple (incident_id, run_id, task_id) accepted by
+      POST /v1/responses.
   state:
     enum: [detected, triage, dismissed, linked, active, investigating,
            mitigating, verifying, resolved, postmortem, closed]
   process_stage:
     type: [integer, "null"]
-    minimum: 1
-    maximum: 7
-    description: Canonical operational phase index, 1 to 7 (see the workflow's
-      process-stage mapping). Documentation metadata only; the runtime never
-      branches on it.
+    minimum: 0
+    maximum: 11
+    description: Canonical operational stage index, 0 to 11, matching the twelve
+      documented stages. Documentation metadata only; the runtime never branches on it.
   severity:
     type: [string, "null"]
     enum: [sev1, sev2, sev3, sev4, null]
@@ -97,6 +117,51 @@ properties:
     format: date-time
 
 allOf:
+  # The session identifier appears exactly when the session exists.
+  # Before `active` there is only an alert, so inventing an incident_id would be a lie.
+  - if:
+      properties:
+        state:
+          enum: [active, investigating, mitigating, verifying, resolved,
+                 postmortem, closed]
+      required: [state]
+    then:
+      properties:
+        incident_id:
+          type: string
+      required: [incident_id]
+  - if:
+      properties:
+        state:
+          enum: [detected, triage]
+      required: [state]
+    then:
+      properties:
+        incident_id:
+          type: "null"
+  # Linking attaches the alert to an existing session; the target is a separate field
+  # and the alert never acquires a session of its own.
+  - if:
+      properties:
+        state: { const: linked }
+      required: [state]
+    then:
+      properties:
+        incident_id:
+          type: "null"
+        linked_incident_id:
+          type: string
+      required: [linked_incident_id]
+  - if:
+      properties:
+        state:
+          enum: [detected, triage, dismissed, active, investigating, mitigating,
+                 verifying, resolved, postmortem, closed]
+      required: [state]
+    then:
+      properties:
+        linked_incident_id:
+          type: "null"
   # Closure is impossible without a postmortem artifact.
   - if:
       properties:
@@ -225,10 +290,25 @@ $defs:
       time_window: { type: [string, "null"], maxLength: 200 }
       summary: { type: string, minLength: 1, maxLength: 8000 }
       collected_at: { type: string, format: date-time }
-      audit_id:
+      request_id:
         type: [string, "null"]
-        description: Gateway audit event correlating this evidence with its
-          authorization decision.
+        format: uuid
+        default: null
+        description: Primary correlation. This is the UUID returned by
+          POST /v1/responses, and the only identifier the harness can observe
+          directly at call time.
+      audit_event_id:
+        type: [string, "null"]
+        default: null
+        oneOf:
+          - type: "null"
+          - type: string
+            format: uuid
+          - type: string
+            pattern: '^cor_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        description: Identifier of the audit event, resolved later by reading the
+          audit projection. Independent of request_id, so it stays optional and is
+          never populated by the harness at call time.
       trusted:
         description: Tool and knowledge output is data, never instruction.
         const: false
@@ -247,7 +327,8 @@ $defs:
       rationale: { type: [string, "null"], maxLength: 4000 }
       actor: { enum: [human, agent, system] }
       transition_id: { type: [string, "null"], maxLength: 100 }
-      audit_id: { type: [string, "null"] }
+      request_id: { type: [string, "null"], format: uuid, default: null }
+      audit_event_id: { type: [string, "null"], default: null }
       decided_at: { type: string, format: date-time }
 
   approval:
@@ -274,7 +355,8 @@ $defs:
       to_state: { type: [string, "null"] }
       reference_id: { type: [string, "null"], maxLength: 100 }
       actor: { enum: [human, agent, system] }
-      audit_id: { type: [string, "null"] }
+      request_id: { type: [string, "null"], format: uuid, default: null }
+      audit_event_id: { type: [string, "null"], default: null }
       note: { type: [string, "null"], maxLength: 2000 }
       occurred_at: { type: string, format: date-time }
 

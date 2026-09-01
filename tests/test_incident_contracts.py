@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 
 import pytest
-from jsonschema import Draft202012Validator
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
@@ -18,6 +17,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 from validate_incident_contracts import (  # noqa: E402
     STATE_SCHEMA_PATH,
     WORKFLOW_PATH,
+    build_validator,
     load_yaml,
     validate,
 )
@@ -34,15 +34,14 @@ def state_schema() -> dict:
 
 
 @pytest.fixture(scope="module")
-def validator(state_schema: dict) -> Draft202012Validator:
-    return Draft202012Validator(state_schema)
+def validator(state_schema: dict):
+    return build_validator(state_schema)
 
 
 def _base_state() -> dict:
     return {
         "workflow_id": "incident-response",
         "workflow_version": "1.0.0",
-        "incident_id": "inc-contract-test",
         "state": "detected",
         "alert": {
             "alert_id": "alt-contract-test",
@@ -116,7 +115,7 @@ def test_workflow_and_schema_carry_explicit_versions(workflow: dict, state_schem
     assert workflow["workflow_id"] == "incident-response"
     assert workflow["workflow_version"] == "1.0.0"
     assert state_schema["$id"].endswith(":1.0.0")
-    assert state_schema["properties"]["workflow_version"]["pattern"]
+    assert state_schema["properties"]["workflow_version"]["const"] == "1.0.0"
 
 
 def test_state_keeps_only_four_first_class_artifacts(state_schema: dict) -> None:
@@ -128,9 +127,7 @@ def test_state_keeps_only_four_first_class_artifacts(state_schema: dict) -> None
     assert state_schema["additionalProperties"] is False
 
 
-def test_anomaly_is_only_alert_origin_metadata(
-    validator: Draft202012Validator, state_schema: dict
-) -> None:
+def test_anomaly_is_only_alert_origin_metadata(validator, state_schema: dict) -> None:
     """Criterion: anomaly data may appear only nested under alert.origin."""
     assert "origin" in state_schema["$defs"]["alert"]["properties"]
 
@@ -146,29 +143,33 @@ def test_anomaly_is_only_alert_origin_metadata(
     assert not validator.is_valid(rejected)
 
 
-def test_closure_requires_a_postmortem(validator: Draft202012Validator) -> None:
+def test_closure_requires_a_postmortem(validator) -> None:
     """Approved rule: the postmortem may be minimal but must exist before closing."""
-    without = _base_state() | {"state": "closed", "severity": "sev2", "postmortem": None}
+    closed = {"state": "closed", "severity": "sev2", "incident_id": "inc-contract-test"}
+    without = _base_state() | closed | {"postmortem": None}
     assert not validator.is_valid(without)
 
-    with_draft = _base_state() | {
-        "state": "closed",
-        "severity": "sev2",
-        "postmortem": {
-            "postmortem_id": "pm_contract_test",
-            "summary": "Payment failure caused by an enabled feature flag.",
-            "status": "draft",
-            "created_by": "agent",
-            "created_at": "2026-08-24T15:00:00Z",
-        },
-    }
+    with_draft = (
+        _base_state()
+        | closed
+        | {
+            "postmortem": {
+                "postmortem_id": "pm_contract_test",
+                "summary": "Payment failure caused by an enabled feature flag.",
+                "status": "draft",
+                "created_by": "agent",
+                "created_at": "2026-08-24T15:00:00Z",
+            },
+        }
+    )
     assert validator.is_valid(with_draft)
 
 
-def test_declared_incident_requires_severity(validator: Draft202012Validator) -> None:
+def test_declared_incident_requires_severity(validator) -> None:
     """A declared incident always carries a severity."""
-    assert not validator.is_valid(_base_state() | {"state": "investigating"})
-    assert validator.is_valid(_base_state() | {"state": "investigating", "severity": "sev2"})
+    declared = {"state": "investigating", "incident_id": "inc-contract-test"}
+    assert not validator.is_valid(_base_state() | declared)
+    assert validator.is_valid(_base_state() | declared | {"severity": "sev2"})
 
 
 def test_evidence_is_never_trusted(state_schema: dict) -> None:
@@ -179,7 +180,10 @@ def test_evidence_is_never_trusted(state_schema: dict) -> None:
 def test_evidence_and_decisions_carry_audit_correlation(state_schema: dict) -> None:
     """Criterion: an agentic step references its gateway authorization decision."""
     for definition in ("evidence", "decision", "timeline_event"):
-        assert "audit_id" in state_schema["$defs"][definition]["properties"], definition
+        properties = state_schema["$defs"][definition]["properties"]
+        assert "request_id" in properties, definition
+        assert "audit_event_id" in properties, definition
+        assert "audit_id" not in properties, definition
 
 
 def test_capabilities_use_the_governed_resource_vocabulary(state_schema: dict) -> None:
@@ -189,8 +193,8 @@ def test_capabilities_use_the_governed_resource_vocabulary(state_schema: dict) -
 
 
 def test_process_stage_mapping_is_declared_and_bounded(workflow: dict) -> None:
-    """Deliverable: mapeo estados operativos <-> fases del flujo (1-7)."""
-    assert workflow["process_stage_range"] == [1, 7]
+    """Deliverable: mapeo estados operativos <-> etapas 0-11."""
+    assert workflow["process_stage_range"] == [0, 11]
     assert workflow["process_stage_mapping_status"] in {"pending_reconciliation", "complete"}
     for name, definition in workflow["states"].items():
         assert "process_stages" in (definition or {}), f"state '{name}' declares no stage list"
@@ -207,7 +211,7 @@ def test_completing_the_stage_mapping_requires_actually_mapping_it() -> None:
     assert check_process_stage_mapping(workflow), "an empty mapping was accepted as complete"
 
     workflow = load_yaml(WORKFLOW_PATH)
-    workflow["states"]["detected"]["process_stages"] = [8]
+    workflow["states"]["detected"]["process_stages"] = [12]
     assert check_process_stage_mapping(workflow)
 
 
@@ -215,10 +219,87 @@ def test_process_stage_is_typed_as_a_bounded_index(state_schema: dict) -> None:
     """The runtime state carries a stage index, not a free-form label."""
     stage = state_schema["properties"]["process_stage"]
     assert stage["type"] == ["integer", "null"]
-    assert stage["minimum"] == 1
-    assert stage["maximum"] == 7
+    assert stage["minimum"] == 0
+    assert stage["maximum"] == 11
 
 
 def test_runtime_state_machine_is_not_implemented_yet() -> None:
     """Out of scope for Sprint 1: the runtime engine belongs to HT-INC-02 (#26)."""
     assert not (REPOSITORY_ROOT / "src" / "sre_agent" / "incident" / "state_machine.py").exists()
+
+
+def test_session_identifier_appears_only_once_the_session_exists(validator) -> None:
+    """Objection 1: incident_id cannot be required before the incident is declared."""
+    assert validator.is_valid(_base_state())
+    assert not validator.is_valid(_base_state() | {"incident_id": "inc-contract-test"})
+    assert not validator.is_valid(
+        _base_state() | {"state": "investigating", "severity": "sev2", "incident_id": None}
+    )
+
+
+def test_linking_uses_a_separate_target_identifier(validator) -> None:
+    """Objection 1: a linked alert joins another session instead of opening one."""
+    linked = _base_state() | {"state": "linked"}
+    assert not validator.is_valid(linked)
+    assert validator.is_valid(linked | {"linked_incident_id": "inc-target"})
+    assert not validator.is_valid(
+        linked | {"linked_incident_id": "inc-target", "incident_id": "inc-own"}
+    )
+
+
+def test_state_carries_the_full_gateway_correlation_triple(state_schema: dict) -> None:
+    """Objection 2: the gateway accepts incident_id, run_id and task_id."""
+    for field in ("incident_id", "run_id", "task_id"):
+        assert field in state_schema["properties"], field
+
+
+def test_correlation_uses_request_id_not_audit_id(validator, state_schema: dict) -> None:
+    """Objection 3: POST /v1/responses returns request_id; event_id is independent."""
+    for definition in ("evidence", "decision", "timeline_event"):
+        properties = state_schema["$defs"][definition]["properties"]
+        assert "request_id" in properties, definition
+        assert "audit_event_id" in properties, definition
+        assert "audit_id" not in properties, definition
+
+    state = _base_state() | {
+        "state": "investigating",
+        "severity": "sev2",
+        "incident_id": "inc-contract-test",
+        "evidence": [
+            {
+                "evidence_id": "ev_probe",
+                "source": "grafana-mcp",
+                "summary": "probe",
+                "collected_at": "2026-08-24T14:10:00Z",
+                "request_id": "not-a-uuid",
+            }
+        ],
+    }
+    assert not validator.is_valid(state)
+
+
+def test_decision_point_inputs_resolve_against_the_state(
+    workflow: dict, state_schema: dict
+) -> None:
+    """Objection 4: required_inputs must name properties the state really carries."""
+    from validate_incident_contracts import check_decision_point_inputs
+
+    assert check_decision_point_inputs(workflow, state_schema) == []
+
+    broken = {"decision_points": {"probe": {"required_inputs": ["hypothesis"]}}}
+    assert check_decision_point_inputs(broken, state_schema)
+
+
+def test_timestamp_format_is_enforced(validator, state_schema: dict) -> None:
+    """Objection 5: jsonschema treats format as annotation without a FormatChecker."""
+    from validate_incident_contracts import check_format_enforcement
+
+    assert check_format_enforcement(state_schema) == []
+    assert not validator.is_valid(_base_state() | {"updated_at": "definitely-not-a-timestamp"})
+
+
+def test_workflow_version_is_pinned_to_this_schema(validator, state_schema: dict) -> None:
+    """Objection 6: a versioned schema must not accept a foreign workflow version."""
+    assert state_schema["properties"]["workflow_version"]["const"] == "1.0.0"
+    assert not validator.is_valid(_base_state() | {"workflow_version": "9.9.9"})
+    assert not validator.is_valid(_base_state() | {"workflow_version": "01.0.0"})

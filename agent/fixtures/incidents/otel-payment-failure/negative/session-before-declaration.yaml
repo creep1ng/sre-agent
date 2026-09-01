@@ -1,0 +1,18 @@
+# Negative fixture — an undeclared alert MUST NOT carry a session identifier.
+#
+# Guards objection 1 from the near side: `detected` and `triage` act on an alert
+# that has no session yet, so inventing an incident_id there is invalid.
+---
+workflow_id: incident-response
+workflow_version: 1.0.0
+state: triage
+alert:
+  alert_id: alt-payment-error-rate
+  service: paymentservice
+  severity: sev2
+  status: new
+  observed_at: '2026-08-24T14:05:00Z'
+  summary: Elevated error rate on paymentservice.
+  source: grafana-alerting
+updated_at: '2026-08-24T14:06:00Z'
+incident_id: inc-otel-payment-failure

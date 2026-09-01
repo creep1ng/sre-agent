@@ -9,8 +9,10 @@
 ---
 workflow_id: incident-response
 workflow_version: 1.0.0
-incident_id: inc-otel-payment-failure
+incident_id: null
+linked_incident_id: null
 run_id: null
+task_id: null
 state: detected
 process_stage: null
 severity: null
@@ -46,7 +48,8 @@ timeline:
     to_state: detected
     reference_id: alt-payment-error-rate
     actor: system
-    audit_id: null
+    request_id: null
+    audit_event_id: null
     note: Alert ingested from fixture source.
     occurred_at: '2026-08-24T14:05:00Z'
 

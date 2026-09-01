@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 AGENT_ROOT = REPOSITORY_ROOT / "agent"
@@ -41,6 +41,41 @@ def load_yaml(path: Path) -> Any:
     if not path.exists():
         raise FileNotFoundError(f"required contract file is missing: {path}")
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def build_validator(schema: dict[str, Any]) -> Draft202012Validator:
+    """Build a validator that actually enforces `format`.
+
+    jsonschema treats `format` as an annotation unless a FormatChecker is supplied,
+    so without this a state carrying `updated_at: definitely-not-a-timestamp` would
+    pass CI. The `jsonschema[format]` extra installs the RFC 3339 validators the
+    checker needs for `date-time`.
+    """
+    return Draft202012Validator(schema, format_checker=FormatChecker())
+
+
+def check_format_enforcement(schema: dict[str, Any]) -> list[str]:
+    """Prove at runtime that `date-time` and `uuid` are enforced, not annotated.
+
+    A silently disabled FormatChecker is invisible: every fixture keeps passing. This
+    check fails loudly if the installed environment cannot validate the formats the
+    contract relies on.
+    """
+    errors: list[str] = []
+    validator = build_validator(schema)
+
+    probes = (
+        ("date-time", {"type": "string", "format": "date-time"}, "definitely-not-a-timestamp"),
+        ("uuid", {"type": "string", "format": "uuid"}, "not-a-uuid"),
+    )
+    for name, subschema, invalid in probes:
+        probe = Draft202012Validator(subschema, format_checker=validator.format_checker)
+        if probe.is_valid(invalid):
+            errors.append(
+                f"format '{name}' is not being enforced; install the jsonschema[format] "
+                "extra so the contract rejects malformed values"
+            )
+    return errors
 
 
 def check_state_schema(schema: dict[str, Any]) -> list[str]:
@@ -208,7 +243,7 @@ def _fixture_paths() -> tuple[list[Path], list[Path]]:
 def check_fixtures(schema: dict[str, Any]) -> list[str]:
     """Positive fixtures must validate; negative fixtures must fail."""
     errors: list[str] = []
-    validator = Draft202012Validator(schema)
+    validator = build_validator(schema)
     positive, negative = _fixture_paths()
 
     if not positive:
@@ -254,6 +289,49 @@ def check_workflow_state_alignment(workflow: dict[str, Any], schema: dict[str, A
     for name in sorted(workflow_points ^ schema_points):
         errors.append(f"decision point '{name}' is declared in only one of the two contracts")
 
+    return errors
+
+
+def _resolve_schema_path(schema: dict[str, Any], path: str) -> bool:
+    """Resolve a dotted `required_inputs` path against the state schema.
+
+    Only the first two segments are resolved: the top-level property, and one level
+    inside it. That covers every path the workflow declares today and keeps the check
+    readable without reimplementing a JSON Pointer resolver.
+    """
+    head, _, tail = path.partition(".")
+    node = schema.get("properties", {}).get(head)
+    if node is None:
+        return False
+    if not tail:
+        return True
+
+    # Follow arrays and local $refs to reach the object that owns the nested key.
+    if node.get("type") == "array":
+        node = node.get("items", {})
+    ref = node.get("$ref") or next(
+        (option.get("$ref") for option in node.get("oneOf", []) if option.get("$ref")), None
+    )
+    if ref and ref.startswith("#/$defs/"):
+        node = schema.get("$defs", {}).get(ref.split("/")[-1], {})
+    return tail in node.get("properties", {})
+
+
+def check_decision_point_inputs(workflow: dict[str, Any], schema: dict[str, Any]) -> list[str]:
+    """Every `required_inputs` entry must name something the state actually carries.
+
+    A consumer that reads these as paths would look up a key that does not exist, and
+    the divergence is invisible until runtime. Checking them here keeps the workflow
+    and the state contract from drifting apart.
+    """
+    errors: list[str] = []
+    for name, definition in workflow.get("decision_points", {}).items():
+        for path in (definition or {}).get("required_inputs", []):
+            if not _resolve_schema_path(schema, path):
+                errors.append(
+                    f"decision point '{name}' requires input '{path}', which does not "
+                    "resolve against the incident state schema"
+                )
     return errors
 
 
@@ -307,7 +385,9 @@ def validate() -> list[str]:
 
     return [
         *check_state_schema(schema),
+        *check_format_enforcement(schema),
         *check_workflow(workflow),
+        *check_decision_point_inputs(workflow, schema),
         *check_process_stage_mapping(workflow),
         *check_workflow_state_alignment(workflow, schema),
         *check_fixtures(schema),
