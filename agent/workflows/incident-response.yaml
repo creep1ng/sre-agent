@@ -63,9 +63,20 @@ supporting_records:
 #
 # The canonical incident process (Notion page "Flujo de atención a incidentes")
 # is organized into seven phases, indexed 1 to 7:
-# The authoritative enumeration is the twelve documented stages, indexed 0 to 11,
-# defined in the refined HT-INC-01 specification (Notion). Their canonical labels were
-# not available when this file was authored, so no index has been invented here.
+# The detailed Notion diagram organises the operational process into seven phases,
+# indexed 1 to 7:
+#   1. Sistema simulado y observabilidad   (anomaly detection, alert creation)
+#   2. Gestión de alertas                  (dedup, triage, declare/dismiss/link)
+#   3. Gestión y coordinación              (severity, on-call, war room)
+#   4. Investigación del harness           (hypotheses, evidence)
+#   5. Autonomía controlada                (human approval of an action)
+#   6. Recuperación y cierre               (verify, mitigate, resolve)
+#   7. Post-incidente                      (postmortem, close)
+#
+# States are identified by name and never by index. Phases carry the only numeric
+# index in this contract, so a phase number can never be mistaken for a state
+# number. An earlier review confused the two and assumed a 0-11 stage enumeration
+# that is not documented anywhere; keeping states unnumbered removes that ambush.
 #
 # Each state below declares which phases it covers, so the operational model is
 # preserved without creating one entity per phase. The runtime never branches on
@@ -74,8 +85,8 @@ supporting_records:
 # The validator enforces coverage: every phase in the range must be claimed by at
 # least one state, and no phase may fall outside the range. Marking the mapping
 # complete without covering every phase fails CI.
-process_stage_mapping_status: pending_reconciliation
-process_stage_range: [0, 11]
+process_stage_mapping_status: complete
+process_stage_range: [1, 7]
 
 initial_state: detected
 terminal_states: [dismissed, linked, closed]
@@ -83,67 +94,67 @@ terminal_states: [dismissed, linked, closed]
 states:
   detected:
     description: An alert exists and has not been dispositioned.
-    process_stages: []
+    process_stages: [1]
     entry_condition: An alert record exists with service, severity and timestamp.
     allows_agentic_step: false
 
   triage:
     description: The alert is being dispositioned.
-    process_stages: []
+    process_stages: [2]
     entry_condition: A human or the harness opened the alert for triage.
     allows_agentic_step: true
     agent_objective: triage
 
   dismissed:
     description: The alert was rejected as noise. Terminal.
-    process_stages: []
+    process_stages: [2]
     terminal: true
 
   linked:
     description: The alert was associated with an existing incident. Terminal for
       this alert; the target incident continues its own session.
-    process_stages: []
+    process_stages: [2]
     terminal: true
 
   active:
     description: An incident is declared and a war room exists. Session starts here.
-    process_stages: []
+    process_stages: [3]
     entry_condition: incident_id assigned, severity set, war room created.
     allows_agentic_step: false
 
   investigating:
     description: Evidence is being gathered and hypotheses formulated.
-    process_stages: []
+    process_stages: [4]
     allows_agentic_step: true
     agent_objective: investigate
 
   mitigating:
     description: A mitigation strategy is proposed, approved and applied.
       MVP interventions are simulated or performed by a human.
-    process_stages: []
+    process_stages: [5, 6]
     allows_agentic_step: true
     agent_objective: mitigate
 
   verifying:
     description: Service stability is being checked after the intervention.
-    process_stages: []
+    process_stages: [6]
     allows_agentic_step: true
     agent_objective: investigate
 
   resolved:
     description: Service is stable. The postmortem does not exist yet.
-    process_stages: []
+    process_stages: [6]
     allows_agentic_step: false
 
   postmortem:
     description: A postmortem draft is being produced and validated.
-    process_stages: []
+    process_stages: [7]
     allows_agentic_step: true
     agent_objective: postmortem
 
   closed:
     description: Session closed with a declared postmortem. Terminal.
-    process_stages: []
+    process_stages: [7]
     terminal: true
 
 # Decision points are declared inline. `outcomes` enumerate the branches; the
