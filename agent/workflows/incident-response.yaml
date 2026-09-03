@@ -61,8 +61,6 @@ supporting_records:
 
 # Process-stage mapping — "mapeo estados operativos <-> fases del flujo".
 #
-# The canonical incident process (Notion page "Flujo de atención a incidentes")
-# is organized into seven phases, indexed 1 to 7:
 # The detailed Notion diagram organises the operational process into seven phases,
 # indexed 1 to 7:
 #   1. Sistema simulado y observabilidad   (anomaly detection, alert creation)
@@ -75,8 +73,8 @@ supporting_records:
 #
 # States are identified by name and never by index. Phases carry the only numeric
 # index in this contract, so a phase number can never be mistaken for a state
-# number. An earlier review confused the two and assumed a 0-11 stage enumeration
-# that is not documented anywhere; keeping states unnumbered removes that ambush.
+# number. Each of the eleven states below maps to one or more of these phases
+# through its `process_stages` field, which is documentation metadata only.
 #
 # Each state below declares which phases it covers, so the operational model is
 # preserved without creating one entity per phase. The runtime never branches on
