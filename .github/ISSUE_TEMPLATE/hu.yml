@@ -1,0 +1,89 @@
+name: Historia de usuario (HU)
+description: Necesidad observable de un rol con beneficio y criterios de aceptación
+title: "[HU-XX] "
+labels:
+  - "type: user story"
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: Historia
+      description: Como rol, quiero capacidad, para beneficio.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Contexto / escenario
+      description: Cuándo aparece la necesidad y qué tarea intenta completar la persona.
+    validations:
+      required: true
+  - type: textarea
+    id: design_reference
+    attributes:
+      label: Diseño / referencia UX
+      description: Wireframe, Figma, Excalidraw o ejemplo de interacción cuando aplique. Escribí "No aplica" cuando corresponda.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_data
+    attributes:
+      label: Datos / fixtures de aceptación
+      description: Datos mínimos necesarios para reproducir la aceptación.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Criterios de aceptación
+      description: Incluí comportamiento positivo, estados límite y errores relevantes.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance_scenario
+    attributes:
+      label: Escenario de aceptación
+      description: Describí el escenario como Dado, Cuando y Entonces.
+    validations:
+      required: true
+  - type: checkboxes
+    id: definition_of_ready
+    attributes:
+      label: Definition of Ready
+      options:
+        - label: Rol, capacidad y beneficio son claros.
+          required: true
+        - label: Existe diseño o ejemplo cuando aplica.
+          required: true
+        - label: Los datos de prueba están definidos.
+          required: true
+        - label: Dependencias y contratos están identificados.
+          required: true
+        - label: Los criterios pueden validarse durante el Sprint Review.
+          required: true
+        - label: Cabe en el sprint o está dividida.
+          required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Fuera de alcance
+      description: Funcionalidades cercanas que no pertenecen a esta HU.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencias
+      description: Indicá de qué depende y qué desbloquea.
+    validations:
+      required: true
+  - type: textarea
+    id: planning
+    attributes:
+      label: Planificación
+      description: Incluí Sprint, SP, responsable, épica y si pertenece a la ruta crítica.
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: El Definition of Done se verifica en la Pull Request. Para trabajo sin código puede aplicarse la excepción de cierre basada en evidencia definida por el proyecto.
