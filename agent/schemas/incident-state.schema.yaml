@@ -1,0 +1,372 @@
+# Incident runtime state contract — HT-INC-01 (issue #16)
+#
+# Minimum shared state consumed by the UI, the investigator harness and the backend.
+# JSON Schema draft 2020-12, authored in YAML for reviewability.
+#
+# First-class artifacts are exactly four: alert, hypothesis, mitigation_strategy,
+# postmortem. Anomaly data may only appear nested inside alert.origin.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:incident-state:1.0.0
+title: IncidentState
+type: object
+additionalProperties: false
+required:
+  - workflow_id
+  - workflow_version
+  - state
+  - alert
+  - updated_at
+
+properties:
+  workflow_id:
+    const: incident-response
+  workflow_version:
+    const: 1.0.0
+    description: >-
+      Exact workflow version executed. Pinned with `const` because this schema is
+      itself incident-state 1.0.0, and a permissive pattern would accept a snapshot
+      produced by a different workflow version, breaking the reproducibility
+      guarantee. A new workflow version requires a new schema version.
+  incident_id:
+    type: [string, "null"]
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+    default: null
+    description: Canonical session identifier. Null before the incident is declared,
+      because `detected` and `triage` act on an alert that has no session yet.
+      Required from `active` onward, enforced by the conditional rules below.
+  linked_incident_id:
+    type: [string, "null"]
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+    default: null
+    description: Target incident this alert was attached to. Only meaningful in the
+      `linked` terminal state, where the alert joins an existing session instead of
+      opening one of its own.
+  run_id:
+    type: [string, "null"]
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+    default: null
+    description: Current harness execution inside this session. Second dimension of
+      the gateway correlation triple.
+  task_id:
+    type: [string, "null"]
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+    default: null
+    description: Current step inside the harness execution. Third dimension of the
+      gateway correlation triple (incident_id, run_id, task_id) accepted by
+      POST /v1/responses.
+  state:
+    enum: [detected, triage, dismissed, linked, active, investigating,
+           mitigating, verifying, resolved, postmortem, closed]
+  process_stage:
+    type: [integer, "null"]
+    minimum: 1
+    maximum: 7
+    description: Operational phase index, 1 to 7, matching the phases of the detailed
+      process diagram. Documentation metadata only; the runtime never branches on it.
+      States are identified by name, never by index.
+  severity:
+    type: [string, "null"]
+    enum: [sev1, sev2, sev3, sev4, null]
+  impact:
+    type: [string, "null"]
+    maxLength: 2000
+
+  alert:
+    $ref: '#/$defs/alert'
+  hypotheses:
+    type: array
+    items: { $ref: '#/$defs/hypothesis' }
+    default: []
+  mitigation_strategy:
+    oneOf:
+      - { $ref: '#/$defs/mitigation_strategy' }
+      - type: "null"
+    default: null
+  postmortem:
+    oneOf:
+      - { $ref: '#/$defs/postmortem' }
+      - type: "null"
+    default: null
+
+  evidence:
+    type: array
+    items: { $ref: '#/$defs/evidence' }
+    default: []
+  decisions:
+    type: array
+    items: { $ref: '#/$defs/decision' }
+    default: []
+  approvals:
+    type: array
+    items: { $ref: '#/$defs/approval' }
+    default: []
+  timeline:
+    type: array
+    items: { $ref: '#/$defs/timeline_event' }
+    default: []
+
+  authorized_capabilities:
+    type: array
+    description: Capabilities the gateway resolved for the current principal.
+      Advisory for the harness; the gateway remains the enforcement point.
+    items: { $ref: '#/$defs/capability' }
+    default: []
+
+  updated_at:
+    type: string
+    format: date-time
+
+allOf:
+  # The session identifier appears exactly when the session exists.
+  # Before `active` there is only an alert, so inventing an incident_id would be a lie.
+  - if:
+      properties:
+        state:
+          enum: [active, investigating, mitigating, verifying, resolved,
+                 postmortem, closed]
+      required: [state]
+    then:
+      properties:
+        incident_id:
+          type: string
+      required: [incident_id]
+  - if:
+      properties:
+        state:
+          enum: [detected, triage]
+      required: [state]
+    then:
+      properties:
+        incident_id:
+          type: "null"
+  # Linking attaches the alert to an existing session; the target is a separate field
+  # and the alert never acquires a session of its own.
+  - if:
+      properties:
+        state: { const: linked }
+      required: [state]
+    then:
+      properties:
+        incident_id:
+          type: "null"
+        linked_incident_id:
+          type: string
+      required: [linked_incident_id]
+  - if:
+      properties:
+        state:
+          enum: [detected, triage, dismissed, active, investigating, mitigating,
+                 verifying, resolved, postmortem, closed]
+      required: [state]
+    then:
+      properties:
+        linked_incident_id:
+          type: "null"
+  # Closure is impossible without a postmortem artifact.
+  - if:
+      properties:
+        state: { const: closed }
+      required: [state]
+    then:
+      properties:
+        postmortem:
+          not: { type: "null" }
+      required: [postmortem]
+  # A declared incident always carries a severity.
+  - if:
+      properties:
+        state:
+          enum: [active, investigating, mitigating, verifying, resolved,
+                 postmortem, closed]
+      required: [state]
+    then:
+      properties:
+        severity:
+          enum: [sev1, sev2, sev3, sev4]
+      required: [severity]
+
+$defs:
+  alert:
+    type: object
+    additionalProperties: false
+    required: [alert_id, service, severity, status, observed_at, summary, source]
+    properties:
+      alert_id:
+        type: string
+        pattern: '^[a-z][a-z0-9_-]{2,63}$'
+      service: { type: string, minLength: 1, maxLength: 200 }
+      severity: { enum: [sev1, sev2, sev3, sev4] }
+      status: { enum: [new, triaged, dismissed, linked] }
+      observed_at: { type: string, format: date-time }
+      summary: { type: string, minLength: 1, maxLength: 2000 }
+      source: { type: string, minLength: 1, maxLength: 200 }
+      origin:
+        description: Anomaly information, when it exists, lives here as metadata.
+          There is no standalone Anomaly entity in the MVP.
+        oneOf:
+          - type: object
+            additionalProperties: false
+            properties:
+              signal: { type: string, maxLength: 200 }
+              condition: { type: string, maxLength: 500 }
+              detector: { type: string, maxLength: 200 }
+              observed_at: { type: string, format: date-time }
+          - type: "null"
+        default: null
+
+  hypothesis:
+    type: object
+    additionalProperties: false
+    required: [hypothesis_id, statement, confidence, status, created_by, created_at]
+    properties:
+      hypothesis_id: { type: string, pattern: '^hyp_[a-z0-9_-]{1,60}$' }
+      statement: { type: string, minLength: 1, maxLength: 4000 }
+      confidence: { enum: [low, medium, high] }
+      status: { enum: [open, supported, refuted, superseded] }
+      supporting_evidence:
+        type: array
+        items: { type: string, pattern: '^ev_[a-z0-9_-]{1,60}$' }
+        default: []
+      contradicting_evidence:
+        type: array
+        items: { type: string, pattern: '^ev_[a-z0-9_-]{1,60}$' }
+        default: []
+      next_check: { type: [string, "null"], maxLength: 1000 }
+      created_by: { enum: [human, agent] }
+      created_at: { type: string, format: date-time }
+
+  mitigation_strategy:
+    type: object
+    additionalProperties: false
+    required: [mitigation_id, description, steps, risk, verification_check,
+               approval_status, created_by, created_at]
+    properties:
+      mitigation_id: { type: string, pattern: '^mit_[a-z0-9_-]{1,60}$' }
+      description: { type: string, minLength: 1, maxLength: 4000 }
+      steps:
+        type: array
+        minItems: 1
+        items: { type: string, minLength: 1, maxLength: 1000 }
+      risk: { enum: [low, medium, high] }
+      expected_effect: { type: [string, "null"], maxLength: 2000 }
+      verification_check: { type: string, minLength: 1, maxLength: 2000 }
+      approval_status: { enum: [pending, approved, rejected, changes_requested] }
+      execution_mode:
+        description: The MVP never executes real infrastructure changes.
+        enum: [simulated, human]
+        default: simulated
+      based_on_hypothesis: { type: [string, "null"], pattern: '^hyp_[a-z0-9_-]{1,60}$' }
+      created_by: { enum: [human, agent] }
+      created_at: { type: string, format: date-time }
+
+  postmortem:
+    type: object
+    additionalProperties: false
+    required: [postmortem_id, summary, status, created_by, created_at]
+    properties:
+      postmortem_id: { type: string, pattern: '^pm_[a-z0-9_-]{1,60}$' }
+      summary: { type: string, minLength: 1, maxLength: 8000 }
+      impact: { type: [string, "null"], maxLength: 4000 }
+      root_cause: { type: [string, "null"], maxLength: 4000 }
+      resolution: { type: [string, "null"], maxLength: 4000 }
+      lessons:
+        type: array
+        items: { type: string, maxLength: 2000 }
+        default: []
+      status: { enum: [draft, declared] }
+      created_by: { enum: [human, agent] }
+      created_at: { type: string, format: date-time }
+
+  evidence:
+    type: object
+    additionalProperties: false
+    required: [evidence_id, source, collected_at, summary]
+    properties:
+      evidence_id: { type: string, pattern: '^ev_[a-z0-9_-]{1,60}$' }
+      source: { type: string, minLength: 1, maxLength: 200 }
+      tool: { type: [string, "null"], maxLength: 200 }
+      datasource_uid: { type: [string, "null"], maxLength: 200 }
+      query: { type: [string, "null"], maxLength: 4000 }
+      time_window: { type: [string, "null"], maxLength: 200 }
+      summary: { type: string, minLength: 1, maxLength: 8000 }
+      collected_at: { type: string, format: date-time }
+      request_id:
+        type: [string, "null"]
+        format: uuid
+        default: null
+        description: Primary correlation. This is the UUID returned by
+          POST /v1/responses, and the only identifier the harness can observe
+          directly at call time.
+      audit_event_id:
+        type: [string, "null"]
+        default: null
+        oneOf:
+          - type: "null"
+          - type: string
+            format: uuid
+          - type: string
+            pattern: '^cor_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        description: Identifier of the audit event, resolved later by reading the
+          audit projection. Independent of request_id, so it stays optional and is
+          never populated by the harness at call time.
+      trusted:
+        description: Tool and knowledge output is data, never instruction.
+        const: false
+        default: false
+
+  decision:
+    type: object
+    additionalProperties: false
+    required: [decision_id, decision_point, outcome, actor, decided_at]
+    properties:
+      decision_id: { type: string, pattern: '^dec_[a-z0-9_-]{1,60}$' }
+      decision_point:
+        enum: [triage_outcome, evidence_sufficiency, mitigation_approval,
+               stability_check]
+      outcome: { type: string, minLength: 1, maxLength: 100 }
+      rationale: { type: [string, "null"], maxLength: 4000 }
+      actor: { enum: [human, agent, system] }
+      transition_id: { type: [string, "null"], maxLength: 100 }
+      request_id: { type: [string, "null"], format: uuid, default: null }
+      audit_event_id: { type: [string, "null"], default: null }
+      decided_at: { type: string, format: date-time }
+
+  approval:
+    type: object
+    additionalProperties: false
+    required: [approval_id, subject_id, granted, actor, decided_at]
+    properties:
+      approval_id: { type: string, pattern: '^apr_[a-z0-9_-]{1,60}$' }
+      subject_id: { type: string, minLength: 1, maxLength: 100 }
+      granted: { type: boolean }
+      comment: { type: [string, "null"], maxLength: 2000 }
+      actor: { const: human }
+      decided_at: { type: string, format: date-time }
+
+  timeline_event:
+    type: object
+    additionalProperties: false
+    required: [event_id, kind, occurred_at]
+    properties:
+      event_id: { type: string, pattern: '^evt_[a-z0-9_-]{1,60}$' }
+      kind: { enum: [state_change, evidence, decision, approval, artifact,
+                     escalation, denial] }
+      from_state: { type: [string, "null"] }
+      to_state: { type: [string, "null"] }
+      reference_id: { type: [string, "null"], maxLength: 100 }
+      actor: { enum: [human, agent, system] }
+      request_id: { type: [string, "null"], format: uuid, default: null }
+      audit_event_id: { type: [string, "null"], default: null }
+      note: { type: [string, "null"], maxLength: 2000 }
+      occurred_at: { type: string, format: date-time }
+
+  capability:
+    type: object
+    additionalProperties: false
+    required: [resource_type, resource_id]
+    properties:
+      resource_type:
+        enum: [llm_model, mcp_server, mcp_tool, skill, bok_collection]
+      resource_id: { type: string, minLength: 1, maxLength: 200 }
+      action: { type: [string, "null"], maxLength: 100 }

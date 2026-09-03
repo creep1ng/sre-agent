@@ -1,0 +1,21 @@
+# Negative fixture — closure without a postmortem MUST be rejected.
+#
+# Encodes the approved rule: the postmortem may be a minimal draft, but it must
+# exist before the session transitions to `closed`.
+---
+workflow_id: incident-response
+workflow_version: 1.0.0
+incident_id: inc-invalid-closure
+run_id: null
+state: closed
+severity: sev2
+alert:
+  alert_id: alt-payment-error-rate
+  service: paymentservice
+  severity: sev2
+  status: triaged
+  observed_at: '2026-08-24T14:05:00Z'
+  summary: Elevated error rate on paymentservice.
+  source: grafana-alerting
+postmortem: null
+updated_at: '2026-08-24T15:00:00Z'
