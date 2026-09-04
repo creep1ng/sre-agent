@@ -705,10 +705,68 @@
               "upstream",
               "response"
             ]
+          },
+          "resource": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "resource_type": {
+                "const": "administrative_control"
+              }
+            },
+            "required": [
+              "resource_type"
+            ]
           }
         },
         "required": [
-          "stage"
+          "stage",
+          "resource"
+        ]
+      },
+      "then": {
+        "properties": {
+          "identity": {
+            "$ref": "#/$defs/authenticatedIdentity"
+          },
+          "resource": true,
+          "model_alias_ref": false,
+          "routing": false
+        },
+        "required": [
+          "identity",
+          "resource"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage": {
+            "enum": [
+              "authorization",
+              "routing",
+              "upstream",
+              "response"
+            ]
+          },
+          "resource": {
+            "not": {
+              "type": "object",
+              "properties": {
+                "resource_type": {
+                  "const": "administrative_control"
+                }
+              },
+              "required": [
+                "resource_type"
+              ]
+            }
+          }
+        },
+        "required": [
+          "stage",
+          "resource"
         ]
       },
       "then": {
