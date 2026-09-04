@@ -19,6 +19,65 @@ class AuditProjector:
             digest=hmac.new(self._key, data, sha256).hexdigest(),
         )
 
+    def control_event(
+        self,
+        request_id: UUID,
+        status: int,
+        latency_ms: int,
+        stage: str,
+        *,
+        operation: str,
+        action: str,
+        reason: str | None = None,
+        retryable: bool = False,
+        context: PrincipalContext | None = None,
+        resource_ref: tuple[str, str] | None = None,
+        decision: PolicyDecision | None = None,
+        authorization_denial_cause: AuthorizationDenialCause | None = None,
+    ) -> AuditEvent:
+        """Project a metadata-only administrative control-plane event.
+
+        Control operations never carry LLM routing evidence; identity and
+        resource are HMAC references only, per ADR-005 domain separation.
+        """
+        ref = self.reference
+        identity = None
+        if context:
+            identity = {
+                "principal_ref": ref("principal", context.principal.principal_id),
+                "principal_kind": context.principal.kind,
+                "principal_status": context.principal.status,
+                "credential_ref": ref("credential", context.credential_id),
+                "authenticated_at": context.authenticated_at,
+            }
+        policy = None
+        if decision:
+            policy = {"decision": decision.decision, "reason_code": decision.reason_code}
+            if decision.policy_id:
+                policy["grant_ref"] = ref("grant", decision.policy_id)
+        resource = None
+        if resource_ref is not None:
+            resource = {
+                "resource_type": resource_ref[0],
+                "resource_ref": ref("resource", f"{resource_ref[0]}/{resource_ref[1]}"),
+            }
+        # fmt: off
+        return AuditEvent(
+            event_id=uuid4(), occurred_at=datetime.now(UTC), operation=operation,
+            action=action, stage=stage, outcome="success" if status < 400 else
+            ("denied" if status in {403, 404} else "error"), reason_code=reason,
+            authorization_denial_cause=authorization_denial_cause
+            if stage == "authorization" and status == 403 else None,
+            response_status=status, retryable=retryable, latency_ms=latency_ms,
+            correlation={"request_id": request_id}, identity=identity,
+            resource=resource, policy_decision=policy,
+            redaction={"policy_version": "redaction-1.0.0", "result": "success",
+                       "source_class": "none", "categories": [], "match_count": 0,
+                       "sink_eligible": False},
+            content_state="absent", authoritative_acceptance="accepted",
+            ordinary_result="released", exporter_result="not_attempted",
+        )
+
     def event(
         self,
         request_id: UUID,
