@@ -85,6 +85,55 @@ def test_latency_migration_backfills_without_a_server_default() -> None:
             )
 
 
+def test_authorization_denial_cause_is_nullable_but_constrained() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        metadata = connection.execute(
+            """SELECT is_nullable, column_default FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='audit_events'
+              AND column_name='authorization_denial_cause'"""
+        ).fetchone()
+        assert metadata == ("YES", None)
+        assert connection.execute(
+            "SELECT authorization_denial_cause FROM audit_events WHERE event_id=%s",
+            ("00000000-0000-4000-8000-000000000000",),
+        ).fetchone() == (None,)
+        constraints = {
+            row[0]
+            for row in connection.execute(
+                "SELECT conname FROM pg_constraint WHERE conrelid='audit_events'::regclass"
+            )
+        }
+        assert "ck_audit_events_authorization_denial_cause" in constraints
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              response_status, retryable, latency_ms, correlation, redaction, content_state,
+              authoritative_acceptance, ordinary_result, exporter_result,
+              authorization_denial_cause)
+            VALUES ('00000000-0000-4000-8000-000000000087', now(), 'responses.create',
+              'invoke', 'authorization', 'denied', 'no_matching_grant', 403, false, 1,
+              '{}', '{}', 'absent', 'accepted', 'released', 'not_attempted',
+              'grant_not_applicable')"""
+        )
+        assert connection.execute(
+            "SELECT authorization_denial_cause FROM audit_events WHERE event_id=%s",
+            ("00000000-0000-4000-8000-000000000087",),
+        ).fetchone() == ("grant_not_applicable",)
+        connection.rollback()
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(
+                """INSERT INTO audit_events (
+                  event_id, occurred_at, operation, action, stage, outcome, reason_code,
+                  response_status, retryable, latency_ms, correlation, redaction, content_state,
+                  authoritative_acceptance, ordinary_result, exporter_result,
+                  authorization_denial_cause)
+                VALUES ('00000000-0000-4000-8000-000000000088', now(), 'responses.create',
+                  'invoke', 'routing', 'denied', 'no_matching_grant', 403, false, 1,
+                  '{}', '{}', 'absent', 'accepted', 'released', 'not_attempted',
+                  'resource_missing')"""
+            )
+
+
 @pytest.mark.asyncio
 async def test_async_transaction_boundary() -> None:
     database = Database(DATABASE_URL)
