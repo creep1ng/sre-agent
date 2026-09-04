@@ -18,7 +18,7 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, alembic_version CASCADE"
+            "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -39,7 +39,7 @@ def migrated_database() -> None:
     command.upgrade(config, "head")
 
 
-def test_repeated_head_has_exactly_five_domain_tables() -> None:
+def test_repeated_head_has_exactly_six_domain_tables() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         rows = connection.execute(
             "SELECT tablename FROM pg_tables WHERE schemaname='public'"
@@ -49,6 +49,7 @@ def test_repeated_head_has_exactly_five_domain_tables() -> None:
         "audit_events",
         "credentials",
         "grants",
+        "idempotency_records",
         "principals",
         "resources",
     }
