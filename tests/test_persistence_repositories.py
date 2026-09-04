@@ -9,6 +9,7 @@ from alembic.config import Config
 from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
+from sre_agent.governance.authorization import ResourceAuthorizationFact
 from sre_agent.governance.dto import AuditEvent
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import (
@@ -159,6 +160,7 @@ async def test_resource_authorization_view_precedes_assignment_resolution() -> N
             repository = ResourceRepository(session)
             view = await repository.authorization_view("llm_model", "triage-agent")
             assert view is not None
+            assert isinstance(view, ResourceAuthorizationFact)
             assert (view.resource_type, view.resource_id, view.status) == (
                 "llm_model",
                 "triage-agent",
@@ -197,31 +199,28 @@ async def test_resource_authorization_view_precedes_assignment_resolution() -> N
 
 @pytest.mark.asyncio
 async def test_grant_decision_matches_only_the_active_exact_direct_grant() -> None:
+    assert not hasattr(GrantRepository, "decide")
     database = Database(DATABASE_URL)
     async with database.transaction() as session:
         repository = GrantRepository(session)
-        allow = await repository.decide("incident-harness", "invoke", "llm_model", "triage-agent")
-        assert allow.model_dump() == {
-            "decision": "allow",
-            "reason_code": "grant_matched",
-            "policy_id": "grant-incident-harness-invoke-triage-agent",
-        }
+        allow = await repository.find_active(
+            "incident-harness", "invoke", "llm_model", "triage-agent"
+        )
+        assert allow is not None and allow.grant_id == "grant-incident-harness-invoke-triage-agent"
         for principal_id in (
             "restricted-harness",
             "admin-human",
             "demo-human",
             "absent-principal",
         ):
-            decision = await repository.decide(principal_id, "invoke", "llm_model", "triage-agent")
-            assert decision.model_dump() == {
-                "decision": "deny",
-                "reason_code": "no_matching_grant",
-                "policy_id": None,
-            }
-        wrong_action = await repository.decide(
+            assert (
+                await repository.find_active(principal_id, "invoke", "llm_model", "triage-agent")
+                is None
+            )
+        wrong_action = await repository.find_active(
             "incident-harness", "read_metadata", "llm_model", "triage-agent"
         )
-        assert wrong_action.decision == "deny"
+        assert wrong_action is None
     await database.dispose()
 
 

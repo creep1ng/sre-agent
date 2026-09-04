@@ -1,0 +1,304 @@
+openapi: 3.1.0
+info: { title: SRE Agent Control Plane API, version: 1.3.0, description: 'Canonical single-workspace governance contract. Authentication precedes lookup; hidden and absent resources are indistinguishable.' }
+servers: [{ url: / }]
+security: [{ bearerAuth: [] }]
+tags: [{ name: Principals, description: Principal lifecycle operations. }, { name: Credentials, description: One-time issuance and credential lifecycle operations. }, { name: ModelAliases, description: Stable model alias assignment operations. }, { name: Grants, description: Direct allow Grant lifecycle operations. }, { name: Audit, description: Metadata-only audit projection operations. }]
+paths:
+  /v1/principals:
+    post:
+      summary: Create a Principal
+      operationId: createPrincipal
+      tags: [Principals]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PrincipalCreate' } } } }
+      responses:
+        '201': { description: Principal created or stable replay, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:principal:1.3.0' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+    get:
+      summary: List Principals
+      operationId: listPrincipals
+      tags: [Principals]
+      description: Ordered by (created_at,id) ascending. No continuation is available.
+      x-forbidden-query-parameters: [cursor, page, offset, continuation_token, next]
+      parameters: [{ $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: Bounded principal list, content: { application/json: { schema: { $ref: '#/components/schemas/PrincipalList' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/principals/{id}:
+    get:
+      summary: Get a Principal
+      operationId: getPrincipal
+      tags: [Principals]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Principal, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:principal:1.3.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/principals/{id}/status:
+    put:
+      summary: Replace Principal status
+      operationId: replacePrincipalStatus
+      tags: [Principals]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActiveInactiveStatus' } } } }
+      responses:
+        '200': { description: Deterministically replaced Principal status, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:principal:1.3.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/principals/{id}/credentials:
+    post:
+      summary: Issue a credential
+      operationId: issueCredential
+      tags: [Credentials]
+      description: Reveals the key only on first success; replay omits it and sets secret_revealed=false.
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CredentialIssue' } } } }
+      responses:
+        '201': { description: Credential issuance or stable replay, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:credential-issuance:1.3.0' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+    get:
+      summary: List credential metadata
+      operationId: listCredentials
+      tags: [Credentials]
+      description: Metadata only, ordered by (created_at,id) descending. No hash, key, or continuation.
+      x-forbidden-query-parameters: [cursor, page, offset, continuation_token, next]
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: Bounded credential list, content: { application/json: { schema: { $ref: '#/components/schemas/CredentialList' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/credentials/{id}:
+    delete:
+      summary: Revoke a credential
+      operationId: revokeCredential
+      tags: [Credentials]
+      description: Converges on revoked; repetition creates no transition and reveals no secret.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Credential is revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/credentials/{id}/rotation:
+    post:
+      summary: Rotate a credential
+      operationId: rotateCredential
+      tags: [Credentials]
+      description: Atomically revokes the old credential and creates one replacement. Failure leaves the old credential active.
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CredentialIssue' } } } }
+      responses:
+        '201': { description: Replacement issuance or stable replay, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:credential-issuance:1.3.0' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/model-aliases:
+    post:
+      summary: Create a ModelAlias
+      operationId: createModelAlias
+      tags: [ModelAliases]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ModelAliasCreate' } } } }
+      responses:
+        '201': { description: ModelAlias created or stable replay, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:model-alias:1.3.0' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+    get:
+      summary: List ModelAliases
+      operationId: listModelAliases
+      tags: [ModelAliases]
+      description: Ordered by (created_at,id) ascending. No continuation is available.
+      x-forbidden-query-parameters: [cursor, page, offset, continuation_token, next]
+      parameters: [{ $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: Bounded ModelAlias list, content: { application/json: { schema: { $ref: '#/components/schemas/ModelAliasList' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/model-aliases/{id}:
+    get:
+      summary: Get a ModelAlias
+      operationId: getModelAlias
+      tags: [ModelAliases]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: ModelAlias, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:model-alias:1.3.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/model-aliases/{id}/assignment:
+    put:
+      summary: Replace ModelAlias assignment
+      operationId: replaceModelAliasAssignment
+      tags: [ModelAliases]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ModelAliasAssignment' } } } }
+      responses:
+        '200': { description: Deterministically replaced assignment, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:model-alias:1.3.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/model-aliases/{id}/status:
+    put:
+      summary: Replace ModelAlias status
+      operationId: replaceModelAliasStatus
+      tags: [ModelAliases]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ActiveInactiveStatus' } } } }
+      responses:
+        '200': { description: Deterministically replaced ModelAlias status, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:model-alias:1.3.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/grants:
+    post:
+      summary: Create a direct allow Grant
+      operationId: createGrant
+      tags: [Grants]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GrantCreate' } } } }
+      responses:
+        '201': { description: Direct allow Grant created or stable replay, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:grant:1.3.0' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+    get:
+      summary: List filtered Grants
+      operationId: listGrants
+      tags: [Grants]
+      description: Requires principal_id or resource_id; ordered by (created_at,id) descending. No continuation.
+      x-required-query-any-of: [principal_id, resource_id]
+      x-forbidden-query-parameters: [cursor, page, offset, continuation_token, next]
+      parameters: [{ $ref: '#/components/parameters/PrincipalFilter' }, { $ref: '#/components/parameters/ResourceFilter' }, { $ref: '#/components/parameters/Limit' }]
+      responses:
+        '200': { description: Bounded filtered Grant list, content: { application/json: { schema: { $ref: '#/components/schemas/GrantList' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/grants/{id}:
+    delete:
+      summary: Revoke a Grant
+      operationId: revokeGrant
+      tags: [Grants]
+      description: Converges on revoked; repetition creates no transition.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Grant is revoked }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/audit-events/{id}:
+    get:
+      summary: Get audit metadata
+      operationId: getAuditEvent
+      tags: [Audit]
+      description: Metadata and redaction state only. Raw or redacted content retrieval is unsupported.
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Metadata-only AuditEvent projection, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:audit-event-metadata:1.3.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+  /v1/audit-events:
+    get:
+      summary: List filtered audit metadata
+      operationId: listAuditEvents
+      tags: [Audit]
+      description: Requires a listed identity, decision, alias, correlation, or bounded-time filter; ordered by (occurred_at,event_id) descending. Content parameters are rejected.
+      x-required-query-any-of: [principal_id, decision, model_alias_id, request_id, incident_id, run_id, task_id, trace_id, from, to]
+      x-forbidden-query-parameters: [cursor, page, offset, continuation_token, next, content, raw_content, redacted_content, include_content]
+      parameters:
+        - { $ref: '#/components/parameters/PrincipalFilter' }
+        - { name: decision, in: query, schema: { enum: [allow, deny] } }
+        - { name: model_alias_id, in: query, schema: { type: string } }
+        - { name: request_id, in: query, schema: { type: string, format: uuid } }
+        - { name: incident_id, in: query, schema: { type: string } }
+        - { name: run_id, in: query, schema: { type: string } }
+        - { name: task_id, in: query, schema: { type: string } }
+        - { name: trace_id, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: Bounded metadata-only AuditEvent list, content: { application/json: { schema: { $ref: '#/components/schemas/AuditEventList' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
+components:
+  securitySchemes: { bearerAuth: { type: http, scheme: bearer } }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[\x20-\x7E]+$' } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 100 } }
+    PrincipalFilter: { name: principal_id, in: query, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+    ResourceFilter: { name: resource_id, in: query, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+  responses:
+    BadRequest: { description: Missing or invalid Idempotency-Key, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.3.0' } } } }
+    Unauthorized: { description: Authentication failed before lookup, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.3.0' } } } }
+    Forbidden: { description: Authenticated Principal is not permitted, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.3.0' } } } }
+    NotFound: { description: Identical response for hidden and absent resources, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.3.0' } } } }
+    Conflict: { description: Idempotency payload conflicts with retained binding, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.3.0' } } } }
+    ValidationError: { description: 'Closed-body, unsafe-list, unsupported-pagination, or audit-content validation failure', content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.3.0' } } } }
+    AuditUnavailable: { description: Authoritative audit store did not durably accept the safe event, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.3.0' } } } }
+  schemas:
+    PrincipalCreate: { type: object, additionalProperties: false, required: [principal_id, kind, display_name], properties: { principal_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }, kind: { enum: [human, agent] }, display_name: { type: string, minLength: 1, maxLength: 200 } } }
+    ActiveInactiveStatus: { type: object, additionalProperties: false, required: [status], properties: { status: { enum: [active, inactive] } } }
+    CredentialIssue: { type: object, additionalProperties: false, properties: { expires_at: { type: [string, 'null'], format: date-time } } }
+    ModelAliasCreate: { type: object, additionalProperties: false, required: [model_alias_id, alias, concrete_model, router, inference_provider], properties: { model_alias_id: { type: string }, alias: { type: string }, concrete_model: { type: string }, router: { type: string }, inference_provider: { type: string } } }
+    ModelAliasAssignment: { type: object, additionalProperties: false, required: [concrete_model, router, inference_provider], properties: { concrete_model: { type: string }, router: { type: string }, inference_provider: { type: string } } }
+    GrantCreate: { type: object, additionalProperties: false, required: [grant_id, principal_id, action, resource, effect], properties: { grant_id: { type: string }, principal_id: { type: string }, action: { type: string }, resource: { $ref: 'urn:sre-agent:schema:resource:1.3.0' }, effect: { const: allow } } }
+    PrincipalList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:principal:1.3.0' } } } }
+    CredentialList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:credential-reference:1.3.0' } } } }
+    ModelAliasList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:model-alias:1.3.0' } } } }
+    GrantList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:grant:1.3.0' } } } }
+    AuditEventList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:audit-event-metadata:1.3.0' } } } }
+    ListBase: { type: object, additionalProperties: false, required: [items, limit, truncated], properties: { items: { type: array, maxItems: 100 }, limit: { type: integer, minimum: 1, maximum: 100 }, truncated: { type: boolean } } }

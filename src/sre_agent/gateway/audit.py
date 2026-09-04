@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import UUID, uuid4
 
+from sre_agent.governance.authorization import AuthorizationDenialCause
 from sre_agent.governance.dto import AuditEvent, AuditRef, ModelAlias, PolicyDecision, PrincipalContext  # noqa: E501  # fmt: skip
 
 
@@ -30,6 +31,7 @@ class AuditProjector:
         context: PrincipalContext | None = None,
         alias: str | None = None,
         decision: PolicyDecision | None = None,
+        authorization_denial_cause: AuthorizationDenialCause | None = None,
         assignment: ModelAlias | None = None,
         identifiers: dict[str, str] | None = None,
     ) -> AuditEvent:
@@ -56,6 +58,7 @@ class AuditProjector:
             event_id=uuid4(), occurred_at=datetime.now(UTC), operation="responses.create",
             action="invoke", stage=stage, outcome="success" if status < 400 else
             ("denied" if status == 403 else "error"), reason_code=reason,
+            authorization_denial_cause=authorization_denial_cause,
             response_status=status, retryable=retryable, latency_ms=latency_ms,
             correlation=correlation, identity=identity,
             resource={"resource_type": "llm_model", "resource_ref": ref("resource", alias)}
