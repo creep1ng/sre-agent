@@ -2,6 +2,7 @@
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "20260902_04"
 down_revision = "20260901_03"
@@ -42,7 +43,11 @@ def upgrade() -> None:
         sa.Column("method", sa.String(16), nullable=False),
         sa.Column("canonical_path", sa.String(200), nullable=False),
         sa.Column("binding", sa.String(32), nullable=False),
-        sa.Column("outcome", sa.JSON(), nullable=False),
+        sa.Column(
+            "outcome",
+            sa.JSON().with_variant(postgresql.JSONB(), "postgresql"),
+            nullable=False,
+        ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("transition_count", sa.Integer(), nullable=False),
