@@ -6,7 +6,15 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
-ResourceType = Literal["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"]
+ResourceType = Literal[
+    "llm_model",
+    "mcp_server",
+    "mcp_tool",
+    "skill",
+    "bok_collection",
+    "administrative_control",
+]
+ControlAction = Literal["admin.read", "admin.write"]
 AuditRefValue = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ReasonCode = Literal[
     "audit_unavailable",
@@ -240,8 +248,25 @@ class AuditEvent(StrictDTO):
         "audit.redact",
         "credentials.authenticate",
         "responses.create",
+        "principals.create",
+        "principals.get",
+        "principals.list",
+        "principals.status.replace",
+        "credentials.issue",
+        "credentials.list",
+        "credentials.revoke",
+        "credentials.rotate",
     ]
-    action: Literal["authenticate", "export", "invoke", "persist", "read_metadata", "redact"]
+    action: Literal[
+        "authenticate",
+        "export",
+        "invoke",
+        "persist",
+        "read_metadata",
+        "redact",
+        "admin.read",
+        "admin.write",
+    ]
     stage: Literal[
         "validation",
         "authentication",
@@ -280,10 +305,24 @@ class AuditEvent(StrictDTO):
         subject = (self.identity, self.resource, self.model_alias_ref, self.policy_decision)
         if no_subject and any(value is not None for value in (*subject, self.routing)):
             raise ValueError("this audit stage cannot carry subject evidence")
-        if self.stage in {"authorization", "routing", "upstream", "response"} and any(
-            value is None for value in subject[:3]
+        is_control = (
+            isinstance(self.resource, ResourceEvidence)
+            and self.resource.resource_type == "administrative_control"
+        )
+        if (
+            self.stage in {"authorization", "routing", "upstream", "response"}
+            and not is_control
+            and any(value is None for value in subject[:3])
         ):
             raise ValueError("this audit stage requires identity and resource evidence")
+        if (
+            self.stage in {"authorization", "routing", "upstream", "response"}
+            and is_control
+            and (self.identity is None or self.resource is None)
+        ):
+            raise ValueError("control audit stage requires identity and resource evidence")
+        if is_control and (self.model_alias_ref is not None or self.routing is not None):
+            raise ValueError("control audit evidence cannot carry LLM routing evidence")
         expected_redaction = {"absent": "none", "redacted": "success", "redaction_failed": "failed"}
         actual_redaction = (
             self.redaction.source_class if self.content_state == "absent" else self.redaction.result
