@@ -6,9 +6,10 @@ Define durable, metadata-only evidence for every governed response attempt and t
 
 ## Requirements
 
+
 ### Requirement: Record every terminal attempt
 
-The system MUST persist one terminal audit event for every governed endpoint attempt, including allow, deny, authentication/validation outcomes covered by the operation, and normalized upstream failures. Each event MUST include the request correlation, principal/resource references, decision, outcome status, applicable routing references when known, and integer non-null `latency_ms`.
+The system MUST persist one terminal audit event for every governed endpoint attempt, including allow, deny, authentication/validation outcomes covered by the operation, and normalized upstream failures. Each event MUST include the request correlation, principal/resource references, decision, outcome status, applicable routing references when known, and integer non-null `latency_ms`. For an authorization denial, governed audit evidence MUST also retain the exact internal denial cause in a dedicated audit-only attribute, separately from the public `PolicyDecision`.
 
 #### Scenario: Allow is durably represented
 
@@ -20,7 +21,7 @@ The system MUST persist one terminal audit event for every governed endpoint att
 
 - GIVEN a denied request
 - WHEN the operation returns 403
-- THEN one committed event contains deny and status 403, while routing references remain absent or not applicable
+- THEN one committed event contains deny and status 403, the exact internal cause, and no routing references
 
 ### Requirement: Project metadata safely
 
@@ -31,6 +32,7 @@ Audit evidence MUST be metadata-only. It MUST NOT persist or log prompts, model 
 - GIVEN an event containing source identifiers and sensitive request/provider data
 - WHEN the audit projection is created
 - THEN only approved HMAC references and non-sensitive metadata are persisted, and a readback contains none of the sensitive values
+
 
 ### Requirement: Audit acceptance gates release
 
@@ -48,6 +50,7 @@ The operation MUST commit the terminal audit event before releasing a 200, 403, 
 - WHEN its deny event cannot be committed
 - THEN the client receives 503 `audit_unavailable` rather than 403
 
+
 ### Requirement: Preserve request and transaction boundaries
 
 The system MUST measure latency from request entry through terminal decision/normalization, MUST close governance reads before upstream I/O, and MUST perform terminal audit persistence in a short transaction. It MUST NOT hold a database transaction open across the network call.
@@ -64,6 +67,7 @@ The system MUST measure latency from request entry through terminal decision/nor
 - WHEN the provider is in flight
 - THEN no governance read transaction remains open, and the terminal audit transaction begins only after normalization
 
+
 ### Requirement: Verify durability and redaction deterministically
 
 PostgreSQL-backed deterministic tests MUST assert event counts, fields, redaction/HMAC projections, release gating, and latency for allow, deny, and failure paths. A live smoke, when enabled, MUST assert only protected audit dimensions and MUST NOT require raw audit inspection.
@@ -73,3 +77,20 @@ PostgreSQL-backed deterministic tests MUST assert event counts, fields, redactio
 - GIVEN a recording provider and a real test database
 - WHEN allow, deny, and provider-failure cases execute
 - THEN each has exactly one terminal event with the required status, latency, and protected fields
+
+
+### Requirement: Isolate exact denial causes to governed audit
+
+The audit contract and persistence MUST store the bounded causes `principal_inactive`, `resource_missing`, `resource_inactive`, and `grant_not_applicable` only in the dedicated audit denial-cause attribute. They MUST NOT overload, widen, or reinterpret public `PolicyDecision.reason_code`; API responses and ordinary operational logs MUST remain `deny/no_matching_grant/null`.
+
+#### Scenario: Audit readback preserves the exact cause
+
+- GIVEN a denied request with a known precedence winner
+- WHEN governed audit evidence is read back
+- THEN it contains that one cause and the public decision remains `deny/no_matching_grant/null`
+
+#### Scenario: Non-audit projections omit the cause
+
+- GIVEN a denied request with any internal cause
+- WHEN an API response or ordinary operational log is produced
+- THEN it contains no internal cause, grant enumeration, or resource-state distinction

@@ -6,6 +6,7 @@ Define the HT-01 non-streaming text-only response operation for governed princip
 
 ## Requirements
 
+
 ### Requirement: Ordered, correlated request handling
 
 The operation MUST assign one server-controlled `request_id` and process validation, authentication, logical resource lookup, authorization, routing, upstream invocation, normalization, and terminal recording in that order. It MUST NOT accept client-supplied routing or provider identity.
@@ -22,21 +23,28 @@ The operation MUST assign one server-controlled `request_id` and process validat
 - WHEN the operation handles the request
 - THEN it resolves routing only after the grant decision is allow and uses the assigned `request_id` throughout
 
+
 ### Requirement: Authorize before routing and invocation
 
-The operation MUST read only authorization-safe logical resource state before the grant decision. A deny MUST return the uniform 403 `resource_unavailable`, MUST NOT resolve an alias or provider, and MUST NOT make an upstream call.
+The operation MUST obtain authorization-safe Principal, logical-resource, and grant facts through the reusable authorization decision engine before resolving any alias, provider, or routing assignment. A deny MUST return the uniform 403 `resource_unavailable`, MUST NOT resolve an alias or provider, and MUST NOT make an upstream call.
 
 #### Scenario: Restricted principal has no upstream traffic
 
 - GIVEN `restricted-harness` has no applicable `invoke` grant
 - WHEN it submits an otherwise valid request
-- THEN it receives 403 `resource_unavailable`, the upstream call count remains zero, and a deny attempt is recorded
+- THEN the engine returns deny, the operation returns 403 `resource_unavailable`, the upstream call count remains zero, and a deny attempt is recorded
 
 #### Scenario: Missing or inactive resource is indistinguishable
 
 - GIVEN the requested logical resource is missing or unavailable
 - WHEN an authenticated principal submits the request
-- THEN the operation returns the same 403 `resource_unavailable` without routing or upstream traffic
+- THEN the engine returns deny, the operation returns the same 403 `resource_unavailable` without routing or upstream traffic
+
+#### Scenario: Inactive Principal is denied before routing
+
+- GIVEN an authenticated context whose Principal is inactive
+- WHEN it submits an otherwise valid request
+- THEN the engine denies before routing, the operation returns 403 `resource_unavailable`, and no provider or routing data is accessed
 
 ### Requirement: Resolve bounded routing evidence after allow
 
@@ -54,6 +62,7 @@ After allow, the operation MUST resolve the active alias to one concrete model a
 - WHEN the response is normalized
 - THEN the operation returns non-retryable 502 `provider_evidence_invalid` and performs no fallback call
 
+
 ### Requirement: Normalize provider outcomes without hidden retries
 
 The operation MUST make at most one upstream request. It MUST map timeout to 504, temporary transport/availability failure to 503, and unadaptable provider success or error bodies to 502, using only bounded validated retry metadata when exposed.
@@ -63,6 +72,7 @@ The operation MUST make at most one upstream request. It MUST map timeout to 504
 - GIVEN an allowed request and one of the defined provider failure classes
 - WHEN the provider attempt completes
 - THEN the gateway returns the corresponding HT-01 status/error shape and makes no second attempt
+
 
 ### Requirement: Verification is deterministic with optional live smoke
 
@@ -79,3 +89,20 @@ The conformance suite MUST prove allow, ordering, normalized failures, and deny 
 - GIVEN the live-smoke secret is present
 - WHEN one non-streaming request is sent through the complete gateway
 - THEN the test asserts only normalized response and protected metadata, never provider bodies or secrets
+
+
+### Requirement: Preserve one authorization authority for Responses
+
+The Responses consumer MUST pass its authorization facts to the reusable engine and MUST use its `PolicyDecision` unchanged for allow/deny behavior. It MUST NOT infer roles, scopes, or policy from request fields, routing assignments, YAML catalogs, or provider state.
+
+#### Scenario: Allowed request routes only after engine allow
+
+- GIVEN an active Principal, active logical resource, and exact active `invoke` grant
+- WHEN the engine returns allow
+- THEN routing resolves one assignment and only then may one upstream call occur
+
+#### Scenario: Denied request cannot reveal topology
+
+- GIVEN an inactive resource or inapplicable grant
+- WHEN the engine returns deny
+- THEN the response remains uniform 403 and neither alias/provider identity nor upstream data is exposed
