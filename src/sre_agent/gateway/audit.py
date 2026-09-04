@@ -62,15 +62,31 @@ class AuditProjector:
                 "resource_ref": ref("resource", f"{resource_ref[0]}/{resource_ref[1]}"),
             }
         # fmt: off
+        audit_decision = None
+        if decision is not None:
+            if decision.decision == "allow":
+                if decision.policy_id is None:
+                    raise ValueError("control allow requires a grant policy_id")
+                audit_decision = {
+                    "decision": "allow", "reason_code": "grant_matched",
+                    "grant_ref": ref("grant", decision.policy_id),
+                }
+            else:
+                audit_decision = {"decision": "deny", "reason_code": "no_matching_grant"}
+        cause = (
+            authorization_denial_cause
+            if stage == "authorization" and status == 403 and audit_decision is not None
+            and audit_decision["decision"] == "deny"
+            else None
+        )
         return AuditEvent(
             event_id=uuid4(), occurred_at=datetime.now(UTC), operation=operation,
             action=action, stage=stage, outcome="success" if status < 400 else
             ("denied" if status in {403, 404} else "error"), reason_code=reason,
-            authorization_denial_cause=authorization_denial_cause
-            if stage == "authorization" and status == 403 else None,
+            authorization_denial_cause=cause,
             response_status=status, retryable=retryable, latency_ms=latency_ms,
             correlation={"request_id": request_id}, identity=identity,
-            resource=resource, policy_decision=policy,
+            resource=resource, policy_decision=audit_decision,
             redaction={"policy_version": "redaction-1.0.0", "result": "success",
                        "source_class": "none", "categories": [], "match_count": 0,
                        "sink_eligible": False},
