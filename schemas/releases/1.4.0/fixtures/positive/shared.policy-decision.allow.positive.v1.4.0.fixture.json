@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:policy-decision:1.4.0","rule":"valid","status":"positive","version":"1.4.0","group":"policy","data":{"decision":"allow","reason_code":"grant_matched","policy_id":"grant-1"}}

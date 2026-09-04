@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:correlation:1.4.0","rule":"additionalProperties","status":"negative","version":"1.4.0","group":"shared","data":{"request_id":"9d47db9a-5b15-4f9f-a86a-a0ce507c6161","principal_id":"principal-agent-1"}}
