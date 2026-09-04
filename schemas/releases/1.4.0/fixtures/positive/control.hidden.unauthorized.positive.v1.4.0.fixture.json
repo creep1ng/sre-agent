@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:control-http-case:1.4.0","rule":"valid","status":"positive","version":"1.4.0","group":"control","data":{"operation":"principals.get","request":{"method":"GET","path":"/v1/principals/principal-hidden","parameters":[]},"expected":{"status":404,"error_code":"resource_not_found","retryable":false,"mutated":false}}}
