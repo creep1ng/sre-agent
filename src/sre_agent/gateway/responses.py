@@ -1,11 +1,13 @@
 # ruff: noqa: E501, I001
 
 from time import monotonic
-from typing import Annotated, Any, Protocol
-from uuid import uuid4
+from typing import Annotated, Any, Literal, Protocol
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Body, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sre_agent.gateway.audit import AuditProjector
@@ -17,12 +19,128 @@ from sre_agent.persistence.repositories import AuditRepository, CredentialReposi
 
 
 class ResponsesRequest(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "model": "triage-agent",
+                    "input": "Summarize the current incident status.",
+                    "incident_id": "inc_example",
+                }
+            ]
+        },
+    )
     model: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")]
     input: Annotated[str, Field(min_length=1, max_length=65_536)]
-    incident_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] | None = None
-    run_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] | None = None
-    task_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] | None = None
+    incident_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] = None  # type: ignore[assignment]
+    run_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] = None  # type: ignore[assignment]
+    task_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] = None  # type: ignore[assignment]
+
+
+class ResponseContent(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["output_text"]
+    text: Annotated[str, Field(min_length=1, max_length=65_536)]
+
+
+class ResponseOutput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["message"]
+    role: Literal["assistant"]
+    content: Annotated[list[ResponseContent], Field(min_length=1)]
+
+
+class ResponseMetadata(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    requested_model_alias: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")]
+    router: Annotated[str, Field(min_length=1, max_length=100)]
+    inference_provider: Annotated[str, Field(min_length=1, max_length=100)]
+
+
+class ResponsesResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "id": "resp_example01",
+                    "object": "response",
+                    "status": "completed",
+                    "model": "openai/gpt-4o-mini",
+                    "output": [
+                        {
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "No active incidents."}],
+                        }
+                    ],
+                    "request_id": "00000000-0000-4000-8000-000000000001",
+                    "metadata": {
+                        "requested_model_alias": "triage-agent",
+                        "router": "openrouter",
+                        "inference_provider": "openai",
+                    },
+                }
+            ]
+        },
+    )
+    id: Annotated[str, Field(pattern=r"^resp_[A-Za-z0-9_-]{8,}$")]
+    object: Literal["response"]
+    status: Literal["completed"]
+    model: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$")]
+    output: Annotated[list[ResponseOutput], Field(min_length=1)]
+    request_id: UUID
+    metadata: ResponseMetadata
+
+
+class ErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    field: Annotated[str, Field(min_length=1, max_length=100)]
+    message: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=200,
+            json_schema_extra={"pattern": r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"},
+        ),
+    ]
+
+
+class ErrorBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")]
+    message: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=300,
+            json_schema_extra={"pattern": r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"},
+        ),
+    ]
+    details: Annotated[list[ErrorDetail], Field(max_length=16)] = None  # type: ignore[assignment]
+
+
+class ErrorEnvelope(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "error": {
+                        "code": "contract_validation_failed",
+                        "message": "Request validation failed.",
+                    },
+                    "request_id": "00000000-0000-4000-8000-000000000001",
+                    "retryable": False,
+                }
+            ]
+        },
+    )
+    error: ErrorBody
+    request_id: UUID
+    retryable: bool
 
 
 class AuditStore(Protocol):
@@ -124,14 +242,79 @@ class ResponsesService:  # noqa: E305
 
 
 def responses_router(service: ResponsesService) -> APIRouter:
-    router = APIRouter()
+    class ResponsesRoute(APIRoute):
+        def get_route_handler(self):
+            route_handler = super().get_route_handler()
 
-    @router.post("/v1/responses")
-    async def create(request: Request) -> JSONResponse:
-        try:
-            body = await request.json()
-        except ValueError:
-            body = None
+            async def validation_preserving_handler(request: Request):
+                try:
+                    return await route_handler(request)
+                except RequestValidationError:
+                    return await service.create(None, request.headers.get("authorization"))
+
+            return validation_preserving_handler
+
+    router = APIRouter(route_class=ResponsesRoute)
+
+    def documented_error(status: int, description: str, *, headers=None):
+        code, message = ERRORS[status]
+        example = {
+            "error": {"code": code, "message": message},
+            "request_id": "00000000-0000-4000-8000-000000000001",
+            "retryable": status in {503, 504},
+        }
+        response = {
+            "model": ErrorEnvelope,
+            "description": description,
+            "content": {"application/json": {"example": example}},
+        }
+        if headers:
+            response["headers"] = headers
+        return response
+
+    error_responses = {
+        401: documented_error(
+            401,
+            "Authentication failed.",
+            headers={"WWW-Authenticate": {"schema": {"type": "string", "const": "Bearer"}}},
+        ),
+        403: documented_error(
+            403, "The requested model alias is unavailable without enumeration."
+        ),
+        422: documented_error(422, "Contract validation failed before authentication."),
+        502: documented_error(502, "Upstream output could not be safely adapted."),
+        503: documented_error(
+            503,
+            "Routing, audit, or the upstream provider is temporarily unavailable.",
+            headers={"Retry-After": {"schema": {"type": "string"}}},
+        ),
+        504: documented_error(
+            504,
+            "The upstream provider timed out.",
+            headers={"Retry-After": {"schema": {"type": "string"}}},
+        ),
+    }
+
+    @router.post(
+        "/v1/responses",
+        response_model=ResponsesResponse,
+        responses=error_responses,
+        summary="Create a completed textual response",
+        operation_id="createResponse",
+        description=(
+            "Validation precedes authentication and alias authorization; routing occurs only after "
+            "authorization."
+        ),
+        response_description="Completed textual response",
+        tags=["Responses"],
+    )
+    async def create(
+        request: Request,
+        body: Annotated[
+            ResponsesRequest,
+            Body(description="Bounded textual, non-streaming response request."),
+        ],
+    ) -> JSONResponse:
         return await service.create(body, request.headers.get("authorization"))
 
     return router
