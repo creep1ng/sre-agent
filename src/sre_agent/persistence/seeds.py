@@ -110,6 +110,14 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
     existing = (
         principals + credentials + ([resource] if resource else []) + ([grant] if grant else [])
     )
+    if existing and (len(admin_resources), len(admin_grants)) != (
+        len(ADMIN_RESOURCES),
+        len(ADMIN_GRANTS),
+    ):
+        # Explicit conflict (owner decision #147): databases seeded before #147 have
+        # no test data in any environment and must reseed rather than partially
+        # upgrade. Additive upgrade is out of scope for this slice.
+        raise SeedConflict("seed_state_conflict: pre_control_plane_seed_requires_reseed")
     if not existing:
         # Compact construction keeps this atomic work unit within its review budget.
         # fmt: off
