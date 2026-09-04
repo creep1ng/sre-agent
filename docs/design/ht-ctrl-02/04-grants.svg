@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" fill="none" role="img" aria-labelledby="04-grants-v3-1-title 04-grants-v3-1-desc" data-ma-theme="light">
-<title id="04-grants-v3-1-title">Control Plane — Grants</title><desc id="04-grants-v3-1-desc">Low- and medium-fidelity grant-management screen showing list, form, and denial states alongside an orange annotation column.</desc><style type="text/css">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" fill="none" role="img" aria-labelledby="04-grants-title 04-grants-desc" data-ma-theme="light">
+<title id="04-grants-title">Control Plane — Grants</title><desc id="04-grants-desc">Low- and medium-fidelity grant-management screen showing list, form, and denial states alongside an orange annotation column.</desc><style type="text/css">
 /* Resolved from styles/tokens.css light theme; semantic names retained as SVG classes. */
 .ma-fill-bg-canvas { fill: #FAFAFF; } /* --ma-color-bg-canvas */
 .ma-fill-bg-subtle { fill: #F6F3FF; } /* --ma-color-bg-subtle */
