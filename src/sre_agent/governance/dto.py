@@ -6,7 +6,15 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
-ResourceType = Literal["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"]
+ResourceType = Literal[
+    "llm_model",
+    "mcp_server",
+    "mcp_tool",
+    "skill",
+    "bok_collection",
+    "administrative_control",
+]
+ControlAction = Literal["admin.read", "admin.write"]
 AuditRefValue = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ReasonCode = Literal[
     "audit_unavailable",
@@ -240,8 +248,25 @@ class AuditEvent(StrictDTO):
         "audit.redact",
         "credentials.authenticate",
         "responses.create",
+        "principals.create",
+        "principals.get",
+        "principals.list",
+        "principals.status.replace",
+        "credentials.issue",
+        "credentials.list",
+        "credentials.revoke",
+        "credentials.rotate",
     ]
-    action: Literal["authenticate", "export", "invoke", "persist", "read_metadata", "redact"]
+    action: Literal[
+        "authenticate",
+        "export",
+        "invoke",
+        "persist",
+        "read_metadata",
+        "redact",
+        "admin.read",
+        "admin.write",
+    ]
     stage: Literal[
         "validation",
         "authentication",

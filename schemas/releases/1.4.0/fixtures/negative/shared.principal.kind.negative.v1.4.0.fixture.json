@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:principal:1.4.0","rule":"enum","status":"negative","version":"1.4.0","group":"identity","data":{"principal_id":"principal-service-1","kind":"service","display_name":"Service Identity","status":"active","created_at":"2026-08-17T12:00:00Z","updated_at":"2026-08-17T12:00:00Z"}}
