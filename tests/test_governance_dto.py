@@ -61,6 +61,8 @@ def test_positive_ht01_fixtures_round_trip(path: Path) -> None:
         not in {
             "audit.authorization-denial-cause-missing.negative.v1.3.0.fixture.json",
             "audit.authorization-denial-cause-null.negative.v1.3.0.fixture.json",
+            "audit.authorization-denial-cause-missing.negative.v1.4.0.fixture.json",
+            "audit.authorization-denial-cause-null.negative.v1.4.0.fixture.json",
         }
     ),
     ids=lambda path: path.name,
