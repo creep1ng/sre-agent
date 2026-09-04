@@ -118,7 +118,7 @@ class IdempotencyRecordRow(Base):
     scope = mapped_column(String(320), primary_key=True)
     key_digest = mapped_column(String(64), primary_key=True)
     payload_sha256 = required(String(64))
-    principal_id = required(String(64), ForeignKey("principals.principal_id"))
+    principal_id = required(String(64))
     method = required(String(16))
     canonical_path = required(String(200))
     binding = required(String(32))
