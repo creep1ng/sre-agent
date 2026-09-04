@@ -1,0 +1,32 @@
+contract_version: 1.3.0
+obligations:
+  - id: issue-10.fixture-transport
+    owner: infrastructure
+    fixture: fixtures/positive/control.bootstrap.first.positive.v1.3.0.fixture.json
+    action: fixtures-transport
+    command: npm --prefix schemas/tooling run conformance -- --consumer issue-10
+  - id: issue-11.schema-persistence
+    owner: persistence
+    fixture: fixtures/positive/shared.principal.human.positive.v1.3.0.fixture.json
+    action: schema-persistence
+    command: npm --prefix schemas/tooling run conformance -- --consumer issue-11
+  - id: issue-13.bearer-context-401
+    owner: authentication
+    fixture: fixtures/positive/responses.boundary.credentials.positive.v1.3.0.fixture.json
+    action: bearer-context
+    command: npm --prefix schemas/tooling run conformance -- --consumer issue-13
+  - id: issue-14.ordered-response-flow
+    owner: gateway
+    fixture: fixtures/positive/audit.responses.allowed.positive.v1.3.0.fixture.json
+    action: ordered-responses
+    command: npm --prefix schemas/tooling run conformance -- --consumer issue-14
+  - id: harness.execution-contract
+    owner: harness
+    fixture: fixtures/positive/future-fastapi.match.projection.json
+    action: execution-openapi
+    command: npm --prefix schemas/tooling run conformance -- --consumer harness
+  - id: ui.control-contract
+    owner: ui
+    fixture: examples/control/credential-issuance-first.example.json
+    action: control-openapi
+    command: npm --prefix schemas/tooling run conformance -- --consumer ui

@@ -1,0 +1,39 @@
+contract_version: 1.3.0
+authorities:
+  git:
+    label: Git
+    required:
+      - openapi
+      - schemas
+      - adrs
+      - examples
+      - fixtures
+      - seeds
+      - conformance
+    prohibited:
+      - raw_keys
+      - authorization
+      - runtime_records
+  db:
+    label: Database
+    required:
+      - principals
+      - credential_records
+      - model_aliases
+      - grants
+      - audit_events
+      - idempotency_records
+    prohibited:
+      - raw_keys
+      - upstream_secrets
+      - contract_definitions
+  secret_store:
+    label: Secret store or environment
+    required:
+      - provider_secrets
+      - deployment_secrets
+    prohibited:
+      - policy
+      - grants
+      - schemas
+      - audit_content

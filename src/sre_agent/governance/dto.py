@@ -21,6 +21,12 @@ ReasonCode = Literal[
     "upstream_invalid",
     "upstream_unavailable",
 ]
+AuthorizationDenialCause = Literal[
+    "principal_inactive",
+    "resource_missing",
+    "resource_inactive",
+    "grant_not_applicable",
+]
 
 
 class StrictDTO(BaseModel):
@@ -247,6 +253,7 @@ class AuditEvent(StrictDTO):
     ]
     outcome: Literal["success", "denied", "error"]
     reason_code: ReasonCode | None
+    authorization_denial_cause: AuthorizationDenialCause | None = None
     response_status: Annotated[int, Field(ge=100, le=599)]
     retryable: bool
     latency_ms: Annotated[int, Field(ge=0, le=2_147_483_647)] | None = None
@@ -292,4 +299,12 @@ class AuditEvent(StrictDTO):
             self.reason_code != "audit_unavailable" or self.ordinary_result != "suppressed"
         ):
             raise ValueError("rejected audit events must fail closed")
+        if self.authorization_denial_cause is not None and (
+            self.stage != "authorization"
+            or self.outcome != "denied"
+            or self.reason_code != "no_matching_grant"
+            or self.response_status != 403
+            or not isinstance(self.policy_decision, DenyDecisionEvidence)
+        ):
+            raise ValueError("authorization denial cause requires an authorization deny")
         return self

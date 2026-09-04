@@ -8,12 +8,12 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sre_agent.governance.authorization import ResourceAuthorizationFact
 from sre_agent.governance.dto import (
     AuditEvent,
     CredentialReference,
     Grant,
     ModelAlias,
-    PolicyDecision,
     Principal,
     PrincipalContext,
     Resource,
@@ -104,6 +104,15 @@ class CredentialRepository:
     async def authenticate(
         self, key: str, *, now: datetime | None = None
     ) -> PrincipalContext | None:
+        context = await self.resolve_authorization_context(key, now=now)
+        if context is None or context.principal.status != "active":
+            return None
+        return context
+
+    async def resolve_authorization_context(
+        self, key: str, *, now: datetime | None = None
+    ) -> PrincipalContext | None:
+        """Resolve a valid credential while preserving Principal status for authorization."""
         authenticated_at = now or datetime.now(UTC)
         matches = await self._session.execute(
             select(CredentialRow, PrincipalRow)
@@ -113,7 +122,6 @@ class CredentialRepository:
         for credential, principal in matches:
             if (
                 credential.status == "active"
-                and principal.status == "active"
                 and (credential.expires_at is None or credential.expires_at > authenticated_at)
                 and verify_api_key(key, credential.key_hash)
             ):
@@ -146,7 +154,7 @@ class ResourceRepository:
 
     async def authorization_view(
         self, resource_type: str, resource_id: str
-    ) -> "ResourceAuthorizationView | None":
+    ) -> ResourceAuthorizationFact | None:
         row = (
             await self._session.execute(
                 select(
@@ -161,7 +169,7 @@ class ResourceRepository:
         ).one_or_none()
         if row is None:
             return None
-        return ResourceAuthorizationView(*row)
+        return ResourceAuthorizationFact(*row)
 
     async def get(self, resource_type: str, resource_id: str) -> Resource | None:
         view = await self.authorization_view(resource_type, resource_id)
@@ -186,13 +194,6 @@ class ResourceRepository:
             )
         ).one_or_none()
         return project_model_alias(row._mapping) if row is not None else None
-
-
-@dataclass(frozen=True, slots=True)
-class ResourceAuthorizationView:
-    resource_type: str
-    resource_id: str
-    status: str
 
 
 class GrantRepository:
@@ -227,16 +228,6 @@ class GrantRepository:
                 "status": row.status,
                 "created_at": row.created_at,
             }
-        )
-
-    async def decide(
-        self, principal_id: str, action: str, resource_type: str, resource_id: str
-    ) -> PolicyDecision:
-        grant = await self.find_active(principal_id, action, resource_type, resource_id)
-        if grant is None:
-            return PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None)
-        return PolicyDecision(
-            decision="allow", reason_code="grant_matched", policy_id=grant.grant_id
         )
 
 

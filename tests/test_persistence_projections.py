@@ -72,3 +72,18 @@ def test_audit_projection_preserves_zero_latency() -> None:
     projected = projections.project_audit_event(data)
 
     assert projected.latency_ms == 0
+
+
+def test_audit_projection_preserves_the_authorization_denial_cause() -> None:
+    data = json.loads(
+        (
+            ROOT / "schemas/releases/1.2.0/fixtures/positive/"
+            "audit.responses.denied.positive.v1.2.0.fixture.json"
+        ).read_text()
+    )["data"]
+    data["authorization_denial_cause"] = "resource_inactive"
+
+    projected = projections.project_audit_event(data)
+
+    assert projected.authorization_denial_cause == "resource_inactive"
+    assert projected.policy_decision.reason_code == "no_matching_grant"

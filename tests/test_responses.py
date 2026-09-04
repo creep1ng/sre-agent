@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sre_agent.application import create_application
 from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.repositories import GrantRepository, ResourceRepository
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
 
@@ -115,15 +116,110 @@ def test_validation_and_authentication_fail_before_upstream(
     assert event[:2] == (stage, status) and provider.requests == []
 
 
-@pytest.mark.parametrize("model", ["triage-agent", "missing-agent"])
-def test_deny_and_missing_resources_are_indistinguishable_without_routing(model: str) -> None:
+@pytest.mark.parametrize(
+    ("model", "principal", "cause"),
+    [
+        ("triage-agent", "restricted-harness", "grant_not_applicable"),
+        ("missing-agent", "incident-harness", "resource_missing"),
+    ],
+)
+def test_deny_and_missing_resources_are_indistinguishable_without_routing(
+    model: str, principal: str, cause: str
+) -> None:
     provider = RecordingProvider()
-    principal = "restricted-harness" if model == "triage-agent" else "incident-harness"
     response = post(provider, principal, BODY | {"model": model})
     event = latest_events()[0]
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "resource_unavailable"
     assert event[0:2] == ("authorization", 403) and event[4] is None and not provider.requests
+    assert event[7]["authorization_denial_cause"] == cause
+    assert "authorization_denial_cause" not in response.text
+
+
+def test_denial_never_resolves_an_assignment(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def unexpected_assignment(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("assignment resolution must follow authorization allow")
+
+    monkeypatch.setattr(ResourceRepository, "resolve_assignment", unexpected_assignment)
+    response = post(RecordingProvider(), "restricted-harness")
+
+    assert response.status_code == 403
+
+
+def test_inactive_principal_reaches_the_engine_before_all_authorization_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"resource": 0, "grant": 0, "routing": 0}
+
+    async def resource_read(*_args: object, **_kwargs: object) -> None:
+        calls["resource"] += 1
+
+    async def grant_read(*_args: object, **_kwargs: object) -> None:
+        calls["grant"] += 1
+
+    async def routing_read(*_args: object, **_kwargs: object) -> None:
+        calls["routing"] += 1
+
+    monkeypatch.setattr(ResourceRepository, "authorization_view", resource_read)
+    monkeypatch.setattr(GrantRepository, "find_active", grant_read)
+    monkeypatch.setattr(ResourceRepository, "resolve_assignment", routing_read)
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE principals SET status = 'inactive' WHERE principal_id = 'incident-harness'"
+        )
+    try:
+        provider = RecordingProvider()
+        response = post(provider, "incident-harness")
+        event = latest_events()[0]
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+            connection.execute(
+                "UPDATE principals SET status = 'active' WHERE principal_id = 'incident-harness'"
+            )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "resource_unavailable"
+    assert event[0:2] == ("authorization", 403)
+    assert event[7]["authorization_denial_cause"] == "principal_inactive"
+    assert calls == {"resource": 0, "grant": 0, "routing": 0}
+    assert provider.requests == []
+
+
+def test_inactive_resource_stops_before_grant_and_routing_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"grant": 0, "routing": 0}
+
+    async def grant_read(*_args: object, **_kwargs: object) -> None:
+        calls["grant"] += 1
+
+    async def routing_read(*_args: object, **_kwargs: object) -> None:
+        calls["routing"] += 1
+
+    monkeypatch.setattr(GrantRepository, "find_active", grant_read)
+    monkeypatch.setattr(ResourceRepository, "resolve_assignment", routing_read)
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE resources SET status = 'inactive' "
+            "WHERE resource_type = 'llm_model' AND resource_id = 'triage-agent'"
+        )
+    try:
+        provider = RecordingProvider()
+        response = post(provider, "incident-harness")
+        event = latest_events()[0]
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+            connection.execute(
+                "UPDATE resources SET status = 'active' "
+                "WHERE resource_type = 'llm_model' AND resource_id = 'triage-agent'"
+            )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "resource_unavailable"
+    assert event[0:2] == ("authorization", 403)
+    assert event[7]["authorization_denial_cause"] == "resource_inactive"
+    assert calls == {"grant": 0, "routing": 0}
+    assert provider.requests == []
 
 
 def test_allow_calls_once_outside_transactions_and_commits_protected_readback() -> None:

@@ -15,7 +15,7 @@ def postgres_readiness_probe(database_url: str) -> ReadinessProbe:
             async with connection.cursor() as cursor:
                 await cursor.execute("SELECT version_num FROM alembic_version")
                 row = await cursor.fetchone()
-                if row != ("20260825_02",):
+                if row != ("20260901_03",):
                     raise RuntimeError("PostgreSQL schema prerequisite is unavailable")
 
     return probe

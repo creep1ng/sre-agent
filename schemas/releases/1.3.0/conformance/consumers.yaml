@@ -1,0 +1,9 @@
+contract_version: 1.3.0
+consumers:
+  - { id: issue-10, owner: infrastructure, obligations: [issue-10.fixture-transport], internal_models_are_authority: false }
+  - { id: issue-11, owner: persistence, obligations: [issue-11.schema-persistence], internal_models_are_authority: false }
+  - { id: issue-13, owner: authentication, obligations: [issue-13.bearer-context-401], internal_models_are_authority: false }
+  - { id: issue-14, owner: gateway, obligations: [issue-14.ordered-response-flow], internal_models_are_authority: false }
+  - { id: harness, owner: harness, obligations: [harness.execution-contract], internal_models_are_authority: false }
+  - { id: ui, owner: ui, obligations: [ui.control-contract], internal_models_are_authority: false }
+prohibited_authorities: [framework_dto, orm_model, database_model, provider_sdk_type]

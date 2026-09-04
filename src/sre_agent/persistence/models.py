@@ -127,6 +127,13 @@ class AuditEventRow(Base):
             "'upstream_unavailable')",
             name="ck_audit_events_reason_code",
         ),
+        CK(
+            "authorization_denial_cause IS NULL OR (authorization_denial_cause IN "
+            "('principal_inactive','resource_missing','resource_inactive','grant_not_applicable') "
+            "AND stage='authorization' AND outcome='denied' "
+            "AND reason_code='no_matching_grant' AND response_status=403)",
+            name="ck_audit_events_authorization_denial_cause",
+        ),
         CK("response_status BETWEEN 100 AND 599", name="ck_audit_events_response"),
         CK("latency_ms >= 0", name="ck_audit_events_latency"),
         CK(
@@ -149,6 +156,7 @@ class AuditEventRow(Base):
     stage = required(String(32))
     outcome = required(String(16))
     reason_code = mapped_column(String(64), nullable=True)
+    authorization_denial_cause = mapped_column(String(32), nullable=True)
     response_status = required(Integer)
     retryable = required(Boolean)
     latency_ms = required(Integer)

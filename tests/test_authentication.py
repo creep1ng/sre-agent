@@ -161,6 +161,39 @@ def test_all_authentication_failures_are_uniform_and_stop_before_resources_or_up
 
 
 @pytest.mark.asyncio
+async def test_responses_authorization_context_preserves_an_inactive_principal(
+    authentication_database: Database,
+) -> None:
+    async with authentication_database.transaction() as session:
+        repository = CredentialRepository(session)
+        context = await repository.resolve_authorization_context(KEYS["inactive-agent"], now=NOW)
+        generic_context = await repository.authenticate(KEYS["inactive-agent"], now=NOW)
+
+    assert context is not None
+    assert context.principal.principal_id == "inactive-agent"
+    assert context.principal.status == "inactive"
+    assert generic_context is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key",
+    [
+        KEYS["revoked-agent"],
+        KEYS["expired-agent"],
+        "sre_nact_0123456789abcdefghijklmnoq",
+    ],
+)
+async def test_responses_authorization_context_rejects_invalid_credentials(
+    authentication_database: Database, key: str
+) -> None:
+    async with authentication_database.transaction() as session:
+        context = await CredentialRepository(session).resolve_authorization_context(key, now=NOW)
+
+    assert context is None
+
+
+@pytest.mark.asyncio
 async def test_revocation_is_idempotent_and_immediately_prevents_authentication(
     authentication_database: Database,
 ) -> None:
