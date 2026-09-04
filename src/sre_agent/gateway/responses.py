@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
-from sre_agent.governance.dto import AuditEvent, PolicyDecision
+from sre_agent.governance.authorization import AuthorizationDecisionEngine
+from sre_agent.governance.dto import AuditEvent
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import AuditRepository, CredentialRepository, GrantRepository, ResourceRepository  # fmt: skip
 
@@ -62,13 +63,14 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, 401, "authentication",
                                       reason="authentication_failed", identifiers=identifiers)
         async with self.sessions() as session:
-            resource = await ResourceRepository(session).authorization_view("llm_model", request.model)
-            decision = await GrantRepository(session).decide(
-                context.principal.principal_id, "invoke", "llm_model", request.model)
-        if resource is None or resource.status != "active" or decision.decision == "deny":
-            deny = PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None)
+            evaluation = await AuthorizationDecisionEngine(
+                ResourceRepository(session), GrantRepository(session)
+            ).evaluate(context.principal, "invoke", "llm_model", request.model)
+        decision = evaluation.decision
+        if decision.decision == "deny":
             return await self._finish(request_id, started, 403, "authorization", context=context,
-                                      alias=request.model, decision=deny, reason="no_matching_grant",
+                                      alias=request.model, decision=decision, reason="no_matching_grant",
+                                      authorization_denial_cause=evaluation.denial_cause,
                                       identifiers=identifiers)
         async with self.sessions() as session:
             assignment = await ResourceRepository(session).resolve_assignment("llm_model", request.model)

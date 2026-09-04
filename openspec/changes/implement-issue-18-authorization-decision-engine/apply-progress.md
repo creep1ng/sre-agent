@@ -6,9 +6,13 @@
 - [x] 1.2 Audit/DTO/projection/migration RED tests
 - [x] 2.3 Audit-only cause DTO, model, projection, gateway plumbing, and migration
 - [x] 2.4 Immutable 1.3.0 audit contract, fixtures, compatibility, evidence, and manifest
+- [x] 1.3 Responses integration RED tests
+- [x] 2.2 Repository fact ports and decision-authority removal
+- [x] 3.1 Responses engine integration and audit-only cause projection
+- [x] 4.1 Final routing, append, release, and harness verification
 
 ## Deferred
-- [ ] 2.2 is not implemented in PR 2 or PR 3. PR 4 will add persistence fact ports and remove/narrow `GrantRepository.decide()` after `ResponsesService` migrates.
+- [x] 2.2 completed in PR 4 after `ResponsesService` migrated to the engine.
 
 ## TDD Cycle Evidence
 | Task | Safety Net | RED | GREEN | TRIANGULATE | REFACTOR |
@@ -17,6 +21,8 @@
 | 1.2 | `TEST_DATABASE_URL=postgresql://sre_agent:local-development-only@127.0.0.1:49564/sre_agent uv run pytest tests/test_governance_dto.py tests/test_audit.py tests/test_persistence_projections.py tests/test_migrations.py -q`: 247 passed | Same command after test-first changes: 8 failed, 250 passed (missing DTO field, projector parameter, 1.3 fixture, and migration column/constraint) | Same command: 338 passed | Four closed causes, invalid value, non-deny/stage misuse, legacy null, valid constrained row, invalid row, and 1.3 fixture | Reformatted changed tests; focused suite remained 338 passed |
 | 2.3 | Same 247-pass baseline | Migration triangulation test: 1 failed (`authorization_denial_cause` metadata absent) | Focused migration suite: 6 passed; focused complete suite: 338 passed | Valid authorization deny round-trip and invalid routing-stage row prove the database constraint | Rolled back the test-only insert transaction to preserve later append-only count tests |
 | 2.4 | Contract release did not exist | Focused RED included missing `schemas/releases/1.3.0/...audit.responses.denied...` fixture | `node schemas/tooling/release.mjs evidence --release 1.3.0` and `validate --release 1.3.0`: 143 artifacts, 8 checks | Positive audit fixture has `grant_not_applicable`; negative fixture rejects an unclosed cause; 1.2 positive fixtures validate through additive compatibility | Restored existing compact JSON-schema layout after a formatting-only expansion; regenerated immutable evidence and manifest |
+| 1.3/2.2/3.1 | `TEST_DATABASE_URL=postgresql://sre_agent:local-development-only@127.0.0.1:49564/sre_agent uv run pytest tests/test_responses.py tests/test_persistence_repositories.py -q`: 16 passed | Same command: 4 failed (missing exact audit causes, repository fact type, and `GrantRepository.decide()` removal) | Same command: 16 passed | Grant-not-applicable and resource-missing preserve uniform 403/API secrecy while retaining separate audit causes; assignment resolution spy raises on deny | Replaced the repository-specific view with the engine fact type and removed the duplicate decision authority; focused Responses/repository/engine suite: 33 passed |
+| 4.1 | Focused GREEN: 33 passed | N/A: verification/refactor task | Full isolated suite: 426 passed, 1 skipped | Issue-14 harness covers 12 Responses cases, including denied provider/assignment isolation | Ruff check/format passed; no application-root change was needed because the engine is composed with per-request SQLAlchemy fact readers inside `ResponsesService` |
 
 ## Work Unit Evidence
 | Evidence | Result |
@@ -26,6 +32,10 @@
 | Immutable release | `node schemas/tooling/release.mjs evidence --release 1.3.0` and `node schemas/tooling/release.mjs validate --release 1.3.0` exit 0: 143 artifacts and 8 checks; `npm --prefix schemas/tooling test` exit 0. |
 | Runtime harness | `scripts/worktree-compose --profile checks run --build --rm python-checks sh -c 'shellcheck docker/harness-entrypoint.sh scripts/worktree-compose && ruff check --no-cache src/sre_agent/governance/dto.py src/sre_agent/persistence/models.py src/sre_agent/gateway/audit.py migrations/versions/20260901_03_add_authorization_denial_cause.py tests/test_governance_dto.py tests/test_audit.py tests/test_persistence_projections.py tests/test_migrations.py && ruff format --check --no-cache src/sre_agent/governance/dto.py src/sre_agent/persistence/models.py src/sre_agent/gateway/audit.py migrations/versions/20260901_03_add_authorization_denial_cause.py tests/test_governance_dto.py tests/test_audit.py tests/test_persistence_projections.py tests/test_migrations.py && uv lock --check --no-cache && pytest tests/test_governance_dto.py tests/test_audit.py tests/test_persistence_projections.py tests/test_migrations.py -q && alembic check'` exit 0: shellcheck, Ruff, formatting, and lock checks passed; 339 passed in 0.57s; `No new upgrade operations detected.` The unmodified default command remains known to fail 8 unrelated `test_security_catalogs.py` tests because `docker/api.Dockerfile` does not copy `docs/security/**`. |
 | Rollback boundary | Revert audit DTO/model/projector changes, `20260901_03_add_authorization_denial_cause.py`, the complete immutable `schemas/releases/1.3.0/**` release, release-tooling version maps/tests, audit tests, `tasks.md`, and this progress file. Leave PR 2 engine code and deferred PR 4 Responses/repository work intact. |
+| PR4 focused tests | `TEST_DATABASE_URL=postgresql://sre_agent:local-development-only@127.0.0.1:49564/sre_agent uv run pytest tests/test_responses.py tests/test_persistence_repositories.py tests/test_authorization.py -q` exit 0: 33 passed in 1.15s. |
+| PR4 runtime harness | `scripts/worktree-compose --profile issue-14 run --rm issue-14-harness` exit 0: 12 passed, 1 warning; deny assignment spy and provider recording prove zero routing/provider access. |
+| PR4 release and suite | `node schemas/tooling/release.mjs validate --release 1.3.0` exit 0: 145 artifacts, 8 checks; `npm --prefix schemas/tooling test` exit 0: 71 passed; `TEST_DATABASE_URL=postgresql://sre_agent:local-development-only@127.0.0.1:49564/sre_agent uv run pytest -q` exit 0: 426 passed, 1 skipped. |
+| PR4 rollback boundary | Revert engine use in `gateway/responses.py`, fact-only `persistence/repositories.py`, and PR4 tests/docs; restore the former repository decision only with the old Responses composition. |
 
 ## Scope and Size Exception
 

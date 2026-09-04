@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sre_agent.application import create_application
 from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.repositories import ResourceRepository
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
 
@@ -115,15 +116,34 @@ def test_validation_and_authentication_fail_before_upstream(
     assert event[:2] == (stage, status) and provider.requests == []
 
 
-@pytest.mark.parametrize("model", ["triage-agent", "missing-agent"])
-def test_deny_and_missing_resources_are_indistinguishable_without_routing(model: str) -> None:
+@pytest.mark.parametrize(
+    ("model", "principal", "cause"),
+    [
+        ("triage-agent", "restricted-harness", "grant_not_applicable"),
+        ("missing-agent", "incident-harness", "resource_missing"),
+    ],
+)
+def test_deny_and_missing_resources_are_indistinguishable_without_routing(
+    model: str, principal: str, cause: str
+) -> None:
     provider = RecordingProvider()
-    principal = "restricted-harness" if model == "triage-agent" else "incident-harness"
     response = post(provider, principal, BODY | {"model": model})
     event = latest_events()[0]
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "resource_unavailable"
     assert event[0:2] == ("authorization", 403) and event[4] is None and not provider.requests
+    assert event[7]["authorization_denial_cause"] == cause
+    assert "authorization_denial_cause" not in response.text
+
+
+def test_denial_never_resolves_an_assignment(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def unexpected_assignment(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("assignment resolution must follow authorization allow")
+
+    monkeypatch.setattr(ResourceRepository, "resolve_assignment", unexpected_assignment)
+    response = post(RecordingProvider(), "restricted-harness")
+
+    assert response.status_code == 403
 
 
 def test_allow_calls_once_outside_transactions_and_commits_protected_readback() -> None:

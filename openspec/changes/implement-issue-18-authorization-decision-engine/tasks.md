@@ -28,19 +28,19 @@ Chain strategy: stacked-to-main
 
 - [x] 1.1 Add failing `tests/test_authorization.py` table tests for human/agent parity, every `ResourceType`, exact active allow, revoked/mismatched deny, inactive-principal/resource precedence, short-circuit reader calls, and rejection of role/name/model/YAML inputs.
 - [x] 1.2 Add failing audit/DTO/projection/migration tests in `tests/test_governance_dto.py`, `tests/test_audit.py`, `tests/test_persistence_projections.py`, and `tests/test_migrations.py` for nullable historical causes, closed values, stage/decision consistency, invalid-row checks, and 1.3 readback.
-- [ ] 1.3 Add failing `tests/test_responses.py` spies for authorization-before-routing, zero assignment/provider access on every deny, uniform 403/non-enumeration, ordinary-log/API cause absence, and exact audit cause population.
+- [x] 1.3 Add failing `tests/test_responses.py` spies for authorization-before-routing, zero assignment/provider access on every deny, uniform 403/non-enumeration, ordinary-log/API cause absence, and exact audit cause population.
 
 ## Phase 2: GREEN — Authority and Persistence
 
 - [x] 2.1 Create `src/sre_agent/governance/authorization.py` with typed fact-reader protocols, `ResourceAuthorizationFact`, closed denial taxonomy, frozen `AuthorizationEvaluation`, precedence, and sole `PolicyDecision` construction.
-- [ ] 2.2 PR 4: update `src/sre_agent/persistence/repositories.py` to expose authorization facts, retain exact `find_active()`, and remove/narrow `GrantRepository.decide()` after Responses migrates to the engine.
+- [x] 2.2 PR 4: update `src/sre_agent/persistence/repositories.py` to expose authorization facts, retain exact `find_active()`, and remove/narrow `GrantRepository.decide()` after Responses migrates to the engine.
 - [x] 2.3 Update `src/sre_agent/governance/dto.py`, `src/sre_agent/persistence/models.py`, `src/sre_agent/persistence/projections.py`, `src/sre_agent/gateway/audit.py`, and `migrations/versions/20260901_03_add_authorization_denial_cause.py`; add nullable `varchar(32)` plus closed check constraint and legacy-compatible readback.
 - [x] 2.4 Add immutable `schemas/releases/1.3.0/**` audit contract, fixtures, compatibility/evidence/manifest, leaving public `PolicyDecision` and API deny envelopes unchanged.
 
 ## Phase 3: GREEN — Responses Integration
 
-- [ ] 3.1 Wire `src/sre_agent/gateway/responses.py` and `src/sre_agent/application.py` to evaluate once before assignment/provider access; pass only the public decision outside audit and project the internal cause only for authorization denies.
+- [x] 3.1 Wire `src/sre_agent/gateway/responses.py` and `src/sre_agent/application.py` to evaluate once before assignment/provider access; pass only the public decision outside audit and project the internal cause only for authorization denies.
 
 ## Phase 4: REFACTOR — Verification and Boundaries
 
-- [ ] 4.1 Remove obsolete decision imports/composition, preserve routing-after-allow and one append/commit semantics, and run `uv run pytest` plus `docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.3.0`.
+- [x] 4.1 Remove obsolete decision imports/composition, preserve routing-after-allow and one append/commit semantics, and run `uv run pytest` plus `docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.3.0`.
