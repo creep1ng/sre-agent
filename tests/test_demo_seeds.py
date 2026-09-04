@@ -30,7 +30,7 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, alembic_version CASCADE"
+            "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -71,13 +71,24 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         after = connection.execute(
             "SELECT credential_id, key_hash FROM credentials ORDER BY credential_id"
         ).fetchall()
-        grant = connection.execute("SELECT principal_id, action FROM grants").fetchone()
-        resource = connection.execute(
-            "SELECT concrete_model, inference_provider FROM resources"
+        grant = connection.execute(
+            "SELECT principal_id, action FROM grants WHERE action='invoke' ORDER BY grant_id"
         ).fetchone()
+        resource = connection.execute(
+            "SELECT concrete_model, inference_provider FROM resources "
+            "WHERE resource_type='llm_model'"
+        ).fetchone()
+        admin_resources = connection.execute(
+            "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+        ).fetchone()[0]
+        admin_grants = connection.execute(
+            "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
+        ).fetchone()[0]
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 1, 1]
+    assert counts == [4, 4, 3, 5]
+    assert admin_resources == 2
+    assert admin_grants == 4
     assert before == after
     by_id = dict(before)
     seeded_principals = (
