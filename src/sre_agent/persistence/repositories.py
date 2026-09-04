@@ -104,6 +104,15 @@ class CredentialRepository:
     async def authenticate(
         self, key: str, *, now: datetime | None = None
     ) -> PrincipalContext | None:
+        context = await self.resolve_authorization_context(key, now=now)
+        if context is None or context.principal.status != "active":
+            return None
+        return context
+
+    async def resolve_authorization_context(
+        self, key: str, *, now: datetime | None = None
+    ) -> PrincipalContext | None:
+        """Resolve a valid credential while preserving Principal status for authorization."""
         authenticated_at = now or datetime.now(UTC)
         matches = await self._session.execute(
             select(CredentialRow, PrincipalRow)
@@ -113,7 +122,6 @@ class CredentialRepository:
         for credential, principal in matches:
             if (
                 credential.status == "active"
-                and principal.status == "active"
                 and (credential.expires_at is None or credential.expires_at > authenticated_at)
                 and verify_api_key(key, credential.key_hash)
             ):

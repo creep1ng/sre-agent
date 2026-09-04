@@ -103,7 +103,7 @@ class ResponsesService:  # noqa: E305
         if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
             return None
         async with self.sessions() as session:
-            return await CredentialRepository(session).authenticate(key)
+            return await CredentialRepository(session).resolve_authorization_context(key)
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, **facts):
