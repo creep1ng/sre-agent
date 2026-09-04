@@ -2,23 +2,24 @@
 
 import hashlib
 import json
+import re
 from time import monotonic
-from typing import Annotated, Any
-from uuid import uuid4
+from typing import Annotated, Any, Literal
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Path, Query, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
-from sre_agent.governance.dto import Principal
+from sre_agent.governance.dto import Principal, PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, PrincipalRepository, ResourceRepository  # fmt: skip
 
 IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
-ERRORS = {
+ERRORS: dict[int, tuple[str, str]] = {
     400: ("invalid_idempotency_key", "The Idempotency-Key header is missing or invalid."),
     401: ("authentication_failed", "Authentication failed."),
     403: ("resource_unavailable", "Resource unavailable."),
@@ -27,6 +28,58 @@ ERRORS = {
     422: ("validation_error", "The request is invalid."),
     503: ("audit_unavailable", "Audit unavailable."),
 }
+CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    ("POST", "/v1/principals"): (
+        "principals.create",
+        "admin.write",
+        "administrative_control",
+        "principals",
+    ),
+    ("GET", "/v1/principals"): (
+        "principals.list",
+        "admin.read",
+        "administrative_control",
+        "principals",
+    ),
+    ("GET", "/v1/principals/{id}"): (
+        "principals.get",
+        "admin.read",
+        "administrative_control",
+        "principals",
+    ),
+    ("PUT", "/v1/principals/{id}/status"): (
+        "principals.status.replace",
+        "admin.write",
+        "administrative_control",
+        "principals",
+    ),
+    ("POST", "/v1/principals/{id}/credentials"): (
+        "credentials.issue",
+        "admin.write",
+        "administrative_control",
+        "credentials",
+    ),
+    ("GET", "/v1/principals/{id}/credentials"): (
+        "credentials.list",
+        "admin.read",
+        "administrative_control",
+        "credentials",
+    ),
+    ("DELETE", "/v1/credentials/{id}"): (
+        "credentials.revoke",
+        "admin.write",
+        "administrative_control",
+        "credentials",
+    ),
+    ("POST", "/v1/credentials/{id}/rotation"): (
+        "credentials.rotate",
+        "admin.write",
+        "administrative_control",
+        "credentials",
+    ),
+}
+assert set(CONTROL_OPERATIONS) == set(CONTROL_SCOPES)
+assert all(CONTROL_OPERATIONS[route][1:] == scope for route, scope in CONTROL_SCOPES.items())
 
 
 class PrincipalCreate(BaseModel):
@@ -36,15 +89,9 @@ class PrincipalCreate(BaseModel):
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
 
 
-class StatusReplace(BaseModel):
+class ListPrincipalsQuery(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
-    status: Annotated[str, Field(pattern=r"^(active|inactive)$")]
-    expected_updated_at: Annotated[str, Field(min_length=1, max_length=64)]
-
-
-class CredentialIssueBody(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
-    expires_at: Annotated[str, Field(min_length=1, max_length=64)] | None = None
+    limit: int = Field(default=100, ge=1, le=100)
 
 
 def _canonical_payload(payload: Any) -> str:
@@ -68,11 +115,9 @@ class ControlService:  # noqa: E305
         self.sessions, self.audit, self.projector = sessions, audit, projector
 
     def _invalid_key(self, value: str | None) -> bool:
-        import re
-
         return value is None or re.match(IDEMPOTENCY_KEY_PATTERN, value) is None
 
-    async def _authenticate(self, authorization: str | None):
+    async def _authenticate(self, authorization: str | None) -> PrincipalContext | None:
         scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
         if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
             return None
@@ -87,19 +132,19 @@ class ControlService:  # noqa: E305
 
     async def _finish(
         self,
-        request_id,
-        started,
-        status,
-        stage,
-        operation,
-        action,
+        request_id: UUID,
+        started: float,
+        status: int,
+        stage: Literal["validation", "authentication", "authorization", "audit"],
+        operation: str,
+        action: Literal["admin.read", "admin.write"],
         *,
-        payload=None,
-        error_code=None,
-        context=None,
-        resource_ref=None,
-        decision=None,
-        authorization_denial_cause=None,
+        payload: dict[str, Any] | None = None,
+        error_code: str | None = None,
+        context: PrincipalContext | None = None,
+        resource_ref: tuple[str, str] | None = None,
+        decision: Any = None,
+        authorization_denial_cause: Any = None,
     ) -> JSONResponse:
         event = self.projector.control_event(
             request_id,
@@ -321,8 +366,6 @@ class ControlService:  # noqa: E305
     async def get_principal(self, principal_id: str, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.get", "admin.read"
-        import re
-
         if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
             return await self._finish(
                 request_id,
@@ -392,28 +435,46 @@ class ControlService:  # noqa: E305
 
 
 def control_router(service: ControlService) -> APIRouter:
+    """Typed control-plane router: 3 of 8 routes (principals create/list/get).
+
+    Remaining routes (status replace + credentials issue/list/revoke/rotate)
+    ship in follow-up slices with #147 open; see openspec apply-progress.
+    """
     router = APIRouter()
 
-    @router.post("/v1/principals")
-    async def create_principal(request: Request) -> JSONResponse:
-        return await service.create_principal(
-            await request.json(),
+    @router.post("/v1/principals", status_code=201)
+    async def create_principal(
+        body: PrincipalCreate, request: Request, response: Response
+    ) -> Response:
+        result = await service.create_principal(
+            body.model_dump(mode="json"),
             request.headers.get("authorization"),
             request.headers.get("idempotency-key"),
         )
+        response.status_code = result.status_code
+        return result
 
     @router.get("/v1/principals")
-    async def list_principals(request: Request) -> JSONResponse:
-        params = dict(request.query_params)
-        raw_limit = params.pop("limit", "100")
+    async def list_principals(
+        request: Request, response: Response, limit: int = Query(default=100, ge=1, le=100)
+    ) -> Response:
         try:
-            limit = int(raw_limit)
-        except ValueError:
-            limit = 0
-        return await service.list_principals(request.headers.get("authorization"), limit, params)
+            ListPrincipalsQuery.model_validate({"limit": limit, **dict(request.query_params)})
+        except ValidationError:
+            pass
+        params = {k: v for k, v in request.query_params.items() if k != "limit"}
+        result = await service.list_principals(request.headers.get("authorization"), limit, params)
+        response.status_code = result.status_code
+        return result
 
     @router.get("/v1/principals/{principal_id}")
-    async def get_principal(principal_id: str, request: Request) -> JSONResponse:
-        return await service.get_principal(principal_id, request.headers.get("authorization"))
+    async def get_principal(
+        principal_id: Annotated[str, Path(pattern=r"^[a-z][a-z0-9_-]{2,63}$")],
+        request: Request,
+        response: Response,
+    ) -> Response:
+        result = await service.get_principal(principal_id, request.headers.get("authorization"))
+        response.status_code = result.status_code
+        return result
 
     return router
