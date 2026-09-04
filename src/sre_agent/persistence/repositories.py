@@ -29,6 +29,7 @@ from sre_agent.persistence.models import (
     AuditEventRow,
     CredentialRow,
     GrantRow,
+    IdempotencyRecordRow,
     PrincipalRow,
     ResourceRow,
 )
@@ -49,6 +50,69 @@ class PrincipalRepository:
     async def get(self, principal_id: str) -> Principal | None:
         row = await self._session.get(PrincipalRow, principal_id)
         return project_principal(row) if row is not None else None
+
+    async def create(
+        self,
+        principal_id: str,
+        kind: str,
+        display_name: str,
+        *,
+        now: datetime | None = None,
+    ) -> Principal:
+        issued_at = now or datetime.now(UTC)
+        row = PrincipalRow(
+            principal_id=principal_id,
+            kind=kind,
+            display_name=display_name,
+            status="active",
+            created_at=issued_at,
+            updated_at=issued_at,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return project_principal(row)
+
+    async def list(self, *, limit: int) -> tuple[list[Principal], bool]:
+        rows = (
+            await self._session.scalars(
+                select(PrincipalRow)
+                .order_by(PrincipalRow.created_at.asc(), PrincipalRow.principal_id.asc())
+                .limit(limit + 1)
+            )
+        ).all()
+        truncated = len(rows) > limit
+        return [project_principal(row) for row in rows[:limit]], truncated
+
+    async def replace_status(
+        self,
+        principal_id: str,
+        status: str,
+        *,
+        expected_updated_at: datetime,
+        now: datetime | None = None,
+    ) -> Principal | None:
+        """Deterministic status replace guarded by optimistic concurrency.
+
+        Returns ``None`` when the principal is absent; raises ``StaleWriteError``
+        when ``expected_updated_at`` no longer matches the stored row.
+        """
+        row = await self._session.get(PrincipalRow, principal_id)
+        if row is None:
+            return None
+        if row.updated_at != expected_updated_at:
+            raise StaleWriteError(principal_id)
+        row.status = status
+        row.updated_at = now or datetime.now(UTC)
+        await self._session.flush()
+        return project_principal(row)
+
+
+class StaleWriteError(RuntimeError):
+    """An optimistic-concurrency guard rejected a stale status replace."""
+
+    def __init__(self, principal_id: str) -> None:
+        super().__init__(f"status_conflict: {principal_id}")
+        self.principal_id = principal_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +210,129 @@ class CredentialRepository:
         )
         row = await self._session.get(CredentialRow, credential_id)
         return project_credential(row) if row is not None else None
+
+    async def list_for_principal(
+        self, principal_id: str, *, limit: int
+    ) -> tuple[list[CredentialReference], bool]:
+        """Metadata-only credential list ordered by (created_at, id) descending."""
+        rows = (
+            await self._session.scalars(
+                select(CredentialRow)
+                .where(CredentialRow.principal_id == principal_id)
+                .order_by(CredentialRow.created_at.desc(), CredentialRow.credential_id.desc())
+                .limit(limit + 1)
+            )
+        ).all()
+        truncated = len(rows) > limit
+        return [project_credential(row) for row in rows[:limit]], truncated
+
+    async def rotate(
+        self,
+        credential_id: str,
+        *,
+        expires_at: datetime | None = None,
+        now: datetime | None = None,
+    ) -> IssuedAPIKey | None:
+        """Atomically revoke one active credential and issue its replacement.
+
+        Returns ``None`` when the credential is absent; revocation converges
+        (a revoked row stays revoked). Any issuance failure rolls the whole
+        transaction back, leaving the old credential active.
+        """
+        row = await self._session.get(CredentialRow, credential_id)
+        if row is None:
+            return None
+        revoked_at = now or datetime.now(UTC)
+        if row.status == "active":
+            row.status = "revoked"
+            row.revoked_at = revoked_at
+            await self._session.flush()
+        replaced_credential_id: str | None = row.credential_id
+        issued = await self.issue(row.principal_id, expires_at=expires_at, now=revoked_at)
+        return IssuedAPIKey(
+            credential=issued.credential,
+            key=issued.key,
+            replaced_credential_id=replaced_credential_id,  # type: ignore[typeddict-item]
+            secret_revealed=True,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class IdempotencyOutcome:
+    response_status: int
+    resource_id: str
+    replayed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class IdempotencyBinding:
+    outcome: IdempotencyOutcome
+    replayed: bool
+
+
+class IdempotencyConflictError(RuntimeError):
+    """The retained key binding conflicts with the request payload hash."""
+
+    def __init__(self, scope: str) -> None:
+        super().__init__(f"idempotency_conflict: {scope}")
+        self.scope = scope
+
+
+class IdempotencyRepository:
+    """Scoped POST bindings: same hash replays, other hash conflicts."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def claim_or_replay(
+        self,
+        *,
+        scope: str,
+        key_digest: str,
+        payload_sha256: str,
+        principal_id: str,
+        method: str,
+        canonical_path: str,
+        binding: str,
+        outcome: IdempotencyOutcome,
+        now: datetime | None = None,
+        expires_at: datetime | None = None,
+    ) -> IdempotencyBinding:
+        created_at = now or datetime.now(UTC)
+        row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
+        if row is None:
+            self._session.add(
+                IdempotencyRecordRow(
+                    scope=scope,
+                    key_digest=key_digest,
+                    payload_sha256=payload_sha256,
+                    principal_id=principal_id,
+                    method=method,
+                    canonical_path=canonical_path,
+                    binding=binding,
+                    outcome={
+                        "response_status": outcome.response_status,
+                        "resource_id": outcome.resource_id,
+                        "replayed": False,
+                    },
+                    created_at=created_at,
+                    expires_at=expires_at,
+                    transition_count=1,
+                )
+            )
+            await self._session.flush()
+            return IdempotencyBinding(outcome=outcome, replayed=False)
+        if row.payload_sha256 != payload_sha256:
+            raise IdempotencyConflictError(scope)
+        stored = row.outcome
+        return IdempotencyBinding(
+            outcome=IdempotencyOutcome(
+                response_status=stored["response_status"],
+                resource_id=stored["resource_id"],
+                replayed=True,
+            ),
+            replayed=True,
+        )
 
 
 class ResourceRepository:

@@ -11,6 +11,7 @@ from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.openrouter import OpenRouterProvider
 from sre_agent.gateway.providers import LLMProvider
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.control.service import ControlService, control_router
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.persistence.database import Database
 from sre_agent.settings import Settings
@@ -43,6 +44,12 @@ def create_application(
     application.state.session_provider = database.sessions
     application.state.database = database
     application.state.llm_provider = provider
+    if runtime_settings.audit_hmac_key:
+        store = audit_store or PostgresAuditStore(database.sessions)
+        projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+        application.include_router(
+            control_router(ControlService(database.sessions, store, projector))
+        )
     if provider is not None and runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()))  # noqa: E501  # fmt: skip
