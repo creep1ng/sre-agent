@@ -1,0 +1,132 @@
+# Incident domain authorization vocabulary and grant matrix — HT-INC-04 (issue #145).
+#
+# Closes audit finding C08: publish the action/resource taxonomy and the grant matrix
+# for human commands before the endpoints exist, so #146 and #26 build on a decided
+# contract instead of a parallel one.
+#
+# RELATIONSHIP TO docs/security/demo-grants.v1.yaml
+# That catalog mirrors the persistence seeds exactly and is asserted against them by
+# tests/test_security_catalogs.py. This one is the incident domain's own vocabulary and
+# is deliberately separate: nothing here is seeded yet. Entries carry `maturity:
+# contracted`, mirroring the vocabulary already used by scenarios.v1.yaml. When
+# HT-INC-06-PERSISTENCE (#146) seeds these grants, they merge into the seeded matrix.
+#
+# AUTHORITY MODEL
+# The shared AuthorizationDecisionEngine (issue #18) evaluates
+# principal + action + resource_type + resource_id with exact matching and deny by
+# default. This document only names what those values mean for incidents; it does not
+# introduce a second engine or a parallel policy path.
+---
+schema_version: "v1"
+maturity: "contracted"
+default_decision: "deny"
+names_confer_roles: false
+
+# Proposed extension to governance.dto.ResourceType — REQUIRES GATEWAY OWNER APPROVAL.
+#
+# ResourceType is currently ["llm_model", "mcp_server", "mcp_tool", "skill",
+# "bok_collection"]. None of them can carry an incident run, so human commands cannot
+# be authorized today.
+#
+# The resource is the WORKFLOW, not the run. The engine matches (resource_type,
+# resource_id) exactly, so a per-run resource would need a grant minted for every run
+# created at runtime, which is not workable. A workflow is a stable named resource,
+# exactly like the `triage-agent` alias is for `llm_model`. Authority is therefore
+# granted over a workflow and applies to every run executing it.
+proposed_resource_type:
+  name: "incident_workflow"
+  resource_id_meaning: "The workflow_id executed by the run, e.g. incident-response."
+  rationale: "Stable and exactly matchable; per-run resources cannot be granted ahead of time."
+  requires_approval_from: "gateway owner (governance.dto.ResourceType)"
+
+actions:
+  - name: "run.start"
+    summary: "Start or resume an investigation run."
+    endpoint: "POST /v1/incidents/{incident_id}/runs"
+  - name: "run.read"
+    summary: "Read run state and the safe event projection."
+    endpoint: "GET /v1/incidents/{incident_id}/runs/{run_id} and .../events"
+  - name: "run.command"
+    summary: "Send a reversible human command."
+    endpoint: "POST /v1/incidents/{incident_id}/runs/{run_id}/commands"
+  - name: "run.approve"
+    summary: >-
+      Approve a proposed mitigation. Held apart from run.command because it is the
+      human gate in front of an intervention, and least privilege only means something
+      if approving can be granted separately from participating.
+    endpoint: "POST /v1/incidents/{incident_id}/runs/{run_id}/commands"
+  - name: "run.read_context"
+    maturity: "contracted_future"
+    summary: >-
+      Read the sensitive execution context, which is a separate surface from the safe
+      projection (audit finding C07). Named here so the vocabulary is complete; the
+      endpoint is defined with the rest of C07.
+    endpoint: "not yet defined"
+
+# Which action authorizes each command. The API resolves the command to its action and
+# asks the engine; it never infers authority from the principal's name or kind.
+command_action_map:
+  approve_mitigation: "run.approve"
+  reject_mitigation: "run.approve"
+  request_changes: "run.command"
+  propose_disposition: "run.command"
+  escalate: "run.command"
+  cancel_run: "run.command"
+
+principals:
+  - id: "admin-human"
+    kind: "human"
+    status: "active"
+  - id: "demo-human"
+    kind: "human"
+    status: "active"
+  - id: "incident-harness"
+    kind: "agent"
+    status: "active"
+  - id: "restricted-harness"
+    kind: "agent"
+    status: "active"
+
+resources:
+  - type: "incident_workflow"
+    id: "incident-response"
+    status: "active"
+
+# Deny by default: only what is listed exists. admin-human deliberately holds no grant
+# here, proving that an administrative-sounding name confers nothing.
+grants:
+  - id: "grant-demo-human-run-start-incident-response"
+    principal_id: "demo-human"
+    action: "run.start"
+    resource_type: "incident_workflow"
+    resource_id: "incident-response"
+    effect: "allow"
+    status: "active"
+  - id: "grant-demo-human-run-read-incident-response"
+    principal_id: "demo-human"
+    action: "run.read"
+    resource_type: "incident_workflow"
+    resource_id: "incident-response"
+    effect: "allow"
+    status: "active"
+  - id: "grant-demo-human-run-command-incident-response"
+    principal_id: "demo-human"
+    action: "run.command"
+    resource_type: "incident_workflow"
+    resource_id: "incident-response"
+    effect: "allow"
+    status: "active"
+  - id: "grant-demo-human-run-approve-incident-response"
+    principal_id: "demo-human"
+    action: "run.approve"
+    resource_type: "incident_workflow"
+    resource_id: "incident-response"
+    effect: "allow"
+    status: "active"
+  - id: "grant-incident-harness-run-read-incident-response"
+    principal_id: "incident-harness"
+    action: "run.read"
+    resource_type: "incident_workflow"
+    resource_id: "incident-response"
+    effect: "allow"
+    status: "active"

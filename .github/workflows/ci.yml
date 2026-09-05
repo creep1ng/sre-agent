@@ -41,6 +41,8 @@ jobs:
       - run: ruff format --check .
       - name: Validate declarative incident contracts
         run: python scripts/validate_incident_contracts.py
+      - name: Validate incident authorization vocabulary
+        run: python scripts/validate_incident_authorization.py
       - name: Validate CI hardening controls
         run: python scripts/validate_ci_hardening.py
       - name: Run database-independent Python tests
