@@ -1,96 +1,63 @@
 name: Historia técnica (HT)
-description: Trabajo técnico con resultado, entregables y criterios verificables
+description: Trabajo técnico con resultado verificable
 title: "[HT-XX] "
-labels:
-  - "type: technical task"
+labels: ["type: technical task"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Use el título nativo del issue. Sprint, SP, épica, prioridad y estado se administran en GitHub Projects; labels y assignees en GitHub; y `blocked by`/`blocks` mediante dependencias nativas. No duplique esa metadata en el cuerpo.
   - type: textarea
     id: technical_problem
     attributes:
-      label: Problema técnico que desbloquea
-      description: Qué ambigüedad, dependencia o capacidad técnica impide avanzar.
-    validations:
-      required: true
+      label: Problema
+      description: Explique la necesidad técnica y el contexto previo; no describa el proceso de planificación.
+    validations: {required: true}
   - type: textarea
     id: observable_result
     attributes:
       label: Resultado observable
-      description: Qué debe existir o poder demostrarse al cerrar la HT.
-    validations:
-      required: true
+      description: Describa qué existe o puede demostrarse al cerrar la HT.
+    validations: {required: true}
   - type: textarea
     id: affected_contracts
     attributes:
-      label: Contratos / interfaces afectados
-      description: API, schema, DB, workflow, UI contract, ADR u otras superficies afectadas.
-    validations:
-      required: true
+      label: Contratos
+      description: Indique APIs, esquemas, datos, interfaces, ADR o flujos afectados; escriba “Ninguno” si no aplica.
+    validations: {required: true}
   - type: textarea
     id: deliverables
     attributes:
       label: Entregables
-      description: Archivos, endpoints, migraciones, ADRs, pruebas o fixtures esperados.
-    validations:
-      required: true
+      description: Enumere los artefactos concretos que se producirán.
+    validations: {required: true}
   - type: textarea
     id: acceptance_criteria
     attributes:
       label: Criterios de aceptación
-      description: Incluí criterios específicos y verificables, casos positivos y casos negativos.
-    validations:
-      required: true
+      description: Incluya comportamiento verificable, casos positivos, límites y errores relevantes.
+    validations: {required: true}
   - type: textarea
     id: acceptance_evidence
     attributes:
       label: Evidencia de aceptación
-      description: Comandos, pruebas, capturas, requests/responses o demo esperada.
-    validations:
-      required: true
-  - type: checkboxes
+      description: Defina comandos, requests/responses, capturas o video que demuestren el resultado funcional. Los tests solos no bastan.
+    validations: {required: true}
+  - type: textarea
     id: definition_of_ready
     attributes:
       label: Definition of Ready
-      options:
-        - label: Resultado y valor técnico están claros.
-          required: true
-        - label: Contratos e interfaces afectados están identificados.
-          required: true
-        - label: Dependencias y riesgos están identificados.
-          required: true
-        - label: Los criterios son verificables.
-          required: true
-        - label: Cabe en el sprint o está dividida.
-          required: true
-        - label: No depende de una decisión abierta sin owner y fecha.
-          required: true
+      description: Registre cada prerrequisito como [x] o [ ]; incluya decisiones, contratos y bloqueantes reales. La historia puede publicarse con requisitos pendientes. Use dependencias nativas para `blocked by` y `blocks`.
+    validations: {required: true}
   - type: textarea
     id: out_of_scope
     attributes:
       label: Fuera de alcance
-      description: Qué explícitamente no se construye en esta HT.
-    validations:
-      required: true
-  - type: textarea
-    id: dependencies
-    attributes:
-      label: Dependencias
-      description: Indicá de qué depende y qué desbloquea.
-    validations:
-      required: true
+      description: Delimite explícitamente lo que no se construye en esta HT.
+    validations: {required: true}
   - type: textarea
     id: open_decisions
     attributes:
       label: Decisiones abiertas
-      description: Si aplica, incluí responsable y fecha objetivo. Escribí "Ninguna" cuando no existan.
-    validations:
-      required: true
-  - type: textarea
-    id: planning
-    attributes:
-      label: Planificación
-      description: Incluí Sprint, SP, responsable, épica y si pertenece a la ruta crítica.
-    validations:
-      required: true
-  - type: markdown
-    attributes:
-      value: El Definition of Done se verifica en la Pull Request. Para trabajo sin código puede aplicarse la excepción de cierre basada en evidencia definida por el proyecto.
+      description: Indique responsable y fecha objetivo; escriba “Ninguna” cuando no existan.
+    validations: {required: true}
