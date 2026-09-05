@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Bandeja de alertas simuladas para iniciar el triage en midnight.agent."
+    />
+    <title>Alertas · midnight.agent</title>
+    <script>
+      (() => {
+        const storageKey = "midnight-agent-theme";
+        let theme = "light";
+
+        try {
+          const savedTheme = window.localStorage.getItem(storageKey);
+          if (savedTheme === "light" || savedTheme === "dark") {
+            theme = savedTheme;
+          } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            theme = "dark";
+          }
+        } catch {
+          if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+            theme = "dark";
+          }
+        }
+
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <link rel="icon" href="/public/favicon.svg" />
+    <link rel="stylesheet" href="/styles/design-system.css" />
+    <link rel="stylesheet" href="/styles/incident-alerts.css" />
+  </head>
+  <body>
+    <a class="ma-skip-link" href="#alert-inbox">Saltar a la bandeja de alertas</a>
+
+    <header class="ops-shell__topbar">
+      <a class="ops-shell__brand" href="/" aria-label="midnight.agent — inicio">
+        <img
+          class="ops-shell__mark"
+          src="/public/midnight-agent-mark.svg"
+          alt=""
+          width="28"
+          height="28"
+        />
+        <span class="ma-display">midnight.agent</span>
+      </a>
+      <div class="ops-shell__context" role="group" aria-label="Controles y contexto de la vista">
+        <button
+          id="theme-toggle"
+          class="theme-switch"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-label="Cambiar a tema oscuro"
+        >
+          <span class="theme-switch__label" id="theme-switch-label">Claro</span>
+          <span class="theme-switch__track" aria-hidden="true">
+            <span class="theme-switch__thumb"></span>
+          </span>
+        </button>
+        <span class="ops-shell__context-label">Atención a incidentes</span>
+      </div>
+    </header>
+
+    <main id="alert-inbox" class="alert-inbox" data-state="loading">
+      <header class="alert-inbox__heading">
+        <div>
+          <p class="ma-eyebrow">Operaciones</p>
+          <h1 class="alert-inbox__title">Alertas</h1>
+          <p class="alert-inbox__subtitle">
+            Identifica una señal relevante, revisa su contexto y decide cuál llevar a triage.
+          </p>
+        </div>
+        <div class="alert-inbox__fixture-note">
+          <span class="ma-live-state">Datos reproducibles</span>
+          <span id="fixture-label" class="ma-muted ma-mono">alerts.json</span>
+        </div>
+      </header>
+
+      <div id="load-error" class="ma-alert alert-inbox__error" data-tone="critical" hidden>
+        <span aria-hidden="true">!</span>
+        <div>
+          <p class="ma-alert__title">No se pudo cargar el fixture de alertas</p>
+          <p class="ma-alert__detail">
+            Verifica que el archivo exista y que la vista se esté sirviendo desde el stack web.
+          </p>
+        </div>
+      </div>
+
+      <section class="alert-workspace" aria-label="Bandeja y detalle de alertas">
+        <section class="ma-panel alert-list-panel" aria-labelledby="alert-list-title">
+          <div class="ma-panel__header alert-list-panel__header">
+            <div>
+              <h2 id="alert-list-title" class="ma-panel__title">Bandeja</h2>
+              <p id="alert-count" class="ma-panel__description" aria-live="polite">Cargando alertas…</p>
+            </div>
+          </div>
+
+          <div class="alert-list-panel__body">
+            <div id="loading-state" class="alert-loading" aria-live="polite">
+              <span class="alert-loading__dot" aria-hidden="true"></span>
+              <span>Cargando fixture…</span>
+            </div>
+
+            <ul id="alert-list" class="alert-list" aria-label="Alertas disponibles" hidden></ul>
+
+            <div id="empty-state" class="alert-empty" hidden>
+              <div class="alert-empty__icon" aria-hidden="true">✓</div>
+              <h3>No hay alertas pendientes</h3>
+              <p>
+                El fixture seleccionado no contiene alertas. Cuando existan señales, aparecerán aquí
+                con servicio, severidad, estado y fecha.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section
+          id="alert-detail"
+          class="ma-panel alert-detail"
+          aria-labelledby="alert-detail-title"
+          aria-live="polite"
+        >
+          <div id="detail-placeholder" class="alert-detail__placeholder">
+            <div class="alert-detail__placeholder-icon" aria-hidden="true">↗</div>
+            <p class="ma-eyebrow">Detalle</p>
+            <h2 id="alert-detail-title">Selecciona una alerta</h2>
+            <p>
+              La bandeja permanece visible para conservar el contexto mientras revisas una señal.
+            </p>
+          </div>
+
+          <article id="detail-content" class="alert-detail__content" hidden>
+            <header class="alert-detail__header">
+              <div>
+                <p class="ma-eyebrow">Detalle de alerta</p>
+                <h2 id="detail-title" class="alert-detail__title">Selecciona una alerta</h2>
+                <p id="detail-summary" class="alert-detail__summary"></p>
+              </div>
+              <div class="alert-detail__badges">
+                <span id="detail-severity" class="ma-badge"></span>
+                <span id="detail-status" class="ma-badge"></span>
+              </div>
+            </header>
+
+            <dl class="alert-detail__facts">
+              <div>
+                <dt>Servicio</dt>
+                <dd id="detail-service"></dd>
+              </div>
+              <div>
+                <dt>Fecha y hora</dt>
+                <dd id="detail-timestamp"></dd>
+              </div>
+              <div>
+                <dt>Fuente</dt>
+                <dd id="detail-source"></dd>
+              </div>
+              <div>
+                <dt>Alert ID</dt>
+                <dd id="detail-id"></dd>
+              </div>
+            </dl>
+
+            <section class="alert-detail__section" aria-labelledby="context-title">
+              <h3 id="context-title">Contexto operacional</h3>
+              <p id="detail-context"></p>
+            </section>
+
+            <section
+              id="origin-section"
+              class="alert-detail__section alert-detail__origin"
+              aria-labelledby="origin-title"
+              hidden
+            >
+              <div class="alert-detail__section-heading">
+                <h3 id="origin-title">Metadata de origen</h3>
+                <span class="ma-badge ma-badge--plain" data-tone="info">No es entidad propia</span>
+              </div>
+              <p id="detail-origin-summary"></p>
+              <dl id="origin-metadata" class="alert-detail__origin-list"></dl>
+            </section>
+
+            <footer class="alert-detail__footer">
+              <div>
+                <p class="alert-detail__next-label">Siguiente paso</p>
+                <p class="ma-muted">
+                  Sprint 1 solo acuerda la solicitud de triage; crear o asociar un incidente pertenece
+                  a HU-OPS-02.
+                </p>
+              </div>
+              <button id="start-triage" class="ma-button ma-button--primary" type="button">
+                Iniciar triage
+              </button>
+            </footer>
+
+            <div id="triage-feedback" class="ma-alert alert-detail__feedback" data-tone="success" hidden>
+              <span aria-hidden="true">✓</span>
+              <div>
+                <p class="ma-alert__title">Solicitud de triage preparada</p>
+                <p id="triage-feedback-detail" class="ma-alert__detail"></p>
+              </div>
+            </div>
+          </article>
+        </section>
+      </section>
+
+      <p class="alert-inbox__developer-note">
+        Estado vacío reproducible: <code>?fixture=empty</code>. Esta superficie no realiza ingesta en vivo
+        ni crea incidentes.
+      </p>
+    </main>
+
+    <script src="/public/incident-ui/alerts.js" defer></script>
+  </body>
+</html>

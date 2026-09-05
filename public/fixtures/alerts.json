@@ -1,0 +1,68 @@
+{
+  "fixture_version": "1.0.0",
+  "description": "Alertas simuladas reproducibles para HU-OPS-01. No representan ingesta en vivo.",
+  "alerts": [
+    {
+      "alert_id": "alert-checkout-001",
+      "title": "Latencia elevada en checkout",
+      "summary": "El p95 de checkout superó 2.5 s durante cinco minutos.",
+      "service": "checkout-service",
+      "severity": "critical",
+      "timestamp": "2026-08-24T19:42:00Z",
+      "status": "new",
+      "source": "Grafana (fixture)",
+      "context": "Los requests siguen respondiendo, pero la latencia p95 alcanzó 3.1 s. La señal afecta el flujo de compra y requiere decidir si se inicia triage.",
+      "origin": {
+        "type": "anomaly_metadata",
+        "summary": "La latencia observada se desvió del rango esperado del servicio.",
+        "metadata": {
+          "signal": "http.server.duration.p95",
+          "baseline": "< 1.5 s",
+          "observed": "3.1 s"
+        }
+      }
+    },
+    {
+      "alert_id": "alert-payment-002",
+      "title": "Aumento de errores de pago",
+      "summary": "La tasa de respuestas 5xx del servicio de pagos alcanzó 8.4%.",
+      "service": "payment-service",
+      "severity": "warning",
+      "timestamp": "2026-08-24T19:35:00Z",
+      "status": "new",
+      "source": "OpenTelemetry (fixture)",
+      "context": "Se observa una concentración de errores en operaciones de autorización. La alerta aún no está correlacionada automáticamente con otra señal.",
+      "origin": {
+        "type": "anomaly_metadata",
+        "summary": "El error rate excedió el umbral configurado para el fixture.",
+        "metadata": {
+          "signal": "http.server.errors.rate",
+          "threshold": "5%",
+          "observed": "8.4%"
+        }
+      }
+    },
+    {
+      "alert_id": "alert-frontend-003",
+      "title": "Errores intermitentes en catálogo",
+      "summary": "El frontend registró fallos esporádicos al cargar recomendaciones.",
+      "service": "frontend",
+      "severity": "info",
+      "timestamp": "2026-08-24T19:20:00Z",
+      "status": "acknowledged",
+      "source": "Frontend monitor (fixture)",
+      "context": "La navegación principal permanece disponible. La señal se incluye para contrastar severidades y estados dentro de la bandeja."
+    },
+    {
+      "alert_id": "alert-cart-004",
+      "title": "Timeouts en actualización del carrito",
+      "summary": "Se detectaron timeouts al persistir cambios de cantidad en el carrito.",
+      "service": "cart-service",
+      "severity": "warning",
+      "timestamp": "2026-08-24T18:58:00Z",
+      "status": "monitoring",
+      "source": "Synthetic check (fixture)",
+      "context": "La señal se mantiene en observación después de una recuperación parcial. No existe declaración de incidente asociada en este Sprint."
+    }
+  ]
+}
