@@ -1,0 +1,88 @@
+# OTel demo → canonical alert mapping — HT-INC-08 (issue #149)
+#
+# Versioned allow-list. Compatible with incident-state 1.0.0 and workflow
+# incident-response 1.0.0 WITHOUT mutating either contract: `alert.origin`
+# stays closed (signal/condition/detector/observed_at only). Trace/span/resource
+# identifiers travel in a separate correlation envelope that never enters the
+# domain object, answering audit C03/C04.
+#
+# Pattern follows Rootly Alert Fields (raw payload → normalized fields at the
+# source layer) and incident.io (alert intake is distinct from incident
+# declaration: no incident_id is invented here).
+---
+mapping_version: 1.0.0
+contract_refs:
+  incident_state: urn:sre-agent:schema:incident-state:1.0.0
+  workflow_id: incident-response
+  workflow_version: 1.0.0
+
+# Minimal demo subset. Anything not listed is dropped, never mapped.
+supported_subset:
+  trace_id: 32 lowercase hex chars (W3C trace id)
+  span_id: 16 lowercase hex chars (W3C span id)
+  resource_attributes:
+    - service.name
+    - service.namespace
+    - deployment.environment
+  span:
+    - name
+    - status.code
+    - status.message
+    - timestamp
+  severity_hint: sev1 | sev2 | sev3 | sev4 (explicit; the adapter never invents policy)
+
+field_map:
+  - otel: resource.attributes[service.name]
+    alert: alert.service
+    required: true
+  - otel: severity_hint
+    alert: alert.severity
+    required: true
+  - otel: span.timestamp
+    alert: alert.observed_at
+    required: true
+  - otel: span.name
+    alert: alert.summary (prefix) + alert.origin.signal
+    required: true
+  - otel: span.status.message
+    alert: alert.origin.condition
+    required: false
+    fallback: otel span error
+  - otel: '"opentelemetry-demo"'
+    alert: alert.source
+    const: true
+  - otel: '"new"'
+    alert: alert.status
+    const: true
+
+correlation_envelope:
+  description: Preserved alongside the alert for triage/start-triage correlation.
+    Never embedded in alert.origin (closed by 1.0.0) and never persisted as an
+    Anomaly entity. Downstream (#145/#146) decides durable storage.
+  fields: [trace_id, span_id, service.name, service.namespace, deployment.environment]
+  versioned_as: otel-correlation 1.0.0
+  resource_values: scalar only (string, number, boolean). A nested object or
+    array under an allowed key is dropped as a whole with its path reported,
+    so unknown/sensitive content cannot ride in inside an allowed value.
+
+identity:
+  alert_id: alt-{service-slug}-{sha256(trace_id:span_id:service:span.name)[:12]}
+  notes: Identity uses the full identifiers, never a trace_id prefix. Retries
+    of the exact same signal hash identically (idempotent); distinct signals
+    diverge. The slug is capped so the id always fits the 64-char pattern.
+
+timestamp:
+  format: full RFC 3339 date-time with explicit timezone (e.g. ...Z or ±HH:MM).
+  rejected: date-only values, timezone-naive values (hour/zone must not be
+    invented), non-string values, and values that overflow normalization.
+
+drop_policy:
+  unknown_fields: dropped and reported in `dropped`, never mapped
+  sensitive_keys_matching: [password, secret, token, authorization, cookie, api_key, set-cookie]
+  sensitive_handling: dropped even when nested; never appear in alert or correlation
+
+errors:
+  missing_field: required OTel field absent or empty
+  invalid_format: malformed trace_id, span_id, timestamp or service name; also
+    non-string severity/timestamp values and un-normalizable timestamps
+  unsupported_severity: severity_hint present but outside sev1..sev4 (any type)
