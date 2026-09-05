@@ -153,9 +153,16 @@ def check_workflow(workflow: dict[str, Any]) -> list[str]:
                 "terminal states must have no outgoing transitions"
             )
 
-        for actor in _as_list(transition.get("actor")):
+        actors = _as_list(transition.get("actor"))
+        if not actors:
+            errors.append(f"transition '{identifier}' must declare at least one actor")
+        for actor in actors:
             if actor not in VALID_ACTORS:
                 errors.append(f"transition '{identifier}' declares unknown actor '{actor}'")
+
+        requires_approval = transition.get("requires_approval")
+        if not isinstance(requires_approval, bool):
+            errors.append(f"transition '{identifier}' must declare requires_approval as a boolean")
 
         decision_point = transition.get("decision_point")
         if decision_point is not None:
@@ -180,15 +187,21 @@ def check_workflow(workflow: dict[str, Any]) -> list[str]:
                         f"'{definition.get('state')}' but leaves '{source}'"
                     )
 
-        # A blocking decision point demands an explicit approval record.
+        # Protected transitions are derived from the workflow contract itself:
+        # blocking approval outcomes and closure both require a human approval.
+        protected = target == "closed"
         if decision_point in decision_points:
             blocking = bool(decision_points[decision_point].get("blocking", False))
             approves = "approve" in _as_list(transition.get("on_outcome"))
-            if blocking and approves and not transition.get("records_approval", False):
-                errors.append(
-                    f"transition '{identifier}' passes a blocking decision point "
-                    "without recording an approval"
-                )
+            protected = protected or (blocking and approves)
+
+        if protected:
+            if requires_approval is not True:
+                errors.append(f"protected transition '{identifier}' must require approval")
+            if actors != ["human"]:
+                errors.append(f"protected transition '{identifier}' must be human-only")
+            if transition.get("records_approval") is not True:
+                errors.append(f"protected transition '{identifier}' must record an approval")
 
     # Reachability: fixed point over the declared transitions.
     changed = True
@@ -273,6 +286,13 @@ def check_workflow_state_alignment(workflow: dict[str, Any], schema: dict[str, A
     schema_states = set(schema.get("properties", {}).get("state", {}).get("enum", []))
 
     errors: list[str] = []
+    workflow_version = workflow.get("workflow_version")
+    schema_version = schema.get("properties", {}).get("workflow_version", {}).get("const")
+    if workflow_version != schema_version:
+        errors.append(
+            f"workflow_version {workflow_version!r} is incompatible with "
+            f"state schema version {schema_version!r}"
+        )
     for name in sorted(workflow_states - schema_states):
         errors.append(f"state '{name}' exists in the workflow but not in the state schema enum")
     for name in sorted(schema_states - workflow_states):
