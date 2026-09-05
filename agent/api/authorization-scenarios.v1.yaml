@@ -1,0 +1,68 @@
+# Authorization scenarios for incident run commands — HT-INC-04 (issue #145).
+#
+# Mirrors the shape of docs/security/scenarios.v1.yaml so both catalogs read alike.
+# Every scenario is `contracted`: the endpoints do not exist yet, so none is executable.
+# They exist to pin the intended decisions before implementation, which is what audit
+# finding C08 asks for.
+---
+catalog_version: "v1"
+maturity: "contracted"
+scenarios:
+  - id: "INC-AUTH-001"
+    threat: "authorized human starts a run"
+    principal: "demo-human"
+    action: "run.start"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs"}
+    expected: {http_status: 201, policy_decision: "allow", denial_cause: null}
+
+  - id: "INC-AUTH-002"
+    threat: "unauthorized agent starts a run"
+    principal: "restricted-harness"
+    action: "run.start"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-003"
+    threat: "administrative name confers no authority"
+    note: >-
+      admin-human is a human principal whose name suggests administrative power and
+      holds no grant in this domain. Authority comes from the grant, never from the
+      name or the kind. This is the scenario that proves names_confer_roles is false.
+    principal: "admin-human"
+    action: "run.approve"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs/{run_id}/commands"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-004"
+    threat: "participation does not imply approval"
+    note: >-
+      Separating run.approve from run.command is what makes this decidable. A principal
+      holding only run.command can escalate or request changes but cannot approve a
+      mitigation.
+    principal: "incident-harness"
+    action: "run.approve"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs/{run_id}/commands"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-005"
+    threat: "agent cannot command itself"
+    note: >-
+      Commands are human-only in the contract (actor is const human), so an agent
+      principal is refused by validation before authorization is even reached.
+    principal: "incident-harness"
+    action: "run.command"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs/{run_id}/commands"}
+    expected: {http_status: 422, policy_decision: "not_evaluated", denial_cause: null}
+
+  - id: "INC-AUTH-006"
+    threat: "unknown workflow is indistinguishable from unauthorized"
+    principal: "demo-human"
+    action: "run.start"
+    resource: {type: "incident_workflow", id: "missing-workflow"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "resource_missing"}
