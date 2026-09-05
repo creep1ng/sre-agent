@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { parse, stringify } from "yaml";
-import { assertImmutableManifest, assertReleaseMetadata, runConsumer, validateCompatibility, validateCoverage, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
+import { assertEveryPublishedRelease, assertImmutableManifest, assertReleaseMetadata, runConsumer, validateCompatibility, validateCoverage, validatePublishedReleases, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
 
 test("consumer coverage pins every owner, fixture, command, and non-authority boundary", async () => { const result = await validateCoverage(); assert.equal(result.consumers.consumers.length, 6); assert.equal(result.suite.obligations.length, 6); });
 test("coverage rejects YAML command substitution without executing it", async () => {
@@ -22,3 +22,36 @@ test("published projection goldens cannot be regenerated", async () => { await a
 test("minor release preserves every positive 1.0.0 instance", async () => assert.deepEqual(await validateCompatibility(), { previous_release: "1.0.0", current_release: "1.1.0", positive_fixtures: 81, examples: 10, status: "passed" }));
 test("release 1.2.0 preserves every positive 1.1.0 instance", async () => assert.deepEqual(await validateCompatibility("1.1.0", "1.2.0"), { previous_release: "1.1.0", current_release: "1.2.0", positive_fixtures: 81, examples: 10, status: "passed" }));
 test("release 1.3.0 preserves compatible 1.2.0 instances while retaining nullable historical audit readback", async () => assert.deepEqual(await validateCompatibility("1.2.0", "1.3.0"), { previous_release: "1.2.0", current_release: "1.3.0", positive_fixtures: 80, examples: 9, status: "passed" }));
+test("published release validation rejects an omitted release", () => {
+  assert.throws(
+    () => assertEveryPublishedRelease(["1.0.0", "1.1.0"], ["1.0.0"]),
+    /omitted.*1\.1\.0/i,
+  );
+});
+test("published release validation discovers deterministically and rejects invalid metadata", async () => {
+  const root = await mkdtemp(join(tmpdir(), "published-releases-"));
+  try {
+    for (const version of ["1.0.0", "1.1.0"]) {
+      const target = join(root, version);
+      await cp(new URL(`../../releases/${version}/`, import.meta.url), target, { recursive: true });
+    }
+    const seen = [];
+    const result = await validatePublishedReleases(root, async (version) => {
+      seen.push(version);
+      return { artifacts: 1, results: 1 };
+    });
+    assert.deepEqual(seen, ["1.0.0", "1.1.0"]);
+    assert.deepEqual(result.releases, ["1.0.0", "1.1.0"]);
+
+    const manifestPath = join(root, "1.1.0/manifest.yaml");
+    const manifest = parse(await readFile(manifestPath, "utf8"));
+    manifest.contract_version = "1.0.0";
+    await writeFile(manifestPath, stringify(manifest));
+    await assert.rejects(
+      validatePublishedReleases(root, async () => ({ artifacts: 1, results: 1 })),
+      /directory.*manifest/i,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
