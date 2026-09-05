@@ -134,7 +134,7 @@ allOf:
   - if:
       properties:
         state:
-          enum: [detected, triage]
+          enum: [detected, triage, dismissed]
       required: [state]
     then:
       properties:

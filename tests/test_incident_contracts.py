@@ -7,6 +7,7 @@ the criterion that regressed instead of a generic schema complaint.
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,8 @@ from validate_incident_contracts import (  # noqa: E402
     STATE_SCHEMA_PATH,
     WORKFLOW_PATH,
     build_validator,
+    check_workflow,
+    check_workflow_state_alignment,
     load_yaml,
     validate,
 )
@@ -96,6 +99,59 @@ def test_transitions_declare_actor_and_approval(workflow: dict) -> None:
     assert {"apply_mitigation", "close_incident"} <= {t["id"] for t in approving}
 
 
+def _transition(workflow: dict, identifier: str) -> dict:
+    return next(item for item in workflow["transitions"] if item["id"] == identifier)
+
+
+def test_validator_rejects_agent_mitigation_without_approval(workflow: dict) -> None:
+    mutated = deepcopy(workflow)
+    transition = _transition(mutated, "apply_mitigation")
+    transition["actor"] = ["agent"]
+    transition["requires_approval"] = False
+
+    errors = check_workflow(mutated)
+
+    assert "protected transition 'apply_mitigation' must require approval" in errors
+    assert "protected transition 'apply_mitigation' must be human-only" in errors
+
+
+@pytest.mark.parametrize("actor", [None, ["operator"]], ids=["missing", "unknown"])
+def test_validator_requires_transition_actor(workflow: dict, actor) -> None:
+    mutated = deepcopy(workflow)
+    transition = _transition(mutated, "open_triage")
+    if actor is None:
+        transition.pop("actor")
+    else:
+        transition["actor"] = actor
+
+    errors = check_workflow(mutated)
+
+    assert any("transition 'open_triage'" in error and "actor" in error for error in errors)
+
+
+def test_validator_rejects_close_without_approval(workflow: dict) -> None:
+    mutated = deepcopy(workflow)
+    transition = _transition(mutated, "close_incident")
+    transition["requires_approval"] = False
+    transition.pop("records_approval")
+
+    errors = check_workflow(mutated)
+
+    assert "protected transition 'close_incident' must require approval" in errors
+    assert "protected transition 'close_incident' must record an approval" in errors
+
+
+def test_validator_rejects_incompatible_workflow_version(
+    workflow: dict, state_schema: dict
+) -> None:
+    mutated = deepcopy(workflow)
+    mutated["workflow_version"] = "9.9.9"
+
+    errors = check_workflow_state_alignment(mutated, state_schema)
+
+    assert "workflow_version '9.9.9' is incompatible with state schema version '1.0.0'" in errors
+
+
 def test_failed_verification_returns_to_investigation(workflow: dict) -> None:
     """Criterion: a failed verification can go back to investigating."""
     assert any(
@@ -170,6 +226,13 @@ def test_declared_incident_requires_severity(validator) -> None:
     declared = {"state": "investigating", "incident_id": "inc-contract-test"}
     assert not validator.is_valid(_base_state() | declared)
     assert validator.is_valid(_base_state() | declared | {"severity": "sev2"})
+
+
+def test_state_schema_rejects_dismissed_incident_id(validator) -> None:
+    dismissed = _base_state() | {"state": "dismissed", "incident_id": "inc-audit"}
+
+    assert not validator.is_valid(dismissed)
+    assert validator.is_valid(_base_state() | {"state": "dismissed"})
 
 
 def test_evidence_is_never_trusted(state_schema: dict) -> None:
