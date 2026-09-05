@@ -9,6 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from starlette.exceptions import HTTPException
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
@@ -162,6 +163,9 @@ ERRORS = {
     422: ("contract_validation_failed", "Request validation failed."), 502: ("provider_evidence_invalid", "Provider response was invalid."),
     503: ("upstream_unavailable", "Upstream provider unavailable."), 504: ("upstream_timeout", "Upstream provider timed out."),
 }
+ERROR_MESSAGES = {
+    "audit_unavailable": "Audit unavailable.",
+}
 class ResponsesService:  # noqa: E305
     def __init__(self, sessions: Any, provider: LLMProvider, audit: AuditStore,
                  projector: AuditProjector) -> None:
@@ -174,24 +178,30 @@ class ResponsesService:  # noqa: E305
         except ValidationError:
             return await self._finish(request_id, started, 422, "validation",
                                       reason="contract_validation_failed")
-        context = await self._authenticate(authorization)
         identifiers = {name: value for name in ("incident_id", "run_id", "task_id")
                        if (value := getattr(request, name))}
-        if context is None:
-            return await self._finish(request_id, started, 401, "authentication",
-                                      reason="authentication_failed", identifiers=identifiers)
-        async with self.sessions() as session:
-            evaluation = await AuthorizationDecisionEngine(
-                ResourceRepository(session), GrantRepository(session)
-            ).evaluate(context.principal, "invoke", "llm_model", request.model)
-        decision = evaluation.decision
-        if decision.decision == "deny":
-            return await self._finish(request_id, started, 403, "authorization", context=context,
-                                      alias=request.model, decision=decision, reason="no_matching_grant",
-                                      authorization_denial_cause=evaluation.denial_cause,
-                                      identifiers=identifiers)
-        async with self.sessions() as session:
-            assignment = await ResourceRepository(session).resolve_assignment("llm_model", request.model)
+        try:
+            context = await self._authenticate(authorization)
+            if context is None:
+                return await self._finish(request_id, started, 401, "authentication",
+                                          reason="authentication_failed", identifiers=identifiers)
+            async with self.sessions() as session:
+                evaluation = await AuthorizationDecisionEngine(
+                    ResourceRepository(session), GrantRepository(session)
+                ).evaluate(context.principal, "invoke", "llm_model", request.model)
+            decision = evaluation.decision
+            if decision.decision == "deny":
+                return await self._finish(request_id, started, 403, "authorization", context=context,
+                                          alias=request.model, decision=decision, reason="no_matching_grant",
+                                          authorization_denial_cause=evaluation.denial_cause,
+                                          identifiers=identifiers)
+            async with self.sessions() as session:
+                assignment = await ResourceRepository(session).resolve_assignment("llm_model", request.model)
+        except Exception:
+            return await self._finish(request_id, started, 503, "audit",
+                                      reason="audit_unavailable", retryable=True,
+                                      identifiers=identifiers,
+                                      error_code="audit_unavailable")
         if assignment is None:
             return await self._finish(request_id, started, 503, "routing", context=context,
                                       alias=request.model, decision=decision,
@@ -234,7 +244,7 @@ class ResponsesService:  # noqa: E305
         if payload is not None:
             return JSONResponse(payload, status_code=status)
         code, message = error_code or ERRORS[status][0], ERRORS[status][1]
-        message = "Audit unavailable." if code == "audit_unavailable" else message
+        message = ERROR_MESSAGES.get(code, message)
         headers = {"Retry-After": str(retry_after)} if retry_after else None
         return JSONResponse({"error": {"code": code, "message": message},
                              "request_id": str(request_id), "retryable": status in {503, 504}},
@@ -250,6 +260,10 @@ def responses_router(service: ResponsesService) -> APIRouter:
                 try:
                     return await route_handler(request)
                 except RequestValidationError:
+                    return await service.create(None, request.headers.get("authorization"))
+                except HTTPException as failure:
+                    if failure.status_code != 400:
+                        raise
                     return await service.create(None, request.headers.get("authorization"))
 
             return validation_preserving_handler
