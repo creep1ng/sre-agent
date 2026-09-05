@@ -217,12 +217,6 @@
   gap: var(--ma-space-3);
 }
 
-.alert-list__status {
-  color: var(--ma-color-text-tertiary);
-  font-family: var(--ma-font-body);
-  font-size: var(--ma-font-size-xs);
-}
-
 .alert-list__title {
   font-size: var(--ma-font-size-md);
   line-height: var(--ma-line-height-heading);
@@ -359,6 +353,7 @@
 .alert-detail__origin-list dd {
   margin: 0;
   overflow-wrap: anywhere;
+  font-family: var(--ma-font-body);
   font-weight: 600;
 }
 
