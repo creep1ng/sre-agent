@@ -79,10 +79,15 @@ class AuditProjector:
             and audit_decision["decision"] == "deny"
             else None
         )
+        outcome = (
+            "success" if status < 400 else ("denied" if status in {403, 404} else "error")
+        )
+        # The public error_code doubles as the audit reason_code so terminal 403
+        # deny evidence stays consistent (no_matching_grant on engine deny).
+        audit_reason = reason if outcome != "denied" else "no_matching_grant"
         return AuditEvent(
             event_id=uuid4(), occurred_at=datetime.now(UTC), operation=operation,
-            action=action, stage=stage, outcome="success" if status < 400 else
-            ("denied" if status in {403, 404} else "error"), reason_code=reason,
+            action=action, stage=stage, outcome=outcome, reason_code=audit_reason,
             authorization_denial_cause=cause,
             response_status=status, retryable=retryable, latency_ms=latency_ms,
             correlation={"request_id": request_id}, identity=identity,

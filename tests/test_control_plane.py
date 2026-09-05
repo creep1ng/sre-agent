@@ -171,6 +171,73 @@ def test_control_projector_rejects_llm_routing_evidence() -> None:
         raise AssertionError("allow without grant must fail")
 
 
+def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
+    import asyncio
+
+    from sre_agent.control.service import ControlService
+    from sre_agent.governance.dto import PolicyDecision
+
+    projector = AuditProjector(b"x" * 32)
+    appended: list = []
+
+    class Audit:
+        async def append(self, event):
+            appended.append(event)
+            return event
+
+    service = ControlService.__new__(ControlService)
+    service.projector = projector
+    service.audit = Audit()
+
+    async def run() -> None:
+        allow = PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="g")
+        deny = PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None)
+        now = datetime(2026, 9, 4, tzinfo=UTC)
+        context = type(
+            "Context",
+            (),
+            {
+                "principal": _principal(),
+                "credential_id": "credential-admin-human",
+                "authenticated_at": now,
+            },
+        )()
+        ok_200 = await service._finish(
+            uuid4(),
+            0.0,
+            200,
+            "audit",
+            "principals.list",
+            "admin.read",
+            payload={"items": []},
+            context=context,
+            resource_ref=("administrative_control", "principals"),
+            decision=allow,
+        )
+        assert ok_200.status_code == 200
+        denied_403 = await service._finish(
+            uuid4(),
+            0.0,
+            403,
+            "authorization",
+            "principals.create",
+            "admin.write",
+            error_code="resource_unavailable",
+            context=context,
+            resource_ref=("administrative_control", "principals"),
+            decision=deny,
+            authorization_denial_cause="grant_not_applicable",
+        )
+        assert denied_403.status_code == 403
+
+    asyncio.run(run())
+    assert [event.stage for event in appended] == ["audit", "authorization"]
+    assert appended[0].identity is None and appended[0].resource is None
+    assert appended[0].reason_code is None
+    assert appended[1].reason_code == "no_matching_grant"
+    assert appended[1].authorization_denial_cause == "grant_not_applicable"
+
+
 def _stub_service(monkey_result=None, status=201, payload=None):
     from sre_agent.control.service import ControlService
 

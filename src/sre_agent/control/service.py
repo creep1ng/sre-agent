@@ -7,8 +7,17 @@ from time import monotonic
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Path, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    Header,
+    Path,
+    Query,
+    Request,
+    Response,
+    Security,
+)
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sre_agent.control.scopes import CONTROL_SCOPES
@@ -146,19 +155,31 @@ class ControlService:  # noqa: E305
         decision: Any = None,
         authorization_denial_cause: Any = None,
     ) -> JSONResponse:
-        event = self.projector.control_event(
-            request_id,
-            status,
-            max(0, int((monotonic() - started) * 1000)),
-            stage,
-            operation=operation,
-            action=action,
-            context=context,
-            resource_ref=resource_ref,
-            decision=decision,
-            authorization_denial_cause=authorization_denial_cause,
+        # Terminal audit events must satisfy the control AuditEvent validator:
+        # stage=authorization carries identity+resource+decision (no alias);
+        # any other stage carries no subject evidence. reason_code mirrors the
+        # public error_code so 403 deny evidence stays consistent.
+        audit_stage = stage if stage == "authorization" else "audit"
+        audit_context = context if audit_stage == "authorization" else None
+        audit_resource = resource_ref if audit_stage == "authorization" else None
+        audit_decision = decision if audit_stage == "authorization" else None
+        audit_cause = (
+            authorization_denial_cause if audit_stage == "authorization" and status == 403 else None
         )
         try:
+            event = self.projector.control_event(
+                request_id,
+                status,
+                max(0, int((monotonic() - started) * 1000)),
+                audit_stage,
+                operation=operation,
+                action=action,
+                reason=error_code,
+                context=audit_context,
+                resource_ref=audit_resource,
+                decision=audit_decision,
+                authorization_denial_cause=audit_cause,
+            )
             await self.audit.append(event)
         except Exception:
             error_code, status, payload = "audit_unavailable", 503, None
@@ -441,29 +462,60 @@ def control_router(service: ControlService) -> APIRouter:
     ship in follow-up slices with #147 open; see openspec apply-progress.
     """
     router = APIRouter()
+    bearer_scheme = HTTPBearer(auto_error=False, description="Administrative bearer credential")
+    bearer_credentials: Any = Security(bearer_scheme)
+    idempotency_header = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=16,
+        max_length=128,
+        pattern=r"^[\x20-\x7E]{16,128}$",
+        description="Scoped idempotency key (mutating POST only)",
+    )
 
-    @router.post("/v1/principals", status_code=201)
+    @router.post(
+        "/v1/principals",
+        status_code=201,
+        responses={
+            201: {"description": "Principal created", "content": {"application/json": {}}},
+            401: {"description": "Authentication failed"},
+            403: {"description": "Resource unavailable"},
+            409: {"description": "Idempotency conflict"},
+            422: {"description": "Validation error"},
+        },
+    )
     async def create_principal(
-        body: PrincipalCreate, request: Request, response: Response
+        body: PrincipalCreate,
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+        idempotency_key: str | None = idempotency_header,
     ) -> Response:
+        authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
         result = await service.create_principal(
             body.model_dump(mode="json"),
-            request.headers.get("authorization"),
-            request.headers.get("idempotency-key"),
+            authorization or request.headers.get("authorization"),
+            idempotency_key or request.headers.get("idempotency-key"),
         )
         response.status_code = result.status_code
         return result
 
     @router.get("/v1/principals")
     async def list_principals(
-        request: Request, response: Response, limit: int = Query(default=100, ge=1, le=100)
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+        limit: int = Query(default=100, ge=1, le=100),
     ) -> Response:
         try:
             ListPrincipalsQuery.model_validate({"limit": limit, **dict(request.query_params)})
         except ValidationError:
             pass
         params = {k: v for k, v in request.query_params.items() if k != "limit"}
-        result = await service.list_principals(request.headers.get("authorization"), limit, params)
+        authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
+        result = await service.list_principals(
+            authorization or request.headers.get("authorization"), limit, params
+        )
         response.status_code = result.status_code
         return result
 
@@ -472,8 +524,12 @@ def control_router(service: ControlService) -> APIRouter:
         principal_id: Annotated[str, Path(pattern=r"^[a-z][a-z0-9_-]{2,63}$")],
         request: Request,
         response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
     ) -> Response:
-        result = await service.get_principal(principal_id, request.headers.get("authorization"))
+        authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
+        result = await service.get_principal(
+            principal_id, authorization or request.headers.get("authorization")
+        )
         response.status_code = result.status_code
         return result
 
