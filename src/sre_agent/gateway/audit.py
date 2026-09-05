@@ -72,6 +72,8 @@ class AuditProjector:
             redaction={"policy_version": "redaction-1.0.0", "result": "success",
                        "source_class": "none", "categories": [], "match_count": 0,
                        "sink_eligible": False},
-            content_state="absent", authoritative_acceptance="accepted",
-            ordinary_result="released", exporter_result="not_attempted",
+            content_state="absent",
+            authoritative_acceptance="rejected" if reason == "audit_unavailable" else "accepted",
+            ordinary_result="suppressed" if reason == "audit_unavailable" else "released",
+            exporter_result="not_attempted",
         )
