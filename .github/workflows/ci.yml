@@ -62,12 +62,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run validate
-      - run: npm run validate:release -- --release 1.0.0
-      - run: npm run validate:release -- --release 1.1.0
-      - run: npm run validate:release -- --release 1.2.0
+      - run: npm run validate:releases
       - run: npm run lint:openapi
-      - run: npm run conformance -- --consumer issue-10
-      - run: npm run conformance -- --consumer issue-14
 
   issue-11-postgresql:
     runs-on: ubuntu-latest

@@ -94,6 +94,42 @@ export async function validateRelease(version = DEFAULT_VERSION) {
   const evidence = JSON.parse(await readFile(join(root, "conformance/evidence.json"))), expectedEvidence = await evidenceObject(root, version, results); assertImmutableManifest(evidence, expectedEvidence); return { artifacts: Object.values(manifest.inventory).flat().length, results: evidence.results.length };
 }
 
+export function assertEveryPublishedRelease(published, validated) {
+  const omitted = published.filter((version) => !validated.includes(version));
+  const unknown = validated.filter((version) => !published.includes(version));
+  if (omitted.length || unknown.length) {
+    throw new Error(
+      `Release validation omitted [${omitted.join(", ")}] and added unknown [${unknown.join(", ")}]`,
+    );
+  }
+}
+
+export async function validatePublishedReleases(
+  root = join(schemas, "releases"),
+  validator = validateRelease,
+) {
+  const entries = await readdir(root, { withFileTypes: true });
+  const versions = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  if (!versions.length || versions.some((version) => !SEMVER.test(version))) {
+    throw new Error("Published release directories must use semantic versions");
+  }
+  const validated = [];
+  const results = [];
+  for (const version of versions) {
+    const manifest = await parsed(join(root, version, "manifest.yaml"));
+    if (manifest?.contract_version !== version) {
+      throw new Error(`Release directory ${version} does not match its manifest`);
+    }
+    results.push({ version, ...await validator(version) });
+    validated.push(version);
+  }
+  assertEveryPublishedRelease(versions, validated);
+  return { releases: validated, results };
+}
+
 export async function writeProjectionFixtures(version = DEFAULT_VERSION) {
   const root = releaseRoot(version); if (await optional(join(root, "manifest.yaml"), parse)) throw new Error(`Release ${version} is immutable; projection fixtures cannot be regenerated`); const outputs = [join(tooling, `.tmp/projection-control-${version}.yaml`), join(tooling, `.tmp/projection-responses-${version}.yaml`)]; await mkdir(dirname(outputs[0]), { recursive: true }); try { await Promise.all([runReleaseOpenapi("control-plane", outputs[0], version), runReleaseOpenapi("responses", outputs[1], version)]); const match = { contract_version: version, ...combineOpenapi(...await Promise.all(outputs.map(readContractFile))) }, missing = structuredClone(match), extra = structuredClone(match), first = Object.keys(missing.paths).sort()[0]; delete missing.paths[first]; extra.paths["/__future_drift__"] = { get: { parameters: [], security: { requirements: [], schemes: {} }, request: null, responses: { 200: { content: {} } } } };
     const files = [["positive/future-fastapi.match.projection.json", match], ["negative/future-fastapi.missing.projection.json", missing], ["negative/future-fastapi.extra.projection.json", extra]]; for (const [name, value] of files) await writeFile(join(root, "fixtures", name), `${canonical(value)}\n`); return files.map(([name]) => name);
