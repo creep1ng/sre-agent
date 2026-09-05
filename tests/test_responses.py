@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 import psycopg
@@ -81,11 +82,13 @@ def post(
     principal: str | None,
     body: object = BODY,
     audit_store: object | None = None,
+    authorization_key: str | None = None,
 ):
     settings = Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY)
     application = create_application(settings, llm_provider=provider, audit_store=audit_store)
     provider.application = application
-    headers = {"Authorization": f"Bearer {KEYS[principal]}"} if principal else {}
+    key = authorization_key or (KEYS[principal] if principal else None)
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
     with TestClient(application) as client:
         return client.post("/v1/responses", headers=headers, json=body)
 
@@ -96,6 +99,17 @@ def latest_events() -> list[tuple]:
             "SELECT stage,response_status,latency_ms,identity,routing,"
             "policy_decision,correlation,to_jsonb(audit_events) "
             "FROM audit_events ORDER BY occurred_at DESC,event_id DESC LIMIT 1"
+        ).fetchall()
+
+
+def events_for_request(request_id: str) -> list[tuple]:
+    with psycopg.connect(DATABASE_URL) as connection:
+        return connection.execute(
+            "SELECT stage,response_status,latency_ms,identity,routing,"
+            "policy_decision,correlation,to_jsonb(audit_events) "
+            "FROM audit_events WHERE correlation ->> 'request_id' = %s "
+            "ORDER BY occurred_at,event_id",
+            (request_id,),
         ).fetchall()
 
 
@@ -220,6 +234,176 @@ def test_inactive_resource_stops_before_grant_and_routing_reads(
     assert event[7]["authorization_denial_cause"] == "resource_inactive"
     assert calls == {"grant": 0, "routing": 0}
     assert provider.requests == []
+
+
+INVALID_KEYS = {
+    "incident-harness": "sre_inci_attempted_invalid_credential_0123456789",
+    "restricted-harness": "sre_rest_attempted_invalid_credential_0123456789",
+}
+
+# The attempted identity labels document the caller's claimed credential family only. Invalid
+# authentication never resolves a Principal and therefore cannot reach authorization.
+CREDENTIAL_MATRIX = [
+    pytest.param(
+        credential_state,
+        attempted_principal,
+        alias_exists,
+        id=(
+            f"credential={credential_state},principal={attempted_principal},"
+            f"alias={'existing' if alias_exists else 'missing'}"
+        ),
+    )
+    for credential_state in ("valid", "invalid", "revoked")
+    for attempted_principal in ("authorized", "unauthorized")
+    for alias_exists in (True, False)
+]
+
+
+def matrix_key(credential_state: str, attempted_principal: str) -> str:
+    principal = matrix_principal(attempted_principal)
+    return KEYS[principal] if credential_state != "invalid" else INVALID_KEYS[principal]
+
+
+def matrix_principal(attempted_principal: str) -> str:
+    return "incident-harness" if attempted_principal == "authorized" else "restricted-harness"
+
+
+def matrix_expectation(
+    credential_state: str, attempted_principal: str, alias_exists: bool
+) -> tuple[int, str, int, dict[str, int]]:
+    if credential_state in {"invalid", "revoked"}:
+        return 401, "authentication", 0, {"resource": 0, "grant": 0, "routing": 0}
+    if attempted_principal == "authorized" and alias_exists:
+        return 200, "response", 1, {"resource": 1, "grant": 1, "routing": 1}
+    if attempted_principal == "authorized":
+        return 403, "authorization", 0, {"resource": 1, "grant": 0, "routing": 0}
+    return (
+        403,
+        "authorization",
+        0,
+        {
+            "resource": 1,
+            "grant": 1 if alias_exists else 0,
+            "routing": 0,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    ("credential_state", "attempted_principal", "alias_exists"), CREDENTIAL_MATRIX
+)
+def test_public_responses_credential_matrix(
+    credential_state: str,
+    attempted_principal: str,
+    alias_exists: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    calls = {"resource": 0, "grant": 0, "routing": 0}
+    original_resource = ResourceRepository.authorization_view
+    original_grant = GrantRepository.find_active
+    original_routing = ResourceRepository.resolve_assignment
+
+    async def resource_read(repository: ResourceRepository, *args: object) -> object:
+        calls["resource"] += 1
+        return await original_resource(repository, *args)
+
+    async def grant_read(repository: GrantRepository, *args: object) -> object:
+        calls["grant"] += 1
+        return await original_grant(repository, *args)
+
+    async def routing_read(repository: ResourceRepository, *args: object) -> object:
+        calls["routing"] += 1
+        return await original_routing(repository, *args)
+
+    monkeypatch.setattr(ResourceRepository, "authorization_view", resource_read)
+    monkeypatch.setattr(GrantRepository, "find_active", grant_read)
+    monkeypatch.setattr(ResourceRepository, "resolve_assignment", routing_read)
+
+    principal = matrix_principal(attempted_principal)
+    key = matrix_key(credential_state, attempted_principal)
+    if credential_state == "revoked":
+        with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+            connection.execute(
+                "UPDATE credentials SET status = 'revoked', revoked_at = CURRENT_TIMESTAMP "
+                "WHERE credential_id = %s",
+                (f"credential-{principal}",),
+            )
+    try:
+        provider = RecordingProvider()
+        response = post(
+            provider,
+            None,
+            BODY | {"model": "triage-agent" if alias_exists else "missing-agent"},
+            authorization_key=key,
+        )
+    finally:
+        if credential_state == "revoked":
+            with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+                connection.execute(
+                    "UPDATE credentials SET status = 'active', revoked_at = NULL "
+                    "WHERE credential_id = %s",
+                    (f"credential-{principal}",),
+                )
+
+    expected_status, expected_stage, expected_upstream, expected_calls = matrix_expectation(
+        credential_state, attempted_principal, alias_exists
+    )
+    assert response.status_code == expected_status
+    assert len(provider.requests) == expected_upstream
+    assert calls == expected_calls
+    if expected_status == 200:
+        assert response.json()["output"][0]["content"][0]["text"] == "sensitive provider output"
+    elif expected_status == 403:
+        assert response.json()["error"] == {
+            "code": "resource_unavailable",
+            "message": "Resource unavailable.",
+        }
+        assert response.json()["retryable"] is False
+    else:
+        assert response.json()["error"] == {
+            "code": "authentication_failed",
+            "message": "Authentication failed.",
+        }
+        assert response.json()["retryable"] is False
+
+    events = events_for_request(response.json()["request_id"])
+    assert len(events) == 1
+    event = events[0]
+    assert event[:3] == (expected_stage, expected_status, event[2]) and event[2] >= 0
+    assert str(event[6]["request_id"]) == response.json()["request_id"]
+    assert event[7]["content_state"] == "absent"
+    if expected_status == 401:
+        assert event[3:6] == (None, None, None)
+    elif expected_status == 403:
+        expected_cause = "resource_missing" if not alias_exists else "grant_not_applicable"
+        assert event[3] and event[4] is None
+        assert event[5]["decision"] == "deny"
+        assert event[7]["authorization_denial_cause"] == expected_cause
+    else:
+        assert event[3] and event[4]
+        assert event[5]["decision"] == "allow"
+        assert event[7]["authorization_denial_cause"] is None
+
+    internal_causes = (
+        "authorization_denial_cause",
+        "grant_not_applicable",
+        "resource_missing",
+        "resource_inactive",
+        "principal_inactive",
+    )
+    public_forbidden = (key, BODY["input"], *internal_causes)
+    assert all(value not in response.text for value in public_forbidden)
+    audit_forbidden = (
+        *KEYS.values(),
+        *INVALID_KEYS.values(),
+        BODY["input"],
+        "sensitive provider output",
+        AUDIT_KEY,
+    )
+    assert all(value not in repr(event) for value in audit_forbidden)
+    assert all(value not in caplog.text for value in (*audit_forbidden, *internal_causes))
 
 
 def test_allow_calls_once_outside_transactions_and_commits_protected_readback() -> None:
