@@ -1,0 +1,56 @@
+# Adapted canonical state — HT-INC-08 (issue #149)
+#
+# Produced by src/sre_agent/incident/signals.py from
+# agent/fixtures/signals/otel-payment-failure-signal.json.
+# Proves the adapter result feeds triage: full IncidentState 1.0.0 in `detected`
+# with incident_id null (declaration belongs to the triage decision, #23/#26).
+# Correlation (trace/span/resource) lives outside this file by design: origin
+# is closed by 1.0.0 (audit C03/C04).
+---
+workflow_id: incident-response
+workflow_version: 1.0.0
+incident_id: null
+linked_incident_id: null
+run_id: null
+task_id: null
+state: detected
+process_stage: null
+severity: null
+impact: null
+
+alert:
+  alert_id: alt-paymentservice-a1b2c3d4
+  service: paymentservice
+  severity: sev2
+  status: new
+  observed_at: '2026-08-24T14:04:30Z'
+  summary: traces_span_metrics_calls_total on paymentservice (trace a1b2c3d4)
+  source: opentelemetry-demo
+  origin:
+    signal: traces_span_metrics_calls_total
+    condition: error rate above threshold over a five minute window
+    detector: opentelemetry-demo
+    observed_at: '2026-08-24T14:04:30Z'
+
+hypotheses: []
+mitigation_strategy: null
+postmortem: null
+evidence: []
+decisions: []
+approvals: []
+
+timeline:
+  - event_id: evt_alert_received
+    kind: state_change
+    from_state: null
+    to_state: detected
+    reference_id: alt-paymentservice-a1b2c3d4
+    actor: system
+    request_id: null
+    audit_event_id: null
+    note: Alert adapted from OTel demo signal (mapping 1.0.0).
+    occurred_at: '2026-08-24T14:04:30Z'
+
+authorized_capabilities: []
+
+updated_at: '2026-08-24T14:04:30Z'
