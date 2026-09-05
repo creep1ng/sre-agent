@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:resource:1.4.0","rule":"valid","status":"positive","version":"1.4.0","group":"model-resource","data":{"resource_type":"llm_model","resource_id":"model-alias-1"}}
