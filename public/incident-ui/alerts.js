@@ -285,6 +285,10 @@
     renderDetail(alert);
   }
 
+  // Intención manual de triage (contrato Sprint 1, HU-OPS-01).
+  // El auto-triage por umbral del plano de control está bloqueado por falta
+  // de contrato: ver docs/hu-ops-01-threshold-contract-pending.md. No
+  // hardcodear un threshold aquí.
   function emitTriageRequest() {
     const alertId = nodes["start-triage"].dataset.alertId;
     const alert = state.alerts.find((candidate) => candidate.alert_id === alertId);
