@@ -114,10 +114,57 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
         len(ADMIN_RESOURCES),
         len(ADMIN_GRANTS),
     ):
-        # Explicit conflict (owner decision #147): databases seeded before #147 have
-        # no test data in any environment and must reseed rather than partially
-        # upgrade. Additive upgrade is out of scope for this slice.
-        raise SeedConflict("seed_state_conflict: pre_control_plane_seed_requires_reseed")
+        # Additive convergence: databases seeded before #147 keep their data and
+        # gain the missing administrative nodes. Missing resources/grants are
+        # inserted with the same deterministic values as a fresh seed; existing
+        # rows are then validated by the convergence check below.
+        present_resources = {(row.resource_type, row.resource_id) for row in admin_resources}
+        await session.execute(
+            insert(ResourceRow),
+            [
+                dict(
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    status="active",
+                    model_alias_id=None,
+                    alias=None,
+                    concrete_model=None,
+                    router=None,
+                    inference_provider=None,
+                )
+                for resource_type, resource_id in ADMIN_RESOURCES
+                if (resource_type, resource_id) not in present_resources
+            ],
+        )
+        present_grants = {row.grant_id for row in admin_grants}
+        await session.execute(
+            insert(GrantRow),
+            [
+                dict(
+                    grant_id=grant_id,
+                    principal_id=principal_id,
+                    action=action,
+                    resource_type="administrative_control",
+                    resource_id="principals" if "principals" in grant_id else "credentials",
+                    effect="allow",
+                    status="active",
+                    created_at=SEED_TIME,
+                )
+                for grant_id, principal_id, action in ADMIN_GRANTS
+                if grant_id not in present_grants
+            ],
+        )
+        await session.flush()
+        admin_resources = [
+            row
+            for key in ADMIN_RESOURCES
+            if (row := await session.get(ResourceRow, key)) is not None
+        ]
+        admin_grants = [
+            row
+            for grant_id, _, _ in ADMIN_GRANTS
+            if (row := await session.get(GrantRow, grant_id)) is not None
+        ]
     if not existing:
         # Compact construction keeps this atomic work unit within its review budget.
         # fmt: off

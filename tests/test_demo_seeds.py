@@ -107,6 +107,31 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
 
 
 @pytest.mark.asyncio
+async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
+    settings = SeedSettings.from_environment(ENV)
+    database = Database(DATABASE_URL)
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DELETE FROM grants WHERE action LIKE 'admin.%'")
+        connection.execute("DELETE FROM resources WHERE resource_type='administrative_control'")
+    assert await seed(database, settings) is False
+    with psycopg.connect(DATABASE_URL) as connection:
+        counts = [
+            connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            for table in ("principals", "credentials", "resources", "grants")
+        ]
+        admin_resources = connection.execute(
+            "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+        ).fetchone()[0]
+        admin_grants = connection.execute(
+            "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
+        ).fetchone()[0]
+    await database.dispose()
+    assert counts == [4, 4, 3, 5]
+    assert admin_resources == 2
+    assert admin_grants == 4
+
+
+@pytest.mark.asyncio
 async def test_seed_conflict_is_atomic_and_secret_free() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
