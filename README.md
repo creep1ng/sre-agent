@@ -98,7 +98,10 @@ See [runtime boundaries](docs/architecture.md) and the [Codex worktree workflow]
 
 ## Local verification
 
-All verification runs inside Compose containers. In a linked worktree, replace
+All verification runs inside Compose containers. The Python command starts a dedicated PostgreSQL
+service backed by disposable `tmpfs`; it neither starts nor mounts the persistent demo database.
+An isolation guard also refuses to run when the test and demo database identities match. In a
+linked worktree, replace
 `docker compose` below with `scripts/worktree-compose` so the generated project name and ports
 remain isolated.
 

@@ -1,4 +1,9 @@
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).parents[1]
 
@@ -37,7 +42,62 @@ def test_all_repository_checks_have_containerized_compose_interfaces() -> None:
     assert "./scripts:/source/scripts:ro" in compose
     assert "FROM base AS checks" in dockerfile
     assert "COPY tests ./tests" in dockerfile
+    assert "COPY agent ./agent" in dockerfile
+    assert "COPY docs ./docs" in dockerfile
+    assert "COPY .github ./.github" in dockerfile
     assert "docker compose --profile checks" in readme
+
+
+def test_python_checks_uses_disposable_database_without_demo_dependency() -> None:
+    compose = (ROOT / "compose.yaml").read_text()
+    checks = compose.split("  python-checks:", 1)[1].split("  python-checks-db:", 1)[0]
+    checks_db = compose.split("  python-checks-db:", 1)[1].split("  harness:", 1)[0]
+
+    assert "python-checks-db:" in checks
+    assert "migrate:" not in checks
+    assert "@python-checks-db:5432/python_checks" in checks
+    assert "/var/lib/postgresql/data" in checks_db
+    assert "ports:" not in checks_db
+    assert "postgres_data" not in checks_db
+
+
+def test_ci_runs_the_documented_python_checks_command() -> None:
+    command = "docker compose --profile checks run --build --rm python-checks"
+    readme = (ROOT / "README.md").read_text()
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert command in readme
+    assert f"run: {command}" in workflow
+
+
+@pytest.mark.parametrize(
+    ("demo_url", "test_url"),
+    [
+        (
+            "postgresql://admin:secret@db:5432/demo",
+            "postgresql://tester:other@db:5432/demo",
+        ),
+        ("postgresql://admin@db:5432/demo", "postgresql://tester@db/demo"),
+    ],
+)
+def test_database_isolation_guard_rejects_same_database_endpoint(
+    demo_url: str, test_url: str
+) -> None:
+    environment = os.environ | {
+        "DEMO_DATABASE_URL": demo_url,
+        "TEST_DATABASE_URL": test_url,
+    }
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "assert_test_database_isolated.py")],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "Refusing to run tests against the demo database" in result.stderr
 
 
 def test_issue_14_harness_is_deterministic_and_provider_secret_free() -> None:

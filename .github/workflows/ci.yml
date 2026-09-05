@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  python-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Create local-only Compose inputs
+        run: cp .env.example .env
+      - name: Run the documented Python checks
+        run: docker compose --profile checks run --build --rm python-checks
+      - name: Remove disposable check services
+        if: always()
+        run: docker compose --profile checks down -v --remove-orphans
+
   python:
     runs-on: ubuntu-latest
     steps:
