@@ -12,6 +12,7 @@ and incident.io (intake ≠ declaration: incident_id is never invented here).
 
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -25,6 +26,9 @@ _SEVERITIES = frozenset({"sev1", "sev2", "sev3", "sev4"})
 _TRACE_RE = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_RE = re.compile(r"^[0-9a-f]{16}$")
 _ALERT_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
+# Full RFC 3339 date-time with an explicit timezone. Date-only and
+# timezone-naive values are rejected: the adapter never invents time or zone.
+_RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:?\d{2})$")
 _SENSITIVE_RE = re.compile(r"password|secret|token|authorization|cookie|api_key|set-cookie")
 _ALLOWED_RESOURCE_KEYS = ("service.name", "service.namespace", "deployment.environment")
 
@@ -55,22 +59,65 @@ def _require(mapping: dict, name: str) -> object:
 
 
 def _parse_time(value: object) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if value is None or (isinstance(value, str) and not value.strip()):
         raise SignalRejected("missing_field", "span timestamp is absent or empty")
-    text = value.strip().replace("Z", "+00:00")
+    if not isinstance(value, str):
+        raise SignalRejected("invalid_format", "span timestamp must be an RFC 3339 string")
+    text = value.strip()
+    if not _RFC3339_RE.match(text):
+        raise SignalRejected(
+            "invalid_format",
+            "span timestamp must be a full RFC 3339 date-time with timezone; "
+            "date-only and timezone-naive values are rejected",
+        )
     try:
-        parsed = datetime.fromisoformat(text)
-    except ValueError:
-        raise SignalRejected("invalid_format", f"timestamp '{value}' is not RFC 3339") from None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00").replace("z", "+00:00"))
+        return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    except (ValueError, OverflowError, OSError) as error:
+        raise SignalRejected(
+            "invalid_format", f"timestamp '{value}' is not a usable RFC 3339 value: {error}"
+        ) from None
 
 
 def _slug(service: str) -> str:
     slug = re.sub(r"[^a-z0-9_-]", "-", service.strip().lower())
     slug = re.sub(r"-+", "-", slug).strip("-") or "unknown"
     return slug[:48]
+
+
+def _sanitized_resource(resource: dict, dropped: list) -> dict:
+    """Keep only scalar values for allow-listed resource keys.
+
+    The allow-list controls keys AND surviving content: a nested object or
+    array under an allowed key is dropped as a whole, so unknown or sensitive
+    fields can never ride into the correlation envelope inside an allowed
+    value. Every drop is reported in `dropped`.
+    """
+    clean: dict = {}
+    for key in _ALLOWED_RESOURCE_KEYS:
+        if key not in resource:
+            continue
+        value = resource[key]
+        if isinstance(value, str | int | float):
+            clean[key] = value
+        else:
+            dropped.append(f"resource_attributes.{key}")
+    return clean
+
+
+def _alert_id(service: str, span_name: str, trace_id: str, span_id: str) -> str:
+    """Derive a stable identity from the full signal identifiers.
+
+    Identity = trace_id + span_id + service + span name, hashed with SHA-256.
+    Truncating trace_id alone is not an identity (distinct signals may share a
+    prefix); truncating a collision-resistant hash is. Retries of the exact
+    same signal hash identically (idempotent); distinct signals diverge.
+    The slug is capped so the result always fits the 64-char contract pattern.
+    """
+    fingerprint = hashlib.sha256(
+        f"{trace_id}:{span_id}:{service.strip().lower()}:{span_name.strip()}".encode()
+    ).hexdigest()[:12]
+    return f"alt-{_slug(service)[:47]}-{fingerprint}"
 
 
 def _scan_sensitive(obj: object, path: str, dropped: list) -> None:
@@ -119,10 +166,12 @@ def adapt_otel_signal(raw: dict) -> AdaptedSignal:
     observed_at = _parse_time(span.get("timestamp"))
 
     severity = raw.get("severity_hint")
-    if severity not in _SEVERITIES:
+    if not isinstance(severity, str) or severity not in _SEVERITIES:
         if severity is None or (isinstance(severity, str) and not severity.strip()):
             raise SignalRejected("missing_field", "severity_hint is required (sev1..sev4)")
-        raise SignalRejected("unsupported_severity", f"severity '{severity}' is not sev1..sev4")
+        raise SignalRejected(
+            "unsupported_severity", f"severity_hint '{severity}' is not sev1..sev4"
+        )
 
     status = span.get("status") or {}
     message = status.get("message") if isinstance(status, dict) else None
@@ -154,7 +203,7 @@ def adapt_otel_signal(raw: dict) -> AdaptedSignal:
         ):
             dropped.append(top)
 
-    alert_id = f"alt-{_slug(service)}-{trace_id[:8]}"
+    alert_id = _alert_id(service, name, trace_id, span_id)
     if not _ALERT_ID_RE.match(alert_id):
         raise SignalRejected("invalid_format", f"derived alert_id '{alert_id}' violates contract")
 
@@ -179,6 +228,6 @@ def adapt_otel_signal(raw: dict) -> AdaptedSignal:
         "mapping_version": MAPPING_VERSION,
         "trace_id": trace_id,
         "span_id": span_id,
-        "resource": {key: resource[key] for key in _ALLOWED_RESOURCE_KEYS if key in resource},
+        "resource": _sanitized_resource(resource, dropped),
     }
     return AdaptedSignal(alert=alert, correlation=correlation, dropped=sorted(set(dropped)))

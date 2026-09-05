@@ -19,7 +19,7 @@ severity: null
 impact: null
 
 alert:
-  alert_id: alt-paymentservice-a1b2c3d4
+  alert_id: alt-paymentservice-b5515c24f983
   service: paymentservice
   severity: sev2
   status: new
@@ -44,7 +44,7 @@ timeline:
     kind: state_change
     from_state: null
     to_state: detected
-    reference_id: alt-paymentservice-a1b2c3d4
+    reference_id: alt-paymentservice-b5515c24f983
     actor: system
     request_id: null
     audit_event_id: null

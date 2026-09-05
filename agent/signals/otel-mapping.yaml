@@ -61,6 +61,20 @@ correlation_envelope:
     Anomaly entity. Downstream (#145/#146) decides durable storage.
   fields: [trace_id, span_id, service.name, service.namespace, deployment.environment]
   versioned_as: otel-correlation 1.0.0
+  resource_values: scalar only (string, number, boolean). A nested object or
+    array under an allowed key is dropped as a whole with its path reported,
+    so unknown/sensitive content cannot ride in inside an allowed value.
+
+identity:
+  alert_id: alt-{service-slug}-{sha256(trace_id:span_id:service:span.name)[:12]}
+  notes: Identity uses the full identifiers, never a trace_id prefix. Retries
+    of the exact same signal hash identically (idempotent); distinct signals
+    diverge. The slug is capped so the id always fits the 64-char pattern.
+
+timestamp:
+  format: full RFC 3339 date-time with explicit timezone (e.g. ...Z or ±HH:MM).
+  rejected: date-only values, timezone-naive values (hour/zone must not be
+    invented), non-string values, and values that overflow normalization.
 
 drop_policy:
   unknown_fields: dropped and reported in `dropped`, never mapped
@@ -69,5 +83,6 @@ drop_policy:
 
 errors:
   missing_field: required OTel field absent or empty
-  invalid_format: malformed trace_id, span_id, timestamp or service name
-  unsupported_severity: severity_hint outside sev1..sev4
+  invalid_format: malformed trace_id, span_id, timestamp or service name; also
+    non-string severity/timestamp values and un-normalizable timestamps
+  unsupported_severity: severity_hint present but outside sev1..sev4 (any type)

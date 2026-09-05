@@ -27,6 +27,17 @@ Contrato de mapeo versionado: `agent/signals/otel-mapping.yaml` (1.0.0).
 Correlación (`trace_id`, `span_id`, `resource` permitida) viaja en un envelope
 versionado (`otel-correlation 1.0.0`) **fuera** de `alert.origin`, que permanece
 cerrado por `incident-state 1.0.0` (auditoría C03/C04). Sin entidad Anomalía.
+Solo sobreviven valores escalares de resource; un objeto/arreglo anidado bajo
+una clave permitida se descarta completo.
+
+Identidad e idempotencia: `alert_id =
+alt-{slug}-{sha256(trace_id:span_id:service:span.name)[:12]}`. Usa los
+identificadores completos, nunca el prefijo de `trace_id`: reintentos de la
+misma señal producen el mismo id; señales distintas divergen.
+
+Temporal: se exige RFC 3339 completo con zona explícita. Fecha sola, timestamp
+sin zona y valores que desbordan la normalización se rechazan (`invalid_format`);
+nunca se inventa hora ni zona.
 
 ## Política de descarte
 

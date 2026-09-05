@@ -45,7 +45,7 @@ def test_valid_demo_signal_yields_exactly_one_canonical_alert() -> None:
     adapted = adapt_otel_signal(_signal("otel-payment-failure-signal.json"))
     validator = build_validator(load_yaml(STATE_SCHEMA_PATH))
     assert validator.is_valid(_base_state(adapted.alert))
-    assert adapted.alert["alert_id"] == "alt-paymentservice-a1b2c3d4"
+    assert adapted.alert["alert_id"] == "alt-paymentservice-b5515c24f983"
     assert adapted.alert["status"] == "new"
     assert adapted.alert["source"] == "opentelemetry-demo"
 
@@ -99,3 +99,87 @@ def test_incomplete_signals_rejected_deterministically(fixture: str, code: str) 
         adapt_otel_signal(_signal(fixture))
     assert error.value.code == code
     assert str(error.value).startswith(code)
+
+
+def _with(**overrides: object) -> dict:
+    signal = _signal("otel-payment-failure-signal.json")
+    signal.update(overrides)
+    return signal
+
+
+def test_nested_sensitive_values_under_allowed_keys_are_dropped() -> None:
+    """P1: an allow-listed key must not smuggle nested secrets into correlation."""
+    signal = _signal("otel-payment-failure-signal.json")
+    signal["resource_attributes"]["service.namespace"] = {
+        "api_key": "SYNTHETIC_SECRET",
+        "unexpected": "retained",
+    }
+    adapted = adapt_otel_signal(signal)
+    blob = json.dumps([adapted.alert, adapted.correlation])
+    assert "SYNTHETIC_SECRET" not in blob
+    assert "retained" not in blob
+    assert "service.namespace" not in adapted.correlation["resource"]
+    assert "resource_attributes.service.namespace" in adapted.dropped
+
+
+@pytest.mark.parametrize("bad", [{}, [], 5, "critical"])
+def test_mistyped_severity_hint_is_rejected_not_raised(bad: object) -> None:
+    """P2: unhashable or invalid severity values must yield SignalRejected."""
+    with pytest.raises(SignalRejected) as error:
+        adapt_otel_signal(_with(severity_hint=bad))
+    assert error.value.code == "unsupported_severity"
+
+
+def test_valid_severity_hint_is_accepted() -> None:
+    assert adapt_otel_signal(_with(severity_hint="sev1")).alert["severity"] == "sev1"
+
+
+def test_same_trace_prefix_yields_distinct_alert_ids() -> None:
+    """P3: identity uses the full identifiers, never the trace_id prefix."""
+    first = adapt_otel_signal(_signal("otel-payment-failure-signal.json"))
+    second_raw = _signal("otel-payment-failure-signal.json")
+    second_raw["trace_id"] = first.correlation["trace_id"][:8] + "0" * 24
+    second = adapt_otel_signal(second_raw)
+    assert first.alert["alert_id"] != second.alert["alert_id"]
+
+
+def test_resending_the_same_signal_is_idempotent() -> None:
+    """P3: retries of the exact same signal keep a valid, stable alert_id."""
+    validator = build_validator(load_yaml(STATE_SCHEMA_PATH))
+    first = adapt_otel_signal(_signal("otel-payment-failure-signal.json"))
+    second = adapt_otel_signal(_signal("otel-payment-failure-signal.json"))
+    assert first.alert["alert_id"] == second.alert["alert_id"]
+    assert validator.is_valid(_base_state(first.alert))
+
+
+@pytest.mark.parametrize(
+    ("timestamp", "expected"),
+    [
+        ("2026-08-24T14:04:30Z", "2026-08-24T14:04:30Z"),
+        ("2026-08-24T14:04:30+02:00", "2026-08-24T12:04:30Z"),
+    ],
+)
+def test_full_rfc3339_timestamps_are_normalized(timestamp: str, expected: str) -> None:
+    """P4: complete zoned timestamps normalize to UTC without inventing data."""
+    signal = _signal("otel-payment-failure-signal.json")
+    signal["span"]["timestamp"] = timestamp
+    assert adapt_otel_signal(signal).alert["observed_at"] == expected
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "2026-08-24",
+        "2026-08-24T14:04:30",
+        "definitely-not-a-timestamp",
+        "0001-01-01T00:30:00+01:00",
+        12345,
+    ],
+)
+def test_incomplete_or_unusable_timestamps_are_rejected(timestamp: object) -> None:
+    """P4: date-only, naive, malformed or overflowing timestamps are rejected."""
+    signal = _signal("otel-payment-failure-signal.json")
+    signal["span"]["timestamp"] = timestamp
+    with pytest.raises(SignalRejected) as error:
+        adapt_otel_signal(signal)
+    assert error.value.code == "invalid_format"
