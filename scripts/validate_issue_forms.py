@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate HT/HU issue forms and render a no-write draft preview."""
+
 from __future__ import annotations
 
 import argparse
@@ -36,8 +37,7 @@ def validate(document: dict, kind: str) -> None:
     if labels != ORDER:
         raise ValueError(f"{kind}: field order is {labels}, expected {ORDER}")
     if any(
-        item["type"] != "textarea"
-        or not item.get("validations", {}).get("required")
+        item["type"] != "textarea" or not item.get("validations", {}).get("required")
         for item in items
     ):
         raise ValueError(f"{kind}: every planning field must be a required textarea")
@@ -51,9 +51,9 @@ def validate(document: dict, kind: str) -> None:
     dor_description = dor["attributes"]["description"].lower()
     if dor["type"] != "textarea" or "puede publicarse" not in dor_description:
         raise ValueError(f"{kind}: DoR must allow unresolved prerequisites")
-    evidence = next(
-        item for item in items if item["id"] == "acceptance_evidence"
-    )["attributes"]["description"].lower()
+    evidence = next(item for item in items if item["id"] == "acceptance_evidence")["attributes"][
+        "description"
+    ].lower()
     if not all(word in evidence for word in ("comandos", "capturas", "video")):
         raise ValueError(f"{kind}: evidence must include functional proof methods")
     if "tests solos no bastan" not in evidence:
@@ -96,8 +96,7 @@ def assert_rejected(document: dict, reason: str, kind: str) -> None:
 def load_documents() -> dict[str, dict]:
     template_dir = ROOT / ".github/ISSUE_TEMPLATE"
     return {
-        kind: yaml.safe_load((template_dir / f"{kind}.yml").read_text())
-        for kind in ("ht", "hu")
+        kind: yaml.safe_load((template_dir / f"{kind}.yml").read_text()) for kind in ("ht", "hu")
     }
 
 
