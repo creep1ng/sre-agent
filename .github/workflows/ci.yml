@@ -109,6 +109,8 @@ jobs:
       - run: alembic upgrade head && alembic upgrade head
       - run: python -m sre_agent.persistence.seeds
       - run: python -m sre_agent.persistence.seeds
+      - name: Show issue 27 Responses credential matrix evidence
+        run: pytest -vv tests/test_responses.py::test_public_responses_credential_matrix
       - name: Run PostgreSQL-backed Python tests
         run: >-
           pytest -q
@@ -120,6 +122,7 @@ jobs:
           tests/test_health.py
           tests/test_audit.py
           tests/test_responses.py
+          --deselect=tests/test_responses.py::test_public_responses_credential_matrix
       - run: alembic check
       - run: npm --prefix schemas/tooling ci
       - run: npm --prefix schemas/tooling run conformance -- --consumer issue-11
