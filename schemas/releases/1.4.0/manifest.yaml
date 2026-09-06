@@ -9,24 +9,24 @@ dialects:
 inventory:
   adrs:
     - path: adrs/ADR-001-responses.md
-      sha256: sha256:9321c2f3bab199d6ba08cc871aa394179a0d06eaab1eeb8a700f2e4f82b0d9bf
+      sha256: sha256:209d14c869cae70ca33dc01e2343d3e4335e79ddc2cc462a3260c673110c618c
     - path: adrs/ADR-002-principal.md
-      sha256: sha256:7bf8eb35a604a4b0a923193bb072576ecac4e97779004b6c5c4d6c2e5e502338
+      sha256: sha256:e57fe9338dbe4f4f2bb601abce5546d984ef9a2805868f32fdfc379e9543d882
     - path: adrs/ADR-003-api-keys.md
-      sha256: sha256:fefe451e4a6419394e1868c0d3dccf07dd8335895d01c437928db6b1767df737
+      sha256: sha256:231d1664a6bfc01bbb9cb10db5ac3daa96aff8ff78b30f98639cfe01796172fb
     - path: adrs/ADR-004-grants.md
-      sha256: sha256:b425407052bedbb1503adcbe26149c7b55c1c41817a8b78f195b424a728f9e8c
+      sha256: sha256:aa891404a220c2d4bca46fe2ed7464b79be7cf652cb24f4755ccfdb5d4de7bc6
     - path: adrs/ADR-005-audit-redaction.md
-      sha256: sha256:72030cccc080b1d92f1005c797ab7a550af0b5da51837d7b0df69f7da2104ed9
+      sha256: sha256:75f932fb87b84244d529b2f3a32b96fa7c3c7ff26f149633fe886fc3297560d8
     - path: adrs/ADR-006-sanitized-audit-content.md
-      sha256: sha256:9d1ba3ba13b2e18e7f2124f11a8b61b39d696d24087244d88ebd51b859cfa610
+      sha256: sha256:44e350527d359a52f7a72acc92f3dd974018db193adeacabb0270a4cd325cfef
   conformance:
     - path: releases/1.4.0/conformance/compatibility.json
       sha256: sha256:41345c2311567370f9b501d18858d58174f3f8c6f31d23d8ec5467b89387727f
     - path: releases/1.4.0/conformance/consumers.yaml
       sha256: sha256:a347be6d8f8dee6ff85f8f94cca8950fa162a784653f3b89c662e4fb3e2d3257
     - path: releases/1.4.0/conformance/evidence.json
-      sha256: sha256:7dbfc12546c50a4b634ad635fdbc300f1dc0df4cfd5e30265515b98e190436e2
+      sha256: sha256:9954cd3c1bf4257a11734caf885268284d236429131052339ce925a41880d613
     - path: releases/1.4.0/conformance/ownership-evidence.json
       sha256: sha256:03ab138fdeeacc0433534157a64378f05785a7e9320e67bca0794cf05f6ecd6d
     - path: releases/1.4.0/conformance/ownership-matrix.yaml
