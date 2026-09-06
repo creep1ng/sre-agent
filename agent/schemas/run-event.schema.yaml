@@ -1,0 +1,111 @@
+# One event in a run's timeline — HT-INC-04 (issue #145).
+#
+# GET /v1/incidents/{incident_id}/runs/{run_id}/events?after={cursor}
+# Events are ordered and cursor-paginated (ADR-008). No prompts, no secrets, no
+# raw tool arguments: this is the safe, UI-facing projection.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:run-event:1.0.0
+title: RunEventPage
+type: object
+additionalProperties: false
+required: [events, next_cursor, has_more]
+properties:
+  events:
+    type: array
+    items: { $ref: '#/$defs/event' }
+  next_cursor:
+    type: string
+    minLength: 1
+    maxLength: 200
+    description: Cursor to pass on the next poll to continue after the last event here.
+  has_more:
+    type: boolean
+    description: True if more events exist beyond this page right now.
+$defs:
+  event:
+    type: object
+    additionalProperties: false
+    required: [event_id, kind, sequence, occurred_at]
+    properties:
+      event_id:
+        type: string
+        pattern: '^evt_[a-z0-9]{8,32}$'
+      kind:
+        enum: [state_change, evidence_collected, hypothesis_proposed,
+               mitigation_proposed, human_command, denial, escalation, run_terminated]
+      sequence:
+        type: integer
+        minimum: 0
+        description: Monotonic order within the run. The cursor is derived from this.
+      state:
+        type: [string, "null"]
+        default: null
+      summary:
+        type: [string, "null"]
+        maxLength: 2000
+        default: null
+        description: Human-readable one-liner. Never contains prompts or secrets.
+      actor:
+        description: >-
+          Who produced this event. C06: recording only the type (human, agent, system)
+          cannot answer which human approved a mitigation. The type is kept so existing
+          consumers do not break, and the concrete reference is added beside it.
+        type: object
+        additionalProperties: false
+        required: [type]
+        properties:
+          type:
+            enum: [human, agent, system]
+          reference:
+            oneOf:
+              - type: "null"
+              - $ref: '#/$defs/actorReference'
+            default: null
+      turn_id:
+        type: [string, "null"]
+        pattern: '^turn_[a-z0-9]{8,32}$'
+        default: null
+        description: >-
+          Internal turn identifier inside the run. C05: this is the incident domain's
+          own identifier and is never sent to the gateway; see task_id for the
+          correlation the gateway accepts.
+      task_id:
+        default: null
+        description: >-
+          Gateway-facing correlation derived from turn_id by the incident envelope.
+          C05: the gateway accepts task_id, so the raw turn_id is mapped, never leaked.
+          The `not` guard rejects a value that still carries the turn_ prefix, which is
+          what leaking the internal identifier would look like in practice.
+        oneOf:
+          - type: "null"
+          - type: string
+            pattern: '^[a-z][a-z0-9_-]{2,63}$'
+            not: { pattern: '^turn_' }
+      request_id:
+        type: [string, "null"]
+        format: uuid
+        default: null
+        description: Gateway correlation for the call that produced this event, when any.
+      occurred_at:
+        type: string
+        format: date-time
+  actorReference:
+    description: >-
+      Concrete identity of the actor, versioned so it can grow without breaking the
+      principal contract it points at.
+    type: object
+    additionalProperties: false
+    required: [reference_version, principal_id]
+    properties:
+      reference_version:
+        const: 1.0.0
+      principal_id:
+        type: string
+        pattern: '^[a-z][a-z0-9_-]{2,63}$'
+        description: The principal that acted, as known to the gateway control plane.
+      display_name:
+        type: [string, "null"]
+        maxLength: 200
+        default: null
+        description: Convenience label for the UI. Never used for authorization.

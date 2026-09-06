@@ -1,0 +1,53 @@
+# Correlation identifier mapping — HT-INC-04 (issue #145), audit finding C05.
+#
+# #26 and #146 work in turns; the gateway accepts incident_id, run_id and task_id.
+# Nothing translated between them, so either the domain would have to abandon turns or
+# a raw internal identifier would leak into gateway calls. This document fixes the
+# translation and names which identifiers may cross the boundary.
+---
+schema_version: "v1"
+maturity: "contracted"
+
+identifiers:
+  - name: "incident_id"
+    scope: "incident domain and gateway"
+    crosses_to_gateway: true
+    notes: "Canonical session identifier. Exists only from `active` onward."
+  - name: "run_id"
+    scope: "incident domain and gateway"
+    crosses_to_gateway: true
+    notes: "One harness execution inside the session."
+  - name: "turn_id"
+    scope: "incident domain only"
+    crosses_to_gateway: false
+    notes: >-
+      One agent turn inside a run. The gateway has no field for it, so it is never sent.
+      It is the source of the derivation below, not a value the gateway ever observes.
+  - name: "task_id"
+    scope: "gateway"
+    crosses_to_gateway: true
+    derived_from: "turn_id"
+    notes: >-
+      Third dimension of the gateway correlation triple. The envelope derives it from
+      the turn so a gateway audit event can be traced back to a turn without the
+      gateway holding a domain-internal identifier.
+
+# The envelope owns this derivation. It is deterministic so the mapping can be replayed
+# when reading an audit trail, and total so every turn has exactly one task.
+derivation:
+  from: "turn_id"
+  to: "task_id"
+  rule: "strip the `turn_` prefix and emit the remainder as the task identifier"
+  example:
+    turn_id: "turn_a1b2c3d4"
+    task_id: "a1b2c3d4"
+  properties:
+    deterministic: true
+    reversible: true
+    injective: true
+
+# What must never happen, stated so tests can assert it.
+invariants:
+  - "A request to the gateway never carries a field named turn_id."
+  - "A request to the gateway never carries a task_id value that still has the turn_ prefix."
+  - "Every event that names a turn_id also names the task_id derived from it."
