@@ -86,3 +86,15 @@ scenarios:
     command: "request_changes"
     payload: {actor: "human", actor_reference: {principal_id: "demo-human"}}
     expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-008"
+    threat: "watching a run does not imply reading its context"
+    note: >-
+      C07. demo-human holds run.read and can follow the investigation, but holds no
+      run.read_context grant, so the assembled input and tool arguments stay out of
+      reach. The separation is enforced by the engine, not only by the schema.
+    principal: "demo-human"
+    action: "run.read_context"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "GET", path: "/v1/incidents/{incident_id}/runs/{run_id}/context"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}

@@ -1,0 +1,99 @@
+# Safe projection policy — HT-INC-04 (issue #145), audit finding C07.
+#
+# The run snapshot the UI reads and the execution context the harness works with are two
+# different things. Mixing them is how prompts, tool arguments and raw provider output
+# reach a screen that was only ever meant to show progress.
+#
+# WHY AN ALLOW-LIST
+# docs/architecture.md already sets the precedent: seed services receive an explicit
+# allow-list of bootstrap variables instead of the whole environment, so a provider
+# credential cannot cross into a client image. The same reasoning applies here. A
+# deny-list fails open, because a field added later leaks until someone remembers to ban
+# it. An allow-list fails closed: an unregistered field breaks CI before it ships.
+#
+# The validator walks the public schemas and asserts that every property they declare is
+# named here. That is what makes this a policy and not a paragraph.
+---
+schema_version: "v1"
+maturity: "contracted"
+
+# Schemas the UI may read. Everything they declare must appear in allowed_fields.
+safe_projection:
+  schemas:
+    - "agent/schemas/run-state.schema.yaml"
+    - "agent/schemas/run-event.schema.yaml"
+  audience: "operations UI, via GET .../runs/{run_id} and GET .../runs/{run_id}/events"
+  authorized_by: "run.read"
+  allowed_fields:
+    # Identity and correlation. These are opaque identifiers, not content.
+    - "run_id"
+    - "incident_id"
+    - "workflow_version"
+    - "request_id"
+    - "task_id"
+    - "turn_id"
+    - "event_id"
+    - "sequence"
+    - "next_cursor"
+    - "cursor"
+    - "has_more"
+    # Progress. What the UI exists to show.
+    - "status"
+    - "current_state"
+    - "state"
+    - "pending_command"
+    - "terminated_reason"
+    - "kind"
+    - "events"
+    # A one-line, already-summarised description. Never raw model or tool output.
+    - "summary"
+    # Attribution (C06). A principal identifier is not a secret.
+    - "actor"
+    - "type"
+    - "reference"
+    - "reference_version"
+    - "principal_id"
+    - "display_name"
+    - "updated_at"
+    - "occurred_at"
+
+# The sensitive context lives behind its own endpoint and its own action.
+sensitive_context:
+  schema: "agent/schemas/run-context.schema.yaml"
+  audience: "operators holding an explicit grant"
+  authorized_by: "run.read_context"
+  endpoint: "GET /v1/incidents/{incident_id}/runs/{run_id}/context"
+  rationale: >-
+    Separating the endpoint means the separation is enforced by the authorization engine
+    and not only by a schema. A principal can be allowed to watch a run without being
+    allowed to read what was sent to the model.
+
+# Field names that must never appear in a safe projection schema, whatever the shape
+# they arrive in. The validator fails on any of them.
+forbidden_in_safe_projection:
+  - "prompt"
+  - "prompts"
+  - "system_prompt"
+  - "instructions"
+  - "input"
+  - "output"
+  - "raw_output"
+  - "completion"
+  - "messages"
+  - "arguments"
+  - "tool_arguments"
+  - "raw_result"
+  - "credential"
+  - "api_key"
+  - "token"
+  - "secret"
+  - "authorization"
+  - "provider"
+  - "inference_provider"
+  - "router"
+
+invariants:
+  - "Every property declared by a safe projection schema is listed in allowed_fields."
+  - "No safe projection schema declares any name in forbidden_in_safe_projection."
+  - "The sensitive context is never reachable through the safe projection endpoints."
+  - "Reading the sensitive context requires run.read_context, not run.read."

@@ -28,8 +28,10 @@ EXAMPLES = AGENT / "api" / "examples"
 CORRELATION_PATH = AGENT / "api" / "correlation-mapping.v1.yaml"
 TRANSPORT_ADR_PATH = REPOSITORY_ROOT / "docs" / "adrs" / "ADR-008-run-events-transport.md"
 AUTHORIZATION_PATH = AGENT / "api" / "authorization.v1.yaml"
+PROJECTION_PATH = AGENT / "api" / "projection-policy.v1.yaml"
 
 SCHEMAS = {
+    "run-context": AGENT / "schemas" / "run-context.schema.yaml",
     "run-start-request": AGENT / "schemas" / "run-start-request.schema.yaml",
     "run-state": AGENT / "schemas" / "run-state.schema.yaml",
     "run-command": AGENT / "schemas" / "run-command.schema.yaml",
@@ -50,6 +52,7 @@ POSITIVE = {
     "run-state-awaiting.json": "run-state",
     "command-approve.json": "run-command",
     "events-page.json": "run-event",
+    "run-context.json": "run-context",
 }
 NEGATIVE = {
     "start-foreign-version.json": "run-start-request",
@@ -57,6 +60,7 @@ NEGATIVE = {
     "state-unknown-status.json": "run-state",
     "command-without-actor-identity.json": "run-command",
     "event-leaks-raw-turn-as-task.json": "run-event",
+    "context-leaks-raw-turn.json": "run-context",
 }
 
 
@@ -99,6 +103,82 @@ def check_format_enforcement() -> list[str]:
     ):
         if Draft202012Validator({**subschema}, format_checker=checker).is_valid(bad):
             errors.append(f"format '{name}' is not enforced; install the jsonschema[format] extra")
+    return errors
+
+
+def _declared_property_names(node: Any, found: set[str]) -> None:
+    """Collect every property name a schema declares, at any depth.
+
+    The walk descends into the property subschemas as well as their names. Without that
+    it stops one level short, and a sensitive field nested inside an object property
+    would never be seen: exactly the blind spot the safe projection cannot afford.
+    """
+    if isinstance(node, dict):
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            found.update(properties)
+            for subschema in properties.values():
+                _declared_property_names(subschema, found)
+        for key, value in node.items():
+            if key != "properties":
+                _declared_property_names(value, found)
+    elif isinstance(node, list):
+        for item in node:
+            _declared_property_names(item, found)
+
+
+def check_safe_projection() -> list[str]:
+    """Audit finding C07: prove the public snapshot cannot carry sensitive content.
+
+    The policy is an allow-list because a deny-list fails open: a field added later leaks
+    until somebody remembers to ban it. Walking the schemas here makes the policy fail
+    closed instead, the same way the compose allow-list keeps a provider credential out of
+    a client image (docs/architecture.md).
+    """
+    errors: list[str] = []
+    policy = load_yaml(PROJECTION_PATH)
+    safe = policy["safe_projection"]
+    allowed = set(safe["allowed_fields"])
+    forbidden = set(policy["forbidden_in_safe_projection"])
+
+    overlap = allowed & forbidden
+    if overlap:
+        errors.append(f"fields are both allowed and forbidden: {sorted(overlap)}")
+
+    for relative in safe["schemas"]:
+        path = REPOSITORY_ROOT / relative
+        if not path.exists():
+            errors.append(f"safe projection schema '{relative}' does not exist")
+            continue
+        declared: set[str] = set()
+        _declared_property_names(load_yaml(path), declared)
+
+        for name in sorted(declared & forbidden):
+            errors.append(
+                f"'{relative}' declares '{name}', which the projection policy forbids in "
+                "a safe projection"
+            )
+        for name in sorted(declared - allowed - forbidden):
+            errors.append(
+                f"'{relative}' declares '{name}', which is not registered in the "
+                "projection allow-list; register it or move it behind the context endpoint"
+            )
+
+    # The sensitive context must be a separate surface with its own action.
+    context = policy["sensitive_context"]
+    if context["authorized_by"] == safe["authorized_by"]:
+        errors.append(
+            "the sensitive context is authorized by the same action as the safe "
+            "projection; C07 requires them to be separable"
+        )
+    if not (REPOSITORY_ROOT / context["schema"]).exists():
+        errors.append(f"sensitive context schema '{context['schema']}' does not exist")
+
+    api = load_yaml(OPENAPI_PATH)
+    context_path = "/v1/incidents/{incident_id}/runs/{run_id}/context"
+    if context_path not in api["paths"]:
+        errors.append("the OpenAPI does not expose the sensitive context endpoint")
+
     return errors
 
 
@@ -282,6 +362,7 @@ def validate() -> list[str]:
     schemas, schema_errors = check_schemas()
     errors = [*schema_errors, *check_format_enforcement(), *check_openapi()]
     if schemas:
+        errors.extend(check_safe_projection())
         errors.extend(check_transport_decision())
         errors.extend(check_correlation_mapping(schemas))
         errors.extend(check_actor_identity(schemas))

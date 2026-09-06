@@ -57,12 +57,11 @@ actions:
       if approving can be granted separately from participating.
     endpoint: "POST /v1/incidents/{incident_id}/runs/{run_id}/commands"
   - name: "run.read_context"
-    maturity: "contracted_future"
     summary: >-
-      Read the sensitive execution context, which is a separate surface from the safe
-      projection (audit finding C07). Named here so the vocabulary is complete; the
-      endpoint is defined with the rest of C07.
-    endpoint: "not yet defined"
+      Read the sensitive execution context, a separate surface from the safe projection
+      (audit finding C07). Held apart from run.read so that watching a run does not imply
+      reading what was sent to the model.
+    endpoint: "GET /v1/incidents/{incident_id}/runs/{run_id}/context"
 
 # Which action authorizes each command. The API resolves the command to its action and
 # asks the engine; it never infers authority from the principal's name or kind.

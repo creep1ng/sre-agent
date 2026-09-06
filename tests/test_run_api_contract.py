@@ -16,6 +16,7 @@ sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 from validate_run_api import (  # noqa: E402
     CORRELATION_PATH,
     OPENAPI_PATH,
+    PROJECTION_PATH,
     REQUIRED_PATHS,
     SCHEMAS,
     build_validator,
@@ -197,3 +198,108 @@ def test_identity_is_for_attribution_not_authorization(schemas: dict) -> None:
         "principal_id"
     ]["description"]
     assert "never inferred" in description
+
+
+@pytest.fixture(scope="module")
+def projection() -> dict:
+    return load_yaml(PROJECTION_PATH)
+
+
+def test_safe_projection_declares_no_sensitive_field(projection: dict) -> None:
+    """C07: the public snapshot must not be able to carry prompts or tool arguments."""
+    from validate_run_api import _declared_property_names
+
+    forbidden = set(projection["forbidden_in_safe_projection"])
+    for relative in projection["safe_projection"]["schemas"]:
+        declared: set[str] = set()
+        _declared_property_names(load_yaml(REPOSITORY_ROOT / relative), declared)
+        assert not (declared & forbidden), f"{relative} leaks {declared & forbidden}"
+
+
+def test_projection_policy_fails_closed(projection: dict) -> None:
+    """An unregistered field must break the build, not ship silently."""
+    from validate_run_api import _declared_property_names
+
+    allowed = set(projection["safe_projection"]["allowed_fields"])
+    for relative in projection["safe_projection"]["schemas"]:
+        declared: set[str] = set()
+        _declared_property_names(load_yaml(REPOSITORY_ROOT / relative), declared)
+        assert declared <= allowed, f"{relative} declares unregistered {declared - allowed}"
+
+
+def test_context_is_a_separate_surface(projection: dict) -> None:
+    """C07: separation is enforced by authorization, not only by schema shape."""
+    safe = projection["safe_projection"]
+    context = projection["sensitive_context"]
+    assert safe["authorized_by"] == "run.read"
+    assert context["authorized_by"] == "run.read_context"
+    assert context["authorized_by"] != safe["authorized_by"]
+
+
+def test_context_endpoint_exists_and_can_deny(openapi: dict) -> None:
+    """The sensitive context has its own path and can refuse an insufficient grant."""
+    path = "/v1/incidents/{incident_id}/runs/{run_id}/context"
+    assert path in openapi["paths"]
+    assert "403" in openapi["paths"][path]["get"]["responses"]
+
+
+def test_context_may_carry_what_the_projection_may_not(schemas: dict) -> None:
+    """The point of the split: this is where the sensitive content is allowed to live."""
+    turn = schemas["run-context"]["$defs"]["turn"]["properties"]
+    assert "assembled_input" in turn
+    assert "model_output" in turn
+    assert "tool_invocation" in turn
+
+
+def test_context_still_refuses_a_leaked_turn_id(schemas: dict) -> None:
+    """C05 holds inside the context too: task_id never keeps the turn_ prefix."""
+    validator = build_validator(schemas["run-context"])
+    context = {
+        "run_id": "run_a1b2c3d4e5",
+        "incident_id": "inc-test",
+        "turns": [
+            {
+                "turn_id": "turn_a1b2c3d4",
+                "task_id": "turn_a1b2c3d4",
+                "sequence": 0,
+                "occurred_at": "2026-08-24T14:11:00Z",
+            }
+        ],
+        "retrieved_at": "2026-08-24T14:30:00Z",
+    }
+    assert not validator.is_valid(context)
+    context["turns"][0]["task_id"] = "a1b2c3d4"
+    assert validator.is_valid(context)
+
+
+def test_projection_walk_reaches_nested_properties() -> None:
+    """The non-exposure walk must not stop one level short.
+
+    An audit of this contract found the walk collecting property names without
+    descending into their subschemas, so a sensitive field nested inside an object
+    property passed the check. This pins the fixed behaviour.
+    """
+    from validate_run_api import _declared_property_names
+
+    schema = {
+        "properties": {
+            "actor": {
+                "type": "object",
+                "properties": {"type": {}, "prompt": {}},
+            }
+        }
+    }
+    found: set[str] = set()
+    _declared_property_names(schema, found)
+    assert {"actor", "type", "prompt"} <= found
+
+
+def test_every_allowed_field_is_actually_used(projection: dict) -> None:
+    """An allow-list entry nobody uses is a permission granted for nothing."""
+    from validate_run_api import _declared_property_names
+
+    used: set[str] = set()
+    for relative in projection["safe_projection"]["schemas"]:
+        _declared_property_names(load_yaml(REPOSITORY_ROOT / relative), used)
+    unused = set(projection["safe_projection"]["allowed_fields"]) - used
+    assert not unused, f"allow-list grants unused fields: {sorted(unused)}"

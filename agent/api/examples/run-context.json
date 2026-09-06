@@ -1,0 +1,21 @@
+{
+  "run_id": "run_a1b2c3d4e5",
+  "incident_id": "inc-otel-payment-failure",
+  "turns": [
+    {
+      "turn_id": "turn_a1b2c3d4",
+      "task_id": "a1b2c3d4",
+      "sequence": 0,
+      "assembled_input": "Incident state and evidence follow. Decide the next action.",
+      "model_output": "{\"action\":\"use_tool\",\"tool\":\"query_prometheus\"}",
+      "tool_invocation": {
+        "tool": "query_prometheus",
+        "arguments": { "query": "sum(rate(errors[5m]))", "window": "15m" },
+        "result_summary": "Error rate elevated and sustained."
+      },
+      "request_id": "3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      "occurred_at": "2026-08-24T14:11:00Z"
+    }
+  ],
+  "retrieved_at": "2026-08-24T14:30:00Z"
+}
