@@ -1,0 +1,82 @@
+---
+title: userJourney — Atención de incidentes del operador
+---
+flowchart TD
+    subgraph HUM[Operador · acciones humanas]
+        H1[Recibir alerta]
+        H2[Identificar señal en bandeja]
+        H3[Revisar detalle y contexto]
+        H4[Decidir: descartar · asociar · declarar]
+        H5[Coordinar en war room]
+        H6[Proponer y revisar hipótesis]
+        H7[Aprobar o rechazar mitigación]
+        H8[Verificar estabilidad del servicio]
+        H9[Cerrar con postmortem declarado]
+    end
+    subgraph UI[Superficies UI · solo interfaz]
+        U1[Bandeja de alertas · #15]
+        U2[Detalle + Iniciar triage · #15]
+        U3[Triage: descartar · asociar · declarar · #23]
+        U4[Board de incidentes · GAP sin issue]
+        U5[War room: estado y responsables · #36]
+        U6[Timeline compartido · #36]
+        U7[Monitor de harness: runs y eventos · #145]
+        U8[Seguimiento post-cierre · GAP sin issue]
+    end
+    subgraph DOM[Dominio y runtime · #16 y #26]
+        D1[detected · alerta sin sesión]
+        D2[triage · alerta en disposición]
+        D3[dismissed · linked · terminales]
+        D4[active · sesión con incident_id]
+        D5[investigating · mitigating · verifying]
+        D6[resolved · postmortem · closed]
+        D7[Cada transición escribe timeline]
+    end
+    subgraph AUT[Harness y automatizaciones · #145 y #146]
+        A1[Adaptar señal OTel a alerta · #149]
+        A2[Run: iniciar o reanudar]
+        A3[Comandos acotados al workflow]
+        A4[Eventos ordenados y snapshot]
+        A5[Resultado o fallo visible]
+    end
+    A1 --> D1
+    D1 --> U1
+    H1 --> H2
+    H2 --> U1
+    U1 --> H3
+    H3 --> U2
+    U2 -->|midnight:triage-requested| D2
+    D2 --> U3
+    U3 --> H4
+    H4 -->|descartar con razón| D3
+    H4 -->|asociar a incidente elegible| D3
+    H4 -->|declarar con severidad| D4
+    D4 --> U4
+    D4 --> U5
+    U4 --> H5
+    U5 --> H5
+    H5 --> U6
+    D5 --> U6
+    U6 --> H6
+    H6 --> A2
+    A2 --> A3
+    A3 --> A4
+    A4 --> A5
+    A5 --> U7
+    U7 --> H7
+    H7 -->|aprobar · humano bloqueante| D5
+    H7 -->|rechazar o pedir cambios| D5
+    D5 --> H8
+    H8 -->|estable| D6
+    H8 -->|no estable| D5
+    D6 --> H9
+    H9 --> U6
+    D6 --> U8
+    classDef human fill:#e8f0fe,stroke:#1a73e8
+    classDef surface fill:#f1f3f4,stroke:#5f6368
+    classDef domain fill:#fef7e0,stroke:#b06000
+    classDef auto fill:#e6f4ea,stroke:#1e8e3e
+    class H1,H2,H3,H4,H5,H6,H7,H8,H9 human
+    class U1,U2,U3,U4,U5,U6,U7,U8 surface
+    class D1,D2,D3,D4,D5,D6,D7 domain
+    class A1,A2,A3,A4,A5 auto
