@@ -132,6 +132,37 @@ async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
 
 
 @pytest.mark.asyncio
+async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -> None:
+    settings = SeedSettings.from_environment(ENV)
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "DELETE FROM grants WHERE grant_id='grant-admin-human-admin-read-principals'"
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+            ).fetchone()[0]
+            == 2
+        )
+
+    database = Database(DATABASE_URL)
+    assert await seed(database, settings) is False
+    assert await seed(database, settings) is False
+    await database.dispose()
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        restored = connection.execute(
+            "SELECT principal_id, action, resource_type, resource_id FROM grants "
+            "WHERE grant_id='grant-admin-human-admin-read-principals'"
+        ).fetchone()
+        counts = connection.execute(
+            "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
+        ).fetchone()
+    assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
+    assert counts == (4, 5)
+
+
+@pytest.mark.asyncio
 async def test_seed_conflict_is_atomic_and_secret_free() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(

@@ -119,41 +119,39 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
         # inserted with the same deterministic values as a fresh seed; existing
         # rows are then validated by the convergence check below.
         present_resources = {(row.resource_type, row.resource_id) for row in admin_resources}
-        await session.execute(
-            insert(ResourceRow),
-            [
-                dict(
-                    resource_type=resource_type,
-                    resource_id=resource_id,
-                    status="active",
-                    model_alias_id=None,
-                    alias=None,
-                    concrete_model=None,
-                    router=None,
-                    inference_provider=None,
-                )
-                for resource_type, resource_id in ADMIN_RESOURCES
-                if (resource_type, resource_id) not in present_resources
-            ],
-        )
+        missing_resources = [
+            dict(
+                resource_type=resource_type,
+                resource_id=resource_id,
+                status="active",
+                model_alias_id=None,
+                alias=None,
+                concrete_model=None,
+                router=None,
+                inference_provider=None,
+            )
+            for resource_type, resource_id in ADMIN_RESOURCES
+            if (resource_type, resource_id) not in present_resources
+        ]
+        if missing_resources:
+            await session.execute(insert(ResourceRow), missing_resources)
         present_grants = {row.grant_id for row in admin_grants}
-        await session.execute(
-            insert(GrantRow),
-            [
-                dict(
-                    grant_id=grant_id,
-                    principal_id=principal_id,
-                    action=action,
-                    resource_type="administrative_control",
-                    resource_id="principals" if "principals" in grant_id else "credentials",
-                    effect="allow",
-                    status="active",
-                    created_at=SEED_TIME,
-                )
-                for grant_id, principal_id, action in ADMIN_GRANTS
-                if grant_id not in present_grants
-            ],
-        )
+        missing_grants = [
+            dict(
+                grant_id=grant_id,
+                principal_id=principal_id,
+                action=action,
+                resource_type="administrative_control",
+                resource_id="principals" if "principals" in grant_id else "credentials",
+                effect="allow",
+                status="active",
+                created_at=SEED_TIME,
+            )
+            for grant_id, principal_id, action in ADMIN_GRANTS
+            if grant_id not in present_grants
+        ]
+        if missing_grants:
+            await session.execute(insert(GrantRow), missing_grants)
         await session.flush()
         admin_resources = [
             row
