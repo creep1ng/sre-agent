@@ -432,6 +432,6 @@ def test_decision_events_require_correlation_and_identity(schemas: dict) -> None
 def test_static_mocks_and_decision_correlation_are_executable(schemas: dict) -> None:
     registry, errors = external_schema_registry(schemas)
     assert errors == []
-    assert "urn:sre-agent:schema:error-envelope:1.2.0" in registry
+    assert "urn:sre-agent:schema:error-envelope:2.0.0" in registry
     assert check_http_fixtures(registry) == []
     assert check_decision_correlation(schemas) == []

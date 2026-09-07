@@ -36,5 +36,5 @@ it is usable as a static client mock without a server.
 - Do not treat the fixtures as runtime evidence, create a router, or add UI behavior.
   Those semantics remain with [#26](https://github.com/creep1ng/sre-agent/issues/26) and
   [#146](https://github.com/creep1ng/sre-agent/issues/146).
-- The error body is the frozen local `error-envelope:1.2.0` schema. The contract gate
+- The error body is the frozen local `error-envelope:2.0.0` schema. The contract gate
   validates every external schema URN and every fixture response before publication.

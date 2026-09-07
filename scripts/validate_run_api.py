@@ -33,7 +33,7 @@ TRANSPORT_ADR_PATH = REPOSITORY_ROOT / "docs" / "adrs" / "ADR-008-run-events-tra
 PROJECTION_PATH = AGENT / "api" / "projection-policy.v1.yaml"
 AUTHORIZATION_PATH = AGENT / "api" / "authorization.v1.yaml"
 ERROR_ENVELOPE_PATH = (
-    REPOSITORY_ROOT / "schemas/releases/1.2.0/json-schema/http/error-envelope.schema.json"
+    REPOSITORY_ROOT / "schemas/releases/2.0.0/json-schema/http/error-envelope.schema.json"
 )
 HTTP_FIXTURES = EXAMPLES / "http"
 CORRELATION_FIXTURES = EXAMPLES / "correlation"
