@@ -349,7 +349,17 @@ def test_control_openapi_publishes_request_success_and_error_schemas() -> None:
     idempotency = next(
         parameter for parameter in create["parameters"] if parameter["name"] == "Idempotency-Key"
     )
-    assert idempotency["schema"]["minLength"] == 16
+    assert idempotency["description"] == (
+        "Client-owned request key, not configuration or a secret. Generate a fresh key per logical "
+        "mutation; reuse it only to retry the identical payload. A different payload returns 409 "
+        "idempotency_conflict."
+    )
+    assert idempotency["schema"] == {
+        "type": "string",
+        "minLength": 16,
+        "maxLength": 128,
+        "pattern": r"^[\x20-\x7E]{16,128}$",
+    }
     for status in ("201", "400", "401", "403", "409", "422", "503"):
         assert create["responses"][status]["content"]["application/json"]["schema"]
     for operation in (

@@ -538,7 +538,11 @@ def control_router(service: ControlService) -> APIRouter:
                     "name": "Idempotency-Key",
                     "in": "header",
                     "required": True,
-                    "description": "Scoped idempotency key (mutating POST only)",
+                    "description": (
+                        "Client-owned request key, not configuration or a secret. Generate a fresh "
+                        "key per logical mutation; reuse it only to retry the identical payload. "
+                        "A different payload returns 409 idempotency_conflict."
+                    ),
                     "schema": {
                         "type": "string",
                         "minLength": 16,
