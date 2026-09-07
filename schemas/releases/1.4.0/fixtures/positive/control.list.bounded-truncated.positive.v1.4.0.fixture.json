@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:list-envelope:1.4.0","rule":"valid","status":"positive","version":"1.4.0","group":"control","data":{"items":["principal-001","principal-002"],"limit":100,"truncated":true}}

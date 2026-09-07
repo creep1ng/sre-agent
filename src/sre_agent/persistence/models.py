@@ -54,7 +54,8 @@ class ResourceRow(Base):
     __tablename__ = "resources"
     __table_args__ = (
         CK(
-            "resource_type IN ('llm_model','mcp_server','mcp_tool','skill','bok_collection')",
+            "resource_type IN ('llm_model','mcp_server','mcp_tool','skill','bok_collection',"
+            "'administrative_control')",
             name="ck_resources_type",
         ),
         CK("status IN ('active','inactive')", name="ck_resources_status"),
@@ -102,16 +103,44 @@ class GrantRow(Base):
     created_at = required(DateTime(timezone=True))
 
 
+class IdempotencyRecordRow(Base):
+    """Scoped POST binding: replay on same hash, conflict on different hash."""
+
+    __tablename__ = "idempotency_records"
+    __table_args__ = (
+        CK("method = 'POST'", name="ck_idempotency_method"),
+        CK(
+            "binding IN ('at_least_24h','principal_lifetime')",
+            name="ck_idempotency_binding",
+        ),
+        CK("transition_count = 1", name="ck_idempotency_transitions"),
+    )
+    scope = mapped_column(String(320), primary_key=True)
+    key_digest = mapped_column(String(64), primary_key=True)
+    payload_sha256 = required(String(64))
+    principal_id = required(String(64))
+    method = required(String(16))
+    canonical_path = required(String(200))
+    binding = required(String(32))
+    outcome = required(JSONB)
+    created_at = required(DateTime(timezone=True))
+    expires_at = mapped_column(DateTime(timezone=True), nullable=True)
+    transition_count = required(Integer)
+
+
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
         CK(
             "operation IN ('audit.accept','audit.export','audit.project','audit.redact',"
-            "'credentials.authenticate','responses.create')",
+            "'credentials.authenticate','responses.create','principals.create',"
+            "'principals.get','principals.list','principals.status.replace',"
+            "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate')",
             name="ck_audit_events_operation",
         ),
         CK(
-            "action IN ('authenticate','export','invoke','persist','read_metadata','redact')",
+            "action IN ('authenticate','export','invoke','persist','read_metadata','redact',"
+            "'admin.read','admin.write')",
             name="ck_audit_events_action",
         ),
         CK(

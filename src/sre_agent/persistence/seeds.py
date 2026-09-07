@@ -22,6 +22,16 @@ PRINCIPALS = (
     ("incident-harness", "agent", "Incident harness"),
     ("restricted-harness", "agent", "Restricted harness"),
 )
+ADMIN_RESOURCES = (
+    ("administrative_control", "principals"),
+    ("administrative_control", "credentials"),
+)
+ADMIN_GRANTS = (
+    ("grant-admin-human-admin-read-principals", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-principals", "admin-human", "admin.write"),
+    ("grant-admin-human-admin-read-credentials", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-credentials", "admin-human", "admin.write"),
+)
 KEY_ENV = (
     "ADMIN_HUMAN_API_KEY",
     "DEMO_HUMAN_API_KEY",
@@ -89,9 +99,70 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
     ]
     resource = await session.get(ResourceRow, ("llm_model", "triage-agent"))
     grant = await session.get(GrantRow, "grant-incident-harness-invoke-triage-agent")
+    admin_resources = [
+        row for key in ADMIN_RESOURCES if (row := await session.get(ResourceRow, key)) is not None
+    ]
+    admin_grants = [
+        row
+        for grant_id, _, _ in ADMIN_GRANTS
+        if (row := await session.get(GrantRow, grant_id)) is not None
+    ]
     existing = (
         principals + credentials + ([resource] if resource else []) + ([grant] if grant else [])
     )
+    if existing and (len(admin_resources), len(admin_grants)) != (
+        len(ADMIN_RESOURCES),
+        len(ADMIN_GRANTS),
+    ):
+        # Additive convergence: databases seeded before #147 keep their data and
+        # gain the missing administrative nodes. Missing resources/grants are
+        # inserted with the same deterministic values as a fresh seed; existing
+        # rows are then validated by the convergence check below.
+        present_resources = {(row.resource_type, row.resource_id) for row in admin_resources}
+        missing_resources = [
+            dict(
+                resource_type=resource_type,
+                resource_id=resource_id,
+                status="active",
+                model_alias_id=None,
+                alias=None,
+                concrete_model=None,
+                router=None,
+                inference_provider=None,
+            )
+            for resource_type, resource_id in ADMIN_RESOURCES
+            if (resource_type, resource_id) not in present_resources
+        ]
+        if missing_resources:
+            await session.execute(insert(ResourceRow), missing_resources)
+        present_grants = {row.grant_id for row in admin_grants}
+        missing_grants = [
+            dict(
+                grant_id=grant_id,
+                principal_id=principal_id,
+                action=action,
+                resource_type="administrative_control",
+                resource_id="principals" if "principals" in grant_id else "credentials",
+                effect="allow",
+                status="active",
+                created_at=SEED_TIME,
+            )
+            for grant_id, principal_id, action in ADMIN_GRANTS
+            if grant_id not in present_grants
+        ]
+        if missing_grants:
+            await session.execute(insert(GrantRow), missing_grants)
+        await session.flush()
+        admin_resources = [
+            row
+            for key in ADMIN_RESOURCES
+            if (row := await session.get(ResourceRow, key)) is not None
+        ]
+        admin_grants = [
+            row
+            for grant_id, _, _ in ADMIN_GRANTS
+            if (row := await session.get(GrantRow, grant_id)) is not None
+        ]
     if not existing:
         # Compact construction keeps this atomic work unit within its review budget.
         # fmt: off
@@ -112,14 +183,31 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
             grant_id="grant-incident-harness-invoke-triage-agent",
             principal_id="incident-harness", action="invoke", resource_type="llm_model",
             resource_id="triage-agent", effect="allow", status="active", created_at=SEED_TIME))
+        fresh_admin_resources = [
+            dict(resource_type=resource_type, resource_id=resource_id, status="active",
+                 model_alias_id=None, alias=None, concrete_model=None, router=None,
+                 inference_provider=None)
+            for resource_type, resource_id in ADMIN_RESOURCES]
+        if fresh_admin_resources:
+            await session.execute(insert(ResourceRow), fresh_admin_resources)
+        fresh_admin_grants = [
+            dict(grant_id=grant_id, principal_id="admin-human", action=action,
+                 resource_type="administrative_control",
+                 resource_id="principals" if "principals" in grant_id else "credentials",
+                 effect="allow", status="active", created_at=SEED_TIME)
+            for grant_id, _, action in ADMIN_GRANTS]
+        if fresh_admin_grants:
+            await session.execute(insert(GrantRow), fresh_admin_grants)
         # fmt: on
         return True
-    if (len(principals), len(credentials), resource is not None, grant is not None) != (
-        4,
-        4,
-        True,
-        True,
-    ):
+    if (
+        len(principals),
+        len(credentials),
+        resource is not None,
+        grant is not None,
+        len(admin_resources),
+        len(admin_grants),
+    ) != (4, 4, True, True, 2, 4):
         raise SeedConflict("seed_state_conflict: incomplete_seed_graph")
     by_principal = {row.principal_id: row for row in principals}
     by_credential = {row.principal_id: row for row in credentials}
@@ -152,6 +240,22 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
         ("incident-harness", "invoke", "llm_model", "triage-agent", "allow", "active", SEED_TIME),
         "grants",
     )
+    by_resource = {(row.resource_type, row.resource_id): row for row in admin_resources}
+    for resource_type, resource_id in ADMIN_RESOURCES:
+        _require(
+            by_resource[(resource_type, resource_id)],
+            ("status", "model_alias_id", "concrete_model"),
+            ("active", None, None),
+            "resources",
+        )
+    by_grant = {row.grant_id: row for row in admin_grants}
+    for grant_id, principal_id, action in ADMIN_GRANTS:
+        _require(
+            by_grant[grant_id],
+            "principal_id action resource_type effect status created_at".split(),
+            (principal_id, action, "administrative_control", "allow", "active", SEED_TIME),
+            "grants",
+        )
     return False
 
 
