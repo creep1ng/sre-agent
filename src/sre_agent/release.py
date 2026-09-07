@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version
 
-CONTRACT_VERSION = "1.4.0"
+CONTRACT_VERSION = "2.0.0"
 SOURCE_ARCHIVE_BUILD_REVISION = "source-archive"
 
 

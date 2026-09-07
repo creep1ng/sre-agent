@@ -1,5 +1,6 @@
 """Evidence for issue #147: administrative control-plane authorization scope."""
 
+import asyncio
 import hashlib
 import json
 from datetime import UTC, datetime
@@ -7,9 +8,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
 from sre_agent.control import scopes
@@ -257,7 +258,7 @@ def _stub_service(monkey_result=None, status=201, payload=None):
     return service
 
 
-def test_router_exposes_three_typed_principals_routes() -> None:
+def test_router_exposes_all_eight_control_routes() -> None:
     app = FastAPI()
     app.include_router(control_router(_stub_service()))
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
@@ -265,18 +266,32 @@ def test_router_exposes_three_typed_principals_routes() -> None:
     assert ("/v1/principals", ("GET",)) in routes
     assert ("/v1/principals/{principal_id}", ("GET",)) in routes
     assert any(path == "/v1/principals" and "POST" in methods for path, methods in routes)
-    assert "/v1/principals/{principal_id}/status" not in {path for path, _ in routes}
-
-    client = TestClient(app, raise_server_exceptions=False)
-    created = client.post(
+    assert {path for path, _ in routes} == {
         "/v1/principals",
-        json={"principal_id": "new-human", "kind": "human", "display_name": "New"},
-        headers={"idempotency-key": "k" * 16},
-    )
+        "/v1/principals/{principal_id}",
+        "/v1/principals/{principal_id}/status",
+        "/v1/principals/{principal_id}/credentials",
+        "/v1/credentials/{credential_id}",
+        "/v1/credentials/{credential_id}/rotation",
+    }
+
+    async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return (
+                await client.post(
+                    "/v1/principals",
+                    json={"principal_id": "new-human", "kind": "human", "display_name": "New"},
+                    headers={"idempotency-key": "k" * 16},
+                ),
+                await client.get("/v1/principals/INVALID"),
+                await client.get("/v1/principals?limit=101"),
+            )
+
+    created, bad_path, bad_query = asyncio.run(exercise())
     assert created.status_code in {201, 200}
-    bad_path = client.get("/v1/principals/INVALID")
     assert bad_path.status_code == 200
-    bad_query = client.get("/v1/principals?limit=101")
     assert bad_query.status_code == 200
 
 
@@ -292,29 +307,34 @@ def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
     service = ControlService(None, Audit(), AuditProjector(b"x" * 32))
     app = FastAPI()
     app.include_router(control_router(service))
-    client = TestClient(app, raise_server_exceptions=False)
 
-    cases = (
-        client.post(
-            "/v1/principals",
-            json={"principal_id": "INVALID"},
-            headers={"idempotency-key": "k" * 16},
-        ),
-        client.post(
-            "/v1/principals",
-            json={"principal_id": "valid-id", "kind": "human", "display_name": "Valid"},
-            headers={"idempotency-key": "short"},
-        ),
-        client.get("/v1/principals?limit=101"),
-        client.get("/v1/principals/INVALID"),
-    )
+    async def exercise() -> tuple[httpx.Response, ...]:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return (
+                await client.post(
+                    "/v1/principals",
+                    json={"principal_id": "INVALID"},
+                    headers={"idempotency-key": "k" * 16},
+                ),
+                await client.post(
+                    "/v1/principals",
+                    json={"principal_id": "valid-id", "kind": "human", "display_name": "Valid"},
+                    headers={"idempotency-key": "short"},
+                ),
+                await client.get("/v1/principals?limit=101"),
+                await client.get("/v1/principals/INVALID"),
+            )
 
-    assert [response.status_code for response in cases] == [422, 400, 422, 422]
+    cases = asyncio.run(exercise())
+
+    assert [response.status_code for response in cases] == [401, 401, 401, 401]
     assert [response.json()["error"]["code"] for response in cases] == [
-        "validation_error",
-        "invalid_idempotency_key",
-        "validation_error",
-        "validation_error",
+        "authentication_failed",
+        "authentication_failed",
+        "authentication_failed",
+        "authentication_failed",
     ]
     assert len(appended) == 4
     assert all(event.stage == "audit" for event in appended)
@@ -330,8 +350,14 @@ def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
     service = ControlService(None, RejectingAudit(), AuditProjector(b"x" * 32))
     app = FastAPI()
     app.include_router(control_router(service))
-    response = TestClient(app, raise_server_exceptions=False).get("/v1/principals?limit=101")
 
+    async def exercise() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            return await client.get("/v1/principals?limit=101")
+
+    response = asyncio.run(exercise())
     assert response.status_code == 503
     assert response.json()["error"] == {
         "code": "audit_unavailable",

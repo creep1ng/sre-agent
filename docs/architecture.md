@@ -36,7 +36,7 @@ The schema releases remain the contract authority. Runtime models must not repla
 | Metadata | OpenAPI location | Default | Meaning |
 | --- | --- | --- |
 | Application version | `info.version` | installed `sre-agent` package version | The runtime code version. |
-| Contract version | `info.x-sre-agent-contract-version` | `1.4.0` | The immutable schema release implemented by the runtime. |
+| Contract version | `info.x-sre-agent-contract-version` | `2.0.0` | The immutable schema release implemented by the runtime. |
 | Build revision | `info.x-sre-agent-build-revision` | `source-archive` | The source revision used to build this artifact. |
 
 The Compose variables `SRE_AGENT_APPLICATION_VERSION`, `SRE_AGENT_CONTRACT_VERSION`, and

@@ -75,15 +75,16 @@ class AuditProjector:
                 audit_decision = {"decision": "deny", "reason_code": "no_matching_grant"}
         cause = (
             authorization_denial_cause
-            if stage == "authorization" and status == 403 and audit_decision is not None
+            if stage == "authorization" and status in {403, 404} and audit_decision is not None
             and audit_decision["decision"] == "deny"
             else None
         )
         outcome = (
-            "success" if status < 400 else ("denied" if status in {403, 404} else "error")
+            "denied" if audit_decision is not None and audit_decision["decision"] == "deny"
+            else ("success" if status < 400 else "error")
         )
-        # The public error_code doubles as the audit reason_code so terminal 403
-        # deny evidence stays consistent (no_matching_grant on engine deny).
+        # Only an engine denial is a denied audit event. An authorized target miss
+        # remains an error outcome and retains its matching-grant decision.
         audit_reason = reason if outcome != "denied" else "no_matching_grant"
         return AuditEvent(
             event_id=uuid4(), occurred_at=datetime.now(UTC), operation=operation,
