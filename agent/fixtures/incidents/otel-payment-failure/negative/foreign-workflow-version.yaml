@@ -1,0 +1,18 @@
+# Negative fixture — a snapshot from another workflow version MUST be rejected.
+#
+# Guards objection 6: incident-state:1.0.0 pins workflow_version with `const`,
+# so a 9.9.9 snapshot cannot claim to validate against this contract.
+---
+workflow_id: incident-response
+workflow_version: 9.9.9
+state: detected
+alert:
+  alert_id: alt-payment-error-rate
+  service: paymentservice
+  severity: sev2
+  status: new
+  observed_at: '2026-08-24T14:05:00Z'
+  summary: Elevated error rate on paymentservice.
+  source: grafana-alerting
+updated_at: '2026-08-24T14:05:00Z'
+incident_id: null

@@ -98,7 +98,10 @@ See [runtime boundaries](docs/architecture.md) and the [Codex worktree workflow]
 
 ## Local verification
 
-All verification runs inside Compose containers. In a linked worktree, replace
+All verification runs inside Compose containers. The Python command starts a dedicated PostgreSQL
+service backed by disposable `tmpfs`; it neither starts nor mounts the persistent demo database.
+An isolation guard also refuses to run when the test and demo database identities match. In a
+linked worktree, replace
 `docker compose` below with `scripts/worktree-compose` so the generated project name and ports
 remain isolated.
 
@@ -113,16 +116,13 @@ Run the complete contract and JavaScript verification set:
 ```bash
 docker compose --profile checks run --build --rm harness npm --prefix schemas/tooling test
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate
-docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.0.0
-docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.1.0
-docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:release -- --release 1.2.0
+docker compose --profile checks run --rm harness npm --prefix schemas/tooling run validate:releases
 docker compose --profile checks run --rm harness npm --prefix schemas/tooling run lint:openapi
-docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-10
-docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-11
-docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-13
-docker compose --profile checks run --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-14
 docker compose --profile checks run --rm harness node --check scripts/showcase.js
 ```
+
+`validate:releases` discovers every published SemVer directory in `schemas/releases`, validates
+them in deterministic order, and fails if any directory is omitted or its manifest is invalid.
 
 To verify issue #13 only, run its HTTP behavior tests and pinned contract obligation:
 

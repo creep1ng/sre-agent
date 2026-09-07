@@ -1,0 +1,165 @@
+openapi: 3.1.0
+info:
+  title: SRE Agent Incident Runs API
+  version: 1.0.0
+  description: >-
+    Contract between the operations UI and the investigation harness. The UI starts
+    or resumes a run, polls its state and events, and sends human commands. The UI
+    never talks to the harness process directly and never uses the gateway as a
+    coordinator. Event delivery is cursor-based polling (ADR-008); no streaming.
+    This is a contract only: routers and UI are out of scope (HT-INC-04, issue #145).
+servers: [{ url: / }]
+security: [{ bearerAuth: [] }]
+
+paths:
+  /v1/incidents/{incident_id}/runs:
+    post:
+      summary: Start or resume an investigation run
+      operationId: startRun
+      description: >-
+        Idempotent on Idempotency-Key. Replaying a key returns the existing run
+        (200) instead of creating a second one (201). Resuming continues the gateway
+        correlation from the last snapshot.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: 'urn:sre-agent:schema:run-start-request:1.0.0' }
+      responses:
+        '201': { description: Run created, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
+        '200': { description: Idempotent replay of an existing run, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/incidents/{incident_id}/runs/{run_id}:
+    get:
+      summary: Get the current run state and cursor
+      operationId: getRunState
+      description: Returns a safe projection with the cursor to poll events from.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - { $ref: '#/components/parameters/RunId' }
+      responses:
+        '200': { description: Current run state, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/incidents/{incident_id}/runs/{run_id}/commands:
+    post:
+      summary: Send a human command to a run
+      operationId: sendRunCommand
+      description: >-
+        Idempotent on Idempotency-Key. The command must be permitted by the workflow
+        from the run's current state; otherwise 409. Human-only.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - { $ref: '#/components/parameters/RunId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: 'urn:sre-agent:schema:run-command:1.0.0' }
+      responses:
+        '202': { description: Command accepted; run state advances, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/incidents/{incident_id}/runs/{run_id}/events:
+    get:
+      summary: Read run events after a cursor
+      operationId: getRunEvents
+      description: >-
+        Cursor-based pagination (ADR-008). Returns events after `after`, in order,
+        with a next cursor. Contains no prompts, secrets or raw tool arguments.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - { $ref: '#/components/parameters/RunId' }
+        - name: after
+          in: query
+          required: false
+          description: Cursor from a prior response. Omit to read from the start.
+          schema: { type: string, maxLength: 200 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200': { description: Ordered event page, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-event:1.0.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /v1/incidents/{incident_id}/runs/{run_id}/context:
+    get:
+      summary: Read the sensitive execution context
+      operationId: getRunContext
+      description: >-
+        Audit finding C07. Separate surface from the safe projection: it may carry the
+        assembled input, the model output and tool arguments. Requires the run.read_context
+        action, so holding run.read is not enough. A principal able to watch a run is not
+        thereby able to read what was sent to the model.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - { $ref: '#/components/parameters/RunId' }
+      responses:
+        '200': { description: Sensitive execution context, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-context:1.0.0' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    IncidentId:
+      name: incident_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^run_[a-z0-9]{8,32}$' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 200 }
+  responses:
+    Unauthorized:
+      description: Authentication failed
+      headers: { WWW-Authenticate: { schema: { type: string, const: Bearer } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+    Forbidden:
+      description: The principal is not authorized for this run or command
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+    NotFound:
+      description: Incident or run does not exist for this principal
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+    Conflict:
+      description: Command not permitted from the current state, or idempotency conflict
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+    ValidationError:
+      description: Request failed contract validation
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+    Unavailable:
+      description: A dependency is temporarily unavailable; the operation is retryable
+      headers: { Retry-After: { schema: { type: string } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }

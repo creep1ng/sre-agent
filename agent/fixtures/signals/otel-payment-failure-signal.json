@@ -1,0 +1,26 @@
+{
+  "trace_id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+  "span_id": "1234abcd5678ef90",
+  "severity_hint": "sev2",
+  "resource_attributes": {
+    "service.name": "paymentservice",
+    "service.namespace": "webstore",
+    "deployment.environment": "demo"
+  },
+  "span": {
+    "name": "traces_span_metrics_calls_total",
+    "status": {
+      "code": "ERROR",
+      "message": "error rate above threshold over a five minute window"
+    },
+    "timestamp": "2026-08-24T14:04:30Z",
+    "attributes": {
+      "http.route": "/pay",
+      "custom.unknown_field": "must be dropped"
+    }
+  },
+  "extra_unknown_top_level": "must be dropped",
+  "credentials": {
+    "api_key": "must never enter the domain"
+  }
+}

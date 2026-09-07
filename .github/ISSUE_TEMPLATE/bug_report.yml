@@ -1,0 +1,128 @@
+name: Reporte de bug / error
+description: Falla reproducible con evidencia, impacto y criterios verificables
+title: "[BUG] "
+labels:
+  - "type:bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Registrar evidencia suficiente para reproducir y verificar la falla. Eliminar secretos, datos personales y rutas locales antes de enviar el reporte.
+
+  - type: textarea
+    id: evidence_baseline
+    attributes:
+      label: Evidencia y línea base
+      description: Incluir versión, commit, entorno, configuración relevante y evidencia observable. Usar referencias o adjuntos sanitizados.
+      placeholder: Versión/commit, entorno y evidencia...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: report_basis
+    attributes:
+      label: Base de clasificación
+      description: Indicar qué tipo de evidencia sostiene el reporte; no presupone que la causa raíz esté confirmada.
+      options:
+        - Defecto reproducido
+        - Riesgo verificado por inspección estática
+        - Hipótesis de compatibilidad pendiente de reproducción
+    validations:
+      required: true
+
+  - type: input
+    id: observed_commit
+    attributes:
+      label: Commit donde se observó la falla
+      description: Incluir el SHA obtenido con `git rev-parse HEAD` en el checkout que corresponda al artefacto donde falló; el artefacto desplegado puede diferir del checkout local. Este commit identifica dónde se observó la falla, no necesariamente dónde fue introducida.
+      placeholder: 0123456789abcdef0123456789abcdef01234567
+    validations:
+      required: true
+
+  - type: textarea
+    id: safe_reproduction
+    attributes:
+      label: Reproducción segura
+      description: Detallar precondiciones, datos mínimos sanitizados y pasos o comando exacto. No incluir credenciales ni datos sensibles.
+      placeholder: |
+        1. Preparar...
+        2. Ejecutar...
+        3. Observar...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Resultado esperado
+      description: Describir el comportamiento o contrato que debería cumplirse.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual_behavior
+    attributes:
+      label: Resultado actual
+      description: Describir qué ocurre, incluyendo mensajes de error sanitizados y frecuencia.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: impact
+    attributes:
+      label: Impacto
+      description: Elegir el impacto observable más alto; la prioridad se define durante el triage.
+      options:
+        - Crítico — indisponibilidad, pérdida de datos o riesgo de seguridad
+        - Alto — flujo principal bloqueado sin alternativa razonable
+        - Medio — degradación o alternativa disponible
+        - Bajo — impacto menor o caso poco frecuente
+    validations:
+      required: true
+
+  - type: textarea
+    id: root_class
+    attributes:
+      label: Clase raíz y trackers relacionados
+      description: Indicar la clase de falla sospechada y enlazar issues, incidentes, épicas o hallazgos relacionados. Escribir "Por determinar" cuando todavía no exista evidencia suficiente.
+      placeholder: "Clase raíz: ...\nRelacionados: #..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: bisect_strategy
+    attributes:
+      label: Estrategia opcional con git bisect
+      description: Proponer commits conocido-bueno y conocido-malo, junto con una reproducción segura, aislada y determinista. Seguir la documentación de `git bisect` (https://git-scm.com/docs/git-bisect), clasificar cada revisión como buena o mala y ejecutar `git bisect reset` al finalizar. No incluir commits supuestos ni ejecutar bisect sobre un entorno con cambios sin resguardar.
+      placeholder: "Conocido-bueno: <SHA>\nConocido-malo: <SHA>\nComando determinista: ..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance_tests
+    attributes:
+      label: Pruebas y criterios de aceptación
+      description: Definir casos positivos, negativos y de frontera, junto con el comando o evidencia que demostrará la corrección.
+      placeholder: |
+        - [ ] Caso reproducido antes de la corrección.
+        - [ ] Caso cubierto por una prueba automatizada.
+        - [ ] Comando de verificación y resultado esperado documentados.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Fuera de alcance
+      description: Delimitar cambios cercanos que no forman parte de esta corrección. Escribir "Ninguno" si no aplica.
+    validations:
+      required: true
+
+  - type: textarea
+    id: planning_proposal
+    attributes:
+      label: Propuesta de prioridad y planificación
+      description: Si corresponde, proponer prioridad, sprint o ruta crítica. El triage confirma la planificación.
+      placeholder: "Prioridad propuesta: ...\nSprint propuesto: ..."
+    validations:
+      required: false

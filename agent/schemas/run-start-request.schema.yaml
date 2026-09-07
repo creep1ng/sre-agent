@@ -1,0 +1,25 @@
+# Request to start or resume an investigation run — HT-INC-04 (issue #145).
+#
+# POST /v1/incidents/{incident_id}/runs. Idempotent on Idempotency-Key: replaying
+# the same key returns the existing run instead of creating a second one.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:run-start-request:1.0.0
+title: RunStartRequest
+type: object
+additionalProperties: false
+required: [workflow_version, objective]
+properties:
+  workflow_version:
+    const: 1.0.0
+    description: Workflow version the run executes against. Pinned so a run is
+      always tied to a known contract, matching incident-state:1.0.0.
+  objective:
+    enum: [triage, investigate, mitigate, postmortem]
+    description: What the run is asked to do. Bounds which states the harness may act in.
+  resume_from_run_id:
+    type: [string, "null"]
+    pattern: '^run_[a-z0-9]{8,32}$'
+    default: null
+    description: When present, resume that run from its last snapshot instead of
+      starting a fresh one. The gateway correlation stays continuous.

@@ -7,6 +7,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
+from sre_agent.persistence import seeds as seeds_module
 from sre_agent.persistence.api_keys import verify_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import KEY_ENV, SeedConflict, SeedSettings, seed
@@ -30,7 +31,7 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, alembic_version CASCADE"
+            "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -71,13 +72,24 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         after = connection.execute(
             "SELECT credential_id, key_hash FROM credentials ORDER BY credential_id"
         ).fetchall()
-        grant = connection.execute("SELECT principal_id, action FROM grants").fetchone()
-        resource = connection.execute(
-            "SELECT concrete_model, inference_provider FROM resources"
+        grant = connection.execute(
+            "SELECT principal_id, action FROM grants WHERE action='invoke' ORDER BY grant_id"
         ).fetchone()
+        resource = connection.execute(
+            "SELECT concrete_model, inference_provider FROM resources "
+            "WHERE resource_type='llm_model'"
+        ).fetchone()
+        admin_resources = connection.execute(
+            "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+        ).fetchone()[0]
+        admin_grants = connection.execute(
+            "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
+        ).fetchone()[0]
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 1, 1]
+    assert counts == [4, 4, 3, 5]
+    assert admin_resources == 2
+    assert admin_grants == 4
     assert before == after
     by_id = dict(before)
     seeded_principals = (
@@ -93,6 +105,105 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
     assert grant == ("incident-harness", "invoke")
     assert resource == ("openai/gpt-4o-mini", "openai")
     assert all(secret not in stored for secret in ENV.values())
+
+
+@pytest.mark.asyncio
+async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
+    settings = SeedSettings.from_environment(ENV)
+    database = Database(DATABASE_URL)
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DELETE FROM grants WHERE action LIKE 'admin.%'")
+        connection.execute("DELETE FROM resources WHERE resource_type='administrative_control'")
+    assert await seed(database, settings) is False
+    with psycopg.connect(DATABASE_URL) as connection:
+        counts = [
+            connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            for table in ("principals", "credentials", "resources", "grants")
+        ]
+        admin_resources = connection.execute(
+            "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+        ).fetchone()[0]
+        admin_grants = connection.execute(
+            "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
+        ).fetchone()[0]
+    await database.dispose()
+    assert counts == [4, 4, 3, 5]
+    assert admin_resources == 2
+    assert admin_grants == 4
+
+
+@pytest.mark.asyncio
+async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -> None:
+    settings = SeedSettings.from_environment(ENV)
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "DELETE FROM grants WHERE grant_id='grant-admin-human-admin-read-principals'"
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+            ).fetchone()[0]
+            == 2
+        )
+
+    database = Database(DATABASE_URL)
+    assert await seed(database, settings) is False
+    assert await seed(database, settings) is False
+    await database.dispose()
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        restored = connection.execute(
+            "SELECT principal_id, action, resource_type, resource_id FROM grants "
+            "WHERE grant_id='grant-admin-human-admin-read-principals'"
+        ).fetchone()
+        counts = connection.execute(
+            "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
+        ).fetchone()
+    assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
+    assert counts == (4, 5)
+
+
+@pytest.mark.asyncio
+async def test_seed_converges_after_real_03_to_04_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
+    schema = "seed_upgrade_03_04_test"
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+        connection.execute(f"CREATE SCHEMA {schema}")
+    dsn = DATABASE_URL
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", dsn)
+    monkeypatch.setenv("DATABASE_URL", dsn)
+    monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema}")
+    command.upgrade(config, "20260901_03")
+
+    settings = SeedSettings.from_environment(ENV)
+    legacy_database = Database(dsn)
+    admin_resources = seeds_module.ADMIN_RESOURCES
+    admin_grants = seeds_module.ADMIN_GRANTS
+    monkeypatch.setattr(seeds_module, "ADMIN_RESOURCES", ())
+    monkeypatch.setattr(seeds_module, "ADMIN_GRANTS", ())
+    assert await seed(legacy_database, settings) is True
+    await legacy_database.dispose()
+    monkeypatch.setattr(seeds_module, "ADMIN_RESOURCES", admin_resources)
+    monkeypatch.setattr(seeds_module, "ADMIN_GRANTS", admin_grants)
+
+    command.upgrade(config, "20260902_04")
+    database = Database(dsn)
+    assert await seed(database, settings) is False
+    assert await seed(database, settings) is False
+    await database.dispose()
+
+    with psycopg.connect(dsn) as connection:
+        version = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        admin_resources = connection.execute(
+            "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+        ).fetchone()[0]
+        admin_grants = connection.execute(
+            "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
+        ).fetchone()[0]
+    assert version == "20260902_04"
+    assert admin_resources == 2
+    assert admin_grants == 4
 
 
 @pytest.mark.asyncio

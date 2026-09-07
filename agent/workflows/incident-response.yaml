@@ -1,0 +1,330 @@
+# Incident response workflow — HT-INC-01 (issue #16)
+#
+# Shared declarative contract consumed by the UI, the investigator harness, and the
+# backend. Sprint 1 defines and validates this contract; the runtime state machine
+# belongs to HT-INC-02 (issue #26).
+#
+# Decision points are declared inline (approved MVP decision). Decisions actually
+# taken during a run are persisted as runtime events, never written back here.
+---
+workflow_id: incident-response
+workflow_version: 1.0.0
+title: Governed incident investigation and response
+description: >-
+  Compact runtime state machine covering alert intake through closure. Every
+  agentic step resolves its capabilities through the gateway; every transition
+  writes a timeline event and references the gateway authorization decision when
+  an AI capability was used.
+
+metadata:
+  owner: papiarcacamilo
+  source_issue: 16
+  scope_reference: Cambio de alcance aprobado — Principals y artefactos del harness
+  session_definition: >-
+    A session is the incident lifecycle from formal declaration until closure
+    after the postmortem is declared. incident_id is the canonical session
+    identifier; run_id and task_id identify harness executions inside it.
+
+# Actor vocabulary shared by every transition.
+actors:
+  human: On-call engineer or administrator acting through the operations UI.
+  agent: Investigator harness executing a governed step through the gateway.
+  system: Platform automation with no reasoning step (ingestion, validation, timers).
+
+# First-class domain artifacts. Anything absent here is a supporting record.
+artifacts:
+  alert:
+    created_by: system
+    description: Actionable notification entering triage. Anomaly data, when present,
+      is nested as origin metadata and never becomes its own entity.
+  hypothesis:
+    created_by: agent
+    reviewable_by: human
+    description: Candidate explanation with confidence and cited supporting evidence.
+  mitigation_strategy:
+    created_by: agent
+    approved_by: human
+    description: Proposed intervention with steps, risk and a verification check.
+  postmortem:
+    created_by: agent
+    validated_by: human
+    description: Draft synthesized from timeline, evidence, hypotheses and mitigation.
+      Mandatory before closure; may be minimal in the MVP.
+
+# Supporting records are persisted as runtime events, not as product artifacts.
+supporting_records:
+  - evidence
+  - decision
+  - approval
+  - timeline_event
+  - impact_severity
+
+# Process-stage mapping — "mapeo estados operativos <-> fases del flujo".
+#
+# The detailed Notion diagram organises the operational process into seven phases,
+# indexed 1 to 7:
+#   1. Sistema simulado y observabilidad   (anomaly detection, alert creation)
+#   2. Gestión de alertas                  (dedup, triage, declare/dismiss/link)
+#   3. Gestión y coordinación              (severity, on-call, war room)
+#   4. Investigación del harness           (hypotheses, evidence)
+#   5. Autonomía controlada                (human approval of an action)
+#   6. Recuperación y cierre               (verify, mitigate, resolve)
+#   7. Post-incidente                      (postmortem, close)
+#
+# States are identified by name and never by index. Phases carry the only numeric
+# index in this contract, so a phase number can never be mistaken for a state
+# number. Each of the eleven states below maps to one or more of these phases
+# through its `process_stages` field, which is documentation metadata only.
+#
+# Each state below declares which phases it covers, so the operational model is
+# preserved without creating one entity per phase. The runtime never branches on
+# process_stage: it is documentation metadata.
+#
+# The validator enforces coverage: every phase in the range must be claimed by at
+# least one state, and no phase may fall outside the range. Marking the mapping
+# complete without covering every phase fails CI.
+process_stage_mapping_status: complete
+process_stage_range: [1, 7]
+
+initial_state: detected
+terminal_states: [dismissed, linked, closed]
+
+states:
+  detected:
+    description: An alert exists and has not been dispositioned.
+    process_stages: [1]
+    entry_condition: An alert record exists with service, severity and timestamp.
+    allows_agentic_step: false
+
+  triage:
+    description: The alert is being dispositioned.
+    process_stages: [2]
+    entry_condition: A human or the harness opened the alert for triage.
+    allows_agentic_step: true
+    agent_objective: triage
+
+  dismissed:
+    description: The alert was rejected as noise. Terminal.
+    process_stages: [2]
+    terminal: true
+
+  linked:
+    description: The alert was associated with an existing incident. Terminal for
+      this alert; the target incident continues its own session.
+    process_stages: [2]
+    terminal: true
+
+  active:
+    description: An incident is declared and a war room exists. Session starts here.
+    process_stages: [3]
+    entry_condition: incident_id assigned, severity set, war room created.
+    allows_agentic_step: false
+
+  investigating:
+    description: Evidence is being gathered and hypotheses formulated.
+    process_stages: [4]
+    allows_agentic_step: true
+    agent_objective: investigate
+
+  mitigating:
+    description: A mitigation strategy is proposed, approved and applied.
+      MVP interventions are simulated or performed by a human.
+    process_stages: [5, 6]
+    allows_agentic_step: true
+    agent_objective: mitigate
+
+  verifying:
+    description: Service stability is being checked after the intervention.
+    process_stages: [6]
+    allows_agentic_step: true
+    agent_objective: investigate
+
+  resolved:
+    description: Service is stable. The postmortem does not exist yet.
+    process_stages: [6]
+    allows_agentic_step: false
+
+  postmortem:
+    description: A postmortem draft is being produced and validated.
+    process_stages: [7]
+    allows_agentic_step: true
+    agent_objective: postmortem
+
+  closed:
+    description: Session closed with a declared postmortem. Terminal.
+    process_stages: [7]
+    terminal: true
+
+# Decision points are declared inline. `outcomes` enumerate the branches; the
+# runtime persists which branch was taken as a decision record.
+decision_points:
+  triage_outcome:
+    state: triage
+    actor: [human, agent]
+    question: How should this alert be dispositioned?
+    required_inputs: [alert.service, alert.severity, alert.summary]
+    outcomes: [dismiss, link, declare]
+    agent_may_propose: true
+    human_may_override: true
+
+  evidence_sufficiency:
+    state: investigating
+    actor: [human, agent]
+    question: Is there enough evidence to propose a mitigation?
+    required_inputs: [hypotheses, evidence]
+    outcomes: [continue_investigation, propose_mitigation, escalate]
+    agent_may_propose: true
+    human_may_override: true
+
+  mitigation_approval:
+    state: mitigating
+    actor: [human]
+    question: Is the proposed mitigation approved?
+    required_inputs: [mitigation_strategy]
+    outcomes: [approve, reject, request_changes]
+    agent_may_propose: false
+    human_may_override: false
+    blocking: true
+
+  stability_check:
+    state: verifying
+    actor: [human, agent]
+    question: Is the service stable after the intervention?
+    required_inputs: [mitigation_strategy.verification_check, evidence]
+    outcomes: [stable, not_stable]
+    agent_may_propose: true
+    human_may_override: true
+
+transitions:
+  - id: open_triage
+    from: detected
+    to: triage
+    actor: [human, system]
+    requires_approval: false
+
+  - id: triage_dismiss
+    from: triage
+    to: dismissed
+    actor: [human]
+    decision_point: triage_outcome
+    on_outcome: dismiss
+    requires_approval: false
+    records_decision: true
+
+  - id: triage_link
+    from: triage
+    to: linked
+    actor: [human]
+    decision_point: triage_outcome
+    on_outcome: link
+    requires_approval: false
+    records_decision: true
+    guard: A target incident_id must be supplied.
+
+  - id: triage_declare
+    from: triage
+    to: active
+    actor: [human]
+    decision_point: triage_outcome
+    on_outcome: declare
+    requires_approval: false
+    records_decision: true
+    guard: Severity must be set. Session starts and incident_id becomes canonical.
+
+  - id: start_investigation
+    from: active
+    to: investigating
+    actor: [human, agent, system]
+    requires_approval: false
+
+  - id: continue_investigation
+    from: investigating
+    to: investigating
+    actor: [agent, human]
+    decision_point: evidence_sufficiency
+    on_outcome: continue_investigation
+    requires_approval: false
+    records_decision: true
+    guard: Bounded by the harness step budget; exhaustion escalates to a human.
+
+  - id: propose_mitigation
+    from: investigating
+    to: mitigating
+    actor: [agent, human]
+    decision_point: evidence_sufficiency
+    on_outcome: propose_mitigation
+    requires_approval: false
+    records_decision: true
+    guard: At least one hypothesis with cited supporting evidence must exist.
+
+  - id: apply_mitigation
+    from: mitigating
+    to: verifying
+    actor: [human]
+    decision_point: mitigation_approval
+    on_outcome: approve
+    requires_approval: true
+    records_decision: true
+    records_approval: true
+    guard: MVP interventions are simulated or human. The agent never executes them.
+
+  - id: reject_mitigation
+    from: mitigating
+    to: investigating
+    actor: [human]
+    decision_point: mitigation_approval
+    on_outcome: [reject, request_changes]
+    requires_approval: false
+    records_decision: true
+
+  - id: verification_failed
+    from: verifying
+    to: investigating
+    actor: [human, agent]
+    decision_point: stability_check
+    on_outcome: not_stable
+    requires_approval: false
+    records_decision: true
+
+  - id: verification_passed
+    from: verifying
+    to: resolved
+    actor: [human, agent]
+    decision_point: stability_check
+    on_outcome: stable
+    requires_approval: false
+    records_decision: true
+
+  - id: start_postmortem
+    from: resolved
+    to: postmortem
+    actor: [human, agent, system]
+    requires_approval: false
+
+  - id: close_incident
+    from: postmortem
+    to: closed
+    actor: [human]
+    requires_approval: true
+    records_approval: true
+    guard: A postmortem artifact must exist. Closure without one is invalid.
+
+# Escalation applies to every state where an agentic step is allowed.
+escalation:
+  triggers:
+    - harness step budget exhausted
+    - two consecutive invalid agent outputs
+    - authorization denied for a capability required by the objective
+    - upstream provider unavailable after bounded retries
+  effect: Transition is blocked, a decision record is written, and a human is notified.
+  invariant: Escalation never produces a state change by itself.
+
+invariants:
+  - Every transition writes one timeline event.
+  - A transition whose decision_point requires approval cannot occur without an
+    approval record.
+  - A failed verification must be able to return to investigating.
+  - No transition into closed is valid without a postmortem artifact.
+  - Every agentic step references the gateway authorization decision that allowed
+    or denied the capability it used.
+  - An authorization denial never produces an invalid state change.

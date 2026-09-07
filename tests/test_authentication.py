@@ -39,7 +39,7 @@ def authentication_database() -> Database:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, alembic_version CASCADE"
+            "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -158,6 +158,39 @@ def test_all_authentication_failures_are_uniform_and_stop_before_resources_or_up
     assert all(" grants" not in statement.lower() for statement in statements)
     assert all(" resources" not in statement.lower() for statement in statements)
     assert authorization is None or authorization not in response.text
+
+
+@pytest.mark.asyncio
+async def test_responses_authorization_context_preserves_an_inactive_principal(
+    authentication_database: Database,
+) -> None:
+    async with authentication_database.transaction() as session:
+        repository = CredentialRepository(session)
+        context = await repository.resolve_authorization_context(KEYS["inactive-agent"], now=NOW)
+        generic_context = await repository.authenticate(KEYS["inactive-agent"], now=NOW)
+
+    assert context is not None
+    assert context.principal.principal_id == "inactive-agent"
+    assert context.principal.status == "inactive"
+    assert generic_context is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "key",
+    [
+        KEYS["revoked-agent"],
+        KEYS["expired-agent"],
+        "sre_nact_0123456789abcdefghijklmnoq",
+    ],
+)
+async def test_responses_authorization_context_rejects_invalid_credentials(
+    authentication_database: Database, key: str
+) -> None:
+    async with authentication_database.transaction() as session:
+        context = await CredentialRepository(session).resolve_authorization_context(key, now=NOW)
+
+    assert context is None
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,46 @@
+# Observable run state returned to the UI — HT-INC-04 (issue #145).
+#
+# GET /v1/incidents/{incident_id}/runs/{run_id}. A safe projection of the run:
+# no prompts, no provider secrets, no raw tool arguments. Only what the UI shows.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:run-state:1.0.0
+title: RunState
+type: object
+additionalProperties: false
+required: [run_id, incident_id, workflow_version, status, current_state, cursor, updated_at]
+properties:
+  run_id:
+    type: string
+    pattern: '^run_[a-z0-9]{8,32}$'
+  incident_id:
+    type: string
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+  workflow_version:
+    const: 1.0.0
+  status:
+    enum: [running, awaiting_human, completed, terminated]
+    description: Lifecycle of the run. `awaiting_human` means a command is expected
+      (e.g. a mitigation approval) before it can continue.
+  current_state:
+    enum: [detected, triage, dismissed, linked, active, investigating,
+           mitigating, verifying, resolved, postmortem, closed]
+    description: Where the incident stands in the workflow. Same enum as incident-state.
+  pending_command:
+    type: [string, "null"]
+    default: null
+    description: When status is awaiting_human, the command kind the run is waiting
+      for. Null otherwise.
+  cursor:
+    type: string
+    minLength: 1
+    maxLength: 200
+    description: Opaque position marker. Passed back to GET .../events to fetch only
+      events produced after this point (polling model, ADR-008).
+  terminated_reason:
+    type: [string, "null"]
+    default: null
+    enum: [completed, max_steps, denied, needs_human, invalid_output, upstream_unavailable, null]
+  updated_at:
+    type: string
+    format: date-time

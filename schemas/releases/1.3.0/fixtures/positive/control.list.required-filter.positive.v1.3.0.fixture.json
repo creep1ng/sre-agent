@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:control-http-case:1.3.0","rule":"valid","status":"positive","version":"1.3.0","group":"control","data":{"operation":"grants.list","request":{"method":"GET","path":"/v1/grants","parameters":[]},"expected":{"status":422,"error_code":"validation_error","retryable":false,"mutated":false}}}

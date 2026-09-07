@@ -1,0 +1,22 @@
+# Negative fixture — a standalone Anomaly entity MUST be rejected.
+#
+# Encodes the approved scope decision: anomaly information exists only as
+# origin metadata nested inside an alert, never as a first-class object.
+---
+workflow_id: incident-response
+workflow_version: 1.0.0
+incident_id: inc-invalid-anomaly
+run_id: null
+state: detected
+alert:
+  alert_id: alt-payment-error-rate
+  service: paymentservice
+  severity: sev2
+  status: new
+  observed_at: '2026-08-24T14:05:00Z'
+  summary: Elevated error rate on paymentservice.
+  source: grafana-alerting
+anomaly:
+  anomaly_id: ano-payment-latency
+  detector: webstore-metrics
+updated_at: '2026-08-24T14:05:00Z'

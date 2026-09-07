@@ -1,0 +1,100 @@
+# Authorization scenarios for incident run commands — HT-INC-04 (issue #145).
+#
+# Mirrors the shape of docs/security/scenarios.v1.yaml so both catalogs read alike.
+# Every scenario is `contracted`: the endpoints do not exist yet, so none is executable.
+# They exist to pin the intended decisions before implementation, which is what audit
+# finding C08 asks for.
+---
+catalog_version: "v1"
+maturity: "contracted"
+scenarios:
+  - id: "INC-AUTH-001"
+    threat: "authorized human starts a run"
+    principal: "demo-human"
+    action: "run.start"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs"}
+    expected: {http_status: 201, policy_decision: "allow", denial_cause: null}
+
+  - id: "INC-AUTH-002"
+    threat: "unauthorized agent starts a run"
+    principal: "restricted-harness"
+    action: "run.start"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-003"
+    threat: "administrative name confers no authority"
+    note: >-
+      admin-human is a human principal whose name suggests administrative power and
+      holds no grant in this domain. Authority comes from the grant, never from the
+      name or the kind. This is the scenario that proves names_confer_roles is false.
+    principal: "admin-human"
+    action: "run.approve"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs/{run_id}/commands"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-004"
+    threat: "run.command-only participation is allowed"
+    note: >-
+      Separating run.approve from run.command is what makes this decidable. A principal
+      holding only run.command can escalate or request changes but cannot approve a
+      mitigation.
+    authenticated_principal: "incident-operator"
+    principal: "incident-operator"
+    action: "run.command"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs/{run_id}/commands"}
+    command: "request_changes"
+    payload: {actor: "human", actor_reference: {principal_id: "incident-operator"}}
+    expected: {http_status: 202, policy_decision: "allow", denial_cause: null}
+
+  - id: "INC-AUTH-005"
+    threat: "run.command participation does not imply approval"
+    note: >-
+      incident-operator holds only run.command. The authenticated principal is evaluated
+      against run.approve even though the command payload declares a human actor.
+    authenticated_principal: "incident-operator"
+    principal: "incident-operator"
+    action: "run.approve"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs/{run_id}/commands"}
+    command: "approve_mitigation"
+    payload: {actor: "human", actor_reference: {principal_id: "incident-operator"}}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-006"
+    threat: "unknown workflow is indistinguishable from unauthorized"
+    principal: "demo-human"
+    action: "run.start"
+    resource: {type: "incident_workflow", id: "missing-workflow"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "resource_missing"}
+
+  - id: "INC-AUTH-007"
+    threat: "payload actor type cannot impersonate an authenticated human"
+    note: >-
+      The JSON Schema validates actor as a payload type only. Authorization uses the
+      authenticated incident-harness principal, not the literal actor or actor_reference.
+    authenticated_principal: "incident-harness"
+    principal: "incident-harness"
+    action: "run.command"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "POST", path: "/v1/incidents/{incident_id}/runs/{run_id}/commands"}
+    command: "request_changes"
+    payload: {actor: "human", actor_reference: {principal_id: "demo-human"}}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}
+
+  - id: "INC-AUTH-008"
+    threat: "watching a run does not imply reading its context"
+    note: >-
+      C07. demo-human holds run.read and can follow the investigation, but holds no
+      run.read_context grant, so the assembled input and tool arguments stay out of
+      reach. The separation is enforced by the engine, not only by the schema.
+    principal: "demo-human"
+    action: "run.read_context"
+    resource: {type: "incident_workflow", id: "incident-response"}
+    request: {method: "GET", path: "/v1/incidents/{incident_id}/runs/{run_id}/context"}
+    expected: {http_status: 403, policy_decision: "deny", denial_cause: "grant_not_applicable"}

@@ -1,0 +1,19 @@
+# Negative fixture — a declared incident MUST carry a session identifier.
+#
+# Guards objection 1 from the far side: the session exists from `active` onward,
+# so incident_id cannot stay null there.
+---
+workflow_id: incident-response
+workflow_version: 1.0.0
+state: investigating
+alert:
+  alert_id: alt-payment-error-rate
+  service: paymentservice
+  severity: sev2
+  status: triaged
+  observed_at: '2026-08-24T14:05:00Z'
+  summary: Elevated error rate on paymentservice.
+  source: grafana-alerting
+updated_at: '2026-08-24T14:12:00Z'
+severity: sev2
+incident_id: null

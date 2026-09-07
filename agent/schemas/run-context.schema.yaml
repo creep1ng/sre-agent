@@ -1,0 +1,100 @@
+# Sensitive execution context — HT-INC-04 (issue #145), audit finding C07.
+#
+# GET /v1/incidents/{incident_id}/runs/{run_id}/context
+#
+# This is the counterpart of the safe projection, not an extension of it. It may carry
+# what the UI snapshot must never carry: the assembled context, the tool arguments and
+# the model output. It is therefore behind its own endpoint and its own action
+# (run.read_context), so a principal can watch a run without being able to read what was
+# sent to the model.
+#
+# Credentials are absent by construction, not by redaction: the harness never holds a
+# provider secret, so there is none to project.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:run-context:1.0.0
+title: RunContext
+type: object
+additionalProperties: false
+required: [run_id, incident_id, turns, retrieved_at]
+properties:
+  run_id:
+    type: string
+    pattern: '^run_[a-z0-9]{8,32}$'
+  incident_id:
+    type: string
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+  turns:
+    type: array
+    items: { $ref: '#/$defs/turn' }
+  retrieved_at:
+    type: string
+    format: date-time
+
+$defs:
+  turn:
+    type: object
+    additionalProperties: false
+    required: [turn_id, task_id, sequence, occurred_at]
+    properties:
+      turn_id:
+        type: string
+        pattern: '^turn_[a-z0-9]{8,32}$'
+      task_id:
+        description: The gateway correlation derived by replacing turn_ with task_ (C05).
+        oneOf:
+          - type: "null"
+          - type: string
+            pattern: '^[a-z][a-z0-9_-]{2,63}$'
+            not: { pattern: '^turn_' }
+      sequence:
+        type: integer
+        minimum: 0
+      assembled_input:
+        type: [string, "null"]
+        maxLength: 65536
+        default: null
+        description: >-
+          The single string sent to the gateway as `input`. Bounded by the same limit the
+          gateway enforces, so the context cannot describe a request the gateway would
+          have rejected.
+      model_output:
+        type: [string, "null"]
+        maxLength: 65536
+        default: null
+        description: The assistant text returned for this turn, before parsing.
+      tool_invocation:
+        oneOf:
+          - type: "null"
+          - $ref: '#/$defs/toolInvocation'
+        default: null
+      request_id:
+        type: [string, "null"]
+        format: uuid
+        default: null
+      occurred_at:
+        type: string
+        format: date-time
+
+  toolInvocation:
+    description: >-
+      What the harness asked a governed tool for. Arguments live here and never in the
+      safe projection, because a query can carry filters that identify people.
+    type: object
+    additionalProperties: false
+    required: [tool, arguments]
+    properties:
+      tool:
+        type: string
+        minLength: 1
+        maxLength: 200
+      arguments:
+        type: object
+      result_summary:
+        type: [string, "null"]
+        maxLength: 8000
+        default: null
+        description: >-
+          Bounded summary of what came back. The raw payload is not projected even here:
+          it is re-fetchable from the tool through the gateway, so persisting it would add
+          exposure without adding capability.

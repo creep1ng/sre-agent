@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:list-envelope:1.3.0","rule":"additionalProperties","status":"negative","version":"1.3.0","group":"shared","data":{"items":[],"limit":100,"truncated":true,"next":"cursor-1"}}

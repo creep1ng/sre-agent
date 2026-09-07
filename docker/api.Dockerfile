@@ -23,11 +23,14 @@ COPY scripts ./scripts
 COPY schemas ./schemas
 COPY public ./public
 COPY styles ./styles
+COPY agent ./agent
+COPY docs ./docs
+COPY .github ./.github
 COPY docker ./docker
 COPY compose.yaml README.md ./
 
 USER 65532:65532
-CMD ["sh", "-c", "shellcheck docker/harness-entrypoint.sh scripts/worktree-compose && ruff check --no-cache . && ruff format --check --no-cache . && uv lock --check --no-cache && pytest && alembic check"]
+CMD ["sh", "-c", "python scripts/assert_test_database_isolated.py && shellcheck docker/harness-entrypoint.sh scripts/worktree-compose && ruff check --no-cache . && ruff format --check --no-cache . && uv lock --check --no-cache && pytest && alembic check"]
 
 FROM base AS runtime
 

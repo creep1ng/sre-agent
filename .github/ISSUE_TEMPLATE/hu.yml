@@ -1,0 +1,63 @@
+name: Historia de usuario (HU)
+description: Necesidad observable de un rol con beneficio verificable
+title: "[HU-XX] "
+labels: ["type: user story"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use el título nativo del issue. Sprint, SP, épica, prioridad y estado se administran en GitHub Projects; labels y assignees en GitHub; y `blocked by`/`blocks` mediante dependencias nativas. No duplique esa metadata en el cuerpo.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema
+      description: Explique la necesidad de la persona usuaria y el contexto previo; no describa el proceso de planificación.
+    validations: {required: true}
+  - type: textarea
+    id: story
+    attributes:
+      label: Resultado observable
+      description: Redacte **Como** rol, **quiero** capacidad **para** beneficio y describa el resultado observable.
+    validations: {required: true}
+  - type: textarea
+    id: affected_contracts
+    attributes:
+      label: Contratos
+      description: Indique APIs, esquemas, datos, interacción o flujos afectados; escriba “Ninguno” si no aplica.
+    validations: {required: true}
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Entregables
+      description: Enumere los artefactos concretos que se producirán.
+    validations: {required: true}
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Criterios de aceptación
+      description: Incluya comportamiento verificable, casos positivos, límites y errores relevantes.
+    validations: {required: true}
+  - type: textarea
+    id: acceptance_evidence
+    attributes:
+      label: Evidencia de aceptación
+      description: Defina comandos, recorridos, capturas o video que demuestren el resultado funcional. Los tests solos no bastan.
+    validations: {required: true}
+  - type: textarea
+    id: definition_of_ready
+    attributes:
+      label: Definition of Ready
+      description: Registre cada prerrequisito como [x] o [ ]; incluya decisiones, contratos y bloqueantes reales. La historia puede publicarse con requisitos pendientes. Use dependencias nativas para `blocked by` y `blocks`.
+    validations: {required: true}
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Fuera de alcance
+      description: Delimite explícitamente lo que no se construye en esta HU.
+    validations: {required: true}
+  - type: textarea
+    id: open_decisions
+    attributes:
+      label: Decisiones abiertas
+      description: Indique responsable y fecha objetivo; escriba “Ninguna” cuando no existan.
+    validations: {required: true}

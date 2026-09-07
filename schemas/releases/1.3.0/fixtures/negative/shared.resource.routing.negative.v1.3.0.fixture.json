@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:resource:1.3.0","rule":"additionalProperties","status":"negative","version":"1.3.0","group":"model-resource","data":{"resource_type":"llm_model","resource_id":"model-alias-1","router":"openrouter","provider":"openai"}}
