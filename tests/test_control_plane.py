@@ -3,12 +3,14 @@
 import hashlib
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 
 from sre_agent.control import scopes
 from sre_agent.control.scopes import CONTROL_SCOPES
@@ -360,3 +362,32 @@ def test_control_openapi_publishes_request_success_and_error_schemas() -> None:
     assert limit["schema"] == {"type": "integer", "default": 100, "minimum": 1, "maximum": 100}
     principal_id = paths["/v1/principals/{principal_id}"]["get"]["parameters"][0]
     assert principal_id["schema"]["pattern"] == r"^[a-z][a-z0-9_-]{2,63}$"
+
+
+def test_control_openapi_error_responses_match_canonical_fixtures() -> None:
+    release = Path(__file__).parents[1] / "schemas/releases/1.4.0"
+    fixtures = {
+        "positive": release
+        / "fixtures/positive/shared.error-envelope.safe.positive.v1.4.0.fixture.json",
+        "stack": release
+        / "fixtures/negative/shared.error-envelope.stack.negative.v1.4.0.fixture.json",
+        "authorization": release
+        / "fixtures/negative/shared.error-envelope.authorization.negative.v1.4.0.fixture.json",
+    }
+    payloads = {name: json.loads(path.read_text())["data"] for name, path in fixtures.items()}
+
+    app = FastAPI()
+    app.include_router(control_router(_stub_service()))
+    document = app.openapi()
+    validator = Draft202012Validator(document)
+
+    for path in document["paths"].values():
+        for operation in path.values():
+            for status, response in operation.get("responses", {}).items():
+                if int(status) < 400:
+                    continue
+                schema = response["content"]["application/json"]["schema"]
+                response_validator = validator.evolve(schema=schema)
+                assert response_validator.is_valid(payloads["positive"])
+                assert not response_validator.is_valid(payloads["stack"])
+                assert not response_validator.is_valid(payloads["authorization"])
