@@ -7,6 +7,7 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
+from sre_agent.persistence import seeds as seeds_module
 from sre_agent.persistence.api_keys import verify_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import KEY_ENV, SeedConflict, SeedSettings, seed
@@ -160,6 +161,49 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
         ).fetchone()
     assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
     assert counts == (4, 5)
+
+
+@pytest.mark.asyncio
+async def test_seed_converges_after_real_03_to_04_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
+    schema = "seed_upgrade_03_04_test"
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+        connection.execute(f"CREATE SCHEMA {schema}")
+    dsn = DATABASE_URL
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", dsn)
+    monkeypatch.setenv("DATABASE_URL", dsn)
+    monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema}")
+    command.upgrade(config, "20260901_03")
+
+    settings = SeedSettings.from_environment(ENV)
+    legacy_database = Database(dsn)
+    admin_resources = seeds_module.ADMIN_RESOURCES
+    admin_grants = seeds_module.ADMIN_GRANTS
+    monkeypatch.setattr(seeds_module, "ADMIN_RESOURCES", ())
+    monkeypatch.setattr(seeds_module, "ADMIN_GRANTS", ())
+    assert await seed(legacy_database, settings) is True
+    await legacy_database.dispose()
+    monkeypatch.setattr(seeds_module, "ADMIN_RESOURCES", admin_resources)
+    monkeypatch.setattr(seeds_module, "ADMIN_GRANTS", admin_grants)
+
+    command.upgrade(config, "20260902_04")
+    database = Database(dsn)
+    assert await seed(database, settings) is False
+    assert await seed(database, settings) is False
+    await database.dispose()
+
+    with psycopg.connect(dsn) as connection:
+        version = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+        admin_resources = connection.execute(
+            "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
+        ).fetchone()[0]
+        admin_grants = connection.execute(
+            "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
+        ).fetchone()[0]
+    assert version == "20260902_04"
+    assert admin_resources == 2
+    assert admin_grants == 4
 
 
 @pytest.mark.asyncio

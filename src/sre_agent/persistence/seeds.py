@@ -183,17 +183,21 @@ async def _seed_session(session: AsyncSession, settings: SeedSettings) -> bool:
             grant_id="grant-incident-harness-invoke-triage-agent",
             principal_id="incident-harness", action="invoke", resource_type="llm_model",
             resource_id="triage-agent", effect="allow", status="active", created_at=SEED_TIME))
-        await session.execute(insert(ResourceRow), [
+        fresh_admin_resources = [
             dict(resource_type=resource_type, resource_id=resource_id, status="active",
                  model_alias_id=None, alias=None, concrete_model=None, router=None,
                  inference_provider=None)
-            for resource_type, resource_id in ADMIN_RESOURCES])
-        await session.execute(insert(GrantRow), [
+            for resource_type, resource_id in ADMIN_RESOURCES]
+        if fresh_admin_resources:
+            await session.execute(insert(ResourceRow), fresh_admin_resources)
+        fresh_admin_grants = [
             dict(grant_id=grant_id, principal_id="admin-human", action=action,
                  resource_type="administrative_control",
                  resource_id="principals" if "principals" in grant_id else "credentials",
                  effect="allow", status="active", created_at=SEED_TIME)
-            for grant_id, _, action in ADMIN_GRANTS])
+            for grant_id, _, action in ADMIN_GRANTS]
+        if fresh_admin_grants:
+            await session.execute(insert(GrantRow), fresh_admin_grants)
         # fmt: on
         return True
     if (
