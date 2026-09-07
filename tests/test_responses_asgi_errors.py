@@ -58,7 +58,9 @@ def application(sessions: object, audit: RecordingAuditStore) -> FastAPI:
 
 
 @pytest.mark.asyncio
-async def test_session_exception_returns_safe_audited_error_envelope() -> None:
+async def test_session_exception_with_incident_identifier_returns_safe_audited_error_envelope() -> (
+    None
+):
     audit = RecordingAuditStore()
     transport = httpx.ASGITransport(
         app=application(FailingSessions(), audit), raise_app_exceptions=False
@@ -67,7 +69,11 @@ async def test_session_exception_returns_safe_audited_error_envelope() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/v1/responses",
-            json={"model": "triage-agent", "input": "incident"},
+            json={
+                "model": "triage-agent",
+                "input": "incident",
+                "incident_id": "incident-harness",
+            },
             headers={"Authorization": "Bearer sre_test_0123456789abcdefghijklmnop"},
         )
 
@@ -80,6 +86,7 @@ async def test_session_exception_returns_safe_audited_error_envelope() -> None:
     assert response.json()["retryable"] is True
     assert response.json()["request_id"] == str(audit.events[0].correlation.request_id)
     assert audit.events[0].stage == "audit"
+    assert audit.events[0].correlation.incident_ref is not None
     assert audit.events[0].authoritative_acceptance == "rejected"
     assert audit.events[0].ordinary_result == "suppressed"
     assert "database secret" not in response.text

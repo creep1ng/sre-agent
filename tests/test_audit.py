@@ -2,6 +2,8 @@ import hmac  # noqa: I001
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import pytest
+
 from sre_agent.governance.authorization import AuthorizationDenialCause
 from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext
 from sre_agent.gateway.audit import AuditProjector
@@ -12,6 +14,22 @@ def test_audit_references_follow_adr_005_domain_separation() -> None:
     reference = AuditProjector(key).reference("principal", "incident-harness")
     expected = hmac.digest(key, b"sre-audit-v1\0principal\0incident-harness", "sha256").hex()
     assert reference.digest == expected and "incident-harness" not in repr(reference)
+
+
+@pytest.mark.parametrize("identifier", ("incident_id", "run_id", "task_id"))
+def test_audit_projector_normalizes_identifier_correlation_keys(identifier: str) -> None:
+    projector = AuditProjector(b"test-audit-key-not-for-production")
+    event = projector.event(
+        request_id=uuid4(),
+        status=503,
+        latency_ms=1,
+        stage="audit",
+        identifiers={identifier: "correlation-harness"},
+    )
+
+    correlation_ref = getattr(event.correlation, f"{identifier.removesuffix('_id')}_ref")
+
+    assert correlation_ref == projector.reference(identifier, "correlation-harness")
 
 
 def test_audit_projector_carries_the_exact_cause_only_for_authorization_denies() -> None:

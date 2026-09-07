@@ -119,7 +119,7 @@ class AuditProjector:
         ref = self.reference
         correlation = {"request_id": request_id}
         for name, value in (identifiers or {}).items():
-            correlation[f"{name}_ref"] = ref(name, value)
+            correlation[f"{name.removesuffix('_id')}_ref"] = ref(name, value)
         identity = None
         if context:
             identity = {
