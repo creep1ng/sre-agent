@@ -712,10 +712,14 @@
             "properties": {
               "resource_type": {
                 "const": "administrative_control"
+              },
+              "resource_ref": {
+                "$ref": "#/$defs/auditRef"
               }
             },
             "required": [
-              "resource_type"
+              "resource_type",
+              "resource_ref"
             ]
           }
         },

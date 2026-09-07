@@ -110,7 +110,7 @@ MUST create the first administrator, both resources, and `admin.read` /
 
 ### Requirement: Metadata-only terminal audit
 
-Every terminal attempt MUST append one metadata-only audit event (stage `audit`,
+Every terminal attempt MUST append one metadata-only audit event (stage `authorization`,
 `content_state=absent`, HMAC refs only) before releasing its ordinary result.
 Audit rejection MUST suppress the result and return 503 `audit_unavailable`
 with `retryable=true`. Audit reads MUST remain metadata-only; content params ->

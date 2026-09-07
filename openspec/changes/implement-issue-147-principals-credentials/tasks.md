@@ -42,7 +42,7 @@ reads use `admin.read`, creación/actualización/revocación/rotación use
 
 - [ ] 2.1 Extend `AuditEvent` operation vocabulary with control operations
   (`principals.create/get/list/status.replace`, `credentials.issue/list/revoke/
-  rotate`) + `stage=audit` metadata-only rules; keep 1.3.0 denial-cause logic.
+  rotate`) + `stage=authorization` metadata-only rules; keep 1.3.0 denial-cause logic.
   Widen `ResourceType` with `administrative_control` (SEC-006 name) in DTO,
   `ck_resources_type`, `resource.schema.json`, `ResourceEvidence`.
 - [ ] 2.2 Add control DTOs (`PrincipalCreate`, `StatusReplace`, `CredentialIssue`,
