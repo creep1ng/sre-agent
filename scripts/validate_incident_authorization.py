@@ -28,8 +28,8 @@ SEEDED_GRANTS_PATH = REPOSITORY_ROOT / "docs" / "security" / "demo-grants.v1.yam
 # never be stored as a grant, so the vocabulary must respect it.
 GRANT_ACTION_PATTERN = re.compile(r"^[a-z][a-z0-9_.:-]{1,63}$")
 
-# governance.dto.ResourceType today. The catalogue proposes an addition rather than
-# silently assuming one, so the proposal must be declared explicitly.
+# governance.dto.ResourceType on this branch. The approved extension is documented
+# here before the persistence/runtime slices consume it.
 ENGINE_RESOURCE_TYPES = frozenset(
     {"llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"}
 )
@@ -74,17 +74,17 @@ def check_vocabulary(catalogue: dict[str, Any]) -> list[str]:
                 "governance.dto.Grant action pattern"
             )
 
-    proposal = catalogue.get("proposed_resource_type") or {}
-    proposed = proposal.get("name")
+    extension = catalogue.get("approved_resource_type") or {}
+    proposed = extension.get("name")
     if proposed is None:
-        errors.append("proposed_resource_type must be declared while the engine enum lacks it")
+        errors.append("approved_resource_type must document the approved engine extension")
     elif proposed in ENGINE_RESOURCE_TYPES:
         errors.append(
             f"resource type '{proposed}' already exists in the engine enum; the "
-            "catalogue should consume it instead of proposing it"
+            "catalogue should consume it directly instead of documenting an extension"
         )
-    elif not proposal.get("requires_approval_from"):
-        errors.append("a proposed resource type must name who approves the extension")
+    elif not extension.get("approved_by") or not extension.get("approval_reference"):
+        errors.append("the resource type extension must record its approval and reference")
 
     declared = {resource.get("type") for resource in catalogue.get("resources", [])}
     for resource_type in declared - ENGINE_RESOURCE_TYPES - {proposed}:
@@ -121,8 +121,11 @@ def check_command_mapping(catalogue: dict[str, Any]) -> list[str]:
 def check_grants(catalogue: dict[str, Any]) -> list[str]:
     """Grants must be exact, active, and reference declared principals and resources."""
     errors: list[str] = []
-    principals = {principal["id"] for principal in catalogue.get("principals", [])}
-    resources = {(resource["type"], resource["id"]) for resource in catalogue.get("resources", [])}
+    principals = {principal["id"]: principal for principal in catalogue.get("principals", [])}
+    resources = {
+        (resource["type"], resource["id"]): resource
+        for resource in catalogue.get("resources", [])
+    }
     action_names = {action["name"] for action in catalogue.get("actions", [])}
 
     seen: set[tuple[str, str, str, str]] = set()
@@ -147,6 +150,17 @@ def check_grants(catalogue: dict[str, Any]) -> list[str]:
             errors.append(
                 f"grant '{grant.get('id')}' is not an allow; the engine only matches "
                 "active allow grants and denial is the default"
+            )
+        if grant.get("status") != "active":
+            errors.append(f"grant '{grant.get('id')}' must be active in this contracted matrix")
+
+    for principal in principals.values():
+        if principal.get("status") != "active":
+            errors.append(f"principal '{principal.get('id')}' must be active in this matrix")
+    for resource in resources.values():
+        if resource.get("status") != "active":
+            errors.append(
+                f"resource '{resource.get('type')}/{resource.get('id')}' must be active in this matrix"
             )
 
     return errors
@@ -174,10 +188,14 @@ def check_scenarios(catalogue: dict[str, Any], scenarios: dict[str, Any]) -> lis
     allowed = {
         (grant["principal_id"], grant["action"], grant["resource_type"], grant["resource_id"])
         for grant in catalogue.get("grants", [])
+        if grant.get("effect") == "allow" and grant.get("status") == "active"
     }
-    known_resources = {
-        (resource["type"], resource["id"]) for resource in catalogue.get("resources", [])
+    principals = {principal["id"]: principal for principal in catalogue.get("principals", [])}
+    resources = {
+        (resource["type"], resource["id"]): resource
+        for resource in catalogue.get("resources", [])
     }
+    known_resources = set(resources)
 
     entries = scenarios.get("scenarios", [])
     if not entries:
@@ -196,7 +214,7 @@ def check_scenarios(catalogue: dict[str, Any], scenarios: dict[str, Any]) -> lis
 
         resource = scenario.get("resource", {})
         key = (
-            scenario.get("principal"),
+            scenario.get("authenticated_principal", scenario.get("principal")),
             action,
             resource.get("type"),
             resource.get("id"),
@@ -204,6 +222,26 @@ def check_scenarios(catalogue: dict[str, Any], scenarios: dict[str, Any]) -> lis
         expected = scenario.get("expected", {})
         decision = expected.get("policy_decision")
         cause = expected.get("denial_cause")
+        authenticated = scenario.get("authenticated_principal", scenario.get("principal"))
+        if scenario.get("principal") != authenticated:
+            errors.append(
+                f"scenario '{identifier}' principal must identify the authenticated principal"
+            )
+        payload = scenario.get("payload", {})
+        if payload and payload.get("actor") != "human":
+            errors.append(f"scenario '{identifier}' command payload actor must be human")
+
+        principal = principals.get(authenticated)
+        resource_fact = resources.get((resource.get("type"), resource.get("id")))
+        engine_cause = None
+        if principal is None or principal.get("status") != "active":
+            engine_cause = "principal_inactive"
+        elif resource_fact is None:
+            engine_cause = "resource_missing"
+        elif resource_fact.get("status") != "active":
+            engine_cause = "resource_inactive"
+        elif key not in allowed:
+            engine_cause = "grant_not_applicable"
 
         if decision == "allow":
             if key not in allowed:
@@ -217,6 +255,11 @@ def check_scenarios(catalogue: dict[str, Any], scenarios: dict[str, Any]) -> lis
                 errors.append(
                     f"scenario '{identifier}' denies with cause '{cause}', which is outside "
                     "the engine's closed denial taxonomy"
+                )
+            if cause != engine_cause:
+                errors.append(
+                    f"scenario '{identifier}' expects cause '{cause}' but active exact-match "
+                    f"evaluation produces '{engine_cause}'"
                 )
             if (
                 cause == "resource_missing"
@@ -295,7 +338,7 @@ def main() -> int:
         "incident authorization: OK "
         f"({len(catalogue['actions'])} actions, {len(catalogue['grants'])} grants, "
         f"{len(scenarios['scenarios'])} scenarios; "
-        f"proposed resource type: {catalogue['proposed_resource_type']['name']})"
+        f"approved resource type: {catalogue['approved_resource_type']['name']})"
     )
     return 0
 

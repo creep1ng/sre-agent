@@ -65,7 +65,7 @@ def test_actions_can_actually_be_stored_as_grants(catalogue: dict) -> None:
         assert GRANT_ACTION_PATTERN.match(action["name"]), action["name"]
 
 
-def test_approval_is_separable_from_participation(catalogue: dict) -> None:
+def test_approval_is_separable_from_participation(catalogue: dict, scenarios: list) -> None:
     """Least privilege only means something if approving is its own action."""
     mapping = catalogue["command_action_map"]
     assert mapping["approve_mitigation"] == "run.approve"
@@ -79,6 +79,11 @@ def test_approval_is_separable_from_participation(catalogue: dict) -> None:
         grant["principal_id"] for grant in catalogue["grants"] if grant["action"] == "run.command"
     }
     assert approvers <= commanders, "approving without being able to participate is incoherent"
+    operator = [item for item in scenarios if item["principal"] == "incident-operator"]
+    assert {(item["action"], item["expected"]["policy_decision"]) for item in operator} == {
+        ("run.command", "allow"),
+        ("run.approve", "deny"),
+    }
 
 
 def test_every_command_resolves_to_an_action(catalogue: dict) -> None:
@@ -88,12 +93,13 @@ def test_every_command_resolves_to_an_action(catalogue: dict) -> None:
         assert action in declared, command
 
 
-def test_resource_type_extension_is_proposed_not_assumed(catalogue: dict) -> None:
-    """The engine enum lacks an incident type, so the catalogue must propose one."""
-    proposal = catalogue["proposed_resource_type"]
-    assert proposal["name"] not in ENGINE_RESOURCE_TYPES
-    assert proposal["requires_approval_from"]
-    assert proposal["rationale"]
+def test_resource_type_extension_records_owner_approval(catalogue: dict) -> None:
+    """The approved extension remains traceable until the engine enum consumes it."""
+    extension = catalogue["approved_resource_type"]
+    assert extension["name"] not in ENGINE_RESOURCE_TYPES
+    assert extension["approved_by"] == "gateway owner"
+    assert extension["approval_reference"] == "issue #145 comment 5553749536"
+    assert extension["rationale"]
 
 
 def test_resource_is_the_workflow_not_the_run(catalogue: dict) -> None:
@@ -122,6 +128,29 @@ def test_scenarios_use_the_engine_denial_taxonomy(scenarios: list) -> None:
         "resource_inactive",
         "grant_not_applicable",
     }
+
+
+def test_authenticated_agent_cannot_borrow_payload_human_identity(scenarios: list) -> None:
+    scenario = next(item for item in scenarios if item["id"] == "INC-AUTH-007")
+    assert scenario["authenticated_principal"] == "incident-harness"
+    assert scenario["payload"]["actor"] == "human"
+    assert scenario["payload"]["actor_reference"]["principal_id"] == "demo-human"
+    assert scenario["expected"] == {
+        "http_status": 403,
+        "policy_decision": "deny",
+        "denial_cause": "grant_not_applicable",
+    }
+
+
+@pytest.mark.parametrize("kind", ["principal", "resource", "grant"])
+def test_validator_rejects_inactive_authorization_facts(catalogue: dict, kind: str) -> None:
+    from copy import deepcopy
+    from validate_incident_authorization import check_grants
+
+    mutated = deepcopy(catalogue)
+    collection = {"principal": "principals", "resource": "resources", "grant": "grants"}[kind]
+    mutated[collection][0]["status"] = "inactive"
+    assert check_grants(mutated)
 
 
 def test_run_endpoints_are_not_implemented_yet() -> None:

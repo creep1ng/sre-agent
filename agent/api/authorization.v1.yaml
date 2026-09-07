@@ -22,7 +22,7 @@ maturity: "contracted"
 default_decision: "deny"
 names_confer_roles: false
 
-# Proposed extension to governance.dto.ResourceType — REQUIRES GATEWAY OWNER APPROVAL.
+# Approved extension to governance.dto.ResourceType.
 #
 # ResourceType is currently ["llm_model", "mcp_server", "mcp_tool", "skill",
 # "bok_collection"]. None of them can carry an incident run, so human commands cannot
@@ -33,11 +33,12 @@ names_confer_roles: false
 # created at runtime, which is not workable. A workflow is a stable named resource,
 # exactly like the `triage-agent` alias is for `llm_model`. Authority is therefore
 # granted over a workflow and applies to every run executing it.
-proposed_resource_type:
+approved_resource_type:
   name: "incident_workflow"
   resource_id_meaning: "The workflow_id executed by the run, e.g. incident-response."
   rationale: "Stable and exactly matchable; per-run resources cannot be granted ahead of time."
-  requires_approval_from: "gateway owner (governance.dto.ResourceType)"
+  approved_by: "gateway owner"
+  approval_reference: "issue #145 comment 5553749536"
 
 actions:
   - name: "run.start"
@@ -80,6 +81,9 @@ principals:
   - id: "demo-human"
     kind: "human"
     status: "active"
+  - id: "incident-operator"
+    kind: "human"
+    status: "active"
   - id: "incident-harness"
     kind: "agent"
     status: "active"
@@ -119,6 +123,13 @@ grants:
   - id: "grant-demo-human-run-approve-incident-response"
     principal_id: "demo-human"
     action: "run.approve"
+    resource_type: "incident_workflow"
+    resource_id: "incident-response"
+    effect: "allow"
+    status: "active"
+  - id: "grant-incident-operator-run-command-incident-response"
+    principal_id: "incident-operator"
+    action: "run.command"
     resource_type: "incident_workflow"
     resource_id: "incident-response"
     effect: "allow"
