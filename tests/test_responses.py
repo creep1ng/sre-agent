@@ -438,6 +438,31 @@ def test_provider_failures_are_normalized_without_fallback(
     assert len(provider.requests) == 1 and latest_events()[0][0] == "upstream"
 
 
+def test_invalid_persisted_provider_assignment_is_audited_routing_unavailability() -> None:
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE resources SET inference_provider = 'relace/fp4' "
+            "WHERE resource_type = 'llm_model' AND resource_id = 'triage-agent'"
+        )
+    provider = RecordingProvider()
+    try:
+        response = post(provider, "incident-harness")
+        event = latest_events()[0]
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+            connection.execute(
+                "UPDATE resources SET inference_provider = %s "
+                "WHERE resource_type = 'llm_model' AND resource_id = 'triage-agent'",
+                (ENV["TRIAGE_AGENT_PROVIDER"],),
+            )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "upstream_unavailable"
+    assert provider.requests == []
+    assert event[0:2] == ("routing", 503)
+    assert event[7]["reason_code"] == "routing_unavailable"
+
+
 @pytest.mark.parametrize("principal", ["incident-harness", "restricted-harness"])
 def test_audit_commit_failure_suppresses_success_and_denial(principal: str) -> None:
     provider = RecordingProvider()

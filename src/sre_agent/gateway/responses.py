@@ -4,10 +4,11 @@ from time import monotonic
 from typing import Annotated, Any, Literal, Protocol
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Request, Security
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.exceptions import HTTPException
 
@@ -208,7 +209,20 @@ class ResponsesService:  # noqa: E305
                                       reason="routing_unavailable", retryable=True,
                                       identifiers=identifiers)
         try:
-            result = await self.provider.create(ProviderRequest(input=request.input, model=assignment.concrete_model, provider=assignment.inference_provider))
+            provider_request = ProviderRequest(
+                input=request.input,
+                model=assignment.concrete_model,
+                provider=assignment.inference_provider,
+            )
+        except ValidationError:
+            # Persisted routing data can outlive provider identifier rules. Do
+            # not let that configuration fault escape as an unaudited ASGI 500.
+            return await self._finish(request_id, started, 503, "routing", context=context,
+                                      alias=request.model, decision=decision,
+                                      reason="routing_unavailable", retryable=True,
+                                      identifiers=identifiers)
+        try:
+            result = await self.provider.create(provider_request)
             payload = {"id": result.response_id, "object": "response", "status": "completed", "model": result.model, "output": [{"type": "message", "role": "assistant",
                        "content": [{"type": "output_text", "text": result.text}]}],
                        "request_id": str(request_id), "metadata": {"requested_model_alias": request.model,
@@ -269,6 +283,7 @@ def responses_router(service: ResponsesService) -> APIRouter:
             return validation_preserving_handler
 
     router = APIRouter(route_class=ResponsesRoute)
+    bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
 
     def documented_error(status: int, description: str, *, headers=None):
         code, message = ERRORS[status]
@@ -328,6 +343,10 @@ def responses_router(service: ResponsesService) -> APIRouter:
             ResponsesRequest,
             Body(description="Bounded textual, non-streaming response request."),
         ],
+        _bearer: Annotated[
+            HTTPAuthorizationCredentials | None,
+            Security(bearer),
+        ] = None,
     ) -> JSONResponse:
         return await service.create(body, request.headers.get("authorization"))
 

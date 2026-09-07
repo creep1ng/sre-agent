@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:principal-status-replace:2.0.0","rule":"valid","status":"positive","version":"2.0.0","group":"control","data":{"status":"inactive","expected_updated_at":"2026-09-07T00:00:00Z"}}

@@ -16,7 +16,7 @@ def async_postgres_dsn(dsn: str) -> str:
 
 class Database:
     def __init__(self, dsn: str) -> None:
-        self.engine = create_async_engine(async_postgres_dsn(dsn))
+        self.engine = create_async_engine(async_postgres_dsn(dsn), hide_parameters=True)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
 
     @asynccontextmanager

@@ -33,11 +33,18 @@ export function createSchemaRegistry(schemas) {
 }
 function semanticFixtureValid(fixture) {
   const name = /^urn:sre-agent:schema:([a-z-]+):/.exec(fixture.target)?.[1];
+  if (name === "idempotency-record") return idempotencyRetentionValid(fixture.data);
   if (name === "responses-http-case") return responsesHttpCaseValid(fixture.data);
   if (name === "openrouter-metadata-case") return openRouterMetadataValid(fixture.data);
   if (name !== "bootstrap-seed" || fixture.data?.output?.result !== "success") return true;
   const { seed, output } = fixture.data, principal = output.principal, grants = new Map(output.grants.map((grant) => [grant.grant_id, grant]));
   return principal.principal_id === seed.principal.principal_id && principal.kind === seed.principal.kind && principal.display_name === seed.principal.display_name && output.credential.credential.principal_id === seed.principal.principal_id && output.grants.length === seed.grants.length && seed.grants.every((expected) => { const actual = grants.get(expected.grant_id); return actual?.principal_id === seed.principal.principal_id && actual.action === expected.action && JSON.stringify(actual.resource) === JSON.stringify(expected.resource); });
+}
+function idempotencyRetentionValid(value) {
+  if (value?.binding === "principal_lifetime") return value.expires_at === null;
+  if (value?.binding !== "at_least_24h" || typeof value.created_at !== "string" || typeof value.expires_at !== "string") return false;
+  const createdAt = Date.parse(value.created_at), expiresAt = Date.parse(value.expires_at);
+  return Number.isFinite(createdAt) && Number.isFinite(expiresAt) && expiresAt - createdAt >= 86_400_000;
 }
 function openRouterMetadataValid(value) {
   const success = ["metadata-success", "lookup-success"].includes(value.condition), selected = value.selected_endpoints ?? [], generation = value.generation;

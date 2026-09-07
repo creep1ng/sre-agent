@@ -38,7 +38,25 @@ def create_application(
             shared_provider_client, api_key=runtime_settings.openrouter_api_key
         )
 
-    application = FastAPI(title="SRE Agent", version="0.1.0")
+    release_metadata = runtime_settings.release_metadata
+    application = FastAPI(
+        title="SRE Agent",
+        version=release_metadata.application_version,
+        description=release_metadata.openapi_description(),
+    )
+    original_openapi = application.openapi
+
+    def openapi_with_release_metadata() -> dict[str, object]:
+        document = original_openapi()
+        document["info"].update(
+            {
+                "x-sre-agent-contract-version": release_metadata.contract_version,
+                "x-sre-agent-build-revision": release_metadata.build_revision,
+            }
+        )
+        return document
+
+    application.openapi = openapi_with_release_metadata  # type: ignore[method-assign]
     application.include_router(health.health_router(probe))
     application.state.planes = (control, incident, harness)
     application.state.session_provider = database.sessions
