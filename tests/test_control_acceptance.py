@@ -38,6 +38,8 @@ SEED_ENV = {
     "RESTRICTED_HARNESS_API_KEY": RESTRICTED_KEY,
     "TRIAGE_AGENT_MODEL": "openai/gpt-4o-mini",
     "TRIAGE_AGENT_PROVIDER": "openai",
+    "REMEDIATION_AGENT_MODEL": "anthropic/claude-3.5-haiku",
+    "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 RELEASE = Path(__file__).parents[1] / "schemas/releases/2.0.0/json-schema"
 

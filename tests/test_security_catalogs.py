@@ -78,8 +78,20 @@ def test_seed_and_grant_catalog_matches_the_seeded_matrix() -> None:
     assert principals == expected_principals, (
         "catalog_drift: principals must match persistence seeds"
     )
-    assert grants["resources"] == [{"type": "llm_model", "id": "triage-agent", "status": "active"}]
+    assert grants["resources"] == [
+        {"type": "llm_model", "id": "remediation-agent", "status": "active"},
+        {"type": "llm_model", "id": "triage-agent", "status": "active"},
+    ]
     assert grants["grants"] == [
+        {
+            "id": "grant-incident-harness-invoke-remediation-agent",
+            "principal_id": "incident-harness",
+            "action": "invoke",
+            "resource_type": "llm_model",
+            "resource_id": "remediation-agent",
+            "effect": "allow",
+            "status": "active",
+        },
         {
             "id": "grant-incident-harness-invoke-triage-agent",
             "principal_id": "incident-harness",
@@ -88,8 +100,8 @@ def test_seed_and_grant_catalog_matches_the_seeded_matrix() -> None:
             "resource_id": "triage-agent",
             "effect": "allow",
             "status": "active",
-        }
-    ], "catalog_drift: exactly one active incident-harness invoke allow is required"
+        },
+    ], "catalog_drift: exactly two active incident-harness invoke allows are required"
 
 
 def test_scenario_structure_enforces_nested_fields_and_maturity_rules() -> None:
