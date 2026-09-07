@@ -145,6 +145,7 @@ def test_authenticated_agent_cannot_borrow_payload_human_identity(scenarios: lis
 @pytest.mark.parametrize("kind", ["principal", "resource", "grant"])
 def test_validator_rejects_inactive_authorization_facts(catalogue: dict, kind: str) -> None:
     from copy import deepcopy
+
     from validate_incident_authorization import check_grants
 
     mutated = deepcopy(catalogue)

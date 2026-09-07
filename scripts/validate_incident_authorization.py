@@ -123,8 +123,7 @@ def check_grants(catalogue: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     principals = {principal["id"]: principal for principal in catalogue.get("principals", [])}
     resources = {
-        (resource["type"], resource["id"]): resource
-        for resource in catalogue.get("resources", [])
+        (resource["type"], resource["id"]): resource for resource in catalogue.get("resources", [])
     }
     action_names = {action["name"] for action in catalogue.get("actions", [])}
 
@@ -160,7 +159,8 @@ def check_grants(catalogue: dict[str, Any]) -> list[str]:
     for resource in resources.values():
         if resource.get("status") != "active":
             errors.append(
-                f"resource '{resource.get('type')}/{resource.get('id')}' must be active in this matrix"
+                f"resource '{resource.get('type')}/{resource.get('id')}' must be active "
+                "in this matrix"
             )
 
     return errors
@@ -192,8 +192,7 @@ def check_scenarios(catalogue: dict[str, Any], scenarios: dict[str, Any]) -> lis
     }
     principals = {principal["id"]: principal for principal in catalogue.get("principals", [])}
     resources = {
-        (resource["type"], resource["id"]): resource
-        for resource in catalogue.get("resources", [])
+        (resource["type"], resource["id"]): resource for resource in catalogue.get("resources", [])
     }
     known_resources = set(resources)
 
