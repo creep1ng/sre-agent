@@ -94,7 +94,7 @@ database until an operator-approved migration or restore plan exists.
 | `schemas/` | Versioned contract authority and conformance tooling |
 | `index.html`, `styles/`, `scripts/`, `public/` | Existing static web catalog |
 
-See [runtime boundaries](docs/architecture.md) and the [Codex worktree workflow](docs/codex-worktrees.md).
+See [runtime boundaries](docs/architecture.md), the [operator incident journey](docs/design/ht-inc-07-ux-journey/ht-inc-07-ux-journey.md), and the [Codex worktree workflow](docs/codex-worktrees.md).
 
 ## Local verification
 

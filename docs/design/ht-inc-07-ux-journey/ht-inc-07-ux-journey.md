@@ -1,143 +1,161 @@
-# HT-INC-07-UX — User journey del operador (issue #150)
+# HT-INC-07 — Operator incident journey
 
-- Issue: #150 · Épica EP-5 · Sprint 2 · SP 3
-- Tipo: investigación + journey. **No implementa pantallas, runtime ni dominio.**
-- Artefactos: `user-journey.mmd` (fuente Mermaid), `user-journey.svg` (imagen renderizada con `mermaid-cli@11 -b white`).
+Issue [#150](https://github.com/creep1ng/sre-agent/issues/150) is a research and
+UX-refinement delivery: it does **not** implement screens, runtime behavior, or
+a new state machine. The checked-in incident workflow remains authoritative.
+This canonical document integrates the original operational journey introduced
+in [commit `c43f01c2`](https://github.com/creep1ng/sre-agent/commit/c43f01c2)
+with complementary decision/recovery research; neither contribution replaces
+the other.
 
-## Objetivo
+## Review path
 
-Mapa validado de las acciones del operador desde la recepción de una alerta
-hasta el seguimiento del incidente y de las automatizaciones, sustentado en
-referencias verificables y en los contratos vigentes (#16, #26, #15, #23, #36).
+1. Review the 15 stages and P01–P07 surface inventory.
+2. Review the Mermaid responsibility **flowchart** in
+   [`user-journey.mmd`](user-journey.mmd), then the decision/recovery map in
+   [`incident-operator-flow.mmd`](../../diagrams/incident-operator-flow.mmd).
+3. Review the separate Mermaid `journey` expected-experience companion in
+   [`incident-operator-journey.mmd`](../../diagrams/incident-operator-journey.mmd).
+4. Check the mapped issues and contract guardrails before proposing UI work.
 
-## Alcance
+## Scope and contract authority
 
-Cubre: alerta → triage → declaración → board → war room → timeline →
-decisiones → harness/ejecución → seguimiento → cierre. Fuera de alcance:
-pantallas, componentes, runtime, máquina de estados nueva, copiar la UX de un
-proveedor, convertir esto en fuente de verdad de ejecución.
+| Source | Role here |
+| --- | --- |
+| [Issue #150](https://github.com/creep1ng/sre-agent/issues/150) | Requires research, journey, Mermaid, rendered evidence, and issue mapping; excludes UI/runtime implementation. |
+| [`incident-response.yaml`](../../../agent/workflows/incident-response.yaml) and [`incident-state.schema.yaml`](../../../agent/schemas/incident-state.schema.yaml) | Normative incident transitions, four decision points, and state shape. |
+| [`incident-runs.openapi.yaml`](../../../agent/api/incident-runs.openapi.yaml) and [ADR-008](../../adrs/ADR-008-run-events-transport.md) | Run lifecycle, commands, snapshots, and cursor polling. |
+| [Notion alternatives](https://www.notion.so/3b4e4205157e80818779cab2fdc1be39), [process](https://www.notion.so/3b4e4205157e80d985e9c3b76e023d3a), [historical flow](https://www.notion.so/3b4e4205157e8012b98dfc33ab72b2ca) | Research index/historical context only; checked-in contracts and live GitHub scope prevail. |
 
-## Mapa interno de contratos (fuente de verdad)
+The canonical path is `detected → triage → active → investigating → mitigating
+→ verifying → resolved → postmortem → closed`. `dismissed` and `linked` are
+terminal alert paths. Declaration creates `incident_id`; closure requires a
+postmortem. The domain validates and persists decisions; UI submits intent and
+reads a safe projection.
 
-Estados #16 (`incident-response 1.0.0`): `detected → triage → {dismissed |
-linked | active} → investigating → mitigating → verifying → {investigating |
-resolved} → postmortem → closed`. Transiciones: 13, todas con actor
-(`human|agent|system`) y `requires_approval`; `apply_mitigation` y
-`close_incident` exigen aprobación humana. Decision points inline (4):
-`triage_outcome` (dismiss|link|declare), `evidence_sufficiency`,
-`mitigation_approval` (blocking, solo humano), `stability_check`.
-`incident_id` nulo hasta `active`; `linked` usa `linked_incident_id`;
-`closed` exige postmortem; severidad obligatoria desde `active`. Cada
-transición escribe un timeline event; cada paso agéntico referencia la
-decisión de autorización del gateway; la escalada nunca cambia estado sola
-(#26 la ejecuta, #146 la persiste, #145 la expone al harness/UI).
+## 15-stage operator journey
 
-Superficies existentes: bandeja+detalle (`#15`, mergeada en PR #105, evento
-`midnight:triage-requested`, sin crear incidentes); triage descartar/asociar/
-declarar (`#23`, consume `#26`); war room + timeline por `incident_id`
-(`#36`, solo lectura, sin push prometido); runs/comandos/eventos del harness
-(`#145`, persistencia `#146`); ingesta OTel→alerta (`#149`, mergeada).
+| # | Stage | Actor | Surface | Status / visible result |
+| --- | --- | --- | --- | --- |
+| 1 | Receive alert | System | — | #149 adapts signal to alert with service, severity, timestamp. |
+| 2 | Identify signal | Human | P01 inbox #15 | `detected`; ordered list and count. |
+| 3 | Review detail | Human | P02 detail #15 | `detected`; context and source metadata. |
+| 4 | Start triage | Human | P02 #15 | `midnight:triage-requested`; no incident yet. |
+| 5 | Decide disposition | Human | P03 triage #23 | `triage_outcome`: dismiss, link, or declare. |
+| 6 | Enter incident | Human + system | P03 #23 | #26 validates; declaration creates `incident_id`, severity, event. |
+| 7 | Prioritize active incidents | Human | P04 board | **Gap:** aggregated active-incident view. |
+| 8 | Coordinate | Human | P05 war room #36 | Persisted shared state, owners, comments. |
+| 9 | Reconstruct context | Human | P06 timeline #36 | Ordered actor/sequence/time/type events. |
+| 10 | Investigate | Human + agent | P05/P07 | #145/#146 safe hypotheses and cited evidence. |
+| 11 | Decide mitigation | Human + agent | P07 monitor | `evidence_sufficiency`; proposal, risk, verification. |
+| 12 | Approve and apply | Human | P07 monitor | Blocking approval; human-operated or simulated mitigation. |
+| 13 | Verify stability | Human + agent | P06/P07 | `stability_check`; unstable returns to investigation. |
+| 14 | Review postmortem and close | Human + agent | P06 | Postmortem and terminal closure event. |
+| 15 | Follow up after close | Human | Follow-up surface | **Gap:** action items, ownership, due dates. |
 
-## Fuentes y herramientas investigadas
+### Surface inventory, roles, and gaps
 
-| Herramienta | Área investigada | Evidencia / fuente |
-| --- | --- | --- |
-| incident.io | Lifecycle (triage→active→post-incident), triage accept/decline/merge, declare, roles, timeline tab, workflows trigger/condición/pasos, postmortems | https://docs.incident.io/incidents/lifecycle, /incidents/triaging, /incidents/declaring, /incidents/incident-roles, /post-incident/timeline, /workflows/getting-started, /post-incident/postmortems-overview |
-| PagerDuty | Roles (IC, deputy, scribe, liaison), durante/después del incidente, postmortems, incident workflows con triggers condicionales e historial de ejecución por paso | https://response.pagerduty.com/during/during_an_incident/, /after/after_an_incident/, https://support.pagerduty.com/main/docs/incident-workflows |
-| Rootly | Alert fields (normalización en ingesta), severidades SEV0–SEV3 single-select, built-ins vs customs, alert API (labels, urgency, deduplication) | https://docs.rootly.com/alerts/alert-fields, /configuration/severities, /configuration/built-in-fields |
-| Atlassian Opsgenie | Alert ack/unack, escalations por estado, responders/on-call schedules, cierre | https://support.atlassian.com/opsgenie/docs/manage-alerts-through-their-lifecycle/, /acknowledge-and-unacknowledge-an-alert/, /how-do-escalations-work-in-opsgenie/ |
+- **P01/P02:** [#15](https://github.com/creep1ng/sre-agent/issues/15) is
+  fixture-driven and does not create incidents. **P03:** #23 captures
+  dismiss/link/declare; #26 validates the decision and transition.
+- **P04 board is not a war room:** #36 and [#189](https://github.com/creep1ng/sre-agent/issues/189)
+  provide incident detail/war-room reads, not a board. The board gap remains.
+- **P05/P06:** #36 reads persisted shared state and ordered events; it does not
+  promise push. Role instructions, formal alert-acknowledgement ownership, and
+  curator timeline pins remain separate refinement gaps.
+- **P07:** #145/#146 define governed runs, commands, snapshots, and events.
+  UI never executes infrastructure or transitions the workflow locally.
+- **Reload/share is not follow-up management:** #146/#189 restore persisted
+  IDs, version, and ordered events; they do not manage action items. [#51](https://github.com/creep1ng/sre-agent/issues/51)
+  is a demo integration, not a follow-up UI story.
+- The fixture severity vocabulary (`critical|warning|info`) and workflow
+  vocabulary (`sev1..sev4`) have no cross-contract mapping.
 
-No verificado: pricing/planes específicos y detalles de war-room por videollamada
-de cada vendor (no necesarios para el journey).
+The operator perceives, decides, approves, coordinates, and closes. UI displays
+versioned state and captures intent; the domain/runtime validates transitions,
+requires approvals, and writes timeline events; the harness runs governed steps
+and reports safe progress, results, or failures.
 
-## Patrones: adoptar / adaptar / descartar
+## J01–J12 decision and recovery map
 
-| Patrón | Herramientas | Decisión | Justificación y relación |
+| J steps | Covers | Contribution | Evidence |
 | --- | --- | --- | --- |
-| Alerta → triage explícito (accept/decline/merge) | incident.io | ADAPTAR | Equivale a `triage_outcome` dismiss/link/declare de #16; #23 lo ejecuta |
-| Declarar con formulario mínimo ampliable | incident.io | ADOPTAR | #23: `incident_id` + severidad/impacto inicial + evento timeline |
-| Lifecycle triage→active→post-incident | incident.io | ADAPTAR | #16 ya lo modela con 11 estados; no duplicar |
-| Roles visibles (lead/IC) + instrucciones | incident.io, PagerDuty | ADAPTAR | #36 muestra responsables; instrucciones de rol → brecha (sin issue) |
-| War room = canal + estado compartido | incident.io, PagerDuty | ADOPTAR | #36: misma fuente persistida, sin push prometido |
-| Timeline auto (cambios) + curado (pins) | incident.io | ADAPTAR | #36: eventos ordenados con actor/secuencia; pins → brecha (sin issue) |
-| Workflows trigger→condición→pasos con historial por paso | incident.io, PagerDuty | ADAPTAR | #145 (contrato) + #146 (eventos); UI solo monitorea |
-| Severidad single-select que enruta respuesta | Rootly, PagerDuty | ADOPTAR | #16: severidad obligatoria desde `active`; calibrar valores fuera de #150 |
-| Escalación por estado no-ack/no-close | Opsgenie | DESCARTAR | Sin runtime de notificaciones en MVP; escalada #16 es bloqueo+a-humano |
-| Ack = ownership que detiene escalación | Opsgenie | ADAPTAR | Parcial: `triaged`/`acknowledged` existe en alertas; ownership formal → brecha |
-| Postmortem obligatorio, borrador asistido + validación humana | incident.io, PagerDuty | ADOPTAR | #16: `closed` exige postmortem; borrador agente + validación humana |
-| Métricas excluyen triage declinado | incident.io | DESCARTAR | Sin motor de métricas en MVP |
-| Board de incidentes | mencionado en #150 | BRECHA | Sin issue ejecutable (ver § Brechas) |
-| Follow-ups post-cierre | incident.io, PagerDuty | BRECHA | Sin issue ejecutable |
+| J01–J03 | 2–6 | Scan/request triage/dismiss-link-declare; dismissal ends the alert path, link opens an eligible incident. | #15, #23, #26 |
+| J04 | 7–9 | Read persisted war room and safe timeline; board remains distinct. | #36, #189 |
+| J05–J07 | 10–11 | Start/resume only when domain permits; review governed evidence; optional authorized BoK may be restricted/insufficient. | #37, #145, #185, #40, #34; [#35](https://github.com/creep1ng/sre-agent/issues/35) is the future workflow-harness connector. |
+| J08–J09 | 11–13 | Human approval blocks mitigation; rejected changes and unstable verification return to investigation. | #41, #26 |
+| J10–J12 | 14–15 | Review postmortem, close, then reload/share persisted links; action-item follow-up remains separate. | #43, #146, #189 |
 
-## User journey (15 etapas)
+Run states (`running`, `awaiting_human`, `completed`, `terminated`) are
+independent from incident states. `resume_from_run_id` requests the last
+snapshot only when the domain permits; `awaiting_human` expects an authorized
+command. Completed/terminated runs and closed incidents are never presumed
+resumable. Reload is server-authoritative cursor polling, not browser state or
+SSE.
 
-| # | Etapa | Actor | Pantalla | Estado dominio | Automatización | Resultado visible |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | Recepción de alerta | sistema | — | `detected` | #149 adapta señal→alerta | alerta con servicio/severidad/timestamp |
-| 2 | Identificar señal | humano | Bandeja #15 | `detected` | orden por severidad/hora | lista + contador |
-| 3 | Revisar detalle | humano | Detalle #15 | `detected` | — | contexto + origen como metadata |
-| 4 | Iniciar triage | humano | Botón #15 | → `triage` | evento `midnight:triage-requested` | feedback `ma-alert`, sin incidente creado |
-| 5 | Decidir | humano | Triage #23 | `triage_outcome` | — | dismiss \| link \| declare |
-| 6 | Entrada al incidente | humano+sistema | Triage #23 | `active` (`dismissed`/`linked` terminales) | validación #26 | `incident_id` + severidad + evento |
-| 7 | Board | humano | Board (brecha) | `active`+ | — | estado agregado |
-| 8 | War room | humano | War room #36 | snapshot persistido | refresco documentado (no push) | mismo estado en 2 navegadores |
-| 9 | Timeline | humano | Timeline #36 | eventos ordenados | paginación sin duplicados | actor/secuencia/fecha/tipo |
-| 10 | Investigar | humano+agente | War room + monitor | `investigating` | run #145, evidencia `trusted:false` | hipótesis con evidencia citada |
-| 11 | Decidir mitigación | humano+agente | Monitor #145 | `evidence_sufficiency` | comandos acotados | propuesta con riesgo y verificación |
-| 12 | Aprobar y aplicar | humano (bloqueante) | Monitor #145 | `mitigating→verifying` | solo simulado/humano | approval + evento |
-| 13 | Verificar | humano+agente | Timeline | `stability_check` | evidencia fresca | estable→`resolved`, si no→`investigating` |
-| 14 | Postmortem y cierre | humano+agente | Timeline | `postmortem→closed` | borrador desde timeline | postmortem declarado, sesión cerrada |
-| 15 | Seguimiento posterior | humano | (brecha) | `closed` | — | follow-ups (sin issue) |
+Denied capability, invalid output, upstream unavailability, or exhausted
+budget blocks/escalates without state advance. Rejected mitigation and failed
+verification return to investigation; recovery is successful only after stable
+verification. Loading, empty, unauthorized, not-found, conflict, and
+disconnected reads remain distinct. UI exposes IDs, progress, cursors,
+attribution, timestamps, and summarized events—not prompts, credentials,
+provider data, raw arguments, or raw output. BoK is optional: [#34](https://github.com/creep1ng/sre-agent/issues/34)
+authorizes retrieval, not a dedicated human knowledge-navigation surface.
 
-## Inventario de pantallas y acciones (resumen)
+## Consolidated research and treatment
 
-P-01 Bandeja (humano: elegir; auto: ordenar/listar; #15). P-02 Detalle
-(humano: revisar, iniciar triage; #15). P-03 Triage (humano: descartar con
-razón / asociar a elegible / declarar; decisión `triage_outcome`; #23, dominio
-#26 valida). P-04 Board (humano: priorizar; brecha, lee `active`+). P-05 War
-room (humano: coordinar/asignar; #36 lectura, #26 confirma cambios). P-06
-Timeline (humano: reconstruir/decidir; auto: registrar cada transición; #36).
-P-07 Monitor harness (humano: iniciar run, enviar comando, aprobar; auto:
-ejecutar pasos, emitir eventos, snapshot; #145/#146; UI jamás ejecuta ni
-transiciona local — CA6 de #36). En todos: la UI es interfaz; el dominio
-(#26) conserva estado y valida.
+Research is public documentation, public product material, and open-source code
+review performed 2026-09-07—not authenticated-product testing or user
+interviews. It informs interaction patterns; it does not import vendor state
+machines.
 
-## Actores y responsabilidades
+| Source | Observed pattern | Treatment |
+| --- | --- | --- |
+| [incident.io triage](https://docs.incident.io/incidents/triaging), [roles](https://docs.incident.io/incidents/incident-roles), [timeline](https://docs.incident.io/post-incident/timeline) | Accept/decline/merge, role instructions, curated timeline inputs. | Adapt explicit disposition and attributable context; retain project states. |
+| [incident.io Investigations](https://incident.io/investigations), [product overview](https://docs.incident.io/getting-started/what-is-incident-io) | Marketing depicts hypotheses, evidence, and confidence, while product docs describe AI SRE as coming soon. | Inspiration only; no availability, performance, or autonomous-remediation claim. |
+| [PagerDuty board](https://support.pagerduty.com/main/docs/navigate-the-incidents-page), [workflow runs](https://support.pagerduty.com/main/docs/incident-workflows#view-workflow-executions-and-step-output) | Board filters; step list alongside detail/output. | Adapt board-to-detail and safe progress, never raw output or vendor run states. |
+| [Rootly lifecycle](https://docs.rootly.com/incidents/incident-lifecycle), [timeline](https://docs.rootly.com/incidents/incident-timeline/incident-timeline) | Lifecycle labels; actor/source filtering; `detected_at` and `acknowledged_at` are timestamps. | Adapt attribution, not labels or timestamp-as-state semantics. |
+| [IncidentFox UI docs](https://github.com/incidentfox/incidentfox/blob/main/web_ui/docs/README.md), [OpenSRE](https://github.com/Tracer-Cloud/opensre) | Open-source runs/knowledge/remediation routes; public-alpha sessions/status/resume. The Notion index supplies no OpenSRE URL, so this repository identity is inferred from its description. | Code/public-alpha context only; no board/war-room behavior asserted. |
+| [Rootly alert fields](https://docs.rootly.com/alerts/alert-fields), [severities](https://docs.rootly.com/configuration/severities), [built-in fields](https://docs.rootly.com/configuration/built-in-fields) | Normalized alert fields, single-select severity, built-in versus custom fields. | Adapt explicit severity/metadata presentation; do not invent a mapping for the project’s two vocabularies. |
+| [PagerDuty during](https://response.pagerduty.com/during/during_an_incident/), [after](https://response.pagerduty.com/after/after_an_incident/) | IC, deputy, scribe, liaison, and post-incident coordination patterns. | Adapt visible responsibility; do not claim a role-assignment runtime. |
+| [incident.io declaring](https://docs.incident.io/incidents/declaring), [workflows](https://docs.incident.io/workflows/getting-started), [postmortems](https://docs.incident.io/post-incident/postmortems-overview) | Minimum declaration form, trigger/condition/step workflows, and reviewable postmortems. | Adopt declaration/postmortem review intent; adapt workflow history to governed run events. |
+| [Opsgenie lifecycle](https://support.atlassian.com/opsgenie/docs/manage-alerts-through-their-lifecycle/), [Atlassian lifecycle notice](https://www.atlassian.com/licensing/opsgenie) | Acknowledgement, responders, escalation. | Legacy reference only: sales ended 2025-06-04 and support ends 2027-04-05. |
 
-Operador: percibir, decidir, aprobar, coordinar, cerrar. UI: mostrar,
-capturar intención, pedir confirmación, reflejar estado versionado. Dominio/
-runtime (#26 sobre #16): validar transiciones, exigir aprobaciones, emitir
-eventos/timeline, correlación gateway. Harness (#145): ejecutar pasos
-gobernados, reportar progreso/resultado/fallo; persistencia (#146).
+**Discarded patterns:** metrics that exclude declined triage need a metrics engine
+outside #150; escalation on no-ack/no-close needs a notification/on-call runtime.
+Neither is introduced by this journey, and the agent cannot autonomously remediate.
 
-## Decisiones y estados
+## Mermaid evidence and rendering
 
-Únicas decisiones válidas: los 4 decision points de #16 ejecutados por #26.
-La UI propone (agente puede proponer salvo `mitigation_approval`) y el humano
-dispone o aprueba; el dominio decide la transición. Sin estados ni
-transiciones fuera de `incident-response 1.0.0`.
+The three views have different purposes: [`user-journey.mmd`](user-journey.mmd)
+shows responsibility boundaries; [`incident-operator-flow.mmd`](../../diagrams/incident-operator-flow.mmd)
+shows decisions/errors/recovery loops; [`incident-operator-journey.mmd`](../../diagrams/incident-operator-journey.mmd)
+uses Mermaid `journey` syntax for expected experience.
 
-## Mapeo a issues
+Journey scores are expected successful-path experience, not measured satisfaction
+or runtime state: `1`–`2` uncertainty, `3` meaningful but unconfirmed work,
+`4` confident learning/follow-up, `5` confirmed recovery/closure. J09 is `5`
+only after successful verification; J11 is `5` after closure. Failure and
+rejection use the decision-flow return paths, never a success score.
 
-#15: etapas 2–4. #23: 5–6. #16: 1,5–6,9–14 (contrato). #26: 6,9–14
-(ejecución). #36: 8–9 (+7 parcial). #149: 1. #145/#146: 10–12 (contrato/
-persistencia; runtime #26 los consume). Brechas sin issue: Board (7),
-instrucciones de rol, pins de timeline, ownership formal de ack, follow-ups
-(15). Discrepancia documentada: escala de severidad del fixture #15
-(`critical|warning|info`) vs `sev1..sev4` de #16 — sin mapeo contractual;
-cada contrato rige en su alcance hasta que una policy lo defina (ver
-`threshold-contract-pending.md` en `main`).
+Rendered evidence: [responsibility SVG](user-journey.svg) · [responsibility PNG](user-journey.png)
+· [decision SVG](../../diagrams/incident-operator-flow.svg) · [decision PNG](../../diagrams/incident-operator-flow.png)
+· [experience SVG](../../diagrams/incident-operator-journey.svg) · [experience PNG](../../diagrams/incident-operator-journey.png).
 
-## Dependencias y riesgos
+[`scripts/render_incident_journey.sh`](../../../scripts/render_incident_journey.sh)
+renders all three sources and three readable decision-flow phase PNGs without a
+repository dependency. Install the pinned CLI outside the repository, then run:
 
-#36 DoR pendiente (mecanismo de refresco, campos de actor) — el journey no
-promete push. #145/#146/#26 abiertos — monitor y runtime son contrato, no
-conducta. Riesgo: tratar este doc como spec ejecutable; no lo es.
+```bash
+PUPPETEER_SKIP_DOWNLOAD=true npm install --prefix /tmp/issue150-render \
+  --cache /tmp/issue150-npm-cache --no-audit --no-fund @mermaid-js/mermaid-cli@11.12.0
+export CHROME_PATH="$(command -v chromium || command -v chromium-browser || command -v google-chrome)"
+[[ -x "$CHROME_PATH" ]]
+export MMDC_PATH=/tmp/issue150-render/node_modules/.bin/mmdc
+scripts/render_incident_journey.sh
+```
 
-## Artefactos
-
-Fuente: `docs/design/ht-inc-07-ux-journey/user-journey.mmd` (diagrama
-`userJourney`, subgraphs operador/UI/dominio/harness, humano vs automático por
-grupo y etiqueta, no solo color). Imagen: `user-journey.svg` generada con
-`npx @mermaid-js/mermaid-cli@11 -i user-journey.mmd -o user-journey.svg
--b white`. Convención seguida: `docs/design/<slug>/` como `ht-ctrl-02`.
+`CHROME_PATH` must name an executable existing Chrome/Chromium binary; set it
+explicitly when the local browser has another name. `MMDC_PATH` defaults to the
+path shown above. This documentation-only work adds no runtime harness,
+persistent state, migration, transport, or UI behavior.

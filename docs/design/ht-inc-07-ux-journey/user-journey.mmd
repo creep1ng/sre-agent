@@ -9,9 +9,10 @@ flowchart TD
         H4[Decidir: descartar · asociar · declarar]
         H5[Coordinar en war room]
         H6[Proponer y revisar hipótesis]
-        H7[Aprobar o rechazar mitigación]
-        H8[Verificar estabilidad del servicio]
-        H9[Cerrar con postmortem declarado]
+        H7[Aprobar mitigación]
+        H8[Rechazar o pedir cambios]
+        H9[Verificar estabilidad del servicio]
+        H10[Revisar postmortem y cerrar]
     end
     subgraph UI[Superficies UI · solo interfaz]
         U1[Bandeja de alertas · #15]
@@ -25,16 +26,21 @@ flowchart TD
     end
     subgraph DOM[Dominio y runtime · #16 y #26]
         D1[detected · alerta sin sesión]
-        D2[triage · alerta en disposición]
-        D3[dismissed · linked · terminales]
-        D4[active · sesión con incident_id]
-        D5[investigating · mitigating · verifying]
-        D6[resolved · postmortem · closed]
-        D7[Cada transición escribe timeline]
+        D2[triage · disposición validada por dominio]
+        D3[dismissed · terminal]
+        D4[linked · abrir incidente existente]
+        D5[active · sesión con incident_id]
+        D6[investigating]
+        D7[mitigating]
+        D8[verifying]
+        D9[resolved · postmortem]
+        D10{Postmortem declarado y cierre humano?}
+        D11[closed]
+        D12[Cada transición escribe timeline]
     end
     subgraph AUT[Harness y automatizaciones · #145 y #146]
         A1[Adaptar señal OTel a alerta · #149]
-        A2[Run: iniciar o reanudar]
+        A2[Run: iniciar o reanudar si dominio permite]
         A3[Comandos acotados al workflow]
         A4[Eventos ordenados y snapshot]
         A5[Resultado o fallo visible]
@@ -45,18 +51,18 @@ flowchart TD
     H2 --> U1
     U1 --> H3
     H3 --> U2
-    U2 -->|midnight:triage-requested| D2
+    U2 -->|intención enviada; dominio valida| D2
     D2 --> U3
     U3 --> H4
     H4 -->|descartar con razón| D3
-    H4 -->|asociar a incidente elegible| D3
-    H4 -->|declarar con severidad| D4
-    D4 --> U4
-    D4 --> U5
+    H4 -->|asociar a incidente elegible| D4 --> U5
+    H4 -->|declarar con severidad| D5
+    D5 --> U4
+    D5 --> U5
     U4 --> H5
     U5 --> H5
     H5 --> U6
-    D5 --> U6
+    D6 --> U6
     U6 --> H6
     H6 --> A2
     A2 --> A3
@@ -64,19 +70,18 @@ flowchart TD
     A4 --> A5
     A5 --> U7
     U7 --> H7
-    H7 -->|aprobar · humano bloqueante| D5
-    H7 -->|rechazar o pedir cambios| D5
-    D5 --> H8
-    H8 -->|estable| D6
-    H8 -->|no estable| D5
-    D6 --> H9
-    H9 --> U6
-    D6 --> U8
+    U7 --> H8
+    H7 -->|aprobar · humano bloqueante| D7 --> D8 --> H9
+    H8 -->|volver a investigar| D6
+    H9 -->|no estable| D6
+    H9 -->|estable| D9 --> H10 --> D10
+    D10 -->|sí| D11 --> U8
+    D10 -->|no| D9
     classDef human fill:#e8f0fe,stroke:#1a73e8
     classDef surface fill:#f1f3f4,stroke:#5f6368
     classDef domain fill:#fef7e0,stroke:#b06000
     classDef auto fill:#e6f4ea,stroke:#1e8e3e
-    class H1,H2,H3,H4,H5,H6,H7,H8,H9 human
+    class H1,H2,H3,H4,H5,H6,H7,H8,H9,H10 human
     class U1,U2,U3,U4,U5,U6,U7,U8 surface
-    class D1,D2,D3,D4,D5,D6,D7 domain
+    class D1,D2,D3,D4,D5,D6,D7,D8,D9,D10,D11,D12 domain
     class A1,A2,A3,A4,A5 auto

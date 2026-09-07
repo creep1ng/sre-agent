@@ -1,0 +1,72 @@
+flowchart LR
+  subgraph ALERT["1 · Alert handling"]
+    direction TB
+    S01[System ingests and validates an alert]:::system --> J01[J01 Human scans alert board]:::human
+    J01 --> J02[J02 Human inspects alert and requests triage]:::human
+    J02 --> D01{J03 Human disposition?}:::decision
+    D01 -->|Dismiss| X01[Dismissed alert: terminal]:::domain
+    D01 -->|Link eligible incident| X02[Linked alert: target session continues]:::domain
+    D01 -->|Declare with severity| X03[System persists incident_id and active state]:::system
+    X03 --> J04
+    J02 -. submit failure: preserve alert context .-> E01[Distinct triage error; retry from J02]:::error
+  end
+
+  subgraph RESPONSE["2 · Shared investigation"]
+    direction TB
+    J04[J04 Human opens persisted war room<br/>state owners safe timeline]:::human
+    J05[J05 Human starts or resumes when domain permits]:::human
+    J06[J06 Agent gathers governed evidence;<br/>human reviews safe summaries]:::agent
+    D02{Run blocked?}:::decision
+    B01[Denied, invalid, upstream, or max steps:<br/>blocked/escalated; no state advance]:::error
+    D03{Evidence sufficient?}:::decision
+    J07[J07 Optional BoK lookup:<br/>authorized evidence only]:::agent
+    B02[Restricted or insufficient evidence]:::error
+    E02[Read/command/transport error:<br/>refresh authoritative view; no false success]:::error
+    R04([Return to J04]):::return
+    R06([Return to J06]):::return
+    J04 --> J05 --> J06 --> D02
+    D02 -->|No| D03
+    D02 -->|Yes| B01 --> R04
+    D03 -->|Yes: propose mitigation| R08([Continue to J08: mitigating]):::return
+    R08 --> J08
+    D03 -->|No: continue investigation| R06
+    D03 -->|Need optional BoK| J07
+    J07 -->|Evidence found| R06
+    J07 -->|Restricted or insufficient| B02 --> R06
+    J04 -. read failure .-> E02
+    J05 -. command failure .-> E02
+    J06 -. transport failure .-> E02
+  end
+
+  subgraph RECOVERY["3 · Controlled recovery and follow-up"]
+    direction TB
+    J08[J08 Human reviews mitigation proposal]:::human
+    D04{Human approves?}:::decision
+    M01[Human-operated or simulated mitigation;<br/>agent never executes infrastructure]:::human
+    J09[J09 Human or agent verifies stability]:::human
+    D05{Stable?}:::decision
+    J10[J10 Agent drafts; human reviews postmortem]:::agent
+    D06{Postmortem exists and human closes?}:::decision
+    J11[J11 System persists terminal closed state]:::system
+    J12[J12 Human reloads or shares direct links;<br/>same IDs version ordered events]:::human
+    E03[Command/read error: retain context and<br/>refresh authority; no false success]:::error
+    R06B([Return to J06]):::return
+    R10([Return to J10]):::return
+    J08 --> D04
+    D04 -->|Approve| M01 --> J09 --> D05
+    D04 -->|Reject or changes| R06B
+    D05 -->|No| R06B
+    D05 -->|Yes| J10 --> D06
+    D06 -->|No| R10
+    D06 -->|Yes| J11 --> J12
+    J08 -. command failure .-> E03
+    J12 -. reload failure .-> E03
+  end
+
+  classDef human fill:#dbeafe,stroke:#2563eb,color:#172554
+  classDef agent fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef system fill:#f3e8ff,stroke:#9333ea,color:#581c87
+  classDef domain fill:#fef3c7,stroke:#d97706,color:#78350f
+  classDef decision fill:#fff,stroke:#475569,color:#0f172a
+  classDef error fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+  classDef return fill:#f8fafc,stroke:#64748b,color:#334155,stroke-dasharray: 4 3
