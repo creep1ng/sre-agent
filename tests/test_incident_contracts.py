@@ -286,11 +286,6 @@ def test_process_stage_is_typed_as_a_bounded_index(state_schema: dict) -> None:
     assert stage["maximum"] == 7
 
 
-def test_runtime_state_machine_is_not_implemented_yet() -> None:
-    """Out of scope for Sprint 1: the runtime engine belongs to HT-INC-02 (#26)."""
-    assert not (REPOSITORY_ROOT / "src" / "sre_agent" / "incident" / "state_machine.py").exists()
-
-
 def test_session_identifier_appears_only_once_the_session_exists(validator) -> None:
     """Objection 1: incident_id cannot be required before the incident is declared."""
     assert validator.is_valid(_base_state())
