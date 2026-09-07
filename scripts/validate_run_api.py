@@ -14,9 +14,12 @@ Checks:
 
 from __future__ import annotations
 
+import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker
@@ -29,6 +32,27 @@ CORRELATION_PATH = AGENT / "api" / "correlation-mapping.v1.yaml"
 TRANSPORT_ADR_PATH = REPOSITORY_ROOT / "docs" / "adrs" / "ADR-008-run-events-transport.md"
 PROJECTION_PATH = AGENT / "api" / "projection-policy.v1.yaml"
 AUTHORIZATION_PATH = AGENT / "api" / "authorization.v1.yaml"
+ERROR_ENVELOPE_PATH = (
+    REPOSITORY_ROOT / "schemas/releases/1.2.0/json-schema/http/error-envelope.schema.json"
+)
+HTTP_FIXTURES = EXAMPLES / "http"
+CORRELATION_FIXTURES = EXAMPLES / "correlation"
+URN_REFERENCE = re.compile(r"^urn:sre-agent:schema:[a-z][a-z0-9-]*:[0-9]+\.[0-9]+\.[0-9]+$")
+EXPECTED_HTTP_FIXTURES = {
+    "start-created.json": ("POST", "201"),
+    "start-replay.json": ("POST", "200"),
+    "start-resume.json": ("POST", "200"),
+    "get-state.json": ("GET", "200"),
+    "command-accepted.json": ("POST", "202"),
+    "events-page.json": ("GET", "200"),
+    "get-context.json": ("GET", "200"),
+    "error-401.json": ("POST", "401"),
+    "error-403.json": ("POST", "403"),
+    "error-404.json": ("GET", "404"),
+    "error-409.json": ("POST", "409"),
+    "error-422.json": ("POST", "422"),
+    "error-503.json": ("POST", "503"),
+}
 
 SCHEMAS = {
     "run-context": AGENT / "schemas" / "run-context.schema.yaml",
@@ -82,6 +106,35 @@ def build_validator(schema: dict[str, Any]) -> Draft202012Validator:
     return Draft202012Validator(schema, format_checker=FormatChecker())
 
 
+def external_schema_registry(schemas: dict[str, dict]) -> tuple[dict[str, dict], list[str]]:
+    """Load every schema available to this contract, including frozen shared bodies."""
+    errors: list[str] = []
+    registry = dict(schemas)
+    try:
+        error_envelope = json.loads(ERROR_ENVELOPE_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return registry, [f"shared error envelope is missing: {ERROR_ENVELOPE_PATH}"]
+    registry["error-envelope"] = error_envelope
+
+    by_id: dict[str, dict] = {}
+    for name, schema in registry.items():
+        schema_id = schema.get("$id")
+        if not isinstance(schema_id, str) or not URN_REFERENCE.fullmatch(schema_id):
+            errors.append(
+                f"schema registry entry '{name}' has malformed immutable $id {schema_id!r}"
+            )
+            continue
+        try:
+            Draft202012Validator.check_schema(schema)
+        except Exception as error:  # noqa: BLE001
+            errors.append(f"schema registry entry '{name}' is invalid: {error}")
+            continue
+        if schema_id in by_id:
+            errors.append(f"schema registry has duplicate $id '{schema_id}'")
+        by_id[schema_id] = schema
+    return by_id, errors
+
+
 def check_schemas() -> tuple[dict[str, dict], list[str]]:
     errors: list[str] = []
     schemas: dict[str, dict] = {}
@@ -129,18 +182,31 @@ def _declared_property_names(node: Any, found: set[str]) -> None:
             _declared_property_names(item, found)
 
 
-def _unclosed_object_paths(node: Any, path: str = "$") -> list[str]:
-    """Return public object-schema locations that do not reject unknown fields."""
+def _unclosed_object_paths(node: Any, path: str = "$", conditional: bool = False) -> list[str]:
+    """Return public object-schema locations that do not reject unknown fields.
+
+    Conditional `if`/`then` fragments intentionally inherit their parent object. They
+    are constraints, not new payload objects. A normal properties-bearing schema still
+    counts as an object even when it omits `type`, so public schemas cannot bypass this
+    gate by deleting one keyword.
+    """
     unclosed: list[str] = []
     if isinstance(node, dict):
-        is_object = node.get("type") == "object" or isinstance(node.get("properties"), dict)
+        has_properties = isinstance(node.get("properties"), dict)
+        is_object = node.get("type") == "object" or (has_properties and not conditional)
         if is_object and node.get("additionalProperties") is not False:
             unclosed.append(path)
         for key, value in node.items():
-            unclosed.extend(_unclosed_object_paths(value, f"{path}/{key}"))
+            unclosed.extend(
+                _unclosed_object_paths(
+                    value,
+                    f"{path}/{key}",
+                    conditional=conditional or key in {"if", "then", "else"},
+                )
+            )
     elif isinstance(node, list):
         for index, item in enumerate(node):
-            unclosed.extend(_unclosed_object_paths(item, f"{path}/{index}"))
+            unclosed.extend(_unclosed_object_paths(item, f"{path}/{index}", conditional))
     return unclosed
 
 
@@ -278,19 +344,38 @@ def check_correlation_mapping(schemas: dict[str, Any]) -> list[str]:
 
 
 def check_authorization_contract(schemas: dict[str, Any]) -> list[str]:
-    """Command assertions must match the canonical authorization vocabulary."""
+    """Every command assertion must be closed over the catalog action map."""
     errors: list[str] = []
     vocabulary = load_yaml(AUTHORIZATION_PATH)
-    props = schemas["run-command"]["properties"]["authorization"]["properties"]
+    command = schemas["run-command"]
+    props = command["properties"]["authorization"]["properties"]
     resource_props = props["resource"]["properties"]
-    expected_action = vocabulary["command_action_map"]["approve_mitigation"]
+    command_action_map = vocabulary["command_action_map"]
+    declared_actions = set(props["action"].get("enum", []))
+    expected_actions = set(command_action_map.values())
+    if declared_actions != expected_actions:
+        errors.append("run-command authorization actions differ from authorization.v1.yaml")
+
     resource = next(item for item in vocabulary["resources"] if item["id"] == "incident-response")
-    if props["action"].get("const") != expected_action:
-        errors.append("run-command approval action differs from authorization.v1.yaml")
     if resource_props["type"].get("const") != resource["type"]:
         errors.append("run-command resource type differs from authorization.v1.yaml")
     if resource_props["id"].get("const") != resource["id"]:
         errors.append("run-command resource id differs from authorization.v1.yaml")
+
+    validator = build_validator(command)
+    identity = {"reference_version": "1.0.0", "principal_id": "demo-human"}
+    resource_assertion = {"type": resource["type"], "id": resource["id"]}
+    for command_name, action in command_action_map.items():
+        payload = {
+            "command": command_name,
+            "actor": "human",
+            "actor_reference": identity,
+            "authorization": {"action": action, "resource": resource_assertion},
+        }
+        if command_name == "propose_disposition":
+            payload["disposition"] = "link"
+        if not validator.is_valid(payload):
+            errors.append(f"run-command rejects catalog mapping for '{command_name}' -> '{action}'")
     return errors
 
 
@@ -324,9 +409,27 @@ def check_actor_identity(schemas: dict[str, Any]) -> list[str]:
     return errors
 
 
-def check_openapi() -> list[str]:
+def _iter_refs(node: Any) -> list[str]:
+    if isinstance(node, dict):
+        refs = [value for key, value in node.items() if key == "$ref" and isinstance(value, str)]
+        return refs + [ref for value in node.values() for ref in _iter_refs(value)]
+    if isinstance(node, list):
+        return [ref for value in node for ref in _iter_refs(value)]
+    return []
+
+
+def _response_for(doc: dict, response: dict) -> dict:
+    ref = response.get("$ref")
+    if not ref:
+        return response
+    if not ref.startswith("#/components/responses/"):
+        raise ValueError(f"unsupported response reference '{ref}'")
+    return doc["components"]["responses"][ref.rsplit("/", 1)[1]]
+
+
+def check_openapi(registry: dict[str, dict], document: dict | None = None) -> list[str]:
     errors: list[str] = []
-    doc = load_yaml(OPENAPI_PATH)
+    doc = document if document is not None else load_yaml(OPENAPI_PATH)
 
     if doc.get("openapi", "").split(".")[0] != "3":
         errors.append("openapi document is not version 3.x")
@@ -335,15 +438,207 @@ def check_openapi() -> list[str]:
     for path in REQUIRED_PATHS - declared:
         errors.append(f"openapi is missing required path '{path}'")
 
-    # Every local component $ref must resolve.
-    text = OPENAPI_PATH.read_text(encoding="utf-8")
-    import re
+    refs = _iter_refs(doc)
+    for ref in refs:
+        if ref.startswith("#/"):
+            parts = ref.removeprefix("#/").split("/")
+            target: Any = doc
+            try:
+                for part in parts:
+                    target = target[part]
+            except (KeyError, TypeError):
+                errors.append(f"openapi $ref '{ref}' does not resolve")
+        elif ref.startswith("urn:sre-agent:schema:"):
+            if not URN_REFERENCE.fullmatch(ref):
+                errors.append(f"openapi schema URN is malformed: '{ref}'")
+            elif ref not in registry:
+                errors.append(f"openapi schema URN is absent from the local registry: '{ref}'")
+        elif ref.startswith("./"):
+            path = OPENAPI_PATH.parent / ref
+            if not path.exists():
+                errors.append(f"openapi external example reference is missing: '{ref}'")
+        else:
+            errors.append(f"openapi uses unsupported external $ref '{ref}'")
+    return errors
 
-    for ref in re.findall(r"#/components/([a-zA-Z]+)/([A-Za-z0-9]+)", text):
-        section, name = ref
-        if name not in doc.get("components", {}).get(section, {}):
-            errors.append(f"openapi $ref '#/components/{section}/{name}' does not resolve")
 
+def _operation_for_fixture(doc: dict, method: str, request_path: str) -> tuple[str, dict] | None:
+    parsed = urlsplit(request_path)
+    for template, item in doc["paths"].items():
+        pattern = "^" + re.sub(r"\{[^}]+\}", r"[^/]+", template) + "$"
+        if re.fullmatch(pattern, parsed.path):
+            operation = item.get(method.lower())
+            if operation:
+                return template, operation
+    return None
+
+
+def _schema_from_content(content: dict, registry: dict[str, dict]) -> dict | None:
+    schema = content.get("application/json", {}).get("schema")
+    if not schema:
+        return None
+    ref = schema.get("$ref")
+    return registry.get(ref) if ref else schema
+
+
+def _header(headers: dict, name: str) -> str | None:
+    return next((value for key, value in headers.items() if key.lower() == name.lower()), None)
+
+
+def check_http_fixtures(registry: dict[str, dict]) -> list[str]:
+    """Validate static mocks against the endpoint selected by their method and path."""
+    errors: list[str] = []
+    doc = load_yaml(OPENAPI_PATH)
+    referenced = {
+        (OPENAPI_PATH.parent / ref).resolve()
+        for ref in _iter_refs(doc)
+        if ref.startswith("./examples/http/")
+    }
+    fixtures = sorted(HTTP_FIXTURES.glob("*.json"))
+    if not fixtures:
+        return ["no HTTP mock fixtures are published"]
+    if {path.name for path in fixtures} != set(EXPECTED_HTTP_FIXTURES):
+        errors.append("HTTP mock fixture coverage is incomplete or contains an unexpected fixture")
+    if {path.resolve() for path in fixtures} != referenced:
+        errors.append("OpenAPI response examples and HTTP mock fixture files differ")
+
+    for path in fixtures:
+        fixture = load_json(path)
+        mock = fixture.get("x-http-mock", {})
+        request, response = mock.get("request", {}), mock.get("response", {})
+        method, request_path = request.get("method"), request.get("path")
+        operation_match = _operation_for_fixture(doc, method or "", request_path or "")
+        if not operation_match:
+            errors.append(f"HTTP fixture '{path.name}' does not select an OpenAPI operation")
+            continue
+        _, operation = operation_match
+        status = str(response.get("status"))
+        if (method, status) != EXPECTED_HTTP_FIXTURES.get(path.name):
+            errors.append(f"HTTP fixture '{path.name}' changed its required method/status coverage")
+        if status not in operation["responses"]:
+            errors.append(f"HTTP fixture '{path.name}' uses undeclared response status {status}")
+            continue
+        request_headers = request.get("headers")
+        response_headers = response.get("headers")
+        if not isinstance(request_headers, dict) or not isinstance(response_headers, dict):
+            errors.append(f"HTTP fixture '{path.name}' must publish request and response headers")
+            continue
+        if status != "401" and not _header(request_headers, "Authorization"):
+            errors.append(f"HTTP fixture '{path.name}' lacks an authenticated request header")
+        if _header(response_headers, "Content-Type") != "application/json":
+            errors.append(
+                f"HTTP fixture '{path.name}' response must publish Content-Type application/json"
+            )
+
+        for parameter in operation.get("parameters", []):
+            if parameter.get("$ref"):
+                parameter = doc["components"]["parameters"][parameter["$ref"].rsplit("/", 1)[1]]
+            if parameter.get("required") and parameter.get("in") == "header":
+                if not _header(request_headers, parameter["name"]):
+                    errors.append(
+                        f"HTTP fixture '{path.name}' lacks required header '{parameter['name']}'"
+                    )
+        resolved_response = _response_for(doc, operation["responses"][status])
+        for header_name, header_schema in resolved_response.get("headers", {}).items():
+            value = _header(response_headers, header_name)
+            if value is None:
+                errors.append(f"HTTP fixture '{path.name}' lacks response header '{header_name}'")
+            elif not build_validator(header_schema.get("schema", {})).is_valid(value):
+                errors.append(
+                    f"HTTP fixture '{path.name}' has invalid response header '{header_name}'"
+                )
+
+        body_schema = _schema_from_content(resolved_response.get("content", {}), registry)
+        if body_schema is None:
+            errors.append(f"HTTP fixture '{path.name}' has no response body schema")
+        elif not build_validator(body_schema).is_valid(response.get("body")):
+            errors.append(f"HTTP fixture '{path.name}' response body fails its OpenAPI schema")
+        if fixture.get("value") != response.get("body"):
+            errors.append(f"HTTP fixture '{path.name}' OpenAPI value differs from response body")
+
+        request_body = request.get("body")
+        request_schema = _schema_from_content(
+            operation.get("requestBody", {}).get("content", {}), registry
+        )
+        request_is_valid = request_schema and build_validator(request_schema).is_valid(request_body)
+        if request_schema and status != "422" and not request_is_valid:
+            errors.append(f"HTTP fixture '{path.name}' request body fails its OpenAPI schema")
+    return errors
+
+
+def check_decision_correlation(schemas: dict[str, dict]) -> list[str]:
+    """Decision fixtures prove endpoint scope and audit metadata stay correlated."""
+    errors: list[str] = []
+    files = sorted(CORRELATION_FIXTURES.glob("authorization-*.json"))
+    expected_decisions = {
+        "authorization-allow.json": ("allow", "human_command"),
+        "authorization-deny.json": ("deny", "denial"),
+    }
+    if {path.name for path in files} != set(expected_decisions):
+        return ["authorization allow/deny correlation fixtures are incomplete"]
+
+    command_validator = build_validator(schemas["run-command"])
+    event_validator = build_validator(schemas["run-event"])
+    uuid_validator = build_validator({"type": "string", "format": "uuid"})
+    for path in files:
+        fixture = load_json(path)
+        request, event, metadata = (
+            fixture.get("request", {}),
+            fixture.get("event", {}),
+            fixture.get("internal_audit_metadata", {}),
+        )
+        match = re.fullmatch(
+            r"/v1/incidents/(?P<incident_id>[a-z][a-z0-9_-]{2,63})/runs/"
+            r"(?P<run_id>run_[a-z0-9]{8,32})/commands",
+            request.get("path", ""),
+        )
+        if request.get("method") != "POST" or not match:
+            errors.append(f"correlation fixture '{path.name}' must use a scoped command endpoint")
+            continue
+        expected_outcome, expected_kind = expected_decisions[path.name]
+        if fixture.get("outcome") != expected_outcome or event.get("kind") != expected_kind:
+            errors.append(f"correlation fixture '{path.name}' changed its decision semantics")
+        request_id = request.get("request_id")
+        if not uuid_validator.is_valid(request_id):
+            errors.append(f"correlation fixture '{path.name}' has an invalid request_id")
+        if not command_validator.is_valid(request.get("body")):
+            errors.append(f"correlation fixture '{path.name}' has an invalid command body")
+        event_page = {"events": [event], "next_cursor": "fixture:1", "has_more": False}
+        if not event_validator.is_valid(event_page):
+            errors.append(f"correlation fixture '{path.name}' has an invalid decision event")
+        if event.get("request_id") != request_id or metadata.get("request_id") != request_id:
+            errors.append(f"correlation fixture '{path.name}' does not retain request_id")
+        if set(metadata) != {"request_id", "incident_id", "run_id"}:
+            errors.append(
+                f"correlation fixture '{path.name}' metadata must contain only "
+                "canonical correlation"
+            )
+        scoped_metadata = (
+            metadata.get("incident_id") == match["incident_id"]
+            and metadata.get("run_id") == match["run_id"]
+        )
+        if not scoped_metadata:
+            errors.append(
+                f"correlation fixture '{path.name}' does not retain endpoint incident_id/run_id"
+            )
+        if metadata.get("run_id") is None:
+            errors.append(
+                f"correlation fixture '{path.name}' cannot null run_id after endpoint scope exists"
+            )
+        if "audit_event_id" in fixture or "audit_event_id" in metadata:
+            errors.append(f"correlation fixture '{path.name}' invents a public audit_event_id")
+
+        authenticated = request.get("authenticated_principal_id")
+        claimed = request.get("body", {}).get("actor_reference", {}).get("principal_id")
+        event_principal = event.get("actor", {}).get("reference", {}).get("principal_id")
+        if fixture.get("outcome") == "allow" and claimed != authenticated:
+            errors.append(
+                f"allow fixture '{path.name}' does not attribute the authenticated principal"
+            )
+        if fixture.get("outcome") == "deny" and claimed == authenticated:
+            errors.append(f"deny fixture '{path.name}' does not exercise spoofed actor rejection")
+        if event_principal != authenticated:
+            errors.append(f"correlation fixture '{path.name}' audit actor is not authoritative")
     return errors
 
 
@@ -375,7 +670,13 @@ def check_examples(schemas: dict[str, dict]) -> list[str]:
 
 def validate() -> list[str]:
     schemas, schema_errors = check_schemas()
-    errors = [*schema_errors, *check_format_enforcement(), *check_openapi()]
+    registry, registry_errors = external_schema_registry(schemas)
+    errors = [
+        *schema_errors,
+        *registry_errors,
+        *check_format_enforcement(),
+        *check_openapi(registry),
+    ]
     if schemas:
         errors.extend(check_safe_projection())
         errors.extend(check_transport_decision())
@@ -383,6 +684,8 @@ def validate() -> list[str]:
         errors.extend(check_actor_identity(schemas))
         errors.extend(check_authorization_contract(schemas))
         errors.extend(check_examples(schemas))
+        errors.extend(check_http_fixtures(registry))
+        errors.extend(check_decision_correlation(schemas))
     return errors
 
 

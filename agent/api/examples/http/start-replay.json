@@ -1,0 +1,45 @@
+{
+  "summary": "Replaying the same idempotency key returns the existing run.",
+  "value": {
+    "run_id": "run_a1b2c3d4e5",
+    "incident_id": "inc-otel-payment-failure",
+    "workflow_version": "1.0.0",
+    "status": "running",
+    "current_state": "investigating",
+    "pending_command": null,
+    "cursor": "seq:3",
+    "terminated_reason": null,
+    "updated_at": "2026-08-24T14:12:00Z"
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Idempotency-Key": "start-otel-payment-failure-001"
+      },
+      "body": {
+        "workflow_version": "1.0.0",
+        "objective": "investigate"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "run_id": "run_a1b2c3d4e5",
+        "incident_id": "inc-otel-payment-failure",
+        "workflow_version": "1.0.0",
+        "status": "running",
+        "current_state": "investigating",
+        "pending_command": null,
+        "cursor": "seq:3",
+        "terminated_reason": null,
+        "updated_at": "2026-08-24T14:12:00Z"
+      }
+    }
+  }
+}

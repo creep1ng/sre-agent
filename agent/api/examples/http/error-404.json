@@ -1,0 +1,35 @@
+{
+  "summary": "Hides an absent run behind the normal not-found envelope.",
+  "value": {
+    "error": {
+      "code": "run_not_found",
+      "message": "The requested incident run was not found."
+    },
+    "request_id": "33333333-3333-4333-8333-333333333333",
+    "retryable": false
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs/run_missing99",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 404,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "run_not_found",
+          "message": "The requested incident run was not found."
+        },
+        "request_id": "33333333-3333-4333-8333-333333333333",
+        "retryable": false
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "summary": "Rejects a command not permitted by the current workflow state.",
+  "value": {
+    "error": {
+      "code": "command_not_permitted",
+      "message": "The command is not permitted from the current state."
+    },
+    "request_id": "44444444-4444-4444-8444-444444444444",
+    "retryable": false
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs/run_a1b2c3d4e5/commands",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Idempotency-Key": "invalid-state-command-001"
+      },
+      "body": {
+        "command": "cancel_run",
+        "actor": "human",
+        "actor_reference": {
+          "reference_version": "1.0.0",
+          "principal_id": "demo-human",
+          "display_name": "On-call engineer"
+        },
+        "turn_id": "turn_a1b2c3d4",
+        "comment": "Confirmed the flag rollback plan.",
+        "authorization": {
+          "action": "run.command",
+          "resource": {
+            "type": "incident_workflow",
+            "id": "incident-response"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 409,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "command_not_permitted",
+          "message": "The command is not permitted from the current state."
+        },
+        "request_id": "44444444-4444-4444-8444-444444444444",
+        "retryable": false
+      }
+    }
+  }
+}

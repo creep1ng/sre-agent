@@ -29,8 +29,21 @@ paths:
           application/json:
             schema: { $ref: 'urn:sre-agent:schema:run-start-request:1.0.0' }
       responses:
-        '201': { description: Run created, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
-        '200': { description: Idempotent replay of an existing run, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
+        '201':
+          description: Run created
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' }
+              examples:
+                created: { $ref: './examples/http/start-created.json' }
+        '200':
+          description: Existing run resumed or returned after an idempotent replay
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' }
+              examples:
+                replay: { $ref: './examples/http/start-replay.json' }
+                resumed: { $ref: './examples/http/start-resume.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -47,7 +60,13 @@ paths:
         - { $ref: '#/components/parameters/IncidentId' }
         - { $ref: '#/components/parameters/RunId' }
       responses:
-        '200': { description: Current run state, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
+        '200':
+          description: Current run state
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' }
+              examples:
+                current: { $ref: './examples/http/get-state.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -70,7 +89,13 @@ paths:
           application/json:
             schema: { $ref: 'urn:sre-agent:schema:run-command:1.0.0' }
       responses:
-        '202': { description: Command accepted; run state advances, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' } } } }
+        '202':
+          description: Command accepted; run state advances
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:run-state:1.0.0' }
+              examples:
+                accepted: { $ref: './examples/http/command-accepted.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -98,7 +123,13 @@ paths:
           required: false
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       responses:
-        '200': { description: Ordered event page, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-event:1.0.0' } } } }
+        '200':
+          description: Ordered event page
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:run-event:1.0.0' }
+              examples:
+                page: { $ref: './examples/http/events-page.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -117,7 +148,13 @@ paths:
         - { $ref: '#/components/parameters/IncidentId' }
         - { $ref: '#/components/parameters/RunId' }
       responses:
-        '200': { description: Sensitive execution context, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:run-context:1.0.0' } } } }
+        '200':
+          description: Sensitive execution context
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:run-context:1.0.0' }
+              examples:
+                context: { $ref: './examples/http/get-context.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -146,20 +183,20 @@ components:
     Unauthorized:
       description: Authentication failed
       headers: { WWW-Authenticate: { schema: { type: string, const: Bearer } } }
-      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' }, examples: { unauthenticated: { $ref: './examples/http/error-401.json' } } } }
     Forbidden:
       description: The principal is not authorized for this run or command
-      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' }, examples: { attribution_mismatch: { $ref: './examples/http/error-403.json' } } } }
     NotFound:
       description: Incident or run does not exist for this principal
-      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' }, examples: { missing_run: { $ref: './examples/http/error-404.json' } } } }
     Conflict:
       description: Command not permitted from the current state, or idempotency conflict
-      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' }, examples: { disallowed_command: { $ref: './examples/http/error-409.json' } } } }
     ValidationError:
       description: Request failed contract validation
-      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' }, examples: { invalid_request: { $ref: './examples/http/error-422.json' } } } }
     Unavailable:
       description: A dependency is temporarily unavailable; the operation is retryable
       headers: { Retry-After: { schema: { type: string } } }
-      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:1.2.0' }, examples: { retryable_failure: { $ref: './examples/http/error-503.json' } } } }

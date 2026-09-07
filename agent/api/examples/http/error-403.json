@@ -1,0 +1,53 @@
+{
+  "summary": "Rejects actor attribution that conflicts with the authenticated principal.",
+  "value": {
+    "error": {
+      "code": "actor_attribution_mismatch",
+      "message": "Actor attribution must match the authenticated principal."
+    },
+    "request_id": "22222222-2222-4222-8222-222222222222",
+    "retryable": false
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs/run_a1b2c3d4e5/commands",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Idempotency-Key": "spoof-attribution-001"
+      },
+      "body": {
+        "command": "approve_mitigation",
+        "actor": "human",
+        "actor_reference": {
+          "reference_version": "1.0.0",
+          "principal_id": "admin-human",
+          "display_name": "Spoofed administrator"
+        },
+        "turn_id": "turn_a1b2c3d4",
+        "comment": "Confirmed the flag rollback plan.",
+        "authorization": {
+          "action": "run.approve",
+          "resource": {
+            "type": "incident_workflow",
+            "id": "incident-response"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 403,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "actor_attribution_mismatch",
+          "message": "Actor attribution must match the authenticated principal."
+        },
+        "request_id": "22222222-2222-4222-8222-222222222222",
+        "retryable": false
+      }
+    }
+  }
+}

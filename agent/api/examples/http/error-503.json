@@ -1,0 +1,54 @@
+{
+  "summary": "Marks an upstream dependency failure as retryable.",
+  "value": {
+    "error": {
+      "code": "upstream_unavailable",
+      "message": "A dependency is temporarily unavailable."
+    },
+    "request_id": "66666666-6666-4666-8666-666666666666",
+    "retryable": true
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs/run_a1b2c3d4e5/commands",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Idempotency-Key": "retryable-command-001"
+      },
+      "body": {
+        "command": "approve_mitigation",
+        "actor": "human",
+        "actor_reference": {
+          "reference_version": "1.0.0",
+          "principal_id": "demo-human",
+          "display_name": "On-call engineer"
+        },
+        "turn_id": "turn_a1b2c3d4",
+        "comment": "Confirmed the flag rollback plan.",
+        "authorization": {
+          "action": "run.approve",
+          "resource": {
+            "type": "incident_workflow",
+            "id": "incident-response"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 503,
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "30"
+      },
+      "body": {
+        "error": {
+          "code": "upstream_unavailable",
+          "message": "A dependency is temporarily unavailable."
+        },
+        "request_id": "66666666-6666-4666-8666-666666666666",
+        "retryable": true
+      }
+    }
+  }
+}
