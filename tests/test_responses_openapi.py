@@ -66,6 +66,11 @@ def test_runtime_operation_documents_the_complete_responses_contract() -> None:
 
     assert operation["operationId"] == canonical["operationId"]
     assert operation["summary"] == canonical["summary"]
+    assert operation["security"] == [{"bearerAuth": []}]
+    assert runtime["components"]["securitySchemes"]["bearerAuth"] == {
+        "type": "http",
+        "scheme": "bearer",
+    }
     assert operation["requestBody"]["required"] is True
     assert set(operation["responses"]) == {"200", "401", "403", "422", "502", "503", "504"}
 

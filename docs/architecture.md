@@ -29,6 +29,22 @@ presence flag and calls the API boundary, so the OpenRouter key never crosses in
 
 The schema releases remain the contract authority. Runtime models must not replace or rewrite files under `schemas/releases/`.
 
+## Release metadata
+
+`/openapi.json` and Swagger identify a running API with three deliberately separate values:
+
+| Metadata | OpenAPI location | Default | Meaning |
+| --- | --- | --- |
+| Application version | `info.version` | installed `sre-agent` package version | The runtime code version. |
+| Contract version | `info.x-sre-agent-contract-version` | `1.4.0` | The immutable schema release implemented by the runtime. |
+| Build revision | `info.x-sre-agent-build-revision` | `source-archive` | The source revision used to build this artifact. |
+
+The Compose variables `SRE_AGENT_APPLICATION_VERSION`, `SRE_AGENT_CONTRACT_VERSION`, and
+`SRE_AGENT_BUILD_REVISION` are optional build arguments and API runtime variables. A release
+pipeline should set all three from its release manifest and checked-out revision; the runtime image
+does not run Git or require a `.git` directory. Empty values keep the explicit source-archive
+defaults, so source archives and local development remain buildable.
+
 ## Persistence ownership
 
 PostgreSQL contains exactly five domain tables: `principals`, `credentials`, `resources`,
