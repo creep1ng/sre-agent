@@ -1,0 +1,10 @@
+{
+  "run_id": "run_a1b2c3d4e5",
+  "incident_id": "inc-otel-payment-failure",
+  "workflow_version": "1.0.0",
+  "status": "running",
+  "current_state": "investigating",
+  "cursor": "seq:1",
+  "updated_at": "2026-08-24T14:11:00Z",
+  "token": "sensitive-value"
+}

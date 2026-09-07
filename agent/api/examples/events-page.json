@@ -1,0 +1,22 @@
+{
+  "events": [
+    { "event_id": "evt_00000001", "kind": "state_change", "sequence": 0, "state": "investigating",
+      "summary": "Investigation started.",
+      "actor": { "type": "system", "reference": null },
+      "turn_id": null, "task_id": null, "request_id": null,
+      "occurred_at": "2026-08-24T14:10:00Z" },
+    { "event_id": "evt_00000002", "kind": "evidence_collected", "sequence": 1, "state": "investigating",
+      "summary": "Prometheus error rate query returned elevated values.",
+      "actor": { "type": "agent", "reference": { "reference_version": "1.0.0", "principal_id": "incident-harness", "display_name": null } },
+      "turn_id": "turn_a1b2c3d4", "task_id": "task_a1b2c3d4",
+      "request_id": "3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+      "occurred_at": "2026-08-24T14:11:00Z" },
+    { "event_id": "evt_00000003", "kind": "human_command", "sequence": 2, "state": "mitigating",
+      "summary": "Mitigation approved.",
+      "actor": { "type": "human", "reference": { "reference_version": "1.0.0", "principal_id": "demo-human", "display_name": "On-call engineer" } },
+      "turn_id": null, "task_id": null, "request_id": null,
+      "occurred_at": "2026-08-24T14:21:00Z" }
+  ],
+  "next_cursor": "seq:3",
+  "has_more": false
+}

@@ -1,0 +1,18 @@
+{
+  "command": "approve_mitigation",
+  "actor": "human",
+  "actor_reference": {
+    "reference_version": "1.0.0",
+    "principal_id": "demo-human",
+    "display_name": "On-call engineer"
+  },
+  "turn_id": "turn_a1b2c3d4",
+  "comment": "Confirmed the flag rollback plan.",
+  "authorization": {
+    "action": "run.approve",
+    "resource": {
+      "type": "incident_workflow",
+      "id": "incident-response"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "events": [
+    { "event_id": "evt_00000001", "kind": "evidence_collected", "sequence": 0,
+      "summary": "Query executed.",
+      "turn_id": "turn_a1b2c3d4",
+      "task_id": "turn_a1b2c3d4",
+      "occurred_at": "2026-08-24T14:11:00Z" }
+  ],
+  "next_cursor": "seq:1",
+  "has_more": false
+}

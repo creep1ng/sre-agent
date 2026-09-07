@@ -1,0 +1,85 @@
+# Human command sent to a run — HT-INC-04 (issue #145).
+#
+# POST /v1/incidents/{incident_id}/runs/{run_id}/commands. Only commands the
+# workflow permits from the current state are accepted; anything else is 409.
+# Idempotent on Idempotency-Key.
+#
+# AUTHORIZATION NOTE:
+# The server resolves command -> action and run -> workflow before consulting the
+# shared engine. The optional `authorization` object is a non-authoritative assertion
+# constrained to the canonical values; it can never expand the authenticated grant.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:run-command:1.0.0
+title: RunCommand
+type: object
+additionalProperties: false
+required: [command, actor, actor_reference]
+properties:
+  command:
+    enum: [approve_mitigation, reject_mitigation, request_changes,
+           propose_disposition, escalate, cancel_run]
+    description: The human action. The API rejects with 409 any command the workflow
+      does not permit from the run's current state.
+  actor:
+    const: human
+    description: >-
+      Commands are human-only; the harness never issues commands to itself. This is the
+      actor TYPE and is kept unchanged so existing consumers do not break.
+  actor_reference:
+    description: >-
+      C06: who concretely issued the command. The type alone cannot answer which human
+      approved a mitigation, which is the question an audit of the incident will ask.
+      Required here, unlike in events, because a command is always attributable.
+    type: object
+    additionalProperties: false
+    required: [reference_version, principal_id]
+    properties:
+      reference_version:
+        const: 1.0.0
+      principal_id:
+        type: string
+        pattern: '^[a-z][a-z0-9_-]{2,63}$'
+        description: >-
+          The principal that issued the command. Recorded for attribution only:
+          authorization is decided by the engine against a grant, never inferred from
+          this value, from the principal's name or from its kind.
+      display_name:
+        type: [string, "null"]
+        maxLength: 200
+        default: null
+  turn_id:
+    type: [string, "null"]
+    pattern: '^turn_[a-z0-9]{8,32}$'
+    default: null
+    description: >-
+      C05: internal turn this command answers, when it responds to a specific agent
+      turn. Domain-internal; the envelope maps it to task_id before any gateway call.
+  disposition:
+    type: [string, "null"]
+    enum: [dismiss, link, declare, null]
+    default: null
+    description: Required only when command is propose_disposition.
+  comment:
+    type: [string, "null"]
+    maxLength: 2000
+    default: null
+  authorization:
+    description: >-
+      Non-authoritative assertion of the server-resolved authorization tuple. The
+      authenticated principal and active exact grant remain authoritative.
+    type: object
+    additionalProperties: false
+    required: [action, resource]
+    properties:
+      action:
+        const: run.approve
+        description: Canonical action resolved from approve_mitigation.
+      resource:
+        type: object
+        additionalProperties: false
+        required: [type, id]
+        properties:
+          type: { const: incident_workflow }
+          id: { const: incident-response }
+        description: Canonical stable workflow resource resolved from the run.
