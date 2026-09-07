@@ -9,7 +9,10 @@
   "turn_id": "turn_a1b2c3d4",
   "comment": "Confirmed the flag rollback plan.",
   "authorization": {
-    "action": "incident.command.approve_mitigation",
-    "resource": "incident:inc-otel-payment-failure/run:run_a1b2c3d4e5"
+    "action": "run.approve",
+    "resource": {
+      "type": "incident_workflow",
+      "id": "incident-response"
+    }
   }
 }

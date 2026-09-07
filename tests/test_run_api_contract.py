@@ -101,10 +101,14 @@ def test_events_never_stream_secrets(schemas: dict) -> None:
     assert "arguments" not in event_props
 
 
-def test_human_authorization_is_provisional(schemas: dict) -> None:
-    """Pending issue #18: the command carries a proposed authorization shape."""
+def test_human_authorization_matches_canonical_vocabulary(schemas: dict) -> None:
+    """The command assertion is closed over the canonical parent authorization tuple."""
     auth = schemas["run-command"]["properties"]["authorization"]
     assert set(auth["required"]) == {"action", "resource"}
+    assert auth["properties"]["action"]["const"] == "run.approve"
+    resource = auth["properties"]["resource"]
+    assert resource["properties"]["type"]["const"] == "incident_workflow"
+    assert resource["properties"]["id"]["const"] == "incident-response"
 
 
 def test_runtime_api_is_not_implemented_yet() -> None:
@@ -130,7 +134,9 @@ def test_task_id_is_derived_from_turn_id(correlation: dict) -> None:
     derivation = correlation["derivation"]
     assert (derivation["from"], derivation["to"]) == ("turn_id", "task_id")
     example = derivation["example"]
-    assert example["turn_id"].removeprefix("turn_") == example["task_id"]
+    assert f"task_{example['turn_id'].removeprefix('turn_')}" == example["task_id"]
+    numeric = derivation["numeric_suffix_example"]
+    assert numeric == {"turn_id": "turn_12345678", "task_id": "task_12345678"}
     assert derivation["properties"]["deterministic"] is True
 
 
@@ -152,8 +158,16 @@ def test_schema_rejects_a_leaked_raw_turn_id(schemas: dict) -> None:
     }
     assert not validator.is_valid(page)
 
-    page["events"][0]["task_id"] = "a1b2c3d4"
+    page["events"][0]["task_id"] = "task_a1b2c3d4"
     assert validator.is_valid(page)
+
+
+def test_numeric_turn_suffix_derives_a_valid_task_in_both_schemas(schemas: dict) -> None:
+    task_id = "task_12345678"
+    event_task = schemas["run-event"]["$defs"]["event"]["properties"]["task_id"]
+    incident = load_yaml(REPOSITORY_ROOT / "agent" / "schemas" / "incident-state.schema.yaml")
+    assert build_validator(event_task).is_valid(task_id)
+    assert build_validator(incident["properties"]["task_id"]).is_valid(task_id)
 
 
 def test_commands_record_who_concretely_acted(schemas: dict) -> None:

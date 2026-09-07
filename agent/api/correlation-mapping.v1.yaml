@@ -37,10 +37,13 @@ identifiers:
 derivation:
   from: "turn_id"
   to: "task_id"
-  rule: "strip the `turn_` prefix and emit the remainder as the task identifier"
+  rule: "replace the `turn_` prefix with the stable alphabetic prefix `task_`"
   example:
     turn_id: "turn_a1b2c3d4"
-    task_id: "a1b2c3d4"
+    task_id: "task_a1b2c3d4"
+  numeric_suffix_example:
+    turn_id: "turn_12345678"
+    task_id: "task_12345678"
   properties:
     deterministic: true
     reversible: true
@@ -49,5 +52,5 @@ derivation:
 # What must never happen, stated so tests can assert it.
 invariants:
   - "A request to the gateway never carries a field named turn_id."
-  - "A request to the gateway never carries a task_id value that still has the turn_ prefix."
+  - "A derived gateway task_id starts with task_ and never with turn_."
   - "Every event that names a turn_id also names the task_id derived from it."

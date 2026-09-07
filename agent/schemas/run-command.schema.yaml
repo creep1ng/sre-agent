@@ -4,11 +4,10 @@
 # workflow permits from the current state are accepted; anything else is 409.
 # Idempotent on Idempotency-Key.
 #
-# AUTHORIZATION NOTE (provisional, pending issue #18):
-# The canonical action/resource pair used to authorize a human command in the
-# gateway grant model is owned by the incident domain and not yet finalized.
-# `authorization` below carries a proposed shape; its exact `action` and
-# `resource` vocabulary must be confirmed against the gateway grants before Ready.
+# AUTHORIZATION NOTE:
+# The server resolves command -> action and run -> workflow before consulting the
+# shared engine. The optional `authorization` object is a non-authoritative assertion
+# constrained to the canonical values; it can never expand the authenticated grant.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: urn:sre-agent:schema:run-command:1.0.0
@@ -66,16 +65,21 @@ properties:
     maxLength: 2000
     default: null
   authorization:
-    description: Provisional. Confirm action/resource against gateway grants (issue #18).
+    description: >-
+      Non-authoritative assertion of the server-resolved authorization tuple. The
+      authenticated principal and active exact grant remain authoritative.
     type: object
     additionalProperties: false
     required: [action, resource]
     properties:
       action:
-        type: string
-        pattern: '^[a-z][a-z0-9_.]{2,63}$'
-        description: Proposed canonical action, e.g. incident.command.approve_mitigation.
+        const: run.approve
+        description: Canonical action resolved from approve_mitigation.
       resource:
-        type: string
-        pattern: '^[a-z][a-z0-9_.:/-]{2,127}$'
-        description: Proposed canonical resource, e.g. incident:{incident_id}/run:{run_id}.
+        type: object
+        additionalProperties: false
+        required: [type, id]
+        properties:
+          type: { const: incident_workflow }
+          id: { const: incident-response }
+        description: Canonical stable workflow resource resolved from the run.

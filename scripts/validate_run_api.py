@@ -27,6 +27,7 @@ OPENAPI_PATH = AGENT / "api" / "incident-runs.openapi.yaml"
 EXAMPLES = AGENT / "api" / "examples"
 CORRELATION_PATH = AGENT / "api" / "correlation-mapping.v1.yaml"
 TRANSPORT_ADR_PATH = REPOSITORY_ROOT / "docs" / "adrs" / "ADR-008-run-events-transport.md"
+AUTHORIZATION_PATH = AGENT / "api" / "authorization.v1.yaml"
 
 SCHEMAS = {
     "run-start-request": AGENT / "schemas" / "run-start-request.schema.yaml",
@@ -143,15 +144,26 @@ def check_correlation_mapping(schemas: dict[str, Any]) -> list[str]:
     if derivation.get("from") != "turn_id" or derivation.get("to") != "task_id":
         errors.append("the derivation must map turn_id to task_id")
 
-    # Replay the documented example against the rule and the schema patterns.
-    example = derivation.get("example", {})
-    turn_id, task_id = example.get("turn_id", ""), example.get("task_id", "")
-    if not turn_id.startswith("turn_") or turn_id[len("turn_") :] != task_id:
-        errors.append(
-            f"the documented example does not follow the rule: {turn_id!r} -> {task_id!r}"
-        )
-    if task_id.startswith("turn_"):
-        errors.append("the derived task_id still carries the turn_ prefix")
+    # Replay every documented example, including an all-numeric suffix, against the
+    # deterministic total rule and both destination schemas.
+    event_task = schemas["run-event"]["$defs"]["event"]["properties"]["task_id"]
+    incident_task = load_yaml(AGENT / "schemas" / "incident-state.schema.yaml")["properties"][
+        "task_id"
+    ]
+    for name in ("example", "numeric_suffix_example"):
+        example = derivation.get(name, {})
+        turn_id, task_id = example.get("turn_id", ""), example.get("task_id", "")
+        expected = f"task_{turn_id.removeprefix('turn_')}"
+        if not turn_id.startswith("turn_") or task_id != expected:
+            errors.append(
+                f"the documented {name} does not follow the rule: {turn_id!r} -> {task_id!r}"
+            )
+        for schema_name, task_schema in (
+            ("run-event", event_task),
+            ("incident-state", incident_task),
+        ):
+            if not build_validator(task_schema).is_valid(task_id):
+                errors.append(f"derived task_id {task_id!r} is invalid in {schema_name}")
 
     # Both identifiers must exist in the schemas that carry them.
     event_props = schemas["run-event"]["$defs"]["event"]["properties"]
@@ -161,6 +173,29 @@ def check_correlation_mapping(schemas: dict[str, Any]) -> list[str]:
     if "turn_id" not in schemas["run-command"]["properties"]:
         errors.append("run-command does not carry 'turn_id'")
 
+    return errors
+
+
+def check_authorization_contract(schemas: dict[str, Any]) -> list[str]:
+    """Command assertions must match the canonical authorization vocabulary."""
+    errors: list[str] = []
+    vocabulary = load_yaml(AUTHORIZATION_PATH)
+    command = schemas["run-command"]
+    authorization = command["properties"].get("authorization", {})
+    props = authorization.get("properties", {})
+    resource_props = props.get("resource", {}).get("properties", {})
+
+    expected_action = vocabulary.get("command_action_map", {}).get("approve_mitigation")
+    resource = next(
+        (item for item in vocabulary.get("resources", []) if item.get("id") == "incident-response"),
+        {},
+    )
+    if props.get("action", {}).get("const") != expected_action:
+        errors.append("run-command approval action differs from authorization.v1.yaml")
+    if resource_props.get("type", {}).get("const") != resource.get("type"):
+        errors.append("run-command resource type differs from authorization.v1.yaml")
+    if resource_props.get("id", {}).get("const") != resource.get("id"):
+        errors.append("run-command resource id differs from authorization.v1.yaml")
     return errors
 
 
@@ -250,6 +285,7 @@ def validate() -> list[str]:
         errors.extend(check_transport_decision())
         errors.extend(check_correlation_mapping(schemas))
         errors.extend(check_actor_identity(schemas))
+        errors.extend(check_authorization_contract(schemas))
         errors.extend(check_examples(schemas))
     return errors
 

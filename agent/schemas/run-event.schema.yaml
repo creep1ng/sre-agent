@@ -73,7 +73,7 @@ $defs:
       task_id:
         default: null
         description: >-
-          Gateway-facing correlation derived from turn_id by the incident envelope.
+          Gateway-facing correlation derived by replacing turn_ with task_.
           C05: the gateway accepts task_id, so the raw turn_id is mapped, never leaked.
           The `not` guard rejects a value that still carries the turn_ prefix, which is
           what leaking the internal identifier would look like in practice.
