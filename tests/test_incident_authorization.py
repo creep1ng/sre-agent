@@ -144,14 +144,10 @@ def test_authenticated_agent_cannot_borrow_payload_human_identity(scenarios: lis
     }
 
 
-def test_run_read_does_not_authorize_sensitive_context(
-    catalogue: dict, scenarios: list
-) -> None:
+def test_run_read_does_not_authorize_sensitive_context(catalogue: dict, scenarios: list) -> None:
     scenario = next(item for item in scenarios if item["id"] == "INC-AUTH-008")
     demo_grants = {
-        grant["action"]
-        for grant in catalogue["grants"]
-        if grant["principal_id"] == "demo-human"
+        grant["action"] for grant in catalogue["grants"] if grant["principal_id"] == "demo-human"
     }
     assert "run.read" in demo_grants
     assert "run.read_context" not in demo_grants
