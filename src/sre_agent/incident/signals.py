@@ -28,7 +28,10 @@ _SPAN_RE = re.compile(r"^[0-9a-f]{16}$")
 _ALERT_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 # Full RFC 3339 date-time with an explicit timezone. Date-only and
 # timezone-naive values are rejected: the adapter never invents time or zone.
-_RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:?\d{2})$")
+_RFC3339_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?"
+    r"([Zz]|[+-](?:[01]\d|2[0-3]):[0-5]\d)$"
+)
 _SENSITIVE_RE = re.compile(r"password|secret|token|authorization|cookie|api_key|set-cookie")
 _ALLOWED_RESOURCE_KEYS = ("service.name", "service.namespace", "deployment.environment")
 

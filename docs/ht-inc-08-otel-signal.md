@@ -35,9 +35,10 @@ alt-{slug}-{sha256(trace_id:span_id:service:span.name)[:12]}`. Usa los
 identificadores completos, nunca el prefijo de `trace_id`: reintentos de la
 misma señal producen el mismo id; señales distintas divergen.
 
-Temporal: se exige RFC 3339 completo con zona explícita. Fecha sola, timestamp
-sin zona y valores que desbordan la normalización se rechazan (`invalid_format`);
-nunca se inventa hora ni zona.
+Temporal: se exige RFC 3339 completo con zona explícita. Los offsets numéricos
+requieren `:` y respetan los rangos `00..23` para horas y `00..59` para minutos.
+Fecha sola, timestamp sin zona, offsets fuera de rango y valores que desbordan
+la normalización se rechazan (`invalid_format`); nunca se inventa hora ni zona.
 
 ## Política de descarte
 
