@@ -27,8 +27,8 @@ OPENAPI_PATH = AGENT / "api" / "incident-runs.openapi.yaml"
 EXAMPLES = AGENT / "api" / "examples"
 CORRELATION_PATH = AGENT / "api" / "correlation-mapping.v1.yaml"
 TRANSPORT_ADR_PATH = REPOSITORY_ROOT / "docs" / "adrs" / "ADR-008-run-events-transport.md"
-AUTHORIZATION_PATH = AGENT / "api" / "authorization.v1.yaml"
 PROJECTION_PATH = AGENT / "api" / "projection-policy.v1.yaml"
+AUTHORIZATION_PATH = AGENT / "api" / "authorization.v1.yaml"
 
 SCHEMAS = {
     "run-context": AGENT / "schemas" / "run-context.schema.yaml",
@@ -61,6 +61,8 @@ NEGATIVE = {
     "command-without-actor-identity.json": "run-command",
     "event-leaks-raw-turn-as-task.json": "run-event",
     "context-leaks-raw-turn.json": "run-context",
+    "event-sensitive-prompt.json": "run-event",
+    "state-sensitive-token.json": "run-state",
 }
 
 
@@ -127,6 +129,21 @@ def _declared_property_names(node: Any, found: set[str]) -> None:
             _declared_property_names(item, found)
 
 
+def _unclosed_object_paths(node: Any, path: str = "$") -> list[str]:
+    """Return public object-schema locations that do not reject unknown fields."""
+    unclosed: list[str] = []
+    if isinstance(node, dict):
+        is_object = node.get("type") == "object" or isinstance(node.get("properties"), dict)
+        if is_object and node.get("additionalProperties") is not False:
+            unclosed.append(path)
+        for key, value in node.items():
+            unclosed.extend(_unclosed_object_paths(value, f"{path}/{key}"))
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            unclosed.extend(_unclosed_object_paths(item, f"{path}/{index}"))
+    return unclosed
+
+
 def check_safe_projection() -> list[str]:
     """Audit finding C07: prove the public snapshot cannot carry sensitive content.
 
@@ -151,7 +168,13 @@ def check_safe_projection() -> list[str]:
             errors.append(f"safe projection schema '{relative}' does not exist")
             continue
         declared: set[str] = set()
-        _declared_property_names(load_yaml(path), declared)
+        schema = load_yaml(path)
+        _declared_property_names(schema, declared)
+
+        for object_path in _unclosed_object_paths(schema):
+            errors.append(
+                f"'{relative}' leaves public object '{object_path}' open to additional properties"
+            )
 
         for name in sorted(declared & forbidden):
             errors.append(
@@ -224,8 +247,6 @@ def check_correlation_mapping(schemas: dict[str, Any]) -> list[str]:
     if derivation.get("from") != "turn_id" or derivation.get("to") != "task_id":
         errors.append("the derivation must map turn_id to task_id")
 
-    # Replay every documented example, including an all-numeric suffix, against the
-    # deterministic total rule and both destination schemas.
     event_task = schemas["run-event"]["$defs"]["event"]["properties"]["task_id"]
     incident_task = load_yaml(AGENT / "schemas" / "incident-state.schema.yaml")["properties"][
         "task_id"
@@ -260,21 +281,15 @@ def check_authorization_contract(schemas: dict[str, Any]) -> list[str]:
     """Command assertions must match the canonical authorization vocabulary."""
     errors: list[str] = []
     vocabulary = load_yaml(AUTHORIZATION_PATH)
-    command = schemas["run-command"]
-    authorization = command["properties"].get("authorization", {})
-    props = authorization.get("properties", {})
-    resource_props = props.get("resource", {}).get("properties", {})
-
-    expected_action = vocabulary.get("command_action_map", {}).get("approve_mitigation")
-    resource = next(
-        (item for item in vocabulary.get("resources", []) if item.get("id") == "incident-response"),
-        {},
-    )
-    if props.get("action", {}).get("const") != expected_action:
+    props = schemas["run-command"]["properties"]["authorization"]["properties"]
+    resource_props = props["resource"]["properties"]
+    expected_action = vocabulary["command_action_map"]["approve_mitigation"]
+    resource = next(item for item in vocabulary["resources"] if item["id"] == "incident-response")
+    if props["action"].get("const") != expected_action:
         errors.append("run-command approval action differs from authorization.v1.yaml")
-    if resource_props.get("type", {}).get("const") != resource.get("type"):
+    if resource_props["type"].get("const") != resource["type"]:
         errors.append("run-command resource type differs from authorization.v1.yaml")
-    if resource_props.get("id", {}).get("const") != resource.get("id"):
+    if resource_props["id"].get("const") != resource["id"]:
         errors.append("run-command resource id differs from authorization.v1.yaml")
     return errors
 

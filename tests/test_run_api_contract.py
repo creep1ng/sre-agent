@@ -6,6 +6,7 @@ Each test maps to an acceptance criterion of the issue so a failure names what r
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,7 @@ from validate_run_api import (  # noqa: E402
     PROJECTION_PATH,
     REQUIRED_PATHS,
     SCHEMAS,
+    _unclosed_object_paths,
     build_validator,
     load_yaml,
     validate,
@@ -268,8 +270,18 @@ def test_context_still_refuses_a_leaked_turn_id(schemas: dict) -> None:
         "retrieved_at": "2026-08-24T14:30:00Z",
     }
     assert not validator.is_valid(context)
-    context["turns"][0]["task_id"] = "a1b2c3d4"
+    context["turns"][0]["task_id"] = "task_a1b2c3d4"
     assert validator.is_valid(context)
+
+
+def test_safe_projection_objects_are_structurally_closed(projection: dict) -> None:
+    for relative in projection["safe_projection"]["schemas"]:
+        schema = load_yaml(REPOSITORY_ROOT / relative)
+        assert _unclosed_object_paths(schema) == []
+
+    mutated = deepcopy(load_yaml(REPOSITORY_ROOT / "agent/schemas/run-event.schema.yaml"))
+    mutated["$defs"]["event"].pop("additionalProperties")
+    assert "$/$defs/event" in _unclosed_object_paths(mutated)
 
 
 def test_projection_walk_reaches_nested_properties() -> None:

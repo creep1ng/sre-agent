@@ -41,7 +41,7 @@ $defs:
         type: string
         pattern: '^turn_[a-z0-9]{8,32}$'
       task_id:
-        description: The gateway correlation derived from turn_id (C05).
+        description: The gateway correlation derived by replacing turn_ with task_ (C05).
         oneOf:
           - type: "null"
           - type: string

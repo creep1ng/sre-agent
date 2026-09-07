@@ -6,6 +6,7 @@ Each test pins one property the taxonomy must keep, so a failure names what regr
 from __future__ import annotations
 
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from validate_incident_authorization import (  # noqa: E402
     ENGINE_RESOURCE_TYPES,
     GRANT_ACTION_PATTERN,
     SCENARIOS_PATH,
+    check_grants,
     check_names_confer_nothing,
     load_yaml,
     validate,
@@ -142,12 +144,32 @@ def test_authenticated_agent_cannot_borrow_payload_human_identity(scenarios: lis
     }
 
 
+def test_run_read_does_not_authorize_sensitive_context(
+    catalogue: dict, scenarios: list
+) -> None:
+    scenario = next(item for item in scenarios if item["id"] == "INC-AUTH-008")
+    demo_grants = {
+        grant["action"]
+        for grant in catalogue["grants"]
+        if grant["principal_id"] == "demo-human"
+    }
+    assert "run.read" in demo_grants
+    assert "run.read_context" not in demo_grants
+    assert scenario["principal"] == "demo-human"
+    assert scenario["action"] == "run.read_context"
+    assert scenario["request"] == {
+        "method": "GET",
+        "path": "/v1/incidents/{incident_id}/runs/{run_id}/context",
+    }
+    assert scenario["expected"] == {
+        "http_status": 403,
+        "policy_decision": "deny",
+        "denial_cause": "grant_not_applicable",
+    }
+
+
 @pytest.mark.parametrize("kind", ["principal", "resource", "grant"])
 def test_validator_rejects_inactive_authorization_facts(catalogue: dict, kind: str) -> None:
-    from copy import deepcopy
-
-    from validate_incident_authorization import check_grants
-
     mutated = deepcopy(catalogue)
     collection = {"principal": "principals", "resource": "resources", "grant": "grants"}[kind]
     mutated[collection][0]["status"] = "inactive"

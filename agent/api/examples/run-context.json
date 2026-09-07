@@ -4,7 +4,7 @@
   "turns": [
     {
       "turn_id": "turn_a1b2c3d4",
-      "task_id": "a1b2c3d4",
+      "task_id": "task_a1b2c3d4",
       "sequence": 0,
       "assembled_input": "Incident state and evidence follow. Decide the next action.",
       "model_output": "{\"action\":\"use_tool\",\"tool\":\"query_prometheus\"}",
