@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from sre_agent.control import scopes
@@ -243,17 +244,13 @@ def _stub_service(monkey_result=None, status=201, payload=None):
 
     service = ControlService.__new__(ControlService)
     service.create_principal = AsyncMock(
-        return_value=type(
-            "Response",
-            (),
-            {"status_code": status, "body": payload or {"ok": True}},
-        )()
+        return_value=JSONResponse(payload or _public_principal(_principal("new-human")), status)
     )
     service.list_principals = AsyncMock(
-        return_value=type("Response", (), {"status_code": 200, "body": {"items": []}})()
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
     service.get_principal = AsyncMock(
-        return_value=type("Response", (), {"status_code": 200, "body": {"ok": True}})()
+        return_value=JSONResponse(_public_principal(_principal()), 200)
     )
     return service
 
@@ -276,6 +273,90 @@ def test_router_exposes_three_typed_principals_routes() -> None:
     )
     assert created.status_code in {201, 200}
     bad_path = client.get("/v1/principals/INVALID")
-    assert bad_path.status_code in {404, 422}
+    assert bad_path.status_code == 200
     bad_query = client.get("/v1/principals?limit=101")
-    assert bad_query.status_code == 422
+    assert bad_query.status_code == 200
+
+
+def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
+    from sre_agent.control.service import ControlService
+
+    appended: list = []
+
+    class Audit:
+        async def append(self, event):
+            appended.append(event)
+
+    service = ControlService(None, Audit(), AuditProjector(b"x" * 32))
+    app = FastAPI()
+    app.include_router(control_router(service))
+    client = TestClient(app, raise_server_exceptions=False)
+
+    cases = (
+        client.post(
+            "/v1/principals",
+            json={"principal_id": "INVALID"},
+            headers={"idempotency-key": "k" * 16},
+        ),
+        client.post(
+            "/v1/principals",
+            json={"principal_id": "valid-id", "kind": "human", "display_name": "Valid"},
+            headers={"idempotency-key": "short"},
+        ),
+        client.get("/v1/principals?limit=101"),
+        client.get("/v1/principals/INVALID"),
+    )
+
+    assert [response.status_code for response in cases] == [422, 400, 422, 422]
+    assert [response.json()["error"]["code"] for response in cases] == [
+        "validation_error",
+        "invalid_idempotency_key",
+        "validation_error",
+        "validation_error",
+    ]
+    assert len(appended) == 4
+    assert all(event.stage == "audit" for event in appended)
+
+
+def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
+    from sre_agent.control.service import ControlService
+
+    class RejectingAudit:
+        async def append(self, event):
+            raise RuntimeError("sink rejected")
+
+    service = ControlService(None, RejectingAudit(), AuditProjector(b"x" * 32))
+    app = FastAPI()
+    app.include_router(control_router(service))
+    response = TestClient(app, raise_server_exceptions=False).get("/v1/principals?limit=101")
+
+    assert response.status_code == 503
+    assert response.json()["error"] == {
+        "code": "audit_unavailable",
+        "message": "Audit unavailable.",
+    }
+
+
+def test_control_openapi_publishes_request_success_and_error_schemas() -> None:
+    app = FastAPI()
+    app.include_router(control_router(_stub_service()))
+    paths = app.openapi()["paths"]
+
+    create = paths["/v1/principals"]["post"]
+    assert create["requestBody"]["content"]["application/json"]["schema"]
+    idempotency = next(
+        parameter for parameter in create["parameters"] if parameter["name"] == "Idempotency-Key"
+    )
+    assert idempotency["schema"]["minLength"] == 16
+    for status in ("201", "400", "401", "403", "409", "422", "503"):
+        assert create["responses"][status]["content"]["application/json"]["schema"]
+    for operation in (
+        paths["/v1/principals"]["get"],
+        paths["/v1/principals/{principal_id}"]["get"],
+    ):
+        assert operation["responses"]["200"]["content"]["application/json"]["schema"]
+        assert operation["responses"]["422"]["content"]["application/json"]["schema"]
+    limit = paths["/v1/principals"]["get"]["parameters"][0]
+    assert limit["schema"] == {"type": "integer", "default": 100, "minimum": 1, "maximum": 100}
+    principal_id = paths["/v1/principals/{principal_id}"]["get"]["parameters"][0]
+    assert principal_id["schema"]["pattern"] == r"^[a-z][a-z0-9_-]{2,63}$"

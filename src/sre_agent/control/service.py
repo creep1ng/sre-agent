@@ -9,9 +9,6 @@ from uuid import UUID, uuid4
 
 from fastapi import (
     APIRouter,
-    Header,
-    Path,
-    Query,
     Request,
     Response,
     Security,
@@ -19,6 +16,7 @@ from fastapi import (
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic.json_schema import WithJsonSchema
 
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.gateway.audit import AuditProjector
@@ -103,6 +101,23 @@ class ListPrincipalsQuery(BaseModel):
     limit: int = Field(default=100, ge=1, le=100)
 
 
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+
+
+class ErrorEnvelope(BaseModel):
+    error: ErrorDetail
+    request_id: UUID
+    retryable: bool
+
+
+class PrincipalListResponse(BaseModel):
+    items: list[Principal]
+    limit: int
+    truncated: bool
+
+
 def _canonical_payload(payload: Any) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
@@ -166,6 +181,13 @@ class ControlService:  # noqa: E305
         audit_cause = (
             authorization_denial_cause if audit_stage == "authorization" and status == 403 else None
         )
+        audit_reason = {
+            "validation_error": "contract_validation_failed",
+            "invalid_idempotency_key": "contract_validation_failed",
+            "idempotency_conflict": "contract_validation_failed",
+            "resource_not_found": "no_matching_grant",
+            "resource_unavailable": "no_matching_grant",
+        }.get(error_code, error_code)
         try:
             event = self.projector.control_event(
                 request_id,
@@ -174,7 +196,7 @@ class ControlService:  # noqa: E305
                 audit_stage,
                 operation=operation,
                 action=action,
-                reason=error_code,
+                reason=audit_reason,
                 context=audit_context,
                 resource_ref=audit_resource,
                 decision=audit_decision,
@@ -321,11 +343,18 @@ class ControlService:  # noqa: E305
         )
 
     async def list_principals(
-        self, authorization: str | None, limit: int, extra_params: dict[str, Any]
+        self, authorization: str | None, limit: Any, extra_params: dict[str, Any]
     ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.list", "admin.read"
-        if extra_params or not 1 <= limit <= 100:
+        try:
+            parsed_limit = int(limit)
+            if isinstance(limit, str) and not limit.isdigit():
+                raise ValueError
+            ListPrincipalsQuery.model_validate({"limit": parsed_limit})
+        except (TypeError, ValueError, ValidationError):
+            parsed_limit = 0
+        if extra_params or not 1 <= parsed_limit <= 100:
             return await self._finish(
                 request_id,
                 started,
@@ -365,10 +394,10 @@ class ControlService:  # noqa: E305
                 authorization_denial_cause=evaluation.denial_cause,
             )
         async with self.sessions() as session:
-            items, truncated = await PrincipalRepository(session).list(limit=limit)
+            items, truncated = await PrincipalRepository(session).list(limit=parsed_limit)
         payload: dict[str, Any] = {
             "items": [_public_principal(item) for item in items],
-            "limit": limit,
+            "limit": parsed_limit,
             "truncated": truncated,
         }
         return await self._finish(
@@ -464,53 +493,84 @@ def control_router(service: ControlService) -> APIRouter:
     router = APIRouter()
     bearer_scheme = HTTPBearer(auto_error=False, description="Administrative bearer credential")
     bearer_credentials: Any = Security(bearer_scheme)
-    idempotency_header = Header(
-        default=None,
-        alias="Idempotency-Key",
-        min_length=16,
-        max_length=128,
-        pattern=r"^[\x20-\x7E]{16,128}$",
-        description="Scoped idempotency key (mutating POST only)",
-    )
 
     @router.post(
         "/v1/principals",
         status_code=201,
+        response_model=Principal,
         responses={
-            201: {"description": "Principal created", "content": {"application/json": {}}},
-            401: {"description": "Authentication failed"},
-            403: {"description": "Resource unavailable"},
-            409: {"description": "Idempotency conflict"},
-            422: {"description": "Validation error"},
+            400: {"model": ErrorEnvelope, "description": "Invalid idempotency key"},
+            401: {"model": ErrorEnvelope, "description": "Authentication failed"},
+            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
+            409: {"model": ErrorEnvelope, "description": "Idempotency conflict"},
+            422: {"model": ErrorEnvelope, "description": "Validation error"},
+            503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "description": "Scoped idempotency key (mutating POST only)",
+                    "schema": {
+                        "type": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                        "pattern": IDEMPOTENCY_KEY_PATTERN,
+                    },
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {"application/json": {"schema": PrincipalCreate.model_json_schema()}},
+            },
         },
     )
     async def create_principal(
-        body: PrincipalCreate,
         request: Request,
         response: Response,
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-        idempotency_key: str | None = idempotency_header,
     ) -> Response:
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
         authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
         result = await service.create_principal(
-            body.model_dump(mode="json"),
+            body,
             authorization or request.headers.get("authorization"),
-            idempotency_key or request.headers.get("idempotency-key"),
+            request.headers.get("idempotency-key"),
         )
         response.status_code = result.status_code
         return result
 
-    @router.get("/v1/principals")
+    @router.get(
+        "/v1/principals",
+        response_model=PrincipalListResponse,
+        responses={
+            401: {"model": ErrorEnvelope, "description": "Authentication failed"},
+            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
+            422: {"model": ErrorEnvelope, "description": "Validation error"},
+            503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "limit",
+                    "in": "query",
+                    "required": False,
+                    "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
+                }
+            ]
+        },
+    )
     async def list_principals(
         request: Request,
         response: Response,
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-        limit: int = Query(default=100, ge=1, le=100),
     ) -> Response:
-        try:
-            ListPrincipalsQuery.model_validate({"limit": limit, **dict(request.query_params)})
-        except ValidationError:
-            pass
+        limit = request.query_params.get("limit", "100")
         params = {k: v for k, v in request.query_params.items() if k != "limit"}
         authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
         result = await service.list_principals(
@@ -519,9 +579,21 @@ def control_router(service: ControlService) -> APIRouter:
         response.status_code = result.status_code
         return result
 
-    @router.get("/v1/principals/{principal_id}")
+    @router.get(
+        "/v1/principals/{principal_id}",
+        response_model=Principal,
+        responses={
+            401: {"model": ErrorEnvelope, "description": "Authentication failed"},
+            404: {"model": ErrorEnvelope, "description": "Resource unavailable"},
+            422: {"model": ErrorEnvelope, "description": "Validation error"},
+            503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
+        },
+    )
     async def get_principal(
-        principal_id: Annotated[str, Path(pattern=r"^[a-z][a-z0-9_-]{2,63}$")],
+        principal_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+        ],
         request: Request,
         response: Response,
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
