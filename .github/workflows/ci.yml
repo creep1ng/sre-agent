@@ -156,6 +156,13 @@ jobs:
           tests/test_control_acceptance.py
           --deselect=tests/test_responses.py::test_public_responses_credential_matrix
       - run: alembic check
+      - name: Install browser consumer dependencies
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Verify the real browser–API consumer
+        env:
+          BROWSER_API_TEST_DATABASE_URL: postgresql://sre_agent@127.0.0.1:5432/sre_agent
+          DEMO_DATABASE_URL: postgresql://unused@127.0.0.1:5432/not_the_test_database
+        run: npm run test:browser-api
       - run: npm --prefix schemas/tooling ci
       - run: npm --prefix schemas/tooling run conformance -- --consumer issue-11
 

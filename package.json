@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:browser-api": "scripts/run-browser-api-consumer-test.sh"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
