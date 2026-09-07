@@ -198,7 +198,7 @@
       severityBadge.className = "ma-badge";
       severityBadge.dataset.tone = severity.tone;
       severityBadge.textContent = severity.label;
-      statusText.className = "ma-badge";
+      statusText.className = "ma-badge alert-list__status";
       statusText.dataset.tone = status.tone;
       statusText.textContent = status.label;
       topRow.append(severityBadge, statusText);

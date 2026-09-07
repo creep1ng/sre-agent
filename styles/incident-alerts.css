@@ -129,6 +129,11 @@
   font-size: var(--ma-font-size-2xl);
 }
 
+.alert-inbox__eyebrow,
+.alert-list__status {
+  font-family: var(--ma-font-body);
+}
+
 .alert-inbox__subtitle {
   max-width: 46rem;
   margin: 0;
