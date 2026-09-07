@@ -153,14 +153,16 @@ class AuditEventRow(Base):
             "reason_code IS NULL OR reason_code IN ('audit_unavailable','authentication_failed',"
             "'contract_validation_failed','grant_matched','no_matching_grant','redaction_failed',"
             "'redaction_uncertain','routing_unavailable','upstream_failed','upstream_invalid',"
-            "'upstream_unavailable')",
+            "'upstream_unavailable','resource_not_found','status_conflict')",
             name="ck_audit_events_reason_code",
         ),
         CK(
             "authorization_denial_cause IS NULL OR (authorization_denial_cause IN "
             "('principal_inactive','resource_missing','resource_inactive','grant_not_applicable') "
             "AND stage='authorization' AND outcome='denied' "
-            "AND reason_code='no_matching_grant' AND response_status=403)",
+            "AND reason_code='no_matching_grant' AND (response_status=403 OR "
+            "(response_status=404 AND action='admin.read' AND "
+            "COALESCE(resource ->> 'resource_type'='administrative_control',false)))",
             name="ck_audit_events_authorization_denial_cause",
         ),
         CK("response_status BETWEEN 100 AND 599", name="ck_audit_events_response"),

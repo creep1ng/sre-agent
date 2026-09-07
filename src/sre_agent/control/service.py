@@ -15,15 +15,15 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from pydantic.json_schema import WithJsonSchema
 
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
-from sre_agent.governance.dto import Principal, PrincipalContext
+from sre_agent.governance.dto import CredentialReference, Principal, PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, PrincipalRepository, ResourceRepository  # fmt: skip
+from sre_agent.persistence.repositories import CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, PrincipalRepository, ResourceRepository, StaleWriteError  # fmt: skip
 
 IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ERRORS: dict[int, tuple[str, str]] = {
@@ -33,7 +33,13 @@ ERRORS: dict[int, tuple[str, str]] = {
     404: ("resource_not_found", "The requested resource was not found."),
     409: ("idempotency_conflict", "The Idempotency-Key was already used with another payload."),
     422: ("validation_error", "The request is invalid."),
+    500: ("credential_issuance_failed", "Credential issuance could not be completed."),
     503: ("audit_unavailable", "Audit unavailable."),
+}
+ERROR_MESSAGES = {
+    "status_conflict": "The principal status was changed by another request.",
+    "credential_inactive": "The credential is not active.",
+    "credential_issuance_failed": "Credential issuance could not be completed.",
 }
 CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("POST", "/v1/principals"): (
@@ -144,6 +150,58 @@ class PrincipalListResponse(BaseModel):
     truncated: bool
 
 
+class StatusReplace(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    status: Literal["active", "inactive"]
+    expected_updated_at: AwareDatetime
+
+
+class CredentialIssue(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    expires_at: AwareDatetime | None = None
+
+
+class CredentialIssueResponse(BaseModel):
+    credential: CredentialReference
+    replaced_credential_id: str | None
+    key: str
+    secret_revealed: Literal[True]
+
+
+class CredentialMetadataResponse(BaseModel):
+    credential: CredentialReference
+    replaced_credential_id: str | None
+    secret_revealed: Literal[False]
+
+
+class CredentialRotationResponse(BaseModel):
+    result: Literal["success"]
+    old_credential: CredentialReference
+    issuance: CredentialIssueResponse | CredentialMetadataResponse
+    replacement_count: Literal[1]
+    transition_count: Literal[1]
+    replayed: bool
+
+
+class RotationIssuanceFailure(RuntimeError):
+    """A replacement key could not be issued after the old credential was locked."""
+
+
+class CredentialRotationFailureResponse(BaseModel):
+    result: Literal["failure"]
+    old_credential: CredentialReference
+    replacement_count: Literal[0]
+    transition_count: Literal[0]
+    replayed: Literal[False]
+    error_code: Literal["credential_inactive", "rotation_failed"]
+
+
+class CredentialListResponse(BaseModel):
+    items: list[CredentialReference]
+    limit: int
+    truncated: bool
+
+
 def _canonical_payload(payload: Any) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
@@ -205,13 +263,17 @@ class ControlService:  # noqa: E305
         audit_resource = resource_ref if audit_stage == "authorization" else None
         audit_decision = decision if audit_stage == "authorization" else None
         audit_cause = (
-            authorization_denial_cause if audit_stage == "authorization" and status == 403 else None
+            authorization_denial_cause
+            if audit_stage == "authorization" and status in {403, 404}
+            else None
         )
         audit_reason = {
             "validation_error": "contract_validation_failed",
             "invalid_idempotency_key": "contract_validation_failed",
             "idempotency_conflict": "contract_validation_failed",
-            "resource_not_found": "no_matching_grant",
+            "credential_inactive": "contract_validation_failed",
+            "rotation_failed": "upstream_failed",
+            "credential_issuance_failed": "upstream_failed",
             "resource_unavailable": "no_matching_grant",
         }.get(error_code, error_code)
         try:
@@ -223,6 +285,7 @@ class ControlService:  # noqa: E305
                 operation=operation,
                 action=action,
                 reason=audit_reason,
+                retryable=status in {500, 503, 504},
                 context=audit_context,
                 resource_ref=audit_resource,
                 decision=audit_decision,
@@ -234,16 +297,47 @@ class ControlService:  # noqa: E305
         if payload is not None and status != 204:
             return JSONResponse(payload, status_code=status)
         if status == 204:
-            return JSONResponse(None, status_code=204)
+            return Response(status_code=204)
         code, message = error_code or ERRORS[status][0], ERRORS[status][1]
+        message = ERROR_MESSAGES.get(code, message)
         message = "Audit unavailable." if code == "audit_unavailable" else message
         return JSONResponse(
             {
                 "error": {"code": code, "message": message},
                 "request_id": str(request_id),
-                "retryable": status in {503, 504},
+                "retryable": status in {500, 503, 504},
             },
             status,
+        )
+
+    async def _rotation_failure(
+        self,
+        request_id: UUID,
+        started: float,
+        context: PrincipalContext,
+        decision: Any,
+        old_credential: CredentialReference,
+        error_code: Literal["credential_inactive", "rotation_failed"],
+    ) -> Response:
+        return await self._finish(
+            request_id,
+            started,
+            409,
+            "authorization",
+            "credentials.rotate",
+            "admin.write",
+            payload={
+                "result": "failure",
+                "old_credential": old_credential.model_dump(mode="json"),
+                "replacement_count": 0,
+                "transition_count": 0,
+                "replayed": False,
+                "error_code": error_code,
+            },
+            error_code=error_code,
+            context=context,
+            resource_ref=("administrative_control", "credentials"),
+            decision=decision,
         )
 
     async def create_principal(
@@ -251,6 +345,17 @@ class ControlService:  # noqa: E305
     ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.create", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
         if self._invalid_key(idempotency_key):
             return await self._finish(
                 request_id,
@@ -272,17 +377,6 @@ class ControlService:  # noqa: E305
                 operation,
                 action,
                 error_code="validation_error",
-            )
-        context = await self._authenticate(authorization)
-        if context is None:
-            return await self._finish(
-                request_id,
-                started,
-                401,
-                "authentication",
-                operation,
-                action,
-                error_code="authentication_failed",
             )
         scope = ("POST", "/v1/principals")
         payload_hash = _payload_sha256(body.model_dump(mode="json"))
@@ -359,7 +453,7 @@ class ControlService:  # noqa: E305
             request_id,
             started,
             status,
-            "audit",
+            "authorization",
             operation,
             action,
             payload=payload,
@@ -373,6 +467,17 @@ class ControlService:  # noqa: E305
     ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.list", "admin.read"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
         try:
             parsed_limit = int(limit)
             if isinstance(limit, str) and not limit.isdigit():
@@ -390,17 +495,6 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="validation_error",
             )
-        context = await self._authenticate(authorization)
-        if context is None:
-            return await self._finish(
-                request_id,
-                started,
-                401,
-                "authentication",
-                operation,
-                action,
-                error_code="authentication_failed",
-            )
         async with self.sessions() as session:
             evaluation = await self._authorize(
                 session, context.principal, CONTROL_SCOPES[("GET", "/v1/principals")]
@@ -409,11 +503,11 @@ class ControlService:  # noqa: E305
             return await self._finish(
                 request_id,
                 started,
-                403,
+                404,
                 "authorization",
                 operation,
                 action,
-                error_code="resource_unavailable",
+                error_code="resource_not_found",
                 context=context,
                 resource_ref=("administrative_control", "principals"),
                 decision=evaluation.decision,
@@ -430,7 +524,7 @@ class ControlService:  # noqa: E305
             request_id,
             started,
             200,
-            "audit",
+            "authorization",
             operation,
             action,
             payload=payload,
@@ -442,16 +536,6 @@ class ControlService:  # noqa: E305
     async def get_principal(self, principal_id: str, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.get", "admin.read"
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                operation,
-                action,
-                error_code="validation_error",
-            )
         context = await self._authenticate(authorization)
         if context is None:
             return await self._finish(
@@ -462,6 +546,16 @@ class ControlService:  # noqa: E305
                 operation,
                 action,
                 error_code="authentication_failed",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
             )
         async with self.sessions() as session:
             evaluation = await self._authorize(
@@ -500,7 +594,7 @@ class ControlService:  # noqa: E305
             request_id,
             started,
             200,
-            "audit",
+            "authorization",
             operation,
             action,
             payload=_public_principal(principal),
@@ -509,13 +603,609 @@ class ControlService:  # noqa: E305
             decision=evaluation.decision,
         )
 
+    async def replace_principal_status(
+        self, principal_id: str, raw: Any, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "principals.status.replace", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            body = StatusReplace.model_validate_json(_canonical_payload(raw))
+        except (TypeError, ValidationError):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session, context.principal, CONTROL_SCOPES[("PUT", "/v1/principals/{id}/status")]
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "principals"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        try:
+            async with self.sessions() as session, session.begin():
+                principal = await PrincipalRepository(session).replace_status(
+                    principal_id, body.status, expected_updated_at=body.expected_updated_at
+                )
+        except StaleWriteError:
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="status_conflict",
+                context=context,
+                resource_ref=("administrative_control", "principals"),
+                decision=evaluation.decision,
+            )
+        if principal is None:
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_not_found",
+                context=context,
+                resource_ref=("administrative_control", "principals"),
+                decision=evaluation.decision,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload=_public_principal(principal),
+            context=context,
+            resource_ref=("administrative_control", "principals"),
+            decision=evaluation.decision,
+        )
+
+    async def issue_credential(
+        self, principal_id: str, raw: Any, authorization: str | None, idempotency_key: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "credentials.issue", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if self._invalid_key(idempotency_key):
+            return await self._finish(
+                request_id,
+                started,
+                400,
+                "validation",
+                operation,
+                action,
+                error_code="invalid_idempotency_key",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            body = CredentialIssue.model_validate_json(_canonical_payload(raw))
+        except (TypeError, ValidationError):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session,
+                context.principal,
+                CONTROL_SCOPES[("POST", "/v1/principals/{id}/credentials")],
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "credentials"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        canonical_path = f"/v1/principals/{principal_id}/credentials"
+        payload_hash = _payload_sha256(body.model_dump(mode="json"))
+        try:
+            async with self.sessions() as session, session.begin():
+                if await PrincipalRepository(session).get(principal_id) is None:
+                    return await self._finish(
+                        request_id,
+                        started,
+                        404,
+                        "authorization",
+                        operation,
+                        action,
+                        error_code="resource_not_found",
+                        context=context,
+                        resource_ref=("administrative_control", "credentials"),
+                        decision=evaluation.decision,
+                    )
+                binding = await IdempotencyRepository(session).claim_or_replay(
+                    scope=f"{context.principal.principal_id}|POST|{canonical_path}",
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=payload_hash,
+                    principal_id=context.principal.principal_id,
+                    method="POST",
+                    canonical_path=canonical_path,
+                    binding="principal_lifetime",
+                    outcome=IdempotencyOutcome(
+                        response_status=201, resource_id=principal_id, replayed=False
+                    ),
+                )
+                if binding.replayed:
+                    payload = binding.outcome.response_payload
+                else:
+                    try:
+                        issued = await CredentialRepository(session).issue(
+                            principal_id, expires_at=body.expires_at
+                        )
+                    except Exception:
+                        await session.rollback()
+                        return await self._finish(
+                            request_id,
+                            started,
+                            500,
+                            "authorization",
+                            operation,
+                            action,
+                            error_code="credential_issuance_failed",
+                            context=context,
+                            resource_ref=("administrative_control", "credentials"),
+                            decision=evaluation.decision,
+                        )
+                    metadata = {
+                        "credential": issued.credential.model_dump(mode="json"),
+                        "replaced_credential_id": None,
+                        "secret_revealed": False,
+                    }
+                    await IdempotencyRepository(session).set_response_payload(
+                        scope=f"{context.principal.principal_id}|POST|{canonical_path}",
+                        key_digest=_key_digest(idempotency_key or ""),
+                        response_payload=metadata,
+                    )
+                    payload = {**metadata, "key": issued.key, "secret_revealed": True}
+        except IdempotencyConflictError:
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="idempotency_conflict",
+                context=context,
+                resource_ref=("administrative_control", "credentials"),
+                decision=evaluation.decision,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            201,
+            "authorization",
+            operation,
+            action,
+            payload=payload,
+            context=context,
+            resource_ref=("administrative_control", "credentials"),
+            decision=evaluation.decision,
+        )
+
+    async def list_credentials(
+        self, principal_id: str, authorization: str | None, limit: Any, extra_params: dict[str, Any]
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "credentials.list", "admin.read"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        try:
+            parsed_limit = int(limit)
+            if isinstance(limit, str) and not limit.isdigit():
+                raise ValueError
+            ListPrincipalsQuery.model_validate({"limit": parsed_limit})
+        except (TypeError, ValueError, ValidationError):
+            parsed_limit = 0
+        if (
+            re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None
+            or extra_params
+            or not 1 <= parsed_limit <= 100
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session,
+                context.principal,
+                CONTROL_SCOPES[("GET", "/v1/principals/{id}/credentials")],
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_not_found",
+                context=context,
+                resource_ref=("administrative_control", "credentials"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session:
+            if await PrincipalRepository(session).get(principal_id) is None:
+                return await self._finish(
+                    request_id,
+                    started,
+                    404,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="resource_not_found",
+                    context=context,
+                    resource_ref=("administrative_control", "credentials"),
+                    decision=evaluation.decision,
+                )
+            items, truncated = await CredentialRepository(session).list_for_principal(
+                principal_id, limit=parsed_limit
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload={
+                "items": [item.model_dump(mode="json") for item in items],
+                "limit": parsed_limit,
+                "truncated": truncated,
+            },
+            context=context,
+            resource_ref=("administrative_control", "credentials"),
+            decision=evaluation.decision,
+        )
+
+    async def revoke_credential(self, credential_id: str, authorization: str | None) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "credentials.revoke", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", credential_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session, context.principal, CONTROL_SCOPES[("DELETE", "/v1/credentials/{id}")]
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "credentials"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session, session.begin():
+            if await CredentialRepository(session).get(credential_id) is None:
+                return await self._finish(
+                    request_id,
+                    started,
+                    404,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="resource_not_found",
+                    context=context,
+                    resource_ref=("administrative_control", "credentials"),
+                    decision=evaluation.decision,
+                )
+            await CredentialRepository(session).revoke(credential_id)
+        return await self._finish(
+            request_id,
+            started,
+            204,
+            "authorization",
+            operation,
+            action,
+            context=context,
+            resource_ref=("administrative_control", "credentials"),
+            decision=evaluation.decision,
+        )
+
+    async def rotate_credential(
+        self, credential_id: str, raw: Any, authorization: str | None, idempotency_key: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "credentials.rotate", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if self._invalid_key(idempotency_key):
+            return await self._finish(
+                request_id,
+                started,
+                400,
+                "validation",
+                operation,
+                action,
+                error_code="invalid_idempotency_key",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", credential_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            body = CredentialIssue.model_validate_json(_canonical_payload(raw))
+        except (TypeError, ValidationError):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session,
+                context.principal,
+                CONTROL_SCOPES[("POST", "/v1/credentials/{id}/rotation")],
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "credentials"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        canonical_path = f"/v1/credentials/{credential_id}/rotation"
+        try:
+            async with self.sessions() as session, session.begin():
+                old_credential = await CredentialRepository(session).get(credential_id)
+                if old_credential is None:
+                    return await self._finish(
+                        request_id,
+                        started,
+                        404,
+                        "authorization",
+                        operation,
+                        action,
+                        error_code="resource_not_found",
+                        context=context,
+                        resource_ref=("administrative_control", "credentials"),
+                        decision=evaluation.decision,
+                    )
+                binding = await IdempotencyRepository(session).claim_or_replay(
+                    scope=f"{context.principal.principal_id}|POST|{canonical_path}",
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=_payload_sha256(body.model_dump(mode="json")),
+                    principal_id=context.principal.principal_id,
+                    method="POST",
+                    canonical_path=canonical_path,
+                    binding="principal_lifetime",
+                    outcome=IdempotencyOutcome(
+                        response_status=201, resource_id=credential_id, replayed=False
+                    ),
+                )
+                if binding.replayed:
+                    payload = {**binding.outcome.response_payload, "replayed": True}
+                elif old_credential.status != "active":
+                    await session.rollback()
+                    return await self._rotation_failure(
+                        request_id,
+                        started,
+                        context,
+                        evaluation.decision,
+                        old_credential,
+                        "credential_inactive",
+                    )
+                else:
+                    try:
+                        issued = await CredentialRepository(session).rotate(
+                            credential_id, expires_at=body.expires_at
+                        )
+                    except Exception:
+                        await session.rollback()
+                        return await self._rotation_failure(
+                            request_id,
+                            started,
+                            context,
+                            evaluation.decision,
+                            old_credential,
+                            "rotation_failed",
+                        )
+                    if issued is None:
+                        await session.rollback()
+                        return await self._rotation_failure(
+                            request_id,
+                            started,
+                            context,
+                            evaluation.decision,
+                            old_credential,
+                            "credential_inactive",
+                        )
+                    metadata = {
+                        "result": "success",
+                        "old_credential": old_credential.model_dump(mode="json"),
+                        "issuance": {
+                            "credential": issued.credential.model_dump(mode="json"),
+                            "replaced_credential_id": old_credential.credential_id,
+                            "secret_revealed": False,
+                        },
+                        "replacement_count": 1,
+                        "transition_count": 1,
+                        "replayed": False,
+                    }
+                    await IdempotencyRepository(session).set_response_payload(
+                        scope=f"{context.principal.principal_id}|POST|{canonical_path}",
+                        key_digest=_key_digest(idempotency_key or ""),
+                        response_payload=metadata,
+                    )
+                    payload = {
+                        **metadata,
+                        "issuance": {
+                            **metadata["issuance"],
+                            "key": issued.key,
+                            "secret_revealed": True,
+                        },
+                    }
+        except IdempotencyConflictError:
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="idempotency_conflict",
+                context=context,
+                resource_ref=("administrative_control", "credentials"),
+                decision=evaluation.decision,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            201,
+            "authorization",
+            operation,
+            action,
+            payload=payload,
+            context=context,
+            resource_ref=("administrative_control", "credentials"),
+            decision=evaluation.decision,
+        )
+
 
 def control_router(service: ControlService) -> APIRouter:
-    """Typed control-plane router: 3 of 8 routes (principals create/list/get).
-
-    Remaining routes (status replace + credentials issue/list/revoke/rotate)
-    ship in follow-up slices with #147 open; see openspec apply-progress.
-    """
+    """Typed administrative control-plane router with all eight Issue #147 routes."""
     router = APIRouter()
     bearer_scheme = HTTPBearer(auto_error=False, description="Administrative bearer credential")
     bearer_credentials: Any = Security(bearer_scheme)
@@ -576,7 +1266,7 @@ def control_router(service: ControlService) -> APIRouter:
         response_model=PrincipalListResponse,
         responses={
             401: {"model": ErrorEnvelope, "description": "Authentication failed"},
-            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
+            404: {"model": ErrorEnvelope, "description": "Resource unavailable"},
             422: {"model": ErrorEnvelope, "description": "Validation error"},
             503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
         },
@@ -627,6 +1317,180 @@ def control_router(service: ControlService) -> APIRouter:
         authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
         result = await service.get_principal(
             principal_id, authorization or request.headers.get("authorization")
+        )
+        response.status_code = result.status_code
+        return result
+
+    async def raw_json(request: Request) -> Any:
+        try:
+            return await request.json()
+        except Exception:
+            return None
+
+    def authorization_from(
+        credentials: HTTPAuthorizationCredentials | None, request: Request
+    ) -> str | None:
+        if credentials is not None:
+            return f"{credentials.scheme} {credentials.credentials}"
+        return request.headers.get("authorization")
+
+    @router.put(
+        "/v1/principals/{principal_id}/status",
+        response_model=Principal,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+    )
+    async def replace_principal_status(
+        principal_id: str,
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.replace_principal_status(
+            principal_id, await raw_json(request), authorization_from(credentials, request)
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.post(
+        "/v1/principals/{principal_id}/credentials",
+        status_code=201,
+        response_model=CredentialIssueResponse | CredentialMetadataResponse,
+        responses={
+            400: {"model": ErrorEnvelope},
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            500: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {
+                        "type": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                        "pattern": IDEMPOTENCY_KEY_PATTERN,
+                    },
+                }
+            ]
+        },
+    )
+    async def issue_credential(
+        principal_id: str,
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.issue_credential(
+            principal_id,
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/principals/{principal_id}/credentials",
+        response_model=CredentialListResponse,
+        responses={
+            401: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+    )
+    async def list_credentials(
+        principal_id: str,
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.list_credentials(
+            principal_id,
+            authorization_from(credentials, request),
+            request.query_params.get("limit", "100"),
+            {key: value for key, value in request.query_params.items() if key != "limit"},
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.delete(
+        "/v1/credentials/{credential_id}",
+        status_code=204,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+    )
+    async def revoke_credential(
+        credential_id: str,
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.revoke_credential(
+            credential_id, authorization_from(credentials, request)
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.post(
+        "/v1/credentials/{credential_id}/rotation",
+        status_code=201,
+        response_model=CredentialRotationResponse | CredentialRotationFailureResponse,
+        responses={
+            400: {"model": ErrorEnvelope},
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            409: {"model": CredentialRotationFailureResponse | ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {
+                        "type": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                        "pattern": IDEMPOTENCY_KEY_PATTERN,
+                    },
+                }
+            ]
+        },
+    )
+    async def rotate_credential(
+        credential_id: str,
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.rotate_credential(
+            credential_id,
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
         )
         response.status_code = result.status_code
         return result

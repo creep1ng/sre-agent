@@ -1,10 +1,11 @@
 """Narrow async persistence ports for governance reads and audit appends."""
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -96,15 +97,26 @@ class PrincipalRepository:
         Returns ``None`` when the principal is absent; raises ``StaleWriteError``
         when ``expected_updated_at`` no longer matches the stored row.
         """
-        row = await self._session.get(PrincipalRow, principal_id)
-        if row is None:
+        replacement_at = now or datetime.now(UTC)
+        result = await self._session.execute(
+            update(PrincipalRow)
+            .where(
+                PrincipalRow.principal_id == principal_id,
+                PrincipalRow.updated_at == expected_updated_at,
+            )
+            .values(status=status, updated_at=replacement_at)
+            .returning(PrincipalRow)
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return project_principal(row)
+
+        exists = await self._session.scalar(
+            select(PrincipalRow.principal_id).where(PrincipalRow.principal_id == principal_id)
+        )
+        if exists is None:
             return None
-        if row.updated_at != expected_updated_at:
-            raise StaleWriteError(principal_id)
-        row.status = status
-        row.updated_at = now or datetime.now(UTC)
-        await self._session.flush()
-        return project_principal(row)
+        raise StaleWriteError(principal_id)
 
 
 class StaleWriteError(RuntimeError):
@@ -239,20 +251,24 @@ class CredentialRepository:
         (a revoked row stays revoked). Any issuance failure rolls the whole
         transaction back, leaving the old credential active.
         """
-        row = await self._session.get(CredentialRow, credential_id)
+        row = await self._session.scalar(
+            select(CredentialRow)
+            .where(CredentialRow.credential_id == credential_id)
+            .with_for_update()
+        )
         if row is None:
             return None
         revoked_at = now or datetime.now(UTC)
-        if row.status == "active":
-            row.status = "revoked"
-            row.revoked_at = revoked_at
-            await self._session.flush()
-        replaced_credential_id: str | None = row.credential_id
+        if row.status != "active" or (row.expires_at is not None and row.expires_at <= revoked_at):
+            return None
+        row.status = "revoked"
+        row.revoked_at = revoked_at
+        await self._session.flush()
         issued = await self.issue(row.principal_id, expires_at=expires_at, now=revoked_at)
         return IssuedAPIKey(
             credential=issued.credential,
             key=issued.key,
-            replaced_credential_id=replaced_credential_id,  # type: ignore[typeddict-item]
+            replaced_credential_id=row.credential_id,  # type: ignore[typeddict-item]
             secret_revealed=True,
         )
 
@@ -262,6 +278,7 @@ class IdempotencyOutcome:
     response_status: int
     resource_id: str
     replayed: bool
+    response_payload: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,10 +316,22 @@ class IdempotencyRepository:
         expires_at: datetime | None = None,
     ) -> IdempotencyBinding:
         created_at = now or datetime.now(UTC)
+        if binding == "at_least_24h":
+            minimum_expiry = created_at + timedelta(hours=24)
+            retained_until = max(expires_at or minimum_expiry, minimum_expiry)
+        elif binding == "principal_lifetime":
+            retained_until = None
+        else:
+            raise ValueError(f"unsupported idempotency binding: {binding}")
         row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
+        if row is not None and row.expires_at is not None and row.expires_at <= created_at:
+            await self._session.delete(row)
+            await self._session.flush()
+            row = None
         if row is None:
-            self._session.add(
-                IdempotencyRecordRow(
+            claim = (
+                postgres_insert(IdempotencyRecordRow)
+                .values(
                     scope=scope,
                     key_digest=key_digest,
                     payload_sha256=payload_sha256,
@@ -314,14 +343,21 @@ class IdempotencyRepository:
                         "response_status": outcome.response_status,
                         "resource_id": outcome.resource_id,
                         "replayed": False,
+                        "response_payload": outcome.response_payload,
                     },
                     created_at=created_at,
-                    expires_at=expires_at,
+                    expires_at=retained_until,
                     transition_count=1,
                 )
+                .on_conflict_do_nothing(index_elements=("scope", "key_digest"))
+                .returning(IdempotencyRecordRow.scope)
             )
-            await self._session.flush()
-            return IdempotencyBinding(outcome=outcome, replayed=False)
+            inserted = await self._session.scalar(claim)
+            if inserted is not None:
+                return IdempotencyBinding(outcome=outcome, replayed=False)
+            row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
+            if row is None:
+                raise RuntimeError("idempotency claim was not retained")
         if row.payload_sha256 != payload_sha256:
             raise IdempotencyConflictError(scope)
         stored = row.outcome
@@ -330,9 +366,24 @@ class IdempotencyRepository:
                 response_status=stored["response_status"],
                 resource_id=stored["resource_id"],
                 replayed=True,
+                response_payload=dict(stored.get("response_payload", {})),
             ),
             replayed=True,
         )
+
+    async def set_response_payload(
+        self,
+        *,
+        scope: str,
+        key_digest: str,
+        response_payload: dict[str, object],
+    ) -> None:
+        """Persist secret-free replay metadata after a successful transition."""
+        row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
+        if row is None:
+            raise LookupError("idempotency binding is absent")
+        row.outcome = {**row.outcome, "response_payload": response_payload}
+        await self._session.flush()
 
 
 class ResourceRepository:

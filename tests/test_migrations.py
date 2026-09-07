@@ -135,6 +135,60 @@ def test_authorization_denial_cause_is_nullable_but_constrained() -> None:
             )
 
 
+def test_control_read_denial_404_is_valid_but_other_404_denials_are_rejected() -> None:
+    insert = """INSERT INTO audit_events (
+      event_id, occurred_at, operation, action, stage, outcome, reason_code,
+      response_status, retryable, latency_ms, correlation, resource, redaction, content_state,
+      authoritative_acceptance, ordinary_result, exporter_result, authorization_denial_cause)
+    VALUES (%s, now(), %s, %s, 'authorization', 'denied', 'no_matching_grant', %s, false, 1,
+      '{}', %s, '{}', 'absent', 'accepted', 'released', 'not_attempted', 'resource_missing')"""
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            insert,
+            (
+                "00000000-0000-4000-8000-000000000089",
+                "principals.get",
+                "admin.read",
+                404,
+                '{"resource_type":"administrative_control"}',
+            ),
+        )
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              response_status, retryable, latency_ms, correlation, resource, redaction,
+              content_state, authoritative_acceptance, ordinary_result, exporter_result)
+            VALUES ('00000000-0000-4000-8000-000000000092', now(),
+              'principals.status.replace', 'admin.write', 'authorization', 'error',
+              'status_conflict', 409, false, 1, '{}',
+              '{"resource_type":"administrative_control"}', '{}', 'absent',
+              'accepted', 'released', 'not_attempted')"""
+        )
+        connection.rollback()
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(
+                insert,
+                (
+                    "00000000-0000-4000-8000-000000000090",
+                    "responses.create",
+                    "invoke",
+                    404,
+                    '{"resource_type":"llm_model"}',
+                ),
+            )
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(
+                insert,
+                (
+                    "00000000-0000-4000-8000-000000000093",
+                    "principals.get",
+                    "admin.read",
+                    404,
+                    None,
+                ),
+            )
+
+
 @pytest.mark.asyncio
 async def test_async_transaction_boundary() -> None:
     database = Database(DATABASE_URL)
@@ -176,3 +230,24 @@ def test_database_trigger_rejects_audit_updates_and_deletes() -> None:
             with pytest.raises(psycopg.errors.RaiseException), connection.transaction():
                 connection.execute(statement)
         assert connection.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 2
+
+
+def test_404_denial_evidence_prevents_fail_open_downgrade() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              response_status, retryable, latency_ms, correlation, resource, redaction,
+              content_state, authoritative_acceptance, ordinary_result, exporter_result,
+              authorization_denial_cause)
+            VALUES ('00000000-0000-4000-8000-000000000091', now(), 'principals.get',
+              'admin.read', 'authorization', 'denied', 'no_matching_grant', 404, false, 1,
+              '{}', '{"resource_type":"administrative_control"}', '{}', 'absent',
+              'accepted', 'released', 'not_attempted', 'resource_missing')"""
+        )
+        connection.commit()
+
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="cannot downgrade"):
+        command.downgrade(config, "20260902_04")

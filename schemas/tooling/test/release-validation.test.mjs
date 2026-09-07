@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { parse, stringify } from "yaml";
-import { assertEveryPublishedRelease, assertImmutableManifest, assertReleaseMetadata, runConsumer, validateCompatibility, validateCoverage, validatePublishedReleases, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
+import { assertEveryPublishedRelease, assertImmutableManifest, assertReleaseMetadata, runConsumer, validateRelease, validateCompatibility, validateCoverage, validatePublishedReleases, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
 
 test("consumer coverage pins every owner, fixture, command, and non-authority boundary", async () => { const result = await validateCoverage(); assert.equal(result.consumers.consumers.length, 6); assert.equal(result.suite.obligations.length, 6); });
 test("coverage rejects YAML command substitution without executing it", async () => {
@@ -54,4 +54,27 @@ test("published release validation discovers deterministically and rejects inval
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+
+test("2.0.0 keeps /v1 while pinning status, hidden reads, and rotation response schemas", async () => {
+  const result = await validateRelease("2.0.0");
+  assert.ok(result.artifacts > 0);
+  const control = parse(await readFile(new URL("../../releases/2.0.0/openapi/control-plane.yaml", import.meta.url), "utf8"));
+  assert.equal(control.info.version, "2.0.0");
+  assert.ok(Object.keys(control.paths).every((path) => path.startsWith("/v1/")));
+  const status = control.paths["/v1/principals/{id}/status"].put;
+  assert.equal(status.requestBody.content["application/json"].schema.$ref, "#/components/schemas/PrincipalStatusReplace");
+  assert.ok(status.responses["409"]);
+  for (const route of [control.paths["/v1/principals"].get, control.paths["/v1/principals/{id}"].get]) {
+    assert.ok(route.responses["404"]);
+    assert.equal(route.responses["403"], undefined);
+  }
+  const rotation = control.paths["/v1/credentials/{id}/rotation"].post;
+  assert.equal(rotation.responses["201"].content["application/json"].schema.$ref, "urn:sre-agent:schema:credential-rotation:2.0.0");
+  assert.equal(rotation.responses["409"].$ref, "#/components/responses/RotationConflict");
+  assert.deepEqual(control.components.responses.RotationConflict.content["application/json"].schema.oneOf, [
+    { $ref: "urn:sre-agent:schema:credential-rotation:2.0.0" },
+    { $ref: "urn:sre-agent:schema:error-envelope:2.0.0" },
+  ]);
 });

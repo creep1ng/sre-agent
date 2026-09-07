@@ -38,7 +38,7 @@ def create_application(
             shared_provider_client, api_key=runtime_settings.openrouter_api_key
         )
 
-    application = FastAPI(title="SRE Agent", version="0.1.0")
+    application = FastAPI(title="SRE Agent", version="2.0.0")
     application.include_router(health.health_router(probe))
     application.state.planes = (control, incident, harness)
     application.state.session_provider = database.sessions

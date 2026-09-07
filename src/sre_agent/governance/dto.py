@@ -25,6 +25,8 @@ ReasonCode = Literal[
     "redaction_failed",
     "redaction_uncertain",
     "routing_unavailable",
+    "resource_not_found",
+    "status_conflict",
     "upstream_failed",
     "upstream_invalid",
     "upstream_unavailable",
@@ -342,7 +344,7 @@ class AuditEvent(StrictDTO):
             self.stage != "authorization"
             or self.outcome != "denied"
             or self.reason_code != "no_matching_grant"
-            or self.response_status != 403
+            or self.response_status not in {403, 404}
             or not isinstance(self.policy_decision, DenyDecisionEvidence)
         ):
             raise ValueError("authorization denial cause requires an authorization deny")
