@@ -28,6 +28,26 @@ and deterministic checks; when set, Compose passes it only to `api`. Set
 `OPENROUTER_TIMEOUT_SECONDS` between 0 and 120 seconds. The seed, contract harness, deterministic
 issue-14 harness, and live-smoke client never receive the provider secret.
 
+## Idempotency-Key for client mutations
+
+`Idempotency-Key` is a client-owned request header for each mutating `POST`. It is **not** an
+`.env` setting, API credential, or secret.
+
+1. Generate a fresh key for each logical mutation, for example:
+
+   ```bash
+   python -c 'import uuid; print(uuid.uuid4())'
+   ```
+
+2. Send that value in the `Idempotency-Key` header. A UUID is a convenient valid value; keys
+   must contain 16–128 printable ASCII characters.
+3. Reuse the same key only when retrying the same request with the identical payload. The service
+   replays the original result without repeating the mutation.
+4. Never reuse the key with a different payload: the service returns `409 idempotency_conflict`.
+
+The key is scoped to the authenticated principal and target operation, so generate and retain it
+with the client request until that request has completed or no longer needs a retry.
+
 Migrate and seed are explicit one-shot operations. The API process never creates tables, runs
 Alembic, or seeds data at startup; readiness returns a sanitized `503` until its schema exists.
 An identical seed rerun prints `seed converged` and preserves stable IDs, counts, assignments,
