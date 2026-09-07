@@ -73,8 +73,8 @@ properties:
     required: [action, resource]
     properties:
       action:
-        const: run.approve
-        description: Canonical action resolved from approve_mitigation.
+        enum: [run.approve, run.command]
+        description: Canonical action resolved from the command by authorization.v1.yaml.
       resource:
         type: object
         additionalProperties: false
@@ -83,3 +83,38 @@ properties:
           type: { const: incident_workflow }
           id: { const: incident-response }
         description: Canonical stable workflow resource resolved from the run.
+
+allOf:
+  - if:
+      properties:
+        command: { const: propose_disposition }
+      required: [command]
+    then:
+      required: [disposition]
+      properties:
+        disposition:
+          type: string
+          enum: [dismiss, link, declare]
+    else:
+      properties:
+        disposition: { type: "null" }
+  - if:
+      properties:
+        command:
+          enum: [approve_mitigation, reject_mitigation]
+      required: [command]
+    then:
+      properties:
+        authorization:
+          properties:
+            action: { const: run.approve }
+  - if:
+      properties:
+        command:
+          enum: [request_changes, propose_disposition, escalate, cancel_run]
+      required: [command]
+    then:
+      properties:
+        authorization:
+          properties:
+            action: { const: run.command }

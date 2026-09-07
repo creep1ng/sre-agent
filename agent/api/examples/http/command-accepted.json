@@ -1,0 +1,59 @@
+{
+  "summary": "Accepts an authorized human command.",
+  "value": {
+    "run_id": "run_a1b2c3d4e5",
+    "incident_id": "inc-otel-payment-failure",
+    "workflow_version": "1.0.0",
+    "status": "awaiting_human",
+    "current_state": "mitigating",
+    "pending_command": "approve_mitigation",
+    "cursor": "seq:7",
+    "terminated_reason": null,
+    "updated_at": "2026-08-24T14:20:00Z"
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs/run_a1b2c3d4e5/commands",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Idempotency-Key": "approve-otel-payment-failure-001"
+      },
+      "body": {
+        "command": "approve_mitigation",
+        "actor": "human",
+        "actor_reference": {
+          "reference_version": "1.0.0",
+          "principal_id": "demo-human",
+          "display_name": "On-call engineer"
+        },
+        "turn_id": "turn_a1b2c3d4",
+        "comment": "Confirmed the flag rollback plan.",
+        "authorization": {
+          "action": "run.approve",
+          "resource": {
+            "type": "incident_workflow",
+            "id": "incident-response"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 202,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "run_id": "run_a1b2c3d4e5",
+        "incident_id": "inc-otel-payment-failure",
+        "workflow_version": "1.0.0",
+        "status": "awaiting_human",
+        "current_state": "mitigating",
+        "pending_command": "approve_mitigation",
+        "cursor": "seq:7",
+        "terminated_reason": null,
+        "updated_at": "2026-08-24T14:20:00Z"
+      }
+    }
+  }
+}

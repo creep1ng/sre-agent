@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/incidents/inc-otel-payment-failure/runs/run_a1b2c3d4e5/commands",
+    "request_id": "77777777-7777-4777-8777-777777777777",
+    "authenticated_principal_id": "demo-human",
+    "body": {
+      "command": "approve_mitigation",
+      "actor": "human",
+      "actor_reference": { "reference_version": "1.0.0", "principal_id": "demo-human" },
+      "authorization": {
+        "action": "run.approve",
+        "resource": { "type": "incident_workflow", "id": "incident-response" }
+      }
+    }
+  },
+  "outcome": "allow",
+  "event": {
+    "event_id": "evt_00000007",
+    "kind": "human_command",
+    "sequence": 7,
+    "actor": { "type": "human", "reference": { "reference_version": "1.0.0", "principal_id": "demo-human" } },
+    "request_id": "77777777-7777-4777-8777-777777777777",
+    "occurred_at": "2026-08-24T14:21:00Z"
+  },
+  "internal_audit_metadata": {
+    "request_id": "77777777-7777-4777-8777-777777777777",
+    "incident_id": "inc-otel-payment-failure",
+    "run_id": "run_a1b2c3d4e5"
+  }
+}

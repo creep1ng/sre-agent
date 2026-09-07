@@ -22,6 +22,10 @@ from validate_run_api import (  # noqa: E402
     SCHEMAS,
     _unclosed_object_paths,
     build_validator,
+    check_decision_correlation,
+    check_http_fixtures,
+    check_openapi,
+    external_schema_registry,
     load_yaml,
     validate,
 )
@@ -45,6 +49,38 @@ def test_every_contract_check_passes() -> None:
 def test_four_run_endpoints_exist(openapi: dict) -> None:
     """Criterion: start/resume, state, commands and events endpoints are defined."""
     assert REQUIRED_PATHS <= set(openapi["paths"])
+
+
+def test_resume_returns_the_existing_run_with_200() -> None:
+    """Resumption is not creation: the response keeps the requested run identity."""
+    import json
+
+    fixture = json.loads(
+        (REPOSITORY_ROOT / "agent/api/examples/http/start-resume.json").read_text(encoding="utf-8")
+    )["x-http-mock"]
+    assert fixture["response"]["status"] == 200
+    assert fixture["request"]["body"]["resume_from_run_id"] == fixture["response"]["body"]["run_id"]
+
+
+@pytest.mark.parametrize(
+    ("ref", "expected_error"),
+    [
+        ("urn:sre-agent:schema:run-state:not-semver", "schema URN is malformed"),
+        ("urn:sre-agent:schema:missing:1.0.0", "absent from the local registry"),
+        ("./examples/http/missing.json", "external example reference is missing"),
+    ],
+)
+def test_openapi_rejects_bad_external_references(
+    openapi: dict, schemas: dict, ref: str, expected_error: str
+) -> None:
+    registry, errors = external_schema_registry(schemas)
+    assert errors == []
+    mutated = deepcopy(openapi)
+    content = mutated["paths"]["/v1/incidents/{incident_id}/runs"]["post"]["responses"]["201"][
+        "content"
+    ]["application/json"]
+    content["examples"]["created"] = {"$ref": ref}
+    assert any(expected_error in error for error in check_openapi(registry, mutated))
 
 
 def test_start_and_command_are_idempotent(openapi: dict) -> None:
@@ -104,14 +140,51 @@ def test_events_never_stream_secrets(schemas: dict) -> None:
     assert "arguments" not in event_props
 
 
-def test_human_authorization_matches_canonical_vocabulary(schemas: dict) -> None:
-    """The command assertion is closed over the canonical parent authorization tuple."""
-    auth = schemas["run-command"]["properties"]["authorization"]
+def test_human_authorization_matches_every_catalog_command(schemas: dict) -> None:
+    """Each command accepts only the action resolved by the canonical catalog."""
+    authorization = load_yaml(REPOSITORY_ROOT / "agent/api/authorization.v1.yaml")
+    command_schema = schemas["run-command"]
+    auth = command_schema["properties"]["authorization"]
     assert set(auth["required"]) == {"action", "resource"}
-    assert auth["properties"]["action"]["const"] == "run.approve"
-    resource = auth["properties"]["resource"]
-    assert resource["properties"]["type"]["const"] == "incident_workflow"
-    assert resource["properties"]["id"]["const"] == "incident-response"
+    assert set(auth["properties"]["action"]["enum"]) == set(
+        authorization["command_action_map"].values()
+    )
+
+    validator = build_validator(command_schema)
+    identity = {"reference_version": "1.0.0", "principal_id": "demo-human"}
+    resource = {"type": "incident_workflow", "id": "incident-response"}
+    for command, action in authorization["command_action_map"].items():
+        payload = {
+            "command": command,
+            "actor": "human",
+            "actor_reference": identity,
+            "authorization": {"action": action, "resource": resource},
+        }
+        if command == "propose_disposition":
+            payload["disposition"] = "link"
+        assert validator.is_valid(payload), command
+        payload["authorization"] = {
+            "action": "run.command" if action == "run.approve" else "run.approve",
+            "resource": resource,
+        }
+        assert not validator.is_valid(payload), command
+
+
+def test_disposition_is_exclusive_to_propose_disposition(schemas: dict) -> None:
+    validator = build_validator(schemas["run-command"])
+    identity = {"reference_version": "1.0.0", "principal_id": "demo-human"}
+    proposed = {"command": "propose_disposition", "actor": "human", "actor_reference": identity}
+    assert not validator.is_valid(proposed)
+    assert not validator.is_valid(proposed | {"disposition": None})
+    assert validator.is_valid(proposed | {"disposition": "declare"})
+    assert not validator.is_valid(
+        {
+            "command": "escalate",
+            "actor": "human",
+            "actor_reference": identity,
+            "disposition": "link",
+        }
+    )
 
 
 def test_runtime_api_is_not_implemented_yet() -> None:
@@ -282,6 +355,7 @@ def test_safe_projection_objects_are_structurally_closed(projection: dict) -> No
     mutated = deepcopy(load_yaml(REPOSITORY_ROOT / "agent/schemas/run-event.schema.yaml"))
     mutated["$defs"]["event"].pop("additionalProperties")
     assert "$/$defs/event" in _unclosed_object_paths(mutated)
+    assert "$" in _unclosed_object_paths({"properties": {"public": {"type": "string"}}})
 
 
 def test_projection_walk_reaches_nested_properties() -> None:
@@ -315,3 +389,49 @@ def test_every_allowed_field_is_actually_used(projection: dict) -> None:
         _declared_property_names(load_yaml(REPOSITORY_ROOT / relative), used)
     unused = set(projection["safe_projection"]["allowed_fields"]) - used
     assert not unused, f"allow-list grants unused fields: {sorted(unused)}"
+
+
+def test_decision_events_require_correlation_and_identity(schemas: dict) -> None:
+    """Human commands and denials are attributable; generic system events stay valid."""
+    validator = build_validator(schemas["run-event"])
+    page = {
+        "events": [
+            {
+                "event_id": "evt_00000001",
+                "kind": "human_command",
+                "sequence": 0,
+                "occurred_at": "2026-08-24T14:10:00Z",
+            }
+        ],
+        "next_cursor": "seq:1",
+        "has_more": False,
+    }
+    assert not validator.is_valid(page)
+    page["events"][0] |= {
+        "request_id": "3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f",
+        "actor": {
+            "type": "human",
+            "reference": {"reference_version": "1.0.0", "principal_id": "demo-human"},
+        },
+    }
+    assert validator.is_valid(page)
+    page["events"][0]["actor"]["reference"] = None
+    assert not validator.is_valid(page)
+
+    page["events"] = [
+        {
+            "event_id": "evt_00000002",
+            "kind": "state_change",
+            "sequence": 1,
+            "occurred_at": "2026-08-24T14:11:00Z",
+        }
+    ]
+    assert validator.is_valid(page)
+
+
+def test_static_mocks_and_decision_correlation_are_executable(schemas: dict) -> None:
+    registry, errors = external_schema_registry(schemas)
+    assert errors == []
+    assert "urn:sre-agent:schema:error-envelope:2.0.0" in registry
+    assert check_http_fixtures(registry) == []
+    assert check_decision_correlation(schemas) == []

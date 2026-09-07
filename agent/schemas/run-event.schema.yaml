@@ -90,6 +90,22 @@ $defs:
       occurred_at:
         type: string
         format: date-time
+
+    # Human commands and authorization denials are externally correlated decisions.
+    # Generic system events remain compatible with historical metadata-only entries.
+    allOf:
+      - if:
+          properties:
+            kind: { enum: [human_command, denial] }
+          required: [kind]
+        then:
+          required: [request_id, actor]
+          properties:
+            request_id: { type: string, format: uuid }
+            actor:
+              required: [type, reference]
+              properties:
+                reference: { $ref: '#/$defs/actorReference' }
   actorReference:
     description: >-
       Concrete identity of the actor, versioned so it can grow without breaking the

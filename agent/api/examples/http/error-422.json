@@ -1,0 +1,39 @@
+{
+  "summary": "Reports a contract-invalid start request.",
+  "value": {
+    "error": {
+      "code": "validation_error",
+      "message": "The request did not satisfy the run contract."
+    },
+    "request_id": "55555555-5555-4555-8555-555555555555",
+    "retryable": false
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs",
+      "headers": {
+        "Authorization": "Bearer fixture-token",
+        "Idempotency-Key": "invalid-start-contract-001"
+      },
+      "body": {
+        "workflow_version": "9.9.9",
+        "objective": "investigate"
+      }
+    },
+    "response": {
+      "status": 422,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "validation_error",
+          "message": "The request did not satisfy the run contract."
+        },
+        "request_id": "55555555-5555-4555-8555-555555555555",
+        "retryable": false
+      }
+    }
+  }
+}
