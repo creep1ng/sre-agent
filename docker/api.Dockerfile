@@ -21,6 +21,8 @@ RUN apt-get update \
 COPY tests ./tests
 COPY scripts ./scripts
 COPY schemas ./schemas
+COPY public ./public
+COPY styles ./styles
 COPY agent ./agent
 COPY docs ./docs
 COPY .github ./.github
