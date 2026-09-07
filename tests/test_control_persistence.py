@@ -27,6 +27,7 @@ DATABASE_URL = os.environ.get(
 @pytest.fixture(scope="module", autouse=True)
 def control_persistence_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
             "principals, idempotency_records, alembic_version CASCADE"

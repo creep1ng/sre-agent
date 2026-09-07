@@ -37,6 +37,7 @@ AUDIT_KEY = "audit-key-must-not-persist"
 @pytest.fixture(scope="module", autouse=True)
 def responses_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
             "principals, idempotency_records, alembic_version CASCADE"

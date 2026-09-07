@@ -46,6 +46,7 @@ RELEASE = Path(__file__).parents[1] / "schemas/releases/2.0.0/json-schema"
 def migrated_acceptance_database() -> None:
     """Use only the dedicated database, never another test suite's database."""
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
             "principals, idempotency_records, alembic_version CASCADE"
