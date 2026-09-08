@@ -1,0 +1,54 @@
+name: PR governance
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, closed]
+  issue_comment:
+    types: [created, edited, deleted]
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+# All runs reconcile ALL open PRs, including events coalesced by concurrency.
+# Scheduled reconciliation also observes base advances and revoked permissions.
+concurrency:
+  group: pr-governance-reconcile
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      # Required to attach a result to the PR HEAD, not the target event's base SHA.
+      statuses: write
+    steps:
+      - name: Resolve trusted default branch
+        id: trusted
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const { data: repo } = await github.rest.repos.get(context.repo);
+            const { data: commit } = await github.rest.repos.getCommit({
+              ...context.repo, ref: repo.default_branch,
+            });
+            core.setOutput('sha', commit.sha);
+      - name: Load only trusted policy, never PR code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ steps.trusted.outputs.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/governance
+      - name: Reconcile evidence and size
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const { run } = require('./.github/governance/pr-evidence.cjs');
+            await run({ github, context, core });
