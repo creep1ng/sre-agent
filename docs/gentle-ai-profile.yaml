@@ -1,0 +1,63 @@
+# This is a project documentation manifest, not a native Gentle AI profile schema.
+# It records the team baseline evaluated for this repository. Individual harnesses
+# retain their own configuration formats and must not consume this file directly.
+manifest: sre-agent-team-gentle-ai-baseline
+manifest_version: 1
+evaluated_gentle_ai_version: "2.5.0"
+release_channel: stable
+
+verification:
+  installed_version: "gentle-ai version"
+  available_commands: "gentle-ai --help"
+  installation_preview: "gentle-ai install --scope workspace --dry-run"
+  health_diagnostic: "gentle-ai doctor"
+
+shared:
+  artifact_store: openspec
+  sdd_orchestrator_mode: multi
+  review_mode: opt-in
+  required_pr_evidence:
+    - screenshot
+    # Temporary policy until durable media storage is available; never use a fabricated URL.
+    - video_or_documented_storage_deferral
+    - reproducible_commands
+    - tested_sha_and_environment
+  pr_reproduction_policy: >-
+    Contributor-facing PR reproduction commands use Docker Compose or docker run.
+    Host package-manager commands are not acceptable; tools run inside containers.
+    This does not prescribe internal GitHub Actions runner commands.
+  skill_inventory:
+    - name: sdd-propose
+      purpose: Capture a durable change proposal.
+    - name: sdd-spec
+      purpose: Define verifiable requirement scenarios.
+    - name: sdd-design
+      purpose: Record implementation decisions before build work.
+    - name: sdd-tasks
+      purpose: Break an approved change into executable work.
+    - name: sdd-apply
+      purpose: Implement approved SDD tasks.
+    - name: sdd-verify
+      purpose: Prove implemented behavior against the change artifacts.
+    - name: sdd-archive
+      purpose: Sync accepted change deltas into the durable specification.
+    - name: issue-creation
+      purpose: Create evidence-based GitHub issues.
+    - name: branch-pr
+      purpose: Prepare issue-linked, reviewable pull requests.
+    - name: work-unit-commits
+      purpose: Keep commits aligned with reviewable work units.
+    - name: cognitive-doc-design
+      purpose: Produce scannable guides and review evidence.
+
+personal_or_harness_specific:
+  - API tokens, credentials, and local secret files.
+  - Model/provider selection and agent-specific preferences.
+  - Editor, terminal, browser, and local harness adapters.
+  - User-owned receipt-driven-development activation state.
+
+upgrade_rule: >-
+  This inventory is version-bound. Before changing the evaluated Gentle AI version,
+  rerun the verification commands, review command and skill changes, and update this
+  manifest plus docs/team-workflow.md. Do not infer a native profile format or command
+  from this documentation manifest.

@@ -4,10 +4,10 @@ context: |
   Project: sre-agent
   OpenSpec is the authoritative store for SDD artifacts.
   Execution mode: interactive.
-  Current implementation: framework-agnostic HTML, CSS, and browser JavaScript design-system catalog; no product backend, persistence, containers, CI, or project test runner exists yet.
-  Backend direction for downstream issues: Python, FastAPI, and Pydantic; issue #9 remains contract-first and does not implement them.
-  MVP governance: single workspace; Principal kind is human or agent; API-key authentication; direct principal-action-resource grants; absence of a grant denies access.
+  Current implementation: Python 3.12 FastAPI application with PostgreSQL persistence, Alembic migrations, Docker Compose services, static web catalog, GitHub Actions CI, Python/Node/browser/Compose checks, and versioned JSON Schema/OpenAPI contracts.
+  Architecture: sre_agent.application.create_application is the composition root. Control, incident, harness, and gateway packages are separate planes; schemas/releases remains the immutable contract authority.
+  MVP governance: single workspace; Principal kind is human or agent; API-key authentication; direct principal-action-resource grants; absence of a grant denies access. Governed responses authorize before provider routing and persist metadata-only audit evidence.
   Shared contract location: /schemas at the repository root.
-  Contract versioning: follow the Semantic Versioning 2.0.0 standard; initial contract version is 1.0.0.
-  Testing: strict TDD is disabled until the repository has an executable project test runner; contract fixtures and validation remain required when introduced.
-  Delivery: force-chained using stacked-to-main; the ordinary limit is at most 400 changed lines per review slice, while 800 is a session ceiling allowed only with explicit approval and `size:exception` when applicable.
+  Contract versioning: follow Semantic Versioning 2.0.0; the current runtime contract version is 2.0.0, and historical releases remain immutable.
+  Testing: an executable test runner exists. Run the relevant repository checks before delivery; contract fixtures and validation are required when contracts change.
+  Delivery: select direct work only for small, understood changes without unresolved behavior, contract, or design decisions. Use SDD for durable decisions. Every pull request requires issue traceability, reproducible commands, tested SHA/environment, video, image, sanitized evidence, and human review. The ordinary review limit is 400 added plus deleted lines; `size:exception` requires documented identified-maintainer approval and never waives other requirements.
