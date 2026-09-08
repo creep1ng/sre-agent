@@ -1,9 +1,9 @@
 # Issue 183 local validation record
 
-This is configuration verification, not hosted CI, peer acceptance or a live
-merge-blocking demonstration. The implementation baseline is integrated main
-`a21d8914cafbf2a291d78b1ac641726b48f12501`. No public contract or migration was changed. The expanded CI slice adds only browser harness adjustments and new control configuration/tests; it does not alter application behavior. Changes remain uncommitted in the
-`codex/issue-183-governance` worktree at the time of this record.
+This records configuration verification and a narrow hosted-CI failure/recovery;
+it is not peer acceptance or a live merge-blocking demonstration. The implementation baseline is integrated main
+`a21d8914cafbf2a291d78b1ac641726b48f12501`. No public contract or migration was changed. The expanded CI slice adds only browser harness adjustments and new control configuration/tests; it does not alter application behavior. The pre-publication candidate was prepared in the
+`codex/issue-183-governance` worktree.
 
 ## Executed locally
 
@@ -31,7 +31,7 @@ The expanded CI controls were validated as configuration and local boundary chec
 | Survivor disposition | Initial safe IDs `evaluate__mutmut_6`, `_7`, `_19`, `_20`, `_21`, `_22` replaced exact resource type/id or grant principal/action/resource lookup arguments with `None`. They exposed missing assertions of the existing reader-contract identity, not new behavior. The test double now records exact arguments; corrected rerun killed all six. |
 | Final checks-image boundary subset | Lock check, Import Linter and scoped mypy pass; `37 passed` for runtime, copied-candidate import, mutation configuration and authorization tests after the correction |
 | Static showcase browser smoke | Verifier: `2 passed` of 2; production-only API seam and proxy specs are excluded from this static server lane. |
-| Production-image browser control | Verifier: `4 passed`; API image `d94acf…550f`, web image `42a6e5…3261`, zero API/web source mounts, zero host ports, and scoped cleanup left zero resources. |
+| Production-image browser control | Hosted run `34274635594` initially found two host-only fixture assumptions (2 passed, 2 failed). The correction was rerun once with CI-equivalent ephemeral inputs: `4 passed`; API/web were candidate images, API/web had zero source mounts and host ports, and scoped cleanup removed its containers, network and volume. The production topology asserts the seeded unprivileged demo's concealed 404; revoked-credential and forwarded-header assertions stay in the host harness. |
 | YAML parsing and `git diff --check` | Pass |
 
 The temporary harness lives outside the repository at `/tmp/issue183-pilot.cjs`.

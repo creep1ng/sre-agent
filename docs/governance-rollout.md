@@ -7,10 +7,10 @@ publication instead of assuming another task's work has landed.
 
 ## Deployment state
 
-- Shared workflow, evidence template, metadata policy, locked images, import/type gates, production-image browser stage and diagnostics: implemented in the worktree. Local verification includes the static browser lane (2/2), production-image browser lane (4 tests) with no API/web source mounts or host ports, and a bounded authorization mutation run (83/83 killed); none is yet published or proved in hosted Actions.
+- Shared workflow, evidence template, metadata policy, locked images, import/type gates, production-image browser stage and diagnostics: published as a draft PR stack. Local verification includes the static browser lane (2/2), production-image browser lane (4/4) with no API/web source mounts or host ports, and a bounded authorization mutation run (83/83 killed); hosted checks are pilot evidence, not active merge protection.
 - Native GitHub secret scanning and push protection: enabled with API readback.
 - Required quality/evidence checks, stale-approval dismissal and governance review:
-  **enforcement partial**, pending publication and the live pilot below.
+  **enforcement partial**, pending administrative activation after the live pilot.
 - Team onboarding, responsible reviewers and estimation: human coordination remains
   required. Keep assignees/labels in GitHub, SP and capacity in Projects, and
   dependencies in native `blocked by`/`blocks`; do not invent planning metadata.
@@ -21,7 +21,7 @@ silently expand who may integrate. Neither ruleset was changed in this delivery.
 
 ## Publish in reviewable work units
 
-The current worktree totals **3,060 additions + 257 deletions = 3,317 changed
+The current worktree totals **3,082 additions + 270 deletions = 3,352 changed
 lines across 34 files**, including untracked files. Count again against each PR
 base before publication. Use these cohesive slices; every slice except the locked
 dependency slice is at or below 400 changed lines.
@@ -34,7 +34,7 @@ dependency slice is at or below 400 changed lines.
 | 4 | CI control inventory | 120 | Documentation-only inventory for later CI slices |
 | 5 | Locked runtime/check dependencies | 1,286 | `uv.lock` contributes 1,154 lines; includes the 6-line pinned database-image hunks and the minimum checks-image configurations that Docker copies |
 | 6 | Import-boundary regression proof | 86 | Depends on 5, which supplies the copied Import Linter configuration |
-| 7 | Production-image browser topology | 95 | Depends on 5; includes the 51-line `compose.yaml` E2E hunks, runner and browser seams |
+| 7 | Production-image browser topology | 130 | Depends on 5; includes the 52-line `compose.yaml` E2E hunks, runner and browser seams |
 | 8 | Mandatory CI DAG and final gate | 373 | Depends on 5–7; workflow integration and its container-interface regression proof |
 | 9 | Informational diagnostics | 357 | Depends on 5; separate Node/Python audits, coverage and authorization mutation reporting |
 | 10 | Pilot record and rollout | 207 | Depends on completed local/hosted evidence; documentation only |
