@@ -1,0 +1,21 @@
+{
+  "theme": "neutral",
+  "themeVariables": {
+    "fontFamily": "Arial"
+  },
+  "flowchart": {
+    "useMaxWidth": false,
+    "htmlLabels": false,
+    "nodeSpacing": 22,
+    "rankSpacing": 30,
+    "curve": "linear"
+  },
+  "journey": {
+    "useMaxWidth": false,
+    "diagramMarginX": 24,
+    "diagramMarginY": 24,
+    "width": 150,
+    "height": 70,
+    "taskMargin": 26
+  }
+}
