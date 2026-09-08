@@ -1,0 +1,9 @@
+# E2E joins only the project-scoped Compose network. It deliberately removes
+# host port publishing so concurrent local work cannot be reached or disrupted.
+services:
+  db:
+    ports: !reset []
+  api:
+    ports: !reset []
+  web:
+    ports: !reset []

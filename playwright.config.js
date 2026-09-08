@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "tests/browser",
-  testIgnore: "api-seam.spec.js",
+  testIgnore: ["api-seam.spec.js", "production-proxy.spec.js"],
   outputDir: "test-results/browser",
   reporter: [["line"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {

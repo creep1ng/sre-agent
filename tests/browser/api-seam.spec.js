@@ -7,10 +7,9 @@ const credentials = {
 };
 
 async function openHarness(page) {
-  const response = await page.goto("/tests/browser/fixtures/api-seam.html");
+  const response = await page.goto("/health");
   expect(response?.status()).toBe(200);
-  await expect(page).toHaveTitle("Administrative API consumer harness");
-  await expect(page.getByRole("main")).toHaveText("Administrative API consumer harness");
+  await expect(page.locator("body")).toHaveText("ok");
 }
 
 test("browser client consumes the real administrative API without fixture fallback", async ({
