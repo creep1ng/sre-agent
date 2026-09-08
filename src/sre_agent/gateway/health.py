@@ -6,6 +6,7 @@ import psycopg
 from fastapi import APIRouter, Response, status
 
 ReadinessProbe = Callable[[], Awaitable[None]]
+REQUIRED_SCHEMA_VERSION = "20260907_06"
 
 
 def postgres_readiness_probe(database_url: str) -> ReadinessProbe:
@@ -15,7 +16,7 @@ def postgres_readiness_probe(database_url: str) -> ReadinessProbe:
             async with connection.cursor() as cursor:
                 await cursor.execute("SELECT version_num FROM alembic_version")
                 row = await cursor.fetchone()
-                if row != ("20260907_05",):
+                if row != (REQUIRED_SCHEMA_VERSION,):
                     raise RuntimeError("PostgreSQL schema prerequisite is unavailable")
 
     return probe
