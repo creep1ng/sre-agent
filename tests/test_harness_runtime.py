@@ -66,13 +66,33 @@ def test_python_checks_uses_disposable_database_without_demo_dependency() -> Non
     assert "postgres_data" not in checks_db
 
 
-def test_ci_runs_the_documented_python_checks_command() -> None:
+def test_ci_and_documentation_use_the_containerized_checks_interface() -> None:
     command = "docker compose --profile checks run --build --rm python-checks"
     readme = (ROOT / "README.md").read_text()
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
 
     assert command in readme
-    assert f"run: {command}" in workflow
+    assert "--profile checks run --build --rm" in workflow
+    assert "python-checks" in workflow
+
+
+def test_checks_image_static_guard_has_distinct_synthetic_database_urls() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+
+    assert "TEST_DATABASE_URL=postgresql://python_checks@checks-db:5432/python_checks" in workflow
+    assert "DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo" in workflow
+
+
+def test_browser_configs_keep_static_and_production_suites_separate() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    production_config = (ROOT / "playwright.production.config.js").read_text()
+    static_config = (ROOT / "playwright.config.js").read_text()
+
+    assert "static-web:" in workflow
+    assert '"api-seam.spec.js"' in production_config
+    assert '"production-proxy.spec.js"' in production_config
+    assert "showcase.spec.js" not in production_config
+    assert 'testIgnore: ["api-seam.spec.js", "production-proxy.spec.js"]' in static_config
 
 
 @pytest.mark.parametrize(
