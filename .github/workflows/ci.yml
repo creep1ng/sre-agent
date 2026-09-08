@@ -58,6 +58,7 @@ jobs:
           --ignore=tests/test_responses.py
           --ignore=tests/test_openrouter_live.py
           --ignore=tests/test_control_persistence.py
+          --ignore=tests/test_incident_persistence.py
           --ignore=tests/test_control_acceptance.py
 
   contracts:
@@ -147,6 +148,7 @@ jobs:
           tests/test_audit.py
           tests/test_responses.py
           tests/test_control_persistence.py
+          tests/test_incident_persistence.py
           tests/test_control_acceptance.py
           --deselect=tests/test_responses.py::test_public_responses_credential_matrix
       - run: alembic check
