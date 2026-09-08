@@ -29,6 +29,8 @@ ENV = {
     "RESTRICTED_HARNESS_API_KEY": KEYS["restricted-harness"],
     "TRIAGE_AGENT_MODEL": "openai/gpt-4o-mini",
     "TRIAGE_AGENT_PROVIDER": "openai",
+    "REMEDIATION_AGENT_MODEL": "anthropic/claude-3.5-haiku",
+    "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 BODY = {"model": "triage-agent", "input": "sensitive incident prompt"}
 AUDIT_KEY = "audit-key-must-not-persist"
@@ -37,6 +39,7 @@ AUDIT_KEY = "audit-key-must-not-persist"
 @pytest.fixture(scope="module", autouse=True)
 def responses_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
             "principals, idempotency_records, alembic_version CASCADE"

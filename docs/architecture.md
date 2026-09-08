@@ -1,23 +1,26 @@
 # Runtime and persistence boundaries
 
-Issue 10 establishes the deployable FastAPI runtime. Issues 11–14 add PostgreSQL governance,
-bearer authentication, and one governed HT-01 response path without making ORM, DTO, or provider
-models authoritative.
+Issue 10 establishes the deployable FastAPI runtime. Later vertical slices add PostgreSQL
+governance, bearer authentication, administrative control, incident execution, and governed
+capabilities without making ORM, DTO, or provider models authoritative.
 
 ## Composition
 
 | Boundary | Python package | Current responsibility |
 | --- | --- | --- |
-| Control plane | `sre_agent.control` | Reserved boundary for governed configuration and administration |
-| Incident-resolution plane | `sre_agent.incident` | Reserved boundary for incident analysis and remediation |
-| Harness | `sre_agent.harness` | Contract and fixture execution boundary |
-| Gateway | `sre_agent.gateway` | Health, authentication, governed responses, provider and audit adapters |
+| Control plane | `sre_agent.control` | Authenticated and authorized administration of Principals and credentials; later catalog/grant surfaces remain separately owned |
+| Incident-resolution plane | `sre_agent.incident` | Workflow transitions, decisions, replay ports, and authoritative incident/run persistence |
+| Harness | `sre_agent.harness` | Incident conversation and capability-orchestration boundary; it is not part of the gateway |
+| Gateway | `sre_agent.gateway` | Health, authentication, capability authorization, governed responses, provider, and audit adapters |
 
 `sre_agent.application.create_application` is the only composition root:
 
 - `GET /health/live` is dependency-free and proves the Python process can serve requests.
-- `GET /health/ready` verifies that `alembic_version` contains revision `20260825_02`. Failures
-  return a fixed `503` response that excludes driver messages, DSNs, and credentials.
+- `GET /health/ready` verifies the exact Alembic revision required by the running build. The
+  current integrated baseline is `20260907_06`; every later schema migration must advance that
+  code-owned prerequisite in the same work unit. Failures return a fixed `503` response that
+  excludes driver messages, DSNs, and credentials.
+- The `/v1/principals` and `/v1/credentials` routes expose the real governed administrative API.
 - `POST /v1/responses` validates and authenticates before logical-resource authorization, resolves
   routing only after allow, makes at most one OpenRouter request, commits a protected terminal
   audit event, then releases the normalized result.
@@ -47,10 +50,12 @@ defaults, so source archives and local development remain buildable.
 
 ## Persistence ownership
 
-PostgreSQL contains exactly five domain tables: `principals`, `credentials`, `resources`,
-`grants`, and append-only `audit_events`; `alembic_version` is migration metadata. Repositories
-receive a caller-owned async session and flush or read only. The transaction owner decides when
-seed changes and accepted audit events commit.
+PostgreSQL owns governance tables (`principals`, `credentials`, `resources`, `grants`,
+`audit_events`, and control-plane idempotency records) plus the isolated `incident` schema for
+incidents, runs, decisions, events, snapshots, correlated text context, and transition commits.
+`alembic_version` is migration metadata, not a domain table. Governance repositories receive a
+caller-owned async session; incident repositories run behind their own unit-of-work boundary. The
+transaction owner decides when state and protected audit evidence commit.
 
 The application startup path only constructs the session provider. It does not create, migrate,
 or seed schema. Operators own the lifecycle explicitly:
@@ -65,8 +70,13 @@ docker compose --profile checks run --rm harness npm --prefix schemas/tooling ru
 Seed configuration comes only from the ignored `.env` file. Required names are
 `ADMIN_HUMAN_API_KEY`, `DEMO_HUMAN_API_KEY`, `INCIDENT_HARNESS_API_KEY`,
 `RESTRICTED_HARNESS_API_KEY`, `TRIAGE_AGENT_MODEL`, and `TRIAGE_AGENT_PROVIDER`; documentation
-must never carry functional API-key values. Seed validation happens before SQL. Exact state is a
-no-op, while partial or differing seed-owned state rolls back and reports only entity/field names.
+plus `REMEDIATION_AGENT_MODEL` and `REMEDIATION_AGENT_PROVIDER`; documentation must never carry
+functional API-key values. These values persist the `triage-agent` and `remediation-agent`
+assignments; both aliases use the same `/v1/responses` contract and each authorized invocation
+makes one provider attempt with fallback disabled. Seed validation happens before SQL. Exact state
+is a no-op, while partial or differing seed-owned state rolls back and reports only entity/field
+names. Routing drift is read safely with `--check-routing` and changed only through the explicit
+`--reconcile-routing` seed action under the seed transaction lock.
 
 ## Rollback boundaries
 
@@ -84,10 +94,11 @@ migration or restore plan. Audit history must not be rewritten to simplify rollb
 
 ## Verification path
 
-CI keeps the Python, contract, static-web, and Compose gates. The PostgreSQL job owns migrations,
-seeds, persistence, authentication, governed-response and audit suites; the contract job owns the
-immutable 1.2.0 release and issue-14 conformance. Compose smoke additionally runs the isolated
-recording-provider harness. Ordinary CI explicitly excludes the secret-gated live smoke.
+CI keeps the Python, contract, static-web, browser, and Compose gates. The PostgreSQL job owns
+migrations, seeds, persistence, authentication, administrative consumer, governed-response, and
+audit suites; the contract job owns every published immutable release and its conformance tests.
+Compose smoke additionally runs the isolated recording-provider harness. Ordinary CI explicitly
+excludes the secret-gated live smoke.
 
 The deterministic harness is authoritative for allow, 403 deny with zero provider calls,
 normalized failures, protected audit readback, and release gating. The separately named live smoke

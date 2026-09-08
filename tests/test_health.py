@@ -1,7 +1,12 @@
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
+from sre_agent.gateway.health import REQUIRED_SCHEMA_VERSION
 from sre_agent.settings import Settings
+
+
+def test_readiness_requires_the_latest_incident_store_migration() -> None:
+    assert REQUIRED_SCHEMA_VERSION == "20260907_06"
 
 
 def test_liveness_does_not_call_readiness_dependency() -> None:

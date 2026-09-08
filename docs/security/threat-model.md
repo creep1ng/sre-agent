@@ -17,7 +17,8 @@ Authoritative decisions: [ADR-004](../../schemas/adrs/ADR-004-grants.md),
 
 ## Assets
 
-- API-key credentials, principal identities, direct grants, and the `triage-agent` resource.
+- API-key credentials, principal identities, direct grants, and the `triage-agent` and
+  `remediation-agent` resources.
 - Response requests, provider outputs, and audit-event metadata.
 - The non-enumerating authorization result: `403 resource_unavailable`.
 

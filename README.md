@@ -18,7 +18,8 @@ docker compose up --build --wait
 
 The required seed inputs are `ADMIN_HUMAN_API_KEY`, `DEMO_HUMAN_API_KEY`,
 `INCIDENT_HARNESS_API_KEY`, `RESTRICTED_HARNESS_API_KEY`, `TRIAGE_AGENT_MODEL`, and
-`TRIAGE_AGENT_PROVIDER`. Each API key must be unique, begin with `sre_`, contain at least 32
+`TRIAGE_AGENT_PROVIDER`, plus `REMEDIATION_AGENT_MODEL` and
+`REMEDIATION_AGENT_PROVIDER`. Each API key must be unique, begin with `sre_`, contain at least 32
 characters, and have a unique first eight characters. The model uses `<lab>/<model>` syntax;
 the provider uses the HT-01 provider vocabulary. `.env.example` intentionally contains only
 nonfunctional placeholders.
@@ -97,11 +98,29 @@ does not expose its generation identifier; it emits its own `resp_...` identifie
 
 #### When a changed `.env` route does not take effect
 
-`TRIAGE_AGENT_MODEL` and `TRIAGE_AGENT_PROVIDER` initialize the persisted `triage-agent` route;
-the running gateway reads that route from PostgreSQL, not from a later `.env` edit. Re-running the
-strict seed deliberately reports a conflict rather than silently changing an existing route. Do
-not delete the database volume to force an update. Reconcile the expected old and new route with a
-reviewed, guarded maintenance update, then rebuild/restart the API.
+The triage and remediation model/provider settings initialize the persisted `triage-agent` and
+`remediation-agent` routes. The running gateway reads those routes from PostgreSQL, not from later
+`.env` edits. Check an existing database without printing model, provider, credentials, or payloads:
+
+```bash
+docker compose run --rm seed python -m sre_agent.persistence.seeds --check-routing
+```
+
+The command reports only logical aliases, differing field names, and a SHA-256 snapshot digest,
+then exits `2` on drift. The strict seed also fails rather than silently changing an existing
+route. After reviewing the local configuration, reconcile only seed-owned routing fields in the
+same serializable, advisory-locked transaction as the complete seed validation:
+
+```bash
+docker compose run --rm seed python -m sre_agent.persistence.seeds \
+  --reconcile-routing <digest-from-check>
+docker compose run --rm seed python -m sre_agent.persistence.seeds --check-routing
+```
+
+Reconciliation aborts if the persisted snapshot changed after the check; inspect it again rather
+than overwriting a concurrent operator change. Do not delete the database volume to force an
+update, and do not treat an API restart after editing `.env` as route reconciliation.
+Rebuild/restart the API only after the check reports `converged`.
 
 If OpenRouter resolves a requested model alias to a dated canonical model, the gateway performs one
 additional endpoint-catalog lookup and accepts the result only when the catalog proves the exact

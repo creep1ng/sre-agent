@@ -38,6 +38,8 @@ SEED_ENV = {
     "RESTRICTED_HARNESS_API_KEY": RESTRICTED_KEY,
     "TRIAGE_AGENT_MODEL": "openai/gpt-4o-mini",
     "TRIAGE_AGENT_PROVIDER": "openai",
+    "REMEDIATION_AGENT_MODEL": "anthropic/claude-3.5-haiku",
+    "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 RELEASE = Path(__file__).parents[1] / "schemas/releases/2.0.0/json-schema"
 
@@ -46,6 +48,7 @@ RELEASE = Path(__file__).parents[1] / "schemas/releases/2.0.0/json-schema"
 def migrated_acceptance_database() -> None:
     """Use only the dedicated database, never another test suite's database."""
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
             "principals, idempotency_records, alembic_version CASCADE"

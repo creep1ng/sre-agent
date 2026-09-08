@@ -23,12 +23,15 @@ ENV = {
     "RESTRICTED_HARNESS_API_KEY": "sre_rest_0123456789abcdefghijklmnop",
     "TRIAGE_AGENT_MODEL": "openai/gpt-4o-mini",
     "TRIAGE_AGENT_PROVIDER": "openai",
+    "REMEDIATION_AGENT_MODEL": "anthropic/claude-3.5-haiku",
+    "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 
 
 @pytest.fixture(scope="module", autouse=True)
 def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
             "principals, idempotency_records, alembic_version CASCADE"
@@ -72,13 +75,14 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         after = connection.execute(
             "SELECT credential_id, key_hash FROM credentials ORDER BY credential_id"
         ).fetchall()
-        grant = connection.execute(
-            "SELECT principal_id, action FROM grants WHERE action='invoke' ORDER BY grant_id"
-        ).fetchone()
-        resource = connection.execute(
-            "SELECT concrete_model, inference_provider FROM resources "
-            "WHERE resource_type='llm_model'"
-        ).fetchone()
+        grants = connection.execute(
+            "SELECT resource_id, principal_id, action FROM grants "
+            "WHERE action='invoke' ORDER BY resource_id"
+        ).fetchall()
+        resources = connection.execute(
+            "SELECT resource_id, concrete_model, inference_provider FROM resources "
+            "WHERE resource_type='llm_model' ORDER BY resource_id"
+        ).fetchall()
         admin_resources = connection.execute(
             "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
         ).fetchone()[0]
@@ -87,7 +91,7 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         ).fetchone()[0]
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 3, 5]
+    assert counts == [4, 4, 4, 6]
     assert admin_resources == 2
     assert admin_grants == 4
     assert before == after
@@ -102,8 +106,14 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         verify_api_key(ENV[name], by_id[f"credential-{principal}"])
         for name, principal in zip(KEY_ENV, seeded_principals, strict=True)
     )
-    assert grant == ("incident-harness", "invoke")
-    assert resource == ("openai/gpt-4o-mini", "openai")
+    assert grants == [
+        ("remediation-agent", "incident-harness", "invoke"),
+        ("triage-agent", "incident-harness", "invoke"),
+    ]
+    assert resources == [
+        ("remediation-agent", "anthropic/claude-3.5-haiku", "anthropic"),
+        ("triage-agent", "openai/gpt-4o-mini", "openai"),
+    ]
     assert all(secret not in stored for secret in ENV.values())
 
 
@@ -127,7 +137,7 @@ async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
     await database.dispose()
-    assert counts == [4, 4, 3, 5]
+    assert counts == [4, 4, 4, 6]
     assert admin_resources == 2
     assert admin_grants == 4
 
@@ -160,7 +170,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
         ).fetchone()
     assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
-    assert counts == (4, 5)
+    assert counts == (4, 6)
 
 
 @pytest.mark.asyncio

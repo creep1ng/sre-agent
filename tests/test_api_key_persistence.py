@@ -20,6 +20,7 @@ NOW = datetime(2026, 8, 24, 12, tzinfo=UTC)
 @pytest.fixture(scope="module")
 def persistence_database() -> Database:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
             "principals, idempotency_records, alembic_version CASCADE"
