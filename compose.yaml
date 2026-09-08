@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17.4-alpine
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -122,7 +122,7 @@ services:
 
   python-checks-db:
     profiles: ["checks"]
-    image: postgres:17.4-alpine
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
     environment:
       POSTGRES_DB: python_checks
       POSTGRES_USER: python_checks
@@ -154,7 +154,7 @@ services:
 
   issue-14-db:
     profiles: ["issue-14"]
-    image: postgres:17.4-alpine
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
     environment:
       POSTGRES_DB: sre_agent_issue14
       POSTGRES_USER: sre_agent

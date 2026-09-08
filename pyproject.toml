@@ -19,11 +19,17 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "coverage==7.16.0",
+  "import-linter==2.15",
   "jsonschema[format]==4.23.0",
+  "mutmut==3.7.0",
+  "mypy==2.3.1",
+  "pip-audit==2.10.1",
   "pytest==8.3.5",
   "pytest-asyncio==0.26.0",
   "pyyaml==6.0.3",
   "ruff==0.11.7",
+  "types-pyyaml==6.0.12.20260906",
 ]
 
 [tool.setuptools.packages.find]
@@ -40,3 +46,20 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+strict = true
+files = [
+  "src/sre_agent/incident/persistence.py",
+  "src/sre_agent/incident/runtime.py",
+  "src/sre_agent/governance/dto.py",
+  "src/sre_agent/governance/authorization.py",
+]
+
+[tool.mutmut]
+# Mutmut must copy the complete importable package tree; only this module is
+# eligible for mutations in the authorization diagnostic.
+source_paths = ["src"]
+only_mutate = ["src/sre_agent/governance/authorization.py"]
+pytest_add_cli_args_test_selection = ["tests/test_authorization.py"]

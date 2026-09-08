@@ -40,11 +40,16 @@ def test_all_repository_checks_have_containerized_compose_interfaces() -> None:
     assert "python-checks:" in compose
     assert "target: checks" in compose
     assert "./scripts:/source/scripts:ro" in compose
-    assert "FROM base AS checks" in dockerfile
+    assert "FROM runtime-dependencies AS checks" in dockerfile
+    assert "uv sync --locked --extra dev" in dockerfile
+    assert "COPY --from=runtime-dependencies /app/.venv /app/.venv" in dockerfile
     assert "COPY tests ./tests" in dockerfile
     assert "COPY agent ./agent" in dockerfile
     assert "COPY docs ./docs" in dockerfile
     assert "COPY .github ./.github" in dockerfile
+    copied_config_lines = [line for line in dockerfile.splitlines() if line.startswith("COPY ")]
+    assert any("playwright.config.js" in line for line in copied_config_lines)
+    assert any("playwright.production.config.js" in line for line in copied_config_lines)
     assert "docker compose --profile checks" in readme
 
 
