@@ -3,8 +3,9 @@ import { expect, test } from "@playwright/test";
 const credentials = {
   admin: process.env.ADMIN_HUMAN_API_KEY,
   restricted: process.env.RESTRICTED_HARNESS_API_KEY,
-  revoked: process.env.DEMO_HUMAN_API_KEY,
+  demo: process.env.DEMO_HUMAN_API_KEY,
 };
+const productionTopology = process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY === "1";
 
 async function openHarness(page) {
   const response = await page.goto("/health");
@@ -46,8 +47,8 @@ test("browser client consumes the real administrative API without fixture fallba
     const absent = await captured(() => client.listPrincipals());
     store.set("sre_invalid_0123456789abcdefghijklmnop");
     const invalid = await captured(() => client.listPrincipals());
-    store.set(keys.revoked);
-    const revoked = await captured(() => client.listPrincipals());
+    store.set(keys.demo);
+    const demo = await captured(() => client.listPrincipals());
 
     store.set(keys.restricted);
     const denied = await captured(() =>
@@ -78,7 +79,7 @@ test("browser client consumes the real administrative API without fixture fallba
       valid,
       absent,
       invalid,
-      revoked,
+      demo,
       denied,
       deniedDidNotAdvance,
       missing,
@@ -95,13 +96,18 @@ test("browser client consumes the real administrative API without fixture fallba
   expect(evidence.valid.value.items).toEqual(
     expect.arrayContaining([expect.objectContaining({ principal_id: "admin-human" })]),
   );
-  for (const result of [evidence.absent, evidence.invalid, evidence.revoked]) {
+  for (const result of [evidence.absent, evidence.invalid]) {
     expect(result.error).toMatchObject({
       kind: "authentication",
       status: 401,
       code: "authentication_failed",
     });
   }
+  expect(evidence.demo.error).toMatchObject(
+    productionTopology
+      ? { kind: "not_found", status: 404, code: "resource_not_found" }
+      : { kind: "authentication", status: 401, code: "authentication_failed" },
+  );
   expect(evidence.denied.error).toMatchObject({ kind: "authorization", status: 403 });
   expect(evidence.deniedDidNotAdvance.error).toMatchObject({ kind: "not_found", status: 404 });
   expect(evidence.missing.error).toMatchObject({ kind: "not_found", status: 404 });
@@ -193,14 +199,16 @@ test("client rejects cross-origin-normalized bases and invalid success bodies", 
 test("same-origin proxy rejects cross-site browser requests and ambient cookies", async ({
   request,
 }) => {
-  const forwarded = await request.get("/api/__test/forwarded-headers", {
-    headers: {
-      Cookie: "ambient-session=must-not-cross-the-seam",
-      Origin: "http://127.0.0.1:4173",
-    },
-  });
-  expect(forwarded.status()).toBe(200);
-  expect(await forwarded.json()).toEqual({ cookie: false, origin: false });
+  if (!productionTopology) {
+    const forwarded = await request.get("/api/__test/forwarded-headers", {
+      headers: {
+        Cookie: "ambient-session=must-not-cross-the-seam",
+        Origin: "http://127.0.0.1:4173",
+      },
+    });
+    expect(forwarded.status()).toBe(200);
+    expect(await forwarded.json()).toEqual({ cookie: false, origin: false });
+  }
 
   const response = await request.get("/api/v1/principals", {
     headers: {

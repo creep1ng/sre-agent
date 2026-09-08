@@ -211,6 +211,7 @@ services:
       dockerfile: docker/e2e.Dockerfile
     environment:
       PLAYWRIGHT_BASE_URL: http://web
+      PLAYWRIGHT_PRODUCTION_TOPOLOGY: "1"
       ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
