@@ -1,45 +1,99 @@
 # CI control inventory
 
-This inventory separates repository-owned gates from external checks and from proposed controls.
-It reflects `.github/workflows/ci.yml` and the pull-request checks observed on 2026-09-05.
+Issue #183 makes candidate verification reproducible without claiming that a
+local workflow is an active GitHub merge rule. `Quality gate` becomes enforceable
+only after the hosted pilot and administrative activation in
+[governance-rollout.md](governance-rollout.md).
 
-## Implemented controls
+## Required candidate path
 
-| Control | Ownership | Reproducible evidence | Cost profile |
-| --- | --- | --- | --- |
-| Python lint, format, and tests | Versioned workflow | `python` job: Ruff and database-independent Pytest | Python install plus test runtime |
-| Contract validation | Versioned workflow | `contracts` job: locked npm install, schema, OpenAPI, release, and conformance checks | Node install plus contract suite |
-| PostgreSQL behavior | Versioned workflow | `issue-11-postgresql` job: migrations, seeds, persistence tests, Alembic drift, conformance | Ephemeral database service and Python/Node installs |
-| Static web syntax/assets | Versioned workflow | `static-web` job | Node startup and file checks |
-| Integrated Compose smoke | Versioned workflow | `compose-smoke` job with teardown under `always()` | Image builds and service startup |
-| Secret scanning | External GitHub check | `GitGuardian Security Checks` appears separately on pull requests | External service; configuration is not versioned here |
-| Workflow hardening | Versioned workflow | `python scripts/validate_ci_hardening.py` | Negligible text inspection |
+Each required job has a timeout, Actions permissions are `contents: read`, and
+all actions use reviewed full SHAs. Pull requests stop before expensive stages
+when an earlier required stage fails; scheduled diagnostics retain `always()`
+paths for investigation. The final gate accepts only `success` from every
+required job; failed, cancelled, skipped, neutral, or missing work fails closed.
 
-Repository-owned jobs have explicit timeouts. Actions are pinned to full commit SHAs with semantic
-version comments. The workflow retains only `contents: read`, does not reference repository secrets,
-and groups runs by workflow plus PR number (or ref outside PRs). Thus a newer run replaces an older
-run for the same PR while different PR numbers remain distinct groups.
-
-## Action provenance
-
-The following commits were verified against tags in the official `actions/*` GitHub repositories
-using the Git references API on 2026-09-05:
-
-| Action | Pinned commit | Version tag |
+| Stage | Control | Boundary protected |
 | --- | --- | --- |
-| `actions/checkout` | `11d5960a326750d5838078e36cf38b85af677262` | `v4.4.0` |
-| `actions/setup-python` | `a26af69be951a213d495a4c3e4e4022e16d87065` | `v5.6.0` |
-| `actions/setup-node` | `49933ea5288caeca8642d1e84afbd3f7d6820020` | `v4.4.0` |
+| Configuration lock | Build the runtime image with `uv sync --locked --no-dev` | Manifest/lock drift and runtime dependency resolution |
+| Checks image | Ruff, `lint-imports`, scoped strict mypy, shell and declarative validators | Style, architecture imports, typed interfaces and contract metadata |
+| Unit and contracts | Locked Compose Python checks and Node harness | Application behavior and published schemas |
+| Compose smoke | Candidate API, web, database, migration, seed and harness | Startup and composed-service behavior |
+| Production browser | Containerized Playwright against the candidate API/web images and isolated PostgreSQL | Delivered image, proxy, network and browser behavior |
+| Quality gate | Candidate/head/base summary retained 30 days | No skipped or failed required stage becomes an approval |
 
-## Proposed gates (not implemented)
+The check image is separate from runtime. It owns Ruff, Import Linter, mypy,
+pip-audit and mutation tooling; the runtime image copies only the production
+virtual environment. Both images install Python dependencies from `uv.lock`.
+Python, Node, Nginx and PostgreSQL bases are version-tagged and digest-pinned;
+the Playwright runner is likewise pinned to the lockfile's `1.63.0` package.
 
-These are proposals, not current guarantees or required checks.
+### Architecture and typing controls
 
-| Gap | Baseline required before policy | Expected cost | Next step |
-| --- | --- | --- | --- |
-| Python and Node dependency audit | Record findings from pinned `pip-audit` and `npm audit` runs, including accepted advisories and lockfile scope | Registry/advisory network access and an additional install; likely tens of seconds | Run a non-blocking baseline, define update/exception ownership, then approve a separate blocking gate |
-| Python type checking | Select and pin a checker, then record errors over agreed production-module scope separately from tests | Checker install plus analysis; configuration and incremental cleanup | Produce a baseline report and ownership plan before deciding strictness or exclusions |
-| Python coverage | Measure combined database-independent and PostgreSQL suites with a pinned coverage tool | Instrumentation overhead, report combination, and artifact handling | Capture a stable branch baseline, agree measurement scope, then propose—not invent—a threshold |
+`.importlinter` rejects direct and indirect dependencies from `incident` or
+`governance` to concrete persistence, gateway, control or composition modules.
+It rejects persistence dependencies on delivery/composition, while allowing the
+persistence incident adapter to consume incident ports. Incident runtime and
+ports cannot bring FastAPI, SQLAlchemy or HTTP client dependencies across their
+boundary. YAML and Pydantic are deliberately not forbidden.
 
-GitGuardian is not duplicated by these proposals. No coverage threshold, type policy, or dependency
-vulnerability threshold is introduced by this change.
+Mypy is strict only for `incident.persistence`, `incident.runtime`,
+`governance.dto`, and `governance.authorization`, with the Pydantic plugin.
+This is a deliberate incremental baseline: changing scope or adding a narrow
+exception requires governance review, rather than a broad ignore.
+
+### Production-image browser control
+
+`compose.e2e.yaml` removes database, API and web host ports. A project-scoped
+Compose network starts migration and synthetic seed before API and web become
+healthy. The Playwright runner has no application source mount and does not
+start Uvicorn: it receives only the browser test inputs and calls `http://web`.
+Its production-image scope is deliberately limited to the same-origin API-client
+seam and production proxy behavior; it is not represented as full UI coverage.
+The existing static-web job retains the showcase interaction and accessibility
+coverage separately. A second runner reaches a deliberately bad Nginx upstream
+and is required to fail its API assertion; a pass is treated as a broken
+negative test. CSP remains production-safe: this control does not permit inline
+scripts, inline styles, `unsafe-inline`, or `unsafe-eval`.
+
+The safe local reproduction shape is:
+
+```sh
+docker compose -f compose.yaml -f compose.e2e.yaml --project-name issue183-demo up --build --wait db api web
+docker compose -f compose.yaml -f compose.e2e.yaml --project-name issue183-demo --profile e2e run --build --rm e2e
+docker compose -f compose.yaml -f compose.e2e.yaml --project-name issue183-demo down -v --remove-orphans
+```
+
+Use a unique project name and only remove that project. The local `.env` remains
+untracked and synthetic; do not print, commit, attach or reuse credentials.
+
+## Informational diagnostics
+
+`Quality diagnostics` runs weekly and by manual dispatch. It is not a required
+PR check and never changes dependencies. It builds the locked checks image and:
+
+- audits Python dependencies with pinned `pip-audit`, reporting unavailable or
+  malformed results rather than a false clean state;
+- audits both locked Node installations (the root and `schemas/tooling`) in a
+  digest-pinned Node container; each matrix result is informative and visible;
+- measures branch coverage over `src/sre_agent` in the existing locked Compose
+  checks container, with no threshold or exclusions;
+- copies the complete `src` package into an isolated temporary workspace, then
+  mutates only `governance.authorization` while selecting its governing tests,
+  with a 14-minute tool timeout inside a 20-minute job so image build, summary
+  and cleanup retain budget;
+- reports process errors separately from per-mutant no-test, skipped, suspicious, timeout, interruption and segfault counters; a shell timeout is explicitly incomplete.
+
+Mutation testing has no PR threshold. It is evidence about test sensitivity;
+survivors require a human decision and only motivate a test when they expose a
+missing assertion for an already specified behavior.
+
+## Administrative controls outside the repository
+
+After a hosted pilot, require the exact observed `Quality gate` check run and
+`pr-governance` status, one independent approval, stale approval dismissal,
+latest-push approval, and resolved conversations. Restrict governance, CI,
+lockfile, image, import-boundary and production-browser changes to designated
+human reviewers. Preserve separate merger authorization while removing only the
+quality ruleset bypass. Native GitHub secret scanning and push protection were
+already enabled and read back; neither is created by these workflow files.
