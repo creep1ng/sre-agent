@@ -9,7 +9,6 @@ const sections = [
   'Screenshot', 'Evidence kind', 'Evidence freshness', 'Risks and rollback', 'Security',
 ];
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const videoDeferral = 'Deferred: media storage unavailable; screenshot evidence is mandatory.';
 const clean = value => value.replace(/<!--[\s\S]*?-->/g, '').trim();
 function parse(body) {
   const result = {};
@@ -30,6 +29,19 @@ function reference(value) {
         !/^(example\.(com|org|net)|localhost)$/i.test(url.hostname);
     } catch { return false; }
   });
+}
+function fileReference(value) {
+  return /(?:^|[\s`\[(])(?:\.?\/)?(?:[\w.-]+\/)*[\w.-]+\.(?:md|mdx|ya?ml|json|toml|txt|py|c?js|mjs|ts|tsx|jsx|html|css)(?:#[\w-]+)?(?=$|[\s`\])])/im.test(value || '');
+}
+function visualApplicability(value) {
+  const declarations = [...clean(value || '').matchAll(/^Visual applicability:\s*(yes|no)\s*(?:—|--|-)\s*(.+)$/gim)];
+  if (declarations.length !== 1) return null;
+  const [, answer, declaredReason] = declarations[0];
+  const applies = answer.toLowerCase() === 'yes';
+  const reason = clean(declaredReason);
+  if (reason.length < 12 || /^(?:n\/?a|none|not applicable)\.?$/i.test(reason) ||
+      /\b(TODO|TBD|PLACEHOLDER)\b|<[^>]+>/i.test(reason)) return null;
+  return { applies, reason };
 }
 
 async function snapshot(github, repo, number) {
@@ -64,6 +76,10 @@ function validate(data, repo) {
   try { fields = parse(pr.body); } catch { return ['Duplicate section headings']; }
   for (const name of sections) {
     const value = fields[name] || '';
+    if (name === 'Video') {
+      if (!Object.hasOwn(fields, name)) errors.push(`Complete section: ${name}`);
+      continue;
+    }
     if (!value || /\b(TODO|TBD|PLACEHOLDER)\b|<[^>]+>|^\s*(?:[-*] )?(?:\.\.\.|…|\[ \])\s*$/im.test(value)) {
       errors.push(`Complete section: ${name}`);
     }
@@ -79,11 +95,17 @@ function validate(data, repo) {
   if (!/^(mock|controlled integration|real external service|rendered artifact)$/i.test(fields['Evidence kind'] || '')) {
     errors.push('Declare the documented evidence kind');
   }
-  for (const name of ['Screenshot', 'Acceptance evidence']) {
-    if (!reference(fields[name])) errors.push(`${name} requires a non-placeholder HTTPS reference`);
+  if (!reference(fields['Acceptance evidence']) && !fileReference(fields['Acceptance evidence'])) {
+    errors.push('Acceptance evidence requires a non-placeholder HTTPS or repository-file reference');
   }
-  if (!reference(fields.Video) && fields.Video !== videoDeferral) {
-    errors.push('Video must be an HTTPS reference or the documented storage deferral');
+  const visual = visualApplicability(fields.Screenshot);
+  if (!visual) {
+    errors.push('Screenshot must declare visual applicability as yes or no with a reason');
+  } else if (visual.applies && !reference(fields.Screenshot)) {
+    errors.push('Visual evidence requires a non-placeholder HTTPS screenshot reference');
+  }
+  if (fields.Video && !reference(fields.Video)) {
+    errors.push('Video must be empty or an HTTPS reference');
   }
   if (!/```(?:sh|bash|shell)\n[\s\S]*?\S[\s\S]*?\n```/.test(fields['Reproduction commands'] || '')) {
     errors.push('Reproduction commands require a nonempty sh/bash/shell code block');

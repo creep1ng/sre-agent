@@ -12,7 +12,7 @@ The expanded CI controls were validated as configuration and local boundary chec
 | Verification | Observed result |
 | --- | --- |
 | `node --check .github/governance/pr-evidence.cjs` | Pass |
-| Temporary metadata/API simulation harness | 25 scenarios pass |
+| Temporary metadata/API simulation harness | 30 scenarios pass, including conditional visual applicability and nonvisual repository-file evidence |
 | Extracted Quality gate shell, all jobs successful | Pass |
 | Each of seven jobs set to failure/cancelled/skipped/neutral/empty | All 35 combinations fail closed |
 | Gate dependency inventory | Every mandatory CI job included |
@@ -67,7 +67,9 @@ not automatically closed.
 ## Required before acceptance
 
 - Publish reviewable work units through the approved-issue policy.
-- Capture a screenshot of the actual delivered result at its published SHA. Video is optional while media storage is unavailable; include a real link or the documented deferral, never a fabricated URL.
+- Record evidence at the published SHA according to visual applicability: a screenshot
+  for a changed visual surface, or concrete file/scenario evidence for a nonvisual
+  change. Video is optional; never use a fabricated URL.
 - Complete the hosted negative/positive scenarios in the rollout guide.
 - Have another contributor reproduce and judge the evidence independently. `creep1ng` is the planned independent reproducer/reviewer; this is pending, not an approval.
 - Run the same diagnostics in hosted GitHub Actions after publication; local pass evidence does not establish a hosted check or merge protection.
