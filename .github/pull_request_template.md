@@ -9,13 +9,16 @@
 
 ## Acceptance evidence
 <!-- Map each covered criterion to scenario, actual result and HTTPS evidence.
-For SDD include the openspec/changes/ or openspec/specs/ path. -->
+For nonvisual documentation, link the concrete Markdown/file path. For SDD include
+the openspec/changes/ or openspec/specs/ path. -->
 
 ## Pending criteria
 <!-- List remaining scope, or write None with an explanation. -->
 
 ## Environment
-<!-- Versions, data provenance, prerequisites and safe configuration references. -->
+<!-- Versions, data provenance, prerequisites and safe configuration references.
+For nonvisual backend/test evidence, name synthetic setup and the user/resource/grant
+used when authorization applies; do not invent creation endpoints. -->
 
 ## Tested SHA
 <!-- Full 40-character commit SHA actually demonstrated. -->
@@ -34,12 +37,14 @@ Document host Git/Docker/configuration prerequisites under Environment, not as h
 <!-- Describe behavior, not only test counts. -->
 
 ## Video
-<!-- Optional while media storage is unavailable. Provide a real HTTPS recording link, or write exactly:
-Deferred: media storage unavailable; screenshot evidence is mandatory.
-Never add a fabricated URL. -->
+<!-- Optional. Leave empty or provide a real HTTPS recording link. Never add a fabricated URL. -->
 
 ## Screenshot
-<!-- Required HTTPS image link showing the resulting artifact or behavior. Do not use a fabricated URL. -->
+<!-- Write exactly one applicability statement first:
+Visual applicability: yes — <changed UI, wireframe, or Swagger UI surface>
+Then add a real HTTPS image link.
+Or: Visual applicability: no — <why this change has no visual surface>.
+For mixed changes, include the visual image and nonvisual evidence. Do not use a fabricated URL. -->
 
 ## Evidence kind
 <!-- Exactly: mock, controlled integration, real external service, or rendered artifact. -->

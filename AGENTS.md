@@ -19,8 +19,10 @@ The evaluated tool/skill inventory is in
   authorizes editing them. Validate the actual current candidate, not another
   task's reported result. Clearly separate local tests from hosted CI evidence.
 - Every PR requesting acceptance needs an issue, scope, tested/base SHA, environment,
-  containerized reproduction commands, actual/expected results, a screenshot and human
-  review. Video is optional only with the documented media-storage deferral. The PR's
+  containerized reproduction commands, actual/expected results, explicit visual-evidence
+  applicability and human review. A screenshot is required only when a changed visual
+  surface exists; mixed changes need both visual and nonvisual evidence. Video is optional.
+  The PR's
   `Reproduction commands` use `docker compose` or `docker run`;
   `uv`, `npm`, and similar tools run only inside those containers. The host supplies
   Git, Docker, and safe local configuration setup. This applies to PR demonstrations,

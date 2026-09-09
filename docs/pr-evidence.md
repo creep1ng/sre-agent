@@ -1,21 +1,30 @@
 # Pull-request acceptance evidence
 
 Every PR submitted for acceptance, including documentation, infrastructure, contracts
-and tests-only changes, needs a screenshot and reproducible commands. Video is optional while media storage is unavailable: use a real HTTPS recording link or write exactly `Deferred: media storage unavailable; screenshot evidence is mandatory.`. Do not invent a URL. Use the repository template's exact English headings; HTML guidance comments are ignored.
+and tests-only changes, needs reproducible evidence and commands. The `Screenshot`
+section must declare exactly one `Visual applicability: yes` or `no` statement with a concrete reason. A
+real screenshot is required only when the PR changes a visual surface such as UI,
+wireframes, or Swagger UI. A video is optional; leave its section empty or link a
+real HTTPS recording. Do not invent a URL. Use the repository template's exact
+English headings; HTML guidance comments are ignored.
 Drafts may be incomplete but cannot receive a passing `pr-governance` status.
 
 ## Author path
 
 1. Reference the issue. Use `Refs #183` for a partial work unit; do not close an
    issue whose criteria remain pending. Declare `direct` or `sdd` as the delivery route.
-2. Map each covered criterion to its scenario, actual result and HTTPS evidence.
-   For SDD include the shared `openspec/changes/` or `openspec/specs/` path.
+2. Map each covered criterion to its scenario, actual result and evidence. For
+   documentation, link the concrete Markdown/file path; for SDD include the shared
+   `openspec/changes/` or `openspec/specs/` path.
 3. Record full tested and base commit SHAs, environment versions, data provenance,
    prerequisites and commands in a `sh`, `bash` or `shell` fenced block. The PR's
    reproduction commands must invoke `docker compose` or `docker run`; `uv`, `npm`,
    `pytest`, and similar tools may appear only as commands executed inside the selected
    container.
-4. Link a real HTTPS screenshot. Optionally link a real HTTPS recording; while media storage is unavailable, use the exact documented deferral instead. Use an appropriate rendered artifact for documentation; do not invent a running server for a textual or contract change.
+4. State visual applicability in `Screenshot`. For `yes`, link a real HTTPS image
+   of the changed visual surface. For `no`, explain why no visual surface changes and
+   link the nonvisual criterion evidence in `Acceptance evidence`. Mixed changes need
+   both. Do not invent a running server for a textual or contract change.
 5. Explain expected/actual results, remaining scope, compatibility and rollback.
    Sanitize all evidence, then declare exactly `Sanitized: yes` in Security.
 6. Obtain ordinary independent human review. CI does not prove semantic acceptance.
@@ -73,10 +82,28 @@ criterion mapping. A schema mock is valid contract evidence but cannot close a
 real-provider integration criterion. A Swagger screenshot alone does not prove
 an endpoint executes successfully. Passing tests complement observable behavior.
 
-Acceptable: a documentation PR records its rendered page, the requested change,
-an image, exact build/preview command, SHA and expected/observed result.
-Unacceptable: only a test count, unrelated screenshot, example.com link,
-placeholder, or a claimed live integration demonstrated with a fixture.
+For a nonvisual test or backend change, state the tested scenario, synthetic setup,
+identity and resource/grant data where authorization applies, exact container command,
+and expected/actual result. This repository's `seed` service creates the configured
+synthetic principals, resources and grants; name the existing seeded identity/resource
+used by the scenario rather than inventing a creation endpoint. For example, an
+authorization-only PR can link `tests/test_authorization.py`, state the configured
+synthetic admin or restricted identity, and use the existing checks container:
+
+```sh
+docker compose --profile checks run --build --rm python-checks pytest -q tests/test_authorization.py
+```
+
+For a documentation-only PR, link the affected concrete Markdown file, use a
+containerized file/preview command, and state the expected/actual textual result;
+it does not need a rendered screenshot. A mixed UI plus backend PR needs the UI
+screenshot and the nonvisual scenario evidence.
+
+Acceptable: a documentation PR links its Markdown file, exact container command,
+SHA and expected/observed result; a visual PR supplies an applicable image; a backend
+PR supplies its containerized scenario and setup. Unacceptable: only a test count,
+an unrelated screenshot, `N/A` without a reason, example.com link, placeholder, or a
+claimed live integration demonstrated with a fixture.
 
 Screenshots, any recordings, commands and artifacts must exclude API keys,
 Authorization headers, personal data, full prompts/outputs and sensitive request
@@ -117,9 +144,13 @@ the redundant proposal before asking for acceptance.
 ## What automation does and does not prove
 
 `pr-governance` rejects missing/duplicate sections, empty command blocks,
-placeholders, a missing screenshot HTTPS reference, a video that is neither an HTTPS reference nor the exact documented deferral, stale base SHA, unsupported delivery/evidence kinds, incomplete size data and missing confirmations. It never executes supplied
-commands, downloads evidence, judges videos, or verifies that a named OpenSpec
-path really satisfies the issue. A human checks those claims and the DoD checklist.
+placeholders, missing visual applicability/reason, a missing visual screenshot when
+applicability is `yes`, invalid video links, stale base SHA, unsupported
+delivery/evidence kinds, incomplete size data and missing confirmations. It accepts a
+concrete repository-file reference for nonvisual documentation evidence. It never
+executes supplied commands, downloads evidence, judges media, or verifies that a
+named OpenSpec path really satisfies the issue. A human checks visual applicability,
+evidence sufficiency and the DoD checklist.
 
 The workflow loads policy only from the resolved default-branch commit, never the
 PR branch, and uses no repository secrets. `statuses: write` is limited to the

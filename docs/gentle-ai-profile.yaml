@@ -17,9 +17,10 @@ shared:
   sdd_orchestrator_mode: multi
   review_mode: opt-in
   required_pr_evidence:
-    - screenshot
-    # Temporary policy until durable media storage is available; never use a fabricated URL.
-    - video_or_documented_storage_deferral
+    - visual_applicability_with_reason
+    - screenshot_when_visual_surface_changes
+    - nonvisual_criterion_evidence_when_applicable
+    - optional_video
     - reproducible_commands
     - tested_sha_and_environment
   pr_reproduction_policy: >-
