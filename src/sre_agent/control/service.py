@@ -20,6 +20,7 @@ from pydantic.json_schema import WithJsonSchema
 
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import CredentialReference, Principal, PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
@@ -345,8 +346,12 @@ class ControlService:  # noqa: E305
     ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.create", "admin.write"
-        context = await self._authenticate(authorization)
-        if context is None:
+        scope = ("POST", "/v1/principals")
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[scope]
+            )
+        except AuthenticationFailed:
             return await self._finish(
                 request_id,
                 started,
@@ -355,6 +360,20 @@ class ControlService:  # noqa: E305
                 operation,
                 action,
                 error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "principals"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
             )
         if self._invalid_key(idempotency_key):
             return await self._finish(
@@ -378,25 +397,8 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="validation_error",
             )
-        scope = ("POST", "/v1/principals")
         payload_hash = _payload_sha256(body.model_dump(mode="json"))
         canonical_path = "/v1/principals"
-        async with self.sessions() as session:
-            evaluation = await self._authorize(session, context.principal, CONTROL_SCOPES[scope])
-        if evaluation.decision.decision == "deny":
-            return await self._finish(
-                request_id,
-                started,
-                403,
-                "authorization",
-                operation,
-                action,
-                error_code="resource_unavailable",
-                context=context,
-                resource_ref=("administrative_control", "principals"),
-                decision=evaluation.decision,
-                authorization_denial_cause=evaluation.denial_cause,
-            )
         binding_scope = f"{context.principal.principal_id}|POST|{canonical_path}"
         try:
             async with self.sessions() as session, session.begin():
@@ -467,8 +469,11 @@ class ControlService:  # noqa: E305
     ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.list", "admin.read"
-        context = await self._authenticate(authorization)
-        if context is None:
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[("GET", "/v1/principals")]
+            )
+        except AuthenticationFailed:
             return await self._finish(
                 request_id,
                 started,
@@ -477,6 +482,20 @@ class ControlService:  # noqa: E305
                 operation,
                 action,
                 error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "principals"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
             )
         try:
             parsed_limit = int(limit)
@@ -494,24 +513,6 @@ class ControlService:  # noqa: E305
                 operation,
                 action,
                 error_code="validation_error",
-            )
-        async with self.sessions() as session:
-            evaluation = await self._authorize(
-                session, context.principal, CONTROL_SCOPES[("GET", "/v1/principals")]
-            )
-        if evaluation.decision.decision == "deny":
-            return await self._finish(
-                request_id,
-                started,
-                404,
-                "authorization",
-                operation,
-                action,
-                error_code="resource_not_found",
-                context=context,
-                resource_ref=("administrative_control", "principals"),
-                decision=evaluation.decision,
-                authorization_denial_cause=evaluation.denial_cause,
             )
         async with self.sessions() as session:
             items, truncated = await PrincipalRepository(session).list(limit=parsed_limit)
@@ -536,8 +537,11 @@ class ControlService:  # noqa: E305
     async def get_principal(self, principal_id: str, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.get", "admin.read"
-        context = await self._authenticate(authorization)
-        if context is None:
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[("GET", "/v1/principals/{id}")]
+            )
+        except AuthenticationFailed:
             return await self._finish(
                 request_id,
                 started,
@@ -546,6 +550,20 @@ class ControlService:  # noqa: E305
                 operation,
                 action,
                 error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "principals"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
             )
         if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
             return await self._finish(
@@ -556,24 +574,6 @@ class ControlService:  # noqa: E305
                 operation,
                 action,
                 error_code="validation_error",
-            )
-        async with self.sessions() as session:
-            evaluation = await self._authorize(
-                session, context.principal, CONTROL_SCOPES[("GET", "/v1/principals/{id}")]
-            )
-        if evaluation.decision.decision == "deny":
-            return await self._finish(
-                request_id,
-                started,
-                404,
-                "authorization",
-                operation,
-                action,
-                error_code="resource_not_found",
-                context=context,
-                resource_ref=("administrative_control", "principals"),
-                decision=evaluation.decision,
-                authorization_denial_cause=evaluation.denial_cause,
             )
         async with self.sessions() as session:
             principal = await PrincipalRepository(session).get(principal_id)
@@ -1245,6 +1245,11 @@ def control_router(service: ControlService) -> APIRouter:
                 "required": True,
                 "content": {"application/json": {"schema": PrincipalCreate.model_json_schema()}},
             },
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "principals",
+            },
         },
     )
     async def create_principal(
@@ -1270,7 +1275,7 @@ def control_router(service: ControlService) -> APIRouter:
         response_model=PrincipalListResponse,
         responses={
             401: {"model": ErrorEnvelope, "description": "Authentication failed"},
-            404: {"model": ErrorEnvelope, "description": "Resource unavailable"},
+            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
             422: {"model": ErrorEnvelope, "description": "Validation error"},
             503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
         },
@@ -1282,7 +1287,12 @@ def control_router(service: ControlService) -> APIRouter:
                     "required": False,
                     "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
                 }
-            ]
+            ],
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "principals",
+            },
         },
     )
     async def list_principals(
@@ -1304,9 +1314,17 @@ def control_router(service: ControlService) -> APIRouter:
         response_model=Principal,
         responses={
             401: {"model": ErrorEnvelope, "description": "Authentication failed"},
-            404: {"model": ErrorEnvelope, "description": "Resource unavailable"},
+            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
+            404: {"model": ErrorEnvelope, "description": "Resource not found"},
             422: {"model": ErrorEnvelope, "description": "Validation error"},
             503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "principals",
+            }
         },
     )
     async def get_principal(

@@ -17,13 +17,16 @@ from sre_agent.control import scopes
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.control.service import (
     CONTROL_OPERATIONS,
+    ControlService,
     _key_digest,
     _payload_sha256,
     _public_principal,
     control_router,
 )
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.governance.dto import Principal, Resource
+from sre_agent.gateway.authentication import AuthenticationFailed
+from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
+from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext, Resource
 
 
 def _principal(principal_id: str = "admin-human") -> Principal:
@@ -398,6 +401,17 @@ def test_control_openapi_publishes_request_success_and_error_schemas() -> None:
     assert limit["schema"] == {"type": "integer", "default": 100, "minimum": 1, "maximum": 100}
     principal_id = paths["/v1/principals/{principal_id}"]["get"]["parameters"][0]
     assert principal_id["schema"]["pattern"] == r"^[a-z][a-z0-9_-]{2,63}$"
+    for operation, action in (
+        (create, "admin.write"),
+        (paths["/v1/principals"]["get"], "admin.read"),
+        (paths["/v1/principals/{principal_id}"]["get"], "admin.read"),
+    ):
+        assert operation["security"] == [{"HTTPBearer": []}]
+        assert operation["x-governed-scope"] == {
+            "action": action,
+            "resource_type": "administrative_control",
+            "resource_id": "principals",
+        }
 
 
 def test_control_openapi_error_responses_match_canonical_fixtures() -> None:
@@ -427,3 +441,86 @@ def test_control_openapi_error_responses_match_canonical_fixtures() -> None:
                 assert response_validator.is_valid(payloads["positive"])
                 assert not response_validator.is_valid(payloads["stack"])
                 assert not response_validator.is_valid(payloads["authorization"])
+
+
+def test_principal_operations_use_shared_governed_authorization_before_effects(
+    monkeypatch,
+) -> None:
+    class Session:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *_):
+            return None
+
+    class Audit:
+        def __init__(self) -> None:
+            self.events = []
+
+        async def append(self, event) -> None:
+            self.events.append(event)
+
+    context = PrincipalContext(
+        principal=_principal(),
+        credential_id="credential-admin-human",
+        authenticated_at=datetime(2026, 9, 4, tzinfo=UTC),
+    )
+    deny = AuthorizationEvaluation(
+        PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None),
+        AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
+    )
+    allow = AuthorizationEvaluation(
+        PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="grant-admin"),
+        None,
+    )
+    audit = Audit()
+    service = ControlService(lambda: Session(), audit, AuditProjector(b"x" * 32))
+    effects = AsyncMock(return_value=None)
+    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.create", effects)
+    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.list", effects)
+    monkeypatch.setattr("sre_agent.control.service.PrincipalRepository.get", effects)
+    calls = []
+
+    async def denied(*args):
+        calls.append(args[2:])
+        return context, deny
+
+    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", denied)
+
+    async def exercise_denials():
+        return (
+            await service.create_principal(
+                {"principal_id": "new-human", "kind": "human", "display_name": "New"},
+                "Bearer sre_valid_key",
+                "k" * 16,
+            ),
+            await service.list_principals("Bearer sre_valid_key", "100", {}),
+            await service.get_principal("missing-human", "Bearer sre_valid_key"),
+        )
+
+    denied_responses = asyncio.run(exercise_denials())
+    assert [response.status_code for response in denied_responses] == [403, 403, 403]
+    assert effects.await_count == 0
+    assert calls == [
+        ("admin.write", "administrative_control", "principals"),
+        ("admin.read", "administrative_control", "principals"),
+        ("admin.read", "administrative_control", "principals"),
+    ]
+
+    async def invalid(*_):
+        raise AuthenticationFailed
+
+    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", invalid)
+    invalid_responses = asyncio.run(exercise_denials())
+    assert [response.status_code for response in invalid_responses] == [401, 401, 401]
+    assert effects.await_count == 0
+
+    async def allowed(*_):
+        return context, allow
+
+    monkeypatch.setattr("sre_agent.control.service.authorize_governed_access", allowed)
+    missing = asyncio.run(service.get_principal("missing-human", "Bearer sre_valid_key"))
+    assert missing.status_code == 404
+    assert effects.await_count == 1
+    assert audit.events[-1].policy_decision is not None
+    assert audit.events[-1].policy_decision.grant_ref is not None

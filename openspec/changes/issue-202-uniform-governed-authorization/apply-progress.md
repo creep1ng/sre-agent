@@ -41,3 +41,35 @@ Previous apply progress: none.
 - `/tmp/issue202-unit1-harness.log` — 26 passed.
 - `/tmp/issue202-unit1-full-final.log` — full configured checks passed.
 - `/tmp/issue202-unit1-rebased-proof-final.log` — full configured checks passed on current `origin/main`.
+
+## Completed Tasks — Unit 2
+
+- [x] 2.1 RED: Added executable spies covering invalid credentials, denied create/list/get before repository effects, authorized missing target, and matched-grant audit evidence.
+- [x] 2.2 GREEN: Routed the three principal operations through `authorize_governed_access`; denied list/get now return 403 before business access, while an authorized missing target remains 404.
+- [x] 2.3 REFACTOR: Declared exact governed metadata for the three operations and updated existing control authorization/acceptance evidence to the uniform 403 contract.
+
+## TDD Cycle Evidence — Unit 2
+
+| Task | Test file | Layer | Safety net | RED | GREEN | Triangulate | Refactor |
+|---|---|---|---|---|---|---|---|
+| 2.1 | `tests/test_control_plane.py` | Unit | 13 passed | shared authorization attribute missing during test collection | 14 passed | invalid 401, three denied 403/no effects, and authorized-missing 404/grant evidence | N/A |
+| 2.2 | `tests/test_control_plane.py`, `tests/test_control_authorization_order.py`, `tests/test_control_acceptance.py` | Unit/integration | 13 passed | Unit 2 shared-boundary test failed before the import existed | 28 passed | existing eight-operation ordering and acceptance paths confirm the three migrated operations use the shared boundary | No further extraction needed |
+| 2.3 | `tests/test_control_plane.py` | Unit | 13 passed | `x-governed-scope` KeyError | 14 passed | create/write and list/get/read metadata cases | Kept existing `CONTROL_SCOPES`; no provisioning or lifecycle changes |
+
+## Work Unit Evidence — Unit 2
+
+| Evidence | Result |
+|---|---|
+| Focused test command | `scripts/worktree-compose --profile checks run --build --rm python-checks pytest -q tests/test_control_plane.py tests/test_control_authorization_order.py tests/test_control_acceptance.py` — 28 passed |
+| Runtime harness | N/A — composed FastAPI/TestClient acceptance coverage is the applicable runtime boundary. |
+| Full test command | `scripts/worktree-compose --profile checks run --build --rm python-checks` — 767 passed, 1 skipped; lint, format, import contracts, lock, Alembic, and upgrade checks passed. |
+| Rollback boundary | Revert the Unit 2 changes in `src/sre_agent/control/service.py`, `tests/test_control_plane.py`, `tests/test_control_authorization_order.py`, and `tests/test_control_acceptance.py`; no grants, seeds, migrations, schemas, or lifecycle files changed. |
+
+## Evidence Logs — Unit 2
+
+- `/tmp/issue202-unit2-baseline-retry.log` — 13 passed.
+- `/tmp/issue202-unit2-red.log` — expected missing shared authorization import failure.
+- `/tmp/issue202-unit2-green.log` — 14 passed.
+- `/tmp/issue202-unit2-metadata-red.log` — expected missing `x-governed-scope` failure.
+- `/tmp/issue202-unit2-focused-final.log` — 28 passed.
+- `/tmp/issue202-unit2-full-final.log` — final full configured checks passed.

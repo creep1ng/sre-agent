@@ -35,9 +35,9 @@ One honest pass keeps each PR below 400 lines including planning overhead (PR 1 
 
 ## Unit 2: RED → GREEN → REFACTOR — PR 2 Administration
 
-- [ ] 2.1 RED: Add `tests/test_control_plane.py` spies: invalid → 401, denied create/list/get → 403 before repository effects, authorized missing target → 404, allowed event has `grant_ref`.
-- [ ] 2.2 GREEN: Replace duplicated auth in `src/sre_agent/control/service.py` with the shared function; normalize denied get to 403 and retain control evidence at an evidence-bearing terminal stage.
-- [ ] 2.3 REFACTOR: Add metadata for the three operations; preserve `CONTROL_SCOPES`, provisioning, seeds, migrations, and lifecycle; run focused Docker tests.
+- [x] 2.1 RED: Add `tests/test_control_plane.py` spies: invalid → 401, denied create/list/get → 403 before repository effects, authorized missing target → 404, allowed event has `grant_ref`.
+- [x] 2.2 GREEN: Replace duplicated auth in `src/sre_agent/control/service.py` with the shared function; normalize denied get to 403 and retain control evidence at an evidence-bearing terminal stage.
+- [x] 2.3 REFACTOR: Add metadata for the three operations; preserve `CONTROL_SCOPES`, provisioning, seeds, migrations, and lifecycle; run focused Docker tests.
 
 ## Unit 3: RED → GREEN → REFACTOR — PR 3 Architecture
 
