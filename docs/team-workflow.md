@@ -15,8 +15,9 @@ model settings, or a harness-specific configuration.
 2. Select the direct or SDD route before changing code; record that route in the pull request.
 3. Run the relevant checks, collect evidence at the tested SHA, and complete every required PR
    evidence field.
-4. Request independent human review. Integrate only after required checks, evidence review, and
-   repository protection rules succeed.
+4. Request independent human review. Custom evidence/governance confirmations are not
+   semantic review: an admin or maintainer may self-attest, but a write collaborator must be
+   independent. Integrate only after required checks, evidence review, and repository protection rules succeed.
 
 The issue remains the planning record. A partial PR must state what it covers and must not claim
 to close the full issue.

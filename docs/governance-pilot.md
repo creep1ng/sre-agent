@@ -37,7 +37,8 @@ The expanded CI controls were validated as configuration and local boundary chec
 The temporary harness lives outside the repository at `/tmp/issue183-pilot.cjs`.
 It covers 400/401 lines, approved size, label removal, wrong permission,
 missing mandatory evidence, empty template, placeholder/duplicate sections,
-changed base, evidence reuse, independent review, comment revocation, bot denial,
+changed base, evidence reuse, write-independent confirmation, admin/maintain self-attestation,
+comment revocation, bot denial,
 command injection remaining inert data, SDD path requirements, snapshot changes,
 head-bound status publishing, unchanged-status deduplication and a metadata race. It does not create public PRs
 or alter repository tests. Preserve its output with the final publication evidence;
@@ -69,7 +70,7 @@ not automatically closed.
 - Publish reviewable work units through the approved-issue policy.
 - Capture a screenshot of the actual delivered result at its published SHA. Video is optional while media storage is unavailable; include a real link or the documented deferral, never a fabricated URL.
 - Complete the hosted negative/positive scenarios in the rollout guide.
-- Have another contributor reproduce and judge the evidence independently. `creep1ng` is the planned independent reproducer/reviewer; this is pending, not an approval.
+- Have another contributor reproduce and judge the evidence independently. An admin/maintain evidence or governance self-attestation is not semantic independent review; GitHub-native required approvals remain `0` because authors cannot self-approve. `creep1ng` is the planned independent reproducer/reviewer; this is pending, not an approval.
 - Run the same diagnostics in hosted GitHub Actions after publication; local pass evidence does not establish a hosted check or merge protection.
 - Obtain an explicit `size:exception` approval before publishing any work unit containing the current `uv.lock` update, which alone exceeds the 400-line limit.
 - Verify diagnostics in hosted Actions and dependency-audit network behavior.

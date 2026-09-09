@@ -45,8 +45,9 @@ Never add a fabricated URL. -->
 <!-- Exactly: mock, controlled integration, real external service, or rendered artifact. -->
 
 ## Evidence freshness
-<!-- Explain applicability. If Tested SHA differs from HEAD, link independent
-reviewer acceptance using the syntax in docs/pr-evidence.md. -->
+<!-- Explain applicability. If Tested SHA differs from HEAD, link the exact
+confirmation in docs/pr-evidence.md. A write collaborator must be independent; an
+admin or maintainer may self-attest. This does not replace independent PR review. -->
 
 ## Risks and rollback
 <!-- Compatibility, configuration/migration impact and reversal instructions. -->
@@ -61,7 +62,9 @@ review route and linked maintainer approval; label alone is insufficient. -->
 
 ## Governance review
 Not applicable.
-<!-- For workflow/policy/agent configuration changes, link independent reviewer approval. -->
+<!-- For workflow/policy/agent configuration changes, link the exact confirmation.
+A write collaborator must be independent; an admin or maintainer may self-attest.
+This is not a GitHub approval or a replacement for independent PR review. -->
 
 ## Definition of Done
 - [ ] Every covered criterion has current, reproducible evidence.

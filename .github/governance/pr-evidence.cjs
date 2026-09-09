@@ -98,16 +98,17 @@ function validate(data, repo) {
     return comments.some(comment => {
       const urls = ['issues', 'pull'].map(kind =>
         `https://github.com/${repo.owner}/${repo.repo}/${kind}/${pr.number}#issuecomment-${comment.id}`);
+      const permission = permissions[comment.user.login];
+      const selfAttestation = !sizeException && ['admin', 'maintain'].includes(permission);
       return urls.some(url => links(text).includes(url)) && comment.user.type === 'User' &&
-        (sizeException || comment.user.login !== pr.user.login) &&
+        (comment.user.login !== pr.user.login || selfAttestation) &&
         (sizeException ? ['admin', 'maintain'] : ['admin', 'maintain', 'write'])
-          .includes(permissions[comment.user.login]) &&
-        clean(comment.body || '') === command;
+          .includes(permission) && clean(comment.body || '') === command;
     });
   };
   if (tested !== pr.head.sha && !approved('Evidence freshness',
     `/accept-evidence ${pr.head.sha} ${pr.base.sha} ${tested}`)) {
-    errors.push('Reused evidence needs linked independent reviewer acceptance for this head and base');
+    errors.push('Reused evidence needs linked eligible confirmation for this head and base');
   }
   if (!Number.isInteger(pr.additions) || !Number.isInteger(pr.deletions) ||
       pr.additions < 0 || pr.deletions < 0) errors.push('Size metadata is unavailable');
@@ -121,7 +122,7 @@ function validate(data, repo) {
   }
   if (files.some(path => /^(\.github\/|\.agents\/|\.codex\/|\.atl\/|openspec\/config\.yaml$|AGENTS\.md$|\.importlinter$|compose(?:\.e2e)?\.yaml$|docker\/(?:api|web|harness|e2e)\.Dockerfile$|pyproject\.toml$|uv\.lock$|playwright\.production\.config\.js$|tests\/browser\/(?:api-seam|production-proxy)\.spec\.js$|scripts\/(validate_|assert_)|tests\/test_ci_hardening\.py$|docs\/(team-workflow|gentle-ai-profile|pr-evidence|governance-|ci-controls))/.test(path)) &&
       !approved('Governance review', `/approve-governance ${pr.head.sha} ${pr.base.sha}`)) {
-    errors.push('Governance changes need linked independent reviewer approval in Governance review');
+    errors.push('Governance changes need linked eligible confirmation in Governance review');
   }
   return errors;
 }
