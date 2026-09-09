@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Administrative Principals list for midnight.agent." />
+    <title>Principals · midnight.agent</title>
+    <link rel="icon" href="/public/favicon.svg" />
+    <link rel="stylesheet" href="/styles/design-system.css" />
+    <link rel="stylesheet" href="/styles/incident-alerts.css" />
+    <link rel="stylesheet" href="/styles/principals.css" />
+  </head>
+  <body>
+    <a class="ma-skip-link" href="#principal-list">Skip to principals list</a>
+    <header class="ops-shell__topbar">
+      <a class="ops-shell__brand" href="/" aria-label="midnight.agent — home">
+        <img class="ops-shell__mark" src="/public/midnight-agent-mark.svg" alt="" width="28" height="28" />
+        <span class="ma-display">midnight.agent</span>
+      </a>
+      <span class="ops-shell__context-label">Control plane / Principals</span>
+    </header>
+    <main id="principals-page" class="principals" data-state="idle">
+      <header class="principals__heading">
+        <div>
+          <p class="ma-eyebrow">Administration</p>
+          <h1 class="principals__title">Principals</h1>
+          <p class="principals__subtitle">List and inspect administrative identities from the real control-plane API.</p>
+        </div>
+      </header>
+      <section class="ma-panel principals__session" aria-labelledby="session-title">
+        <div class="ma-panel__header">
+          <div>
+            <h2 id="session-title" class="ma-panel__title">API session</h2>
+            <p class="ma-panel__description">Bearer credential is kept in memory only and cleared on reload.</p>
+          </div>
+        </div>
+        <div class="ma-panel__body">
+          <form id="session-form" class="principals__form" autocomplete="off">
+            <div class="ma-field">
+              <label class="ma-field__label" for="api-key">API key</label>
+              <input class="ma-input ma-mono" id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sre_…" />
+            </div>
+            <div class="ma-button-row">
+              <button id="connect-button" class="ma-button ma-button--primary" type="submit">Connect and load</button>
+              <button id="disconnect-button" class="ma-button ma-button--secondary" type="button">Clear session</button>
+            </div>
+          </form>
+        </div>
+      </section>
+      <div id="page-error" class="ma-alert" data-tone="critical" hidden>
+        <div>
+          <p id="page-error-title" class="ma-alert__title">Request failed</p>
+          <p id="page-error-detail" class="ma-alert__detail"></p>
+        </div>
+      </div>
+      <section class="ma-panel" aria-labelledby="principal-list-title">
+        <div class="ma-panel__header">
+          <div>
+            <h2 id="principal-list-title" class="ma-panel__title">Principals</h2>
+            <p id="principal-count" class="ma-panel__description" aria-live="polite">Not loaded.</p>
+          </div>
+          <button id="refresh-button" class="ma-button ma-button--secondary ma-button--small" type="button">Refresh</button>
+        </div>
+        <div class="ma-panel__body">
+          <div id="list-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading principals…</div>
+          <div class="ma-table-wrap" id="list-wrap" hidden>
+            <table class="ma-table principals__table">
+              <thead><tr><th scope="col">Principal</th><th scope="col">Kind</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"><span class="ma-sr-only">Detail</span></th></tr></thead>
+              <tbody id="principal-rows"></tbody>
+            </table>
+          </div>
+          <div id="list-empty" class="principals__empty" hidden>
+            <h3>No principals to show</h3>
+            <p id="list-empty-detail">Connect with an administrative API key to load the list.</p>
+          </div>
+        </div>
+      </section>
+      <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
+    </main>
+    <script type="module" src="/public/admin/principals.js"></script>
+  </body>
+</html>
