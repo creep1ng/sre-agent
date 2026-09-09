@@ -43,8 +43,8 @@ function describeError(error) {
     return ["API unavailable", "The control-plane API could not be reached. Check the stack and retry."];
   if (error?.kind === "authentication")
     return ["Authentication required", "Provide a valid API key. Nothing else is confirmed."];
-  if (error?.kind === "authorization")
-    return ["Access unavailable", "This identity has no administrative grant. Nothing else is revealed."];
+  if (error?.kind === "authorization" || error?.kind === "not_found")
+    return ["Access unavailable", "The list cannot be confirmed for this identity. Nothing else is revealed."];
   if (error?.kind === "not_found")
     return ["Principal not found", "The principal is absent or hidden. The list was refreshed."];
   if (error?.kind === "conflict")
@@ -162,9 +162,9 @@ async function loadPrincipals() {
     emptyDetail.textContent =
       error?.kind === "authentication"
         ? "Provide a valid API key."
-        : error?.kind === "authorization"
-          ? "This identity has no administrative grant."
-          : "The list could not be loaded. Retry.";
+        : error?.kind === "network"
+          ? "The list could not be loaded. Retry."
+          : "The list cannot be confirmed for this identity.";
     countLine.textContent = "Not loaded.";
     showError(error);
   }

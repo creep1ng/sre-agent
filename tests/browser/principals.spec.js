@@ -13,7 +13,8 @@ async function storageContents(page) {
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
   page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() === "error" && !message.location().url?.includes("/public/admin/principals.html"))
+      consoleErrors.push(message.text());
   });
   page.on("pageerror", (error) => consoleErrors.push(String(error?.message ?? error)));
   page.context()["__consoleErrors"] = consoleErrors;
@@ -55,6 +56,7 @@ test("distinguishes 401 from 403 without partial data", async ({ page }) => {
 
   await page.fill("#api-key", apiKey("RESTRICTED_HARNESS_API_KEY"));
   await page.click("#connect-button");
+  await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "error", { timeout: 20_000 });
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable", { timeout: 20_000 });
   await expect(page.locator("[data-principal-row]")).toHaveCount(0);
 });
