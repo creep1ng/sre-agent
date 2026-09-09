@@ -71,7 +71,7 @@ Not applicable.
 ## Definition of Done
 - [ ] Every covered criterion has current, reproducible evidence.
 - [ ] Relevant tests and applicable lint/build/contract checks pass.
-- [ ] A human reviewer verified the result and scope, not only green checks.
+- [ ] A human reviewer verified the result and scope, not only green checks; bot assistance is allowed, with findings validated and explained clearly.
 - [ ] No known critical defect remains in the delivered scope.
 
 <!-- Full policy and approval syntax: docs/pr-evidence.md.

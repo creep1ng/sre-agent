@@ -15,7 +15,7 @@ model settings, or a harness-specific configuration.
 2. Select the direct or SDD route before changing code; record that route in the pull request.
 3. Run the relevant checks, collect evidence at the tested SHA, and complete every required PR
    evidence field.
-4. Request independent human review. Integrate only after required checks, evidence review, and
+4. Request independent human review; Codex or other bots may assist. Integrate only after required checks, evidence review, and
    repository protection rules succeed.
 
 The issue remains the planning record. A partial PR must state what it covers and must not claim
@@ -165,7 +165,11 @@ This exercise tests the workflow, not an individual's memory or private setup.
 ## Integration responsibility
 
 The author supplies accurate evidence and updates it when needed. The reviewer independently
-checks scope, reproducibility, evidence sufficiency, and sanitization. Maintainers decide a
+checks scope, reproducibility, evidence sufficiency, and sanitization. Reviewers may use
+Codex or other bots, but must validate findings and explain the scenario, impact and next
+step in clear language before sharing them. Tool assistance does not replace the human
+approval required by repository policy. See [review feedback guidance](pr-evidence.md#clear-actionable-review-feedback).
+Maintainers decide a
 size exception and administer branch/ruleset protection after a pilot proves the controls block
 invalid PRs. GitHub Actions validates only untrusted PR metadata; it must not execute commands or
 download arbitrary URLs supplied by a PR description.

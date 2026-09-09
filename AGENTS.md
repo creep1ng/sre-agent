@@ -18,6 +18,9 @@ The evaluated tool/skill inventory is in
 - Preserve existing tests and runtime boundaries unless the requested change
   authorizes editing them. Validate the actual current candidate, not another
   task's reported result. Clearly separate local tests from hosted CI evidence.
+- Reviews may be assisted by Codex or other bots. The responsible human validates
+  findings and communicates the scenario, impact and next step in clear language.
+  Bot assistance does not replace required independent human approval.
 - Every PR requesting acceptance needs an issue, scope, tested/base SHA, environment,
   containerized reproduction commands, actual/expected results, explicit visual-evidence
   applicability and human review. A screenshot is required only when a changed visual

@@ -27,7 +27,8 @@ Drafts may be incomplete but cannot receive a passing `pr-governance` status.
    both. Do not invent a running server for a textual or contract change.
 5. Explain expected/actual results, remaining scope, compatibility and rollback.
    Sanitize all evidence, then declare exactly `Sanitized: yes` in Security.
-6. Obtain ordinary independent human review. CI does not prove semantic acceptance.
+6. Obtain independent human review, which may be assisted by Codex or other bots.
+   The reviewer validates findings and owns acceptance; CI alone does not prove it.
 
 Inspect candidate identity and size without running PR-provided commands:
 
@@ -112,14 +113,28 @@ Secret scanners are complementary and do not certify images or videos as safe.
 
 ## Maintainer confirmations
 
-Confirmations are ordinary human issue comments on the **same PR**, not RDD
-receipts and not bot-generated approval. Use the exact command as the whole comment;
+Codex and other bots may assist with code analysis and drafting review feedback.
+The responsible human verifies the findings and submits confirmations on the **same PR**;
+these are not RDD receipts or autonomous bot approvals. Use the exact command as the whole comment;
 link its `https://github.com/OWNER/REPO/issues/NUMBER#issuecomment-ID` URL in the
 named template section. The equivalent `/pull/NUMBER#issuecomment-ID` URL is
 also accepted. Size exceptions require a human with current `maintain` or `admin` permission.
 Evidence reuse and governance review require a different human from the PR author
 with current `write`, `maintain` or `admin` permission. An exception never replaces
-independent PR review. No bot approval or automatic label grant.
+independent PR review. A bot account's approval does not replace the required human
+confirmation; assistance with that review is allowed. Labels are not granted automatically.
+
+### Clear, actionable review feedback
+
+Before sharing assisted findings, the reviewer checks their accuracy and rewrites them
+for the developer when needed. Explain the affected location, the triggering scenario,
+the concrete impact, and a suggested next step or way to verify the fix. Distinguish
+blocking defects from optional suggestions and explain unfamiliar technical terms.
+Do not paste an unverified bot report or simplify away important evidence or uncertainty.
+
+For example, replace "Authorization invariant violation" with "A reader can modify this
+resource through this request. Check the write permission before saving, and add a test
+showing that the reader is rejected." This is an illustrative finding, not a reported bug.
 
 | Situation | Section | Exact comment, replacing uppercase tokens |
 | --- | --- | --- |
