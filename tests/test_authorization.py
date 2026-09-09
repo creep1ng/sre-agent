@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -48,11 +48,13 @@ def grant(subject: Principal, resource_type: ResourceType, resource_id: str) -> 
 class ResourceFacts:
     fact: ResourceAuthorizationFact | None
     calls: int = 0
+    requests: list[tuple[ResourceType, str]] = field(default_factory=list)
 
     async def authorization_view(
         self, resource_type: ResourceType, resource_id: str
     ) -> ResourceAuthorizationFact | None:
         self.calls += 1
+        self.requests.append((resource_type, resource_id))
         return self.fact
 
 
@@ -60,11 +62,13 @@ class ResourceFacts:
 class GrantFacts:
     result: Grant | None
     calls: int = 0
+    requests: list[tuple[str, str, ResourceType, str]] = field(default_factory=list)
 
     async def find_active(
         self, principal_id: str, action: str, resource_type: ResourceType, resource_id: str
     ) -> Grant | None:
         self.calls += 1
+        self.requests.append((principal_id, action, resource_type, resource_id))
         return self.result
 
 
@@ -167,3 +171,18 @@ async def test_role_name_model_and_yaml_cannot_influence_a_direct_grant_decision
         await engine.evaluate(  # type: ignore[call-arg]
             subject, "invoke", "llm_model", "resource-id", role="admin", yaml_policy="allow"
         )
+
+
+@pytest.mark.asyncio
+async def test_authorization_fact_lookups_receive_the_exact_request_identity() -> None:
+    subject = principal()
+    resources = ResourceFacts(ResourceAuthorizationFact("skill", "resource-id", "active"))
+    grants = GrantFacts(grant(subject, "skill", "resource-id"))
+
+    result = await AuthorizationDecisionEngine(resources, grants).evaluate(
+        subject, "invoke", "skill", "resource-id"
+    )
+
+    assert result.decision.decision == "allow"
+    assert resources.requests == [("skill", "resource-id")]
+    assert grants.requests == [(subject.principal_id, "invoke", "skill", "resource-id")]

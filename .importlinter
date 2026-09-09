@@ -1,0 +1,46 @@
+[importlinter]
+root_package = sre_agent
+include_external_packages = True
+
+[importlinter:contract:incident-does-not-use-concrete-adapters]
+name = Incident core does not use concrete adapters
+type = forbidden
+source_modules =
+    sre_agent.incident
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.application
+
+[importlinter:contract:governance-does-not-use-concrete-adapters]
+name = Governance does not use concrete adapters
+type = forbidden
+source_modules =
+    sre_agent.governance
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.application
+
+[importlinter:contract:persistence-does-not-use-delivery]
+name = Persistence does not use delivery or composition
+type = forbidden
+source_modules =
+    sre_agent.persistence
+forbidden_modules =
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.application
+
+[importlinter:contract:incident-runtime-and-ports-avoid-frameworks]
+name = Incident runtime and ports avoid framework dependencies
+type = forbidden
+source_modules =
+    sre_agent.incident.runtime
+    sre_agent.incident.persistence
+forbidden_modules =
+    fastapi
+    sqlalchemy
+    httpx

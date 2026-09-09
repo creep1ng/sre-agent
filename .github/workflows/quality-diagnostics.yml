@@ -1,0 +1,110 @@
+name: Quality diagnostics
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diagnostics-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  python-dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Audit the locked checks image
+        run: |
+          docker build --target checks --tag sre-agent-diagnostics:${{ github.sha }} -f docker/api.Dockerfile .
+          docker run --rm sre-agent-diagnostics:${{ github.sha }} sh -c '
+            set +e
+            pip-audit --local --format=json > /tmp/pip-audit.json
+            status=$?
+            set -e
+            python - /tmp/pip-audit.json "${status}" <<"PY"
+          import json
+          import sys
+          from pathlib import Path
+          try:
+              findings = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          except (OSError, json.JSONDecodeError) as error:
+              print(f"Python dependency audit unavailable: {error}")
+              raise SystemExit(int(sys.argv[2]) or 2)
+          if isinstance(findings, dict):
+              findings = findings.get("dependencies")
+          if not isinstance(findings, list):
+              print("Python dependency audit unavailable: unexpected report format")
+              raise SystemExit(int(sys.argv[2]) or 2)
+          print(f"Python packages with findings: {sum(bool(item.get('"'"'vulns'"'"')) for item in findings)}")
+          raise SystemExit(int(sys.argv[2]))
+          PY'
+
+  node-dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: root
+            command: npm audit --json
+          - name: schema-tooling
+            command: npm --prefix schemas/tooling audit --json
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Build the locked Node checks image
+        run: docker build --tag sre-agent-node-diagnostics:${{ github.sha }} -f docker/node-checks.Dockerfile .
+      - name: Audit ${{ matrix.name }} dependencies
+        run: >-
+          docker run --rm sre-agent-node-diagnostics:${{ github.sha }} sh -c
+          '${{ matrix.command }}'
+
+  python-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Create local-only Compose inputs
+        run: cp .env.example .env
+      - name: Measure branch coverage in the locked checks container
+        run: >-
+          docker compose --project-name diagnostics-coverage-${{ github.run_id }} --profile checks run --build --rm python-checks
+          sh -c 'coverage run --branch --source=src/sre_agent -m pytest && coverage report --format=total'
+      - name: Remove disposable coverage services
+        if: always()
+        run: docker compose --project-name diagnostics-coverage-${{ github.run_id }} --profile checks down -v --remove-orphans
+
+  mutation-authorization:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Run the bounded authorization mutation diagnostic
+        run: |
+          docker build --target checks --tag sre-agent-mutation:${{ github.sha }} -f docker/api.Dockerfile .
+          docker run --rm sre-agent-mutation:${{ github.sha }} sh -c '
+            workspace=$(mktemp -d)
+            cp -a /app/. "$workspace/"
+            cd "$workspace"
+            set +e
+            timeout 14m mutmut run
+            run_status=$?
+            mutmut export-cicd-stats >/tmp/mutmut-export.log 2>&1
+            export_status=$?
+            set -e
+            stats_path=mutants/mutmut-cicd-stats.json
+            if [ "${export_status}" -eq 0 ] && [ -f "${stats_path}" ]; then
+              cp "${stats_path}" mutation-stats.json
+            else
+              : > mutation-stats.json
+            fi
+            python scripts/summarize_mutation_diagnostic.py \
+              --run-status "${run_status}" \
+              --export-status "${export_status}" \
+              --stats mutation-stats.json
+          ' >> "$GITHUB_STEP_SUMMARY"

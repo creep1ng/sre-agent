@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17.4-alpine
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
@@ -122,7 +122,7 @@ services:
 
   python-checks-db:
     profiles: ["checks"]
-    image: postgres:17.4-alpine
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
     environment:
       POSTGRES_DB: python_checks
       POSTGRES_USER: python_checks
@@ -154,7 +154,7 @@ services:
 
   issue-14-db:
     profiles: ["issue-14"]
-    image: postgres:17.4-alpine
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
     environment:
       POSTGRES_DB: sre_agent_issue14
       POSTGRES_USER: sre_agent
@@ -200,6 +200,58 @@ services:
       TRIAGE_AGENT_PROVIDER: ${TRIAGE_AGENT_PROVIDER:?TRIAGE_AGENT_PROVIDER is required}
     depends_on:
       api:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime]
+
+  e2e:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: docker/e2e.Dockerfile
+    environment:
+      PLAYWRIGHT_BASE_URL: http://web
+      PLAYWRIGHT_PRODUCTION_TOPOLOGY: "1"
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime]
+
+  # The negative runner consumes a separately built web image with a reachable
+  # but non-HTTP upstream. It must fail its API assertion; CI treats a passing
+  # run as a broken negative test.
+  web-bad-proxy:
+    profiles: ["e2e-negative"]
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    environment:
+      API_UPSTREAM: db:5432
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks: [runtime]
+
+  e2e-bad-proxy:
+    profiles: ["e2e-negative"]
+    build:
+      context: .
+      dockerfile: docker/e2e.Dockerfile
+    command: ["npx", "playwright", "test", "--config=playwright.production.config.js", "tests/browser/production-proxy.spec.js"]
+    environment:
+      PLAYWRIGHT_BASE_URL: http://web-bad-proxy
+    depends_on:
+      web-bad-proxy:
         condition: service_healthy
     restart: "no"
     networks: [runtime]
