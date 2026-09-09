@@ -13,9 +13,14 @@ async function storageContents(page) {
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
   page.on("console", (message) => {
-    // Chromium logs "Failed to load resource" for intentional error statuses
-    // (401/404) and aborted requests; the UI assertions cover those paths.
-    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
+    // Nginx CSP (default-src 'self') blocks third-party font fetch locally,
+    // and route.abort("failed") intentionally logs a resource error; the UI
+    // assertions cover those paths.
+    if (
+      message.type() === "error" &&
+      !message.text().includes("Content Security Policy") &&
+      !message.text().startsWith("Failed to load resource")
+    )
       consoleErrors.push(message.text());
   });
   page.on("pageerror", (error) => consoleErrors.push(String(error?.message ?? error)));
