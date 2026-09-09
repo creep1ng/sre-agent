@@ -13,7 +13,9 @@ async function storageContents(page) {
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
   page.on("console", (message) => {
-    if (message.type() === "error" && !message.location().url?.includes("/public/admin/principals.html"))
+    // Chromium logs "Failed to load resource" for intentional error statuses
+    // (401/404) and aborted requests; the UI assertions cover those paths.
+    if (message.type() === "error" && !message.text().startsWith("Failed to load resource"))
       consoleErrors.push(message.text());
   });
   page.on("pageerror", (error) => consoleErrors.push(String(error?.message ?? error)));
@@ -86,12 +88,4 @@ test("surfaces an unreachable API as a recoverable offline state", async ({ page
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "offline", { timeout: 20_000 });
   await expect(page.locator("#page-error-title")).toHaveText("API unavailable");
   await expect(page.locator("[data-principal-row]")).toHaveCount(0);
-  // The aborted request intentionally logs a resource error; drop only that
-  // expected entry so the suite still fails on any other browser error.
-  const errors = page.context()["__consoleErrors"];
-  if (Array.isArray(errors)) {
-    page.context()["__consoleErrors"] = errors.filter(
-      (text) => !String(text).includes("ERR_FAILED") && !String(text).includes("Failed to load resource"),
-    );
-  }
 });
