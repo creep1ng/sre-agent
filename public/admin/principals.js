@@ -26,6 +26,11 @@ const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 const expanded = new Set();
 let currentItems = [];
+// Monotonic load generation: every loadPrincipals() call owns the UI until a
+// newer load starts or the session is cleared. A late resolution from a
+// previous generation (e.g. fetched with an older credential) must never
+// render.
+let sessionGeneration = 0;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const known = (value, allowed) => (allowed.has(value) ? value : "unknown");
@@ -131,6 +136,8 @@ function renderRows() {
 }
 
 async function loadPrincipals() {
+  const generation = sessionGeneration + 1;
+  sessionGeneration = generation;
   hideError();
   page.dataset.state = "loading";
   loadingState.hidden = false;
@@ -140,6 +147,7 @@ async function loadPrincipals() {
   announce("Loading principals.");
   try {
     const payload = await controlApi.listPrincipals();
+    if (generation !== sessionGeneration) return;
     currentItems = Array.isArray(payload?.items) ? payload.items : [];
     renderRows();
     loadingState.hidden = true;
@@ -156,6 +164,7 @@ async function loadPrincipals() {
     countLine.textContent = `${currentItems.length} principal${currentItems.length === 1 ? "" : "s"}${payload?.truncated === true ? " (truncated)" : "."}`;
     announce(countLine.textContent);
   } catch (error) {
+    if (generation !== sessionGeneration) return;
     loadingState.hidden = true;
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     listEmpty.hidden = false;
@@ -207,6 +216,9 @@ sessionForm.addEventListener("submit", (event) => {
 });
 
 disconnectButton.addEventListener("click", () => {
+  // Invalidate any in-flight load before clearing: its late resolution must
+  // not repopulate administrative data under the cleared session.
+  sessionGeneration += 1;
   credentialStore.clear();
   expanded.clear();
   currentItems = [];
