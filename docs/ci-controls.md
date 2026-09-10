@@ -92,10 +92,8 @@ missing assertion for an already specified behavior.
 
 After a hosted pilot, require the exact observed `Quality gate` check run and
 `pr-governance` status, stale-review dismissal, latest-push approval, and resolved
-conversations. Set GitHub's native required-approval count to `0`: GitHub cannot
-self-approve an author's PR, while this policy permits only an admin or maintainer
-self-attestation for evidence freshness or governance. That custom confirmation is
-not semantic independent review; ordinary independent human review remains required.
+conversations. Set GitHub's native required-approval count to `0`; the maintainer's
+merge decision is the human acceptance step, without separate custom confirmations.
 Restrict governance, CI, lockfile, image, import-boundary and production-browser changes
 to designated human reviewers. Preserve separate merger authorization while removing only
 the quality ruleset bypass. Native GitHub secret scanning and push protection were already
