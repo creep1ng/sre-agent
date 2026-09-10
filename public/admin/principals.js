@@ -223,13 +223,23 @@ sessionForm.addEventListener("submit", (event) => {
 
 disconnectButton.addEventListener("click", () => {
   // Invalidate any in-flight load before clearing: its late resolution must
-  // not repopulate administrative data under the cleared session.
+  // not repopulate administrative data under the cleared session. Do not
+  // start a replacement load: the cleared session has no credential, so a new
+  // request would only produce an authentication error and clobber the
+  // disconnected state the stale guard is meant to preserve.
   sessionGeneration += 1;
   credentialStore.clear();
   expanded.clear();
   currentItems = [];
+  renderRows();
+  hideError();
+  loadingState.hidden = true;
+  listWrap.hidden = true;
+  listEmpty.hidden = false;
+  emptyDetail.textContent = "Connect with an administrative API key to load the list.";
+  countLine.textContent = "Not loaded.";
+  page.dataset.state = "idle";
   announce("Session cleared.");
-  loadPrincipals();
 });
 
 refreshButton.addEventListener("click", () => {
