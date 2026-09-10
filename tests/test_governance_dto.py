@@ -6,6 +6,7 @@ from pydantic import ValidationError
 
 from sre_agent.governance.dto import (
     AuditEvent,
+    Consumption,
     CredentialReference,
     Grant,
     ModelAlias,
@@ -163,3 +164,89 @@ def test_historical_release_120_denial_without_a_cause_remains_readable() -> Non
     dto = AuditEvent.model_validate_json(json.dumps(data))
 
     assert dto.authorization_denial_cause is None
+
+
+def test_denied_audit_event_rejects_provider_consumption() -> None:
+    data = fixture("1.2.0", "positive", "audit.responses.denied")["data"]
+    data["consumption"] = {
+        "availability": "unavailable",
+        "source": "openrouter",
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+        "billed_usd": None,
+        "currency": None,
+        "precision": None,
+        "pricing_context": None,
+    }
+
+    with pytest.raises(ValidationError):
+        AuditEvent.model_validate_json(json.dumps(data))
+
+
+def complete_consumption() -> dict[str, object]:
+    return {
+        "availability": "complete",
+        "source": "openrouter",
+        "input_tokens": 11,
+        "output_tokens": 7,
+        "total_tokens": 18,
+        "billed_usd": "0.0012300",
+        "currency": "USD",
+        "precision": "exact",
+        "pricing_context": {
+            "observed_at": "2026-09-10T14:00:00Z",
+            "price_version": "openrouter:2026-09-10T14:00:00Z",
+        },
+    }
+
+
+def test_consumption_is_closed_and_preserves_exact_decimal_text() -> None:
+    data = complete_consumption()
+    dto = Consumption.model_validate_json(json.dumps(data))
+
+    assert dto.billed_usd == "0.0012300"
+    assert dto.model_dump(mode="json") == data
+
+    with pytest.raises(ValidationError):
+        Consumption.model_validate_json(json.dumps(data | {"unexpected": "drift"}))
+
+
+@pytest.mark.parametrize(
+    "changes",
+    (
+        {"input_tokens": -1},
+        {"input_tokens": True},
+        {"total_tokens": 17},
+        {"billed_usd": "NaN"},
+    ),
+)
+def test_consumption_rejects_invalid_invariants(changes: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        Consumption.model_validate_json(json.dumps(complete_consumption() | changes))
+
+
+def test_consumption_allows_explicit_absent_and_unavailable_states() -> None:
+    for availability in ("absent", "unavailable"):
+        dto = Consumption(
+            availability=availability,
+            source="openrouter",
+            input_tokens=None,
+            output_tokens=None,
+            total_tokens=None,
+            billed_usd=None,
+            currency=None,
+            precision=None,
+            pricing_context=None,
+        )
+        assert dto.model_dump(mode="json") == {
+            "availability": availability,
+            "source": "openrouter",
+            "input_tokens": None,
+            "output_tokens": None,
+            "total_tokens": None,
+            "billed_usd": None,
+            "currency": None,
+            "precision": None,
+            "pricing_context": None,
+        }
