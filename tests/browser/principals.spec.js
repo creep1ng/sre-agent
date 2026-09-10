@@ -135,7 +135,7 @@ test("ignores a stale detail response after the session is cleared", async ({ pa
   await expect(page.locator("[data-principal-detail='admin-human']")).toHaveCount(0);
   await expect(page.locator("[data-principal-row]")).toHaveCount(0);
   await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
-  await expect(page.locator("#page-error-title")).toHaveCount(0);
+  await expect(page.locator("#page-error")).toBeHidden();
   await page.unroute("**/api/v1/principals/admin-human");
 });
 
