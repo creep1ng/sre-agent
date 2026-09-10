@@ -15,6 +15,8 @@ from fastapi.security import HTTPBearer
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
+from sre_agent.control.service import ControlService
+from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.providers import ProviderRequest, ProviderResult
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import PrincipalRepository
@@ -234,6 +236,51 @@ def test_declared_secure_route_probe_detects_direct_adapter_bypass() -> None:
             )
 
     assert effects == ["adapter"]
+
+
+class RecordingAudit:
+    def __init__(self) -> None:
+        self.events: list[Any] = []
+
+    async def append(self, event: Any) -> None:
+        self.events.append(event)
+
+
+def test_principal_validation_precedes_shared_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    audit = RecordingAudit()
+    service = ControlService(object(), audit, AuditProjector(b"unit3-remediation-audit"))
+
+    async def unexpected_authorization(*_args: Any, **_kwargs: Any) -> Any:
+        raise AssertionError("authorization must follow operation validation")
+
+    monkeypatch.setattr(
+        "sre_agent.control.service.authorize_governed_access", unexpected_authorization
+    )
+
+    async def exercise() -> list[Any]:
+        return [
+            await service.create_principal(
+                {"principal_id": "INVALID", "kind": "human", "display_name": "Invalid"},
+                "Bearer invalid",
+                "unit3-valid-idempotency-key",
+            ),
+            await service.create_principal(
+                {"principal_id": "valid-id", "kind": "human", "display_name": "Valid"},
+                "Bearer invalid",
+                "short",
+            ),
+            await service.list_principals("Bearer invalid", "0", {}),
+            await service.list_principals("Bearer invalid", "100", {"unexpected": "value"}),
+            await service.get_principal("INVALID", "Bearer invalid"),
+            await service.get_principal("bad!", "Bearer invalid"),
+        ]
+
+    responses = asyncio.run(exercise())
+
+    assert [response.status_code for response in responses] == [422, 400, 422, 422, 422, 422]
+    assert len(audit.events) == 6
 
 
 def test_future_consumer_guidance_is_documentation_only() -> None:

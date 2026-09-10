@@ -332,12 +332,12 @@ def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
 
     cases = asyncio.run(exercise())
 
-    assert [response.status_code for response in cases] == [401, 401, 401, 401]
+    assert [response.status_code for response in cases] == [422, 400, 422, 422]
     assert [response.json()["error"]["code"] for response in cases] == [
-        "authentication_failed",
-        "authentication_failed",
-        "authentication_failed",
-        "authentication_failed",
+        "validation_error",
+        "invalid_idempotency_key",
+        "validation_error",
+        "validation_error",
     ]
     assert len(appended) == 4
     assert all(event.stage == "audit" for event in appended)

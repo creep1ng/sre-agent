@@ -347,6 +347,28 @@ class ControlService:  # noqa: E305
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.create", "admin.write"
         scope = ("POST", "/v1/principals")
+        if self._invalid_key(idempotency_key):
+            return await self._finish(
+                request_id,
+                started,
+                400,
+                "validation",
+                operation,
+                action,
+                error_code="invalid_idempotency_key",
+            )
+        try:
+            body = PrincipalCreate.model_validate(raw)
+        except ValidationError:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
         try:
             context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, *CONTROL_SCOPES[scope]
@@ -374,28 +396,6 @@ class ControlService:  # noqa: E305
                 resource_ref=("administrative_control", "principals"),
                 decision=evaluation.decision,
                 authorization_denial_cause=evaluation.denial_cause,
-            )
-        if self._invalid_key(idempotency_key):
-            return await self._finish(
-                request_id,
-                started,
-                400,
-                "validation",
-                operation,
-                action,
-                error_code="invalid_idempotency_key",
-            )
-        try:
-            body = PrincipalCreate.model_validate(raw)
-        except ValidationError:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                operation,
-                action,
-                error_code="validation_error",
             )
         payload_hash = _payload_sha256(body.model_dump(mode="json"))
         canonical_path = "/v1/principals"
@@ -470,6 +470,23 @@ class ControlService:  # noqa: E305
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.list", "admin.read"
         try:
+            parsed_limit = int(limit)
+            if isinstance(limit, str) and not limit.isdigit():
+                raise ValueError
+            ListPrincipalsQuery.model_validate({"limit": parsed_limit})
+        except (TypeError, ValueError, ValidationError):
+            parsed_limit = 0
+        if extra_params or not 1 <= parsed_limit <= 100:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
             context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, *CONTROL_SCOPES[("GET", "/v1/principals")]
             )
@@ -497,23 +514,6 @@ class ControlService:  # noqa: E305
                 decision=evaluation.decision,
                 authorization_denial_cause=evaluation.denial_cause,
             )
-        try:
-            parsed_limit = int(limit)
-            if isinstance(limit, str) and not limit.isdigit():
-                raise ValueError
-            ListPrincipalsQuery.model_validate({"limit": parsed_limit})
-        except (TypeError, ValueError, ValidationError):
-            parsed_limit = 0
-        if extra_params or not 1 <= parsed_limit <= 100:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                operation,
-                action,
-                error_code="validation_error",
-            )
         async with self.sessions() as session:
             items, truncated = await PrincipalRepository(session).list(limit=parsed_limit)
         payload: dict[str, Any] = {
@@ -537,6 +537,16 @@ class ControlService:  # noqa: E305
     async def get_principal(self, principal_id: str, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.get", "admin.read"
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
         try:
             context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, *CONTROL_SCOPES[("GET", "/v1/principals/{id}")]
@@ -564,16 +574,6 @@ class ControlService:  # noqa: E305
                 resource_ref=("administrative_control", "principals"),
                 decision=evaluation.decision,
                 authorization_denial_cause=evaluation.denial_cause,
-            )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                operation,
-                action,
-                error_code="validation_error",
             )
         async with self.sessions() as session:
             principal = await PrincipalRepository(session).get(principal_id)
