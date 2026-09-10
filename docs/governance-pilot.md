@@ -35,13 +35,14 @@ The expanded CI controls were validated as configuration and local boundary chec
 | YAML parsing and `git diff --check` | Pass |
 
 The temporary harness lives outside the repository at `/tmp/issue183-pilot.cjs`.
-It covers 400/401 lines, approved size, label removal, wrong permission,
+It covered the original 400/401-line exception and confirmation design,
 missing mandatory evidence, empty template, placeholder/duplicate sections,
-changed base, evidence reuse, independent review, comment revocation, bot denial,
+changed base, evidence reuse,
 command injection remaining inert data, SDD path requirements, snapshot changes,
 head-bound status publishing, unchanged-status deduplication and a metadata race. It does not create public PRs
 or alter repository tests. Preserve its output with the final publication evidence;
-temporary local paths are not a shared test suite or proof of hosted execution.
+temporary local paths are not a shared test suite or proof of hosted execution. The
+custom approval commands and label gate described by that historical harness were later removed.
 
 Reproduce the static checks using the project development environment and pinned
 `actionlint` installed outside the project dependency files:
@@ -69,9 +70,8 @@ not automatically closed.
 - Publish reviewable work units through the approved-issue policy.
 - Capture a screenshot of the actual delivered result at its published SHA. Video is optional while media storage is unavailable; include a real link or the documented deferral, never a fabricated URL.
 - Complete the hosted negative/positive scenarios in the rollout guide.
-- Have another contributor reproduce and judge the evidence independently. `creep1ng` is the planned independent reproducer/reviewer; this is pending, not an approval.
+- Have the maintainer judge the evidence, scope, and risk when deciding whether to merge.
 - Run the same diagnostics in hosted GitHub Actions after publication; local pass evidence does not establish a hosted check or merge protection.
-- Obtain an explicit `size:exception` approval before publishing any work unit containing the current `uv.lock` update, which alone exceeds the 400-line limit.
 - Verify diagnostics in hosted Actions and dependency-audit network behavior.
 - Obtain explicit maintainer activation confirmation, apply and read back required
   contexts/review settings, then prove the effective integration block.
