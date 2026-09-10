@@ -49,7 +49,9 @@ to slice 7. Do not combine the total worktree into a wholesale exception.
 The trusted `pr-governance` workflow loads its helper from the default branch,
 not the PR candidate. It therefore cannot validate its own first landing. Bootstrap
 slice 3 through ordinary independent review, then run the hosted pilot before
-requiring `pr-governance` as a protected context.
+requiring `pr-governance` as a protected context. A policy PR initially fails the old
+default policy; use one explicit admin ruleset bypass only for that bootstrap, then update
+the ruleset and read it back. Do not change live settings or merge as part of this record.
 
 Publication planning for #183 is authorized, but every actual PR still needs
 current-base metadata and ordinary independent review. The only requested
@@ -73,7 +75,7 @@ Record candidate/base/tested SHA, workflow URL, observed status and a sanitized 
 - Remove the label or edit/delete the approving comment: the status fails again.
 - Missing screenshot or commands fails; a video passes only as a real link or the documented storage deferral; empty templates fail.
 - Change base/head: recompute size and require current evidence/confirmations.
-- Wrong-role, bot and self approvals cannot satisfy independent review.
+- Wrong-role and bot confirmations fail; admin/maintain self-attestations pass only for evidence freshness or governance, while write self-confirmations fail.
 - Manifest/lock mismatch, direct/indirect forbidden import against a copied candidate, and scoped type mismatch fail their respective stage.
 - Candidate API/web images run with no source mount or host ports; the ordinary and bad-proxy browser scenarios pass/fail as designed.
 - Failure, cancellation, skip or missing mandatory CI job fails Quality gate.
@@ -97,13 +99,15 @@ durable operator backup. The initial local pre-state is in
    head. Require `Quality gate` (check run) and `pr-governance` (commit status),
    binding each to the observed GitHub Actions integration. Never guess a display
    prefix or use a similarly named check from another application.
-2. In quality ruleset `20580391`, require current-base successful checks, one
-   independent approving review, stale-review dismissal, latest-push approval and
-   resolution of conversations. Remove blanket quality bypass. Preserve existing
-   deletion, force-push and allowed-merge-method rules.
+2. In quality ruleset `20580391`, require current-base successful checks, `0` native
+   required approvals, stale-review dismissal, latest-push approval and resolution of
+   conversations. GitHub-native self-review remains impossible; the custom admin/maintain
+   confirmation is self-attestation, not semantic independent review. Remove blanket quality
+   bypass. Preserve existing deletion, force-push and allowed-merge-method rules.
 3. Preserve merger-authorization ruleset `21689570` unchanged. The metadata policy
-   separately requires a human write/maintain/admin collaborator's candidate-bound
-   confirmation when governance files change; it does not grant merge permission.
+   separately requires a candidate-bound human confirmation when governance files change:
+   `write` must be independent, while `maintain`/`admin` may self-attest. It does not grant
+   merge permission or replace independent review.
 4. Read both rulesets back and exercise a real blocked integration. Export the
    effective rule and evidence. Only then replace "enforcement partial" with the
    exact activated state. Never assert protection from YAML presence alone.

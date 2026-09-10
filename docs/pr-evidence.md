@@ -90,9 +90,13 @@ receipts and not bot-generated approval. Use the exact command as the whole comm
 link its `https://github.com/OWNER/REPO/issues/NUMBER#issuecomment-ID` URL in the
 named template section. The equivalent `/pull/NUMBER#issuecomment-ID` URL is
 also accepted. Size exceptions require a human with current `maintain` or `admin` permission.
-Evidence reuse and governance review require a different human from the PR author
-with current `write`, `maintain` or `admin` permission. An exception never replaces
-independent PR review. No bot approval or automatic label grant.
+Evidence reuse and governance review accept a human with current `write`, `maintain`
+or `admin` permission. A `write` collaborator must be different from the PR author;
+an `admin` or `maintain` collaborator may confirm their own or another author's evidence
+freshness or governance change. That custom confirmation is a bounded self-attestation,
+not semantic independent review. GitHub-native authors still cannot approve their own PR,
+so the native required-approval count must remain `0`; ordinary independent human review
+remains required. No bot approval or automatic label grant.
 
 | Situation | Section | Exact comment, replacing uppercase tokens |
 | --- | --- | --- |
