@@ -12,7 +12,7 @@ def test_environment_injects_all_public_release_metadata() -> None:
         {
             "DATABASE_URL": "postgresql://unused",
             "SRE_AGENT_APPLICATION_VERSION": "2.3.4",
-            "SRE_AGENT_CONTRACT_VERSION": "2.0.0",
+            "SRE_AGENT_CONTRACT_VERSION": "2.1.0",
             "SRE_AGENT_BUILD_REVISION": "0c1fb19",
         }
     )
@@ -20,10 +20,10 @@ def test_environment_injects_all_public_release_metadata() -> None:
     document = create_application(settings).openapi()
 
     assert document["info"]["version"] == "2.3.4"
-    assert document["info"]["x-sre-agent-contract-version"] == "2.0.0"
+    assert document["info"]["x-sre-agent-contract-version"] == "2.1.0"
     assert document["info"]["x-sre-agent-build-revision"] == "0c1fb19"
     assert "Application version: `2.3.4`" in document["info"]["description"]
-    assert "Contract version: `2.0.0`" in document["info"]["description"]
+    assert "Contract version: `2.1.0`" in document["info"]["description"]
     assert "Build revision: `0c1fb19`" in document["info"]["description"]
 
 
@@ -37,7 +37,7 @@ def test_empty_environment_values_keep_source_archive_defaults() -> None:
         }
     )
 
-    assert settings.release_metadata.contract_version == CONTRACT_VERSION == "2.0.0"
+    assert settings.release_metadata.contract_version == CONTRACT_VERSION == "2.1.0"
     assert settings.release_metadata.build_revision == SOURCE_ARCHIVE_BUILD_REVISION
     assert settings.release_metadata.application_version
 

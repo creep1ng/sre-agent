@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -7,8 +8,10 @@ import yaml
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
+from pydantic import ValidationError
 
 from sre_agent.gateway.responses import ResponsesRequest, responses_router
+from sre_agent.governance.dto import Consumption
 from sre_agent.release import CONTRACT_VERSION
 
 RELEASES = Path("schemas/releases")
@@ -27,27 +30,75 @@ def runtime_openapi(service: object | None = None) -> dict[str, Any]:
     return application.openapi()
 
 
-def dereference(schema: Any, components: dict[str, Any]) -> Any:
+def contract_schemas(release: Path) -> dict[str, dict[str, Any]]:
+    return {
+        document["$id"]: document
+        for path in sorted((release / "json-schema").rglob("*.json"))
+        if (document := json.loads(path.read_text())).get("$id")
+    }
+
+
+def dereference(
+    schema: Any,
+    components: dict[str, Any],
+    release_schemas: dict[str, dict[str, Any]],
+    document: dict[str, Any] | None = None,
+) -> Any:
     if isinstance(schema, list):
-        return [dereference(item, components) for item in schema]
+        return [dereference(item, components, release_schemas, document) for item in schema]
     if not isinstance(schema, dict):
         return schema
+    document = document or schema
     if "$ref" in schema:
-        name = schema["$ref"].removeprefix("#/components/schemas/")
-        resolved = dereference(components[name], components)
+        reference = schema["$ref"]
+        if reference.startswith("#/components/schemas/"):
+            resolved = components[reference.removeprefix("#/components/schemas/")]
+        elif reference.startswith("#/$defs/"):
+            resolved = document["$defs"][reference.removeprefix("#/$defs/")]
+        else:
+            resolved = release_schemas[reference]
+        resolved = dereference(resolved, components, release_schemas, resolved)
         siblings = {
-            key: dereference(value, components)
+            key: dereference(value, components, release_schemas, document)
             for key, value in schema.items()
             if key not in {"$ref", "description"}
         }
         return resolved | siblings
     normalized = {
-        key: dereference(value, components)
+        key: dereference(value, components, release_schemas, document)
         for key, value in schema.items()
-        if key not in {"$id", "$schema", "title", "description", "examples", "default"}
+        if key not in {"$id", "$schema", "$defs", "title", "description", "examples", "default"}
     }
     if "const" in normalized:
         normalized.pop("type", None)
+    return normalized
+
+
+def normalize_equivalent_schema_shapes(schema: Any) -> Any:
+    """Normalize equivalent Pydantic and JSON Schema scalar encodings."""
+    if isinstance(schema, list):
+        return [normalize_equivalent_schema_shapes(item) for item in schema]
+    if not isinstance(schema, dict):
+        return schema
+
+    normalized = {key: normalize_equivalent_schema_shapes(value) for key, value in schema.items()}
+    if "enum" in normalized:
+        normalized.pop("type", None)
+
+    alternatives = normalized.get("anyOf")
+    if isinstance(alternatives, list) and len(alternatives) == 2:
+        value_schema = next((item for item in alternatives if item != {"type": "null"}), None)
+        if value_schema is not None and {"type": "null"} in alternatives:
+            if "enum" in value_schema:
+                normalized["enum"] = [*value_schema["enum"], None]
+                normalized.pop("anyOf")
+            elif "const" in value_schema:
+                normalized["enum"] = [value_schema["const"], None]
+                normalized.pop("anyOf")
+            elif set(value_schema) <= {"type", "minimum", "maxLength", "pattern"}:
+                normalized.pop("anyOf")
+                normalized.update(value_schema)
+                normalized["type"] = [value_schema["type"], "null"]
     return normalized
 
 
@@ -62,6 +113,7 @@ def test_runtime_operation_documents_the_complete_responses_contract() -> None:
     operation = runtime["paths"]["/v1/responses"]["post"]
     canonical = contract["paths"]["/v1/responses"]["post"]
     components = runtime["components"]["schemas"]
+    release_schemas = contract_schemas(release)
 
     assert operation["operationId"] == canonical["operationId"]
     assert operation["summary"] == canonical["summary"]
@@ -75,14 +127,18 @@ def test_runtime_operation_documents_the_complete_responses_contract() -> None:
 
     runtime_request = operation["requestBody"]["content"]["application/json"]["schema"]
     contract_request = canonical["requestBody"]["content"]["application/json"]["schema"]
-    assert dereference(runtime_request, components) == dereference(
-        contract_schema(release, contract_request["$ref"]), components
+    assert normalize_equivalent_schema_shapes(
+        dereference(runtime_request, components, release_schemas)
+    ) == normalize_equivalent_schema_shapes(
+        dereference(contract_schema(release, contract_request["$ref"]), components, release_schemas)
     )
 
     runtime_success = operation["responses"]["200"]["content"]["application/json"]["schema"]
     contract_success = canonical["responses"]["200"]["content"]["application/json"]["schema"]
-    assert dereference(runtime_success, components) == dereference(
-        contract_schema(release, contract_success["$ref"]), components
+    assert normalize_equivalent_schema_shapes(
+        dereference(runtime_success, components, release_schemas)
+    ) == normalize_equivalent_schema_shapes(
+        dereference(contract_schema(release, contract_success["$ref"]), components, release_schemas)
     )
 
     for status in {"401", "403", "422", "502", "503", "504"}:
@@ -91,9 +147,63 @@ def test_runtime_operation_documents_the_complete_responses_contract() -> None:
             canonical["responses"][status]["$ref"].rsplit("/", 1)[-1]
         ]
         contract_error = canonical_response["content"]["application/json"]["schema"]
-        assert dereference(runtime_error, components) == dereference(
-            contract_schema(release, contract_error["$ref"]), components
+        assert normalize_equivalent_schema_shapes(
+            dereference(runtime_error, components, release_schemas)
+        ) == normalize_equivalent_schema_shapes(
+            dereference(
+                contract_schema(release, contract_error["$ref"]),
+                components,
+                release_schemas,
+            )
         )
+
+
+def test_runtime_consumption_enforces_contract_semantics_missing_from_json_schema() -> None:
+    complete = {
+        "availability": "complete",
+        "source": "openrouter",
+        "input_tokens": 1,
+        "output_tokens": 2,
+        "total_tokens": 3,
+        "billed_usd": "0.001",
+        "currency": "USD",
+        "precision": "exact",
+        "pricing_context": {
+            "observed_at": datetime(2026, 9, 10, tzinfo=UTC),
+            "price_version": "openrouter-2026-09-10",
+        },
+    }
+    assert Consumption.model_validate(complete)
+    invalid = (
+        {**complete, "currency": None, "precision": None, "pricing_context": None},
+        {**complete, "availability": "complete", "total_tokens": None},
+        {
+            **complete,
+            "availability": "partial",
+            "input_tokens": None,
+            "output_tokens": None,
+            "total_tokens": None,
+            "billed_usd": None,
+            "currency": None,
+            "precision": None,
+            "pricing_context": None,
+        },
+        {
+            **complete,
+            "availability": "unavailable",
+            "input_tokens": 1,
+            "output_tokens": None,
+            "total_tokens": None,
+            "billed_usd": None,
+            "currency": None,
+            "precision": None,
+            "pricing_context": None,
+        },
+        {**complete, "unexpected": True},
+    )
+    for payload in invalid:
+        with pytest.raises(ValidationError):
+            Consumption.model_validate(payload)
 
 
 def test_runtime_operation_declares_bearer_security_and_governed_scope() -> None:
