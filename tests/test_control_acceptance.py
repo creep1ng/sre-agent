@@ -320,17 +320,17 @@ def test_conflict_inactive_auth_and_hidden_denial_audit(
         == 200
     )
     inactive_denial = client.get("/v1/principals", headers=headers(issued["key"]))
-    assert inactive_denial.status_code == 404
+    assert inactive_denial.status_code == 403
     inactive_cause, *_ = audit_row(inactive_denial.json()["request_id"])
     assert inactive_cause == "principal_inactive"
 
     denied_existing = client.get("/v1/principals/admin-human", headers=headers(RESTRICTED_KEY))
     denied_missing = client.get("/v1/principals/not-present-human", headers=headers(RESTRICTED_KEY))
-    assert (denied_existing.status_code, denied_missing.status_code) == (404, 404)
+    assert (denied_existing.status_code, denied_missing.status_code) == (403, 403)
     assert denied_existing.json()["error"] == denied_missing.json()["error"]
     assert_valid(canonical["error"], denied_existing.json())
     cause, status, identity, resource, decision = audit_row(denied_existing.json()["request_id"])
-    assert cause == "grant_not_applicable" and status == 404
+    assert cause == "grant_not_applicable" and status == 403
     assert identity is not None and resource["resource_type"] == "administrative_control"
     assert decision["decision"] == "deny"
 

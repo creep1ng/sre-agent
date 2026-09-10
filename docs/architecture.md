@@ -32,6 +32,18 @@ presence flag and calls the API boundary, so the OpenRouter key never crosses in
 
 The schema releases remain the contract authority. Runtime models must not replace or rewrite files under `schemas/releases/`.
 
+## Governed extension rule
+
+Future LLM, MCP, skill, and knowledge consumers MUST enter through a declared governed operation:
+
+1. Declare Bearer security and the server-owned `(action, resource_type, resource_id)` scope.
+2. Call `authorize_governed_access` after operation validation and before lookup, routing, or adapter execution.
+3. Use an exact existing grant; do not infer roles from principal names or client input.
+4. Record the terminal audit event before releasing an allowed result, and keep denied effects at zero.
+
+MCP, skill, and knowledge runtimes remain future-only until their runtime boundaries exist. This rule adds no
+endpoint, grant model, provisioning path, schema, seed, migration, or lifecycle behavior.
+
 ## Release metadata
 
 `/openapi.json` and Swagger identify a running API with three deliberately separate values:

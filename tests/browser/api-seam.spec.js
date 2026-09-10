@@ -105,7 +105,7 @@ test("browser client consumes the real administrative API without fixture fallba
   }
   expect(evidence.demo.error).toMatchObject(
     productionTopology
-      ? { kind: "not_found", status: 404, code: "resource_not_found" }
+      ? { kind: "authorization", status: 403, code: "resource_unavailable" }
       : { kind: "authentication", status: 401, code: "authentication_failed" },
   );
   expect(evidence.denied.error).toMatchObject({ kind: "authorization", status: 403 });

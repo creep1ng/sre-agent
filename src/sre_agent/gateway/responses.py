@@ -13,11 +13,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.exceptions import HTTPException
 
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
-from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import AuditEvent
-from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import AuditRepository, CredentialRepository, GrantRepository, ResourceRepository  # fmt: skip
+from sre_agent.persistence.repositories import AuditRepository, ResourceRepository
 
 
 class ResponsesRequest(BaseModel):
@@ -182,14 +181,9 @@ class ResponsesService:  # noqa: E305
         identifiers = {name: value for name in ("incident_id", "run_id", "task_id")
                        if (value := getattr(request, name))}
         try:
-            context = await self._authenticate(authorization)
-            if context is None:
-                return await self._finish(request_id, started, 401, "authentication",
-                                          reason="authentication_failed", identifiers=identifiers)
-            async with self.sessions() as session:
-                evaluation = await AuthorizationDecisionEngine(
-                    ResourceRepository(session), GrantRepository(session)
-                ).evaluate(context.principal, "invoke", "llm_model", request.model)
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, "invoke", "llm_model", request.model
+            )
             decision = evaluation.decision
             if decision.decision == "deny":
                 return await self._finish(request_id, started, 403, "authorization", context=context,
@@ -198,6 +192,9 @@ class ResponsesService:  # noqa: E305
                                           identifiers=identifiers)
             async with self.sessions() as session:
                 assignment = await ResourceRepository(session).resolve_assignment("llm_model", request.model)
+        except AuthenticationFailed:
+            return await self._finish(request_id, started, 401, "authentication",
+                                      reason="authentication_failed", identifiers=identifiers)
         except Exception:
             return await self._finish(request_id, started, 503, "audit",
                                       reason="audit_unavailable", retryable=True,
@@ -239,13 +236,6 @@ class ResponsesService:  # noqa: E305
                                       alias=request.model, decision=decision, assignment=assignment,
                                       reason=reason, retryable=status in {503, 504}, identifiers=identifiers,
                                       error_code=code, retry_after=failure.retry_after)
-
-    async def _authenticate(self, authorization: str | None):
-        scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
-            return None
-        async with self.sessions() as session:
-            return await CredentialRepository(session).resolve_authorization_context(key)
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, **facts):
@@ -336,6 +326,13 @@ def responses_router(service: ResponsesService) -> APIRouter:
         ),
         response_description="Completed textual response",
         tags=["Responses"],
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "invoke",
+                "resource_type": "llm_model",
+                "resource_id": "body.model",
+            }
+        },
     )
     async def create(
         request: Request,
