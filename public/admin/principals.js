@@ -188,14 +188,20 @@ rowsBody.addEventListener("click", async (event) => {
     renderRows();
     return;
   }
+  const generation = sessionGeneration;
   try {
+    // Capture the session generation before the detail request: a late
+    // resolution must not mutate items, DOM, expanded, error or live region
+    // once the session changed or was cleared.
     const item = await controlApi.getPrincipal(principalId);
+    if (generation !== sessionGeneration) return;
     const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
     if (index >= 0) currentItems[index] = item;
     else currentItems = [...currentItems, item];
     expanded.add(principalId);
     renderRows();
   } catch (error) {
+    if (generation !== sessionGeneration) return;
     expanded.delete(principalId);
     showError(error);
     await loadPrincipals();
