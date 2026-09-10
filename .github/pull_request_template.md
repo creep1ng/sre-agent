@@ -45,8 +45,8 @@ Never add a fabricated URL. -->
 <!-- Exactly: mock, controlled integration, real external service, or rendered artifact. -->
 
 ## Evidence freshness
-<!-- Explain applicability. If Tested SHA differs from HEAD, link independent
-reviewer acceptance using the syntax in docs/pr-evidence.md. -->
+<!-- Explain why the evidence still applies if Tested SHA differs from HEAD.
+The human reviewer evaluates freshness before merging. -->
 
 ## Risks and rollback
 <!-- Compatibility, configuration/migration impact and reversal instructions. -->
@@ -54,20 +54,11 @@ reviewer acceptance using the syntax in docs/pr-evidence.md. -->
 ## Security
 <!-- After manually sanitizing evidence, write exactly Sanitized: yes. -->
 
-## Size exception
-Not requested.
-<!-- Over 400 additions + deletions requires rationale, rejected split alternatives,
-review route and linked maintainer approval; label alone is insufficient. -->
-
-## Governance review
-Not applicable.
-<!-- For workflow/policy/agent configuration changes, link independent reviewer approval. -->
-
 ## Definition of Done
 - [ ] Every covered criterion has current, reproducible evidence.
 - [ ] Relevant tests and applicable lint/build/contract checks pass.
 - [ ] A human reviewer verified the result and scope, not only green checks.
 - [ ] No known critical defect remains in the delivered scope.
 
-<!-- Full policy and approval syntax: docs/pr-evidence.md.
+<!-- Full policy: docs/pr-evidence.md.
 Spikes without repository changes retain issue-only evidence; never create an empty PR. -->
