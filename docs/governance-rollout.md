@@ -39,12 +39,11 @@ dependency slice is at or below 400 changed lines.
 | 9 | Informational diagnostics | 357 | Depends on 5; separate Node/Python audits, coverage and authorization mutation reporting |
 | 10 | Pilot record and rollout | 207 | Depends on completed local/hosted evidence; documentation only |
 
-Slice 5 needs the explicitly authorized `size:exception`: the overage comes from
+Slice 5 exceeds the original 400-line planning target because
 the generated lockfile, while its non-lock companion changes are the minimum
-consumer/configuration changes needed to validate that lock. Do not use that
-exception for any other slice. Stage `compose.yaml` by hunk: its three digest
+consumer/configuration changes needed to validate that lock. Stage `compose.yaml` by hunk: its three digest
 replacements (6 changed lines) belong to slice 5; its 51-line E2E block belongs
-to slice 7. Do not combine the total worktree into a wholesale exception.
+to slice 7. Do not combine the total worktree into one review unit.
 
 The trusted `pr-governance` workflow loads its helper from the default branch,
 not the PR candidate. It therefore cannot validate its own first landing. Bootstrap
@@ -54,9 +53,8 @@ default policy; use one explicit admin ruleset bypass only for that bootstrap, t
 the ruleset and read it back. Do not change live settings or merge as part of this record.
 
 Publication planning for #183 is authorized, but every actual PR still needs
-current-base metadata and ordinary independent review. The only requested
-size exception is slice 5; record its live label, rationale and maintainer
-approval on that PR only. Partial deliveries reference, rather than close, #183.
+current-base metadata and maintainer review. CI requires no approval comment,
+label, or commit confirmation. Partial deliveries reference, rather than close, #183.
 
 The [local validation record](governance-pilot.md) separates executed checks from
 remaining hosted and human acceptance evidence.
@@ -71,11 +69,9 @@ against production. Local API simulations complement but do not replace this pil
 
 Record candidate/base/tested SHA, workflow URL, observed status and a sanitized screenshot of the actual acceptance result for these scenarios. A video is optional while media storage is unavailable; use its real link or the documented deferral, never a fabricated URL:
 
-- 400 lines pass; 401 without exception fail; valid exception passes only size.
-- Remove the label or edit/delete the approving comment: the status fails again.
+- Both small and large PRs report valid size metadata without a custom approval gate.
 - Missing screenshot or commands fails; a video passes only as a real link or the documented storage deferral; empty templates fail.
-- Change base/head: recompute size and require current evidence/confirmations.
-- Wrong-role and bot confirmations fail; admin/maintain self-attestations pass only for evidence freshness or governance, while write self-confirmations fail.
+- Change base/head: recompute metadata and reevaluate evidence freshness during merge review.
 - Manifest/lock mismatch, direct/indirect forbidden import against a copied candidate, and scoped type mismatch fail their respective stage.
 - Candidate API/web images run with no source mount or host ports; the ordinary and bad-proxy browser scenarios pass/fail as designed.
 - Failure, cancellation, skip or missing mandatory CI job fails Quality gate.
@@ -101,13 +97,10 @@ durable operator backup. The initial local pre-state is in
    prefix or use a similarly named check from another application.
 2. In quality ruleset `20580391`, require current-base successful checks, `0` native
    required approvals, stale-review dismissal, latest-push approval and resolution of
-   conversations. GitHub-native self-review remains impossible; the custom admin/maintain
-   confirmation is self-attestation, not semantic independent review. Remove blanket quality
+   conversations. The maintainer's merge decision is the human acceptance step. Remove blanket quality
    bypass. Preserve existing deletion, force-push and allowed-merge-method rules.
 3. Preserve merger-authorization ruleset `21689570` unchanged. The metadata policy
-   separately requires a candidate-bound human confirmation when governance files change:
-   `write` must be independent, while `maintain`/`admin` may self-attest. It does not grant
-   merge permission or replace independent review.
+   does not add separate comment, label, or per-commit approvals for governance changes.
 4. Read both rulesets back and exercise a real blocked integration. Export the
    effective rule and evidence. Only then replace "enforcement partial" with the
    exact activated state. Never assert protection from YAML presence alone.
