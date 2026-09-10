@@ -41,6 +41,6 @@ One honest pass keeps each PR below 400 lines including planning overhead (PR 1 
 
 ## Unit 3: RED → GREEN → REFACTOR — PR 3 Architecture
 
-- [ ] 3.1 RED: Add inventory tests for all four real /v1 operations, Bearer security, exact scopes, and 401/403 declarations; edit only `tests/test_governed_authorization.py`.
-- [ ] 3.2 GREEN: Drive composed real routes with recording provider/principal adapters and denied credentials; assert zero business effects. A synthetic direct-adapter case is secondary only.
-- [ ] 3.3 REFACTOR: Update `docs/architecture.md` with the governed-entry rule for future LLM/MCP/skill/knowledge consumers; run focused Docker tests.
+- [x] 3.1 RED: Add inventory tests for all four real /v1 operations, Bearer security, exact scopes, and 401/403 declarations; edit only `tests/test_governed_authorization.py`.
+- [x] 3.2 GREEN: Drive composed real routes with recording provider/principal adapters and denied credentials; assert zero business effects. A synthetic direct-adapter case is secondary only.
+- [x] 3.3 REFACTOR: Update `docs/architecture.md` with the governed-entry rule for future LLM/MCP/skill/knowledge consumers; run focused Docker tests.
