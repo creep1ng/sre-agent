@@ -2,73 +2,71 @@
 
 ## Technical Approach
 
-Publish an additive, immutable 2.1.0 snapshot on /v1 while leaving every 2.0.0 byte unchanged. Normalize OpenRouter response evidence once into the closed consumption object specified by the sibling specs, then pass that object to both the public response metadata and the metadata-only audit event.
+Publish an additive, immutable 2.1.0 snapshot on /v1 while leaving every 2.0.0 artifact byte-identical. Normalize OpenRouter evidence once into the closed consumption object, then pass the same object to public response metadata and metadata-only audit persistence.
 
-The apply baseline MUST first contain issue #202's governed flow from /home/creep/.codex/worktrees/ed92/sre-agent: validation -> `authorize_governed_access` -> alias resolution -> routing -> provider -> normalization -> audit append -> release. Do not reintroduce the old ResponsesService-local authentication/authorization path; #130 extends the shared boundary and preserves zero-call denial and audit-before-release.
+Separate **published contract discovery** from the **active runtime contract**. Release tooling discovers and validates every published semantic-version directory. Runtime OpenAPI parity resolves the explicit active `CONTRACT_VERSION`, requires that exact published snapshot and manifest to exist, and compares against that snapshot only. It MUST NOT select the highest directory. This permits a staged 2.1.0 (and later contract-only 2.2.0) to validate independently while the runtime remains explicitly 2.0.0 until the response/audit activation slice; the final integrated #130 runtime MUST be 2.1.0.
+
+The apply baseline MUST contain issue #202's governed flow: validation -> `authorize_governed_access` -> alias resolution -> routing -> provider -> normalization -> audit append -> release. Do not restore the old ResponsesService-local authorization path.
 
 ## Architecture Decisions
 
 | Decision | Choice | Rejected | Rationale |
 |---|---|---|---|
-| Evidence authority | OpenRouter `usage` is the only source for token and billed USD values; discard the provider body after adaptation. | Text, latency, SDK types, or inferred estimates | Prevents false zeroes and sensitive-body retention. |
-| Normalized shape | Add one strict, closed `Consumption` DTO with availability/source, nullable token dimensions, exact-decimal `billed_usd`, currency, precision, and `pricing_context`; reuse it in response metadata and AuditEvent. | Separate public/audit shapes or an untyped JSON sidecar | Keeps #143's projection identical and rejects drift. |
-| Billing context | Preserve provider observation time and use that billed-response instant as the temporal price snapshot/version. | Floating-point amounts or a fabricated external pricing-registry ID | The runtime has no pricing registry; exact provider evidence remains authoritative. |
-| Outcome handling | Complete/partial/absent/unavailable are explicit. Invalid, timeout, upstream error, cache, and fallback without evidence become unavailable; deny has no consumption projection. | Null-as-zero or a synthetic receipt-time estimate | Makes failure and pre-routing semantics deterministic. |
-| Release coordination | Start apply from #202's shared auth helper and route metadata, then add #130 fields without duplicate orchestration. | Applying against the old ResponsesService | The old branch would conflict and can regress validation -> authn -> authz ordering. |
+| Evidence authority | OpenRouter `usage` is the sole source for token and billed USD values; drop the body after adaptation. | Text, latency, SDK types, inferred estimates | Prevents false zeroes and sensitive-body retention. |
+| Normalized shape | One strict closed `Consumption` DTO is reused by response and audit projections. | Separate public/audit JSON or an untyped sidecar | Prevents projection drift and preserves exact decimal text. |
+| Billing context | Retain provider observation time as the temporal price snapshot/version; require it for `billed_usd`. | Floating point, receipt-time estimates, user price configuration | The provider is authoritative and no pricing registry is in scope. |
+| Published versus active release | Tooling validates every published snapshot; runtime parity uses explicit `CONTRACT_VERSION` and rejects a missing/mismatched manifest. | Deriving runtime version from the maximum directory, skips, or bypasses | Independent green stacks need staged snapshots without silently changing runtime behavior. |
+| Activation order | Land the small active-version parity boundary before the 2.1.0 snapshot; activate runtime 2.1.0 only with response/audit wiring. Issue #129 may add contract-only 2.2.0 after verification while runtime stays 2.1.0. | Activating an unpublished snapshot or reverting to 1.x | Keeps activation explicit, ordered, and on the requested 2.x line. |
 
 ## Data Flow
 
 ```
-request
-  -> validate
-  -> shared governed authn/authz (#202)
-  -> resolve alias/router
-  -> OpenRouter (direct, no fallback)
-  -> normalize usage/cost; drop raw body
-  -> public consumption + audit consumption (same DTO)
-  -> append audit (release gate)
-  -> release response
+published releases/* -> validate every manifest/snapshot -> release evidence
+explicit CONTRACT_VERSION -> require matching published snapshot
+runtime OpenAPI -> compare against that exact snapshot
+request -> #202 authn/authz -> route -> OpenRouter -> normalize
+       -> public consumption + audit consumption -> audit gate -> response
 ```
 
-Malformed routing evidence remains non-retryable 502. Malformed consumption evidence does not become zero; retain only valid dimensions as partial or mark unavailable per the spec.
+Malformed routing evidence remains non-retryable 502. Invalid consumption evidence remains partial or unavailable; it never becomes zero.
 
 ## File Changes
 
 | File | Action | Description |
 |---|---|---|
-| `src/sre_agent/governance/dto.py` | Modify | Add closed consumption DTO and AuditEvent projection field. |
-| `src/sre_agent/gateway/providers.py` | Modify | Carry normalized consumption and optional explicit failure evidence. |
-| `src/sre_agent/gateway/openrouter.py` | Modify | Validate usage, exact decimal billing, observation time, and pricing context; never retain raw body. |
-| `src/sre_agent/gateway/responses.py`, `gateway/audit.py` | Modify | Project the same object; preserve #202 helper, ordering, and audit gate. |
-| `src/sre_agent/persistence/{models,repositories,projections}.py` + new migration | Modify/Create | Add nullable JSONB consumption, round-trip nulls/decimal text, and preserve append-only controls. |
-| `schemas/releases/2.1.0/`, `schemas/tooling/{lib/release-validation.mjs,release.mjs}` | Create/Modify | Full immutable snapshot, fixtures, conformance, and 2.0.0 compatibility baseline. |
-| `src/sre_agent/release.py` and focused tests | Modify | Advertise 2.1.0 and cover provider, flow, persistence, and release invariants. |
+| `src/sre_agent/release.py` | Modify | Keep the explicit active runtime contract identity. |
+| `tests/test_responses_openapi.py`, `tests/test_release_metadata.py` | Modify | Test exact active-snapshot parity, missing active snapshot failure, and staged-release independence. |
+| `schemas/tooling/lib/release-validation.mjs`, `schemas/tooling/release.mjs`, release tests | Modify | Validate all published snapshots without changing runtime selection. |
+| `schemas/releases/2.1.0/` | Create | Immutable 2.1.0 schemas, fixtures, manifests, and evidence after the boundary slice. |
+| Runtime gateway/audit/persistence files | Modify | Carry the normalized DTO without changing #202 ordering. |
 
 ## Interfaces / Contracts
 
-`ProviderResult` returns normalized `Consumption` for completed calls; provider failures may carry only validated explicit evidence. `ResponsesResponse.metadata.consumption` is required for successful completion, including `absent`; audit consumption is present for authorized provider outcomes and `unavailable` for evidence-less timeout/error/cache/fallback. Denial remains consumption-free.
+`CONTRACT_VERSION` is the explicit active runtime release. Runtime parity MUST:
+
+1. Read that value.
+2. Require `schemas/releases/{CONTRACT_VERSION}/manifest.yaml` with the same `contract_version`.
+3. Compare runtime OpenAPI with that snapshot's `openapi/responses.yaml`.
+
+Published-release validation remains exhaustive and independent of active selection. No user price configuration is introduced.
 
 ## Testing Strategy
 
-- Provider RED tests: complete, partial, absent, invalid, exact decimal text, invariant violation, provider observation time, and raw-body exclusion.
-- Flow RED tests: #202 validation/authn/authz ordering, zero-call deny, no fallback, same public/audit projection, unavailable failure states, and audit failure suppressing release.
-- Persistence RED tests: migration constraints and JSONB readback preserving nulls, availability, decimal text, and pricing context.
-- Release RED tests: 2.0.0 byte identity, complete 2.1.0 snapshot, and explicit fixtures for complete/partial/absent/unavailable/invalid/deny/timeout/error/cache/fallback.
+| Layer | What to Test | Approach |
+|---|---|---|
+| Boundary prerequisite | Active 2.0.0 with a published 2.1.0 directory | Assert parity uses 2.0.0; assert missing/mismatched active snapshot fails; never use max or skip. |
+| Tooling | Every published release | Validate all manifests, evidence, conformance, and 2.0.0 immutability. |
+| Runtime 2.1 | Final public/audit activation | Assert parity selects 2.1.0 and consumption/error/ordering tests remain green. |
+| Contract | 2.1.0 snapshot | Cover complete, partial, absent, unavailable, invalid, deny, timeout, error, cache, and fallback fixtures without secrets or raw bodies. |
 
 ## Threat Matrix
 
-| Boundary | Applicability | Design response / RED tests |
-|---|---|---|
-| Documentation-like paths | N/A — no executable classification | None |
-| Git repository selection | N/A — no Git invocation | None |
-| Commit state | N/A — no index handling | None |
-| Push state | N/A — no push automation | None |
-| PR commands | N/A — no PR automation | None |
+N/A — no routing, shell, subprocess, VCS/PR automation, executable-file classification, or process-integration boundary is added by this release-selection decision.
 
 ## Migration / Rollout
 
-Run the additive migration before the runtime; legacy audit rows remain NULL and immutable. Publish 2.1.0 after schema/tooling conformance. Roll back runtime first if needed; never rewrite 2.0.0 or existing audit rows.
+First land the small active-version parity boundary with runtime active 2.0.0. Then publish and validate 2.1.0, wire response/audit behavior, switch the explicit runtime active version to 2.1.0, and run independent verification. After that gate, #129 may publish contract-only 2.2.0; it MUST NOT change runtime activation or introduce 1.x behavior. No migration or user price configuration is required.
 
 ## Open Questions
 
-None; provider observation time is the temporal pricing version, not an external registry identifier.
+None.
