@@ -29,23 +29,23 @@ Gate 2.2.0 creation on independent #130 PASS. Runtime stays active at 2.1 while 
 
 ## Phase 1: Release Contract Foundation
 
-- [ ] 1.1 Gate on verified #130 `2.1.0` (read-only), copy its sibling to `schemas/releases/2.2.0/**`, and preserve `schemas/releases/2.0.0/**` (read-only) plus all 1.x bytes.
-- [ ] 1.2 Add closed `ResourceCatalogEntry` and bounded-list schemas under `schemas/releases/2.2.0/json-schema/**`; exclude secrets, prompts, raw I/O, routing/provider fields, and arbitrary config.
-- [ ] 1.3 Add authenticated catalog reads/examples under `schemas/releases/2.2.0/openapi/**` and `schemas/releases/2.2.0/examples/**`, with deterministic ordering, 1–100 limits, filters, no continuation, and 401/403/404/422 behavior.
+- [x] 1.1 Gate on verified #130 `2.1.0` (read-only), copy its sibling to `schemas/releases/2.2.0/**`, and preserve `schemas/releases/2.0.0/**` (read-only) plus all 1.x bytes.
+- [x] 1.2 Add closed `ResourceCatalogEntry` and bounded-list schemas under `schemas/releases/2.2.0/json-schema/**`; exclude secrets, prompts, raw I/O, routing/provider fields, and arbitrary config.
+- [x] 1.3 Add authenticated catalog reads/examples under `schemas/releases/2.2.0/openapi/**` and `schemas/releases/2.2.0/examples/**`, with deterministic ordering, 1–100 limits, filters, no continuation, and 401/403/404/422 behavior.
 
 ## Phase 2: Ownership, Lifecycle, and Fixtures
 
-- [ ] 2.1 Encode LLM/MCP/Skill/BoK owner/state/action matrix/evidence under `schemas/releases/2.2.0/conformance/**`; retain Resource/Grant/ModelAlias authority and #202 authorization.
-- [ ] 2.2 Add positive fixtures for discovery, states, replay, in-flight snapshots, and reconciliation under `schemas/releases/2.2.0/fixtures/positive/**`.
-- [ ] 2.3 Add negative fixtures for closed fields, bounds, non-enumeration, errors, conflicts, stale versions, and drift under `schemas/releases/2.2.0/fixtures/negative/**`; threat rows are N/A, so no RED task.
-- [ ] 2.4 Register obligations and prohibited authorities in `schemas/releases/2.2.0/conformance/{suite.yaml,consumers.yaml}`.
+- [x] 2.1 Encode LLM/MCP/Skill/BoK owner/state/action matrix/evidence under `schemas/releases/2.2.0/conformance/**`; retain Resource/Grant/ModelAlias authority and #202 authorization.
+- [x] 2.2 Add positive fixtures for discovery, states, replay, in-flight snapshots, and reconciliation under `schemas/releases/2.2.0/fixtures/positive/**`.
+- [x] 2.3 Add negative fixtures for closed fields, bounds, non-enumeration, errors, conflicts, stale versions, and drift under `schemas/releases/2.2.0/fixtures/negative/**`; threat rows are N/A, so no RED task.
+- [x] 2.4 Register obligations and prohibited authorities in `schemas/releases/2.2.0/conformance/{suite.yaml,consumers.yaml}`.
 
 ## Phase 3: Tooling and Regression Coverage
 
-- [ ] 3.1 Serially extend `schemas/tooling/release.mjs`, `schemas/tooling/lib/{release-validation,governance-validation}.mjs`, and 2.2.0 tests from 2.1.0; do not alter history.
-- [ ] 3.2 Add tests for closed projection, owner states, errors, fixture coverage, #130 consumption, #202 authorization, and historical hashes.
+- [x] 3.1 Serially extend `schemas/tooling/release.mjs`, `schemas/tooling/lib/{release-validation,governance-validation}.mjs`, and 2.2.0 tests from 2.1.0; do not alter history.
+- [x] 3.2 Add tests for closed projection, owner states, errors, fixture coverage, #130 consumption, #202 authorization, and historical hashes.
 
 ## Phase 4: Evidence and Verification
 
-- [ ] 4.1 Generate deterministic `schemas/releases/2.2.0/conformance/{compatibility.json,evidence.json}` and `schemas/releases/2.2.0/manifest.yaml` only after source validation; never regenerate immutable releases.
-- [ ] 4.2 Run catalog, tooling, release, and byte/hash validation; record runtime N/A: #129 changes no runtime, persistence, seed, UI, or authorization.
+- [x] 4.1 Generate deterministic `schemas/releases/2.2.0/conformance/{compatibility.json,evidence.json}` and `schemas/releases/2.2.0/manifest.yaml` only after source validation; never regenerate immutable releases.
+- [x] 4.2 Run catalog, tooling, release, and byte/hash validation; record runtime N/A: #129 changes no runtime, persistence, seed, UI, or authorization.
