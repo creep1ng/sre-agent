@@ -212,6 +212,20 @@ def test_consumption_is_closed_and_preserves_exact_decimal_text() -> None:
         Consumption.model_validate_json(json.dumps(data | {"unexpected": "drift"}))
 
 
+def test_consumption_rejects_partial_billing_without_pricing_context() -> None:
+    data = complete_consumption() | {
+        "availability": "partial",
+        "output_tokens": None,
+        "total_tokens": None,
+        "currency": None,
+        "precision": None,
+        "pricing_context": None,
+    }
+
+    with pytest.raises(ValidationError):
+        Consumption.model_validate_json(json.dumps(data))
+
+
 @pytest.mark.parametrize(
     "changes",
     (

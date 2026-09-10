@@ -300,7 +300,9 @@ def _consumption(body: Mapping[str, Any]) -> Consumption:
     pricing_context: PricingContext | None = None
     if billed_usd is not None:
         observed_at = _observed_at(body.get("created_at"))
-        if observed_at is not None:
+        if observed_at is None:
+            billed_usd, cost_invalid = None, True
+        else:
             observed = observed_at.isoformat().replace("+00:00", "Z")
             pricing_context = PricingContext(
                 observed_at=observed_at,
