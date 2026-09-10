@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError
 
 from sre_agent.governance.dto import (
@@ -224,6 +226,32 @@ def test_consumption_rejects_partial_billing_without_pricing_context() -> None:
 
     with pytest.raises(ValidationError):
         Consumption.model_validate_json(json.dumps(data))
+
+
+def test_consumption_generated_schema_enforces_cross_field_invariants() -> None:
+    schema = Consumption.model_json_schema()
+    assert schema["unevaluatedProperties"] is False
+    validator = Draft202012Validator(schema)
+
+    validator.validate(complete_consumption())
+    invalid = (
+        complete_consumption() | {"currency": None, "precision": None, "pricing_context": None},
+        complete_consumption() | {"total_tokens": None},
+        complete_consumption()
+        | {
+            "availability": "partial",
+            "input_tokens": None,
+            "output_tokens": None,
+            "total_tokens": None,
+            "billed_usd": None,
+            "currency": None,
+            "precision": None,
+            "pricing_context": None,
+        },
+    )
+    for payload in invalid:
+        with pytest.raises(JsonSchemaValidationError):
+            validator.validate(payload)
 
 
 @pytest.mark.parametrize(
