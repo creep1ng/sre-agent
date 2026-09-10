@@ -9,16 +9,15 @@ from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
 
 from sre_agent.gateway.responses import ResponsesRequest, responses_router
+from sre_agent.release import CONTRACT_VERSION
 
 RELEASES = Path("schemas/releases")
 
 
-def latest_responses_contract() -> tuple[Path, dict[str, Any]]:
-    versions = sorted(
-        (path for path in RELEASES.iterdir() if (path / "openapi/responses.yaml").exists()),
-        key=lambda path: tuple(int(part) for part in path.name.split(".")),
-    )
-    release = versions[-1]
+def active_responses_contract() -> tuple[Path, dict[str, Any]]:
+    release = RELEASES / CONTRACT_VERSION
+    assert (release / "manifest.yaml").is_file()
+    assert (release / "openapi/responses.yaml").is_file()
     return release, yaml.safe_load((release / "openapi/responses.yaml").read_text())
 
 
@@ -58,7 +57,7 @@ def contract_schema(release: Path, reference: str) -> dict[str, Any]:
 
 
 def test_runtime_operation_documents_the_complete_responses_contract() -> None:
-    release, contract = latest_responses_contract()
+    release, contract = active_responses_contract()
     runtime = runtime_openapi()
     operation = runtime["paths"]["/v1/responses"]["post"]
     canonical = contract["paths"]["/v1/responses"]["post"]
