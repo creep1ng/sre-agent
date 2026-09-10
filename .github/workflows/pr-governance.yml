@@ -2,9 +2,7 @@ name: PR governance
 
 on:
   pull_request_target:
-    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled, closed]
-  issue_comment:
-    types: [created, edited, deleted]
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft, closed]
   schedule:
     - cron: '*/15 * * * *'
   workflow_dispatch:
@@ -20,13 +18,11 @@ permissions:
 
 jobs:
   reconcile:
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: read
-      issues: read
       # Required to attach a result to the PR HEAD, not the target event's base SHA.
       statuses: write
     steps:

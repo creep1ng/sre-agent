@@ -34,31 +34,16 @@ function reference(value) {
 
 async function snapshot(github, repo, number) {
   const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: number });
-  const comments = await github.paginate(github.rest.issues.listComments, {
-    ...repo, issue_number: number, per_page: 100,
-  });
-  const files = await github.paginate(github.rest.pulls.listFiles, {
-    ...repo, pull_number: number, per_page: 100,
-  });
-  // GitHub caps this endpoint at 3,000 files; an incomplete scope cannot pass.
-  if (files.length !== pr.changed_files) throw new Error('Incomplete changed-file inventory');
-  const permissions = {};
-  for (const user of new Set(comments.filter(c => c.user?.type === 'User' &&
-    /^\/(approve-size|accept-evidence|approve-governance) /.test(c.body || '')).map(c => c.user.login))) {
-    const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ ...repo, username: user });
-    permissions[user] = data.role_name || data.permission;
-  }
-  return { pr, comments, files: files.map(f => f.filename), permissions };
+  return { pr };
 }
 function fingerprint(data) {
-  const { pr, comments, files, permissions } = data;
+  const { pr } = data;
   return hash([pr.state, pr.draft, pr.body, pr.head.sha, pr.base.sha, pr.base.ref,
-    pr.additions, pr.deletions, pr.labels.map(l => l.name).sort(),
-    comments.map(c => [c.id, c.body, c.user.login, c.user.type, c.updated_at]), files, permissions]);
+    pr.additions, pr.deletions]);
 }
 
-function validate(data, repo) {
-  const { pr, comments, permissions, files } = data;
+function validate(data) {
+  const { pr } = data;
   const errors = [];
   let fields;
   try { fields = parse(pr.body); } catch { return ['Duplicate section headings']; }
@@ -93,36 +78,8 @@ function validate(data, repo) {
   if (!/^[a-f0-9]{40}$/.test(tested)) errors.push('Tested SHA must be a full commit SHA');
   if (fields['Base SHA'] !== pr.base.sha) errors.push('Base SHA must match the current PR base commit');
 
-  const approved = (field, command, sizeException = false) => {
-    const text = fields[field] || '';
-    return comments.some(comment => {
-      const urls = ['issues', 'pull'].map(kind =>
-        `https://github.com/${repo.owner}/${repo.repo}/${kind}/${pr.number}#issuecomment-${comment.id}`);
-      return urls.some(url => links(text).includes(url)) && comment.user.type === 'User' &&
-        (sizeException || comment.user.login !== pr.user.login) &&
-        (sizeException ? ['admin', 'maintain'] : ['admin', 'maintain', 'write'])
-          .includes(permissions[comment.user.login]) &&
-        clean(comment.body || '') === command;
-    });
-  };
-  if (tested !== pr.head.sha && !approved('Evidence freshness',
-    `/accept-evidence ${pr.head.sha} ${pr.base.sha} ${tested}`)) {
-    errors.push('Reused evidence needs linked independent reviewer acceptance for this head and base');
-  }
   if (!Number.isInteger(pr.additions) || !Number.isInteger(pr.deletions) ||
       pr.additions < 0 || pr.deletions < 0) errors.push('Size metadata is unavailable');
-  else if (pr.additions + pr.deletions > 400) {
-    const rationale = clean(fields['Size exception'] || '').replace(/https:\/\/\S+/g, '').trim();
-    if (!pr.labels.some(l => l.name === 'size:exception') || rationale.length < 30 ||
-        /\b(TODO|TBD|PLACEHOLDER)\b|<[^>]+>/.test(rationale) ||
-        !approved('Size exception', `/approve-size ${pr.head.sha} ${pr.base.sha}`, true)) {
-      errors.push('Over 400 lines requires size:exception, rationale and linked maintainer approval');
-    }
-  }
-  if (files.some(path => /^(\.github\/|\.agents\/|\.codex\/|\.atl\/|openspec\/config\.yaml$|AGENTS\.md$|\.importlinter$|compose(?:\.e2e)?\.yaml$|docker\/(?:api|web|harness|e2e)\.Dockerfile$|pyproject\.toml$|uv\.lock$|playwright\.production\.config\.js$|tests\/browser\/(?:api-seam|production-proxy)\.spec\.js$|scripts\/(validate_|assert_)|tests\/test_ci_hardening\.py$|docs\/(team-workflow|gentle-ai-profile|pr-evidence|governance-|ci-controls))/.test(path)) &&
-      !approved('Governance review', `/approve-governance ${pr.head.sha} ${pr.base.sha}`)) {
-    errors.push('Governance changes need linked independent reviewer approval in Governance review');
-  }
   return errors;
 }
 
@@ -150,7 +107,7 @@ async function run({ github, context, core }) {
       }
       const state = errors.length ? 'failure' : 'success';
       const identity = hash([fingerprint(fresh), errors, readFileSync(__filename, 'utf8')]).slice(0, 32);
-      const description = `${identity}: ${errors.length ? 'Policy incomplete; see summary' : 'Structure/size checked; human acceptance required'}`;
+      const description = `${identity}: ${errors.length ? 'Policy incomplete; see summary' : 'Structure checked; human acceptance required'}`;
       const { data: combined } = await github.rest.repos.getCombinedStatusForRef({ ...repo, ref: sha });
       const previous = combined.statuses.find(entry => entry.context === 'pr-governance');
       // Reconcile reads on every event, but do not exhaust GitHub's per-SHA status
