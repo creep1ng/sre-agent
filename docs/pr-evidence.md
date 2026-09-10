@@ -83,41 +83,22 @@ Authorization headers, personal data, full prompts/outputs and sensitive request
 payloads. Use controlled synthetic data. Never upload `.env` or unfiltered dumps.
 Secret scanners are complementary and do not certify images or videos as safe.
 
-## Maintainer confirmations
+## Human acceptance
 
-Confirmations are ordinary human issue comments on the **same PR**, not RDD
-receipts and not bot-generated approval. Use the exact command as the whole comment;
-link its `https://github.com/OWNER/REPO/issues/NUMBER#issuecomment-ID` URL in the
-named template section. The equivalent `/pull/NUMBER#issuecomment-ID` URL is
-also accepted. Size exceptions require a human with current `maintain` or `admin` permission.
-Evidence reuse and governance review require a different human from the PR author
-with current `write`, `maintain` or `admin` permission. An exception never replaces
-independent PR review. No bot approval or automatic label grant.
+CI validates the PR description and candidate metadata; it does not authorize a merge.
+It does not require approval comments, labels, or per-commit confirmations. The maintainer
+reviews evidence freshness, scope, size, governance changes, and risk once when deciding
+whether to merge. Keep independent work in focused PRs when that improves reviewability,
+but no fixed line-count exception is enforced.
 
-| Situation | Section | Exact comment, replacing uppercase tokens |
-| --- | --- | --- |
-| More than 400 added + deleted lines | Size exception | `/approve-size HEAD_SHA BASE_SHA` |
-| Older evidence is still valid | Evidence freshness | `/accept-evidence HEAD_SHA BASE_SHA TESTED_SHA` |
-| Workflow, policy or shared agent configuration changes | Governance review | `/approve-governance HEAD_SHA BASE_SHA` |
-
-All tokens are full 40-character SHAs. Size approval also requires `size:exception`,
-the need for the exception, rejected alternatives and a review route. Its removal
-invalidates the exception. It never exempts security or evidence.
-Changing the base/head invalidates confirmations. Editing/deleting the
-comment or losing maintainer permission also invalidates it on reconciliation.
-Revoke by deleting/editing the original confirmation, not adding a contradictory
-comment. A human reviewer still checks whether the rationale is sufficient.
-
-Split independent work into PRs of at most 400 changed lines, retaining
-issue linkage, immediate base/dependencies and independent rollback boundaries.
-If multiple open PRs share the exact same head SHA, `pr-governance` fails closed:
-commit statuses cannot distinguish those PRs. Use distinct candidates or close
-the redundant proposal before asking for acceptance.
+If multiple open PRs share the exact same head SHA, `pr-governance` fails closed because
+commit statuses cannot distinguish them. Use distinct candidates or close the redundant
+proposal before asking for acceptance.
 
 ## What automation does and does not prove
 
 `pr-governance` rejects missing/duplicate sections, empty command blocks,
-placeholders, a missing screenshot HTTPS reference, a video that is neither an HTTPS reference nor the exact documented deferral, stale base SHA, unsupported delivery/evidence kinds, incomplete size data and missing confirmations. It never executes supplied
+placeholders, a missing screenshot HTTPS reference, a video that is neither an HTTPS reference nor the exact documented deferral, stale base SHA, unsupported delivery/evidence kinds, and incomplete size data. It never executes supplied
 commands, downloads evidence, judges videos, or verifies that a named OpenSpec
 path really satisfies the issue. A human checks those claims and the DoD checklist.
 
@@ -127,10 +108,10 @@ trusted metadata job so the result can be attached to the PR head rather than th
 `pull_request_target` base. It never checks out or executes untrusted PR code.
 
 Every run reconciles all open PRs from current API data, with a fresh snapshot before
-publishing. Events handle PR edits/pushes/labels and confirmation edits/deletions.
-A 15-minute scheduled reconciliation covers base advances and permission changes;
+publishing. Pull-request events handle PR edits and pushes.
+A 15-minute scheduled reconciliation covers base advances;
 GitHub scheduling can be delayed, so this is eventual revalidation, not an atomic
-merge authorization service. Dispatch manually after revocation before integrating.
+merge authorization service. Dispatch manually after a base advance before integrating.
 All failures are candidate-bound and summaries omit raw descriptions/attachments.
 Unchanged conclusions are not republished, avoiding redundant status history.
 
