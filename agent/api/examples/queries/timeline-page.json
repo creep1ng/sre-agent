@@ -1,0 +1,16 @@
+{
+  "events": [
+    { "event_id": "evt_0000000a", "kind": "state_change", "sequence": 3, "state": "investigating",
+      "summary": "Triage declared an incident.",
+      "actor": { "type": "human", "reference": { "reference_version": "1.0.0", "principal_id": "demo-human", "display_name": "On-call engineer" } },
+      "turn_id": null, "task_id": null, "request_id": null,
+      "occurred_at": "2026-08-24T14:12:00Z" },
+    { "event_id": "evt_0000000b", "kind": "state_change", "sequence": 4, "state": "investigating",
+      "summary": "Investigation started.",
+      "actor": { "type": "system", "reference": null },
+      "turn_id": null, "task_id": null, "request_id": null,
+      "occurred_at": "2026-08-24T14:12:01Z" }
+  ],
+  "next_cursor": "seq:4",
+  "has_more": false
+}

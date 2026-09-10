@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.incident.persistence import (
     DecisionDraft,
+    DecisionRecord,
     EventDraft,
     IncidentIdempotencyConflictError,
     IncidentRecord,
@@ -89,6 +90,17 @@ def _context(row: Mapping[str, Any]) -> TextContextRecord:
     )
 
 
+def _decision(row: Mapping[str, Any]) -> DecisionRecord:
+    return DecisionRecord(
+        decision_id=row["decision_id"],
+        incident_id=row["incident_id"],
+        run_id=row["run_id"],
+        turn_id=row["turn_id"],
+        document=row["document"],
+        decided_at=row["decided_at"],
+    )
+
+
 class PostgresIncidentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -161,6 +173,21 @@ class PostgresRunRepository:
             .one()
         )
         return _run(row)
+
+    async def list_ids(self, incident_id: str) -> tuple[str, ...]:
+        rows = (
+            (
+                await self._session.execute(
+                    text("""SELECT run_id FROM incident.runs
+                    WHERE incident_id=:incident_id
+                    ORDER BY created_at ASC, run_id ASC"""),
+                    {"incident_id": incident_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return tuple(row["run_id"] for row in rows)
 
 
 class PostgresEventRepository:
@@ -255,6 +282,24 @@ class PostgresTextContextRepository:
         )
 
 
+class PostgresDecisionRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get(self, decision_id: str) -> DecisionRecord | None:
+        row = (
+            (
+                await self._session.execute(
+                    text("SELECT * FROM incident.decisions WHERE decision_id=:decision_id"),
+                    {"decision_id": decision_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return _decision(row) if row else None
+
+
 class PostgresIncidentUnitOfWork:
     """One explicit SQL transaction spanning incident-owned repositories."""
 
@@ -271,6 +316,7 @@ class PostgresIncidentUnitOfWork:
         self.runs = PostgresRunRepository(self._session)
         self.events = PostgresEventRepository(self._session)
         self.snapshots = PostgresSnapshotRepository(self._session)
+        self.decisions = PostgresDecisionRepository(self._session)
         self.text_context = PostgresTextContextRepository(self._session)
         return self
 

@@ -46,7 +46,8 @@ jobs:
           src/sre_agent/governance/dto.py src/sre_agent/governance/authorization.py &&
           python scripts/validate_incident_contracts.py &&
           python scripts/validate_incident_authorization.py &&
-          python scripts/validate_run_api.py && python scripts/validate_ci_hardening.py'
+          python scripts/validate_run_api.py && python scripts/validate_incident_queries.py &&
+          python scripts/validate_ci_hardening.py'
 
   unit:
     needs: checks-image

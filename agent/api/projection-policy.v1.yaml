@@ -22,7 +22,11 @@ safe_projection:
   schemas:
     - "agent/schemas/run-state.schema.yaml"
     - "agent/schemas/run-event.schema.yaml"
-  audience: "operations UI, via GET .../runs/{run_id} and GET .../runs/{run_id}/events"
+    - "agent/schemas/incident-detail.schema.yaml"
+    - "agent/schemas/incident-snapshot.schema.yaml"
+  audience: >-
+    operations UI, via GET .../runs/{run_id}, GET .../runs/{run_id}/events,
+    GET /v1/incidents/{incident_id}, GET .../timeline and GET .../snapshot
   authorized_by: "run.read"
   allowed_fields:
     # Identity and correlation. These are opaque identifiers, not content.
@@ -56,6 +60,31 @@ safe_projection:
     - "display_name"
     - "updated_at"
     - "occurred_at"
+    # Incident queries (HT-INC-RUNTIME-B, issue #189). Same rules: opaque
+    # identifiers, bounded human text, aggregate versions. No content.
+    - "incident"
+    - "run"
+    - "runs"
+    - "version"
+    - "severity"
+    - "impact"
+    - "alert"
+    - "alert_id"
+    - "service"
+    - "source"
+    - "origin"
+    - "signal"
+    - "condition"
+    - "detector"
+    - "observed_at"
+    - "approvals"
+    - "approval_id"
+    - "subject_id"
+    - "granted"
+    - "decided_at"
+    - "snapshot_id"
+    - "event_sequence"
+    - "created_at"
 
 # The sensitive context lives behind its own endpoint and its own action.
 sensitive_context:

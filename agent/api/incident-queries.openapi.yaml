@@ -1,0 +1,132 @@
+openapi: 3.1.0
+info:
+  title: SRE Agent Incident Queries API
+  version: 1.0.0
+  description: >-
+    Authoritative read surface for the incident domain (HT-INC-RUNTIME-B, issue
+    #189), consumed by the war room (issue #36). Detail, timeline and public
+    snapshot are projected from persisted state; reads never create or modify
+    executions. Cursor polling follows ADR-008. Timeline and snapshot default to
+    the latest run; pass run_id explicitly to read another run. Cross-run event
+    merging is out of scope: order always comes from one run's sequence.
+servers: [{ url: / }]
+security: [{ bearerAuth: [] }]
+
+paths:
+  /v1/incidents/{incident_id}:
+    get:
+      summary: Get the public incident detail
+      operationId: getIncidentDetail
+      description: >-
+        Safe projection of the persisted incident: identity, workflow position,
+        severity/impact, canonical alert, bounded approvals, run summaries and
+        the aggregate version. 404 with an explicit code when the incident or
+        any run is absent; reads never synthesize aggregates.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+      responses:
+        '200':
+          description: Incident detail
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:incident-detail:1.0.0' }
+              examples:
+                current: { $ref: './examples/queries/detail.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/incidents/{incident_id}/timeline:
+    get:
+      summary: Read the incident timeline page
+      operationId: getIncidentTimeline
+      description: >-
+        Ordered run events projected safe (run-event schema). `after` is an
+        opaque cursor of the form seq:N; an invalid cursor is rejected with 422
+        and never resets silently. Defaults to the latest run when run_id is
+        omitted; an explicit run_id must belong to the incident.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - name: run_id
+          in: query
+          required: false
+          schema: { type: string, pattern: '^run_[a-z0-9]{8,32}$' }
+        - name: after
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: Ordered event page
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:run-event:1.0.0' }
+              examples:
+                page: { $ref: './examples/queries/timeline-page.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/incidents/{incident_id}/snapshot:
+    get:
+      summary: Get the public incident snapshot
+      operationId: getIncidentSnapshot
+      description: >-
+        Latest persisted snapshot of the selected run, projected safe with the
+        covered aggregate version and event sequence. 404 with an explicit code
+        when no run or no snapshot exists; reads never create snapshots.
+      parameters:
+        - { $ref: '#/components/parameters/IncidentId' }
+        - name: run_id
+          in: query
+          required: false
+          schema: { type: string, pattern: '^run_[a-z0-9]{8,32}$' }
+      responses:
+        '200':
+          description: Public snapshot
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:incident-snapshot:1.0.0' }
+              examples:
+                current: { $ref: './examples/queries/snapshot.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    IncidentId:
+      name: incident_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
+  responses:
+    Unauthorized:
+      description: Authentication failed
+      headers: { WWW-Authenticate: { schema: { type: string, const: Bearer } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { unauthenticated: { $ref: './examples/queries/error-401.json' } } } }
+    Forbidden:
+      description: The principal is not authorized to read this incident
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { denied: { $ref: './examples/queries/error-403.json' } } } }
+    NotFound:
+      description: Incident, run or snapshot absent for this principal
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { missing: { $ref: './examples/queries/error-404.json' } } } }
+    ValidationError:
+      description: Request failed contract validation
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { invalid_request: { $ref: './examples/queries/error-422.json' } } } }
+    Unavailable:
+      description: Storage is temporarily unavailable; the operation is retryable
+      headers: { Retry-After: { schema: { type: string } } }
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { retryable_failure: { $ref: './examples/queries/error-503.json' } } } }
