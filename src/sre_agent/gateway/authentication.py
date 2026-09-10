@@ -1,14 +1,22 @@
 """FastAPI bearer authentication boundary."""
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import Header, Request
 from fastapi.responses import JSONResponse
 
+from sre_agent.governance.authorization import (
+    AuthorizationDecisionEngine,
+    AuthorizationEvaluation,
+)
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CredentialRepository
+from sre_agent.persistence.repositories import (
+    CredentialRepository,
+    GrantRepository,
+    ResourceRepository,
+)
 
 
 class AuthenticationFailed(Exception):
@@ -19,14 +27,34 @@ async def authenticate_principal(
     request: Request,
     authorization: Annotated[str | None, Header()] = None,
 ) -> PrincipalContext:
-    if authorization is None:
+    context = await _authorization_context(request.app.state.session_provider, authorization)
+    if context.principal.status != "active":
         raise AuthenticationFailed
-    scheme, separator, key = authorization.partition(" ")
-    if not separator or scheme.lower() != "bearer" or not is_api_key(key):
+    return context
+
+
+async def authorize_governed_access(
+    sessions: Any,
+    authorization: str | None,
+    action: str,
+    resource_type: str,
+    resource_id: str,
+) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+    """Authenticate a bearer credential and evaluate a server-owned governed scope."""
+    context = await _authorization_context(sessions, authorization)
+    async with sessions() as session:
+        evaluation = await AuthorizationDecisionEngine(
+            ResourceRepository(session), GrantRepository(session)
+        ).evaluate(context.principal, action, resource_type, resource_id)
+    return context, evaluation
+
+
+async def _authorization_context(sessions: Any, authorization: str | None) -> PrincipalContext:
+    scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
+    if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
         raise AuthenticationFailed
-    session_provider = request.app.state.session_provider
-    async with session_provider() as session:
-        context = await CredentialRepository(session).authenticate(key)
+    async with sessions() as session:
+        context = await CredentialRepository(session).resolve_authorization_context(key)
     if context is None:
         raise AuthenticationFailed
     return context

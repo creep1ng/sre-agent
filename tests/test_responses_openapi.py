@@ -97,6 +97,17 @@ def test_runtime_operation_documents_the_complete_responses_contract() -> None:
         )
 
 
+def test_runtime_operation_declares_bearer_security_and_governed_scope() -> None:
+    operation = runtime_openapi()["paths"]["/v1/responses"]["post"]
+
+    assert operation["security"] == [{"bearerAuth": []}]
+    assert operation["x-governed-scope"] == {
+        "action": "invoke",
+        "resource_type": "llm_model",
+        "resource_id": "body.model",
+    }
+
+
 def test_runtime_openapi_examples_are_present_and_safe() -> None:
     document = runtime_openapi()
     operation = document["paths"]["/v1/responses"]["post"]

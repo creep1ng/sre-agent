@@ -14,6 +14,7 @@ from sre_agent.gateway.authentication import (
     AuthenticationFailed,
     authenticate_principal,
     authentication_failed_handler,
+    authorize_governed_access,
 )
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.persistence.api_keys import hash_api_key
@@ -192,6 +193,60 @@ async def test_responses_authorization_context_rejects_invalid_credentials(
         context = await CredentialRepository(session).resolve_authorization_context(key, now=NOW)
 
     assert context is None
+
+
+@pytest.mark.asyncio
+async def test_governed_access_passes_server_owned_scope_to_the_decision_engine(
+    authentication_database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, str, str, str]] = []
+
+    async def evaluate(_engine, principal, action, resource_type, resource_id):
+        calls.append((principal.principal_id, action, resource_type, resource_id))
+        return object()
+
+    monkeypatch.setattr(
+        "sre_agent.gateway.authentication.AuthorizationDecisionEngine.evaluate", evaluate
+    )
+
+    context, evaluation = await authorize_governed_access(
+        authentication_database.sessions,
+        f"Bearer {KEYS['incident-harness']}",
+        "invoke",
+        "llm_model",
+        "triage-agent",
+    )
+
+    assert context.principal.principal_id == "incident-harness"
+    assert evaluation is not None
+    assert calls == [("incident-harness", "invoke", "llm_model", "triage-agent")]
+
+
+@pytest.mark.asyncio
+async def test_governed_access_rejects_a_malformed_bearer_before_authorization(
+    authentication_database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = 0
+
+    async def evaluate(*_args: object) -> object:
+        nonlocal calls
+        calls += 1
+        return object()
+
+    monkeypatch.setattr(
+        "sre_agent.gateway.authentication.AuthorizationDecisionEngine.evaluate", evaluate
+    )
+
+    with pytest.raises(AuthenticationFailed):
+        await authorize_governed_access(
+            authentication_database.sessions,
+            "Bearer malformed",
+            "invoke",
+            "llm_model",
+            "triage-agent",
+        )
+
+    assert calls == 0
 
 
 @pytest.mark.asyncio

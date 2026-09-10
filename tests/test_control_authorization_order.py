@@ -55,12 +55,12 @@ def _context() -> PrincipalContext:
         (
             ("GET", "/v1/principals"),
             lambda service: service.list_principals("Bearer safe-key", "100", {}),
-            404,
+            403,
         ),
         (
             ("GET", "/v1/principals/{id}"),
             lambda service: service.get_principal("target-human", "Bearer safe-key"),
-            404,
+            403,
         ),
         (
             ("PUT", "/v1/principals/{id}/status"),
@@ -134,12 +134,23 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
         yield object()
 
     service.sessions = sessions
+    shared = AsyncMock(return_value=(_context(), denied))
+    monkeypatch.setattr(service_module, "authorize_governed_access", shared)
     response = asyncio.run(invoke(service))
 
     assert response.status_code == expected_status
     action, resource_type, resource_id = CONTROL_SCOPES[operation]
-    service._authorize.assert_awaited_once_with(
-        ANY,
-        _context().principal,
-        (action, resource_type, resource_id),
-    )
+    if operation in {
+        ("POST", "/v1/principals"),
+        ("GET", "/v1/principals"),
+        ("GET", "/v1/principals/{id}"),
+    }:
+        shared.assert_awaited_once_with(
+            service.sessions, "Bearer safe-key", action, resource_type, resource_id
+        )
+    else:
+        service._authorize.assert_awaited_once_with(
+            ANY,
+            _context().principal,
+            (action, resource_type, resource_id),
+        )
