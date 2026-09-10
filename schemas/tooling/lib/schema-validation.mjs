@@ -41,12 +41,62 @@ function consumptionSemanticsValid(value) {
   if (value.availability === "partial") return hasEvidence && !complete;
   return (value.availability === "absent" || value.availability === "unavailable") && !hasEvidence;
 }
+const CATALOG_ENTRY_RULES = {
+  llm_model: { source: "model_alias", states: new Set(["active", "inactive"]) },
+  mcp_server: { source: "mcp", states: new Set(["registered", "active", "inactive", "revoked"]) },
+  mcp_tool: { source: "mcp", states: new Set(["registered", "active", "inactive", "revoked"]) },
+  skill: { source: "skill", states: new Set(["draft", "published", "active", "inactive", "revoked"]) },
+  bok_collection: { source: "bok", states: new Set(["draft", "indexing", "active", "inactive", "revoked"]) },
+};
+function resourceCatalogEntrySemanticsValid(value) {
+  const rule = CATALOG_ENTRY_RULES[value?.resource_type];
+  return Boolean(rule && value.source === rule.source && rule.states.has(value.status) && typeof value.owner_id === "string" && typeof value.source_ref === "string");
+}
+function orderedIds(ids) {
+  const sorted = [...ids].sort((left, right) => left.localeCompare(right));
+  return ids.length === sorted.length && ids.every((id, index) => id === sorted[index]) && new Set(ids).size === ids.length;
+}
+function catalogHttpCaseSemanticsValid(value) {
+  const request = value?.request, expected = value?.expected, phases = request?.phase_order;
+  if (!request || !expected || !Array.isArray(phases) || expected.enumerates !== false || expected.continuation !== false || expected.limit !== request.limit || !orderedIds(expected.result_ids)) return false;
+  const empty = expected.visible_items === 0 && expected.result_ids.length === 0;
+  const noLookup = request.lookup_performed === false && empty && expected.deterministic === true;
+  if (request.authentication !== "valid") {
+    const status = ["missing", "invalid"].includes(request.authentication) ? 401 : 403;
+    const code = status === 401 ? "authentication_failed" : "resource_unavailable";
+    return phases.join("/") === "authenticate" && request.lookup_performed === false && request.filters_valid === true && expected.status === status && expected.error_code === code && noLookup;
+  }
+  if (!request.filters_valid) return phases.join("/") === "authenticate/validate_filters" && request.lookup_performed === false && expected.status === 422 && expected.error_code === "validation_error" && noLookup && request.forbidden_parameter !== null;
+  if (phases.join("/") !== "authenticate/validate_filters/lookup/project" || request.lookup_performed !== true || expected.deterministic !== true) return false;
+  if (value.operation === "catalog.list") return request.target_visibility === "none" && expected.status === 200 && expected.error_code === null && expected.visible_items === expected.result_ids.length;
+  if (value.operation !== "catalog.read") return false;
+  if (request.target_visibility === "visible") return expected.status === 200 && expected.error_code === null && expected.visible_items === 1 && expected.result_ids.length === 1;
+  return ["hidden", "absent", "inactive", "filtered"].includes(request.target_visibility) && expected.status === 404 && expected.error_code === "resource_not_found" && empty;
+}
+function lifecyclePhase(value, expected) {
+  const request = value.request;
+  return expected.state_before === request.state_before && expected.authorization_before === request.authorization_before && expected.authorization_after === request.authorization_after && expected.state_unchanged === (expected.state_before === expected.state_after) && expected.transition_count === (expected.state_unchanged ? 0 : 1);
+}
+function catalogLifecycleCaseSemanticsValid(value) {
+  const request = value?.request, expected = value?.expected;
+  if (!request || !expected || !lifecyclePhase(value, expected)) return false;
+  const phase = request.phase_order.join("/");
+  if (value.operation === "idempotent_replay") return request.prior_state === "active" && request.reset_requested === false && request.state_before === "active" && request.payload_matches_binding && request.version_matches && request.authorization_before === "allowed" && request.authorization_after === "allowed" && !request.drift_detected && phase === "authenticate/authorize/idempotency_lookup/replay_response" && expected.status === 200 && expected.transition_count === 0 && !expected.upstream_called && !expected.snapshot_allowed && expected.state_after === "active" && expected.stable_replay && expected.later_request_status === null && !expected.later_upstream_called && expected.upstream_denied_reason === "none" && !expected.repair_performed;
+  if (value.operation === "idempotency_conflict") return request.prior_state === "active" && request.reset_requested === false && request.state_before === "active" && (!request.payload_matches_binding || !request.version_matches) && request.authorization_before === "allowed" && request.authorization_after === "allowed" && !request.drift_detected && phase === "authenticate/authorize/idempotency_lookup/conflict_response" && expected.status === 409 && !expected.upstream_called && !expected.snapshot_allowed && expected.state_after === "active" && !expected.stable_replay && expected.later_request_status === 409 && !expected.later_upstream_called && expected.upstream_denied_reason === "idempotency_conflict" && !expected.repair_performed;
+  if (value.operation === "in_flight_snapshot") return request.prior_state === "active" && request.reset_requested === false && request.state_before === "active" && request.payload_matches_binding && request.version_matches && request.authorization_before === "allowed" && request.authorization_after === "denied" && !request.drift_detected && phase === "authenticate/authorize/capture_snapshot/lifecycle_change/upstream/later_authorize" && expected.status === 204 && expected.transition_count === 1 && expected.upstream_called && expected.snapshot_allowed && expected.state_after === "inactive" && !expected.stable_replay && expected.later_request_status === 403 && !expected.later_upstream_called && expected.upstream_denied_reason === "none" && !expected.repair_performed;
+  if (value.operation === "startup_drift") return request.prior_state === "conflict" && request.reset_requested === false && request.state_before === "active" && request.payload_matches_binding && request.version_matches && request.authorization_before === "not_applicable" && request.authorization_after === "not_applicable" && request.drift_detected && phase === "startup/drift_detected/conflict_response" && expected.status === 409 && !expected.upstream_called && !expected.snapshot_allowed && expected.state_after === "active" && !expected.stable_replay && expected.later_request_status === 409 && !expected.later_upstream_called && expected.upstream_denied_reason === "startup_drift" && !expected.repair_performed;
+  if (value.operation === "reconciliation") return request.prior_state === "conflict" && request.reset_requested === true && request.state_before === "conflict" && request.payload_matches_binding && request.version_matches && request.authorization_before === "allowed" && request.authorization_after === "allowed" && request.drift_detected && phase === "authenticate/authorize/startup/drift_detected/reconcile_authorize/reset" && expected.status === 201 && expected.transition_count === 1 && !expected.upstream_called && !expected.snapshot_allowed && expected.state_after === "restored" && expected.stable_replay && expected.later_request_status === null && !expected.later_upstream_called && expected.upstream_denied_reason === "none" && expected.repair_performed;
+  return false;
+}
 function semanticFixtureValid(fixture) {
   const name = /^urn:sre-agent:schema:([a-z-]+):/.exec(fixture.target)?.[1];
   if (name === "consumption") return consumptionSemanticsValid(fixture.data);
   if (name === "idempotency-record") return idempotencyRetentionValid(fixture.data);
   if (name === "responses-http-case") return responsesHttpCaseValid(fixture.data);
   if (name === "openrouter-metadata-case") return openRouterMetadataValid(fixture.data);
+  if (name === "resource-catalog-entry") return resourceCatalogEntrySemanticsValid(fixture.data);
+  if (name === "resource-catalog-http-case") return catalogHttpCaseSemanticsValid(fixture.data);
+  if (name === "resource-catalog-lifecycle-case") return catalogLifecycleCaseSemanticsValid(fixture.data);
   if (name !== "bootstrap-seed" || fixture.data?.output?.result !== "success") return true;
   const { seed, output } = fixture.data, principal = output.principal, grants = new Map(output.grants.map((grant) => [grant.grant_id, grant]));
   return principal.principal_id === seed.principal.principal_id && principal.kind === seed.principal.kind && principal.display_name === seed.principal.display_name && output.credential.credential.principal_id === seed.principal.principal_id && output.grants.length === seed.grants.length && seed.grants.every((expected) => { const actual = grants.get(expected.grant_id); return actual?.principal_id === seed.principal.principal_id && actual.action === expected.action && JSON.stringify(actual.resource) === JSON.stringify(expected.resource); });
@@ -116,13 +166,19 @@ async function readJsonTree(directory, suffix, prefix = "") {
   }
   return values;
 }
+async function readJsonTreeOptional(directory, suffix) {
+  try { return await readJsonTree(directory, suffix); } catch (error) { if (error.code === "ENOENT") return []; throw error; }
+}
 export async function loadReleaseDirectory(directory, group = "shared") {
   const base = directory instanceof URL ? directory : pathToFileURL(`${resolve(directory)}/`);
   const schemas = (await readJsonTree(new URL("json-schema/", base), ".schema.json")).map(({ value }) => value);
   const loaded = (await readJsonTree(new URL("fixtures/", base), ".fixture.json")).flatMap(({ name, value }) => value.cases ? value.cases.map((data, index) => ({ name: `${name}#${index + 1}`, target: value.target, rule: value.rule, status: value.status, version: value.version, group: value.group, data })) : [{ name, ...value }]);
   const fixtures = group === "all" || group === "shared" ? loaded : loaded.filter((fixture) => fixture.group === group);
-  const version = schemaVersion(schemas[0]?.$id), schemaId = (name) => `urn:sre-agent:schema:${name}:${version}`, exampleTarget = (scope, name) => scope === "audit" ? schemaId("audit-event") : scope === "control" ? name.startsWith("credential-") ? schemaId("credential-issuance") : schemaId("bootstrap-seed") : name.startsWith("minimal-request") ? schemaId("responses-request") : schemaId("responses-response");
-  const scopes = group === "all" ? ["audit", "control", "responses"] : [group], examples = (await Promise.all(scopes.filter((scope) => ["audit", "control", "responses"].includes(scope)).map(async (scope) => (await readJsonTree(new URL(`examples/${scope}/`, base), ".example.json")).map(({ name, value: data }) => ({ name: group === "all" ? `${scope}/${name}` : name, data, target: exampleTarget(scope, name) }))))).flat();
+  const version = schemaVersion(schemas[0]?.$id), schemaId = (name) => `urn:sre-agent:schema:${name}:${version}`, exampleTarget = (scope, name) => scope === "audit" ? schemaId("audit-event") : scope === "control" ? name.startsWith("credential-") ? schemaId("credential-issuance") : schemaId("bootstrap-seed") : scope === "catalog" ? name.includes("list") ? schemaId("resource-catalog-list") : schemaId("resource-catalog-entry") : name.startsWith("minimal-request") ? schemaId("responses-request") : schemaId("responses-response");
+  const scopes = group === "all" ? ["audit", "control", "responses", "catalog"] : [group], examples = (await Promise.all(scopes.filter((scope) => ["audit", "control", "responses", "catalog"].includes(scope)).map(async (scope) => {
+    const readExamples = scope === "catalog" ? readJsonTreeOptional : readJsonTree;
+    return (await readExamples(new URL(`examples/${scope}/`, base), ".example.json")).map(({ name, value: data }) => ({ name: group === "all" ? `${scope}/${name}` : name, data, target: exampleTarget(scope, name) }));
+  }))).flat();
   if (!fixtures.length && !examples.length) throw new Error(`Unknown or empty fixture scope: ${group}`);
   return { schemas, fixtures, examples };
 }

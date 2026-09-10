@@ -1,0 +1,317 @@
+{
+  "target": "urn:sre-agent:schema:resource-catalog-http-case:2.2.0",
+  "rule": "valid",
+  "status": "positive",
+  "version": "2.2.0",
+  "group": "catalog",
+  "cases": [
+    {
+      "operation": "catalog.list",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": true,
+        "target_visibility": "none",
+        "lookup_performed": true,
+        "limit": 100,
+        "query_parameters": [
+          "resource_type"
+        ],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate",
+          "validate_filters",
+          "lookup",
+          "project"
+        ]
+      },
+      "expected": {
+        "status": 200,
+        "error_code": null,
+        "visible_items": 2,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [
+          "model-prod",
+          "server-tools"
+        ],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.list",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": true,
+        "target_visibility": "none",
+        "lookup_performed": true,
+        "limit": 25,
+        "query_parameters": [
+          "owner_id"
+        ],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate",
+          "validate_filters",
+          "lookup",
+          "project"
+        ]
+      },
+      "expected": {
+        "status": 200,
+        "error_code": null,
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 25,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.read",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": true,
+        "target_visibility": "visible",
+        "lookup_performed": true,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate",
+          "validate_filters",
+          "lookup",
+          "project"
+        ]
+      },
+      "expected": {
+        "status": 200,
+        "error_code": null,
+        "visible_items": 1,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [
+          "model-prod"
+        ],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.read",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": true,
+        "target_visibility": "hidden",
+        "lookup_performed": true,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate",
+          "validate_filters",
+          "lookup",
+          "project"
+        ]
+      },
+      "expected": {
+        "status": 404,
+        "error_code": "resource_not_found",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.read",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": true,
+        "target_visibility": "absent",
+        "lookup_performed": true,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate",
+          "validate_filters",
+          "lookup",
+          "project"
+        ]
+      },
+      "expected": {
+        "status": 404,
+        "error_code": "resource_not_found",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.read",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": true,
+        "target_visibility": "inactive",
+        "lookup_performed": true,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate",
+          "validate_filters",
+          "lookup",
+          "project"
+        ]
+      },
+      "expected": {
+        "status": 404,
+        "error_code": "resource_not_found",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.read",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": true,
+        "target_visibility": "filtered",
+        "lookup_performed": true,
+        "limit": 100,
+        "query_parameters": [
+          "status"
+        ],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate",
+          "validate_filters",
+          "lookup",
+          "project"
+        ]
+      },
+      "expected": {
+        "status": 404,
+        "error_code": "resource_not_found",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.list",
+      "request": {
+        "authentication": "unauthorized",
+        "filters_valid": true,
+        "target_visibility": "none",
+        "lookup_performed": false,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate"
+        ]
+      },
+      "expected": {
+        "status": 403,
+        "error_code": "resource_unavailable",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.list",
+      "request": {
+        "authentication": "missing",
+        "filters_valid": true,
+        "target_visibility": "none",
+        "lookup_performed": false,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate"
+        ]
+      },
+      "expected": {
+        "status": 401,
+        "error_code": "authentication_failed",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.list",
+      "request": {
+        "authentication": "invalid",
+        "filters_valid": true,
+        "target_visibility": "none",
+        "lookup_performed": false,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": null,
+        "phase_order": [
+          "authenticate"
+        ]
+      },
+      "expected": {
+        "status": 401,
+        "error_code": "authentication_failed",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    },
+    {
+      "operation": "catalog.list",
+      "request": {
+        "authentication": "valid",
+        "filters_valid": false,
+        "target_visibility": "none",
+        "lookup_performed": false,
+        "limit": 100,
+        "query_parameters": [],
+        "forbidden_parameter": "cursor",
+        "phase_order": [
+          "authenticate",
+          "validate_filters"
+        ]
+      },
+      "expected": {
+        "status": 422,
+        "error_code": "validation_error",
+        "visible_items": 0,
+        "deterministic": true,
+        "enumerates": false,
+        "result_ids": [],
+        "limit": 100,
+        "continuation": false
+      }
+    }
+  ]
+}

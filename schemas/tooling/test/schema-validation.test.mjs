@@ -130,3 +130,25 @@ test("2.1.0 consumption parity rejects nested all-complete partial states", asyn
   allowedAudit.consumption = nestedComplete;
   assert.equal(audit(allowedAudit), false);
 });
+
+
+test("2.2.0 catalog scope validates closed projection, bounded reads, lifecycle, and negative evidence", async () => {
+  const release = await loadReleaseDirectory(new URL("../../releases/2.2.0/", import.meta.url), "catalog");
+  assert.equal(release.examples.length, 2);
+  assert.equal(release.fixtures.length, 27);
+  assert.doesNotThrow(() => validateExamples(release.schemas, release.examples));
+  assert.doesNotThrow(() => validateFixtures(release.schemas, release.fixtures));
+});
+
+test("2.2.0 catalog semantic validation rejects ordering, lifecycle, and owner drift", async () => {
+  const release = await loadReleaseDirectory(new URL("../../releases/2.2.0/", import.meta.url), "catalog");
+  const http = structuredClone(release.fixtures.find(({ name, data }) => name.endsWith("catalog.http.positive.v2.2.0.fixture.json#1")));
+  http.data.expected.result_ids.reverse();
+  assert.throws(() => validateFixtures(release.schemas, [http]), /positive fixture.*failed/i);
+  const lifecycle = structuredClone(release.fixtures.find(({ name, data }) => name.endsWith("catalog.lifecycle.positive.v2.2.0.fixture.json#2")));
+  lifecycle.data.expected.transition_count = 1;
+  assert.throws(() => validateFixtures(release.schemas, [lifecycle]), /positive fixture.*failed/i);
+  const entries = structuredClone(release.fixtures.find(({ name }) => name.endsWith("catalog.entries.positive.v2.2.0.fixture.json#1")));
+  entries.data.source = "mcp";
+  assert.throws(() => validateFixtures(release.schemas, [entries]), /positive fixture.*failed/i);
+});

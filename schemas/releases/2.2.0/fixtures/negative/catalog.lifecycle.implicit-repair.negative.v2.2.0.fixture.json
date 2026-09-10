@@ -1,0 +1,25 @@
+{
+  "target": "urn:sre-agent:schema:resource-catalog-lifecycle-case:2.2.0",
+  "rule": "additionalProperties",
+  "status": "negative",
+  "version": "2.2.0",
+  "group": "catalog",
+  "data": {
+    "operation": "reconciliation",
+    "request": {
+      "idempotency_key": "catalog-repair-key-001",
+      "payload_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "prior_state": "conflict",
+      "reset_requested": false,
+      "repair_on_startup": true
+    },
+    "expected": {
+      "status": 409,
+      "transition_count": 0,
+      "upstream_called": false,
+      "snapshot_allowed": false,
+      "state_after": "unchanged",
+      "stable_replay": false
+    }
+  }
+}
