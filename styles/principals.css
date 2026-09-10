@@ -6,6 +6,45 @@
   gap: var(--ma-space-6);
 }
 
+.principals [hidden] {
+  display: none !important;
+}
+
+.principals__topbar {
+  min-height: 4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ma-space-4);
+  border-bottom: 1px solid var(--ma-color-border-subtle);
+  background: var(--ma-color-bg-surface);
+  padding: var(--ma-space-3) clamp(var(--ma-space-4), 4vw, var(--ma-space-8));
+}
+
+.principals__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ma-space-3);
+  color: var(--ma-color-text-primary);
+  font-size: var(--ma-font-size-lg);
+  text-decoration: none;
+}
+
+.principals__brand:hover {
+  text-decoration: none;
+}
+
+.principals__mark {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.principals__context {
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-sm);
+  font-weight: 600;
+}
+
 .principals__heading .principals__title {
   margin: 0;
 }
