@@ -15,8 +15,9 @@ model settings, or a harness-specific configuration.
 2. Select the direct or SDD route before changing code; record that route in the pull request.
 3. Run the relevant checks, collect evidence at the tested SHA, and complete every required PR
    evidence field.
-4. Request independent human review. Integrate only after required checks, evidence review, and
-   repository protection rules succeed.
+4. Request human review. CI validates structure but does not require separate approval
+   comments, labels, or commit confirmations. Integrate only after required checks,
+   evidence review, and repository protection rules succeed.
 
 The issue remains the planning record. A partial PR must state what it covers and must not claim
 to close the full issue.
@@ -111,9 +112,8 @@ and validator behavior are in [PR evidence requirements](pr-evidence.md).
 Evidence is tied to the tested SHA. If behavior changes, update it. If a later SHA reuses evidence,
 the author explains why it remains valid and the reviewer confirms that explanation.
 
-The review-size limit is **400 added plus deleted lines**. It has no silent exclusion. An oversized
-PR needs the `size:exception` label, a specific reason, and a link to an identified maintainer's
-approval. The exception never waives security, evidence, checks, or review.
+Keep PRs focused enough to review safely. CI reports size metadata but does not enforce a
+fixed line limit or require a size-exception label; the maintainer evaluates scope when merging.
 
 Automated validation can check field presence and references. It requires a real screenshot, and accepts only a real video link or the exact documented storage deferral; it cannot establish that media proves behavior. The human reviewer owns that judgement.
 
