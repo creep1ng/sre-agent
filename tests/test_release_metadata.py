@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import yaml
+
 from sre_agent.application import create_application
 from sre_agent.release import CONTRACT_VERSION, SOURCE_ARCHIVE_BUILD_REVISION
 from sre_agent.settings import Settings
@@ -40,11 +42,13 @@ def test_empty_environment_values_keep_source_archive_defaults() -> None:
     assert settings.release_metadata.application_version
 
 
-def test_default_contract_metadata_tracks_the_latest_schema_release() -> None:
-    releases = Path("schemas/releases")
-    latest = max(
-        (path.name for path in releases.iterdir() if path.is_dir()),
-        key=lambda value: tuple(int(part) for part in value.split(".")),
-    )
+def test_default_contract_metadata_points_to_complete_published_snapshot() -> None:
+    release = Path("schemas/releases") / CONTRACT_VERSION
+    manifest_path = release / "manifest.yaml"
 
-    assert CONTRACT_VERSION == latest
+    assert manifest_path.is_file()
+    manifest = yaml.safe_load(manifest_path.read_text())
+    assert manifest["contract_version"] == CONTRACT_VERSION
+    for entries in manifest["inventory"].values():
+        for entry in entries:
+            assert (Path("schemas") / entry["path"]).is_file()
