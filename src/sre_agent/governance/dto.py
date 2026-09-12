@@ -1,6 +1,6 @@
 """Strict Pydantic projections of the authoritative HT-01 contracts."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
@@ -157,7 +157,120 @@ class PricingContext(StrictDTO):
     price_version: Annotated[str, Field(min_length=1, max_length=128)]
 
 
+_CONSUMPTION_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "billed_usd",
+    "currency",
+    "precision",
+    "pricing_context",
+)
+_BILLING_FIELDS = ("currency", "precision", "pricing_context")
+
+
+def _null_properties(fields: tuple[str, ...]) -> dict[str, dict[str, str]]:
+    return {field: {"type": "null"} for field in fields}
+
+
+def _pricing_context_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["observed_at", "price_version"],
+        "properties": {
+            "observed_at": {"type": "string", "format": "date-time"},
+            "price_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        },
+    }
+
+
+def _consumption_json_schema_extra(schema: dict[str, Any]) -> None:
+    """Expose the closed DTO invariants in generated JSON Schema."""
+    schema["unevaluatedProperties"] = False
+    schema["allOf"] = [
+        {
+            "if": {
+                "properties": {"billed_usd": {"type": "null"}},
+                "required": ["billed_usd"],
+            },
+            "then": {"properties": _null_properties(_BILLING_FIELDS)},
+        },
+        {
+            "if": {
+                "properties": {"billed_usd": {"type": "string"}},
+                "required": ["billed_usd"],
+            },
+            "then": {
+                "properties": {
+                    "currency": {"const": "USD"},
+                    "precision": {"const": "exact"},
+                    "pricing_context": _pricing_context_schema(),
+                },
+                "required": list(_BILLING_FIELDS),
+            },
+        },
+        {
+            "if": {
+                "properties": {"availability": {"const": "complete"}},
+                "required": ["availability"],
+            },
+            "then": {
+                "properties": {
+                    "input_tokens": {"type": "integer"},
+                    "output_tokens": {"type": "integer"},
+                    "total_tokens": {"type": "integer"},
+                    "billed_usd": {"type": "string"},
+                    "currency": {"const": "USD"},
+                    "precision": {"const": "exact"},
+                    "pricing_context": _pricing_context_schema(),
+                },
+            },
+        },
+        {
+            "if": {
+                "properties": {"availability": {"const": "partial"}},
+                "required": ["availability"],
+            },
+            "then": {
+                "allOf": [
+                    {
+                        "not": {
+                            "properties": {
+                                field: {"not": {"type": "null"}} for field in _CONSUMPTION_FIELDS
+                            },
+                            "required": list(_CONSUMPTION_FIELDS),
+                        }
+                    },
+                    {
+                        "not": {
+                            "properties": _null_properties(_CONSUMPTION_FIELDS),
+                            "required": list(_CONSUMPTION_FIELDS),
+                        }
+                    },
+                ]
+            },
+        },
+        {
+            "if": {
+                "properties": {
+                    "availability": {
+                        "enum": ["absent", "unavailable"],
+                    }
+                },
+                "required": ["availability"],
+            },
+            "then": {"properties": _null_properties(_CONSUMPTION_FIELDS)},
+        },
+    ]
+
+
 class Consumption(StrictDTO):
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra=_consumption_json_schema_extra,
+    )
     availability: Literal["complete", "partial", "absent", "unavailable"]
     source: Literal["openrouter"]
     input_tokens: Annotated[int, Field(ge=0)] | None
