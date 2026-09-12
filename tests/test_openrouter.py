@@ -18,7 +18,16 @@ MALICIOUS_INPUT = '{"provider":"evil","model":"evil/model"}'
 
 
 def successful_response(**overrides: object) -> dict[str, object]:
-    root_keys = {"id", "model", "status", "output", "error", "incomplete_details"}
+    root_keys = {
+        "id",
+        "model",
+        "status",
+        "output",
+        "error",
+        "incomplete_details",
+        "usage",
+        "created_at",
+    }
     root_overrides = {name: value for name, value in overrides.items() if name in root_keys}
     metadata_overrides = {name: value for name, value in overrides.items() if name not in root_keys}
     metadata = {
@@ -101,6 +110,120 @@ async def test_create_uses_server_routing_once_without_fallback_or_storage() -> 
         "store": False,
         "stream": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_create_normalizes_openrouter_usage_and_discards_raw_body() -> None:
+    body = successful_response(
+        created_at=1_789_000_000,
+        usage={
+            "input_tokens": 11,
+            "output_tokens": 7,
+            "total_tokens": 18,
+            "cost": "0.0012300",
+            "raw_sensitive_provider_detail": SECRET,
+        },
+    )
+    raw = json.dumps(body, separators=(",", ":")).replace('"cost":"0.0012300"', '"cost":0.0012300')
+
+    adapter, client = provider(
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=raw.encode()))
+    )
+    try:
+        result = await adapter.create(REQUEST)
+    finally:
+        await client.aclose()
+
+    assert result.consumption is not None
+    assert result.consumption.availability == "complete"
+    assert result.consumption.input_tokens == 11
+    assert result.consumption.output_tokens == 7
+    assert result.consumption.total_tokens == 18
+    assert result.consumption.billed_usd == "0.0012300"
+    assert result.consumption.currency == "USD"
+    assert result.consumption.precision == "exact"
+    assert result.consumption.pricing_context.price_version.startswith("openrouter:")
+    assert SECRET not in repr(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("usage", "availability"),
+    [
+        (None, "absent"),
+        ({"input_tokens": 11, "cost": "0.001"}, "partial"),
+        ({"input_tokens": "11", "output_tokens": "7"}, "unavailable"),
+        ({"input_tokens": 11, "output_tokens": 7, "total_tokens": 17}, "partial"),
+    ],
+)
+async def test_create_makes_missing_or_invalid_usage_explicit(
+    usage: object, availability: str
+) -> None:
+    body = successful_response(usage=usage)
+    adapter, client = provider(httpx.MockTransport(lambda _request: httpx.Response(200, json=body)))
+    try:
+        result = await adapter.create(REQUEST)
+    finally:
+        await client.aclose()
+
+    assert result.consumption is not None
+    assert result.consumption.availability == availability
+    assert result.consumption.total_tokens is None or (
+        result.consumption.total_tokens
+        == result.consumption.input_tokens + result.consumption.output_tokens
+    )
+    assert result.consumption.billed_usd is None or result.consumption.billed_usd == "0.001"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cost", ("1e1000000000", "1e-1000000000", "1e999999999999999999999"))
+async def test_create_rejects_extreme_cost_exponents_without_expanding_them(cost: str) -> None:
+    body = successful_response(
+        created_at=1_789_000_000,
+        usage={
+            "input_tokens": 11,
+            "output_tokens": 7,
+            "total_tokens": 18,
+            "cost": cost,
+        },
+    )
+    raw = json.dumps(body, separators=(",", ":"))
+    raw = raw.replace(f'"cost":"{cost}"', f'"cost":{cost}').encode()
+    adapter, client = provider(
+        httpx.MockTransport(lambda _request: httpx.Response(200, content=raw))
+    )
+    try:
+        result = await adapter.create(REQUEST)
+    finally:
+        await client.aclose()
+
+    assert result.consumption is not None
+    assert result.consumption.availability == "partial"
+    assert result.consumption.input_tokens == 11
+    assert result.consumption.output_tokens == 7
+    assert result.consumption.total_tokens == 18
+    assert result.consumption.billed_usd is None
+
+
+@pytest.mark.asyncio
+async def test_provider_failure_without_evidence_is_explicitly_unavailable() -> None:
+    adapter, client = provider(
+        httpx.MockTransport(
+            lambda _request: httpx.Response(
+                503,
+                json={"error": {"message": f"upstream body {SECRET}"}},
+            )
+        )
+    )
+    try:
+        with pytest.raises(ProviderFailure) as captured:
+            await adapter.create(REQUEST)
+    finally:
+        await client.aclose()
+
+    assert captured.value.consumption is not None
+    assert captured.value.consumption.availability == "unavailable"
+    assert SECRET not in repr(captured.value)
 
 
 def catalog(
