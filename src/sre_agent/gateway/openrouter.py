@@ -233,11 +233,18 @@ def _json_body(response: httpx.Response) -> Any:
     try:
         return json.loads(
             response.content,
-            parse_float=Decimal,
+            parse_float=_parse_decimal,
             parse_constant=Decimal,
         )
     except (TypeError, ValueError):
         return None
+
+
+def _parse_decimal(value: str) -> Decimal | str:
+    try:
+        return Decimal(value)
+    except InvalidOperation:
+        return value
 
 
 def _failure(

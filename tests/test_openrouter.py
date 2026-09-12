@@ -176,7 +176,7 @@ async def test_create_makes_missing_or_invalid_usage_explicit(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("cost", ("1e1000000000", "1e-1000000000"))
+@pytest.mark.parametrize("cost", ("1e1000000000", "1e-1000000000", "1e999999999999999999999"))
 async def test_create_rejects_extreme_cost_exponents_without_expanding_them(cost: str) -> None:
     body = successful_response(
         created_at=1_789_000_000,
@@ -199,6 +199,9 @@ async def test_create_rejects_extreme_cost_exponents_without_expanding_them(cost
 
     assert result.consumption is not None
     assert result.consumption.availability == "partial"
+    assert result.consumption.input_tokens == 11
+    assert result.consumption.output_tokens == 7
+    assert result.consumption.total_tokens == 18
     assert result.consumption.billed_usd is None
 
 
