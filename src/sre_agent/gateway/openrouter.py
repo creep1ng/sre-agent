@@ -1,6 +1,8 @@
 """Direct async OpenRouter Responses adapter with closed routing evidence."""
 
+import json
 from collections.abc import Mapping
+from decimal import Decimal
 from re import fullmatch
 from typing import Any
 from uuid import uuid4
@@ -199,6 +201,17 @@ def _completed_output_text(body: Mapping[str, Any]) -> str:
     if not text:
         raise ProviderFailure("invalid_response")
     return "\n".join(text)
+
+
+def _json_body(response: httpx.Response) -> Any:
+    try:
+        return json.loads(
+            response.content,
+            parse_float=Decimal,
+            parse_constant=Decimal,
+        )
+    except (TypeError, ValueError):
+        return None
 
 
 def _generation_id(value: Any) -> bool:

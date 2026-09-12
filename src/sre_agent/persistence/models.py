@@ -197,6 +197,7 @@ class AuditEventRow(Base):
     model_alias_ref = mapped_column(JSONB, nullable=True)
     policy_decision = mapped_column(JSONB, nullable=True)
     routing = mapped_column(JSONB, nullable=True)
+    consumption = mapped_column(JSONB, nullable=True)
     untrusted_input = mapped_column(JSONB, nullable=True)
     redaction = required(JSONB)
     content_state = required(String(32))

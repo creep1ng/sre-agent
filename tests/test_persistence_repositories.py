@@ -10,7 +10,7 @@ from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
 from sre_agent.governance.authorization import ResourceAuthorizationFact
-from sre_agent.governance.dto import AuditEvent
+from sre_agent.governance.dto import AuditEvent, Consumption, PricingContext
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import (
     AuditRepository,
@@ -65,6 +65,23 @@ def repository_database() -> None:
         connection.commit()
 
 
+def complete_consumption() -> Consumption:
+    return Consumption(
+        availability="complete",
+        source="openrouter",
+        input_tokens=11,
+        output_tokens=7,
+        total_tokens=18,
+        billed_usd="0.0012300",
+        currency="USD",
+        precision="exact",
+        pricing_context=PricingContext(
+            observed_at=datetime(2026, 9, 10, 14, tzinfo=UTC),
+            price_version="openrouter:2026-09-10T14:00:00Z",
+        ),
+    )
+
+
 def audit_event(*, allowed: bool, latency_ms: int | None = None) -> AuditEvent:
     digest = "a" * 64
     reference = {"algorithm": "hmac-sha-256", "key_version": 1, "digest": digest}
@@ -99,6 +116,7 @@ def audit_event(*, allowed: bool, latency_ms: int | None = None) -> AuditEvent:
         model_alias_ref=reference,
         policy_decision=policy_decision,
         routing=None,
+        consumption=None,
         untrusted_input=None,
         redaction={
             "policy_version": "redaction-1.0.0",
@@ -267,4 +285,36 @@ async def test_audit_repository_requires_latency_before_flush() -> None:
     with pytest.raises(ValueError, match="latency_ms is required"):
         async with database.transaction() as session:
             await AuditRepository(session).append(audit_event(allowed=True))
+    await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_audit_repository_round_trips_consumption_and_keeps_denials_empty() -> None:
+    database = Database(DATABASE_URL)
+    event = audit_event(allowed=True, latency_ms=17).model_copy(
+        update={
+            "event_id": UUID(int=101),
+            "occurred_at": datetime(2026, 9, 10, 14, tzinfo=UTC),
+            "consumption": complete_consumption(),
+        }
+    )
+    denied = audit_event(allowed=False, latency_ms=3).model_copy(
+        update={"event_id": UUID(int=102), "occurred_at": datetime(2026, 9, 10, 14, 1, tzinfo=UTC)}
+    )
+    async with database.transaction() as session:
+        await AuditRepository(session).append(event)
+        await AuditRepository(session).append(denied)
+
+    async with database.transaction() as session:
+        events = await AuditRepository(session).read_recent(limit=2)
+        allowed = next(item for item in events if item.consumption is not None)
+        denied = next(item for item in events if item.consumption is None)
+        assert allowed.consumption == event.consumption
+        assert allowed.consumption is not None
+        assert allowed.consumption.billed_usd == "0.0012300"
+        assert allowed.consumption.pricing_context is not None
+        assert allowed.consumption.pricing_context.price_version == (
+            "openrouter:2026-09-10T14:00:00Z"
+        )
+        assert denied.consumption is None
     await database.dispose()

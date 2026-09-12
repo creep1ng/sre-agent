@@ -152,6 +152,49 @@ class RoutingEvidence(StrictDTO):
     provider_ref: AuditRef
 
 
+class PricingContext(StrictDTO):
+    observed_at: AwareDatetime
+    price_version: Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class Consumption(StrictDTO):
+    availability: Literal["complete", "partial", "absent", "unavailable"]
+    source: Literal["openrouter"]
+    input_tokens: Annotated[int, Field(ge=0)] | None
+    output_tokens: Annotated[int, Field(ge=0)] | None
+    total_tokens: Annotated[int, Field(ge=0)] | None
+    billed_usd: (
+        Annotated[str, Field(pattern=r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$", max_length=64)] | None
+    )
+    currency: Literal["USD"] | None
+    precision: Literal["exact"] | None
+    pricing_context: PricingContext | None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "Consumption":
+        tokens = (self.input_tokens, self.output_tokens, self.total_tokens)
+        if all(value is not None for value in tokens) and self.total_tokens != (
+            self.input_tokens + self.output_tokens  # type: ignore[operator]
+        ):
+            raise ValueError("total_tokens must equal input_tokens + output_tokens")
+
+        if self.billed_usd is None and any(
+            value is not None for value in (self.currency, self.precision, self.pricing_context)
+        ):
+            raise ValueError("billing context requires billed_usd")
+
+        values = (*tokens, self.billed_usd, self.currency, self.precision, self.pricing_context)
+        has_values = any(value is not None for value in values)
+        complete = all(value is not None for value in values)
+        if self.availability == "complete" and not complete:
+            raise ValueError("complete consumption requires all evidence fields")
+        if self.availability == "partial" and (not has_values or complete):
+            raise ValueError("partial consumption requires an incomplete evidence projection")
+        if self.availability in {"absent", "unavailable"} and has_values:
+            raise ValueError(f"{self.availability} consumption cannot carry evidence values")
+        return self
+
+
 class AllowDecisionEvidence(StrictDTO):
     decision: Literal["allow"]
     reason_code: Literal["grant_matched"]
@@ -292,6 +335,7 @@ class AuditEvent(StrictDTO):
     model_alias_ref: AuditRef | None = None
     policy_decision: AllowDecisionEvidence | DenyDecisionEvidence | None = None
     routing: RoutingEvidence | None = None
+    consumption: Consumption | None = None
     untrusted_input: UntrustedInput | None = None
     redaction: Redaction
     content_state: Literal["absent", "redacted", "redaction_failed"]
@@ -307,6 +351,8 @@ class AuditEvent(StrictDTO):
         subject = (self.identity, self.resource, self.model_alias_ref, self.policy_decision)
         if no_subject and any(value is not None for value in (*subject, self.routing)):
             raise ValueError("this audit stage cannot carry subject evidence")
+        if self.outcome == "denied" and self.consumption is not None:
+            raise ValueError("denied audit events cannot carry provider consumption")
         is_control = (
             isinstance(self.resource, ResourceEvidence)
             and self.resource.resource_type == "administrative_control"
