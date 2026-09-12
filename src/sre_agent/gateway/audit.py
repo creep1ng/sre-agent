@@ -4,7 +4,14 @@ from hashlib import sha256
 from uuid import UUID, uuid4
 
 from sre_agent.governance.authorization import AuthorizationDenialCause
-from sre_agent.governance.dto import AuditEvent, AuditRef, ModelAlias, PolicyDecision, PrincipalContext  # noqa: E501  # fmt: skip
+from sre_agent.governance.dto import (
+    AuditEvent,
+    AuditRef,
+    Consumption,
+    ModelAlias,
+    PolicyDecision,
+    PrincipalContext,
+)  # noqa: E501
 
 
 class AuditProjector:
@@ -115,6 +122,7 @@ class AuditProjector:
         authorization_denial_cause: AuthorizationDenialCause | None = None,
         assignment: ModelAlias | None = None,
         identifiers: dict[str, str] | None = None,
+        consumption: Consumption | None = None,
     ) -> AuditEvent:
         ref = self.reference
         correlation = {"request_id": request_id}
@@ -150,6 +158,7 @@ class AuditProjector:
                      "router": "openrouter",
                      "provider_ref": ref("provider", assignment.inference_provider)}
             if assignment else None,
+            consumption=consumption,
             redaction={"policy_version": "redaction-1.0.0", "result": "success",
                        "source_class": "none", "categories": [], "match_count": 0,
                        "sink_eligible": False},

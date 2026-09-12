@@ -15,7 +15,7 @@ from starlette.exceptions import HTTPException
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
-from sre_agent.governance.dto import AuditEvent
+from sre_agent.governance.dto import AuditEvent, Consumption
 from sre_agent.persistence.repositories import AuditRepository, ResourceRepository
 
 
@@ -58,6 +58,7 @@ class ResponseMetadata(BaseModel):
     requested_model_alias: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")]
     router: Annotated[str, Field(min_length=1, max_length=100)]
     inference_provider: Annotated[str, Field(min_length=1, max_length=100)]
+    consumption: Consumption
 
 
 class ResponsesResponse(BaseModel):
@@ -82,6 +83,17 @@ class ResponsesResponse(BaseModel):
                         "requested_model_alias": "triage-agent",
                         "router": "openrouter",
                         "inference_provider": "openai",
+                        "consumption": {
+                            "availability": "absent",
+                            "source": "openrouter",
+                            "input_tokens": None,
+                            "output_tokens": None,
+                            "total_tokens": None,
+                            "billed_usd": None,
+                            "currency": None,
+                            "precision": None,
+                            "pricing_context": None,
+                        },
                     },
                 }
             ]
@@ -166,6 +178,22 @@ ERRORS = {
 ERROR_MESSAGES = {
     "audit_unavailable": "Audit unavailable.",
 }
+
+
+def _empty_consumption(availability: Literal["absent", "unavailable"]) -> Consumption:
+    return Consumption(
+        availability=availability,
+        source="openrouter",
+        input_tokens=None,
+        output_tokens=None,
+        total_tokens=None,
+        billed_usd=None,
+        currency=None,
+        precision=None,
+        pricing_context=None,
+    )
+
+
 class ResponsesService:  # noqa: E305
     def __init__(self, sessions: Any, provider: LLMProvider, audit: AuditStore,
                  projector: AuditProjector) -> None:
@@ -220,13 +248,16 @@ class ResponsesService:  # noqa: E305
                                       identifiers=identifiers)
         try:
             result = await self.provider.create(provider_request)
+            consumption = result.consumption or _empty_consumption("absent")
             payload = {"id": result.response_id, "object": "response", "status": "completed", "model": result.model, "output": [{"type": "message", "role": "assistant",
                        "content": [{"type": "output_text", "text": result.text}]}],
                        "request_id": str(request_id), "metadata": {"requested_model_alias": request.model,
-                       "router": assignment.router, "inference_provider": result.provider}}
+                       "router": assignment.router, "inference_provider": result.provider,
+                       "consumption": consumption.model_dump(mode="json")}}
             return await self._finish(request_id, started, 200, "response", payload=payload,
                                       context=context, alias=request.model, decision=decision,
-                                      assignment=assignment, identifiers=identifiers)
+                                      assignment=assignment, identifiers=identifiers,
+                                      consumption=consumption)
         except ProviderFailure as failure:
             status, reason, code = {"timeout": (504, "upstream_failed", "upstream_timeout"),
                                     "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
@@ -235,12 +266,14 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, status, "upstream", context=context,
                                       alias=request.model, decision=decision, assignment=assignment,
                                       reason=reason, retryable=status in {503, 504}, identifiers=identifiers,
-                                      error_code=code, retry_after=failure.retry_after)
+                                      error_code=code, retry_after=failure.retry_after,
+                                      consumption=failure.consumption or _empty_consumption("unavailable"))
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
-                      error_code=None, retry_after=None, **facts):
+                      error_code=None, retry_after=None, consumption: Consumption | None = None,
+                      **facts):
         event = self.projector.event(request_id, status, max(0, int((monotonic() - started) * 1000)),
-                                     stage, **facts)
+                                     stage, consumption=consumption, **facts)
         try:
             await self.audit.append(event)
         except Exception:
