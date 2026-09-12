@@ -66,6 +66,23 @@ test("2.1.0 registers the issue-130 consumption consumer", async () => {
   assert.equal(result.suite.obligations.at(-1).fixture, "fixtures/positive/consumption.states.positive.v2.1.0.fixture.json");
 });
 test("release 2.1.0 preserves every positive 2.0.0 instance under documented normalization", async () => assert.deepEqual(await validateCompatibility("2.0.0", "2.1.0"), { previous_release: "2.0.0", current_release: "2.1.0", positive_fixtures: 91, examples: 10, status: "passed", normalization: { mode: "validation-only", legacy_success_consumption: "absent", raw_schema_acceptance: false, strict_consumer_note: "2.1.0 successful response metadata requires consumption; strict 2.0.0 consumers must tolerate the additive field" } }));
+test("2.2.0 retains issue-130 and adds version-aware issue-129 catalog coverage", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.2.0/", import.meta.url)), result = await validateCoverage(root);
+  assert.equal(result.consumers.consumers.length, 8);
+  assert.equal(result.suite.obligations.length, 8);
+  assert.deepEqual(result.consumers.consumers.at(-2), { id: "issue-130", owner: "release", obligations: ["issue-130.consumption-contract"], internal_models_are_authority: false });
+  assert.deepEqual(result.consumers.consumers.at(-1), { id: "issue-129", owner: "release", obligations: ["issue-129.resource-catalog-contract"], internal_models_are_authority: false });
+  assert.equal(result.suite.obligations.at(-2).fixture, "fixtures/positive/consumption.states.positive.v2.2.0.fixture.json");
+  assert.equal(result.suite.obligations.at(-1).fixture, "fixtures/positive/catalog.entries.positive.v2.2.0.fixture.json");
+});
+test("release 2.2.0 validates catalog contract and additive compatibility", async () => {
+  const compatibility = await validateCompatibility("2.1.0", "2.2.0"), result = await validateRelease("2.2.0"), manifest = parse(await readFile(new URL("../../releases/2.2.0/manifest.yaml", import.meta.url), "utf8"));
+  assert.deepEqual(compatibility, { previous_release: "2.1.0", current_release: "2.2.0", positive_fixtures: 96, examples: 10, status: "passed" });
+  assert.ok(result.artifacts > 0);
+  assert.deepEqual(manifest.baseline, { previous_release: "2.1.0", previous_major: "2.0.0", compatibility: "additive" });
+  assert.ok(manifest.inventory.schemas.some(({ path }) => path.endsWith("json-schema/domain/resource-catalog-entry.schema.json")));
+  assert.ok(manifest.inventory.examples.some(({ path }) => path.endsWith("examples/catalog/resource-list.example.json")));
+});
 test("2.1.0 is additive over immutable 2.0.0", async () => {
   const result = await validateRelease("2.1.0"), manifest = parse(await readFile(new URL("../../releases/2.1.0/manifest.yaml", import.meta.url), "utf8")), previous = parse(await readFile(new URL("../../releases/2.0.0/manifest.yaml", import.meta.url), "utf8"));
   assert.ok(result.artifacts > 0);

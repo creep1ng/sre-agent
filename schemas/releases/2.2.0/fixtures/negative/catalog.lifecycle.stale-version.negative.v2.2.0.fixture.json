@@ -1,0 +1,24 @@
+{
+  "target": "urn:sre-agent:schema:resource-catalog-lifecycle-case:2.2.0",
+  "rule": "enum",
+  "status": "negative",
+  "version": "2.2.0",
+  "group": "catalog",
+  "data": {
+    "operation": "idempotent_replay",
+    "request": {
+      "idempotency_key": "catalog-stale-key-001",
+      "payload_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "prior_state": "stale",
+      "reset_requested": false
+    },
+    "expected": {
+      "status": 409,
+      "transition_count": 0,
+      "upstream_called": false,
+      "snapshot_allowed": false,
+      "state_after": "unchanged",
+      "stable_replay": false
+    }
+  }
+}

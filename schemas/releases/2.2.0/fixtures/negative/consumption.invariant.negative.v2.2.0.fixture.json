@@ -1,0 +1,23 @@
+{
+  "target": "urn:sre-agent:schema:consumption:2.2.0",
+  "rule": "semantic",
+  "status": "negative",
+  "version": "2.2.0",
+  "group": "consumption-contract",
+  "cases": [
+    {
+      "availability": "complete",
+      "source": "openrouter",
+      "input_tokens": 11,
+      "output_tokens": 7,
+      "total_tokens": 17,
+      "billed_usd": "0.0012300",
+      "currency": "USD",
+      "precision": "exact",
+      "pricing_context": {
+        "observed_at": "2026-08-17T12:00:00Z",
+        "price_version": "openrouter:2026-08-17T12:00:00Z"
+      }
+    }
+  ]
+}

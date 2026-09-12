@@ -1,0 +1,58 @@
+contract_version: 2.2.0
+resource_types:
+  - type: llm_model
+    owner: ModelAlias
+    identity: alias_id
+    states: [active, inactive]
+    operations:
+      - { name: assignment, action: admin.write }
+      - { name: status, action: admin.write }
+      - { name: read, action: admin.read }
+      - { name: invoke, action: invoke }
+  - type: mcp_server
+    owner: "MCP #187"
+    identity: server_id
+    states: [registered, active, inactive, revoked]
+    operations:
+      - { name: register, action: admin.write }
+      - { name: update, action: admin.write }
+      - { name: deactivate, action: admin.write }
+      - { name: revoke, action: admin.write }
+      - { name: discovery, action: mcp.discovery }
+      - { name: invoke, action: mcp.invoke }
+  - type: mcp_tool
+    owner: "MCP #187"
+    identity: tool_id
+    relation: server_id
+    states: [registered, active, inactive, revoked]
+    operations:
+      - { name: register, action: admin.write }
+      - { name: update, action: admin.write }
+      - { name: deactivate, action: admin.write }
+      - { name: revoke, action: admin.write }
+      - { name: discovery, action: mcp.discovery }
+      - { name: invoke, action: mcp.invoke }
+  - type: skill
+    owner: "Skills #31"
+    identity: skill_id@version
+    states: [draft, published, active, inactive, revoked]
+    operations:
+      - { name: publish, action: admin.write }
+      - { name: version, action: admin.write }
+      - { name: deactivate, action: admin.write }
+      - { name: revoke, action: admin.write }
+      - { name: discovery, action: skill.discovery }
+      - { name: read, action: skill.read }
+      - { name: invoke, action: skill.invoke }
+  - type: bok_collection
+    owner: "BoK #33"
+    identity: collection_id@version
+    states: [draft, indexing, active, inactive, revoked]
+    operations:
+      - { name: publish, action: admin.write }
+      - { name: index, action: admin.write }
+      - { name: deactivate, action: admin.write }
+      - { name: revoke, action: admin.write }
+      - { name: discovery, action: bok.discovery }
+      - { name: search, action: bok.search }
+      - { name: read, action: bok.read }
