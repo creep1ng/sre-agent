@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
 import { assertEveryPublishedRelease, assertImmutableManifest, assertReleaseMetadata, runConsumer, validateRelease, validateCompatibility, validateCoverage, validatePublishedReleases, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
 
@@ -56,6 +57,22 @@ test("published release validation discovers deterministically and rejects inval
   }
 });
 
+
+test("2.1.0 registers the issue-130 consumption consumer", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.1.0/", import.meta.url)), result = await validateCoverage(root);
+  assert.equal(result.consumers.consumers.length, 7);
+  assert.equal(result.suite.obligations.length, 7);
+  assert.deepEqual(result.consumers.consumers.at(-1), { id: "issue-130", owner: "release", obligations: ["issue-130.consumption-contract"], internal_models_are_authority: false });
+  assert.equal(result.suite.obligations.at(-1).fixture, "fixtures/positive/consumption.states.positive.v2.1.0.fixture.json");
+});
+test("release 2.1.0 preserves every positive 2.0.0 instance under documented normalization", async () => assert.deepEqual(await validateCompatibility("2.0.0", "2.1.0"), { previous_release: "2.0.0", current_release: "2.1.0", positive_fixtures: 91, examples: 10, status: "passed", normalization: { mode: "validation-only", legacy_success_consumption: "absent", raw_schema_acceptance: false, strict_consumer_note: "2.1.0 successful response metadata requires consumption; strict 2.0.0 consumers must tolerate the additive field" } }));
+test("2.1.0 is additive over immutable 2.0.0", async () => {
+  const result = await validateRelease("2.1.0"), manifest = parse(await readFile(new URL("../../releases/2.1.0/manifest.yaml", import.meta.url), "utf8")), previous = parse(await readFile(new URL("../../releases/2.0.0/manifest.yaml", import.meta.url), "utf8"));
+  assert.ok(result.artifacts > 0);
+  assert.deepEqual(manifest.baseline, { previous_release: "2.0.0", previous_major: "2.0.0", compatibility: "additive" });
+  assert.equal(manifest.inventory.schemas.some(({ path }) => path.endsWith("json-schema/domain/consumption.schema.json")), true);
+  assert.deepEqual(previous.baseline, { previous_release: "1.4.0", previous_major: "1.0.0", compatibility: "breaking" });
+});
 
 test("2.0.0 keeps /v1 while pinning status, hidden reads, and rotation response schemas", async () => {
   const result = await validateRelease("2.0.0");

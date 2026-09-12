@@ -1,0 +1,1 @@
+{"current_release":"2.1.0","examples":10,"normalization":{"legacy_success_consumption":"absent","mode":"validation-only","raw_schema_acceptance":false,"strict_consumer_note":"2.1.0 successful response metadata requires consumption; strict 2.0.0 consumers must tolerate the additive field"},"positive_fixtures":91,"previous_release":"2.0.0","status":"passed"}

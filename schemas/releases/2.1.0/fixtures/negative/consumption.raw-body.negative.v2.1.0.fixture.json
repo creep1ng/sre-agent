@@ -1,0 +1,23 @@
+{
+  "target": "urn:sre-agent:schema:consumption:2.1.0",
+  "rule": "additionalProperties",
+  "status": "negative",
+  "version": "2.1.0",
+  "group": "consumption-contract",
+  "cases": [
+    {
+      "availability": "absent",
+      "source": "openrouter",
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "billed_usd": null,
+      "currency": null,
+      "precision": null,
+      "pricing_context": null,
+      "provider_body": {
+        "secret": "must-not-cross-boundary"
+      }
+    }
+  ]
+}

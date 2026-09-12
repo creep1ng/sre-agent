@@ -31,8 +31,19 @@ export function createSchemaRegistry(schemas) {
   }
   for (const id of ids) ajv.getSchema(id); return ajv;
 }
+function consumptionSemanticsValid(value) {
+  if (!value || value.source !== "openrouter") return false;
+  const tokens = [value.input_tokens, value.output_tokens, value.total_tokens], billing = [value.billed_usd, value.currency, value.precision, value.pricing_context];
+  if (tokens.every((item) => item !== null) && value.total_tokens !== value.input_tokens + value.output_tokens) return false;
+  if (value.billed_usd === null && billing.slice(1).some((item) => item !== null)) return false;
+  const hasEvidence = [...tokens, ...billing].some((item) => item !== null), complete = [...tokens, ...billing].every((item) => item !== null);
+  if (value.availability === "complete") return complete;
+  if (value.availability === "partial") return hasEvidence && !complete;
+  return (value.availability === "absent" || value.availability === "unavailable") && !hasEvidence;
+}
 function semanticFixtureValid(fixture) {
   const name = /^urn:sre-agent:schema:([a-z-]+):/.exec(fixture.target)?.[1];
+  if (name === "consumption") return consumptionSemanticsValid(fixture.data);
   if (name === "idempotency-record") return idempotencyRetentionValid(fixture.data);
   if (name === "responses-http-case") return responsesHttpCaseValid(fixture.data);
   if (name === "openrouter-metadata-case") return openRouterMetadataValid(fixture.data);

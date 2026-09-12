@@ -100,3 +100,33 @@ test("shared governance ADRs are accepted and structurally complete", () => { fo
 test("release 1.1.0 persists only bounded sanitized LLM text", async () => { const root = new URL("../../releases/1.1.0/", import.meta.url), success = await loadReleaseDirectory(root, "redaction-success"), failure = await loadReleaseDirectory(root, "redaction-failure"), registry = createSchemaRegistry(success.schemas), audit = registry.getSchema("urn:sre-agent:schema:audit-event:1.1.0"), named = Object.fromEntries(success.fixtures.map(({ name, data }) => [name, data])), input = structuredClone(named["positive/audit.redaction.llm-input.positive.v1.1.0.fixture.json"]), response = named["positive/audit.redaction.llm-response.positive.v1.1.0.fixture.json"], failed = failure.fixtures.find(({ name }) => name.includes("partial-payload")).data; assert.doesNotThrow(() => validateFixtures(success.schemas, [...success.fixtures, ...failure.fixtures])); assert.deepEqual([input.redacted_content.representation, response.redacted_content.representation], ["sanitized_text", "sanitized_text"]); input.redacted_content = { representation: "fully_redacted" }; assert.equal(audit(input), true); input.redacted_content = { representation: "sanitized_text", text: "x".repeat(65537) }; assert.equal(audit(input), false); input.redaction.source_class = "command_output"; input.redacted_content = { representation: "sanitized_text", text: "safe" }; assert.equal(audit(input), false); assert.equal(audit(failed), false); });
 test("release 1.2.0 adds optional bounded latency evidence", async () => { const release = await loadReleaseDirectory(new URL("../../releases/1.2.0/", import.meta.url), "audit"), registry = createSchemaRegistry(release.schemas), audit = registry.getSchema("urn:sre-agent:schema:audit-event:1.2.0"), schema = release.schemas.find(({ $id }) => $id === "urn:sre-agent:schema:audit-event:1.2.0"), example = structuredClone(release.examples.find(({ name }) => name === "allow.example.json").data); assert.deepEqual(schema.properties.latency_ms, { type: "integer", minimum: 0, maximum: 2147483647 }); assert.equal(schema.required.includes("latency_ms"), false); assert.ok(release.examples.every(({ data }) => Number.isInteger(data.latency_ms) && data.latency_ms >= 0)); assert.equal(audit(example), true, JSON.stringify(audit.errors)); delete example.latency_ms; assert.equal(audit(example), true, JSON.stringify(audit.errors)); for (const invalid of [-1, true, 1.5, 2147483648]) { example.latency_ms = invalid; assert.equal(audit(example), false, String(invalid)); } });
 test("release 1.3.0 requires a non-null audit cause for every authorization deny", async () => { const release = await loadReleaseDirectory(new URL("../../releases/1.3.0/", import.meta.url), "audit"), registry = createSchemaRegistry(release.schemas), audit = registry.getSchema("urn:sre-agent:schema:audit-event:1.3.0"), denied = structuredClone(release.fixtures.find(({ name }) => name.endsWith("audit.responses.denied.positive.v1.3.0.fixture.json")).data); assert.equal(audit(denied), true, JSON.stringify(audit.errors)); delete denied.authorization_denial_cause; assert.equal(audit(denied), false); assert.ok(audit.errors.some(({ keyword, params }) => keyword === "required" && params.missingProperty === "authorization_denial_cause")); denied.authorization_denial_cause = null; assert.equal(audit(denied), false); });
+
+test("2.1.0 consumption parity rejects nested all-complete partial states", async () => {
+  const release = await loadReleaseDirectory(new URL("../../releases/2.1.0/", import.meta.url), "all");
+  const registry = createSchemaRegistry(release.schemas);
+  const consumption = registry.getSchema("urn:sre-agent:schema:consumption:2.1.0");
+  const response = registry.getSchema("urn:sre-agent:schema:responses-response:2.1.0");
+  const audit = registry.getSchema("urn:sre-agent:schema:audit-event:2.1.0");
+  const completed = structuredClone(release.examples.find(({ name }) => name === "responses/completed-response.example.json").data);
+  const allowedPartial = structuredClone(completed.metadata.consumption);
+  allowedPartial.availability = "partial";
+  allowedPartial.output_tokens = null;
+  allowedPartial.total_tokens = null;
+  allowedPartial.billed_usd = null;
+  allowedPartial.currency = null;
+  allowedPartial.precision = null;
+  allowedPartial.pricing_context = null;
+  assert.equal(consumption(allowedPartial), true, JSON.stringify(consumption.errors));
+  completed.metadata.consumption = structuredClone(allowedPartial);
+  assert.equal(response(completed), true, JSON.stringify(response.errors));
+  const nestedComplete = structuredClone(allowedPartial);
+  Object.assign(nestedComplete, structuredClone(release.examples.find(({ name }) => name === "responses/completed-response.example.json").data.metadata.consumption), { availability: "partial" });
+  assert.equal(consumption(nestedComplete), false);
+  completed.metadata.consumption = nestedComplete;
+  assert.equal(response(completed), false);
+  const allowedAudit = structuredClone(release.examples.find(({ name }) => name === "audit/allow.example.json").data);
+  allowedAudit.consumption = structuredClone(allowedPartial);
+  assert.equal(audit(allowedAudit), true, JSON.stringify(audit.errors));
+  allowedAudit.consumption = nestedComplete;
+  assert.equal(audit(allowedAudit), false);
+});
