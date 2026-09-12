@@ -176,6 +176,43 @@ async def test_create_makes_missing_or_invalid_usage_explicit(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("created_at", "remove_created_at"),
+    [(None, True), ("not-a-timestamp", False)],
+    ids=["missing", "invalid"],
+)
+async def test_create_discards_cost_without_valid_provider_timestamp(
+    created_at: object, remove_created_at: bool
+) -> None:
+    body = successful_response(
+        created_at=created_at,
+        usage={
+            "input_tokens": 11,
+            "output_tokens": 7,
+            "total_tokens": 18,
+            "cost": "0.0012300",
+        },
+    )
+    if remove_created_at:
+        body.pop("created_at")
+    adapter, client = provider(httpx.MockTransport(lambda _request: httpx.Response(200, json=body)))
+    try:
+        result = await adapter.create(REQUEST)
+    finally:
+        await client.aclose()
+
+    assert result.consumption is not None
+    assert result.consumption.availability == "partial"
+    assert result.consumption.input_tokens == 11
+    assert result.consumption.output_tokens == 7
+    assert result.consumption.total_tokens == 18
+    assert result.consumption.billed_usd is None
+    assert result.consumption.currency is None
+    assert result.consumption.precision is None
+    assert result.consumption.pricing_context is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("cost", ("1e1000000000", "1e-1000000000", "1e999999999999999999999"))
 async def test_create_rejects_extreme_cost_exponents_without_expanding_them(cost: str) -> None:
     body = successful_response(

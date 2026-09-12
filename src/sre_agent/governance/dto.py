@@ -182,6 +182,10 @@ class Consumption(StrictDTO):
             value is not None for value in (self.currency, self.precision, self.pricing_context)
         ):
             raise ValueError("billing context requires billed_usd")
+        if self.billed_usd is not None and (
+            self.currency != "USD" or self.precision != "exact" or self.pricing_context is None
+        ):
+            raise ValueError("billed_usd requires complete billing context")
 
         values = (*tokens, self.billed_usd, self.currency, self.precision, self.pricing_context)
         has_values = any(value is not None for value in values)
