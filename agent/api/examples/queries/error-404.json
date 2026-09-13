@@ -1,0 +1,35 @@
+{
+  "summary": "Reports an absent incident explicitly instead of synthesizing one.",
+  "value": {
+    "error": {
+      "code": "incident_not_found",
+      "message": "The requested incident was not found."
+    },
+    "request_id": "33333333-3333-4333-8333-333333333333",
+    "retryable": false
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/incidents/inc-missing99",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 404,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "incident_not_found",
+          "message": "The requested incident was not found."
+        },
+        "request_id": "33333333-3333-4333-8333-333333333333",
+        "retryable": false
+      }
+    }
+  }
+}
