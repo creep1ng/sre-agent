@@ -1,0 +1,35 @@
+{
+  "summary": "Rejects an invalid timeline cursor without resetting silently.",
+  "value": {
+    "error": {
+      "code": "invalid_cursor",
+      "message": "The timeline cursor is invalid."
+    },
+    "request_id": "44444444-4444-4444-8444-444444444444",
+    "retryable": false
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/incidents/inc-otel-payment-failure/timeline?after=banana&limit=50",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 422,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "invalid_cursor",
+          "message": "The timeline cursor is invalid."
+        },
+        "request_id": "44444444-4444-4444-8444-444444444444",
+        "retryable": false
+      }
+    }
+  }
+}
