@@ -1,0 +1,100 @@
+# Public incident detail returned to authorized readers — HT-INC-RUNTIME-B (issue #189).
+#
+# GET /v1/incidents/{incident_id}. A safe allow-listed projection of the
+# persisted incident: identity, workflow position, severity/impact, the
+# canonical alert fragment, bounded approvals, run summaries and the aggregate
+# version. No hypotheses, mitigation content, postmortem body, evidence
+# content, decisions rationale, prompts, secrets or raw tool output.
+# Every property declared here must be registered in
+# agent/api/projection-policy.v1.yaml (allow-list, fail closed).
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:incident-detail:1.0.0
+title: IncidentDetail
+type: object
+additionalProperties: false
+required: [incident_id, workflow_version, state, version, alert, updated_at, runs]
+properties:
+  incident_id:
+    type: string
+    pattern: '^[a-z][a-z0-9_-]{2,63}$'
+  workflow_version:
+    const: 1.0.0
+  state:
+    enum: [detected, triage, dismissed, linked, active, investigating,
+           mitigating, verifying, resolved, postmortem, closed]
+  severity:
+    type: [string, "null"]
+    enum: [sev1, sev2, sev3, sev4, null]
+    default: null
+  impact:
+    type: [string, "null"]
+    maxLength: 2000
+    default: null
+  alert:
+    type: object
+    additionalProperties: false
+    required: [alert_id, service, severity, status, observed_at, summary, source]
+    properties:
+      alert_id:
+        type: string
+        pattern: '^[a-z][a-z0-9_-]{2,63}$'
+      service: { type: string, minLength: 1, maxLength: 200 }
+      severity: { enum: [sev1, sev2, sev3, sev4] }
+      status: { enum: [new, triaged, dismissed, linked] }
+      observed_at: { type: string, format: date-time }
+      summary: { type: string, minLength: 1, maxLength: 2000 }
+      source: { type: string, minLength: 1, maxLength: 200 }
+      origin:
+        type: object
+        additionalProperties: false
+        properties:
+          signal: { type: string, maxLength: 200 }
+          condition: { type: string, maxLength: 500 }
+          detector: { type: string, maxLength: 200 }
+          observed_at: { type: string, format: date-time }
+  approvals:
+    type: array
+    default: []
+    items:
+      type: object
+      additionalProperties: false
+      required: [approval_id, subject_id, granted, decided_at]
+      properties:
+        approval_id: { type: string, pattern: '^apr_[a-z0-9_-]{1,60}$' }
+        subject_id: { type: string, minLength: 1, maxLength: 100 }
+        granted: { type: boolean }
+        decided_at: { type: string, format: date-time }
+  version:
+    type: integer
+    minimum: 0
+    description: Authoritative aggregate version. Returned verbatim from storage.
+  updated_at:
+    type: string
+    format: date-time
+  runs:
+    type: array
+    description: Run summaries for this incident, oldest first. Empty means the
+      incident has no run yet (explicit absence, never a synthesized run).
+    items:
+      type: object
+      additionalProperties: false
+      required: [run_id, version]
+      properties:
+        run_id:
+          type: string
+          pattern: '^run_[a-z0-9]{8,32}$'
+        version:
+          type: integer
+          minimum: 0
+        status:
+          type: [string, "null"]
+          enum: [running, awaiting_human, completed, terminated, null]
+          default: null
+        current_state:
+          type: [string, "null"]
+          default: null
+        updated_at:
+          type: [string, "null"]
+          format: date-time
+          default: null
