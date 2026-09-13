@@ -31,6 +31,8 @@ paths:
           content:
             application/json:
               schema: { $ref: 'urn:sre-agent:schema:incident-detail:1.0.0' }
+              examples:
+                current: { $ref: './examples/queries/detail.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -66,6 +68,8 @@ paths:
           content:
             application/json:
               schema: { $ref: 'urn:sre-agent:schema:run-event:1.0.0' }
+              examples:
+                page: { $ref: './examples/queries/timeline-page.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -92,6 +96,8 @@ paths:
           content:
             application/json:
               schema: { $ref: 'urn:sre-agent:schema:incident-snapshot:1.0.0' }
+              examples:
+                current: { $ref: './examples/queries/snapshot.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
