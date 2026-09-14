@@ -21,6 +21,17 @@ const countLine = document.getElementById("principal-count");
 const rowsBody = document.getElementById("principal-rows");
 const refreshButton = document.getElementById("refresh-button");
 const disconnectButton = document.getElementById("disconnect-button");
+const createButton = document.getElementById("create-button");
+const createDialog = document.getElementById("create-dialog");
+const createForm = document.getElementById("create-form");
+const createPrincipalId = document.getElementById("create-principal-id");
+const createDisplayName = document.getElementById("create-display-name");
+const createKind = document.getElementById("create-kind");
+const createSubmit = document.getElementById("create-submit");
+const createCancel = document.getElementById("create-cancel");
+const createErrorBox = document.getElementById("create-error");
+const createErrorTitle = document.getElementById("create-error-title");
+const createErrorDetail = document.getElementById("create-error-detail");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
@@ -31,6 +42,20 @@ let currentItems = [];
 // previous generation (e.g. fetched with an older credential) must never
 // render.
 let sessionGeneration = 0;
+const PRINCIPAL_ID_RE = /^[a-z][a-z0-9_-]{2,63}$/;
+// Idempotency-Key (B1): `principal-create-` + 16 getRandomValues bytes as hex
+// (49 chars, 16..128, 128-bit). Reused only for the exact same payload; any
+// principal_id/kind/display_name change mints a fresh key (backend binds key).
+function newIdempotencyKey() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return `principal-create-${[...b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+function createBodyKey(body) {
+  return `${body.principal_id}\n${body.kind}\n${body.display_name}`;
+}
+let pendingIdempotencyKey = null;
+let pendingCreateBodyKey = null;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const known = (value, allowed) => (allowed.has(value) ? value : "unknown");
@@ -63,6 +88,61 @@ function showError(error) {
   errorDetail.textContent = detail;
   errorBox.hidden = false;
   announce(`${title}. ${detail}`);
+}
+
+function hideCreateError() {
+  createErrorBox.hidden = true;
+  createErrorTitle.textContent = "";
+  createErrorDetail.textContent = "";
+}
+
+function describeCreateError(error) {
+  // CREATE-only: shared 401/403/409/network copy + POST api codes. not_found untouched (B2).
+  if (error?.kind === "validation")
+    return ["Invalid principal", error?.message ?? "Check the highlighted fields. Nothing was created."];
+  if (error?.kind === "api" && error?.code === "validation_error")
+    return ["Invalid principal", "Check the highlighted fields. Nothing was created."];
+  if (error?.kind === "api" && error?.code === "invalid_idempotency_key")
+    return ["Request failed", "The retry token was rejected. Refresh and retry; nothing was overwritten."];
+  if (error?.kind === "api" && error?.code === "audit_unavailable")
+    return ["Service unavailable", "The request was not completed. Refresh and retry."];
+  if (error?.kind === "api" || error?.kind === "invalid_response")
+    return ["Request failed", error?.message ?? "Unexpected error. Nothing was created."];
+  return describeError(error);
+}
+
+function showCreateError(error) {
+  const [title, detail] = describeCreateError(error);
+  createErrorTitle.textContent = title;
+  createErrorDetail.textContent = detail;
+  createErrorBox.hidden = false;
+  announce(`${title}. ${detail}`);
+}
+
+function validateCreateFields() {
+  const principalId = createPrincipalId.value.trim();
+  const displayName = createDisplayName.value.trim();
+  const kind = createKind.value;
+  const problems = [];
+  const idOk = PRINCIPAL_ID_RE.test(principalId);
+  const nameOk = displayName.length >= 1 && displayName.length <= 200;
+  const kindOk = kind === "human" || kind === "agent";
+  createPrincipalId.setAttribute("aria-invalid", String(!idOk));
+  createDisplayName.setAttribute("aria-invalid", String(!nameOk));
+  createKind.setAttribute("aria-invalid", String(!kindOk));
+  if (!idOk) problems.push("principal ID");
+  if (!nameOk) problems.push("display name");
+  if (!kindOk) problems.push("kind");
+  if (problems.length > 0) {
+    return {
+      ok: false,
+      error: {
+        kind: "validation",
+        message: `Check the highlighted fields (${problems.join(", ")}). Nothing was created.`,
+      },
+    };
+  }
+  return { ok: true, body: { principal_id: principalId, kind, display_name: displayName } };
 }
 
 function detailRow(item) {
@@ -233,6 +313,12 @@ disconnectButton.addEventListener("click", () => {
   currentItems = [];
   renderRows();
   hideError();
+  // Reset create state in the same bump: stale POST must find no work left.
+  pendingIdempotencyKey = null;
+  pendingCreateBodyKey = null;
+  if (createDialog?.open) createDialog.close();
+  hideCreateError();
+  if (createSubmit) createSubmit.disabled = false;
   loadingState.hidden = true;
   listWrap.hidden = true;
   listEmpty.hidden = false;
@@ -244,6 +330,68 @@ disconnectButton.addEventListener("click", () => {
 
 refreshButton.addEventListener("click", () => {
   loadPrincipals();
+});
+
+createButton.addEventListener("click", () => {
+  hideCreateError();
+  createPrincipalId.removeAttribute("aria-invalid");
+  createDisplayName.removeAttribute("aria-invalid");
+  createKind.removeAttribute("aria-invalid");
+  // New attempt: drop retry token; fresh key minted on submit for that payload.
+  pendingIdempotencyKey = null;
+  pendingCreateBodyKey = null;
+  createSubmit.disabled = false;
+  if (typeof createDialog.showModal === "function") createDialog.showModal();
+  else createDialog.setAttribute("open", "");
+  createPrincipalId.focus();
+});
+
+createCancel.addEventListener("click", () => {
+  createDialog.close();
+});
+
+createForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (createSubmit.disabled) return;
+  hideCreateError();
+  const checked = validateCreateFields();
+  if (!checked.ok) {
+    showCreateError(checked.error);
+    return;
+  }
+  // Stale guard: late resolution must not touch UI once session changed/cleared.
+  const generation = sessionGeneration;
+  const bodyKey = createBodyKey(checked.body);
+  if (pendingIdempotencyKey === null || pendingCreateBodyKey !== bodyKey) {
+    pendingIdempotencyKey = newIdempotencyKey();
+    pendingCreateBodyKey = bodyKey;
+  }
+  const idempotencyKey = pendingIdempotencyKey;
+  createSubmit.disabled = true;
+  try {
+    // Real POST only; no optimistic insert. Body uses contract names verbatim.
+    const created = await controlApi.createPrincipal(checked.body, idempotencyKey);
+    if (generation !== sessionGeneration) return;
+    const createdId = text(created?.principal_id) || checked.body.principal_id;
+    createDialog.close();
+    createForm.reset();
+    pendingIdempotencyKey = null;
+    pendingCreateBodyKey = null;
+    // Refresh authoritative list (announces count), then re-assert success so
+    // it is not clobbered. Never insert POST payload directly.
+    await loadPrincipals();
+    // Owns UI only when no Clear/newer load raced it (load bumps by one).
+    if (sessionGeneration === generation + 1) {
+      const countText = countLine.textContent === "Not loaded." ? "" : ` ${countLine.textContent}`;
+      announce(`Principal ${createdId} created.${countText}`);
+    }
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    // Keep form data; same token only for the same exact payload.
+    showCreateError(error);
+  } finally {
+    if (generation === sessionGeneration) createSubmit.disabled = false;
+  }
 });
 
 page.dataset.state = "idle";
