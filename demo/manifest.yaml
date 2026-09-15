@@ -1,0 +1,89 @@
+# OpenTelemetry Demo - pinned environment manifest
+# Issue: creep1ng/sre-agent#186 (HT-DEMO-ENV)
+# Validated: 2026-09-12
+#
+# This file declares WHAT the demo environment is made of.
+# demo/digests.lock records the exact image content that was validated.
+
+upstream:
+  repository: https://github.com/open-telemetry/opentelemetry-demo
+  tag: "3.0.0"
+  commit: "1755859a9de82c2e5e225be68abc401a5ebf2b4f"
+  released: "2026-07-24"
+
+compose:
+  project_name: otel-demo
+
+  # Passed with -f in this order. Later files win.
+  layers_included:
+    - compose.yaml
+    - compose.observability.yaml
+
+  layers_excluded:
+    compose.agent.yaml: "Upstream ships its own agent, MCP and chatbot; the issue contract forbids running them"
+    compose.full.yaml: "Adds Kafka, accounting and fraud-detection; no acceptance criterion requires them"
+    compose.profiling.yaml: "eBPF profiler and firepit; footprint without a criterion"
+    compose.tests.yaml: "Upstream test harness; not required"
+    compose.extras.yaml: "Intentionally empty upstream extension seam; not modified, since it belongs to the upstream tree"
+
+  # Applied in order; the project file is passed last so its values win.
+  env_files:
+    - ".env"            # upstream defaults, from the pinned tag
+    - "demo/demo.env"   # project overrides, this repository
+
+overrides:
+  # Upstream ships DEMO_VERSION=latest at this tag, so pinning the repository does
+  # NOT pin the images. Under `latest` the payment service restart-loops.
+  DEMO_VERSION: "3.0.0"
+  # Upstream publishes the proxy on 8080, colliding with the project `web` service.
+  ENVOY_PORT: "8090"
+  # Must follow the proxy: left at 8080 the browser would export its traces
+  # into the project's own `web` service.
+  PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://localhost:8090/otlp-http/v1/traces"
+
+host_ports:
+  - port: 8090
+    service: frontend-proxy
+    purpose: "Single entry point: store, /grafana, /jaeger/ui, /feature"
+  - port: 10000
+    service: frontend-proxy
+    purpose: "Envoy admin"
+  - port: 9090
+    service: prometheus
+    purpose: "Prometheus UI and API"
+
+# Contract: observability identifiers pinned at this version. Grafana, Jaeger and OpenSearch are reachable only through the proxy.
+observability_services:
+  otel-collector: "opentelemetry-collector-contrib:0.157.0"
+  grafana: "grafana/grafana:13.1.0"
+  prometheus: "quay.io/prometheus/prometheus:v3.13.1"
+  jaeger: "quay.io/jaegertracing/jaeger:2.19.0"
+  opensearch: "demo:3.0.0-opensearch"
+
+# CA1 requires availability to be reported for these. Jaeger is pinned above but
+# is not in CA1's list; MCP availability is added by the PR that introduces it.
+services_verified:
+  - frontend
+  - load-generator
+  - otel-collector
+  - grafana
+  - prometheus
+  - opensearch
+
+failure_injection:
+  provider: flagd
+  flag: paymentUnreachable
+  ui_path: "/feature"
+
+flag_baseline:
+  # `reset` restores this state. It does NOT switch every flag off:
+  # loadGeneratorTraffic sustains the synthetic traffic CA2 requires to keep
+  # running, and verification without traffic would report a false negative.
+  loadGeneratorTraffic: "on"
+  loadGeneratorVUs: "5"
+  all_other_flags: "off"
+
+host_requirements:
+  cpus_minimum: 4
+  memory_minimum_mb: 4096
+  disk_minimum_gb: 15
