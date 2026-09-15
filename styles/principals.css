@@ -110,3 +110,17 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.principals__dialog {
+  width: min(28rem, calc(100vw - 2rem));
+  border: 1px solid var(--ma-panel-border);
+  border-radius: var(--ma-radius-lg);
+  background: var(--ma-panel-bg);
+  box-shadow: var(--ma-shadow-md);
+  color: var(--ma-color-text-primary);
+  padding: 0;
+}
+
+.principals__dialog::backdrop { background: var(--ma-color-bg-overlay); }
+.principals__create-form { display: grid; gap: var(--ma-space-4); padding: var(--ma-space-5); }
+.principals__create-form .ma-panel__description { margin-top: calc(var(--ma-space-1) * -1); }

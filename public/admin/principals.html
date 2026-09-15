@@ -58,7 +58,10 @@
             <h2 id="principal-list-title" class="ma-panel__title">Principals</h2>
             <p id="principal-count" class="ma-panel__description" aria-live="polite">Not loaded.</p>
           </div>
-          <button id="refresh-button" class="ma-button ma-button--secondary ma-button--small" type="button">Refresh</button>
+          <div class="ma-button-row">
+            <button id="create-button" class="ma-button ma-button--primary ma-button--small" type="button">Create principal</button>
+            <button id="refresh-button" class="ma-button ma-button--secondary ma-button--small" type="button">Refresh</button>
+          </div>
         </div>
         <div class="ma-panel__body">
           <div id="list-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading principals…</div>
@@ -74,6 +77,33 @@
           </div>
         </div>
       </section>
+      <dialog id="create-dialog" class="principals__dialog" aria-labelledby="create-title">
+        <form id="create-form" class="principals__create-form" novalidate>
+          <h2 id="create-title" class="ma-panel__title">Create principal</h2>
+          <p class="ma-panel__description">Creates a real identity via <span class="ma-mono">POST /v1/principals</span>. Nothing is added until the API confirms.</p>
+          <div id="create-error" class="ma-alert" data-tone="critical" hidden><div><p id="create-error-title" class="ma-alert__title">Request failed</p><p id="create-error-detail" class="ma-alert__detail"></p></div></div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="create-principal-id">Principal ID</label>
+            <input class="ma-input ma-mono" id="create-principal-id" name="principal-id" type="text" autocomplete="off" spellcheck="false" required maxlength="64" placeholder="tst-run-agent-01" aria-describedby="create-principal-id-hint" />
+            <p id="create-principal-id-hint" class="ma-field__hint">Lowercase, 3–64 chars: start a–z, then a–z 0–9 _ -.</p>
+          </div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="create-display-name">Display name</label>
+            <input class="ma-input" id="create-display-name" name="display-name" type="text" autocomplete="off" required maxlength="200" placeholder="Triage agent 01" />
+          </div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="create-kind">Kind</label>
+            <select class="ma-select" id="create-kind" name="kind" required>
+              <option value="agent" selected>agent</option>
+              <option value="human">human</option>
+            </select>
+          </div>
+          <div class="ma-button-row">
+            <button id="create-submit" class="ma-button ma-button--primary" type="submit">Create</button>
+            <button id="create-cancel" class="ma-button ma-button--secondary" type="button" value="cancel" formnovalidate>Cancel</button>
+          </div>
+        </form>
+      </dialog>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
     </main>
     <script type="module" src="/public/admin/principals.js"></script>
