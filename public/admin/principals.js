@@ -56,6 +56,9 @@ function createBodyKey(body) {
 }
 let pendingIdempotencyKey = null;
 let pendingCreateBodyKey = null;
+// Real-request lock (B1): independent of dialog state. Set while POST +
+// authoritative refresh settle; never cleared by open/cancel/disconnect.
+let createInFlight = false;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const known = (value, allowed) => (allowed.has(value) ? value : "unknown");
@@ -227,7 +230,7 @@ async function loadPrincipals() {
   announce("Loading principals.");
   try {
     const payload = await controlApi.listPrincipals();
-    if (generation !== sessionGeneration) return;
+    if (generation !== sessionGeneration) return false;
     currentItems = Array.isArray(payload?.items) ? payload.items : [];
     renderRows();
     loadingState.hidden = true;
@@ -237,14 +240,15 @@ async function loadPrincipals() {
       emptyDetail.textContent = "The API returned an empty principals list.";
       countLine.textContent = "No principals.";
       announce("No principals.");
-      return;
+      return true;
     }
     page.dataset.state = "ready";
     listWrap.hidden = false;
     countLine.textContent = `${currentItems.length} principal${currentItems.length === 1 ? "" : "s"}${payload?.truncated === true ? " (truncated)" : "."}`;
     announce(countLine.textContent);
+    return true;
   } catch (error) {
-    if (generation !== sessionGeneration) return;
+    if (generation !== sessionGeneration) return false;
     loadingState.hidden = true;
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     listEmpty.hidden = false;
@@ -256,6 +260,7 @@ async function loadPrincipals() {
           : "The list cannot be confirmed for this identity.";
     countLine.textContent = "Not loaded.";
     showError(error);
+    return false;
   }
 }
 
@@ -313,12 +318,19 @@ disconnectButton.addEventListener("click", () => {
   currentItems = [];
   renderRows();
   hideError();
-  // Reset create state in the same bump: stale POST must find no work left.
-  pendingIdempotencyKey = null;
-  pendingCreateBodyKey = null;
+  // Clear may close the UI and invalidate the generation, but it never
+  // clears the in-flight request state: a late POST must stay stale-blocked
+  // and must not enable a concurrent second create.
+  if (!createInFlight) {
+    pendingIdempotencyKey = null;
+    pendingCreateBodyKey = null;
+  }
   if (createDialog?.open) createDialog.close();
   hideCreateError();
-  if (createSubmit) createSubmit.disabled = false;
+  if (!createInFlight) {
+    if (createSubmit) createSubmit.disabled = false;
+    if (createCancel) createCancel.disabled = false;
+  }
   loadingState.hidden = true;
   listWrap.hidden = true;
   listEmpty.hidden = false;
@@ -338,20 +350,32 @@ createButton.addEventListener("click", () => {
   createDisplayName.removeAttribute("aria-invalid");
   createKind.removeAttribute("aria-invalid");
   // New attempt: drop retry token; fresh key minted on submit for that payload.
-  pendingIdempotencyKey = null;
-  pendingCreateBodyKey = null;
-  createSubmit.disabled = false;
-  if (typeof createDialog.showModal === "function") createDialog.showModal();
-  else createDialog.setAttribute("open", "");
+  // Never reset while a real POST is in flight: reopen must stay locked.
+  if (!createInFlight) {
+    pendingIdempotencyKey = null;
+    pendingCreateBodyKey = null;
+    createSubmit.disabled = false;
+    if (createCancel) createCancel.disabled = false;
+  }
+  if (!createDialog.open) {
+    if (typeof createDialog.showModal === "function") createDialog.showModal();
+    else createDialog.setAttribute("open", "");
+  }
   createPrincipalId.focus();
 });
 
+createDialog.addEventListener("cancel", (event) => {
+  if (createInFlight) event.preventDefault();
+});
+
 createCancel.addEventListener("click", () => {
+  if (createInFlight) return;
   createDialog.close();
 });
 
 createForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (createInFlight) return;
   if (createSubmit.disabled) return;
   hideCreateError();
   const checked = validateCreateFields();
@@ -367,7 +391,9 @@ createForm.addEventListener("submit", async (event) => {
     pendingCreateBodyKey = bodyKey;
   }
   const idempotencyKey = pendingIdempotencyKey;
+  createInFlight = true;
   createSubmit.disabled = true;
+  if (createCancel) createCancel.disabled = true;
   try {
     // Real POST only; no optimistic insert. Body uses contract names verbatim.
     const created = await controlApi.createPrincipal(checked.body, idempotencyKey);
@@ -377,11 +403,11 @@ createForm.addEventListener("submit", async (event) => {
     createForm.reset();
     pendingIdempotencyKey = null;
     pendingCreateBodyKey = null;
-    // Refresh authoritative list (announces count), then re-assert success so
-    // it is not clobbered. Never insert POST payload directly.
-    await loadPrincipals();
-    // Owns UI only when no Clear/newer load raced it (load bumps by one).
-    if (sessionGeneration === generation + 1) {
+    // POST alone never authorizes UI success. Only the authoritative refresh
+    // does: announce only when it succeeded and still owns the UI.
+    // Never insert POST payload directly.
+    const refreshed = await loadPrincipals();
+    if (refreshed === true && sessionGeneration === generation + 1) {
       const countText = countLine.textContent === "Not loaded." ? "" : ` ${countLine.textContent}`;
       announce(`Principal ${createdId} created.${countText}`);
     }
@@ -390,7 +416,12 @@ createForm.addEventListener("submit", async (event) => {
     // Keep form data; same token only for the same exact payload.
     showCreateError(error);
   } finally {
-    if (generation === sessionGeneration) createSubmit.disabled = false;
+    // Request-scoped lock: always released, even after stale/disconnect, so
+    // buttons never stay permanently disabled. Stale guard above already
+    // prevented any authoritative UI write.
+    createInFlight = false;
+    if (createSubmit) createSubmit.disabled = false;
+    if (createCancel) createCancel.disabled = false;
   }
 });
 
