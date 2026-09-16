@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from datetime import UTC, datetime
 
 import psycopg
 import pytest
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
 from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
+from sre_agent.governance.dto import Consumption, PricingContext
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import GrantRepository, ResourceRepository
 from sre_agent.persistence.seeds import SeedSettings, seed
@@ -36,6 +38,37 @@ BODY = {"model": "triage-agent", "input": "sensitive incident prompt"}
 AUDIT_KEY = "audit-key-must-not-persist"
 
 
+def complete_consumption() -> Consumption:
+    return Consumption(
+        availability="complete",
+        source="openrouter",
+        input_tokens=11,
+        output_tokens=7,
+        total_tokens=18,
+        billed_usd="0.0012300",
+        currency="USD",
+        precision="exact",
+        pricing_context=PricingContext(
+            observed_at=datetime(2026, 9, 10, 14, tzinfo=UTC),
+            price_version="openrouter:2026-09-10T14:00:00Z",
+        ),
+    )
+
+
+def empty_consumption(availability: str) -> dict[str, object]:
+    return {
+        "availability": availability,
+        "source": "openrouter",
+        "input_tokens": None,
+        "output_tokens": None,
+        "total_tokens": None,
+        "billed_usd": None,
+        "currency": None,
+        "precision": None,
+        "pricing_context": None,
+    }
+
+
 @pytest.fixture(scope="module", autouse=True)
 def responses_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
@@ -58,8 +91,9 @@ def responses_database() -> None:
 
 
 class RecordingProvider:
-    def __init__(self, failure: str | None = None) -> None:
+    def __init__(self, failure: str | None = None, consumption: Consumption | None = None) -> None:
         self.failure = failure
+        self.consumption = consumption
         self.requests, self.checked_out = [], []
 
     async def create(self, request: ProviderRequest) -> ProviderResult:
@@ -72,6 +106,7 @@ class RecordingProvider:
             model=request.model,
             text="sensitive provider output",
             provider=request.provider,
+            consumption=self.consumption,
         )
 
 
@@ -150,6 +185,7 @@ def test_deny_and_missing_resources_are_indistinguishable_without_routing(
     assert response.json()["error"]["code"] == "resource_unavailable"
     assert event[0:2] == ("authorization", 403) and event[4] is None and not provider.requests
     assert event[7]["authorization_denial_cause"] == cause
+    assert event[7]["consumption"] is None
     assert "authorization_denial_cause" not in response.text
 
 
@@ -409,6 +445,30 @@ def test_public_responses_credential_matrix(
     assert all(value not in caplog.text for value in (*audit_forbidden, *internal_causes))
 
 
+def test_authorized_completion_projects_the_same_consumption_to_public_and_audit() -> None:
+    provider = RecordingProvider(consumption=complete_consumption())
+
+    response = post(provider, "incident-harness")
+    event = latest_events()[0]
+
+    assert response.status_code == 200
+    public_consumption = response.json()["metadata"]["consumption"]
+    assert public_consumption == complete_consumption().model_dump(mode="json")
+    assert event[7]["consumption"] == public_consumption
+    assert "sensitive provider output" not in repr(event)
+
+
+def test_authorized_completion_without_evidence_is_absent_not_zero() -> None:
+    provider = RecordingProvider()
+
+    response = post(provider, "incident-harness")
+    event = latest_events()[0]
+
+    assert response.status_code == 200
+    assert response.json()["metadata"]["consumption"] == empty_consumption("absent")
+    assert event[7]["consumption"] == empty_consumption("absent")
+
+
 def test_allow_calls_once_outside_transactions_and_commits_protected_readback() -> None:
     provider = RecordingProvider()
     response = post(provider, "incident-harness")
@@ -437,8 +497,10 @@ def test_provider_failures_are_normalized_without_fallback(
 ) -> None:
     provider = RecordingProvider(failure)
     response = post(provider, "incident-harness")
+    event = latest_events()[0]
     assert response.status_code == status and response.json()["error"]["code"] == code
-    assert len(provider.requests) == 1 and latest_events()[0][0] == "upstream"
+    assert len(provider.requests) == 1 and event[0] == "upstream"
+    assert event[7]["consumption"] == empty_consumption("unavailable")
 
 
 def test_invalid_persisted_provider_assignment_is_audited_routing_unavailability() -> None:

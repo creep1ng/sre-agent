@@ -1,6 +1,6 @@
 """Strict Pydantic projections of the authoritative HT-01 contracts."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
@@ -152,6 +152,166 @@ class RoutingEvidence(StrictDTO):
     provider_ref: AuditRef
 
 
+class PricingContext(StrictDTO):
+    observed_at: AwareDatetime
+    price_version: Annotated[str, Field(min_length=1, max_length=128)]
+
+
+_CONSUMPTION_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "billed_usd",
+    "currency",
+    "precision",
+    "pricing_context",
+)
+_BILLING_FIELDS = ("currency", "precision", "pricing_context")
+
+
+def _null_properties(fields: tuple[str, ...]) -> dict[str, dict[str, str]]:
+    return {field: {"type": "null"} for field in fields}
+
+
+def _pricing_context_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["observed_at", "price_version"],
+        "properties": {
+            "observed_at": {"type": "string", "format": "date-time"},
+            "price_version": {"type": "string", "minLength": 1, "maxLength": 128},
+        },
+    }
+
+
+def _consumption_json_schema_extra(schema: dict[str, Any]) -> None:
+    """Expose the closed DTO invariants in generated JSON Schema."""
+    schema["unevaluatedProperties"] = False
+    schema["allOf"] = [
+        {
+            "if": {
+                "properties": {"billed_usd": {"type": "null"}},
+                "required": ["billed_usd"],
+            },
+            "then": {"properties": _null_properties(_BILLING_FIELDS)},
+        },
+        {
+            "if": {
+                "properties": {"billed_usd": {"type": "string"}},
+                "required": ["billed_usd"],
+            },
+            "then": {
+                "properties": {
+                    "currency": {"const": "USD"},
+                    "precision": {"const": "exact"},
+                    "pricing_context": _pricing_context_schema(),
+                },
+                "required": list(_BILLING_FIELDS),
+            },
+        },
+        {
+            "if": {
+                "properties": {"availability": {"const": "complete"}},
+                "required": ["availability"],
+            },
+            "then": {
+                "properties": {
+                    "input_tokens": {"type": "integer"},
+                    "output_tokens": {"type": "integer"},
+                    "total_tokens": {"type": "integer"},
+                    "billed_usd": {"type": "string"},
+                    "currency": {"const": "USD"},
+                    "precision": {"const": "exact"},
+                    "pricing_context": _pricing_context_schema(),
+                },
+            },
+        },
+        {
+            "if": {
+                "properties": {"availability": {"const": "partial"}},
+                "required": ["availability"],
+            },
+            "then": {
+                "allOf": [
+                    {
+                        "not": {
+                            "properties": {
+                                field: {"not": {"type": "null"}} for field in _CONSUMPTION_FIELDS
+                            },
+                            "required": list(_CONSUMPTION_FIELDS),
+                        }
+                    },
+                    {
+                        "not": {
+                            "properties": _null_properties(_CONSUMPTION_FIELDS),
+                            "required": list(_CONSUMPTION_FIELDS),
+                        }
+                    },
+                ]
+            },
+        },
+        {
+            "if": {
+                "properties": {
+                    "availability": {
+                        "enum": ["absent", "unavailable"],
+                    }
+                },
+                "required": ["availability"],
+            },
+            "then": {"properties": _null_properties(_CONSUMPTION_FIELDS)},
+        },
+    ]
+
+
+class Consumption(StrictDTO):
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra=_consumption_json_schema_extra,
+    )
+    availability: Literal["complete", "partial", "absent", "unavailable"]
+    source: Literal["openrouter"]
+    input_tokens: Annotated[int, Field(ge=0)] | None
+    output_tokens: Annotated[int, Field(ge=0)] | None
+    total_tokens: Annotated[int, Field(ge=0)] | None
+    billed_usd: (
+        Annotated[str, Field(pattern=r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$", max_length=64)] | None
+    )
+    currency: Literal["USD"] | None
+    precision: Literal["exact"] | None
+    pricing_context: PricingContext | None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> "Consumption":
+        tokens = (self.input_tokens, self.output_tokens, self.total_tokens)
+        if all(value is not None for value in tokens) and self.total_tokens != (
+            self.input_tokens + self.output_tokens  # type: ignore[operator]
+        ):
+            raise ValueError("total_tokens must equal input_tokens + output_tokens")
+
+        if self.billed_usd is None and any(
+            value is not None for value in (self.currency, self.precision, self.pricing_context)
+        ):
+            raise ValueError("billing context requires billed_usd")
+        if self.billed_usd is not None and (
+            self.currency != "USD" or self.precision != "exact" or self.pricing_context is None
+        ):
+            raise ValueError("billed_usd requires complete billing context")
+
+        values = (*tokens, self.billed_usd, self.currency, self.precision, self.pricing_context)
+        has_values = any(value is not None for value in values)
+        complete = all(value is not None for value in values)
+        if self.availability == "complete" and not complete:
+            raise ValueError("complete consumption requires all evidence fields")
+        if self.availability == "partial" and (not has_values or complete):
+            raise ValueError("partial consumption requires an incomplete evidence projection")
+        if self.availability in {"absent", "unavailable"} and has_values:
+            raise ValueError(f"{self.availability} consumption cannot carry evidence values")
+        return self
+
+
 class AllowDecisionEvidence(StrictDTO):
     decision: Literal["allow"]
     reason_code: Literal["grant_matched"]
@@ -292,6 +452,7 @@ class AuditEvent(StrictDTO):
     model_alias_ref: AuditRef | None = None
     policy_decision: AllowDecisionEvidence | DenyDecisionEvidence | None = None
     routing: RoutingEvidence | None = None
+    consumption: Consumption | None = None
     untrusted_input: UntrustedInput | None = None
     redaction: Redaction
     content_state: Literal["absent", "redacted", "redaction_failed"]
@@ -307,6 +468,8 @@ class AuditEvent(StrictDTO):
         subject = (self.identity, self.resource, self.model_alias_ref, self.policy_decision)
         if no_subject and any(value is not None for value in (*subject, self.routing)):
             raise ValueError("this audit stage cannot carry subject evidence")
+        if self.outcome == "denied" and self.consumption is not None:
+            raise ValueError("denied audit events cannot carry provider consumption")
         is_control = (
             isinstance(self.resource, ResourceEvidence)
             and self.resource.resource_type == "administrative_control"

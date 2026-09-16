@@ -1,0 +1,24 @@
+{
+  "target": "urn:sre-agent:schema:resource-catalog-http-case:2.2.0",
+  "rule": "additionalProperties",
+  "status": "negative",
+  "version": "2.2.0",
+  "group": "catalog",
+  "data": {
+    "operation": "catalog.list",
+    "request": {
+      "authentication": "valid",
+      "filters_valid": true,
+      "target_visibility": "none",
+      "lookup_performed": true,
+      "cursor": "forbidden"
+    },
+    "expected": {
+      "status": 200,
+      "error_code": null,
+      "visible_items": 0,
+      "deterministic": true,
+      "enumerates": false
+    }
+  }
+}

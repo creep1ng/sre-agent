@@ -252,3 +252,52 @@ def test_404_denial_evidence_prevents_fail_open_downgrade() -> None:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     with pytest.raises(RuntimeError, match="cannot downgrade"):
         command.downgrade(config, "20260902_04")
+
+
+def test_consumption_column_is_nullable_jsonb_and_legacy_rows_remain_null() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        metadata = connection.execute(
+            """SELECT is_nullable, data_type, udt_name
+            FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='audit_events'
+              AND column_name='consumption'"""
+        ).fetchone()
+        assert metadata == ("YES", "jsonb", "jsonb")
+        assert connection.execute(
+            "SELECT consumption FROM audit_events WHERE event_id=%s",
+            ("00000000-0000-4000-8000-000000000000",),
+        ).fetchone() == (None,)
+
+
+def test_consumption_is_append_only_with_exact_decimal_json() -> None:
+    consumption = (
+        '{"availability":"complete","source":"openrouter",'
+        '"input_tokens":11,"output_tokens":7,"total_tokens":18,'
+        '"billed_usd":"0.0012300","currency":"USD","precision":"exact",'
+        '"pricing_context":{"observed_at":"2026-09-10T14:00:00Z",'
+        '"price_version":"openrouter:2026-09-10T14:00:00Z"}}'
+    )
+    event_id = "00000000-0000-4000-8000-000000000130"
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              response_status, retryable, latency_ms, correlation, redaction, content_state,
+              authoritative_acceptance, ordinary_result, exporter_result, consumption)
+            VALUES (%s, now(), 'responses.create', 'invoke', 'response', 'success',
+              'grant_matched', 200, false, 1, '{}', '{}', 'absent', 'accepted',
+              'released', 'not_attempted', %s::jsonb)""",
+            (event_id, consumption),
+        )
+        connection.commit()
+        assert connection.execute(
+            "SELECT consumption->>'billed_usd' FROM audit_events WHERE event_id=%s",
+            (event_id,),
+        ).fetchone() == ("0.0012300",)
+        with (
+            pytest.raises(psycopg.errors.RaiseException, match="audit_events are append-only"),
+            connection.transaction(),
+        ):
+            connection.execute(
+                "UPDATE audit_events SET consumption='{}'::jsonb WHERE event_id=%s", (event_id,)
+            )

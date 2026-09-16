@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"urn:sre-agent:schema:principal-status-replace:2.1.0","title":"PrincipalStatusReplace","type":"object","additionalProperties":false,"required":["status","expected_updated_at"],"properties":{"status":{"enum":["active","inactive"]},"expected_updated_at":{"type":"string","format":"date-time"}}}

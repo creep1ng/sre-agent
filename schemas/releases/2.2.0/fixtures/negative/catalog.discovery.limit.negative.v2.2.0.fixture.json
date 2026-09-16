@@ -1,0 +1,12 @@
+{
+  "target": "urn:sre-agent:schema:resource-catalog-list:2.2.0",
+  "rule": "maximum",
+  "status": "negative",
+  "version": "2.2.0",
+  "group": "catalog",
+  "data": {
+    "items": [],
+    "limit": 101,
+    "truncated": false
+  }
+}

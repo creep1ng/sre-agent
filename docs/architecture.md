@@ -17,7 +17,7 @@ capabilities without making ORM, DTO, or provider models authoritative.
 
 - `GET /health/live` is dependency-free and proves the Python process can serve requests.
 - `GET /health/ready` verifies the exact Alembic revision required by the running build. The
-  current integrated baseline is `20260907_06`; every later schema migration must advance that
+  current integrated baseline is `20260910_07`; every later schema migration must advance that
   code-owned prerequisite in the same work unit. Failures return a fixed `503` response that
   excludes driver messages, DSNs, and credentials.
 - The `/v1/principals` and `/v1/credentials` routes expose the real governed administrative API.

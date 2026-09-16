@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:resource-catalog-entry:2.2.0",
+  "title": "ResourceCatalogEntry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "resource_type",
+    "resource_id",
+    "owner_id",
+    "status",
+    "source",
+    "source_ref",
+    "discoverability"
+  ],
+  "properties": {
+    "resource_type": {
+      "enum": [
+        "llm_model",
+        "mcp_server",
+        "mcp_tool",
+        "skill",
+        "bok_collection"
+      ]
+    },
+    "resource_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$"
+    },
+    "owner_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{2,63}$"
+    },
+    "status": {
+      "enum": [
+        "registered",
+        "draft",
+        "published",
+        "indexing",
+        "active",
+        "inactive",
+        "revoked"
+      ]
+    },
+    "source": {
+      "enum": [
+        "model_alias",
+        "mcp",
+        "skill",
+        "bok"
+      ]
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$"
+    },
+    "discoverability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "display_name",
+        "visibility",
+        "description",
+        "tags"
+      ],
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private",
+            "hidden"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 50,
+            "pattern": "^[a-z0-9][a-z0-9._-]*$"
+          }
+        }
+      }
+    }
+  }
+}

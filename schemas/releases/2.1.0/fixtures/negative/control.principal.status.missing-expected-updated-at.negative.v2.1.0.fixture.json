@@ -1,0 +1,1 @@
+{"target":"urn:sre-agent:schema:principal-status-replace:2.1.0","rule":"required","status":"negative","version":"2.1.0","group":"control","data":{"status":"inactive"}}

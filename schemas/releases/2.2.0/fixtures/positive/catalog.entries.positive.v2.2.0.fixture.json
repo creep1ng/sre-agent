@@ -1,0 +1,94 @@
+{
+  "target": "urn:sre-agent:schema:resource-catalog-entry:2.2.0",
+  "rule": "valid",
+  "status": "positive",
+  "version": "2.2.0",
+  "group": "catalog",
+  "cases": [
+    {
+      "resource_type": "llm_model",
+      "resource_id": "model-prod",
+      "owner_id": "alias-prod",
+      "status": "active",
+      "source": "model_alias",
+      "source_ref": "alias-prod",
+      "discoverability": {
+        "display_name": "Production model",
+        "visibility": "public",
+        "description": "Stable production model alias.",
+        "tags": [
+          "llm",
+          "production"
+        ]
+      }
+    },
+    {
+      "resource_type": "mcp_server",
+      "resource_id": "server-tools",
+      "owner_id": "mcp-platform",
+      "status": "registered",
+      "source": "mcp",
+      "source_ref": "mcp-platform/server-tools",
+      "discoverability": {
+        "display_name": "Tool server",
+        "visibility": "private",
+        "description": "Registered MCP tool server.",
+        "tags": [
+          "mcp",
+          "tools"
+        ]
+      }
+    },
+    {
+      "resource_type": "mcp_tool",
+      "resource_id": "tool-health",
+      "owner_id": "mcp-platform",
+      "status": "active",
+      "source": "mcp",
+      "source_ref": "mcp-platform/server-tools/tool-health",
+      "discoverability": {
+        "display_name": "Health check tool",
+        "visibility": "public",
+        "description": "Active tool exposed by the server-tools MCP server.",
+        "tags": [
+          "mcp",
+          "tool"
+        ]
+      }
+    },
+    {
+      "resource_type": "skill",
+      "resource_id": "skill-search-v1",
+      "owner_id": "skill-search",
+      "status": "published",
+      "source": "skill",
+      "source_ref": "skill-search@1.0.0",
+      "discoverability": {
+        "display_name": "Search skill",
+        "visibility": "public",
+        "description": "Published search skill.",
+        "tags": [
+          "skill",
+          "search"
+        ]
+      }
+    },
+    {
+      "resource_type": "bok_collection",
+      "resource_id": "collection-docs-v1",
+      "owner_id": "bok-docs",
+      "status": "indexing",
+      "source": "bok",
+      "source_ref": "bok-docs@1.0.0",
+      "discoverability": {
+        "display_name": "Documentation collection",
+        "visibility": "private",
+        "description": "Collection currently indexing.",
+        "tags": [
+          "bok",
+          "docs"
+        ]
+      }
+    }
+  ]
+}

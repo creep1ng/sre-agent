@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:resource-catalog-lifecycle-case:2.2.0",
+  "title": "ResourceCatalogLifecycleCase",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "operation",
+    "request",
+    "expected"
+  ],
+  "properties": {
+    "operation": {
+      "enum": [
+        "idempotent_replay",
+        "idempotency_conflict",
+        "in_flight_snapshot",
+        "startup_drift",
+        "reconciliation"
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "idempotency_key",
+        "payload_sha256",
+        "prior_state",
+        "reset_requested",
+        "state_before",
+        "payload_matches_binding",
+        "version_matches",
+        "authorization_before",
+        "authorization_after",
+        "phase_order",
+        "drift_detected"
+      ],
+      "properties": {
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[\\x20-\\x7E]+$"
+        },
+        "payload_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "prior_state": {
+          "enum": [
+            "active",
+            "inactive",
+            "conflict"
+          ]
+        },
+        "reset_requested": {
+          "type": "boolean"
+        },
+        "state_before": {
+          "enum": [
+            "active",
+            "inactive",
+            "conflict",
+            "restored"
+          ]
+        },
+        "payload_matches_binding": {
+          "type": "boolean"
+        },
+        "version_matches": {
+          "type": "boolean"
+        },
+        "authorization_before": {
+          "enum": [
+            "allowed",
+            "denied",
+            "not_applicable"
+          ]
+        },
+        "authorization_after": {
+          "enum": [
+            "allowed",
+            "denied",
+            "not_applicable"
+          ]
+        },
+        "phase_order": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "authenticate",
+              "authorize",
+              "idempotency_lookup",
+              "capture_snapshot",
+              "lifecycle_change",
+              "upstream",
+              "later_authorize",
+              "startup",
+              "drift_detected",
+              "reconcile_authorize",
+              "reset",
+              "conflict_response",
+              "replay_response"
+            ]
+          }
+        },
+        "drift_detected": {
+          "type": "boolean"
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "transition_count",
+        "upstream_called",
+        "snapshot_allowed",
+        "state_before",
+        "state_after",
+        "stable_replay",
+        "state_unchanged",
+        "authorization_before",
+        "authorization_after",
+        "later_request_status",
+        "later_upstream_called",
+        "upstream_denied_reason",
+        "repair_performed"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            200,
+            201,
+            204,
+            403,
+            409
+          ]
+        },
+        "transition_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "upstream_called": {
+          "type": "boolean"
+        },
+        "snapshot_allowed": {
+          "type": "boolean"
+        },
+        "state_before": {
+          "enum": [
+            "active",
+            "inactive",
+            "conflict",
+            "restored"
+          ]
+        },
+        "state_after": {
+          "enum": [
+            "active",
+            "inactive",
+            "conflict",
+            "unchanged",
+            "restored"
+          ]
+        },
+        "stable_replay": {
+          "type": "boolean"
+        },
+        "state_unchanged": {
+          "type": "boolean"
+        },
+        "authorization_before": {
+          "enum": [
+            "allowed",
+            "denied",
+            "not_applicable"
+          ]
+        },
+        "authorization_after": {
+          "enum": [
+            "allowed",
+            "denied",
+            "not_applicable"
+          ]
+        },
+        "later_request_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "enum": [
+            200,
+            403,
+            409,
+            null
+          ]
+        },
+        "later_upstream_called": {
+          "type": "boolean"
+        },
+        "upstream_denied_reason": {
+          "enum": [
+            "none",
+            "lifecycle_inactive",
+            "idempotency_conflict",
+            "startup_drift"
+          ]
+        },
+        "repair_performed": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

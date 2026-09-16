@@ -1,0 +1,101 @@
+{
+  "contract_version": "2.2.0",
+  "closed_projection": true,
+  "excluded_fields": [
+    "credentials",
+    "secrets",
+    "concrete_model",
+    "router",
+    "inference_provider",
+    "prompts",
+    "raw_io",
+    "configuration"
+  ],
+  "scenarios": [
+    {
+      "id": "authority-preserved",
+      "status": "passed",
+      "fixture": "conformance/resource-catalog-matrix.yaml",
+      "assertions": [
+        "owner-action-matrix",
+        "resource-tuple-preserved"
+      ]
+    },
+    {
+      "id": "bounded-discovery",
+      "status": "passed",
+      "fixture": "fixtures/positive/catalog.http.positive.v2.2.0.fixture.json",
+      "assertions": [
+        "catalog.list:200",
+        "limit:1-100",
+        "ordered-result-ids",
+        "continuation:false"
+      ]
+    },
+    {
+      "id": "non-enumerating-read",
+      "status": "passed",
+      "fixture": "fixtures/positive/catalog.http.positive.v2.2.0.fixture.json",
+      "assertions": [
+        "catalog.read:404:hidden",
+        "catalog.read:404:absent",
+        "catalog.read:404:inactive",
+        "catalog.read:404:filtered",
+        "enumerates:false"
+      ]
+    },
+    {
+      "id": "authentication-and-filter-errors",
+      "status": "passed",
+      "fixture": "fixtures/positive/catalog.http.positive.v2.2.0.fixture.json",
+      "assertions": [
+        "401:authentication_failed",
+        "403:resource_unavailable",
+        "422:validation_error",
+        "lookup:false"
+      ]
+    },
+    {
+      "id": "idempotent-replay-and-in-flight",
+      "status": "passed",
+      "fixture": "fixtures/positive/catalog.lifecycle.positive.v2.2.0.fixture.json",
+      "assertions": [
+        "idempotent_replay:stable",
+        "in_flight_snapshot:captured",
+        "authorization-before-deactivation",
+        "later-request:403"
+      ]
+    },
+    {
+      "id": "idempotency-conflict-no-mutation",
+      "status": "passed",
+      "fixture": "fixtures/positive/catalog.lifecycle.positive.v2.2.0.fixture.json",
+      "assertions": [
+        "idempotency_conflict:409",
+        "transition_count:0",
+        "state_unchanged:true",
+        "upstream:false"
+      ]
+    },
+    {
+      "id": "explicit-reconciliation-no-implicit-repair",
+      "status": "passed",
+      "fixture": "fixtures/positive/catalog.lifecycle.positive.v2.2.0.fixture.json",
+      "assertions": [
+        "startup_drift:409",
+        "repair_performed:false",
+        "reconciliation:201",
+        "repair_performed:true"
+      ]
+    },
+    {
+      "id": "historical-release-preserved",
+      "status": "passed",
+      "fixture": "conformance/migration.md",
+      "assertions": [
+        "previous_release:2.1.0",
+        "historical-byte-identity"
+      ]
+    }
+  ]
+}

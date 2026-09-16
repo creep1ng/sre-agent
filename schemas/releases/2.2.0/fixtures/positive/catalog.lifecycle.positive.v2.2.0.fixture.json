@@ -1,0 +1,197 @@
+{
+  "target": "urn:sre-agent:schema:resource-catalog-lifecycle-case:2.2.0",
+  "rule": "valid",
+  "status": "positive",
+  "version": "2.2.0",
+  "group": "catalog",
+  "cases": [
+    {
+      "operation": "idempotent_replay",
+      "request": {
+        "idempotency_key": "catalog-replay-key-001",
+        "payload_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "prior_state": "active",
+        "reset_requested": false,
+        "state_before": "active",
+        "payload_matches_binding": true,
+        "version_matches": true,
+        "authorization_before": "allowed",
+        "authorization_after": "allowed",
+        "phase_order": [
+          "authenticate",
+          "authorize",
+          "idempotency_lookup",
+          "replay_response"
+        ],
+        "drift_detected": false
+      },
+      "expected": {
+        "status": 200,
+        "transition_count": 0,
+        "upstream_called": false,
+        "snapshot_allowed": false,
+        "state_before": "active",
+        "state_after": "active",
+        "stable_replay": true,
+        "state_unchanged": true,
+        "authorization_before": "allowed",
+        "authorization_after": "allowed",
+        "later_request_status": null,
+        "later_upstream_called": false,
+        "upstream_denied_reason": "none",
+        "repair_performed": false
+      }
+    },
+    {
+      "operation": "idempotency_conflict",
+      "request": {
+        "idempotency_key": "catalog-conflict-key-001",
+        "payload_sha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "prior_state": "active",
+        "reset_requested": false,
+        "state_before": "active",
+        "payload_matches_binding": false,
+        "version_matches": false,
+        "authorization_before": "allowed",
+        "authorization_after": "allowed",
+        "phase_order": [
+          "authenticate",
+          "authorize",
+          "idempotency_lookup",
+          "conflict_response"
+        ],
+        "drift_detected": false
+      },
+      "expected": {
+        "status": 409,
+        "transition_count": 0,
+        "upstream_called": false,
+        "snapshot_allowed": false,
+        "state_before": "active",
+        "state_after": "active",
+        "stable_replay": false,
+        "state_unchanged": true,
+        "authorization_before": "allowed",
+        "authorization_after": "allowed",
+        "later_request_status": 409,
+        "later_upstream_called": false,
+        "upstream_denied_reason": "idempotency_conflict",
+        "repair_performed": false
+      }
+    },
+    {
+      "operation": "in_flight_snapshot",
+      "request": {
+        "idempotency_key": "catalog-inflight-key-001",
+        "payload_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "prior_state": "active",
+        "reset_requested": false,
+        "state_before": "active",
+        "payload_matches_binding": true,
+        "version_matches": true,
+        "authorization_before": "allowed",
+        "authorization_after": "denied",
+        "phase_order": [
+          "authenticate",
+          "authorize",
+          "capture_snapshot",
+          "lifecycle_change",
+          "upstream",
+          "later_authorize"
+        ],
+        "drift_detected": false
+      },
+      "expected": {
+        "status": 204,
+        "transition_count": 1,
+        "upstream_called": true,
+        "snapshot_allowed": true,
+        "state_before": "active",
+        "state_after": "inactive",
+        "stable_replay": false,
+        "state_unchanged": false,
+        "authorization_before": "allowed",
+        "authorization_after": "denied",
+        "later_request_status": 403,
+        "later_upstream_called": false,
+        "upstream_denied_reason": "none",
+        "repair_performed": false
+      }
+    },
+    {
+      "operation": "startup_drift",
+      "request": {
+        "idempotency_key": "catalog-startup-drift-key-001",
+        "payload_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "prior_state": "conflict",
+        "reset_requested": false,
+        "state_before": "active",
+        "payload_matches_binding": true,
+        "version_matches": true,
+        "authorization_before": "not_applicable",
+        "authorization_after": "not_applicable",
+        "phase_order": [
+          "startup",
+          "drift_detected",
+          "conflict_response"
+        ],
+        "drift_detected": true
+      },
+      "expected": {
+        "status": 409,
+        "transition_count": 0,
+        "upstream_called": false,
+        "snapshot_allowed": false,
+        "state_before": "active",
+        "state_after": "active",
+        "stable_replay": false,
+        "state_unchanged": true,
+        "authorization_before": "not_applicable",
+        "authorization_after": "not_applicable",
+        "later_request_status": 409,
+        "later_upstream_called": false,
+        "upstream_denied_reason": "startup_drift",
+        "repair_performed": false
+      }
+    },
+    {
+      "operation": "reconciliation",
+      "request": {
+        "idempotency_key": "catalog-reconcile-key-001",
+        "payload_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "prior_state": "conflict",
+        "reset_requested": true,
+        "state_before": "conflict",
+        "payload_matches_binding": true,
+        "version_matches": true,
+        "authorization_before": "allowed",
+        "authorization_after": "allowed",
+        "phase_order": [
+          "authenticate",
+          "authorize",
+          "startup",
+          "drift_detected",
+          "reconcile_authorize",
+          "reset"
+        ],
+        "drift_detected": true
+      },
+      "expected": {
+        "status": 201,
+        "transition_count": 1,
+        "upstream_called": false,
+        "snapshot_allowed": false,
+        "state_before": "conflict",
+        "state_after": "restored",
+        "stable_replay": true,
+        "state_unchanged": false,
+        "authorization_before": "allowed",
+        "authorization_after": "allowed",
+        "later_request_status": null,
+        "later_upstream_called": false,
+        "upstream_denied_reason": "none",
+        "repair_performed": true
+      }
+    }
+  ]
+}

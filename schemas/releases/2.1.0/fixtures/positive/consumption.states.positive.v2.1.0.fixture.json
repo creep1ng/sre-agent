@@ -1,0 +1,56 @@
+{
+  "target": "urn:sre-agent:schema:consumption:2.1.0",
+  "rule": "valid",
+  "status": "positive",
+  "version": "2.1.0",
+  "group": "consumption-contract",
+  "cases": [
+    {
+      "availability": "complete",
+      "source": "openrouter",
+      "input_tokens": 11,
+      "output_tokens": 7,
+      "total_tokens": 18,
+      "billed_usd": "0.0012300",
+      "currency": "USD",
+      "precision": "exact",
+      "pricing_context": {
+        "observed_at": "2026-08-17T12:00:00Z",
+        "price_version": "openrouter:2026-08-17T12:00:00Z"
+      }
+    },
+    {
+      "availability": "partial",
+      "source": "openrouter",
+      "input_tokens": 11,
+      "output_tokens": null,
+      "total_tokens": null,
+      "billed_usd": null,
+      "currency": null,
+      "precision": null,
+      "pricing_context": null
+    },
+    {
+      "availability": "absent",
+      "source": "openrouter",
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "billed_usd": null,
+      "currency": null,
+      "precision": null,
+      "pricing_context": null
+    },
+    {
+      "availability": "unavailable",
+      "source": "openrouter",
+      "input_tokens": null,
+      "output_tokens": null,
+      "total_tokens": null,
+      "billed_usd": null,
+      "currency": null,
+      "precision": null,
+      "pricing_context": null
+    }
+  ]
+}

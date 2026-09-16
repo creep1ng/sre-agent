@@ -4,6 +4,8 @@ from typing import Annotated, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from sre_agent.governance.dto import Consumption
+
 ConcreteModel = Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$")]
 ProviderName = Annotated[str, Field(pattern=r"^[a-z][a-z0-9._-]{0,63}$")]
 
@@ -23,16 +25,24 @@ class ProviderResult(ProviderDTO):
     model: ConcreteModel
     text: Annotated[str, Field(min_length=1, max_length=65_536)]
     provider: ProviderName
+    consumption: Consumption | None = None
 
 
 ProviderFailureKind = Literal["evidence_invalid", "invalid_response", "unavailable", "timeout"]
 
 
 class ProviderFailure(Exception):
-    def __init__(self, kind: ProviderFailureKind, *, retry_after: int | None = None) -> None:
+    def __init__(
+        self,
+        kind: ProviderFailureKind,
+        *,
+        retry_after: int | None = None,
+        consumption: Consumption | None = None,
+    ) -> None:
         super().__init__(f"provider_{kind}")
         self.kind = kind
         self.retry_after = retry_after
+        self.consumption = consumption
 
 
 class LLMProvider(Protocol):

@@ -1,0 +1,173 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:resource-catalog-http-case:2.2.0",
+  "title": "ResourceCatalogHttpCase",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "operation",
+    "request",
+    "expected"
+  ],
+  "properties": {
+    "operation": {
+      "enum": [
+        "catalog.list",
+        "catalog.read"
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authentication",
+        "filters_valid",
+        "target_visibility",
+        "lookup_performed",
+        "limit",
+        "query_parameters",
+        "forbidden_parameter",
+        "phase_order"
+      ],
+      "properties": {
+        "authentication": {
+          "enum": [
+            "valid",
+            "missing",
+            "invalid",
+            "unauthorized"
+          ]
+        },
+        "filters_valid": {
+          "type": "boolean"
+        },
+        "target_visibility": {
+          "enum": [
+            "visible",
+            "hidden",
+            "absent",
+            "inactive",
+            "filtered",
+            "none"
+          ]
+        },
+        "lookup_performed": {
+          "type": "boolean"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "query_parameters": {
+          "type": "array",
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "resource_type",
+              "owner_id",
+              "status",
+              "visibility"
+            ]
+          }
+        },
+        "forbidden_parameter": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "cursor",
+            "page",
+            "offset",
+            "continuation_token",
+            "next",
+            null
+          ]
+        },
+        "phase_order": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "authenticate",
+              "validate_filters",
+              "lookup",
+              "project"
+            ]
+          }
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "error_code",
+        "visible_items",
+        "deterministic",
+        "enumerates",
+        "result_ids",
+        "limit",
+        "continuation"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            200,
+            401,
+            403,
+            404,
+            422
+          ]
+        },
+        "error_code": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "authentication_failed",
+            "resource_unavailable",
+            "resource_not_found",
+            "validation_error",
+            null
+          ]
+        },
+        "visible_items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "deterministic": {
+          "type": "boolean"
+        },
+        "enumerates": {
+          "type": "boolean"
+        },
+        "result_ids": {
+          "type": "array",
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "continuation": {
+          "const": false
+        }
+      }
+    }
+  }
+}
