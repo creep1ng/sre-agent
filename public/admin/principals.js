@@ -32,6 +32,15 @@ const createCancel = document.getElementById("create-cancel");
 const createErrorBox = document.getElementById("create-error");
 const createErrorTitle = document.getElementById("create-error-title");
 const createErrorDetail = document.getElementById("create-error-detail");
+const deactivateDialog = document.getElementById("deactivate-dialog");
+const deactivateForm = document.getElementById("deactivate-form");
+const deactivateTitle = document.getElementById("deactivate-title");
+const deactivateDetail = document.getElementById("deactivate-detail");
+const deactivateSubmit = document.getElementById("deactivate-submit");
+const deactivateCancel = document.getElementById("deactivate-cancel");
+const deactivateErrorBox = document.getElementById("deactivate-error");
+const deactivateErrorTitle = document.getElementById("deactivate-error-title");
+const deactivateErrorDetail = document.getElementById("deactivate-error-detail");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
@@ -59,6 +68,9 @@ let pendingCreateBodyKey = null;
 // Real-request lock (B1): independent of dialog state. Set while POST +
 // authoritative refresh settle; never cleared by open/cancel/disconnect.
 let createInFlight = false;
+// Real-request lock (B2): PUT status settle; never cleared by UI.
+let statusInFlight = false;
+let pendingDeactivate = null;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const known = (value, allowed) => (allowed.has(value) ? value : "unknown");
@@ -122,6 +134,30 @@ function showCreateError(error) {
   announce(`${title}. ${detail}`);
 }
 
+function hideDeactivateError() {
+  deactivateErrorBox.hidden = true;
+  deactivateErrorTitle.textContent = "";
+  deactivateErrorDetail.textContent = "";
+}
+
+function describeStatusError(error) {
+  if (error?.kind === "api" && error?.code === "validation_error")
+    return ["Invalid status change", "Check the principal state. Nothing was changed."];
+  if (error?.kind === "api" && error?.code === "audit_unavailable")
+    return ["Service unavailable", "The request was not completed. Refresh and retry."];
+  if (error?.kind === "api" || error?.kind === "invalid_response")
+    return ["Request failed", error?.message ?? "Unexpected error. Nothing was changed."];
+  return describeError(error);
+}
+
+function showDeactivateError(error) {
+  const [title, detail] = describeStatusError(error);
+  deactivateErrorTitle.textContent = title;
+  deactivateErrorDetail.textContent = detail;
+  deactivateErrorBox.hidden = false;
+  announce(`${title}. ${detail}`);
+}
+
 function validateCreateFields() {
   const principalId = createPrincipalId.value.trim();
   const displayName = createDisplayName.value.trim();
@@ -176,6 +212,20 @@ function detailRow(item) {
     list.append(name, data);
   }
   panel.append(title, list);
+  if (item.status === "active") {
+    const deactivate = document.createElement("button");
+    deactivate.className = "ma-button ma-button--secondary ma-button--small";
+    deactivate.type = "button";
+    deactivate.dataset.deactivatePrincipal = principalId;
+    deactivate.textContent = "Deactivate";
+    panel.append(deactivate);
+  } else {
+    const noAction = document.createElement("p");
+    noAction.className = "ma-panel__description";
+    noAction.dataset.deactivateUnavailable = principalId;
+    noAction.textContent = "No actions available.";
+    panel.append(noAction);
+  }
   cell.append(panel);
   detail.append(cell);
   return detail;
@@ -264,7 +314,30 @@ async function loadPrincipals() {
   }
 }
 
+function openDeactivateDialog(principalId) {
+  const item = currentItems.find((entry) => text(entry.principal_id) === principalId);
+  if (!item || item.status !== "active" || typeof item.updated_at !== "string") return;
+  hideDeactivateError();
+  pendingDeactivate = { principalId, expected_updated_at: item.updated_at };
+  deactivateTitle.textContent = `Deactivate ${principalId}?`;
+  deactivateDetail.textContent = `Principal ${principalId} is active.`;
+  if (!statusInFlight) {
+    deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+  if (!deactivateDialog.open) {
+    if (typeof deactivateDialog.showModal === "function") deactivateDialog.showModal();
+    else deactivateDialog.setAttribute("open", "");
+  }
+  deactivateSubmit.focus();
+}
+
 rowsBody.addEventListener("click", async (event) => {
+  const deactivate = event.target.closest("[data-deactivate-principal]");
+  if (deactivate) {
+    openDeactivateDialog(deactivate.dataset.deactivatePrincipal);
+    return;
+  }
   const toggle = event.target.closest("[data-expand-principal]");
   if (!toggle) return;
   const principalId = toggle.dataset.expandPrincipal;
@@ -331,6 +404,13 @@ disconnectButton.addEventListener("click", () => {
     if (createSubmit) createSubmit.disabled = false;
     if (createCancel) createCancel.disabled = false;
   }
+  if (deactivateDialog?.open) deactivateDialog.close();
+  hideDeactivateError();
+  if (!statusInFlight) {
+    pendingDeactivate = null;
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
   loadingState.hidden = true;
   listWrap.hidden = true;
   listEmpty.hidden = false;
@@ -338,6 +418,70 @@ disconnectButton.addEventListener("click", () => {
   countLine.textContent = "Not loaded.";
   page.dataset.state = "idle";
   announce("Session cleared.");
+});
+
+deactivateDialog.addEventListener("cancel", (event) => {
+  if (statusInFlight) event.preventDefault();
+});
+
+deactivateCancel.addEventListener("click", () => {
+  if (statusInFlight) return;
+  deactivateDialog.close();
+});
+
+deactivateForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (statusInFlight) return;
+  if (deactivateSubmit.disabled) return;
+  if (!pendingDeactivate) return;
+  hideDeactivateError();
+  // expected_updated_at from dialog open (authoritative); no second PUT.
+  const generation = sessionGeneration;
+  const { principalId, expected_updated_at } = pendingDeactivate;
+  statusInFlight = true;
+  deactivateSubmit.disabled = true;
+  if (deactivateCancel) deactivateCancel.disabled = true;
+  try {
+    const updated = await controlApi.replacePrincipalStatus(principalId, {
+      status: "inactive",
+      expected_updated_at,
+    });
+    if (generation !== sessionGeneration) return;
+    const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
+    if (index >= 0) currentItems[index] = updated;
+    else currentItems = [...currentItems, updated];
+    pendingDeactivate = null;
+    deactivateDialog.close();
+    renderRows();
+    announce(`Principal ${principalId} deactivated.`);
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    const isConflict =
+      error?.kind === "conflict" || (error?.kind === "api" && error?.code === "status_conflict");
+    showDeactivateError(error);
+    if (isConflict) {
+      // Refresh authoritative state after 409; keep conflict message.
+      try {
+        const fresh = await controlApi.getPrincipal(principalId);
+        if (generation !== sessionGeneration) return;
+        const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
+        if (index >= 0) currentItems[index] = fresh;
+        else currentItems = [...currentItems, fresh];
+        if (typeof fresh?.updated_at === "string") {
+          pendingDeactivate = { principalId, expected_updated_at: fresh.updated_at };
+        }
+        renderRows();
+        showDeactivateError(error);
+      } catch {
+        if (generation !== sessionGeneration) return;
+        showDeactivateError(error);
+      }
+    }
+  } finally {
+    statusInFlight = false;
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
 });
 
 refreshButton.addEventListener("click", () => {
