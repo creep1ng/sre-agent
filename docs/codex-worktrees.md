@@ -4,27 +4,62 @@ Give each Codex task its own Compose project and host ports. The identity comes 
 
 ## Quick path
 
-1. Create the Codex task with a new worktree rather than reusing a running task's checkout.
-2. In the new worktree, run:
+1. From the main worktree or another linked worktree, create an isolated checkout:
+
+   ```bash
+   scripts/create-worktree.sh
+   ```
+
+   On Windows Command Prompt, use `scripts\create-worktree.bat` instead. The command prints the
+   generated path when it finishes.
+
+2. Open the new checkout as the Codex task rather than reusing a running task's checkout.
+3. In the new worktree, run:
 
    ```bash
    scripts/bootstrap-worktree.py
    scripts/worktree-compose up --build --wait
    ```
 
-3. Run the issue-10 contract obligation when needed:
+4. Run the issue-10 contract obligation when needed:
 
    ```bash
    scripts/worktree-compose --profile harness run --rm harness
    ```
 
-4. Before archiving or deleting the Codex task/worktree, remove its containers and volumes:
+5. Before archiving or deleting the Codex task/worktree, remove its containers and volumes:
 
    ```bash
    scripts/worktree-compose down -v --remove-orphans
    ```
 
 Only archive or remove the worktree after the teardown command completes. This order prevents orphaned databases and networks. Harness dependencies are ephemeral: each run copies the versions locked into its image to a fresh in-memory filesystem, so no dependency volume survives the container.
+
+## What creation owns
+
+`create-worktree.sh` and `create-worktree.bat` are thin entrypoints for the same Python
+implementation. It shuffles the complete built-in adjective/noun product and checks each
+combination once, so it finds a free two-word name such as `amber-otter` whenever one exists. It
+uses that exact name for both `.worktrees/amber-otter` and its new branch. The branch starts at the
+invoking worktree's current `HEAD`, even when the command is launched from a linked worktree.
+
+The creator copies `.env` from the primary worktree without printing its contents and preserves
+its private permission mode on POSIX. It never copies or links `.env.worktree`; instead, it runs
+`bootstrap-worktree.py` inside the new checkout to create that checkout's Compose identity and
+ports.
+
+When manifests and lockfiles match the new checkout, the creator reuses `.venv` and each detected
+`node_modules` directory. It prefers the invoking worktree and falls back to the primary worktree.
+Unix uses symbolic links; Windows uses directory junctions and therefore requires Git, Python 3,
+and a filesystem that supports junctions.
+
+These dependency directories are SHARED, mutable environments. Do not run `uv sync`, `npm
+install`, package upgrades, or other dependency-mutating commands through the links. Remove the
+link and create a worktree-local environment first. Python editable installs in a reused `.venv`
+may also retain the source path of the worktree that originally created them; recreate `.venv`
+locally whenever editable source resolution matters.
+
+If creation fails, the command removes only the branch and worktree created by that invocation.
 
 ## What bootstrap owns
 
