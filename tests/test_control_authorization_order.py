@@ -126,6 +126,31 @@ def _context() -> PrincipalContext:
             lambda service: service.revoke_grant("grant-target-human", "Bearer safe-key"),
             403,
         ),
+        (
+            ("POST", "/v1/model-aliases"),
+            lambda service: service.create_alias(
+                {
+                    "model_alias_id": "target-alias",
+                    "alias": "target-alias",
+                    "concrete_model": "openai/gpt-4o-mini",
+                    "router": "openrouter",
+                    "inference_provider": "openai",
+                },
+                "Bearer safe-key",
+                "create-target-alias",
+            ),
+            403,
+        ),
+        (
+            ("GET", "/v1/model-aliases"),
+            lambda service: service.list_aliases("Bearer safe-key", "100", {}),
+            403,
+        ),
+        (
+            ("GET", "/v1/model-aliases/{id}"),
+            lambda service: service.get_alias("target-alias", "Bearer safe-key"),
+            403,
+        ),
     ],
 )
 def test_engine_denial_precedes_target_access_for_every_control_operation(
@@ -142,6 +167,7 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
         "CredentialRepository",
         "GrantRepository",
         "IdempotencyRepository",
+        "ModelAliasRepository",
     ):
         monkeypatch.setattr(service_module, repository, _TargetAccessed)
 
@@ -172,6 +198,8 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
         ("GET", "/v1/principals/{id}"),
         ("POST", "/v1/grants"),
         ("GET", "/v1/grants"),
+        ("POST", "/v1/model-aliases"),
+        ("GET", "/v1/model-aliases"),
     }:
         shared.assert_awaited_once_with(
             service.sessions, "Bearer safe-key", action, resource_type, resource_id

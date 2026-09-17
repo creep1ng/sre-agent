@@ -28,12 +28,13 @@ from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import (
     CredentialReference,
     Grant,
+    ModelAlias,
     Principal,
     PrincipalContext,
     Resource,
 )
 from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, PrincipalRepository, ResourceRepository, StaleWriteError  # fmt: skip
+from sre_agent.persistence.repositories import CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, StaleWriteError  # fmt: skip
 
 IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ERRORS: dict[int, tuple[str, str]] = {
@@ -117,6 +118,24 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "admin.write",
         "administrative_control",
         "grants",
+    ),
+    ("POST", "/v1/model-aliases"): (
+        "aliases.create",
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    ),
+    ("GET", "/v1/model-aliases"): (
+        "aliases.list",
+        "admin.read",
+        "administrative_control",
+        "model_aliases",
+    ),
+    ("GET", "/v1/model-aliases/{id}"): (
+        "aliases.get",
+        "admin.read",
+        "administrative_control",
+        "model_aliases",
     ),
 }
 assert set(CONTROL_OPERATIONS) == set(CONTROL_SCOPES)
@@ -241,6 +260,21 @@ class GrantCreate(BaseModel):
 
 class GrantListResponse(BaseModel):
     items: list[Grant]
+    limit: int
+    truncated: bool
+
+
+class ModelAliasCreate(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    model_alias_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    alias: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")]
+    concrete_model: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$")]
+    router: Literal["openrouter"]
+    inference_provider: Annotated[str, Field(min_length=1, max_length=100)]
+
+
+class ModelAliasListResponse(BaseModel):
+    items: list[ModelAlias]
     limit: int
     truncated: bool
 
@@ -1555,6 +1589,291 @@ class ControlService:  # noqa: E305
                 await session.rollback()
             return result
 
+    async def create_alias(
+        self, raw: Any, authorization: str | None, idempotency_key: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "aliases.create", "admin.write"
+        scope = ("POST", "/v1/model-aliases")
+        if self._invalid_key(idempotency_key):
+            return await self._finish(
+                request_id,
+                started,
+                400,
+                "validation",
+                operation,
+                action,
+                error_code="invalid_idempotency_key",
+            )
+        try:
+            body = ModelAliasCreate.model_validate(raw)
+        except ValidationError:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[scope]
+            )
+        except AuthenticationFailed:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "model_aliases"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+
+        canonical_path = "/v1/model-aliases"
+        binding_scope = f"{context.principal.principal_id}|POST|{canonical_path}"
+        payload_hash = _payload_sha256(body.model_dump(mode="json"))
+        try:
+            async with self.sessions() as session, session.begin():
+                binding = await IdempotencyRepository(session).claim_or_replay(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=payload_hash,
+                    principal_id=context.principal.principal_id,
+                    method="POST",
+                    canonical_path=canonical_path,
+                    binding="at_least_24h",
+                    outcome=IdempotencyOutcome(
+                        response_status=201,
+                        resource_id=body.model_alias_id,
+                        replayed=False,
+                    ),
+                )
+                if binding.replayed:
+                    try:
+                        payload = ModelAlias.model_validate_json(
+                            _canonical_payload(binding.outcome.response_payload)
+                        ).model_dump(mode="json")
+                    except ValidationError:
+                        raise IdempotencyConflictError(binding_scope) from None
+                    return Response(
+                        content=_canonical_payload(payload),
+                        status_code=binding.outcome.response_status,
+                        media_type="application/json",
+                    )
+                alias = await ModelAliasRepository(session).create(
+                    body.model_alias_id,
+                    body.alias,
+                    body.concrete_model,
+                    body.router,
+                    body.inference_provider,
+                )
+                payload = alias.model_dump(mode="json")
+                await IdempotencyRepository(session).set_response_payload(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    response_payload=payload,
+                )
+                result = await self._finish(
+                    request_id,
+                    started,
+                    binding.outcome.response_status,
+                    "authorization",
+                    operation,
+                    action,
+                    payload=payload,
+                    error_code="grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "model_aliases"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+                if result.status_code == 503:
+                    await session.rollback()
+                    return result
+                return Response(
+                    content=_canonical_payload(payload),
+                    status_code=binding.outcome.response_status,
+                    media_type="application/json",
+                )
+        except (IdempotencyConflictError, IntegrityError):
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="idempotency_conflict",
+                context=context,
+                resource_ref=("administrative_control", "model_aliases"),
+                decision=evaluation.decision,
+            )
+
+    async def list_aliases(
+        self,
+        authorization: str | None,
+        limit: Any,
+        extra_params: dict[str, Any],
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "aliases.list", "admin.read"
+        try:
+            parsed_limit = int(limit)
+            if isinstance(limit, str) and not limit.isdigit():
+                raise ValueError
+            ListPrincipalsQuery.model_validate({"limit": parsed_limit})
+        except (TypeError, ValueError, ValidationError):
+            parsed_limit = 0
+        if extra_params or not 1 <= parsed_limit <= 100:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions,
+                authorization,
+                *CONTROL_SCOPES[("GET", "/v1/model-aliases")],
+            )
+        except AuthenticationFailed:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "model_aliases"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session:
+            items, truncated = await ModelAliasRepository(session).list(limit=parsed_limit)
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload={
+                "items": [item.model_dump(mode="json") for item in items],
+                "limit": parsed_limit,
+                "truncated": truncated,
+            },
+            error_code="grant_matched",
+            context=context,
+            resource_ref=("administrative_control", "model_aliases"),
+            decision=evaluation.decision,
+        )
+
+    async def get_alias(self, model_alias_id: str, authorization: str | None) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "aliases.get", "admin.read"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", model_alias_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session,
+                context.principal,
+                CONTROL_SCOPES[("GET", "/v1/model-aliases/{id}")],
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "model_aliases"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session:
+            alias = await ModelAliasRepository(session).get(model_alias_id)
+        if alias is None:
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_not_found",
+                context=context,
+                resource_ref=("administrative_control", "model_aliases"),
+                decision=evaluation.decision,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload=alias.model_dump(mode="json"),
+            error_code="grant_matched",
+            context=context,
+            resource_ref=("administrative_control", "model_aliases"),
+            decision=evaluation.decision,
+        )
+
 
 def control_router(service: ControlService) -> APIRouter:
     """Typed administrative control-plane router with all eight Issue #147 routes."""
@@ -1998,6 +2317,133 @@ def control_router(service: ControlService) -> APIRouter:
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
     ) -> Response:
         result = await service.revoke_grant(grant_id, authorization_from(credentials, request))
+        response.status_code = result.status_code
+        return result
+
+    @router.post(
+        "/v1/model-aliases",
+        status_code=201,
+        response_model=ModelAlias,
+        responses={
+            400: {"model": ErrorEnvelope},
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {
+                        "type": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                        "pattern": IDEMPOTENCY_KEY_PATTERN,
+                    },
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {"application/json": {"schema": ModelAliasCreate.model_json_schema()}},
+            },
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "model_aliases",
+            },
+        },
+    )
+    async def create_alias(
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.create_alias(
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/model-aliases",
+        response_model=ModelAliasListResponse,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "limit",
+                    "in": "query",
+                    "required": False,
+                    "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
+                },
+            ],
+            "x-forbidden-query-parameters": [
+                "cursor",
+                "page",
+                "offset",
+                "continuation_token",
+                "next",
+            ],
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "model_aliases",
+            },
+        },
+    )
+    async def list_aliases(
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        known = {"limit"}
+        result = await service.list_aliases(
+            authorization_from(credentials, request),
+            request.query_params.get("limit", "100"),
+            {key: value for key, value in request.query_params.items() if key not in known},
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/model-aliases/{alias_id}",
+        response_model=ModelAlias,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "model_aliases",
+            }
+        },
+    )
+    async def get_alias(
+        alias_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.get_alias(alias_id, authorization_from(credentials, request))
         response.status_code = result.status_code
         return result
 

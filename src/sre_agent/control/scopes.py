@@ -56,4 +56,19 @@ CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
         "administrative_control",
         "grants",
     ),
+    ("POST", "/v1/model-aliases"): (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    ),
+    ("GET", "/v1/model-aliases"): (
+        "admin.read",
+        "administrative_control",
+        "model_aliases",
+    ),
+    ("GET", "/v1/model-aliases/{id}"): (
+        "admin.read",
+        "administrative_control",
+        "model_aliases",
+    ),
 }
