@@ -10,7 +10,10 @@ const sections = [
 ];
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const videoDeferral = 'Deferred: media storage unavailable; screenshot evidence is mandatory.';
-const clean = value => value.replace(/<!--[\s\S]*?-->/g, '').trim();
+const clean = value => value
+  .replace(/\r\n?/g, '\n')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .trim();
 function parse(body) {
   const result = {};
   for (const match of clean(body || '').matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm)) {
@@ -88,7 +91,7 @@ async function run({ github, context, core }) {
   const repo = context.repo;
   const open = await github.paginate(github.rest.pulls.list, { ...repo, state: 'open', per_page: 100 });
   const target_url = `${context.serverUrl}/${repo.owner}/${repo.repo}/actions/runs/${context.runId}`;
-  let failures = 0;
+  let operationalFailures = 0;
   for (const item of open) {
     const sha = item.head.sha;
     const status = (state, description) => github.rest.repos.createCommitStatus({
@@ -118,13 +121,12 @@ async function run({ github, context, core }) {
       // Never print the PR body, command text, exception comments or attachment URLs.
       await core.summary.addHeading(`PR #${item.number}: ${state}`, 3)
         .addRaw(`Candidate: ${sha}\n\n`).addList(errors.length ? errors : ['Structural checks passed.']).write();
-      if (errors.length) failures++;
     } catch {
-      failures++;
+      operationalFailures++;
       await status('error', 'Metadata unavailable; retry reconciliation, do not bypass');
       core.error(`PR #${item.number}: metadata could not be validated`);
     }
   }
-  if (failures) core.setFailed(`${failures} open PR(s) do not meet the governance policy`);
+  if (operationalFailures) core.setFailed(`${operationalFailures} open PR(s) could not be reconciled`);
 }
 module.exports = { parse, validate, fingerprint, run };
