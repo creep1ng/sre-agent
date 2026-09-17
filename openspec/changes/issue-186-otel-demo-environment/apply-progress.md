@@ -45,3 +45,13 @@ meets. Every operation now probes the daemon before doing anything.
 previous session came up with that session's flag state while reporting success.
 CA1 requires a clean start, so `up` applies the declared baseline before
 starting rather than reusing whatever was left behind.
+
+**No synthetic traffic reached the store.** The upstream `.env` derives
+`FRONTEND_PROXY_ADDR` and `K6_TARGET_URL` from `ENVOY_PORT` while Compose reads
+it, before `demo/demo.env` moves the proxy to 8090, so both kept 8080. k6 called
+a closed port and still logged each checkout as completed, and `verify`
+approved the environment, since it checks availability rather than traffic.
+Measured on the reference host: in 30 seconds Envoy received 6 requests before
+the fix, one every five seconds as the health check does, and 208 after it.
+Both variables are now redeclared in `demo/demo.env` with the literal port,
+because a reference there resolves against the upstream value first.

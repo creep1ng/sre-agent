@@ -40,6 +40,12 @@ overrides:
   # Must follow the proxy: left at 8080 the browser would export its traces
   # into the project's own `web` service.
   PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://localhost:8090/otlp-http/v1/traces"
+  # Upstream .env derives these from ENVOY_PORT while it is read, before this
+  # file moves the proxy, so they kept 8080: k6 and the Collector's http_check
+  # targeted a closed port and no synthetic traffic reached the store. Written
+  # literally, since a reference here resolves against the upstream value first.
+  FRONTEND_PROXY_ADDR: "frontend-proxy:8090"
+  K6_TARGET_URL: "http://frontend-proxy:8090"
 
 host_ports:
   - port: 8090
