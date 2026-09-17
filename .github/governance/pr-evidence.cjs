@@ -10,7 +10,10 @@ const sections = [
 ];
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const videoDeferral = 'Deferred: media storage unavailable; screenshot evidence is mandatory.';
-const clean = value => value.replace(/<!--[\s\S]*?-->/g, '').trim();
+const clean = value => value
+  .replace(/\r\n?/g, '\n')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .trim();
 function parse(body) {
   const result = {};
   for (const match of clean(body || '').matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm)) {

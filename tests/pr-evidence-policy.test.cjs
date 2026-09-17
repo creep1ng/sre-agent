@@ -47,6 +47,9 @@ function errors(input) {
 }
 
 assert.deepEqual(validate(data()), []);
+const crlf = data();
+crlf.pr.body = crlf.pr.body.replace(/\n/g, '\r\n');
+assert.deepEqual(validate(crlf), []);
 assert.match(errors(data({ fields: { Video: 'Video pending.' } })), /Video must be an HTTPS reference/);
 assert.match(errors(data({ fields: { Screenshot: 'Screenshot pending.' } })), /Screenshot requires a non-placeholder HTTPS reference/);
 assert.deepEqual(validate(data({ fields: { 'Tested SHA': tested } })), []);
