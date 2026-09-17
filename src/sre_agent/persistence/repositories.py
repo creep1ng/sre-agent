@@ -459,6 +459,53 @@ class GrantRepository:
         row = await self._session.get(GrantRow, grant_id)
         return self._project(row) if row is not None else None
 
+    async def create(
+        self,
+        grant_id: str,
+        principal_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> Grant:
+        row = GrantRow(
+            grant_id=grant_id,
+            principal_id=principal_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            effect="allow",
+            status="active",
+            created_at=now or datetime.now(UTC),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return self._project(row)
+
+    async def list_filtered(
+        self,
+        *,
+        principal_id: str | None,
+        resource_id: str | None,
+        limit: int,
+    ) -> tuple[list[Grant], bool]:
+        if (principal_id is None) == (resource_id is None):
+            raise ValueError("exactly one grant filter is required")
+        statement = select(GrantRow)
+        if principal_id is not None:
+            statement = statement.where(GrantRow.principal_id == principal_id)
+        else:
+            statement = statement.where(GrantRow.resource_id == resource_id)
+        rows = (
+            await self._session.scalars(
+                statement.order_by(GrantRow.created_at.desc(), GrantRow.grant_id.desc()).limit(
+                    limit + 1
+                )
+            )
+        ).all()
+        return [self._project(row) for row in rows[:limit]], len(rows) > limit
+
     @staticmethod
     def _project(row: GrantRow) -> Grant:
         return project_grant(

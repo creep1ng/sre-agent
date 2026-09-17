@@ -87,6 +87,8 @@ def test_control_grant_actions_cover_read_and_write() -> None:
         "administrative_control",
         "grants",
     )
+    assert CONTROL_SCOPES[("POST", "/v1/grants")][0] == "admin.write"
+    assert CONTROL_SCOPES[("GET", "/v1/grants")][0] == "admin.read"
 
 
 def test_control_scopes_cover_all_routes_exactly_once() -> None:
@@ -99,9 +101,11 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("GET", "/v1/principals/{id}/credentials"),
         ("DELETE", "/v1/credentials/{id}"),
         ("POST", "/v1/credentials/{id}/rotation"),
+        ("POST", "/v1/grants"),
+        ("GET", "/v1/grants"),
         ("DELETE", "/v1/grants/{id}"),
     }
-    assert len({*CONTROL_SCOPES.values()}) == 5
+    assert len({*CONTROL_SCOPES.values()}) == 6
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
 
 
@@ -134,6 +138,8 @@ def test_control_operations_match_scopes() -> None:
         "credentials.rotate"
     )
     assert CONTROL_OPERATIONS[("DELETE", "/v1/grants/{id}")][0] == "grants.revoke"
+    assert CONTROL_OPERATIONS[("POST", "/v1/grants")][0] == "grants.create"
+    assert CONTROL_OPERATIONS[("GET", "/v1/grants")][0] == "grants.list"
 
 
 def test_control_projector_rejects_llm_routing_evidence() -> None:
@@ -266,6 +272,10 @@ def _stub_service(monkey_result=None, status=201, payload=None):
         return_value=JSONResponse(_public_principal(_principal()), 200)
     )
     service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
+    service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
+    service.list_grants = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
     return service
 
 
@@ -284,6 +294,7 @@ def test_router_exposes_all_control_routes() -> None:
         "/v1/principals/{principal_id}/credentials",
         "/v1/credentials/{credential_id}",
         "/v1/credentials/{credential_id}/rotation",
+        "/v1/grants",
         "/v1/grants/{grant_id}",
     }
 

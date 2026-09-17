@@ -102,6 +102,26 @@ def _context() -> PrincipalContext:
             403,
         ),
         (
+            ("POST", "/v1/grants"),
+            lambda service: service.create_grant(
+                {
+                    "grant_id": "grant-target-human",
+                    "principal_id": "target-human",
+                    "action": "invoke",
+                    "resource": {"resource_type": "llm_model", "resource_id": "target-model"},
+                    "effect": "allow",
+                },
+                "Bearer safe-key",
+                "create-target-grant",
+            ),
+            403,
+        ),
+        (
+            ("GET", "/v1/grants"),
+            lambda service: service.list_grants("Bearer safe-key", "target-human", None, "100", {}),
+            403,
+        ),
+        (
             ("DELETE", "/v1/grants/{id}"),
             lambda service: service.revoke_grant("grant-target-human", "Bearer safe-key"),
             403,
@@ -150,6 +170,8 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
         ("POST", "/v1/principals"),
         ("GET", "/v1/principals"),
         ("GET", "/v1/principals/{id}"),
+        ("POST", "/v1/grants"),
+        ("GET", "/v1/grants"),
     }:
         shared.assert_awaited_once_with(
             service.sessions, "Bearer safe-key", action, resource_type, resource_id

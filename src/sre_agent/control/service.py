@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from pydantic.json_schema import WithJsonSchema
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.control.scopes import CONTROL_SCOPES
@@ -24,7 +25,13 @@ from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.responses import TransactionalAuditStore
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
-from sre_agent.governance.dto import CredentialReference, Principal, PrincipalContext
+from sre_agent.governance.dto import (
+    CredentialReference,
+    Grant,
+    Principal,
+    PrincipalContext,
+    Resource,
+)
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, PrincipalRepository, ResourceRepository, StaleWriteError  # fmt: skip
 
@@ -92,6 +99,18 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "admin.write",
         "administrative_control",
         "credentials",
+    ),
+    ("POST", "/v1/grants"): (
+        "grants.create",
+        "admin.write",
+        "administrative_control",
+        "grants",
+    ),
+    ("GET", "/v1/grants"): (
+        "grants.list",
+        "admin.read",
+        "administrative_control",
+        "grants",
     ),
     ("DELETE", "/v1/grants/{id}"): (
         "grants.revoke",
@@ -207,6 +226,21 @@ class CredentialRotationFailureResponse(BaseModel):
 
 class CredentialListResponse(BaseModel):
     items: list[CredentialReference]
+    limit: int
+    truncated: bool
+
+
+class GrantCreate(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    grant_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    principal_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    action: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_.:-]{1,63}$")]
+    resource: Resource
+    effect: Literal["allow"]
+
+
+class GrantListResponse(BaseModel):
+    items: list[Grant]
     limit: int
     truncated: bool
 
@@ -1217,6 +1251,234 @@ class ControlService:  # noqa: E305
             decision=evaluation.decision,
         )
 
+    async def create_grant(
+        self, raw: Any, authorization: str | None, idempotency_key: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "grants.create", "admin.write"
+        scope = ("POST", "/v1/grants")
+        if self._invalid_key(idempotency_key):
+            return await self._finish(
+                request_id,
+                started,
+                400,
+                "validation",
+                operation,
+                action,
+                error_code="invalid_idempotency_key",
+            )
+        try:
+            body = GrantCreate.model_validate(raw)
+        except ValidationError:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[scope]
+            )
+        except AuthenticationFailed:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "grants"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+
+        canonical_path = "/v1/grants"
+        binding_scope = f"{context.principal.principal_id}|POST|{canonical_path}"
+        payload_hash = _payload_sha256(body.model_dump(mode="json"))
+        try:
+            async with self.sessions() as session, session.begin():
+                binding = await IdempotencyRepository(session).claim_or_replay(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=payload_hash,
+                    principal_id=context.principal.principal_id,
+                    method="POST",
+                    canonical_path=canonical_path,
+                    binding="at_least_24h",
+                    outcome=IdempotencyOutcome(
+                        response_status=201,
+                        resource_id=body.grant_id,
+                        replayed=False,
+                    ),
+                )
+                repository = GrantRepository(session)
+                if binding.replayed:
+                    try:
+                        payload = Grant.model_validate_json(
+                            _canonical_payload(binding.outcome.response_payload)
+                        ).model_dump(mode="json")
+                    except ValidationError:
+                        raise IdempotencyConflictError(binding_scope) from None
+                    return Response(
+                        content=_canonical_payload(payload),
+                        status_code=binding.outcome.response_status,
+                        media_type="application/json",
+                    )
+                grant = await repository.create(
+                    body.grant_id,
+                    body.principal_id,
+                    body.action,
+                    body.resource.resource_type,
+                    body.resource.resource_id,
+                )
+                payload = grant.model_dump(mode="json")
+                await IdempotencyRepository(session).set_response_payload(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    response_payload=payload,
+                )
+                result = await self._finish(
+                    request_id,
+                    started,
+                    binding.outcome.response_status,
+                    "authorization",
+                    operation,
+                    action,
+                    payload=payload,
+                    error_code="grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "grants"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+                if result.status_code == 503:
+                    await session.rollback()
+                    return result
+                return Response(
+                    content=_canonical_payload(payload),
+                    status_code=binding.outcome.response_status,
+                    media_type="application/json",
+                )
+        except (IdempotencyConflictError, IntegrityError):
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="idempotency_conflict",
+                context=context,
+                resource_ref=("administrative_control", "grants"),
+                decision=evaluation.decision,
+            )
+
+    async def list_grants(
+        self,
+        authorization: str | None,
+        principal_id: str | None,
+        resource_id: str | None,
+        limit: Any,
+        extra_params: dict[str, Any],
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "grants.list", "admin.read"
+        try:
+            parsed_limit = int(limit)
+            if isinstance(limit, str) and not limit.isdigit():
+                raise ValueError
+            ListPrincipalsQuery.model_validate({"limit": parsed_limit})
+        except (TypeError, ValueError, ValidationError):
+            parsed_limit = 0
+        identifier_pattern = r"^[a-z][a-z0-9_-]{2,63}$"
+        exactly_one_filter = (principal_id is None) != (resource_id is None)
+        filter_value = principal_id if principal_id is not None else resource_id
+        if (
+            extra_params
+            or not exactly_one_filter
+            or filter_value is None
+            or re.match(identifier_pattern, filter_value) is None
+            or not 1 <= parsed_limit <= 100
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions,
+                authorization,
+                *CONTROL_SCOPES[("GET", "/v1/grants")],
+            )
+        except AuthenticationFailed:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "grants"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session:
+            items, truncated = await GrantRepository(session).list_filtered(
+                principal_id=principal_id,
+                resource_id=resource_id,
+                limit=parsed_limit,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload={
+                "items": [item.model_dump(mode="json") for item in items],
+                "limit": parsed_limit,
+                "truncated": truncated,
+            },
+            error_code="grant_matched",
+            context=context,
+            resource_ref=("administrative_control", "grants"),
+            decision=evaluation.decision,
+        )
+
     async def revoke_grant(self, grant_id: str, authorization: str | None) -> Response:
         request_id, started = uuid4(), monotonic()
         operation, action = "grants.revoke", "admin.write"
@@ -1603,6 +1865,117 @@ def control_router(service: ControlService) -> APIRouter:
             await raw_json(request),
             authorization_from(credentials, request),
             request.headers.get("idempotency-key"),
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.post(
+        "/v1/grants",
+        status_code=201,
+        response_model=Grant,
+        responses={
+            400: {"model": ErrorEnvelope},
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {
+                        "type": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                        "pattern": IDEMPOTENCY_KEY_PATTERN,
+                    },
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {"application/json": {"schema": GrantCreate.model_json_schema()}},
+            },
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "grants",
+            },
+        },
+    )
+    async def create_grant(
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.create_grant(
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/grants",
+        response_model=GrantListResponse,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "principal_id",
+                    "in": "query",
+                    "required": False,
+                    "schema": {"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"},
+                },
+                {
+                    "name": "resource_id",
+                    "in": "query",
+                    "required": False,
+                    "schema": {"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"},
+                },
+                {
+                    "name": "limit",
+                    "in": "query",
+                    "required": False,
+                    "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
+                },
+            ],
+            "x-required-query-any-of": ["principal_id", "resource_id"],
+            "x-forbidden-query-parameters": [
+                "cursor",
+                "page",
+                "offset",
+                "continuation_token",
+                "next",
+            ],
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "grants",
+            },
+        },
+    )
+    async def list_grants(
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        known = {"principal_id", "resource_id", "limit"}
+        result = await service.list_grants(
+            authorization_from(credentials, request),
+            request.query_params.get("principal_id"),
+            request.query_params.get("resource_id"),
+            request.query_params.get("limit", "100"),
+            {key: value for key, value in request.query_params.items() if key not in known},
         )
         response.status_code = result.status_code
         return result
