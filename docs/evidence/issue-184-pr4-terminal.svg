@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="420" viewBox="0 0 1040 420">
+  <rect width="1040" height="420" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #184 PR4 2.3.0 contract snapshot</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q (python-checks): 868 passed, 1 skipped</text>
+  <text x="28" y="136" fill="#d1fae5" font-family="monospace" font-size="20">$ npm --prefix schemas/tooling test (harness): 90 passed</text>
+  <text x="28" y="176" fill="#d1fae5" font-family="monospace" font-size="20">$ validate:release --release 2.3.0: 192 artifacts, 13 checks</text>
+  <text x="28" y="216" fill="#d1fae5" font-family="monospace" font-size="20">$ validate:releases: 1.0.0 through 2.3.0 validated</text>
+  <text x="28" y="256" fill="#f9fafb" font-family="monospace" font-size="20">Focused control (76 passed) + full suite + contract validation green.</text>
+  <text x="28" y="296" fill="#f9fafb" font-family="monospace" font-size="20">2.2.0 zero diff; odd/ excluded; 2.3.0 snapshot 187 files.</text>
+  <text x="28" y="346" fill="#f9fafb" font-family="monospace" font-size="20">ruff check/format clean; alembic head 20260917_09 linear.</text>
+  <text x="28" y="386" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #184 PR4; no secrets or environment values shown.</text>
+</svg>
