@@ -19,8 +19,15 @@ from sqlalchemy.exc import StatementError
 
 from sre_agent.application import create_application
 from sre_agent.control.service import RotationIssuanceFailure
+from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.repositories import CredentialRepository
+from sre_agent.persistence.repositories import (
+    AuditRepository,
+    CredentialRepository,
+    GrantRepository,
+    PrincipalRepository,
+    ResourceRepository,
+)
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
 
@@ -447,3 +454,178 @@ def test_audit_append_failure_suppresses_ordinary_secret(
     assert response.status_code == 503 and response.json()["error"]["code"] == "audit_unavailable"
     assert "key" not in response.json() and "sre_" not in response.text
     assert_valid(canonical["error"], response.json())
+
+
+def test_grant_revocation_is_authorized_convergent_audited_and_immediately_effective(
+    client: TestClient,
+) -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status) "
+            "VALUES ('administrative_control', 'grants', 'active')"
+        )
+        connection.execute(
+            "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+            "effect, status, created_at) VALUES "
+            "('grant-admin-human-admin-write-grants', 'admin-human', 'admin.write', "
+            "'administrative_control', 'grants', 'allow', 'active', now())"
+        )
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, alias, "
+            "concrete_model, router, inference_provider) VALUES "
+            "('llm_model', 't1-alias', 'active', 't1-alias', 't1-alias', "
+            "'openai/gpt-4o-mini', 'openrouter', 'openai')"
+        )
+        connection.execute(
+            "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+            "effect, status, created_at) VALUES "
+            "('grant-t1-invoke', 'incident-harness', 'invoke', 'llm_model', 't1-alias', "
+            "'allow', 'active', now())"
+        )
+
+    async def decision() -> str:
+        database = Database(DATABASE_URL)
+        try:
+            async with database.sessions() as session:
+                principal = await PrincipalRepository(session).get("incident-harness")
+                assert principal is not None
+                evaluation = await AuthorizationDecisionEngine(
+                    ResourceRepository(session), GrantRepository(session)
+                ).evaluate(principal, "invoke", "llm_model", "t1-alias")
+                return evaluation.decision.decision
+        finally:
+            await database.dispose()
+
+    assert asyncio.run(decision()) == "allow"
+
+    denied = client.delete("/v1/grants/grant-t1-invoke", headers=headers(RESTRICTED_KEY))
+    assert denied.status_code == 403
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT status FROM grants WHERE grant_id = 'grant-t1-invoke'"
+        ).fetchone() == ("active",)
+
+    first = client.delete("/v1/grants/grant-t1-invoke", headers=headers())
+    replay = client.delete("/v1/grants/grant-t1-invoke", headers=headers())
+    assert (first.status_code, replay.status_code) == (204, 204)
+    assert first.content == replay.content == b""
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT status, count(*) OVER () FROM grants WHERE grant_id = 'grant-t1-invoke'"
+        ).fetchone() == ("revoked", 1)
+        events = connection.execute(
+            "SELECT outcome, response_status, identity, resource, policy_decision, content_state, "
+            "redacted_content FROM audit_events WHERE operation = 'grants.revoke' "
+            "ORDER BY occurred_at, event_id"
+        ).fetchall()
+
+    assert len(events) == 3
+    assert events[0][0:2] == ("denied", 403)
+    assert events[0][4]["decision"] == "deny"
+    for event in events[1:]:
+        assert event[0:2] == ("success", 204)
+        assert event[2] is not None
+        assert event[3]["resource_type"] == "administrative_control"
+        assert event[4]["decision"] == "allow"
+        assert event[5:] == ("absent", None)
+
+    assert asyncio.run(decision()) == "deny"
+
+
+def test_grant_revocation_stages_mutation_and_audit_in_the_same_session(monkeypatch) -> None:
+    grant_id = "grant-t1-shared-transaction"
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status) "
+            "VALUES ('administrative_control', 'grants', 'active') ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+            "effect, status, created_at) VALUES "
+            "('grant-admin-human-admin-write-grants', 'admin-human', 'admin.write', "
+            "'administrative_control', 'grants', 'allow', 'active', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+            "effect, status, created_at) VALUES "
+            "(%s, 'incident-harness', 'invoke.atomic-test', 'llm_model', "
+            "'triage-agent', 'allow', 'active', now())",
+            (grant_id,),
+        )
+
+    mutation_sessions: list[object] = []
+    audit_sessions: list[object] = []
+    emitted_events: list[object] = []
+    original_revoke = GrantRepository.revoke
+
+    async def tracked_revoke(repository: GrantRepository, target_id: str):
+        mutation_sessions.append(repository._session)
+        return await original_revoke(repository, target_id)
+
+    class TransactionalAudit:
+        async def append(self, _event: object) -> None:
+            raise AssertionError("grant revocation must not use standalone audit append")
+
+        async def append_in_transaction(self, event, session) -> None:
+            audit_sessions.append(session)
+            emitted_events.append(event)
+            await AuditRepository(session).append(event)
+
+    monkeypatch.setattr(GrantRepository, "revoke", tracked_revoke)
+    app = create_application(
+        Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY), audit_store=TransactionalAudit()
+    )
+    with TestClient(app, raise_server_exceptions=False) as atomic_client:
+        response = atomic_client.delete(f"/v1/grants/{grant_id}", headers=headers())
+
+    assert response.status_code == 204
+    assert len(mutation_sessions) == len(audit_sessions) == 1
+    assert mutation_sessions[0] is audit_sessions[0]
+    assert len(emitted_events) == 1
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT status FROM grants WHERE grant_id = %s", (grant_id,)
+        ).fetchone() == ("revoked",)
+
+
+def test_grant_revocation_rolls_back_when_authoritative_audit_rejects() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status) "
+            "VALUES ('administrative_control', 'grants', 'active') ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+            "effect, status, created_at) VALUES "
+            "('grant-admin-human-admin-write-grants', 'admin-human', 'admin.write', "
+            "'administrative_control', 'grants', 'allow', 'active', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+            "effect, status, created_at) VALUES "
+            "('grant-t1-audit-rollback', 'incident-harness', 'invoke.audit-test', 'llm_model', "
+            "'triage-agent', 'allow', 'active', now())"
+        )
+
+    class RejectingAudit:
+        async def append(self, _event: object) -> None:
+            raise RuntimeError("intentional grant audit rejection")
+
+        async def append_in_transaction(self, _event: object, _session: object) -> None:
+            raise RuntimeError("intentional grant audit rejection")
+
+    app = create_application(
+        Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY), audit_store=RejectingAudit()
+    )
+    with TestClient(app, raise_server_exceptions=False) as failing_client:
+        response = failing_client.delete("/v1/grants/grant-t1-audit-rollback", headers=headers())
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT status FROM grants WHERE grant_id = 'grant-t1-audit-rollback'"
+        ).fetchone() == ("active",)

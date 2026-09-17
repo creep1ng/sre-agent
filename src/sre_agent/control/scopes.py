@@ -41,4 +41,9 @@ CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
         "administrative_control",
         "credentials",
     ),
+    ("DELETE", "/v1/grants/{id}"): (
+        "admin.write",
+        "administrative_control",
+        "grants",
+    ),
 }
