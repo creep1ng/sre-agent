@@ -46,6 +46,14 @@ const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 const expanded = new Set();
 let currentItems = [];
+// Per-principal read version: every authoritative write of one Principal
+// bumps its version, and a detail GET resolving with an older version never
+// writes. A status mutation is not a session change, so sessionGeneration
+// alone cannot invalidate it.
+const principalVersions = new Map();
+const principalVersionOf = (principalId) => principalVersions.get(principalId) ?? 0;
+const touchPrincipalVersion = (principalId) =>
+  principalVersions.set(principalId, principalVersionOf(principalId) + 1);
 // Monotonic load generation: every loadPrincipals() call owns the UI until a
 // newer load starts or the session is cleared. A late resolution from a
 // previous generation (e.g. fetched with an older credential) must never
@@ -347,15 +355,18 @@ rowsBody.addEventListener("click", async (event) => {
     return;
   }
   const generation = sessionGeneration;
+  const itemVersion = principalVersionOf(principalId);
   try {
     // Capture the session generation before the detail request: a late
     // resolution must not mutate items, DOM, expanded, error or live region
     // once the session changed or was cleared.
     const item = await controlApi.getPrincipal(principalId);
     if (generation !== sessionGeneration) return;
+    if (itemVersion !== principalVersionOf(principalId)) return;
     const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
     if (index >= 0) currentItems[index] = item;
     else currentItems = [...currentItems, item];
+    touchPrincipalVersion(principalId);
     expanded.add(principalId);
     renderRows();
   } catch (error) {
@@ -389,6 +400,7 @@ disconnectButton.addEventListener("click", () => {
   credentialStore.clear();
   expanded.clear();
   currentItems = [];
+  principalVersions.clear();
   renderRows();
   hideError();
   // Clear may close the UI and invalidate the generation, but it never
@@ -441,6 +453,7 @@ deactivateForm.addEventListener("submit", async (event) => {
   statusInFlight = true;
   deactivateSubmit.disabled = true;
   if (deactivateCancel) deactivateCancel.disabled = true;
+  let allowRetry = true;
   try {
     const updated = await controlApi.replacePrincipalStatus(principalId, {
       status: "inactive",
@@ -450,6 +463,7 @@ deactivateForm.addEventListener("submit", async (event) => {
     const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
     if (index >= 0) currentItems[index] = updated;
     else currentItems = [...currentItems, updated];
+    touchPrincipalVersion(principalId);
     pendingDeactivate = null;
     deactivateDialog.close();
     renderRows();
@@ -460,26 +474,40 @@ deactivateForm.addEventListener("submit", async (event) => {
       error?.kind === "conflict" || (error?.kind === "api" && error?.code === "status_conflict");
     showDeactivateError(error);
     if (isConflict) {
-      // Refresh authoritative state after 409; keep conflict message.
+      allowRetry = false;
       try {
         const fresh = await controlApi.getPrincipal(principalId);
         if (generation !== sessionGeneration) return;
         const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
         if (index >= 0) currentItems[index] = fresh;
         else currentItems = [...currentItems, fresh];
-        if (typeof fresh?.updated_at === "string") {
+        touchPrincipalVersion(principalId);
+        if (fresh?.status === "active" && typeof fresh?.updated_at === "string") {
           pendingDeactivate = { principalId, expected_updated_at: fresh.updated_at };
+          allowRetry = true;
+          renderRows();
+          showDeactivateError(error);
+        } else if (fresh?.status !== "active") {
+          pendingDeactivate = null;
+          deactivateDialog.close();
+          renderRows();
+          announce(`Principal ${principalId} is now inactive.`);
+        } else {
+          pendingDeactivate = null;
+          showDeactivateError({
+            kind: "invalid_response",
+            message: "The principal refresh was unusable. Collapse and expand to retry.",
+          });
         }
-        renderRows();
-        showDeactivateError(error);
-      } catch {
+      } catch (refreshError) {
         if (generation !== sessionGeneration) return;
-        showDeactivateError(error);
+        pendingDeactivate = null;
+        showDeactivateError(refreshError);
       }
     }
   } finally {
     statusInFlight = false;
-    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (allowRetry && deactivateSubmit) deactivateSubmit.disabled = false;
     if (deactivateCancel) deactivateCancel.disabled = false;
   }
 });

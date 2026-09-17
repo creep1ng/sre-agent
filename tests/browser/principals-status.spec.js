@@ -212,28 +212,160 @@ test("surfaces failed status update without false success", async ({ page }) => 
   await expect(page.locator("#live-region")).toContainText(`Principal ${id} deactivated.`, { timeout: 20_000 });
   await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("inactive");
 });
-test("ignores stale status response after session clear", async ({ page }) => {
+test("clears the session before a held status response arrives", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
   const id = await createActivePrincipal(page, adminKey, "s05");
   await connect(page, adminKey);
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
   await openDeactivate(page, id);
-  await page.route("**/api/**/status", async (route) => {
+  let releasePut;
+  const gate = new Promise((resolve) => { releasePut = resolve; });
+  let puts = 0;
+  let putHeld = false;
+  const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
+  await page.route(statusPut, async (route) => {
     if (route.request().method() !== "PUT") return route.continue();
-    await new Promise((r) => setTimeout(r, 1500));
+    puts += 1;
+    putHeld = true;
+    await gate;
     await route.continue();
   });
   await page.click("#deactivate-submit");
+  await expect.poll(async () => putHeld).toBe(true);
   await expect(page.locator("#deactivate-submit")).toBeDisabled();
   await expect(page.locator("#deactivate-cancel")).toBeDisabled();
-  await page.waitForTimeout(300);
-  await page.click("#disconnect-button");
-  await page.waitForTimeout(2500);
+  // The open modal backdrop blocks pointer input, so Clear is dispatched
+  // on the real handler instead of clicked through the modal.
+  await page.locator("#disconnect-button").dispatchEvent("click");
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(0);
   await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
   await expect(page.locator("#page-error")).toBeHidden();
   await expect(page.locator("#live-region")).toHaveText("Session cleared.");
+  releasePut();
+  await page.waitForTimeout(1000);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(0);
+  await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
+  await expect(page.locator("#deactivate-dialog")).toBeHidden();
+  await expect(page.locator("#live-region")).toHaveText("Session cleared.");
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} deactivated.`);
-  await page.unroute("**/api/**/status");
+  expect(puts).toBe(1);
+  await page.unroute(statusPut);
+});
+test("drops a stale detail read that resolves after a confirmed deactivation", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const id = await createActivePrincipal(page, adminKey, "s06");
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  let holdFirstGet = true;
+  const detailGet = (url) => url.pathname === `/api/v1/principals/${id}`;
+  const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
+  let puts = 0;
+  await page.route(detailGet, async (route) => {
+    if (route.request().method() === "GET" && holdFirstGet) {
+      holdFirstGet = false;
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+    await route.continue();
+  });
+  await page.route(statusPut, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    puts += 1;
+    await route.continue();
+  });
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect(page.locator(`[data-principal-detail='${id}']`)).toBeVisible({ timeout: 20_000 });
+  await page.click(`[data-deactivate-principal='${id}']`);
+  await expect(page.locator("#deactivate-dialog")).toBeVisible();
+  await page.click("#deactivate-submit");
+  await expect(page.locator("#live-region")).toContainText(`Principal ${id} deactivated.`, { timeout: 20_000 });
+  await page.waitForTimeout(3000);
+  await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("inactive");
+  await expect(page.locator(`[data-deactivate-principal='${id}']`)).toHaveCount(0);
+  expect(puts).toBe(1);
+  await page.unroute(detailGet);
+  await page.unroute(statusPut);
+});
+test("locks retry when the refresh after a real 409 fails", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const id = await createActivePrincipal(page, adminKey, "s07");
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  await openDeactivate(page, id);
+  await page.evaluate(async ({ key, principalId }) => {
+    const { createAdministrativeApiClient, createMemoryCredentialStore } = await import("/public/api/client.js");
+    const store = createMemoryCredentialStore();
+    store.set(key);
+    const client = createAdministrativeApiClient({ credentialStore: store });
+    const fresh = await client.getPrincipal(principalId);
+    await client.replacePrincipalStatus(principalId, { status: "active", expected_updated_at: fresh.updated_at });
+  }, { key: adminKey, principalId: id });
+  let puts = 0;
+  const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
+  const detailGet = (url) => url.pathname === `/api/v1/principals/${id}`;
+  await page.route(statusPut, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    puts += 1;
+    await route.continue();
+  });
+  await page.route(detailGet, (route) => {
+    if (route.request().method() === "GET") return route.abort("failed");
+    return route.continue();
+  });
+  await page.click("#deactivate-submit");
+  await expect(page.locator("#deactivate-error-title")).toHaveText("API unavailable", { timeout: 20_000 });
+  await expect(page.locator("#live-region")).toContainText("API unavailable");
+  await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} deactivated.`);
+  await expect(page.locator("#deactivate-submit")).toBeDisabled();
+  await expect(page.locator("#deactivate-cancel")).toBeEnabled();
+  await expect(page.locator("#deactivate-dialog")).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(puts).toBe(1);
+  await page.unroute(detailGet);
+  await page.click("#deactivate-cancel");
+  await expect(page.locator("#deactivate-dialog")).toBeHidden();
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("active", { timeout: 20_000 });
+  await page.click(`[data-deactivate-principal='${id}']`);
+  await expect(page.locator("#deactivate-dialog")).toBeVisible();
+  await page.click("#deactivate-submit");
+  await expect(page.locator("#live-region")).toContainText(`Principal ${id} deactivated.`, { timeout: 20_000 });
+  await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("inactive");
+  expect(puts).toBe(2);
+  await page.unroute(statusPut);
+});
+test("closes deactivate without retry when the refresh after 409 finds inactive", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const id = await createActivePrincipal(page, adminKey, "s08");
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  await openDeactivate(page, id);
+  await page.evaluate(async ({ key, principalId }) => {
+    const { createAdministrativeApiClient, createMemoryCredentialStore } = await import("/public/api/client.js");
+    const store = createMemoryCredentialStore();
+    store.set(key);
+    const client = createAdministrativeApiClient({ credentialStore: store });
+    const fresh = await client.getPrincipal(principalId);
+    await client.replacePrincipalStatus(principalId, { status: "inactive", expected_updated_at: fresh.updated_at });
+  }, { key: adminKey, principalId: id });
+  let puts = 0;
+  const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
+  await page.route(statusPut, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    puts += 1;
+    await route.continue();
+  });
+  await page.click("#deactivate-submit");
+  await expect(page.locator("#live-region")).toContainText(`Principal ${id} is now inactive.`, { timeout: 20_000 });
+  await expect(page.locator("#deactivate-dialog")).toBeHidden();
+  await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("inactive");
+  await expect(page.locator(`[data-deactivate-principal='${id}']`)).toHaveCount(0);
+  await page.waitForTimeout(500);
+  expect(puts).toBe(1);
+  await page.unroute(statusPut);
 });
