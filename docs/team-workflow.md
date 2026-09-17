@@ -15,7 +15,7 @@ model settings, or a harness-specific configuration.
 2. Select the direct or SDD route before changing code; record that route in the pull request.
 3. Run the relevant checks, collect evidence at the tested SHA, and complete every required PR
    evidence field.
-4. Request independent human review. Integrate only after required checks, evidence review, and
+4. Request independent human review; Codex or other bots may assist. Integrate only after required checks, evidence review, and
    repository protection rules succeed.
 
 The issue remains the planning record. A partial PR must state what it covers and must not claim
@@ -61,8 +61,9 @@ behavior, contract, or design decision. Write `direct` under `Delivery route` an
 
 **Complete direct example:** correct a wording typo in an existing operator guide. The issue states
 the exact replacement; no public behavior changes. Edit the guide, render or preview it, record
-the tested SHA and preview command, attach a screenshot showing the rendered result and either a real video link or the documented media-storage deferral,
-then ask a reviewer to confirm the issue criterion.
+the tested SHA and preview command, declare `Visual applicability: no` with the
+text-only reason, link the concrete Markdown file and expected/actual result, then ask
+a reviewer to confirm the issue criterion. A screenshot is not required.
 
 ### SDD route
 
@@ -75,8 +76,8 @@ agent memory and chat history are not substitutes for repository-visible specifi
 Create the proposal, requirements/scenarios, design, and tasks in OpenSpec; have the decision and
 contract reviewed; implement the approved tasks; run applicable contract and integration checks;
 link every criterion to the resulting evidence; complete verification; then archive the accepted
-delta into the durable spec. The PR still requires the same screenshot, commands, SHA, and
-environment evidence as a direct change; video is optional only with the documented media-storage deferral.
+delta into the durable spec. The PR still requires commands, SHA, environment and an
+explicit visual-applicability decision; a screenshot is required only for changed visual surfaces.
 
 SDD is a route-selection tool, not paperwork for trivial edits. Direct work never skips evidence,
 security, or human review.
@@ -103,7 +104,7 @@ and validator behavior are in [PR evidence requirements](pr-evidence.md).
 | --- | --- |
 | Traceability | Linked issue; scope; covered and pending criteria; selected route and any OpenSpec links |
 | Reproduction | Tested commit SHA, base, environment, prerequisites, expected versus actual results, and containerized PR commands |
-| Demonstration | **One screenshot for every PR**, including documentation-only work; show the actual artifact, not an invented running service. A video is optional while storage is unavailable and must be either a real link or the documented deferral. |
+| Demonstration | Declare exactly one visual-applicability statement with a reason. A changed UI, wireframe or Swagger UI needs a screenshot of the actual surface; documentation, backend and tests-only changes use concrete file/scenario evidence instead. Mixed changes need both. Video is optional. |
 | Criterion mapping | Each acceptance criterion maps to a test, request/response, capture, file, or demonstration; label mocks, controlled integration, and live external-service evidence accurately |
 | Operational assessment | Risks, compatibility effects, and rollback procedure |
 | Sanitization | No secret, sensitive header, personal data, confidential content, or unsafe raw log is attached or linked |
@@ -115,7 +116,7 @@ The review-size limit is **400 added plus deleted lines**. It has no silent excl
 PR needs the `size:exception` label, a specific reason, and a link to an identified maintainer's
 approval. The exception never waives security, evidence, checks, or review.
 
-Automated validation can check field presence and references. It requires a real screenshot, and accepts only a real video link or the exact documented storage deferral; it cannot establish that media proves behavior. The human reviewer owns that judgement.
+Automated validation can check field presence, visual applicability and references. It requires a real screenshot only when applicability is `yes`; it cannot establish that the classification or evidence proves behavior. The human reviewer owns that judgement.
 
 ### Containerized PR reproduction
 
@@ -154,7 +155,8 @@ During onboarding, every contributor completes this exercise:
 1. Prepare a small issue-linked PR using only this guide and repository documentation.
 2. A different contributor checks out the recorded SHA, follows the stated prerequisites and
    commands, and independently reproduces the expected result.
-3. The reproducer reviews the criterion-to-evidence mapping, required screenshot, any linked video or its documented deferral, sanitization, and selected delivery route.
+3. The reproducer reviews the criterion-to-evidence mapping, visual applicability,
+   any required screenshot, any linked video, sanitization, and selected delivery route.
 4. Record gaps in the issue or PR and improve the shared documentation before declaring the
    onboarding exercise complete.
 
@@ -163,7 +165,11 @@ This exercise tests the workflow, not an individual's memory or private setup.
 ## Integration responsibility
 
 The author supplies accurate evidence and updates it when needed. The reviewer independently
-checks scope, reproducibility, evidence sufficiency, and sanitization. Maintainers decide a
+checks scope, reproducibility, evidence sufficiency, and sanitization. Reviewers may use
+Codex or other bots, but must validate findings and explain the scenario, impact and next
+step in clear language before sharing them. Tool assistance does not replace the human
+approval required by repository policy. See [review feedback guidance](pr-evidence.md#clear-actionable-review-feedback).
+Maintainers decide a
 size exception and administer branch/ruleset protection after a pilot proves the controls block
 invalid PRs. GitHub Actions validates only untrusted PR metadata; it must not execute commands or
 download arbitrary URLs supplied by a PR description.

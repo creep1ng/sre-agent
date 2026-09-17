@@ -67,11 +67,14 @@ just to make the first PR green. Use a team-authorized sandbox for hosted negati
 cases, or a real contribution for the positive path; do not manufacture noisy PRs
 against production. Local API simulations complement but do not replace this pilot.
 
-Record candidate/base/tested SHA, workflow URL, observed status and a sanitized screenshot of the actual acceptance result for these scenarios. A video is optional while media storage is unavailable; use its real link or the documented deferral, never a fabricated URL:
+Record candidate/base/tested SHA, workflow URL, observed status and evidence appropriate
+to the declared visual applicability for these scenarios. A video is optional; never
+use a fabricated URL:
 
 - 400 lines pass; 401 without exception fail; valid exception passes only size.
 - Remove the label or edit/delete the approving comment: the status fails again.
-- Missing screenshot or commands fails; a video passes only as a real link or the documented storage deferral; empty templates fail.
+- Missing visual applicability, required visual screenshot, or commands fails; an empty
+  optional video section is valid; empty templates fail.
 - Change base/head: recompute size and require current evidence/confirmations.
 - Wrong-role, bot and self approvals cannot satisfy independent review.
 - Manifest/lock mismatch, direct/indirect forbidden import against a copied candidate, and scoped type mismatch fail their respective stage.
