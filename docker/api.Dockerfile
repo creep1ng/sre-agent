@@ -31,7 +31,7 @@ FROM base AS runtime-dependencies
 FROM runtime-dependencies AS checks
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y shellcheck \
+    && apt-get install --no-install-recommends -y git shellcheck \
     && rm -rf /var/lib/apt/lists/* \
     && uv sync --locked --extra dev
 
