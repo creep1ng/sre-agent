@@ -18,29 +18,35 @@ which git ignores.
 
 ## Operations
 
-    python scripts/demo_env.py up|verify|down
+    python scripts/demo_env.py up|fail|verify|reset|down
 
 | Operation | What it does |
 |---|---|
 | `up` | Clones the pinned tag if absent, refuses to run over residue, applies the flag baseline, starts the minimal profile and waits for health |
+| `fail` | Switches the declared failure flag on and restarts flagd; synthetic traffic keeps running |
 | `verify` | Checks every service of the project and compares image digests against `demo/digests.lock` |
+| `reset` | Restores the flag baseline declared in the manifest and restarts flagd |
 | `down` | Stops the environment and confirms no container of the project survived |
 
-All three are idempotent and bounded to the Compose project `otel-demo`. None
+All five are idempotent and bounded to the Compose project `otel-demo`. None
 removes resources of another project, and none runs a host-wide cleanup such as
 `docker system prune`.
-
-`fail` and `reset`, and the signal check that tells a degraded environment from
-a healthy one, arrive in the follow-up PR of this change.
 
 ## Typical run
 
     python scripts/demo_env.py up
     python scripts/demo_env.py verify
+    python scripts/demo_env.py fail
+    python scripts/demo_env.py reset
     python scripts/demo_env.py down
 
 `verify` exits non-zero when a service is unavailable or a digest no longer
 matches the lock, so the sequence can be scripted.
+
+`verify` reports availability, not behaviour: it cannot yet tell a degraded
+environment from a healthy one. Confirm the injected failure by placing an order
+in the store, which does not complete while the flag is on and completes again
+after `reset`. A programmatic check is tracked separately.
 
 ## Where the state lives
 
@@ -68,6 +74,11 @@ service is down would not report real failures, so every service of the
 composition is checked. That is a superset of the six the acceptance criterion
 names.
 
+**`reset` is not a global switch-off.** `loadGeneratorTraffic` ships enabled and
+sustains the traffic that failure injection needs; disabling it would leave the
+environment without signals. `reset` restores the baseline declared in the
+manifest, including flags that carry a rate or targeting rules.
+
 **`down` confirms what it removed.** A `down` against a mismatched project name
 returns success and removes nothing, so it checks afterwards that no container
 labelled with the project survived.
@@ -77,3 +88,6 @@ labelled with the project survived.
 Everything goes through the proxy on 8090: the store at the root, Grafana under
 `/grafana`, Jaeger under `/jaeger/ui`, the flagd UI under `/feature`. Grafana,
 Jaeger and OpenSearch are not published to the host.
+
+Do not use the flagd UI to inject failures: it writes to the upstream file and
+`reset` would not know about the change.
