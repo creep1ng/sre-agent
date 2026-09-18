@@ -34,6 +34,8 @@ The result status uses the run-state `terminated_reason` values, so #35 applies 
 | Network error, timeout or 5xx, twice | `upstream_unavailable` | None |
 | Budget exhausted | `max_steps` | None |
 | Any other gateway status | `needs_human` | None; `detail` names the status |
+| Tool fails or exceeds its timeout | `upstream_unavailable` | None; `detail` names the tool |
+| Assembled input over 65 536 characters | `needs_human` | None; nothing is sent |
 
 ## Decision: Every turn re-sends the whole state
 
