@@ -34,6 +34,7 @@ The result status uses the run-state `terminated_reason` values, so #35 applies 
 | Network error, timeout or 5xx, twice | `upstream_unavailable` | None |
 | Budget exhausted | `max_steps` | None |
 | Any other gateway status | `needs_human` | None; `detail` names the status |
+| A 200 whose body breaks the Responses contract | `needs_human` | None; no retry |
 | Tool fails or exceeds its timeout | `upstream_unavailable` | None; `detail` names the tool |
 | Assembled input over 65 536 characters | `needs_human` | None; nothing is sent |
 
@@ -65,4 +66,4 @@ Until #187 exposes governed MCP invocation, the fixture provider serves evidence
 
 ## Decision: Configuration is three variables
 
-`INVESTIGATOR_GATEWAY_URL`, `INVESTIGATOR_GATEWAY_API_KEY` and `INVESTIGATOR_MODEL_ALIAS`. The key is a gateway principal key, such as the seeded `incident-harness`; the harness reads no provider or MCP secret.
+`INVESTIGATOR_GATEWAY_URL`, `INVESTIGATOR_GATEWAY_API_KEY` and `INVESTIGATOR_MODEL_ALIAS`. The key is a gateway principal key, such as the seeded `incident-harness`, held as a secret value that never reaches a representation or a log; the harness reads no provider or MCP secret. The client sends only the fields of the Responses request contract.
