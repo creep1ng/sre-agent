@@ -47,7 +47,7 @@ COPY docker ./docker
 COPY .dockerignore compose.yaml README.md .importlinter playwright.config.js playwright.production.config.js ./
 
 USER 65532:65532
-CMD ["sh", "-c", "python scripts/assert_test_database_isolated.py && shellcheck docker/harness-entrypoint.sh scripts/worktree-compose && ruff check --no-cache . && ruff format --check --no-cache . && uv lock --check --no-cache && lint-imports --no-cache && mypy --cache-dir=/tmp/mypy src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py src/sre_agent/governance/dto.py src/sre_agent/governance/authorization.py && pytest && alembic check"]
+CMD ["sh", "-c", "python scripts/assert_test_database_isolated.py && shellcheck docker/harness-entrypoint.sh scripts/worktree-compose && ruff check --no-cache . && ruff format --check --no-cache . && uv lock --check --no-cache && lint-imports --no-cache && mypy --cache-dir=/tmp/mypy src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py src/sre_agent/governance/dto.py src/sre_agent/governance/authorization.py src/sre_agent/investigator && pytest && alembic check"]
 
 FROM base AS runtime
 

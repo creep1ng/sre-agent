@@ -46,9 +46,9 @@ Every criterion is demonstrated again end to end in PR 5.
 ## Tasks
 
 - [x] 1.1 Proposal, design, tasks and capability delta
-- [ ] 2.1 `contract.py`: request, actions, result, limits and `task_id` derivation
-- [ ] 2.2 Import contract and strict mypy scope for the package
-- [ ] 2.3 Contract tests, including run-context and incident-state conformance
+- [x] 2.1 `contract.py`: request, actions, result, limits and `task_id` derivation
+- [x] 2.2 Import contract and strict mypy scope for the package
+- [x] 2.3 Contract tests, including run-context and incident-state conformance
 - [ ] 3.1 Output parsing and reference checks
 - [ ] 3.2 Bounded loop with re-interpretation and step budget
 - [ ] 4.1 Gateway client and error mapping; fixture evidence provider
