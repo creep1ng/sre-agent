@@ -46,8 +46,9 @@ def run(args: list[str], capture: bool = False) -> str:
 
 def require_docker() -> None:
     """Fail fast with a readable message instead of hanging on a dead socket."""
-    probe = subprocess.run(["docker", "info", "--format", "{{.ServerVersion}}"],
-                           text=True, capture_output=True)
+    probe = subprocess.run(
+        ["docker", "info", "--format", "{{.ServerVersion}}"], text=True, capture_output=True
+    )
     if probe.returncode != 0:
         abort("the Docker daemon is not responding; start Docker and run again")
 
@@ -60,12 +61,17 @@ def manifest() -> dict:
 
 def compose(cfg: dict) -> list[str]:
     args = [
-        "docker", "compose",
-        "-p", cfg["compose"]["project_name"],
+        "docker",
+        "compose",
+        "-p",
+        cfg["compose"]["project_name"],
         # Upstream compose files use paths relative to their own checkout.
-        "--project-directory", str(CHECKOUT),
-        "--env-file", str(CHECKOUT / ".env"),
-        "--env-file", str(ROOT / "demo" / "demo.env"),
+        "--project-directory",
+        str(CHECKOUT),
+        "--env-file",
+        str(CHECKOUT / ".env"),
+        "--env-file",
+        str(ROOT / "demo" / "demo.env"),
     ]
     for layer in cfg["compose"]["layers_included"]:
         args += ["-f", str(CHECKOUT / layer)]
@@ -76,12 +82,24 @@ def ensure_checkout(cfg: dict) -> None:
     upstream = cfg["upstream"]
     if not CHECKOUT.exists():
         print(f"Cloning {upstream['tag']} into {CHECKOUT.name}/")
-        run(["git", "clone", "--depth", "1", "--branch", upstream["tag"],
-             upstream["repository"], str(CHECKOUT)])
+        run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                upstream["tag"],
+                upstream["repository"],
+                str(CHECKOUT),
+            ]
+        )
     head = run(["git", "-C", str(CHECKOUT), "rev-parse", "HEAD"], capture=True).strip()
     if head != upstream["commit"]:
-        abort(f"{CHECKOUT.name}/ is at {head[:7]} but the manifest pins "
-              f"{upstream['commit'][:7]}; remove the directory and run up again")
+        abort(
+            f"{CHECKOUT.name}/ is at {head[:7]} but the manifest pins "
+            f"{upstream['commit'][:7]}; remove the directory and run up again"
+        )
     if run(["git", "-C", str(CHECKOUT), "status", "--porcelain"], capture=True).strip():
         abort("the upstream checkout has local modifications; it must stay pristine")
 
@@ -108,11 +126,15 @@ def conflicting_containers(cfg: dict) -> list[str]:
     """
     project = cfg["compose"]["project_name"]
     wanted = set(run(compose(cfg) + ["config", "--services"], capture=True).split())
-    listing = run(["docker", "ps", "-a", "--format",
-                   '{{.Names}}\t{{.Label "com.docker.compose.project"}}'], capture=True)
-    return [f"{n} (project: {o or 'none'})"
-            for n, _, o in (line.partition("\t") for line in listing.splitlines())
-            if n in wanted and o != project]
+    listing = run(
+        ["docker", "ps", "-a", "--format", '{{.Names}}\t{{.Label "com.docker.compose.project"}}'],
+        capture=True,
+    )
+    return [
+        f"{n} (project: {o or 'none'})"
+        for n, _, o in (line.partition("\t") for line in listing.splitlines())
+        if n in wanted and o != project
+    ]
 
 
 def set_variants(updates: dict[str, str]) -> None:
@@ -133,9 +155,11 @@ def baseline(cfg: dict) -> dict[str, str]:
     declared = dict(cfg["flag_baseline"])
     fallback = declared.pop("all_other_flags", "off")
     data = json.loads(flags_file().read_text(encoding="utf-8"))
-    return {name: declared.get(name, fallback)
-            for name, flag in data["flags"].items()
-            if declared.get(name, fallback) in flag["variants"]}
+    return {
+        name: declared.get(name, fallback)
+        for name, flag in data["flags"].items()
+        if declared.get(name, fallback) in flag["variants"]
+    }
 
 
 def unavailable(cfg: dict) -> list[str]:
@@ -145,8 +169,7 @@ def unavailable(cfg: dict) -> list[str]:
     """
     expected = set(run(compose(cfg) + ["config", "--services"], capture=True).split())
     states = {}
-    for line in run(compose(cfg) + ["ps", "--all", "--format", "json"],
-                    capture=True).splitlines():
+    for line in run(compose(cfg) + ["ps", "--all", "--format", "json"], capture=True).splitlines():
         if line.strip():
             row = json.loads(line)
             states[row["Service"]] = row.get("Health") or row.get("State")
@@ -172,8 +195,10 @@ def digest_drift(cfg: dict) -> list[str]:
         if ref not in recorded:
             problems.append(f"{ref}: not recorded in digests.lock")
             continue
-        local = run(["docker", "image", "inspect", ref, "--format",
-                     '{{join .RepoDigests ","}}'], capture=True)
+        local = run(
+            ["docker", "image", "inspect", ref, "--format", '{{join .RepoDigests ","}}'],
+            capture=True,
+        )
         if recorded[ref] not in local:
             problems.append(f"{ref}: digest differs from the lock")
     return problems
@@ -183,8 +208,7 @@ def op_up(cfg: dict) -> None:
     ensure_checkout(cfg)
     conflicts = conflicting_containers(cfg)
     if conflicts:
-        abort("another project already holds these container names: "
-              + ", ".join(conflicts))
+        abort("another project already holds these container names: " + ", ".join(conflicts))
     ensure_flags()
     # Start from the declared baseline so a previous session cannot leak in.
     set_variants(baseline(cfg))
@@ -204,9 +228,18 @@ def op_verify(cfg: dict) -> None:
 def op_down(cfg: dict) -> None:
     project = cfg["compose"]["project_name"]
     run(compose(cfg) + ["down"])
-    left = run(["docker", "ps", "-a", "--filter",
-                f"label=com.docker.compose.project={project}",
-                "--format", "{{.Names}}"], capture=True).split()
+    left = run(
+        [
+            "docker",
+            "ps",
+            "-a",
+            "--filter",
+            f"label=com.docker.compose.project={project}",
+            "--format",
+            "{{.Names}}",
+        ],
+        capture=True,
+    ).split()
     if left:
         abort("containers survived down: " + ", ".join(left))
     print("Environment is down; nothing outside the project was touched.")
