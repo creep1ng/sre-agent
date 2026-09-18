@@ -20,7 +20,8 @@ The planning artifacts alone are about 250 lines, the contract with its tests ab
 | Interpretation | Output parsing, reference validation, prompt assembly | 3 | parsing and prompt tests |
 | Loop | Ports, bounded reducer, retries, step budget | 4 | loop tests against a scripted gateway |
 | Client and provider | Gateway client from three variables, error mapping, labeled fixture evidence | 5 | client tests with an HTTP mock, provider tests |
-| Demo | Deterministic server, scenarios, real call, guide | 6 | `docker compose` scenarios |
+| Demo | Deterministic demo gateway, scenarios, operator guide | 6 | `docker compose` scenarios |
+| Live call | One run through the real gateway with a live model | 7 | `docker compose` against the project stack |
 
 ## Acceptance Mapping
 
@@ -33,7 +34,7 @@ The planning artifacts alone are about 250 lines, the contract with its tests ab
 | CA5 gateway denial is a block | Loop, Client | 4 and 5 |
 | CA6 configuration only, no provider secret | Client, Demo | 5 and 6 |
 
-Every criterion is demonstrated again end to end in PR 6.
+Every criterion is demonstrated again end to end in PR 6; the live model call follows in PR 7.
 
 ## Definition of Ready
 
@@ -53,4 +54,5 @@ Every criterion is demonstrated again end to end in PR 6.
 - [x] 3.1 Output parsing, reference checks and prompt assembly
 - [x] 4.1 Ports and bounded loop with re-interpretation, transient retry and step budget
 - [x] 5.1 Gateway client and error mapping; fixture evidence provider
-- [ ] 6.1 Demo server, scenarios, real call through the gateway and operator guide
+- [x] 6.1 Deterministic demo gateway, scenarios and operator guide
+- [ ] 7.1 Real call through the gateway with a live model and sanitized audit reference
