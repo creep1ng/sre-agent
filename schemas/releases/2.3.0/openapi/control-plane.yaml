@@ -175,6 +175,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StatusConflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
         '503': { $ref: '#/components/responses/AuditUnavailable' }
   /v1/model-aliases/{id}/status:
@@ -189,6 +190,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/StatusConflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
         '503': { $ref: '#/components/responses/AuditUnavailable' }
   /v1/grants:
@@ -335,11 +337,11 @@ components:
     AuditUnavailable: { description: Authoritative audit store did not durably accept the safe event, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.3.0' } } } }
   schemas:
     PrincipalCreate: { type: object, additionalProperties: false, required: [principal_id, kind, display_name], properties: { principal_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }, kind: { enum: [human, agent] }, display_name: { type: string, minLength: 1, maxLength: 200 } } }
-    ActiveInactiveStatus: { type: object, additionalProperties: false, required: [status], properties: { status: { enum: [active, inactive] } } }
+    ActiveInactiveStatus: { type: object, additionalProperties: false, required: [status, expected_updated_at], properties: { status: { enum: [active, inactive] }, expected_updated_at: { type: string, format: date-time } } }
     PrincipalStatusReplace: { type: object, additionalProperties: false, required: [status, expected_updated_at], properties: { status: { enum: [active, inactive] }, expected_updated_at: { type: string, format: date-time } } }
     CredentialIssue: { type: object, additionalProperties: false, properties: { expires_at: { type: [string, 'null'], format: date-time } } }
     ModelAliasCreate: { type: object, additionalProperties: false, required: [model_alias_id, alias, concrete_model, router, inference_provider], properties: { model_alias_id: { type: string }, alias: { type: string }, concrete_model: { type: string }, router: { type: string }, inference_provider: { type: string } } }
-    ModelAliasAssignment: { type: object, additionalProperties: false, required: [concrete_model, router, inference_provider], properties: { concrete_model: { type: string }, router: { type: string }, inference_provider: { type: string } } }
+    ModelAliasAssignment: { type: object, additionalProperties: false, required: [concrete_model, router, inference_provider, expected_updated_at], properties: { concrete_model: { type: string }, router: { type: string }, inference_provider: { type: string }, expected_updated_at: { type: string, format: date-time } } }
     GrantCreate: { type: object, additionalProperties: false, required: [grant_id, principal_id, action, resource, effect], properties: { grant_id: { type: string }, principal_id: { type: string }, action: { type: string }, resource: { $ref: 'urn:sre-agent:schema:resource:2.3.0' }, effect: { const: allow } } }
     PrincipalList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:principal:2.3.0' } } } }
     CredentialList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:credential-reference:2.3.0' } } } }

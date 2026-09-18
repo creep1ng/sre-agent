@@ -58,7 +58,9 @@
         "grants.revoke",
         "aliases.create",
         "aliases.list",
-        "aliases.get"
+        "aliases.get",
+        "aliases.assignment.replace",
+        "aliases.status.replace"
       ]
     },
     "action": {

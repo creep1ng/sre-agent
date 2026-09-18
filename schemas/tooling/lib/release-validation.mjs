@@ -15,7 +15,7 @@ const CONSUMERS = ["issue-10", "issue-11", "issue-13", "issue-14", "harness", "u
 const contractLevel = (version) => version.split(".").slice(0, 2).map(Number);
 const consumersForVersion = (version) => {
   const [major, minor] = contractLevel(version);
-  if (major === 2 && minor >= 3) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3"];
+  if (major === 2 && minor >= 3) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5"];
   if (major === 2 && minor >= 2) return [...CONSUMERS, "issue-130", "issue-129"];
   if (major === 2 && minor >= 1) return [...CONSUMERS, "issue-130"];
   return CONSUMERS;
@@ -31,9 +31,10 @@ const POLICY = {
   "issue-129": ["release", "issue-129.resource-catalog-contract", "resource-catalog-contract", "fixtures/positive/catalog.entries.positive.v{version}.fixture.json"],
   "issue-184": ["release", "issue-184.grant-revocation-contract", "grant-revocation-contract", "fixtures/positive/control.audit.grants-revoke-allow.positive.v{version}.fixture.json"],
   "issue-184-t2": ["release", "issue-184.grant-create-list-contract", "grant-create-list-contract", "fixtures/positive/control.audit.grants-create-allow.positive.v{version}.fixture.json"],
-  "issue-184-t3": ["release", "issue-184.alias-create-read-contract", "alias-create-read-contract", "fixtures/positive/control.audit.aliases-create-allow.positive.v{version}.fixture.json"]
+  "issue-184-t3": ["release", "issue-184.alias-create-read-contract", "alias-create-read-contract", "fixtures/positive/control.audit.aliases-create-allow.positive.v{version}.fixture.json"],
+  "issue-184-t5": ["release", "issue-184.alias-mutation-contract", "alias-mutation-contract", "fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v{version}.fixture.json"]
 };
-const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
+const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
 const versionedPolicy = (version) => Object.fromEntries(Object.entries(POLICY).map(([consumer, values]) => [consumer, values.map((value) => value.replaceAll("1.0.0", version).replaceAll("{version}", version))]));
 const sorted = (value) => Array.isArray(value) ? value.map(sorted) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])])) : value;
 const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`, canonical = (value) => JSON.stringify(sorted(value));
@@ -54,6 +55,23 @@ async function validateGrantCreateListContract(root, version) {
   validateFixtures(loaded.schemas, fixtures);
   const operations = fixtures.map(({ data }) => data.operation).sort();
   if (canonical(operations) !== canonical(["grants.create", "grants.list"]) || fixtures.some(({ data }) => data.stage !== "authorization" || data.outcome !== "success" || data.reason_code !== "grant_matched" || data.resource?.resource_type !== "administrative_control")) throw new Error("Grant create/list audit evidence drifted from the authorization contract");
+}
+
+async function validateAliasMutationContract(root, version) {
+  const loaded = await loadReleaseDirectory(root, "control");
+  const names = ["assignment-replace", "status-replace"].map((operation) => `positive/control.audit.aliases-${operation}-allow.positive.v${version}.fixture.json`);
+  const fixtures = loaded.fixtures.filter(({ name }) => names.includes(name.replace(/#\d+$/, "")));
+  if (fixtures.length !== names.length) throw new Error("Alias mutation audit fixtures are incomplete");
+  validateFixtures(loaded.schemas, fixtures);
+  const operations = fixtures.map(({ data }) => data.operation).sort();
+  if (canonical(operations) !== canonical(["aliases.assignment.replace", "aliases.status.replace"]) || fixtures.some(({ data }) => data.stage !== "authorization" || data.outcome !== "success" || data.reason_code !== "grant_matched" || data.resource?.resource_type !== "administrative_control")) throw new Error("Alias mutation audit evidence drifted from the authorization contract");
+  const openapi = await readContractFile(join(root, "openapi/control-plane.yaml"));
+  for (const path of ["/v1/model-aliases/{id}/assignment", "/v1/model-aliases/{id}/status"]) {
+    const put = openapi.paths?.[path]?.put;
+    if (!put || put.responses?.["409"]?.$ref !== "#/components/responses/StatusConflict") throw new Error(`Alias mutation route ${path} lacks the stale-token 409 StatusConflict`);
+    const schema = openapi.components?.schemas?.[put.requestBody?.content?.["application/json"]?.schema?.$ref?.split("/").pop()];
+    if (!schema || schema.additionalProperties !== false || !schema.required?.includes("expected_updated_at") || !schema.properties?.expected_updated_at) throw new Error(`Alias mutation route ${path} lacks the closed expected_updated_at CAS body`);
+  }
 }
 
 async function validateAliasCreateReadContract(root, version) {
@@ -145,7 +163,8 @@ const ACTIONS = {
   "resource-catalog-contract": (root, version) => validateResourceCatalogContract(root, version),
   "grant-revocation-contract": (root) => validateGroup("control", root),
   "grant-create-list-contract": (root, version) => validateGrantCreateListContract(root, version),
-  "alias-create-read-contract": (root, version) => validateAliasCreateReadContract(root, version)
+  "alias-create-read-contract": (root, version) => validateAliasCreateReadContract(root, version),
+  "alias-mutation-contract": (root, version) => validateAliasMutationContract(root, version)
 };
 
 export async function validateCoverage(root = release) {

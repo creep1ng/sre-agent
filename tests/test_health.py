@@ -6,7 +6,7 @@ from sre_agent.settings import Settings
 
 
 def test_readiness_requires_grant_revoke_audit_migration() -> None:
-    assert REQUIRED_SCHEMA_VERSION == "20260917_09"
+    assert REQUIRED_SCHEMA_VERSION == "20260918_10"
 
 
 def test_liveness_does_not_call_readiness_dependency() -> None:

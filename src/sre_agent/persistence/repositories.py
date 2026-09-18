@@ -451,11 +451,15 @@ class ModelAliasRepository:
         concrete_model: str,
         router: str,
         inference_provider: str,
+        *,
+        now: datetime | None = None,
     ) -> ModelAlias:
+        issued_at = now or datetime.now(UTC)
         row = ResourceRow(
             resource_type="llm_model",
             resource_id=model_alias_id,
             status="active",
+            updated_at=issued_at,
             model_alias_id=model_alias_id,
             alias=alias,
             concrete_model=concrete_model,
@@ -490,6 +494,79 @@ class ModelAliasRepository:
         ).all()
         truncated = len(rows) > limit
         return [project_model_alias(row) for row in rows[:limit]], truncated
+
+    async def replace_assignment(
+        self,
+        model_alias_id: str,
+        *,
+        concrete_model: str,
+        router: str,
+        inference_provider: str,
+        expected_updated_at: datetime,
+        now: datetime | None = None,
+    ) -> ModelAlias | None:
+        """Deterministically replace an alias assignment guarded by optimistic concurrency.
+
+        Returns ``None`` when the alias is absent, inactive, or hidden behind a
+        non-llm resource; raises ``StaleWriteError`` when ``expected_updated_at``
+        no longer matches the stored row. The alias slug itself is immutable.
+        """
+        replacement_at = now or datetime.now(UTC)
+        result = await self._session.execute(
+            update(ResourceRow)
+            .where(
+                ResourceRow.resource_type == "llm_model",
+                ResourceRow.model_alias_id == model_alias_id,
+                ResourceRow.status == "active",
+                ResourceRow.updated_at == expected_updated_at,
+            )
+            .values(
+                concrete_model=concrete_model,
+                router=router,
+                inference_provider=inference_provider,
+                updated_at=replacement_at,
+            )
+            .returning(ResourceRow)
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return project_model_alias(row)
+        if await self.get(model_alias_id) is None:
+            return None
+        raise StaleWriteError(model_alias_id)
+
+    async def replace_status(
+        self,
+        model_alias_id: str,
+        status: str,
+        *,
+        expected_updated_at: datetime,
+        now: datetime | None = None,
+    ) -> ModelAlias | None:
+        """Deterministically replace an alias status guarded by optimistic concurrency.
+
+        Returns ``None`` when the alias is absent, inactive, or hidden behind a
+        non-llm resource; raises ``StaleWriteError`` when ``expected_updated_at``
+        no longer matches the stored row.
+        """
+        replacement_at = now or datetime.now(UTC)
+        result = await self._session.execute(
+            update(ResourceRow)
+            .where(
+                ResourceRow.resource_type == "llm_model",
+                ResourceRow.model_alias_id == model_alias_id,
+                ResourceRow.status == "active",
+                ResourceRow.updated_at == expected_updated_at,
+            )
+            .values(status=status, updated_at=replacement_at)
+            .returning(ResourceRow)
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return project_model_alias(row)
+        if await self.get(model_alias_id) is None:
+            return None
+        raise StaleWriteError(model_alias_id)
 
 
 class GrantRepository:

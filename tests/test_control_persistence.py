@@ -15,6 +15,7 @@ from sre_agent.persistence.repositories import (
     IdempotencyConflictError,
     IdempotencyOutcome,
     IdempotencyRepository,
+    ModelAliasRepository,
     PrincipalRepository,
     StaleWriteError,
 )
@@ -101,6 +102,105 @@ async def test_status_replace_allows_exactly_one_concurrent_writer() -> None:
         stored = await PrincipalRepository(session).get("cas-principal")
     assert stored is not None
     assert stored.updated_at in {original + timedelta(seconds=1), original + timedelta(seconds=2)}
+    await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_alias_assignment_allows_exactly_one_concurrent_writer() -> None:
+    database = Database(DATABASE_URL)
+    original = datetime(2026, 9, 18, tzinfo=UTC)
+    async with database.transaction() as session:
+        await ModelAliasRepository(session).create(
+            "cas-alias",
+            "cas-alias",
+            "openai/gpt-4o-mini",
+            "openrouter",
+            "openai",
+            now=original,
+        )
+
+    barrier = asyncio.Barrier(2)
+
+    async def writer(model: str, updated_at: datetime) -> str:
+        async with database.transaction() as session:
+            repository = ModelAliasRepository(CoordinatedSession(session, barrier))  # type: ignore[arg-type]
+            try:
+                await repository.replace_assignment(
+                    "cas-alias",
+                    concrete_model=model,
+                    router="openrouter",
+                    inference_provider="openai",
+                    expected_updated_at=original,
+                    now=updated_at,
+                )
+            except StaleWriteError:
+                return "stale"
+            return "written"
+
+    results = await asyncio.gather(
+        writer("anthropic/claude-3-5-haiku", original + timedelta(seconds=1)),
+        writer("openai/gpt-4o", original + timedelta(seconds=2)),
+    )
+
+    assert sorted(results) == ["stale", "written"]
+    async with database.transaction() as session:
+        stored = await ModelAliasRepository(session).get("cas-alias")
+    assert stored is not None
+    assert stored.concrete_model in {"anthropic/claude-3-5-haiku", "openai/gpt-4o"}
+    assert stored.updated_at in {
+        original + timedelta(seconds=1),
+        original + timedelta(seconds=2),
+    }
+    await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_alias_mutations_hide_absent_inactive_and_reject_stale_tokens() -> None:
+    database = Database(DATABASE_URL)
+    original = datetime(2026, 9, 18, tzinfo=UTC)
+    async with database.transaction() as session:
+        repository = ModelAliasRepository(session)
+        await repository.create(
+            "cas-retired", "cas-retired", "openai/gpt-4o-mini", "openrouter", "openai"
+        )
+        retired = await repository.get("cas-retired")
+        assert retired is not None
+        await repository.replace_status(
+            "cas-retired", "inactive", expected_updated_at=retired.updated_at
+        )
+
+    async with database.transaction() as session:
+        repository = ModelAliasRepository(session)
+        assert (
+            await repository.replace_assignment(
+                "cas-absent",
+                concrete_model="openai/gpt-4o-mini",
+                router="openrouter",
+                inference_provider="openai",
+                expected_updated_at=original,
+            )
+            is None
+        )
+        assert (
+            await repository.replace_assignment(
+                "cas-retired",
+                concrete_model="openai/gpt-4o-mini",
+                router="openrouter",
+                inference_provider="openai",
+                expected_updated_at=original,
+            )
+            is None
+        )
+        assert (
+            await repository.replace_status("cas-absent", "inactive", expected_updated_at=original)
+            is None
+        )
+        assert (
+            await repository.replace_status("cas-retired", "inactive", expected_updated_at=original)
+            is None
+        )
+        with pytest.raises(StaleWriteError):
+            await repository.replace_status("cas-alias", "inactive", expected_updated_at=original)
     await database.dispose()
 
 
