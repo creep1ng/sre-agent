@@ -6,8 +6,9 @@ it. Issue: #186.
 
 ## Prerequisites
 
-- Docker Engine with Compose v2, **running**. Every operation probes the daemon
-  first and stops with a readable message if it is unreachable.
+- Docker Engine with Compose 2.24 or later, **running**. The overlay uses the
+  `!reset` tag, and every operation probes the daemon first and stops with a
+  readable message if it is unreachable.
 - 4 CPUs, 4 GB of free memory, 15 GB of free disk. Observed on a reference host:
   2.8 GB of memory and 8.7 GB of images.
 - Host ports 8090, 10000 and 9090 free.
@@ -24,7 +25,7 @@ which git ignores.
 |---|---|
 | `up` | Clones the pinned tag if absent, refuses to run over residue, applies the flag baseline, starts the minimal profile and waits for health |
 | `fail` | Switches the declared failure flag on and restarts flagd; synthetic traffic keeps running |
-| `verify` | Checks every service of the project and compares image digests against `demo/digests.lock` |
+| `verify` | Checks every service of the project, compares image digests against `demo/digests.lock`, rejects undeclared host ports and probes Grafana MCP |
 | `reset` | Restores the flag baseline declared in the manifest and restarts flagd |
 | `down` | Stops the environment and confirms no container of the project survived |
 
@@ -40,8 +41,10 @@ removes resources of another project, and none runs a host-wide cleanup such as
     python scripts/demo_env.py reset
     python scripts/demo_env.py down
 
-`verify` exits non-zero when a service is unavailable or a digest no longer
-matches the lock, so the sequence can be scripted.
+`verify` exits non-zero when a service is unavailable, a digest no longer
+matches the lock, an undeclared host port is published, or Grafana MCP stops
+answering or accepts a caller without its token, so the sequence can be
+scripted.
 
 `verify` reports availability, not behaviour: it does not yet tell a degraded
 environment from a healthy one. The injected failure shows as a rise in 5xx
@@ -54,9 +57,10 @@ that does not complete; both return to baseline after `reset`.
 |---|---|---|
 | `otel-demo/` | Upstream checkout at the pinned tag | No |
 | `.demo-state/flagd/` | Flag definitions the project owns and edits | No |
+| `.demo-state/grafana-mcp.env` | Grafana MCP caller token, created by `up` | No |
 | `demo/manifest.yaml` | What the environment is made of | Yes |
 | `demo/digests.lock` | Digests validated for the pinned version | Yes |
-| `compose.demo.yaml` | Overlay mounting the owned flag directory and disabling the flag cache in `checkout` | Yes |
+| `compose.demo.yaml` | Overlay: owned flag directory, no flag cache in `checkout`, Grafana MCP, reset of undeclared host ports | Yes |
 
 The upstream checkout stays pristine: `up` refuses to run if it reports local
 modifications, and the flag working copy is never written back to it.
@@ -88,11 +92,37 @@ for it, so `fail` and `reset` take effect without touching `checkout`.
 returns success and removes nothing, so it checks afterwards that no container
 labelled with the project survived.
 
+## Grafana MCP
+
+`grafana-mcp` runs `grafana/mcp-grafana` 1.3.0 inside the demo. It answers only
+at `http://grafana-mcp:8000/mcp` (streamable HTTP), from a container on one of
+its networks.
+
+- **Read-only.** `--disable-write` plus three tool categories: `prometheus`,
+  `elasticsearch` (the OpenSearch logs) and `datasource`. Ten tools, none of
+  which writes. There is no Jaeger tool; follow a trace from its `trace_id`.
+- **Caller token.** A request without `Authorization: Bearer` and the token in
+  `.demo-state/grafana-mcp.env` gets HTTP 401. `up` creates the token and git
+  ignores it. The gateway will hold it (#187); the harness must never receive it.
+- **No published port.** A `Host` allowlist (`grafana-mcp:8000`) also answers
+  HTTP 403 to any other host name.
+- **Networks.** The demo network, to reach Grafana, and `sre-mcp-boundary`, an
+  internal network reserved for the gateway. The project's `runtime` network,
+  where the harness runs, is not attached: the harness can neither resolve nor
+  route to the MCP.
+
+The MCP reaches Grafana anonymously. Upstream grants the anonymous user Admin,
+so read-only rests on `--disable-write`, not on Grafana; tightening Grafana is
+pending. Do not paste the output of `docker compose config` as evidence: it
+expands the token.
+
 ## Reaching the services
 
 Everything goes through the proxy on 8090: the store at the root, Grafana under
-`/grafana`, Jaeger under `/jaeger/ui`, the flagd UI under `/feature`. Grafana,
-Jaeger and OpenSearch are not published to the host.
+`/grafana`, Jaeger under `/jaeger/ui`, the flagd UI under `/feature`. Upstream
+publishes most services on random host ports; the overlay resets every
+publication the manifest does not declare, so Grafana, Jaeger and OpenSearch
+are reachable only through the proxy.
 
 Do not use the flagd UI to inject failures: it writes to the upstream file and
 `reset` would not know about the change.
