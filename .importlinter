@@ -44,3 +44,18 @@ forbidden_modules =
     fastapi
     sqlalchemy
     httpx
+
+[importlinter:contract:investigator-cannot-reach-state]
+name = Investigator reaches the gateway over HTTP only and cannot write state
+type = forbidden
+source_modules =
+    sre_agent.investigator
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.incident
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.application
+    fastapi
+    sqlalchemy
+    psycopg
