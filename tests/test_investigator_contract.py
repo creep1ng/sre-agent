@@ -11,10 +11,13 @@ from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import ValidationError
 
 from sre_agent.investigator.contract import (
+    InvalidOutput,
     InvestigationRequest,
     InvestigationResult,
     Limits,
+    parse_action,
     task_id_for,
+    unknown_references,
 )
 
 ROOT = Path(__file__).parents[1]
@@ -69,6 +72,51 @@ def test_request_rejects_a_state_without_agentic_step() -> None:
 def test_request_rejects_context_for_a_different_incident() -> None:
     with pytest.raises(ValidationError, match="context incident_id must match request incident_id"):
         request(incident_id="inc-another-incident")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"action": "use_tool", "tool": "query_prometheus", "arguments": {"window": "2m"}}',
+        '{"action": "request_human", "reason": "Evidence is contradictory."}',
+        '{"action": "conclude", "summary": "Payment is unreachable."}',
+        '```json\n{"action": "conclude", "summary": "Payment is unreachable."}\n```',
+    ],
+)
+def test_valid_outputs_parse_into_one_action(text: str) -> None:
+    assert parse_action(text).action in {"use_tool", "request_human", "conclude"}
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "sk-not-a-secret, not json",
+        '{"action": "restart_pod", "target": "payment"}',
+        '{"action": "propose_hypothesis", "statement": "x", "confidence": "high"}',
+        '{"action": "request_human", "reason": "x", "tools": []}',
+        'Answer: {"action": "conclude", "summary": "x"}',
+    ],
+)
+def test_invalid_outputs_are_rejected_without_echoing_them(text: str) -> None:
+    with pytest.raises(InvalidOutput) as raised:
+        parse_action(text)
+
+    assert "sk-not-a-secret" not in str(raised.value)
+
+
+def test_citations_must_exist_in_the_context_or_the_run() -> None:
+    subject = request()
+    uncited = parse_action(
+        '{"action": "propose_hypothesis", "statement": "x", "confidence": "low",'
+        ' "supporting_evidence": ["ev_payment_error_rate", "ev_new", "ev_invented"]}'
+    )
+    mitigation = parse_action(
+        '{"action": "propose_mitigation", "description": "x", "steps": ["Disable the flag"],'
+        ' "risk": "low", "verification_check": "x", "based_on_hypothesis": "hyp_invented"}'
+    )
+
+    assert unknown_references(uncited, subject, collected={"ev_new"}) == ["ev_invented"]
+    assert unknown_references(mitigation, subject) == ["hyp_invented"]
 
 
 def test_task_id_is_derived_from_the_turn() -> None:
