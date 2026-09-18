@@ -121,3 +121,20 @@ The environment MUST publish only the host ports declared in the manifest, and v
 - GIVEN a service publishes a host port the manifest does not declare
 - WHEN verification runs
 - THEN it names the service and the port and exits with a non-zero status
+
+### Requirement: Document the failure's signals
+
+The environment MUST document how the declared failure shows in Prometheus metrics and OpenSearch logs, with the queries and the time window that read it, and MUST link traces by `trace_id` without claiming a trace query through Grafana MCP.
+
+#### Scenario: Signals separate the failure from the baseline
+
+- GIVEN a verified baseline
+- WHEN the documented queries run over the documented window, before the failure, while it is on and after reset
+- THEN error calls and stalled orders appear only while the failure is on
+
+#### Scenario: A stalled order leads to its trace
+
+- GIVEN the failure is on
+- WHEN the documented log query finds an order that never completed
+- THEN its `trace_id` opens the trace in the Jaeger UI, and no MCP tool is used for it
+
