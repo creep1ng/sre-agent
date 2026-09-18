@@ -52,5 +52,5 @@ Every criterion is demonstrated again end to end in PR 6.
 - [x] 2.3 Contract tests, including run-context and incident-state conformance
 - [x] 3.1 Output parsing, reference checks and prompt assembly
 - [x] 4.1 Ports and bounded loop with re-interpretation, transient retry and step budget
-- [ ] 5.1 Gateway client and error mapping; fixture evidence provider
+- [x] 5.1 Gateway client and error mapping; fixture evidence provider
 - [ ] 6.1 Demo server, scenarios, real call through the gateway and operator guide
