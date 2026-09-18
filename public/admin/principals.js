@@ -539,8 +539,10 @@ disconnectButton.addEventListener("click", () => {
     if (deactivateCancel) deactivateCancel.disabled = false;
   }
   if (issueDialog?.open) issueDialog.close();
+  // The holder is always discarded: an in-flight request already captured
+  // its key/body in locals, so a later session can never reuse this key.
+  pendingIssue = null;
   if (!credentialIssueInFlight) {
-    pendingIssue = null;
     issueSubmit.disabled = false;
     issueCancel.disabled = false;
   }

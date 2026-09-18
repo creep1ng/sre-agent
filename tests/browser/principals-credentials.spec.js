@@ -152,22 +152,30 @@ test("keeps one logical issuance across network retry and clears late secrets", 
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
   await openCredentials(page, id);
   await page.click(`[data-issue-credential='${id}']`);
-  await page.route("**/api/**/credentials", (route) => (route.request().method() === "POST" ? route.abort("failed") : route.continue()));
+  const seenKeys = [];
+  let credMode = "abort";
+  await page.route("**/api/**/credentials", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    seenKeys.push(await route.request().headerValue("idempotency-key"));
+    if (credMode === "abort") return route.abort("failed");
+    if (credMode === "delay") {
+      await new Promise((r) => setTimeout(r, 1500));
+      return route.continue();
+    }
+    return route.continue();
+  });
   await page.click("#issue-submit");
   await expect(page.locator("#issue-error-title")).toHaveText("API unavailable", { timeout: 20_000 });
   await expect(page.locator("#secret-dialog")).toBeHidden();
-  await page.unroute("**/api/**/credentials");
+  credMode = "live";
   await page.click("#issue-submit");
   await expect(page.locator("#secret-dialog")).toBeVisible({ timeout: 20_000 });
   await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1, { timeout: 20_000 });
+  expect(seenKeys[1]).toBe(seenKeys[0]);
   await page.click("#secret-close");
   await page.click(`[data-issue-credential='${id}']`);
   await expect(page.locator(`[data-credential-list='${id}']`)).toHaveCount(1, { timeout: 20_000 });
-  await page.route("**/api/**/credentials", async (route) => {
-    if (route.request().method() !== "POST") return route.continue();
-    await new Promise((r) => setTimeout(r, 1500));
-    await route.continue();
-  });
+  credMode = "delay";
   await page.click("#issue-submit");
   await expect(page.locator("#issue-submit")).toBeDisabled();
   await expect(page.locator("#issue-cancel")).toBeDisabled();
@@ -178,5 +186,14 @@ test("keeps one logical issuance across network retry and clears late secrets", 
   await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
   await expect(page.locator("#secret-dialog")).toBeHidden();
   await expect(page.locator("#live-region")).toHaveText("Session cleared.");
+  credMode = "live";
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  await openCredentials(page, id);
+  await page.click(`[data-issue-credential='${id}']`);
+  await page.click("#issue-submit");
+  await expect(page.locator("#secret-dialog")).toBeVisible({ timeout: 20_000 });
+  expect(seenKeys.length).toBe(4);
+  expect(seenKeys.at(-1) !== seenKeys.at(-2)).toBe(true);
   await page.unroute("**/api/**/credentials");
 });
