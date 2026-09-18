@@ -47,7 +47,8 @@ test("lists real principals through the same-origin proxy", async ({ page }) => 
 });
 
 test("expands a principal row to an inline detail", async ({ page }) => {
-  await page.fill("#api-key", apiKey("ADMIN_HUMAN_API_KEY"));
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  await page.fill("#api-key", adminKey);
   await page.click("#connect-button");
   await expect(page.locator("[data-principal-row='admin-human']")).toBeVisible({ timeout: 20_000 });
   await page.click("[data-expand-principal='admin-human']");
@@ -55,7 +56,10 @@ test("expands a principal row to an inline detail", async ({ page }) => {
   await expect(detail).toBeVisible();
   await expect(detail).toContainText("admin-human");
   await expect(detail).toContainText("human");
-  await expect(detail).not.toContainText("sre_");
+  // Credential prefixes are display metadata and may contain "sre_"; only a full key is a leak.
+  await expect(page.locator("[data-credential-list='admin-human'], [data-credentials-empty='admin-human']")).toHaveCount(1, { timeout: 20_000 });
+  const detailText = await detail.innerText();
+  expect(/\bsre_[A-Za-z0-9_-]{24,128}\b/.test(detailText)).toBe(false);
 });
 
 test("rejects an invalid non-empty credential with a real 401", async ({ page }) => {
