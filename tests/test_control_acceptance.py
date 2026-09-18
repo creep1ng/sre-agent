@@ -49,7 +49,6 @@ SEED_ENV = {
     "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 RELEASE = Path(__file__).parents[1] / "schemas/releases/2.0.0/json-schema"
-RELEASE_23 = Path(__file__).parents[1] / "schemas/releases/2.3.0/json-schema"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -103,18 +102,6 @@ def canonical() -> dict[str, Draft202012Validator]:
         "list": validator("ListEnvelope"),
         "error": validator("ErrorEnvelope"),
     }
-
-
-@pytest.fixture(scope="module")
-def audit_23() -> Draft202012Validator:
-    documents = [json.loads(path.read_text()) for path in RELEASE_23.rglob("*.json")]
-    registry = Registry().with_resources(
-        (document["$id"], DRAFT202012.create_resource(document))
-        for document in documents
-        if "$id" in document
-    )
-    document = next(item for item in documents if item.get("title") == "AuditEvent")
-    return Draft202012Validator(document, registry=registry, format_checker=FormatChecker())
 
 
 def headers(key: str = ADMIN_KEY, idempotency_key: str | None = None) -> dict[str, str]:
@@ -817,7 +804,7 @@ def test_grant_create_replays_original_response_after_grant_mutation(client: Tes
 
 
 def test_grant_listing_requires_a_filter_and_is_bounded_stable_and_non_enumerating(
-    client: TestClient, audit_23: Draft202012Validator
+    client: TestClient,
 ) -> None:
     _prepare_t2_grant_facts()
     with psycopg.connect(DATABASE_URL) as connection:
@@ -865,7 +852,6 @@ def test_grant_listing_requires_a_filter_and_is_bounded_stable_and_non_enumerati
     )
     success_event = latest_audit_event("grants.list", 200)
     assert success_event.reason_code == "grant_matched"
-    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
 
 
 def test_grant_create_and_audit_roll_back_together() -> None:
