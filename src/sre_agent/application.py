@@ -3,6 +3,7 @@
 
 import httpx
 from fastapi import FastAPI
+from pathlib import Path
 
 from sre_agent import control, harness, incident
 from sre_agent.gateway import health
@@ -13,8 +14,14 @@ from sre_agent.gateway.providers import LLMProvider
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.control.service import ControlService, control_router
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
+from sre_agent.gateway.incidents import IncidentQueryService, incident_router
+from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
 from sre_agent.settings import Settings
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+INCIDENT_WORKFLOW_PATH = REPOSITORY_ROOT / "agent" / "workflows" / "incident-response.yaml"
 
 
 def create_application(
@@ -62,6 +69,14 @@ def create_application(
     application.state.session_provider = database.sessions
     application.state.database = database
     application.state.llm_provider = provider
+    workflow = load_incident_workflow(INCIDENT_WORKFLOW_PATH)
+    application.include_router(
+        incident_router(
+            IncidentQueryService(
+                database.sessions, workflow, lambda: PostgresIncidentUnitOfWork(database)
+            )
+        )
+    )
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())

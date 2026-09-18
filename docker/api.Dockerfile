@@ -55,6 +55,7 @@ COPY --from=runtime-dependencies /app/.venv /app/.venv
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY src ./src
+COPY agent/workflows ./agent/workflows
 
 USER 65532:65532
 EXPOSE 8000

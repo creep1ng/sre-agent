@@ -13,6 +13,10 @@ ResourceType = Literal[
     "skill",
     "bok_collection",
     "administrative_control",
+    # Approved extension (agent/api/authorization.v1.yaml): the incident workflow
+    # is the stable grantable resource for run-scoped incident actions. Grants over
+    # this type are contracted but not seeded; evaluation denies by default.
+    "incident_workflow",
 ]
 ControlAction = Literal["admin.read", "admin.write"]
 AuditRefValue = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]

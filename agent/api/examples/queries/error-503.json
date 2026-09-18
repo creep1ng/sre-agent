@@ -1,0 +1,36 @@
+{
+  "summary": "Reports unavailable storage as retryable without leaking internals.",
+  "value": {
+    "error": {
+      "code": "storage_unavailable",
+      "message": "Incident storage is temporarily unavailable."
+    },
+    "request_id": "55555555-5555-4555-8555-555555555555",
+    "retryable": true
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/incidents/inc-otel-payment-failure",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 503,
+      "headers": {
+        "Content-Type": "application/json",
+        "Retry-After": "5"
+      },
+      "body": {
+        "error": {
+          "code": "storage_unavailable",
+          "message": "Incident storage is temporarily unavailable."
+        },
+        "request_id": "55555555-5555-4555-8555-555555555555",
+        "retryable": true
+      }
+    }
+  }
+}

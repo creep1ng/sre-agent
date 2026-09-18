@@ -1,0 +1,35 @@
+{
+  "summary": "Rejects an unauthorized incident read without partial content.",
+  "value": {
+    "error": {
+      "code": "not_authorized",
+      "message": "The principal is not authorized to read this incident."
+    },
+    "request_id": "22222222-2222-4222-8222-222222222222",
+    "retryable": false
+  },
+  "x-http-mock": {
+    "request": {
+      "method": "GET",
+      "path": "/v1/incidents/inc-otel-payment-failure",
+      "headers": {
+        "Authorization": "Bearer fixture-token"
+      },
+      "body": null
+    },
+    "response": {
+      "status": 403,
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "not_authorized",
+          "message": "The principal is not authorized to read this incident."
+        },
+        "request_id": "22222222-2222-4222-8222-222222222222",
+        "retryable": false
+      }
+    }
+  }
+}

@@ -186,5 +186,26 @@ export function createAdministrativeApiClient({
         headers: mutationHeaders(idempotencyKey),
       });
     },
+    getIncident(incidentId) {
+      return request(`/v1/incidents/${encodeURIComponent(incidentId)}`);
+    },
+    getIncidentTimeline(incidentId, { runId, after, limit } = {}) {
+      const params = new URLSearchParams();
+      if (runId) params.set("run_id", runId);
+      if (after) params.set("after", after);
+      if (limit !== undefined) params.set("limit", String(limit));
+      const query = params.toString();
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/timeline${query ? `?${query}` : ""}`,
+      );
+    },
+    getIncidentSnapshot(incidentId, { runId } = {}) {
+      const params = new URLSearchParams();
+      if (runId) params.set("run_id", runId);
+      const query = params.toString();
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/snapshot${query ? `?${query}` : ""}`,
+      );
+    },
   });
 }

@@ -1,0 +1,225 @@
+.war-room [hidden] {
+  display: none !important;
+}
+
+.war-room {
+  width: min(100% - 2rem, 88rem);
+  margin: 0 auto;
+  padding: clamp(var(--ma-space-6), 4vw, var(--ma-space-10)) 0 var(--ma-space-12);
+}
+
+.war-room__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--ma-space-6);
+  margin-bottom: var(--ma-space-6);
+}
+
+.war-room__title {
+  margin-bottom: var(--ma-space-2);
+  font-size: var(--ma-font-size-2xl);
+}
+
+.war-room__subtitle {
+  max-width: 46rem;
+  margin: 0;
+  color: var(--ma-color-text-secondary);
+}
+
+.war-room__actions {
+  display: flex;
+  gap: var(--ma-space-3);
+}
+
+.war-room__error {
+  margin-bottom: var(--ma-space-5);
+}
+
+.war-room__credentials,
+.war-room__summary,
+.war-room__timeline {
+  margin-bottom: var(--ma-space-5);
+  overflow: hidden;
+}
+
+.war-room__form {
+  display: grid;
+  gap: var(--ma-space-3);
+  max-width: 32rem;
+}
+
+.war-room__summary-header {
+  align-items: flex-start;
+}
+
+.war-room__badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ma-space-2);
+}
+
+.war-room__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border-bottom: 1px solid var(--ma-color-border-subtle);
+}
+
+.war-room__facts > div {
+  min-width: 0;
+  padding: var(--ma-space-4) var(--ma-space-6);
+}
+
+.war-room__facts > div:nth-child(odd) {
+  border-right: 1px solid var(--ma-color-border-subtle);
+}
+
+.war-room__facts > div:nth-child(-n + 2) {
+  border-bottom: 1px solid var(--ma-color-border-subtle);
+}
+
+.war-room__facts dt {
+  margin-bottom: var(--ma-space-1);
+  color: var(--ma-color-text-tertiary);
+  font-family: var(--ma-font-body);
+  font-size: var(--ma-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.war-room__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--ma-font-body);
+  font-weight: 600;
+}
+
+.war-room__section {
+  border-bottom: 1px solid var(--ma-color-border-subtle);
+  padding: var(--ma-space-5) var(--ma-space-6);
+}
+
+.war-room__section:last-child {
+  border-bottom: 0;
+}
+
+.war-room__section h3 {
+  margin-bottom: var(--ma-space-2);
+  font-size: var(--ma-font-size-md);
+}
+
+.war-room__approvals {
+  display: grid;
+  gap: var(--ma-space-2);
+  list-style: none;
+  margin: var(--ma-space-3) 0 0;
+  padding: 0;
+}
+
+.war-room__approvals li {
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-3);
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-sm);
+}
+
+.war-room__events {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0 0 var(--ma-space-4);
+  padding: 0;
+}
+
+.war-room__event {
+  display: grid;
+  justify-items: start;
+  gap: var(--ma-space-1);
+  border-left: 2px solid var(--ma-color-border-brand);
+  padding: var(--ma-space-3) 0 var(--ma-space-3) var(--ma-space-4);
+}
+
+.war-room__event + .war-room__event {
+  border-top: 1px solid var(--ma-color-border-subtle);
+}
+
+.war-room__event strong {
+  font-size: var(--ma-font-size-md);
+  line-height: var(--ma-line-height-heading);
+}
+
+.war-room__event-meta {
+  color: var(--ma-color-text-tertiary);
+  font-size: var(--ma-font-size-xs);
+}
+
+.war-room__empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--ma-space-2);
+  padding: var(--ma-space-8);
+  text-align: center;
+}
+
+.war-room__empty h3 {
+  margin-bottom: 0;
+  font-size: var(--ma-font-size-lg);
+}
+
+.war-room__empty p {
+  margin: 0;
+  color: var(--ma-color-text-secondary);
+}
+
+.war-room__developer-note {
+  margin: var(--ma-space-5) 0 0;
+  color: var(--ma-color-text-tertiary);
+  font-size: var(--ma-font-size-xs);
+  text-align: center;
+}
+
+@media (max-width: 56rem) {
+  .war-room__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .war-room__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .war-room__facts > div,
+  .war-room__facts > div:nth-child(odd),
+  .war-room__facts > div:nth-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--ma-color-border-subtle);
+  }
+
+  .war-room__facts > div:last-child {
+    border-bottom: 0;
+  }
+
+  .war-room__badges {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 40rem) {
+  .war-room {
+    width: min(100% - 1rem, 88rem);
+    padding-top: var(--ma-space-5);
+  }
+
+  .war-room__actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .war-room__actions .ma-button {
+    width: 100%;
+  }
+}
