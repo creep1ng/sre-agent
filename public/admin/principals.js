@@ -309,12 +309,17 @@ function detailRow(item) {
   } else {
     const note = document.createElement("p");
     note.className = "ma-panel__description";
-    note.textContent = !cached
-      ? "Loading credentials…"
-      : cached.error
-        ? "Credentials unavailable. Collapse and expand to retry."
-        : "No credentials.";
-    if (cached && !cached.error) note.dataset.credentialsEmpty = principalId;
+    if (!cached) {
+      note.textContent = "Loading credentials…";
+    } else if (cached.error) {
+      const [title, detailText] = describeError(cached.error);
+      note.textContent = `${title}. ${detailText}`;
+      note.dataset.credentialsError = principalId;
+      note.dataset.errorKind = cached.error.kind ?? "unknown";
+    } else {
+      note.textContent = "No credentials.";
+      note.dataset.credentialsEmpty = principalId;
+    }
     panel.append(note);
   }
   cell.append(panel);
@@ -404,12 +409,28 @@ async function loadPrincipals() {
       emptyDetail.textContent = "The API returned an empty principals list.";
       countLine.textContent = "No principals.";
       announce("No principals.");
+      expanded.clear();
+      credentialCache.clear();
+      credentialReadVersions.clear();
       return true;
     }
     page.dataset.state = "ready";
     listWrap.hidden = false;
     countLine.textContent = `${currentItems.length} principal${currentItems.length === 1 ? "" : "s"}${payload?.truncated === true ? " (truncated)" : "."}`;
     announce(countLine.textContent);
+    // A refresh orphans pending credential reads (stale generation) without
+    // replacing them: re-request credentials for still-expanded principals
+    // that still exist, and drop vanished ones entirely.
+    const currentIds = new Set(currentItems.map((item) => text(item.principal_id)));
+    for (const principalId of [...expanded]) {
+      if (!currentIds.has(principalId)) {
+        expanded.delete(principalId);
+        credentialCache.delete(principalId);
+        credentialReadVersions.delete(principalId);
+        continue;
+      }
+      loadCredentials(principalId);
+    }
     return true;
   } catch (error) {
     if (generation !== sessionGeneration) return false;

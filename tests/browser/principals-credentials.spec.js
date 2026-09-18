@@ -42,6 +42,12 @@ async function seamIssue(page, key, principalId, idem, body) {
     }
   }, { key, principalId, idem, body });
 }
+async function seamRawList(page, key, principalId) {
+  return page.evaluate(async ({ key, principalId }) => {
+    const res = await fetch(`/api/v1/principals/${encodeURIComponent(principalId)}/credentials`, { headers: { Accept: "application/json", Authorization: `Bearer ${key}` } });
+    return { status: res.status, body: await res.json() };
+  }, { key, principalId });
+}
 async function openCredentials(page, id) {
   await page.click(`[data-expand-principal='${id}']`);
   await expect(page.locator(`[data-principal-detail='${id}']`)).toBeVisible({ timeout: 20_000 });
@@ -247,5 +253,84 @@ test("keeps newer credential metadata when an older list read resolves late", as
   await page.waitForTimeout(500);
   await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1);
   await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("unavailable");
+  await page.unroute(credList);
+});
+test("reloads credentials for expanded principals after principals refresh", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const id = await createActivePrincipal(page, adminKey, "c08");
+  await page.evaluate(async ({ key, principalId }) => {
+    const { createAdministrativeApiClient, createMemoryCredentialStore } = await import("/public/api/client.js");
+    const store = createMemoryCredentialStore();
+    store.set(key);
+    const client = createAdministrativeApiClient({ credentialStore: store });
+    const b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    const idem = `credential-issue-${[...b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+    await client.issueCredential(principalId, {}, idem);
+  }, { key: adminKey, principalId: id });
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  let credGets = 0;
+  const credList = (url) => url.pathname === `/api/v1/principals/${id}/credentials`;
+  await page.route(credList, async (route) => {
+    if (route.request().method() === "GET") credGets += 1;
+    await route.continue();
+  });
+  await openCredentials(page, id);
+  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1, { timeout: 20_000 });
+  await expect.poll(async () => credGets).toBe(1);
+  await page.click("#refresh-button");
+  await expect.poll(async () => credGets).toBeGreaterThanOrEqual(2);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1, { timeout: 20_000 });
+  await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("Loading credentials");
+  await page.unroute(credList);
+});
+test("shows distinct list errors for invalid and restricted sessions", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const restrictedKey = apiKey("RESTRICTED_HARNESS_API_KEY");
+  const id = await createActivePrincipal(page, adminKey, "c09");
+  // Real backend envelopes captured first; replayed below so the UI maps
+  // genuine error payloads while the admin session stays usable. Note: this
+  // list endpoint hides unauthorized callers as 404, never 403.
+  // Current runtime denial for listCredentials is intentionally hidden as 404
+  // resource_not_found; OpenAPI 2.2.0 still permits 403. This controlled response
+  // covers the UI's contractual authorization rendering without claiming a real
+  // 403 runtime path.
+  const bad = await seamRawList(page, "sre_admn_0123456789abcdefghij", id);
+  const denied = await seamRawList(page, restrictedKey, id);
+  expect(bad.status).toBe(401);
+  expect(denied.status).toBe(404);
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  await openCredentials(page, id);
+  const credList = (url) => url.pathname === `/api/v1/principals/${id}/credentials`;
+  let fulfillNext = null;
+  await page.route(credList, async (route) => {
+    if (route.request().method() !== "GET" || fulfillNext === null) return route.continue();
+    const replay = fulfillNext;
+    fulfillNext = null;
+    await route.fulfill({ status: replay.status, contentType: "application/json", body: JSON.stringify(replay.body) });
+  });
+  fulfillNext = bad;
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveText(/Authentication required/, { timeout: 20_000 });
+  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveAttribute("data-error-kind", "authentication");
+  await expect(page.locator(`[data-credential-list='${id}']`)).toHaveCount(0);
+  fulfillNext = denied;
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveText(/Access unavailable/, { timeout: 20_000 });
+  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveAttribute("data-error-kind", "not_found");
+  await expect(page.locator(`[data-credential-list='${id}']`)).toHaveCount(0);
+  fulfillNext = { status: 403, body: denied.body };
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveText(/Access unavailable/, { timeout: 20_000 });
+  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveAttribute("data-error-kind", "authorization");
+  await expect(page.locator(`[data-credential-list='${id}']`)).toHaveCount(0);
   await page.unroute(credList);
 });
