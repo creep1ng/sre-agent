@@ -43,10 +43,10 @@ removes resources of another project, and none runs a host-wide cleanup such as
 `verify` exits non-zero when a service is unavailable or a digest no longer
 matches the lock, so the sequence can be scripted.
 
-`verify` reports availability, not behaviour: it cannot yet tell a degraded
-environment from a healthy one. Confirm the injected failure by placing an order
-in the store, which does not complete while the flag is on and completes again
-after `reset`. A programmatic check is tracked separately.
+`verify` reports availability, not behaviour: it does not yet tell a degraded
+environment from a healthy one. The injected failure shows as a rise in 5xx
+responses at the proxy while the flag is on, and as an order placed in the store
+that does not complete; both return to baseline after `reset`.
 
 ## Where the state lives
 
@@ -56,7 +56,7 @@ after `reset`. A programmatic check is tracked separately.
 | `.demo-state/flagd/` | Flag definitions the project owns and edits | No |
 | `demo/manifest.yaml` | What the environment is made of | Yes |
 | `demo/digests.lock` | Digests validated for the pinned version | Yes |
-| `compose.demo.yaml` | Overlay mounting the owned flag directory | Yes |
+| `compose.demo.yaml` | Overlay mounting the owned flag directory and disabling the flag cache in `checkout` | Yes |
 
 The upstream checkout stays pristine: `up` refuses to run if it reports local
 modifications, and the flag working copy is never written back to it.
@@ -78,6 +78,11 @@ names.
 sustains the traffic that failure injection needs; disabling it would leave the
 environment without signals. `reset` restores the baseline declared in the
 manifest, including flags that carry a rate or targeting rules.
+
+**`checkout` evaluates flags without a cache.** Its flagd provider kept a cached
+evaluation across the flagd restart, so the store went on failing after `reset`
+until `checkout` itself was restarted. The overlay sets `FLAGD_CACHE=disabled`
+for it, so `fail` and `reset` take effect without touching `checkout`.
 
 **`down` confirms what it removed.** A `down` against a mismatched project name
 returns success and removes nothing, so it checks afterwards that no container

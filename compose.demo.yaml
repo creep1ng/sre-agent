@@ -11,3 +11,11 @@ services:
   flagd:
     volumes:
       - ${DEMO_FLAGS_DIR:?run operations through scripts/demo_env.py}:/etc/flagd
+
+  # The flagd provider in checkout kept a cached evaluation after flagd
+  # restarted, so the store went on failing after reset until checkout itself
+  # was restarted. Evaluating on every call lets fail and reset take effect
+  # without touching checkout.
+  checkout:
+    environment:
+      FLAGD_CACHE: disabled
