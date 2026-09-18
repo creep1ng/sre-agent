@@ -153,6 +153,21 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "model_aliases",
     },
+    ("POST", "/v1/catalog/resources"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/catalog/resources"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/catalog/resources/{resource_type}/{id}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
 }
 
 

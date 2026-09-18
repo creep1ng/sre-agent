@@ -277,6 +277,21 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
         '503': { $ref: '#/components/responses/AuditUnavailable' }
   /v1/catalog/resources:
+    post:
+      summary: Create a catalog resource
+      operationId: createCatalogResource
+      tags: [Catalog]
+      description: ADMIN-authoritative closed create for non-llm catalog resources. llm_model stays owned by ModelAliasCreate and is rejected here. Same Idempotency-Key replay/conflict contract as alias and grant creates.
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CatalogCreate' } } } }
+      responses:
+        '201': { description: Catalog resource created or stable replay, content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:resource-catalog-entry:2.3.0' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
     get:
       summary: List catalog resources
       operationId: listCatalogResources
@@ -295,6 +310,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
   /v1/catalog/resources/{resource_type}/{id}:
     get:
       summary: Read a catalog resource
@@ -310,6 +326,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/AuditUnavailable' }
 components:
   securitySchemes: { bearerAuth: { type: http, scheme: bearer } }
   parameters:
@@ -340,7 +357,9 @@ components:
     ActiveInactiveStatus: { type: object, additionalProperties: false, required: [status, expected_updated_at], properties: { status: { enum: [active, inactive] }, expected_updated_at: { type: string, format: date-time } } }
     PrincipalStatusReplace: { type: object, additionalProperties: false, required: [status, expected_updated_at], properties: { status: { enum: [active, inactive] }, expected_updated_at: { type: string, format: date-time } } }
     CredentialIssue: { type: object, additionalProperties: false, properties: { expires_at: { type: [string, 'null'], format: date-time } } }
-    ModelAliasCreate: { type: object, additionalProperties: false, required: [model_alias_id, alias, concrete_model, router, inference_provider], properties: { model_alias_id: { type: string }, alias: { type: string }, concrete_model: { type: string }, router: { type: string }, inference_provider: { type: string } } }
+    ModelAliasCreate: { type: object, additionalProperties: false, required: [model_alias_id, alias, concrete_model, router, inference_provider], properties: { model_alias_id: { type: string }, alias: { type: string }, concrete_model: { type: string }, router: { const: openrouter }, inference_provider: { type: string }, owner_id: { type: string }, source: { const: model_alias }, source_ref: { type: string }, display_name: { type: string }, visibility: { enum: [public, private, hidden] }, description: { type: string }, tags: { type: array, maxItems: 16, items: { type: string } } } }
+    CatalogDiscoverability: { type: object, additionalProperties: false, required: [display_name, visibility, description, tags], properties: { display_name: { type: string, minLength: 1, maxLength: 200 }, visibility: { enum: [public, private, hidden] }, description: { type: string, maxLength: 500 }, tags: { type: array, maxItems: 16, items: { type: string } } } }
+    CatalogCreate: { type: object, additionalProperties: false, required: [resource_type, resource_id, owner_id, source, source_ref, status, discoverability], properties: { resource_type: { enum: [mcp_server, mcp_tool, skill, bok_collection] }, resource_id: { type: string }, owner_id: { type: string }, source: { enum: [mcp, skill, bok] }, source_ref: { type: string }, status: { enum: [registered, draft, published, indexing, active, inactive, revoked] }, discoverability: { $ref: '#/components/schemas/CatalogDiscoverability' } } }
     ModelAliasAssignment: { type: object, additionalProperties: false, required: [concrete_model, router, inference_provider, expected_updated_at], properties: { concrete_model: { type: string }, router: { type: string }, inference_provider: { type: string }, expected_updated_at: { type: string, format: date-time } } }
     GrantCreate: { type: object, additionalProperties: false, required: [grant_id, principal_id, action, resource, effect], properties: { grant_id: { type: string }, principal_id: { type: string }, action: { type: string }, resource: { $ref: 'urn:sre-agent:schema:resource:2.3.0' }, effect: { const: allow } } }
     PrincipalList: { $ref: '#/components/schemas/ListBase', properties: { items: { type: array, maxItems: 100, items: { $ref: 'urn:sre-agent:schema:principal:2.3.0' } } } }

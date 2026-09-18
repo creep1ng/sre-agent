@@ -18,6 +18,7 @@ from sre_agent.governance.dto import (
     Principal,
     PrincipalContext,
     Resource,
+    ResourceCatalogEntry,
 )
 from sre_agent.persistence.api_keys import (
     api_key_prefix,
@@ -36,6 +37,7 @@ from sre_agent.persistence.models import (
 )
 from sre_agent.persistence.projections import (
     project_audit_event,
+    project_catalog_entry,
     project_credential,
     project_grant,
     project_model_alias,
@@ -453,6 +455,12 @@ class ModelAliasRepository:
         inference_provider: str,
         *,
         now: datetime | None = None,
+        owner_id: str | None = None,
+        source_ref: str | None = None,
+        display_name: str | None = None,
+        visibility: str | None = None,
+        description: str | None = None,
+        tags: list[str] | None = None,
     ) -> ModelAlias:
         issued_at = now or datetime.now(UTC)
         row = ResourceRow(
@@ -465,6 +473,13 @@ class ModelAliasRepository:
             concrete_model=concrete_model,
             router=router,
             inference_provider=inference_provider,
+            owner_id=owner_id if owner_id is not None else model_alias_id,
+            source="model_alias",
+            source_ref=source_ref if source_ref is not None else model_alias_id,
+            display_name=display_name if display_name is not None else alias,
+            visibility=visibility if visibility is not None else "private",
+            description=description if description is not None else "",
+            tags=list(tags) if tags is not None else [],
         )
         self._session.add(row)
         await self._session.flush()
@@ -567,6 +582,108 @@ class ModelAliasRepository:
         if await self.get(model_alias_id) is None:
             return None
         raise StaleWriteError(model_alias_id)
+
+
+class CatalogRepository:
+    """Closed owner-backed catalog reads and admin creates over resource rows.
+
+    Only catalog resource types enumerate here; administrative_control never
+    does. Hidden and inactive entries never enumerate in lists and read as
+    the safe 404; revoked and other lifecycle states remain discoverable.
+    The projection never leaks ModelAlias routing or secrets.
+    """
+
+    CATALOG_TYPES = ("llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection")
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        resource_type: str,
+        resource_id: str,
+        owner_id: str,
+        source: str,
+        source_ref: str,
+        status: str,
+        display_name: str,
+        visibility: str,
+        description: str,
+        tags: list[str],
+        *,
+        now: datetime | None = None,
+    ) -> ResourceCatalogEntry:
+        issued_at = now or datetime.now(UTC)
+        row = ResourceRow(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            status=status,
+            updated_at=issued_at,
+            model_alias_id=None,
+            alias=None,
+            concrete_model=None,
+            router=None,
+            inference_provider=None,
+            owner_id=owner_id,
+            source=source,
+            source_ref=source_ref,
+            display_name=display_name,
+            visibility=visibility,
+            description=description,
+            tags=list(tags),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return project_catalog_entry(row)
+
+    async def get(self, resource_type: str, resource_id: str) -> ResourceCatalogEntry | None:
+        row = await self._session.get(ResourceRow, (resource_type, resource_id))
+        if row is None or row.resource_type not in self.CATALOG_TYPES:
+            return None
+        try:
+            return project_catalog_entry(row)
+        except Exception:
+            return None
+
+    async def list(
+        self,
+        *,
+        resource_type: str | None = None,
+        owner_id: str | None = None,
+        status: str | None = None,
+        visibility: str | None = None,
+        limit: int,
+    ) -> tuple[list[ResourceCatalogEntry], bool]:
+        statement = select(ResourceRow).where(
+            ResourceRow.resource_type.in_(self.CATALOG_TYPES),
+            ResourceRow.visibility != "hidden",
+            ResourceRow.status != "inactive",
+        )
+        if resource_type is not None:
+            statement = statement.where(ResourceRow.resource_type == resource_type)
+        if owner_id is not None:
+            statement = statement.where(ResourceRow.owner_id == owner_id)
+        if status is not None:
+            statement = statement.where(ResourceRow.status == status)
+        if visibility is not None:
+            if visibility == "hidden":
+                return [], False
+            statement = statement.where(ResourceRow.visibility == visibility)
+        rows = (
+            await self._session.scalars(
+                statement.order_by(
+                    ResourceRow.resource_type.asc(), ResourceRow.resource_id.asc()
+                ).limit(limit + 1)
+            )
+        ).all()
+        truncated = len(rows) > limit
+        items = []
+        for row in rows[:limit]:
+            try:
+                items.append(project_catalog_entry(row))
+            except Exception:
+                continue
+        return items, truncated
 
 
 class GrantRepository:

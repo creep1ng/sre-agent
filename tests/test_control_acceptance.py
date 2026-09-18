@@ -502,9 +502,11 @@ def test_grant_revocation_is_authorized_convergent_audited_and_immediately_effec
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, alias, "
-            "concrete_model, router, inference_provider) VALUES "
+            "concrete_model, router, inference_provider, owner_id, source, source_ref, "
+            "display_name, visibility, description, tags) VALUES "
             "('llm_model', 't1-alias', 'active', 't1-alias', 't1-alias', "
-            "'openai/gpt-4o-mini', 'openrouter', 'openai')"
+            "'openai/gpt-4o-mini', 'openrouter', 'openai', "
+            "'t1-alias', 'model_alias', 't1-alias', 't1-alias', 'private', '', '[]')"
         )
         connection.execute(
             "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
@@ -715,10 +717,19 @@ def _prepare_t2_grant_facts() -> None:
         ):
             connection.execute(
                 "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
-                "alias, concrete_model, router, inference_provider) VALUES "
+                "alias, concrete_model, router, inference_provider, owner_id, source, "
+                "source_ref, display_name, visibility, description, tags) VALUES "
                 "('llm_model', %s, 'active', %s, %s, 'openai/gpt-4o-mini', "
-                "'openrouter', 'openai') ON CONFLICT DO NOTHING",
-                (resource_id, f"alias-{resource_id}", resource_id),
+                "'openrouter', 'openai', %s, 'model_alias', %s, %s, 'private', '', '[]') "
+                "ON CONFLICT DO NOTHING",
+                (
+                    resource_id,
+                    f"alias-{resource_id}",
+                    resource_id,
+                    f"alias-{resource_id}",
+                    f"alias-{resource_id}",
+                    resource_id,
+                ),
             )
 
 
@@ -1085,10 +1096,19 @@ def test_alias_listing_is_ordered_bounded_and_non_enumerating(
         for suffix in ("a", "b", "c"):
             connection.execute(
                 "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
-                "alias, concrete_model, router, inference_provider) VALUES "
+                "alias, concrete_model, router, inference_provider, owner_id, source, "
+                "source_ref, display_name, visibility, description, tags) VALUES "
                 "( 'llm_model', %s, 'active', %s, %s, 'openai/gpt-4o-mini', "
-                "'openrouter', 'openai') ON CONFLICT DO NOTHING",
-                (f"t3-order-{suffix}", f"t3-order-{suffix}", f"t3-order-{suffix}"),
+                "'openrouter', 'openai', %s, 'model_alias', %s, %s, 'private', '', '[]') "
+                "ON CONFLICT DO NOTHING",
+                (
+                    f"t3-order-{suffix}",
+                    f"t3-order-{suffix}",
+                    f"t3-order-{suffix}",
+                    f"t3-order-{suffix}",
+                    f"t3-order-{suffix}",
+                    f"t3-order-{suffix}",
+                ),
             )
         connection.commit()
 
@@ -1143,15 +1163,21 @@ def test_alias_get_is_authorized_and_non_enumerating(
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
-            "alias, concrete_model, router, inference_provider) VALUES "
+            "alias, concrete_model, router, inference_provider, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags) VALUES "
             "('llm_model', 't3-get-active', 'active', 't3-get-active', 't3-get-active', "
-            "'openai/gpt-4o-mini', 'openrouter', 'openai') ON CONFLICT DO NOTHING"
+            "'openai/gpt-4o-mini', 'openrouter', 'openai', "
+            "'t3-get-active', 'model_alias', 't3-get-active', 't3-get-active', "
+            "'private', '', '[]') ON CONFLICT DO NOTHING"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
-            "alias, concrete_model, router, inference_provider) VALUES "
+            "alias, concrete_model, router, inference_provider, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags) VALUES "
             "('llm_model', 't3-get-retired', 'inactive', 't3-get-retired', 't3-get-retired', "
-            "'openai/gpt-4o-mini', 'openrouter', 'openai') "
+            "'openai/gpt-4o-mini', 'openrouter', 'openai', "
+            "'t3-get-retired', 'model_alias', 't3-get-retired', 't3-get-retired', "
+            "'private', '', '[]') "
             "ON CONFLICT (resource_type, resource_id) DO UPDATE SET status = 'inactive'"
         )
         connection.commit()
@@ -1366,9 +1392,12 @@ def test_alias_status_replace_conflicts_safely_and_hides_retired(
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
-            "alias, concrete_model, router, inference_provider, updated_at) VALUES "
+            "alias, concrete_model, router, inference_provider, updated_at, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags) VALUES "
             "('llm_model', 't5-status-retired', 'inactive', 't5-status-retired', "
-            "'t5-status-retired', 'openai/gpt-4o-mini', 'openrouter', 'openai', now()) "
+            "'t5-status-retired', 'openai/gpt-4o-mini', 'openrouter', 'openai', now(), "
+            "'t5-status-retired', 'model_alias', 't5-status-retired', 't5-status-retired', "
+            "'private', '', '[]') "
             "ON CONFLICT (resource_type, resource_id) DO UPDATE SET status = 'inactive'"
         )
         connection.commit()
@@ -1479,3 +1508,354 @@ def test_alias_mutations_and_audit_roll_back_together(client: TestClient) -> Non
     assert row is not None
     assert (row[0], row[1]) == ("openai/gpt-4o-mini", "active")
     assert row[2].isoformat().replace("+00:00", "Z") == before["updated_at"].replace("+00:00", "Z")
+
+
+def _prepare_t6_catalog_facts() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status) "
+            "VALUES ('administrative_control', 'catalog', 'active') "
+            "ON CONFLICT DO NOTHING"
+        )
+        for action in ("admin.read", "admin.write"):
+            connection.execute(
+                "INSERT INTO grants (grant_id, principal_id, action, resource_type, "
+                "resource_id, effect, status, created_at) VALUES (%s, 'admin-human', %s, "
+                "'administrative_control', 'catalog', 'allow', 'active', now()) "
+                "ON CONFLICT DO NOTHING",
+                (f"grant-admin-human-{action.replace('.', '-')}-catalog", action),
+            )
+        connection.commit()
+
+
+def _t6_body(
+    resource_type: str,
+    resource_id: str,
+    owner_id: str,
+    source: str,
+    status: str,
+    visibility: str = "private",
+) -> dict:
+    return {
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "owner_id": owner_id,
+        "source": source,
+        "source_ref": f"{owner_id}/{resource_id}",
+        "status": status,
+        "discoverability": {
+            "display_name": resource_id,
+            "visibility": visibility,
+            "description": f"T6 {resource_type} {resource_id}.",
+            "tags": ["t6"],
+        },
+    }
+
+
+def test_catalog_create_is_closed_idempotent_owned_and_metadata_only(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
+    _prepare_t6_catalog_facts()
+    _prepare_t3_alias_facts()
+    body = _t6_body("mcp_server", "t6-server", "mcp-platform", "mcp", "registered")
+    request_headers = headers(idempotency_key="create-catalog-t6-unit")
+
+    denied = client.post(
+        "/v1/catalog/resources",
+        json=body,
+        headers=headers(RESTRICTED_KEY, "denied-catalog-t6-unit"),
+    )
+    first = client.post("/v1/catalog/resources", json=body, headers=request_headers)
+    replay = client.post("/v1/catalog/resources", json=body, headers=request_headers)
+    conflict = client.post(
+        "/v1/catalog/resources",
+        json={**body, "status": "active"},
+        headers=request_headers,
+    )
+    rejected_secret = client.post(
+        "/v1/catalog/resources",
+        json={**body, "resource_id": "t6-secret", "router": "do-not-store"},
+        headers=headers(idempotency_key="create-catalog-t6-secret"),
+    )
+    rejected_llm = client.post(
+        "/v1/catalog/resources",
+        json={**body, "resource_type": "llm_model", "source": "model_alias"},
+        headers=headers(idempotency_key="create-catalog-t6-llm"),
+    )
+    rejected_source = client.post(
+        "/v1/catalog/resources",
+        json={**body, "resource_id": "t6-source", "source": "skill"},
+        headers=headers(idempotency_key="create-catalog-t6-source"),
+    )
+
+    assert denied.status_code == 403
+    assert first.status_code == replay.status_code == 201
+    assert first.json() == replay.json()
+    assert first.json()["resource_type"] == "mcp_server"
+    assert first.json()["owner_id"] == "mcp-platform"
+    assert "concrete_model" not in first.text and "router" not in first.text
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "idempotency_conflict"
+    assert rejected_secret.status_code == 422
+    assert rejected_llm.status_code == 422
+    assert rejected_source.status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources "
+                "WHERE resource_type = 'mcp_server' AND resource_id = 't6-server'"
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources WHERE resource_id IN ('t6-secret', 't6-source')"
+            ).fetchone()[0]
+            == 0
+        )
+        audit = connection.execute(
+            "SELECT identity, resource, redacted_content FROM audit_events "
+            "WHERE operation = 'catalog.create' AND response_status = 201 "
+            "ORDER BY occurred_at DESC, event_id DESC LIMIT 1"
+        ).fetchone()
+    assert audit is not None
+    assert audit[0] is not None and audit[1] is not None
+    assert audit[2] is None
+    assert "admin-human" not in json.dumps(audit)
+    success_event = latest_audit_event("catalog.create", 201)
+    conflict_event = latest_audit_event("catalog.create", 409)
+    assert success_event.reason_code == "grant_matched"
+    assert conflict_event.reason_code == "status_conflict"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+    assert_valid(audit_23, conflict_event.model_dump(mode="json", exclude_none=True))
+
+
+def test_catalog_reads_cover_all_five_types_without_routing_leakage(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
+    _prepare_t6_catalog_facts()
+    _prepare_t3_alias_facts()
+    created = client.post(
+        "/v1/model-aliases",
+        json={**alias_body("t6-llm"), "owner_id": "alias-prod"},
+        headers=headers(idempotency_key="create-alias-t6-llm"),
+    )
+    assert created.status_code == 201
+    fixtures = [
+        ("mcp_server", "t6-all-server", "mcp-platform", "mcp", "registered"),
+        ("mcp_tool", "t6-all-tool", "mcp-platform", "mcp", "active"),
+        ("skill", "t6-all-skill", "skill-search", "skill", "published"),
+        ("bok_collection", "t6-all-bok", "bok-docs", "bok", "indexing"),
+    ]
+    for resource_type, resource_id, owner_id, source, status in fixtures:
+        response = client.post(
+            "/v1/catalog/resources",
+            json=_t6_body(resource_type, resource_id, owner_id, source, status, "public"),
+            headers=headers(idempotency_key=f"create-catalog-{resource_id}"),
+        )
+        assert response.status_code == 201, response.text
+
+    llm = client.get("/v1/catalog/resources/llm_model/t6-llm", headers=headers())
+    assert llm.status_code == 200
+    assert llm.json()["owner_id"] == "alias-prod"
+    assert llm.json()["source"] == "model_alias"
+    assert set(llm.json()) == {
+        "resource_type",
+        "resource_id",
+        "owner_id",
+        "status",
+        "source",
+        "source_ref",
+        "discoverability",
+    }
+    assert "concrete_model" not in llm.text and "router" not in llm.text
+
+    for resource_type, resource_id, owner_id, source, status in fixtures:
+        fetched = client.get(
+            f"/v1/catalog/resources/{resource_type}/{resource_id}", headers=headers()
+        )
+        assert fetched.status_code == 200, fetched.text
+        assert fetched.json()["owner_id"] == owner_id
+        assert fetched.json()["source"] == source
+        assert fetched.json()["status"] == status
+        assert "concrete_model" not in fetched.text
+
+    listed = client.get("/v1/catalog/resources?limit=100", headers=headers())
+    assert listed.status_code == 200
+    pairs = {(item["resource_type"], item["resource_id"]) for item in listed.json()["items"]}
+    assert ("llm_model", "t6-llm") in pairs
+    for resource_type, resource_id, _, _, _ in fixtures:
+        assert (resource_type, resource_id) in pairs
+    ordered = [(item["resource_type"], item["resource_id"]) for item in listed.json()["items"]]
+    assert ordered == sorted(ordered)
+    assert all("concrete_model" not in json.dumps(item) for item in listed.json()["items"])
+    success_event = latest_audit_event("catalog.read", 200)
+    assert success_event.reason_code == "grant_matched"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+    list_event = latest_audit_event("catalog.list", 200)
+    assert_valid(audit_23, list_event.model_dump(mode="json", exclude_none=True))
+
+
+def test_catalog_list_is_bounded_stable_and_visibility_filtered(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
+    _prepare_t6_catalog_facts()
+    with psycopg.connect(DATABASE_URL) as connection:
+        for suffix in ("a", "b", "c"):
+            connection.execute(
+                "INSERT INTO resources (resource_type, resource_id, status, owner_id, source, "
+                "source_ref, display_name, visibility, description, tags, updated_at) VALUES "
+                "('skill', %s, 'published', 'skill-search', 'skill', %s, %s, 'public', '', "
+                "'[]', now()) ON CONFLICT DO NOTHING",
+                (f"t6-order-{suffix}", f"skill-search/t6-order-{suffix}", f"t6-order-{suffix}"),
+            )
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags, updated_at) VALUES "
+            "('skill', 't6-hidden', 'published', 'skill-search', 'skill', "
+            "'skill-search/t6-hidden', 't6-hidden', 'hidden', '', '[]', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags, updated_at) VALUES "
+            "('skill', 't6-retired', 'inactive', 'skill-search', 'skill', "
+            "'skill-search/t6-retired', 't6-retired', 'public', '', '[]', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.commit()
+
+    assert client.get("/v1/catalog/resources?limit=0", headers=headers()).status_code == 422
+    assert client.get("/v1/catalog/resources?limit=101", headers=headers()).status_code == 422
+    assert client.get("/v1/catalog/resources?cursor=opaque", headers=headers()).status_code == 422
+    assert (
+        client.get("/v1/catalog/resources?limit=2&unknown=1", headers=headers()).status_code == 422
+    )
+    assert (
+        client.get("/v1/catalog/resources?resource_type=unknown", headers=headers()).status_code
+        == 422
+    )
+    assert (
+        client.get("/v1/catalog/resources?visibility=secret", headers=headers()).status_code == 422
+    )
+    assert client.get("/v1/catalog/resources", headers=headers()).status_code == 200
+    assert client.get("/v1/catalog/resources").status_code == 401
+    denied = client.get("/v1/catalog/resources", headers=headers(RESTRICTED_KEY))
+    assert denied.status_code == 403
+
+    full = client.get("/v1/catalog/resources?resource_type=skill", headers=headers())
+    assert full.status_code == 200
+    identifiers = [item["resource_id"] for item in full.json()["items"]]
+    assert "t6-hidden" not in identifiers and "t6-retired" not in identifiers
+    assert [name for name in identifiers if name.startswith("t6-order-")] == [
+        "t6-order-a",
+        "t6-order-b",
+        "t6-order-c",
+    ]
+    assert identifiers == sorted(identifiers)
+
+    public = client.get("/v1/catalog/resources?visibility=public", headers=headers())
+    assert public.status_code == 200
+    assert all(item["discoverability"]["visibility"] == "public" for item in public.json()["items"])
+    hidden = client.get("/v1/catalog/resources?visibility=hidden", headers=headers())
+    assert hidden.status_code == 200 and hidden.json()["items"] == []
+
+    bounded = client.get("/v1/catalog/resources?limit=2", headers=headers())
+    assert bounded.status_code == 200 and bounded.json()["truncated"] is True
+    assert client.get("/v1/catalog/resources?limit=2", headers=headers()).content == bounded.content
+    success_event = latest_audit_event("catalog.list", 200)
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+
+
+def test_catalog_read_is_authorized_and_non_enumerating(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
+    _prepare_t6_catalog_facts()
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags, updated_at) VALUES "
+            "('mcp_server', 't6-visible', 'registered', 'mcp-platform', 'mcp', "
+            "'mcp-platform/t6-visible', 't6-visible', 'private', '', '[]', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags, updated_at) VALUES "
+            "('mcp_server', 't6-concealed', 'registered', 'mcp-platform', 'mcp', "
+            "'mcp-platform/t6-concealed', 't6-concealed', 'hidden', '', '[]', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, owner_id, source, "
+            "source_ref, display_name, visibility, description, tags, updated_at) VALUES "
+            "('mcp_server', 't6-offline', 'inactive', 'mcp-platform', 'mcp', "
+            "'mcp-platform/t6-offline', 't6-offline', 'private', '', '[]', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.commit()
+
+    assert client.get("/v1/catalog/resources/mcp_server/t6-visible").status_code == 401
+    denied = client.get(
+        "/v1/catalog/resources/mcp_server/t6-visible", headers=headers(RESTRICTED_KEY)
+    )
+    assert denied.status_code == 403
+    assert (
+        client.get("/v1/catalog/resources/unknown/t6-visible", headers=headers()).status_code == 422
+    )
+    assert (
+        client.get("/v1/catalog/resources/mcp_server/INVALID ID", headers=headers()).status_code
+        == 422
+    )
+    for missing in ("t6-absent", "t6-concealed", "t6-offline"):
+        response = client.get(f"/v1/catalog/resources/mcp_server/{missing}", headers=headers())
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "resource_not_found"
+
+    fetched = client.get("/v1/catalog/resources/mcp_server/t6-visible", headers=headers())
+    assert fetched.status_code == 200
+    assert fetched.json()["resource_id"] == "t6-visible"
+    assert "concrete_model" not in fetched.text
+    success_event = latest_audit_event("catalog.read", 200)
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+
+
+def test_catalog_create_and_audit_roll_back_together() -> None:
+    _prepare_t6_catalog_facts()
+
+    class RejectingAudit:
+        async def append(self, event: object) -> object:
+            return event
+
+        async def append_in_transaction(self, event: object, session: object) -> None:
+            raise RuntimeError("intentional catalog create audit rejection")
+
+    app = create_application(
+        Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY), audit_store=RejectingAudit()
+    )
+    body = _t6_body("skill", "t6-rollback", "skill-search", "skill", "draft")
+    with TestClient(app, raise_server_exceptions=False) as failing_client:
+        response = failing_client.post(
+            "/v1/catalog/resources",
+            json=body,
+            headers=headers(idempotency_key="create-catalog-t6-rollback"),
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources "
+                "WHERE resource_type = 'skill' AND resource_id = 't6-rollback'"
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM idempotency_records "
+                "WHERE canonical_path = '/v1/catalog/resources' AND outcome ->> 'resource_id' = "
+                "'skill/t6-rollback'"
+            ).fetchone()[0]
+            == 0
+        )

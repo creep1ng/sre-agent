@@ -6,7 +6,7 @@ import psycopg
 from fastapi import APIRouter, Response, status
 
 ReadinessProbe = Callable[[], Awaitable[None]]
-REQUIRED_SCHEMA_VERSION = "20260918_10"
+REQUIRED_SCHEMA_VERSION = "20260918_11"
 
 
 def postgres_readiness_probe(database_url: str) -> ReadinessProbe:

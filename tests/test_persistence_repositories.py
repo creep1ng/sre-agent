@@ -52,9 +52,11 @@ def repository_database() -> None:
         )
         connection.execute(
             """INSERT INTO resources (resource_type, resource_id, status, updated_at,
-             model_alias_id, alias, concrete_model, router, inference_provider) VALUES
+             model_alias_id, alias, concrete_model, router, inference_provider,
+             owner_id, source, source_ref, display_name, visibility, description, tags) VALUES
             ('llm_model','triage-agent','active',now(),'triage-agent','triage-agent',
-             'openai/gpt-4o-mini','openrouter','openai')"""
+             'openai/gpt-4o-mini','openrouter','openai',
+             'triage-agent','model_alias','triage-agent','triage-agent','private','','[]')"""
         )
         connection.execute(
             """INSERT INTO grants VALUES

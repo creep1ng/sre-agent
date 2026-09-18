@@ -60,7 +60,10 @@
         "aliases.list",
         "aliases.get",
         "aliases.assignment.replace",
-        "aliases.status.replace"
+        "aliases.status.replace",
+        "catalog.create",
+        "catalog.list",
+        "catalog.read"
       ]
     },
     "action": {

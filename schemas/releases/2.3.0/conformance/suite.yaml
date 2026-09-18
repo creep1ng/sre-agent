@@ -60,3 +60,8 @@ obligations:
     fixture: fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v2.3.0.fixture.json
     action: alias-mutation-contract
     command: npm --prefix schemas/tooling run conformance -- --consumer issue-184-t5 --release 2.3.0
+  - id: issue-184.catalog-contract
+    owner: release
+    fixture: fixtures/positive/control.audit.catalog-create-allow.positive.v2.3.0.fixture.json
+    action: catalog-contract
+    command: npm --prefix schemas/tooling run conformance -- --consumer issue-184-t6 --release 2.3.0

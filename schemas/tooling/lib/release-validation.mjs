@@ -15,7 +15,7 @@ const CONSUMERS = ["issue-10", "issue-11", "issue-13", "issue-14", "harness", "u
 const contractLevel = (version) => version.split(".").slice(0, 2).map(Number);
 const consumersForVersion = (version) => {
   const [major, minor] = contractLevel(version);
-  if (major === 2 && minor >= 3) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5"];
+  if (major === 2 && minor >= 3) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6"];
   if (major === 2 && minor >= 2) return [...CONSUMERS, "issue-130", "issue-129"];
   if (major === 2 && minor >= 1) return [...CONSUMERS, "issue-130"];
   return CONSUMERS;
@@ -32,9 +32,10 @@ const POLICY = {
   "issue-184": ["release", "issue-184.grant-revocation-contract", "grant-revocation-contract", "fixtures/positive/control.audit.grants-revoke-allow.positive.v{version}.fixture.json"],
   "issue-184-t2": ["release", "issue-184.grant-create-list-contract", "grant-create-list-contract", "fixtures/positive/control.audit.grants-create-allow.positive.v{version}.fixture.json"],
   "issue-184-t3": ["release", "issue-184.alias-create-read-contract", "alias-create-read-contract", "fixtures/positive/control.audit.aliases-create-allow.positive.v{version}.fixture.json"],
-  "issue-184-t5": ["release", "issue-184.alias-mutation-contract", "alias-mutation-contract", "fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v{version}.fixture.json"]
+  "issue-184-t5": ["release", "issue-184.alias-mutation-contract", "alias-mutation-contract", "fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v{version}.fixture.json"],
+  "issue-184-t6": ["release", "issue-184.catalog-contract", "catalog-contract", "fixtures/positive/control.audit.catalog-create-allow.positive.v{version}.fixture.json"]
 };
-const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
+const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
 const versionedPolicy = (version) => Object.fromEntries(Object.entries(POLICY).map(([consumer, values]) => [consumer, values.map((value) => value.replaceAll("1.0.0", version).replaceAll("{version}", version))]));
 const sorted = (value) => Array.isArray(value) ? value.map(sorted) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])])) : value;
 const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`, canonical = (value) => JSON.stringify(sorted(value));
@@ -82,6 +83,24 @@ async function validateAliasCreateReadContract(root, version) {
   validateFixtures(loaded.schemas, fixtures);
   const operations = fixtures.map(({ data }) => data.operation).sort();
   if (canonical(operations) !== canonical(["aliases.create", "aliases.get", "aliases.list"]) || fixtures.some(({ data }) => data.stage !== "authorization" || data.outcome !== "success" || data.reason_code !== "grant_matched" || data.resource?.resource_type !== "administrative_control")) throw new Error("Alias create/read audit evidence drifted from the authorization contract");
+}
+
+async function validateCatalogContract(root, version) {
+  const loaded = await loadReleaseDirectory(root, "control");
+  const names = ["create", "list", "read"].map((operation) => `positive/control.audit.catalog-${operation}-allow.positive.v${version}.fixture.json`);
+  const fixtures = loaded.fixtures.filter(({ name }) => names.includes(name.replace(/#\d+$/, "")));
+  if (fixtures.length !== names.length) throw new Error("Catalog audit fixtures are incomplete");
+  validateFixtures(loaded.schemas, fixtures);
+  const operations = fixtures.map(({ data }) => data.operation).sort();
+  if (canonical(operations) !== canonical(["catalog.create", "catalog.list", "catalog.read"]) || fixtures.some(({ data }) => data.stage !== "authorization" || data.outcome !== "success" || data.reason_code !== "grant_matched" || data.resource?.resource_type !== "administrative_control")) throw new Error("Catalog audit evidence drifted from the authorization contract");
+  const openapi = await readContractFile(join(root, "openapi/control-plane.yaml"));
+  const post = openapi.paths?.["/v1/catalog/resources"]?.post;
+  if (!post || post.responses?.["409"]?.$ref !== "#/components/responses/Conflict") throw new Error("Catalog create route lacks the idempotency 409 Conflict");
+  const schema = openapi.components?.schemas?.[post.requestBody?.content?.["application/json"]?.schema?.$ref?.split("/").pop()];
+  if (!schema || schema.additionalProperties !== false || !schema.required?.includes("resource_type") || !schema.required?.includes("discoverability")) throw new Error("Catalog create route lacks the closed catalog body");
+  if (schema.properties?.resource_type?.enum?.includes("llm_model")) throw new Error("Catalog create must reject llm_model to preserve ModelAlias routing authority");
+  const list = openapi.paths?.["/v1/catalog/resources"]?.get, read = openapi.paths?.["/v1/catalog/resources/{resource_type}/{id}"]?.get;
+  if (!list || !read || list.responses?.["200"]?.content?.["application/json"]?.schema?.$ref !== `urn:sre-agent:schema:resource-catalog-list:${version}` || read.responses?.["200"]?.content?.["application/json"]?.schema?.$ref !== `urn:sre-agent:schema:resource-catalog-entry:${version}`) throw new Error("Catalog OpenAPI reads are incomplete or version-misaligned");
 }
 
 const RESOURCE_TYPES = [
@@ -164,7 +183,8 @@ const ACTIONS = {
   "grant-revocation-contract": (root) => validateGroup("control", root),
   "grant-create-list-contract": (root, version) => validateGrantCreateListContract(root, version),
   "alias-create-read-contract": (root, version) => validateAliasCreateReadContract(root, version),
-  "alias-mutation-contract": (root, version) => validateAliasMutationContract(root, version)
+  "alias-mutation-contract": (root, version) => validateAliasMutationContract(root, version),
+  "catalog-contract": (root, version) => validateCatalogContract(root, version)
 };
 
 export async function validateCoverage(root = release) {
