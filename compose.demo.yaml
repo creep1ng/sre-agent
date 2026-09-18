@@ -1,0 +1,13 @@
+# External composition overlay for the pinned OpenTelemetry Demo.
+# Passed last, so its values win. See demo/manifest.yaml for the environment.
+#
+# Upstream mounts ./src/flagd, inside its own checkout, as the flagd config
+# directory. Injecting a failure by editing that file would modify the demo,
+# which the issue contract forbids. This overlay replaces the mount with a
+# working copy the project owns, created by scripts/demo_env.py from the
+# upstream definitions. DEMO_FLAGS_DIR is an absolute path set by that script.
+
+services:
+  flagd:
+    volumes:
+      - ${DEMO_FLAGS_DIR:?run operations through scripts/demo_env.py}:/etc/flagd
