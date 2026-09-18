@@ -135,7 +135,8 @@ class AuditEventRow(Base):
             "operation IN ('audit.accept','audit.export','audit.project','audit.redact',"
             "'credentials.authenticate','responses.create','principals.create',"
             "'principals.get','principals.list','principals.status.replace',"
-            "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate')",
+            "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
+            "'grants.create','grants.list','grants.revoke')",
             name="ck_audit_events_operation",
         ),
         CK(

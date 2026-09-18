@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from jsonschema import Draft202012Validator
 
 from sre_agent.control import scopes
@@ -82,6 +82,11 @@ def test_control_grant_actions_cover_read_and_write() -> None:
         "administrative_control",
         "credentials",
     )
+    assert CONTROL_SCOPES[("DELETE", "/v1/grants/{id}")] == (
+        "admin.write",
+        "administrative_control",
+        "grants",
+    )
 
 
 def test_control_scopes_cover_all_routes_exactly_once() -> None:
@@ -94,8 +99,9 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("GET", "/v1/principals/{id}/credentials"),
         ("DELETE", "/v1/credentials/{id}"),
         ("POST", "/v1/credentials/{id}/rotation"),
+        ("DELETE", "/v1/grants/{id}"),
     }
-    assert len({*CONTROL_SCOPES.values()}) == 4
+    assert len({*CONTROL_SCOPES.values()}) == 5
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
 
 
@@ -127,6 +133,7 @@ def test_control_operations_match_scopes() -> None:
     assert CONTROL_OPERATIONS[("POST", "/v1/credentials/{id}/rotation")][0] == (
         "credentials.rotate"
     )
+    assert CONTROL_OPERATIONS[("DELETE", "/v1/grants/{id}")][0] == "grants.revoke"
 
 
 def test_control_projector_rejects_llm_routing_evidence() -> None:
@@ -258,10 +265,11 @@ def _stub_service(monkey_result=None, status=201, payload=None):
     service.get_principal = AsyncMock(
         return_value=JSONResponse(_public_principal(_principal()), 200)
     )
+    service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
     return service
 
 
-def test_router_exposes_all_eight_control_routes() -> None:
+def test_router_exposes_all_control_routes() -> None:
     app = FastAPI()
     app.include_router(control_router(_stub_service()))
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
@@ -276,9 +284,10 @@ def test_router_exposes_all_eight_control_routes() -> None:
         "/v1/principals/{principal_id}/credentials",
         "/v1/credentials/{credential_id}",
         "/v1/credentials/{credential_id}/rotation",
+        "/v1/grants/{grant_id}",
     }
 
-    async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
+    async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response, httpx.Response]:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -290,12 +299,14 @@ def test_router_exposes_all_eight_control_routes() -> None:
                 ),
                 await client.get("/v1/principals/INVALID"),
                 await client.get("/v1/principals?limit=101"),
+                await client.delete("/v1/grants/grant-example"),
             )
 
-    created, bad_path, bad_query = asyncio.run(exercise())
+    created, bad_path, bad_query, revoked = asyncio.run(exercise())
     assert created.status_code in {201, 200}
     assert bad_path.status_code == 200
     assert bad_query.status_code == 200
+    assert revoked.status_code == 204
 
 
 def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:

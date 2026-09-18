@@ -17,10 +17,12 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from pydantic.json_schema import WithJsonSchema
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gateway.responses import TransactionalAuditStore
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import CredentialReference, Principal, PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
@@ -90,6 +92,12 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "admin.write",
         "administrative_control",
         "credentials",
+    ),
+    ("DELETE", "/v1/grants/{id}"): (
+        "grants.revoke",
+        "admin.write",
+        "administrative_control",
+        "grants",
     ),
 }
 assert set(CONTROL_OPERATIONS) == set(CONTROL_SCOPES)
@@ -220,7 +228,9 @@ def _public_principal(principal: Principal) -> dict[str, Any]:
 
 
 class ControlService:  # noqa: E305
-    def __init__(self, sessions: Any, audit: Any, projector: AuditProjector) -> None:
+    def __init__(
+        self, sessions: Any, audit: TransactionalAuditStore, projector: AuditProjector
+    ) -> None:
         self.sessions, self.audit, self.projector = sessions, audit, projector
 
     def _invalid_key(self, value: str | None) -> bool:
@@ -254,6 +264,7 @@ class ControlService:  # noqa: E305
         resource_ref: tuple[str, str] | None = None,
         decision: Any = None,
         authorization_denial_cause: Any = None,
+        audit_session: AsyncSession | None = None,
     ) -> JSONResponse:
         # Terminal audit events must satisfy the control AuditEvent validator:
         # stage=authorization carries identity+resource+decision (no alias);
@@ -271,7 +282,7 @@ class ControlService:  # noqa: E305
         audit_reason = {
             "validation_error": "contract_validation_failed",
             "invalid_idempotency_key": "contract_validation_failed",
-            "idempotency_conflict": "contract_validation_failed",
+            "idempotency_conflict": "status_conflict",
             "credential_inactive": "contract_validation_failed",
             "rotation_failed": "upstream_failed",
             "credential_issuance_failed": "upstream_failed",
@@ -292,7 +303,10 @@ class ControlService:  # noqa: E305
                 decision=audit_decision,
                 authorization_denial_cause=audit_cause,
             )
-            await self.audit.append(event)
+            if audit_session is None:
+                await self.audit.append(event)
+            else:
+                await self.audit.append_in_transaction(event, audit_session)
         except Exception:
             error_code, status, payload = "audit_unavailable", 503, None
         if payload is not None and status != 204:
@@ -1203,6 +1217,82 @@ class ControlService:  # noqa: E305
             decision=evaluation.decision,
         )
 
+    async def revoke_grant(self, grant_id: str, authorization: str | None) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "grants.revoke", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", grant_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session, context.principal, CONTROL_SCOPES[("DELETE", "/v1/grants/{id}")]
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "grants"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session, session.begin():
+            grant = await GrantRepository(session).revoke(grant_id)
+            if grant is None:
+                result = await self._finish(
+                    request_id,
+                    started,
+                    404,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="resource_not_found",
+                    context=context,
+                    resource_ref=("administrative_control", "grants"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            else:
+                result = await self._finish(
+                    request_id,
+                    started,
+                    204,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "grants"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            if result.status_code == 503:
+                await session.rollback()
+            return result
+
 
 def control_router(service: ControlService) -> APIRouter:
     """Typed administrative control-plane router with all eight Issue #147 routes."""
@@ -1514,6 +1604,27 @@ def control_router(service: ControlService) -> APIRouter:
             authorization_from(credentials, request),
             request.headers.get("idempotency-key"),
         )
+        response.status_code = result.status_code
+        return result
+
+    @router.delete(
+        "/v1/grants/{grant_id}",
+        status_code=204,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+    )
+    async def revoke_grant(
+        grant_id: str,
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.revoke_grant(grant_id, authorization_from(credentials, request))
         response.status_code = result.status_code
         return result
 

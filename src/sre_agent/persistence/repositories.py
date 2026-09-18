@@ -453,6 +453,14 @@ class GrantRepository:
         )
         if row is None:
             return None
+        return self._project(row)
+
+    async def get(self, grant_id: str) -> Grant | None:
+        row = await self._session.get(GrantRow, grant_id)
+        return self._project(row) if row is not None else None
+
+    @staticmethod
+    def _project(row: GrantRow) -> Grant:
         return project_grant(
             {
                 "grant_id": row.grant_id,
@@ -467,6 +475,18 @@ class GrantRepository:
                 "created_at": row.created_at,
             }
         )
+
+    async def revoke(self, grant_id: str) -> Grant | None:
+        """Converge an existing direct grant on revoked without deleting its trace."""
+        await self._session.execute(
+            update(GrantRow)
+            .where(GrantRow.grant_id == grant_id, GrantRow.status == "active")
+            .values(status="revoked")
+        )
+        row = await self._session.get(GrantRow, grant_id)
+        if row is None:
+            return None
+        return self._project(row)
 
 
 class AuditRepository:

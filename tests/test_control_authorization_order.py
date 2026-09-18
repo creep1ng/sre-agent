@@ -101,6 +101,11 @@ def _context() -> PrincipalContext:
             ),
             403,
         ),
+        (
+            ("DELETE", "/v1/grants/{id}"),
+            lambda service: service.revoke_grant("grant-target-human", "Bearer safe-key"),
+            403,
+        ),
     ],
 )
 def test_engine_denial_precedes_target_access_for_every_control_operation(
@@ -115,6 +120,7 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
     for repository in (
         "PrincipalRepository",
         "CredentialRepository",
+        "GrantRepository",
         "IdempotencyRepository",
     ):
         monkeypatch.setattr(service_module, repository, _TargetAccessed)
