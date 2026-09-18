@@ -32,11 +32,28 @@ const createCancel = document.getElementById("create-cancel");
 const createErrorBox = document.getElementById("create-error");
 const createErrorTitle = document.getElementById("create-error-title");
 const createErrorDetail = document.getElementById("create-error-detail");
+const deactivateDialog = document.getElementById("deactivate-dialog");
+const deactivateForm = document.getElementById("deactivate-form");
+const deactivateTitle = document.getElementById("deactivate-title");
+const deactivateDetail = document.getElementById("deactivate-detail");
+const deactivateSubmit = document.getElementById("deactivate-submit");
+const deactivateCancel = document.getElementById("deactivate-cancel");
+const deactivateErrorBox = document.getElementById("deactivate-error");
+const deactivateErrorTitle = document.getElementById("deactivate-error-title");
+const deactivateErrorDetail = document.getElementById("deactivate-error-detail");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 const expanded = new Set();
 let currentItems = [];
+// Per-principal read version: every authoritative write of one Principal
+// bumps its version, and a detail GET resolving with an older version never
+// writes. A status mutation is not a session change, so sessionGeneration
+// alone cannot invalidate it.
+const principalVersions = new Map();
+const principalVersionOf = (principalId) => principalVersions.get(principalId) ?? 0;
+const touchPrincipalVersion = (principalId) =>
+  principalVersions.set(principalId, principalVersionOf(principalId) + 1);
 // Monotonic load generation: every loadPrincipals() call owns the UI until a
 // newer load starts or the session is cleared. A late resolution from a
 // previous generation (e.g. fetched with an older credential) must never
@@ -59,6 +76,9 @@ let pendingCreateBodyKey = null;
 // Real-request lock (B1): independent of dialog state. Set while POST +
 // authoritative refresh settle; never cleared by open/cancel/disconnect.
 let createInFlight = false;
+// Real-request lock (B2): PUT status settle; never cleared by UI.
+let statusInFlight = false;
+let pendingDeactivate = null;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const known = (value, allowed) => (allowed.has(value) ? value : "unknown");
@@ -122,6 +142,30 @@ function showCreateError(error) {
   announce(`${title}. ${detail}`);
 }
 
+function hideDeactivateError() {
+  deactivateErrorBox.hidden = true;
+  deactivateErrorTitle.textContent = "";
+  deactivateErrorDetail.textContent = "";
+}
+
+function describeStatusError(error) {
+  if (error?.kind === "api" && error?.code === "validation_error")
+    return ["Invalid status change", "Check the principal state. Nothing was changed."];
+  if (error?.kind === "api" && error?.code === "audit_unavailable")
+    return ["Service unavailable", "The request was not completed. Refresh and retry."];
+  if (error?.kind === "api" || error?.kind === "invalid_response")
+    return ["Request failed", error?.message ?? "Unexpected error. Nothing was changed."];
+  return describeError(error);
+}
+
+function showDeactivateError(error) {
+  const [title, detail] = describeStatusError(error);
+  deactivateErrorTitle.textContent = title;
+  deactivateErrorDetail.textContent = detail;
+  deactivateErrorBox.hidden = false;
+  announce(`${title}. ${detail}`);
+}
+
 function validateCreateFields() {
   const principalId = createPrincipalId.value.trim();
   const displayName = createDisplayName.value.trim();
@@ -176,6 +220,20 @@ function detailRow(item) {
     list.append(name, data);
   }
   panel.append(title, list);
+  if (item.status === "active") {
+    const deactivate = document.createElement("button");
+    deactivate.className = "ma-button ma-button--secondary ma-button--small";
+    deactivate.type = "button";
+    deactivate.dataset.deactivatePrincipal = principalId;
+    deactivate.textContent = "Deactivate";
+    panel.append(deactivate);
+  } else {
+    const noAction = document.createElement("p");
+    noAction.className = "ma-panel__description";
+    noAction.dataset.deactivateUnavailable = principalId;
+    noAction.textContent = "No actions available.";
+    panel.append(noAction);
+  }
   cell.append(panel);
   detail.append(cell);
   return detail;
@@ -264,7 +322,30 @@ async function loadPrincipals() {
   }
 }
 
+function openDeactivateDialog(principalId) {
+  const item = currentItems.find((entry) => text(entry.principal_id) === principalId);
+  if (!item || item.status !== "active" || typeof item.updated_at !== "string") return;
+  hideDeactivateError();
+  pendingDeactivate = { principalId, expected_updated_at: item.updated_at };
+  deactivateTitle.textContent = `Deactivate ${principalId}?`;
+  deactivateDetail.textContent = `Principal ${principalId} is active.`;
+  if (!statusInFlight) {
+    deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+  if (!deactivateDialog.open) {
+    if (typeof deactivateDialog.showModal === "function") deactivateDialog.showModal();
+    else deactivateDialog.setAttribute("open", "");
+  }
+  deactivateSubmit.focus();
+}
+
 rowsBody.addEventListener("click", async (event) => {
+  const deactivate = event.target.closest("[data-deactivate-principal]");
+  if (deactivate) {
+    openDeactivateDialog(deactivate.dataset.deactivatePrincipal);
+    return;
+  }
   const toggle = event.target.closest("[data-expand-principal]");
   if (!toggle) return;
   const principalId = toggle.dataset.expandPrincipal;
@@ -274,15 +355,18 @@ rowsBody.addEventListener("click", async (event) => {
     return;
   }
   const generation = sessionGeneration;
+  const itemVersion = principalVersionOf(principalId);
   try {
     // Capture the session generation before the detail request: a late
     // resolution must not mutate items, DOM, expanded, error or live region
     // once the session changed or was cleared.
     const item = await controlApi.getPrincipal(principalId);
     if (generation !== sessionGeneration) return;
+    if (itemVersion !== principalVersionOf(principalId)) return;
     const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
     if (index >= 0) currentItems[index] = item;
     else currentItems = [...currentItems, item];
+    touchPrincipalVersion(principalId);
     expanded.add(principalId);
     renderRows();
   } catch (error) {
@@ -316,6 +400,7 @@ disconnectButton.addEventListener("click", () => {
   credentialStore.clear();
   expanded.clear();
   currentItems = [];
+  principalVersions.clear();
   renderRows();
   hideError();
   // Clear may close the UI and invalidate the generation, but it never
@@ -331,6 +416,13 @@ disconnectButton.addEventListener("click", () => {
     if (createSubmit) createSubmit.disabled = false;
     if (createCancel) createCancel.disabled = false;
   }
+  if (deactivateDialog?.open) deactivateDialog.close();
+  hideDeactivateError();
+  if (!statusInFlight) {
+    pendingDeactivate = null;
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
   loadingState.hidden = true;
   listWrap.hidden = true;
   listEmpty.hidden = false;
@@ -338,6 +430,86 @@ disconnectButton.addEventListener("click", () => {
   countLine.textContent = "Not loaded.";
   page.dataset.state = "idle";
   announce("Session cleared.");
+});
+
+deactivateDialog.addEventListener("cancel", (event) => {
+  if (statusInFlight) event.preventDefault();
+});
+
+deactivateCancel.addEventListener("click", () => {
+  if (statusInFlight) return;
+  deactivateDialog.close();
+});
+
+deactivateForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (statusInFlight) return;
+  if (deactivateSubmit.disabled) return;
+  if (!pendingDeactivate) return;
+  hideDeactivateError();
+  // expected_updated_at from dialog open (authoritative); no second PUT.
+  const generation = sessionGeneration;
+  const { principalId, expected_updated_at } = pendingDeactivate;
+  statusInFlight = true;
+  deactivateSubmit.disabled = true;
+  if (deactivateCancel) deactivateCancel.disabled = true;
+  let allowRetry = true;
+  try {
+    const updated = await controlApi.replacePrincipalStatus(principalId, {
+      status: "inactive",
+      expected_updated_at,
+    });
+    if (generation !== sessionGeneration) return;
+    const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
+    if (index >= 0) currentItems[index] = updated;
+    else currentItems = [...currentItems, updated];
+    touchPrincipalVersion(principalId);
+    pendingDeactivate = null;
+    deactivateDialog.close();
+    renderRows();
+    announce(`Principal ${principalId} deactivated.`);
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    const isConflict =
+      error?.kind === "conflict" || (error?.kind === "api" && error?.code === "status_conflict");
+    showDeactivateError(error);
+    if (isConflict) {
+      allowRetry = false;
+      try {
+        const fresh = await controlApi.getPrincipal(principalId);
+        if (generation !== sessionGeneration) return;
+        const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
+        if (index >= 0) currentItems[index] = fresh;
+        else currentItems = [...currentItems, fresh];
+        touchPrincipalVersion(principalId);
+        if (fresh?.status === "active" && typeof fresh?.updated_at === "string") {
+          pendingDeactivate = { principalId, expected_updated_at: fresh.updated_at };
+          allowRetry = true;
+          renderRows();
+          showDeactivateError(error);
+        } else if (fresh?.status !== "active") {
+          pendingDeactivate = null;
+          deactivateDialog.close();
+          renderRows();
+          announce(`Principal ${principalId} is now inactive.`);
+        } else {
+          pendingDeactivate = null;
+          showDeactivateError({
+            kind: "invalid_response",
+            message: "The principal refresh was unusable. Collapse and expand to retry.",
+          });
+        }
+      } catch (refreshError) {
+        if (generation !== sessionGeneration) return;
+        pendingDeactivate = null;
+        showDeactivateError(refreshError);
+      }
+    }
+  } finally {
+    statusInFlight = false;
+    if (allowRetry && deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
 });
 
 refreshButton.addEventListener("click", () => {
