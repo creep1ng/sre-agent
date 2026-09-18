@@ -63,6 +63,16 @@ class DecisionDraft:
 
 
 @dataclass(frozen=True, slots=True)
+class DecisionRecord:
+    decision_id: str
+    incident_id: str
+    run_id: str | None
+    turn_id: str | None
+    document: JsonDocument
+    decided_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class SnapshotDraft:
     snapshot_id: str
     incident_state: JsonDocument
@@ -125,6 +135,8 @@ class RunRepository(Protocol):
         self, run_id: str, incident_id: str, state: JsonDocument, *, now: datetime
     ) -> RunRecord: ...
 
+    async def list_ids(self, incident_id: str) -> tuple[str, ...]: ...
+
 
 class EventRepository(Protocol):
     async def list_after(
@@ -144,12 +156,19 @@ class TextContextRepository(Protocol):
     async def append(self, context: TextContextRecord) -> None: ...
 
 
+class DecisionRepository(Protocol):
+    """Read-only access to persisted decision documents for timeline attribution."""
+
+    async def get(self, decision_id: str) -> DecisionRecord | None: ...
+
+
 class IncidentUnitOfWork(Protocol):
     incidents: IncidentRepository
     runs: RunRepository
     events: EventRepository
     snapshots: SnapshotRepository
     text_context: TextContextRepository
+    decisions: DecisionRepository
 
     async def __aenter__(self) -> Self: ...
 
