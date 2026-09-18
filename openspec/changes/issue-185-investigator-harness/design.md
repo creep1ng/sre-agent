@@ -35,6 +35,10 @@ The result status uses the run-state `terminated_reason` values, so #35 applies 
 | Budget exhausted | `max_steps` | None |
 | Any other gateway status | `needs_human` | None; `detail` names the status |
 
+## Decision: Every turn re-sends the whole state
+
+The Responses contract has no message array, so each turn is self-contained. Its input carries the instructions, the declared context, the authorized tools, the evidence collected so far, the tool calls already made, the steps left and, on a re-interpretation, why the previous reply was rejected. Evidence summaries are presented as data returned by tools, never as instructions.
+
 ## Decision: Validate references before use
 
 A tool is authorized when a capability has `resource_type: mcp_tool`, its `resource_id` equals the tool name and its action is empty or `invoke`. The gateway stays the enforcement point; this check keeps an unauthorized request from reaching the provider at all. A citation (`supporting_evidence`, `based_on_hypothesis`) must name an item of the received context or evidence collected earlier in the same run. An unknown citation is an invalid output and shares the single re-interpretation retry.

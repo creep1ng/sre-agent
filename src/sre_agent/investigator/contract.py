@@ -7,6 +7,7 @@ result. It never writes incident state: the incident runtime decides what to app
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -16,6 +17,8 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
+    TypeAdapter,
+    ValidationError,
     model_validator,
 )
 
@@ -30,6 +33,7 @@ Status = Literal[
     "completed", "needs_human", "denied", "max_steps", "invalid_output", "upstream_unavailable"
 ]
 _TURN = re.compile(r"^turn_[a-z0-9]{8,32}$")
+_FENCE = re.compile(r"^```(?:json)?[ \t]*\n(?P<body>.*)\n```$", re.DOTALL)
 
 
 class _Strict(BaseModel):
@@ -129,6 +133,41 @@ class Conclude(_Strict):
 
 Outcome = ProposeHypothesis | ProposeMitigation | RequestHuman | Conclude
 Action = UseTool | Outcome
+_ACTIONS: TypeAdapter[Action] = TypeAdapter(Annotated[Action, Field(discriminator="action")])
+
+
+class InvalidOutput(ValueError):
+    """The model output is not exactly one valid action."""
+
+
+def parse_action(text: str) -> Action:
+    """Parse one JSON action, tolerating a single surrounding Markdown code fence."""
+    body = text.strip()
+    if fenced := _FENCE.fullmatch(body):
+        body = fenced["body"]
+    try:
+        return _ACTIONS.validate_json(body)
+    except ValidationError as error:
+        problems = [
+            f"{'.'.join(map(str, item['loc'])) or 'output'}: {item['msg']}"
+            for item in error.errors(include_url=False)[:3]
+        ]
+        raise InvalidOutput("; ".join(problems)) from None
+
+
+def unknown_references(
+    action: Action, request: InvestigationRequest, collected: Collection[str] = ()
+) -> list[str]:
+    """Citations that name nothing in the received context or in this run's evidence."""
+    evidence = {item.evidence_id for item in request.context.evidence} | set(collected)
+    hypotheses = {item.hypothesis_id for item in request.context.hypotheses}
+    unknown: list[str] = []
+    if isinstance(action, ProposeHypothesis | Conclude):
+        unknown += [ref for ref in action.supporting_evidence if ref not in evidence]
+    if isinstance(action, ProposeMitigation) and action.based_on_hypothesis is not None:
+        if action.based_on_hypothesis not in hypotheses:
+            unknown.append(action.based_on_hypothesis)
+    return unknown
 
 
 def task_id_for(turn_id: str) -> str:

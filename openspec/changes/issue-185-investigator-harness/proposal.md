@@ -43,9 +43,10 @@ A stateless reducer in `src/sre_agent/investigator/`, as ADR-007 decides. Each t
 | `openspec/changes/issue-185-investigator-harness/` | Added, PR 1 | Proposal, design, tasks, capability delta |
 | `src/sre_agent/investigator/contract.py` | Added, PR 2 | Request, actions, result, limits, correlation |
 | `.importlinter`, mypy scope | Modified, PR 2 | The package cannot reach persistence, incident or gateway code; strict typing |
-| `src/sre_agent/investigator/` loop | Added, PR 3 | Bounded loop |
-| `src/sre_agent/investigator/` client, provider | Added, PR 4 | Gateway client, fixture provider |
-| Demo server, scenarios, `docs/investigator.md` | Added, PR 5 | Deterministic scenarios and operator guide |
+| `contract.py` parsing, `prompt.py` | Added, PR 3 | Output interpretation, reference checks, turn input |
+| `src/sre_agent/investigator/` ports, loop | Added, PR 4 | Bounded loop |
+| `src/sre_agent/investigator/` client, provider | Added, PR 5 | Gateway client, fixture provider |
+| Demo server, scenarios, `docs/investigator.md` | Added, PR 6 | Deterministic scenarios and operator guide |
 
 ## Rollback
 
