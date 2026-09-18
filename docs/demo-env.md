@@ -47,9 +47,8 @@ answering or accepts a caller without its token, so the sequence can be
 scripted.
 
 `verify` reports availability, not behaviour: it does not yet tell a degraded
-environment from a healthy one. The injected failure shows as a rise in 5xx
-responses at the proxy while the flag is on, and as an order placed in the store
-that does not complete; both return to baseline after `reset`.
+environment from a healthy one. How the injected failure shows in metrics, logs
+and traces, and how to read it, is in [demo-signals.md](demo-signals.md).
 
 ## Where the state lives
 
