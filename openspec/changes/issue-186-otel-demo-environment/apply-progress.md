@@ -8,8 +8,8 @@ pull request inside the size budget.
 | 1 | Planning artifacts, manifest, digest lock, env overrides | 1 | Merged |
 | 2a | Lifecycle: `up`, `verify`, `down`, composition overlay, operator guide | 2, partial | Open, #273 |
 | 2b | Failure cycle: `fail` and `reset` | 2, complete | Open, #275 |
-| 3a | Grafana MCP, its network boundary, MCP and port checks in `verify` | 3 | This PR |
-| 3b | Signal guide and sanitized output of two cycles | 4 | Pending |
+| 3a | Grafana MCP, its network boundary, MCP and port checks in `verify` | 3 | Open, #291 |
+| 3b | Signal guide and sanitized output of two cycles | 4 | This PR |
 
 PR 3 is split in two because the MCP boundary and the signal guide carry
 different evidence and would not fit one review budget together.
@@ -82,4 +82,23 @@ queries answered through Grafana's datasources, and a container outside the demo
 network unable to resolve it. `query_elasticsearch` works against the
 `grafana-opensearch-datasource` plugin the demo provisions. The image reports
 its version as `(devel)`, so the pin rests on the digest in `demo/digests.lock`.
+
+## PR 3b findings
+
+**checkout does not log the failure.** A first reading searched for `ERROR`
+logs and found only the Collector's own, about fifty per window in every state,
+from Kafka and PostgreSQL receivers without a target in the minimal profile.
+The checkout source returns a failed charge to its caller without logging it;
+its `INFO` logs mark the stages of an order instead. The log signal is therefore
+an order that reaches `[PlaceOrder]` and never `order placed`, confirmed by the
+proxy access logs of `POST /api/checkout` answering 500.
+
+**Measured over two cycles on the reference host**, two-minute windows read 150
+seconds after each operation: error calls in checkout went from 0 to 12 and back
+to 0 in both cycles, split evenly between `PlaceOrder` and
+`PaymentService/Charge`; every order stalled while the flag was on and every
+checkout request answered 500; after each `reset` orders completed and the proxy
+answered 200. One order in flight at the edge of a window appeared started
+without completion after the second `reset`, so the guide reads the log signal
+together with the metrics and the proxy codes, never alone.
 
