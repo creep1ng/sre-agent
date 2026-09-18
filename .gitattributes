@@ -1,0 +1,6 @@
+# Scripts that run inside Linux containers must keep LF endings. Git for Windows
+# checks files out with CRLF by default, which puts a CR in the shebang: the
+# harness then fails with "exec /usr/local/bin/harness-entrypoint: no such file
+# or directory". The committed blobs are already LF; this fixes the checkout.
+*.sh text eol=lf
+scripts/worktree-compose text eol=lf
