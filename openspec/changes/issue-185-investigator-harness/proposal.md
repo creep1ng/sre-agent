@@ -46,7 +46,8 @@ A stateless reducer in `src/sre_agent/investigator/`, as ADR-007 decides. Each t
 | `contract.py` parsing, `prompt.py` | Added, PR 3 | Output interpretation, reference checks, turn input |
 | `src/sre_agent/investigator/` ports, loop | Added, PR 4 | Bounded loop |
 | `src/sre_agent/investigator/` client, provider | Added, PR 5 | Gateway client, fixture provider |
-| Demo server, scenarios, `docs/investigator.md` | Added, PR 6 | Deterministic scenarios and operator guide |
+| `scripts/investigator_demo.py`, `docs/investigator.md` | Added, PR 6 | Deterministic scenarios and operator guide |
+| Live call evidence | Added, PR 7 | One run through the real gateway |
 
 ## Rollback
 
