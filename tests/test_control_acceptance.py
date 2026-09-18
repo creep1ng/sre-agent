@@ -690,9 +690,7 @@ def _prepare_t2_grant_facts() -> None:
             )
 
 
-def test_grant_create_is_closed_idempotent_owned_and_metadata_only(
-    client: TestClient
-) -> None:
+def test_grant_create_is_closed_idempotent_owned_and_metadata_only(client: TestClient) -> None:
     _prepare_t2_grant_facts()
     body = {
         "grant_id": "grant-t2-created",
@@ -928,9 +926,7 @@ def _prepare_t3_alias_facts() -> None:
         connection.commit()
 
 
-def test_alias_create_is_closed_idempotent_owned_and_metadata_only(
-    client: TestClient
-) -> None:
+def test_alias_create_is_closed_idempotent_owned_and_metadata_only(client: TestClient) -> None:
     _prepare_t3_alias_facts()
     body = alias_body("t3-created")
     request_headers = headers(idempotency_key="create-alias-t3-unit")
@@ -1040,9 +1036,7 @@ def test_alias_create_replays_original_response_after_alias_mutation(client: Tes
     assert stored[0] == first.json()
 
 
-def test_alias_listing_is_ordered_bounded_and_non_enumerating(
-    client: TestClient
-) -> None:
+def test_alias_listing_is_ordered_bounded_and_non_enumerating(client: TestClient) -> None:
     _prepare_t3_alias_facts()
     with psycopg.connect(DATABASE_URL) as connection:
         for suffix in ("a", "b", "c"):
@@ -1090,9 +1084,7 @@ def test_alias_listing_is_ordered_bounded_and_non_enumerating(
     assert success_event.reason_code == "grant_matched"
 
 
-def test_alias_get_is_authorized_and_non_enumerating(
-    client: TestClient
-) -> None:
+def test_alias_get_is_authorized_and_non_enumerating(client: TestClient) -> None:
     _prepare_t3_alias_facts()
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(

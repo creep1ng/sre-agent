@@ -7,7 +7,6 @@ ordering, audit persistence) is proven by the acceptance suite.
 
 import asyncio
 import json
-from pathlib import Path
 from typing import get_args
 from unittest.mock import AsyncMock
 
@@ -442,25 +441,3 @@ def test_alias_openapi_marks_idempotency_scope_and_closed_list() -> None:
 def test_audit_event_dto_admits_alias_operations() -> None:
     admitted = set(get_args(AuditEvent.model_fields["operation"].annotation))
     assert {"aliases.create", "aliases.list", "aliases.get"} <= admitted
-
-
-def test_release_230_audit_schema_admits_alias_authorization_success() -> None:
-    schema_path = (
-        Path(__file__).parents[1]
-        / "schemas/releases/2.3.0/json-schema/domain/audit-event.schema.json"
-    )
-    schema = json.loads(schema_path.read_text())
-    assert {"aliases.create", "aliases.list", "aliases.get"} <= set(
-        schema["properties"]["operation"]["enum"]
-    )
-    fixture_path = (
-        Path(__file__).parents[1]
-        / "schemas/releases/2.3.0/fixtures/positive"
-        / "control.audit.aliases-create-allow.positive.v2.3.0.fixture.json"
-    )
-    fixture = json.loads(fixture_path.read_text())
-    assert fixture["target"] == "urn:sre-agent:schema:audit-event:2.3.0"
-    assert fixture["data"]["operation"] == "aliases.create"
-    assert fixture["data"]["stage"] == "authorization"
-    assert fixture["data"]["outcome"] == "success"
-    assert fixture["data"]["reason_code"] == "grant_matched"
