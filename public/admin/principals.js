@@ -94,6 +94,17 @@ let credentialIssueInFlight = false;
 let pendingIssue = null;
 let pendingSecret = null;
 const credentialCache = new Map();
+// Read version per Principal for its credential collection: every new
+// listCredentials read invalidates older ones, so only the latest read
+// may write the cache. Separate from B2 principalVersions, which guards
+// the Principal object itself.
+const credentialReadVersions = new Map();
+const credentialReadVersionOf = (principalId) => credentialReadVersions.get(principalId) ?? 0;
+const touchCredentialReadVersion = (principalId) => {
+  const next = credentialReadVersionOf(principalId) + 1;
+  credentialReadVersions.set(principalId, next);
+  return next;
+};
 
 const text = (value) => (typeof value === "string" ? value : "");
 const known = (value, allowed) => (allowed.has(value) ? value : "unknown");
@@ -350,9 +361,11 @@ function renderRows() {
 
 async function loadCredentials(principalId) {
   const generation = sessionGeneration;
+  const readVersion = touchCredentialReadVersion(principalId);
   try {
     const payload = await controlApi.listCredentials(principalId);
     if (generation !== sessionGeneration) return false;
+    if (readVersion !== credentialReadVersionOf(principalId)) return false;
     credentialCache.set(principalId, {
       items: Array.isArray(payload?.items) ? payload.items : [],
       error: null,
@@ -362,6 +375,7 @@ async function loadCredentials(principalId) {
     return true;
   } catch (error) {
     if (generation !== sessionGeneration) return false;
+    if (readVersion !== credentialReadVersionOf(principalId)) return false;
     credentialCache.set(principalId, { items: [], error, loading: false });
     if (expanded.has(principalId)) renderRows();
     return false;
@@ -549,6 +563,7 @@ disconnectButton.addEventListener("click", () => {
   if (secretDialog?.open) secretDialog.close();
   wipeSecret();
   credentialCache.clear();
+  credentialReadVersions.clear();
   loadingState.hidden = true;
   listWrap.hidden = true;
   listEmpty.hidden = false;
@@ -678,6 +693,9 @@ issueForm.addEventListener("submit", async (event) => {
   credentialIssueInFlight = true;
   issueSubmit.disabled = true;
   issueCancel.disabled = true;
+  // The real mutation goes out now: any list read started before this POST
+  // must not overwrite the authoritative refresh that follows it.
+  touchCredentialReadVersion(principalId);
   try {
     const issued = await controlApi.issueCredential(principalId, body, pendingIssue.idempotencyKey);
     if (generation !== sessionGeneration) return;
@@ -699,6 +717,10 @@ issueForm.addEventListener("submit", async (event) => {
   } catch (error) {
     if (generation !== sessionGeneration) return;
     showIssueError(error);
+    // Reconcile: the pre-POST touch invalidated the previous list read, so
+    // refresh authoritatively instead of stranding "Loading credentials…".
+    // This starts the newest read version, keeps the retry key, no success.
+    await loadCredentials(principalId);
   } finally {
     credentialIssueInFlight = false;
     issueSubmit.disabled = false;

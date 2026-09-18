@@ -167,6 +167,7 @@ test("keeps one logical issuance across network retry and clears late secrets", 
   await page.click("#issue-submit");
   await expect(page.locator("#issue-error-title")).toHaveText("API unavailable", { timeout: 20_000 });
   await expect(page.locator("#secret-dialog")).toBeHidden();
+  await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("No credentials", { timeout: 20_000 });
   credMode = "live";
   await page.click("#issue-submit");
   await expect(page.locator("#secret-dialog")).toBeVisible({ timeout: 20_000 });
@@ -196,4 +197,55 @@ test("keeps one logical issuance across network retry and clears late secrets", 
   expect(seenKeys.length).toBe(4);
   expect(seenKeys.at(-1) !== seenKeys.at(-2)).toBe(true);
   await page.unroute("**/api/**/credentials");
+});
+test("keeps newer credential metadata when an older list read resolves late", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const id = await createActivePrincipal(page, adminKey, "c07");
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  // Hold the first credential-list GET. It started before any issuance, so
+  // fulfilling it with the empty page replays its true pre-issue response.
+  let releaseHeld = null;
+  let getHeld = false;
+  let holdNext = true;
+  let failOnRelease = false;
+  const credList = (url) => url.pathname === `/api/v1/principals/${id}/credentials`;
+  await page.route(credList, async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    if (!holdNext) return route.continue();
+    holdNext = false;
+    getHeld = true;
+    await new Promise((resolve) => { releaseHeld = resolve; });
+    getHeld = false;
+    if (failOnRelease) return route.abort("failed");
+    return route.fulfill({ status: 200, contentType: "application/json", body: '{"items":[],"limit":100,"truncated":false}' });
+  });
+  await openCredentials(page, id);
+  await expect.poll(async () => getHeld).toBe(true);
+  await page.click(`[data-issue-credential='${id}']`);
+  await page.click("#issue-submit");
+  await expect(page.locator("#secret-dialog")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1, { timeout: 20_000 });
+  releaseHeld();
+  await page.waitForTimeout(500);
+  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1);
+  await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("No credentials");
+  await expect(page.locator("#secret-dialog")).toBeVisible();
+  await page.click("#secret-close");
+  await expect(page.locator("#secret-dialog")).toBeHidden();
+  // A stale read that fails must not replace fresh metadata with an error either.
+  holdNext = true;
+  failOnRelease = true;
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect.poll(async () => getHeld).toBe(true);
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1, { timeout: 20_000 });
+  releaseHeld();
+  await page.waitForTimeout(500);
+  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1);
+  await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("unavailable");
+  await page.unroute(credList);
 });
