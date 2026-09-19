@@ -80,6 +80,9 @@ class ModelAlias(StrictDTO):
     router: Annotated[str, Field(min_length=1, max_length=100)]
     inference_provider: Annotated[str, Field(min_length=1, max_length=100)]
     status: Literal["active", "inactive"]
+    # Additive CAS version: absent on pre-T5 projections, always populated by
+    # persistence rows carrying resources.updated_at.
+    updated_at: AwareDatetime | None = None
 
 
 class Grant(StrictDTO):
@@ -424,6 +427,8 @@ class AuditEvent(StrictDTO):
         "aliases.create",
         "aliases.list",
         "aliases.get",
+        "aliases.assignment.replace",
+        "aliases.status.replace",
     ]
     action: Literal[
         "authenticate",

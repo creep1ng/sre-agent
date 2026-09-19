@@ -279,6 +279,31 @@ test("release 2.3.0 traces issue-184 T3 alias create and read conformance", asyn
     ),
   );
 });
+test("release 2.3.0 traces issue-184 T5 alias mutation conformance", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.3.0/", import.meta.url));
+  const coverage = await validateCoverage(root);
+  assert.deepEqual(coverage.consumers.consumers.find(({ id }) => id === "issue-184-t5"), {
+    id: "issue-184-t5",
+    owner: "release",
+    obligations: ["issue-184.alias-mutation-contract"],
+    internal_models_are_authority: false,
+  });
+  const result = await runConsumer("issue-184-t5", root);
+  assert.deepEqual(result, {
+    consumer: "issue-184-t5",
+    action: "alias-mutation-contract",
+    fixture: "fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v2.3.0.fixture.json",
+    status: "passed",
+  });
+  const evidence = JSON.parse(
+    await readFile(new URL("../../releases/2.3.0/conformance/evidence.json", import.meta.url)),
+  );
+  assert.ok(
+    evidence.results.some(
+      (item) => item.consumer === "issue-184-t5" && item.action === "alias-mutation-contract",
+    ),
+  );
+});
 test("2.1.0 is additive over immutable 2.0.0", async () => {
   const result = await validateRelease("2.1.0"), manifest = parse(await readFile(new URL("../../releases/2.1.0/manifest.yaml", import.meta.url), "utf8")), previous = parse(await readFile(new URL("../../releases/2.0.0/manifest.yaml", import.meta.url), "utf8"));
   assert.ok(result.artifacts > 0);

@@ -48,7 +48,7 @@ ERRORS: dict[int, tuple[str, str]] = {
     503: ("audit_unavailable", "Audit unavailable."),
 }
 ERROR_MESSAGES = {
-    "status_conflict": "The principal status was changed by another request.",
+    "status_conflict": "The status was changed by another request.",
     "credential_inactive": "The credential is not active.",
     "credential_issuance_failed": "Credential issuance could not be completed.",
 }
@@ -134,6 +134,18 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("GET", "/v1/model-aliases/{id}"): (
         "aliases.get",
         "admin.read",
+        "administrative_control",
+        "model_aliases",
+    ),
+    ("PUT", "/v1/model-aliases/{id}/assignment"): (
+        "aliases.assignment.replace",
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    ),
+    ("PUT", "/v1/model-aliases/{id}/status"): (
+        "aliases.status.replace",
+        "admin.write",
         "administrative_control",
         "model_aliases",
     ),
@@ -277,6 +289,20 @@ class ModelAliasListResponse(BaseModel):
     items: list[ModelAlias]
     limit: int
     truncated: bool
+
+
+class ModelAliasAssignment(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    concrete_model: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$")]
+    router: Literal["openrouter"]
+    inference_provider: Annotated[str, Field(min_length=1, max_length=100)]
+    expected_updated_at: AwareDatetime
+
+
+class ActiveInactiveStatus(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    status: Literal["active", "inactive"]
+    expected_updated_at: AwareDatetime
 
 
 def _canonical_payload(payload: Any) -> str:
@@ -1874,6 +1900,232 @@ class ControlService:  # noqa: E305
             decision=evaluation.decision,
         )
 
+    async def replace_alias_assignment(
+        self, model_alias_id: str, raw: Any, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "aliases.assignment.replace", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", model_alias_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            body = ModelAliasAssignment.model_validate_json(_canonical_payload(raw))
+        except (TypeError, ValidationError):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session,
+                context.principal,
+                CONTROL_SCOPES[("PUT", "/v1/model-aliases/{id}/assignment")],
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "model_aliases"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session, session.begin():
+            try:
+                alias = await ModelAliasRepository(session).replace_assignment(
+                    model_alias_id,
+                    concrete_model=body.concrete_model,
+                    router=body.router,
+                    inference_provider=body.inference_provider,
+                    expected_updated_at=body.expected_updated_at,
+                )
+            except StaleWriteError:
+                await session.rollback()
+                return await self._finish(
+                    request_id,
+                    started,
+                    409,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="status_conflict",
+                    context=context,
+                    resource_ref=("administrative_control", "model_aliases"),
+                    decision=evaluation.decision,
+                )
+            if alias is None:
+                result = await self._finish(
+                    request_id,
+                    started,
+                    404,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="resource_not_found",
+                    context=context,
+                    resource_ref=("administrative_control", "model_aliases"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            else:
+                result = await self._finish(
+                    request_id,
+                    started,
+                    200,
+                    "authorization",
+                    operation,
+                    action,
+                    payload=alias.model_dump(mode="json"),
+                    error_code="grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "model_aliases"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            if result.status_code == 503:
+                await session.rollback()
+            return result
+
+    async def replace_alias_status(
+        self, model_alias_id: str, raw: Any, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "aliases.status.replace", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", model_alias_id) is None:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            body = ActiveInactiveStatus.model_validate_json(_canonical_payload(raw))
+        except (TypeError, ValidationError):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        async with self.sessions() as session:
+            evaluation = await self._authorize(
+                session,
+                context.principal,
+                CONTROL_SCOPES[("PUT", "/v1/model-aliases/{id}/status")],
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "model_aliases"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session, session.begin():
+            try:
+                alias = await ModelAliasRepository(session).replace_status(
+                    model_alias_id,
+                    body.status,
+                    expected_updated_at=body.expected_updated_at,
+                )
+            except StaleWriteError:
+                await session.rollback()
+                return await self._finish(
+                    request_id,
+                    started,
+                    409,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="status_conflict",
+                    context=context,
+                    resource_ref=("administrative_control", "model_aliases"),
+                    decision=evaluation.decision,
+                )
+            if alias is None:
+                result = await self._finish(
+                    request_id,
+                    started,
+                    404,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="resource_not_found",
+                    context=context,
+                    resource_ref=("administrative_control", "model_aliases"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            else:
+                result = await self._finish(
+                    request_id,
+                    started,
+                    200,
+                    "authorization",
+                    operation,
+                    action,
+                    payload=alias.model_dump(mode="json"),
+                    error_code="grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "model_aliases"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            if result.status_code == 503:
+                await session.rollback()
+            return result
+
 
 def control_router(service: ControlService) -> APIRouter:
     """Typed administrative control-plane router with all eight Issue #147 routes."""
@@ -2444,6 +2696,86 @@ def control_router(service: ControlService) -> APIRouter:
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
     ) -> Response:
         result = await service.get_alias(alias_id, authorization_from(credentials, request))
+        response.status_code = result.status_code
+        return result
+
+    @router.put(
+        "/v1/model-aliases/{alias_id}/assignment",
+        response_model=ModelAlias,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {"schema": ModelAliasAssignment.model_json_schema()}
+                },
+            },
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "model_aliases",
+            },
+        },
+    )
+    async def replace_alias_assignment(
+        alias_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.replace_alias_assignment(
+            alias_id, await raw_json(request), authorization_from(credentials, request)
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.put(
+        "/v1/model-aliases/{alias_id}/status",
+        response_model=ModelAlias,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {"schema": ActiveInactiveStatus.model_json_schema()}
+                },
+            },
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "model_aliases",
+            },
+        },
+    )
+    async def replace_alias_status(
+        alias_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.replace_alias_status(
+            alias_id, await raw_json(request), authorization_from(credentials, request)
+        )
         response.status_code = result.status_code
         return result
 

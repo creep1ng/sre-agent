@@ -211,8 +211,9 @@ def test_schema_exposes_required_constraints_and_rejects_invalid_rows() -> None:
         assert required <= {row[0] for row in names}
         with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
             connection.execute(
-                "INSERT INTO resources VALUES "
-                "('skill','triage-agent','active','alias-id',NULL,NULL,NULL,NULL)"
+                "INSERT INTO resources (resource_type, resource_id, status, updated_at, "
+                "model_alias_id, alias, concrete_model, router, inference_provider) VALUES "
+                "('skill','triage-agent','active',now(),'alias-id',NULL,NULL,NULL,NULL)"
             )
 
 

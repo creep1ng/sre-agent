@@ -71,4 +71,14 @@ CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
         "administrative_control",
         "model_aliases",
     ),
+    ("PUT", "/v1/model-aliases/{id}/assignment"): (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    ),
+    ("PUT", "/v1/model-aliases/{id}/status"): (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    ),
 }

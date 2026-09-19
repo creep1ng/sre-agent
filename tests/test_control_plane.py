@@ -104,6 +104,16 @@ def test_control_grant_actions_cover_read_and_write() -> None:
         "administrative_control",
         "model_aliases",
     )
+    assert CONTROL_SCOPES[("PUT", "/v1/model-aliases/{id}/assignment")] == (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    )
+    assert CONTROL_SCOPES[("PUT", "/v1/model-aliases/{id}/status")] == (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    )
 
 
 def test_control_scopes_cover_all_routes_exactly_once() -> None:
@@ -122,6 +132,8 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("POST", "/v1/model-aliases"),
         ("GET", "/v1/model-aliases"),
         ("GET", "/v1/model-aliases/{id}"),
+        ("PUT", "/v1/model-aliases/{id}/assignment"),
+        ("PUT", "/v1/model-aliases/{id}/status"),
     }
     assert len({*CONTROL_SCOPES.values()}) == 8
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
@@ -161,6 +173,12 @@ def test_control_operations_match_scopes() -> None:
     assert CONTROL_OPERATIONS[("POST", "/v1/model-aliases")][0] == "aliases.create"
     assert CONTROL_OPERATIONS[("GET", "/v1/model-aliases")][0] == "aliases.list"
     assert CONTROL_OPERATIONS[("GET", "/v1/model-aliases/{id}")][0] == "aliases.get"
+    assert CONTROL_OPERATIONS[("PUT", "/v1/model-aliases/{id}/assignment")][0] == (
+        "aliases.assignment.replace"
+    )
+    assert CONTROL_OPERATIONS[("PUT", "/v1/model-aliases/{id}/status")][0] == (
+        "aliases.status.replace"
+    )
 
 
 def test_control_projector_rejects_llm_routing_evidence() -> None:
@@ -302,6 +320,8 @@ def _stub_service(monkey_result=None, status=201, payload=None):
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
     service.get_alias = AsyncMock(return_value=JSONResponse({}, 200))
+    service.replace_alias_assignment = AsyncMock(return_value=JSONResponse({}, 200))
+    service.replace_alias_status = AsyncMock(return_value=JSONResponse({}, 200))
     return service
 
 
@@ -324,6 +344,8 @@ def test_router_exposes_all_control_routes() -> None:
         "/v1/grants/{grant_id}",
         "/v1/model-aliases",
         "/v1/model-aliases/{alias_id}",
+        "/v1/model-aliases/{alias_id}/assignment",
+        "/v1/model-aliases/{alias_id}/status",
     }
 
     async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response, httpx.Response]:

@@ -151,6 +151,29 @@ def _context() -> PrincipalContext:
             lambda service: service.get_alias("target-alias", "Bearer safe-key"),
             403,
         ),
+        (
+            ("PUT", "/v1/model-aliases/{id}/assignment"),
+            lambda service: service.replace_alias_assignment(
+                "target-alias",
+                {
+                    "concrete_model": "openai/gpt-4o-mini",
+                    "router": "openrouter",
+                    "inference_provider": "openai",
+                    "expected_updated_at": "2026-09-18T00:00:00Z",
+                },
+                "Bearer safe-key",
+            ),
+            403,
+        ),
+        (
+            ("PUT", "/v1/model-aliases/{id}/status"),
+            lambda service: service.replace_alias_status(
+                "target-alias",
+                {"status": "inactive", "expected_updated_at": "2026-09-18T00:00:00Z"},
+                "Bearer safe-key",
+            ),
+            403,
+        ),
     ],
 )
 def test_engine_denial_precedes_target_access_for_every_control_operation(

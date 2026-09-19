@@ -996,7 +996,7 @@ def test_alias_create_is_closed_idempotent_owned_and_metadata_only(
     assert denied.status_code == 403
     assert first.status_code == replay.status_code == 201
     assert first.json() == replay.json()
-    assert first.json() == {**body, "status": "active"}
+    assert first.json() == {**body, "status": "active", "updated_at": first.json()["updated_at"]}
     assert conflict.status_code == 409
     assert conflict.json()["error"]["code"] == "idempotency_conflict"
     assert rejected_secret.status_code == 422
@@ -1112,7 +1112,15 @@ def test_alias_listing_is_ordered_bounded_and_non_enumerating(
     assert ordered == ["t3-order-a", "t3-order-b", "t3-order-c"]
     assert all(
         set(item)
-        == {"model_alias_id", "alias", "concrete_model", "router", "inference_provider", "status"}
+        == {
+            "model_alias_id",
+            "alias",
+            "concrete_model",
+            "router",
+            "inference_provider",
+            "status",
+            "updated_at",
+        }
         for item in full.json()["items"]
     )
 
@@ -1160,7 +1168,11 @@ def test_alias_get_is_authorized_and_non_enumerating(
 
     fetched = client.get("/v1/model-aliases/t3-get-active", headers=headers())
     assert fetched.status_code == 200
-    assert fetched.json() == {**alias_body("t3-get-active"), "status": "active"}
+    assert fetched.json() == {
+        **alias_body("t3-get-active"),
+        "status": "active",
+        "updated_at": fetched.json()["updated_at"],
+    }
     assert "secret" not in json.dumps(fetched.json()).lower()
     success_event = latest_audit_event("aliases.get", 200)
     assert success_event.reason_code == "grant_matched"
@@ -1206,3 +1218,264 @@ def test_alias_create_and_audit_roll_back_together() -> None:
             ).fetchone()[0]
             == 0
         )
+
+
+def _prepare_t5_alias(alias_id: str, client: TestClient) -> dict:
+    _prepare_t3_alias_facts()
+    created = client.post(
+        "/v1/model-aliases",
+        json=alias_body(alias_id),
+        headers=headers(idempotency_key=f"create-alias-{alias_id}"),
+    )
+    assert created.status_code == 201
+    return created.json()
+
+
+def test_alias_assignment_replace_is_guarded_replay_safe_and_metadata_only(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
+    stored = _prepare_t5_alias("t5-assignment", client)
+    token = stored["updated_at"]
+    path = "/v1/model-aliases/t5-assignment/assignment"
+
+    assert client.put(path, json=assignment_payload()).status_code == 401
+    denied = client.put(
+        path,
+        json={**assignment_payload(), "expected_updated_at": token},
+        headers=headers(RESTRICTED_KEY),
+    )
+    assert denied.status_code == 403
+    assert (
+        client.put(
+            "/v1/model-aliases/INVALID/assignment",
+            json=assignment_payload(),
+            headers=headers(),
+        ).status_code
+        == 422
+    )
+    assert client.put(path, json=assignment_payload(), headers=headers()).status_code == 422
+    rejected_status = client.put(
+        path,
+        json={**assignment_payload(), "expected_updated_at": token, "status": "active"},
+        headers=headers(),
+    )
+    assert rejected_status.status_code == 422
+    rejected_secret = client.put(
+        path,
+        json={**assignment_payload(), "expected_updated_at": token, "secret": "x"},
+        headers=headers(),
+    )
+    assert rejected_secret.status_code == 422
+    rejected_router = client.put(
+        path,
+        json={**assignment_payload(), "expected_updated_at": token, "router": "direct"},
+        headers=headers(),
+    )
+    assert rejected_router.status_code == 422
+    assert (
+        client.put(
+            "/v1/model-aliases/t5-assignment-absent/assignment",
+            json={**assignment_payload(), "expected_updated_at": token},
+            headers=headers(),
+        ).status_code
+        == 404
+    )
+
+    first = client.put(
+        path,
+        json={
+            "concrete_model": "anthropic/claude-3-5-haiku",
+            "router": "openrouter",
+            "inference_provider": "anthropic",
+            "expected_updated_at": token,
+        },
+        headers=headers(),
+    )
+    assert first.status_code == 200
+    assert first.json()["concrete_model"] == "anthropic/claude-3-5-haiku"
+    assert first.json()["inference_provider"] == "anthropic"
+    assert first.json()["alias"] == "t5-assignment"
+    assert first.json()["status"] == "active"
+    assert first.json()["updated_at"] != token
+    assert "secret" not in json.dumps(first.json()).lower()
+
+    stale = client.put(
+        path,
+        json={**assignment_payload(), "expected_updated_at": token},
+        headers=headers(),
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "status_conflict"
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        row = connection.execute(
+            "SELECT concrete_model, inference_provider, updated_at FROM resources "
+            "WHERE resource_type = 'llm_model' AND model_alias_id = 't5-assignment'"
+        ).fetchone()
+    assert row is not None
+    assert (row[0], row[1]) == ("anthropic/claude-3-5-haiku", "anthropic")
+    assert row[2].isoformat().replace("+00:00", "Z") == first.json()["updated_at"].replace(
+        "+00:00", "Z"
+    )
+
+    replay = client.put(
+        path,
+        json={
+            "concrete_model": "anthropic/claude-3-5-haiku",
+            "router": "openrouter",
+            "inference_provider": "anthropic",
+            "expected_updated_at": first.json()["updated_at"],
+        },
+        headers=headers(),
+    )
+    assert replay.status_code == 200
+    assert replay.json()["concrete_model"] == "anthropic/claude-3-5-haiku"
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        audit = connection.execute(
+            "SELECT identity, resource, redacted_content FROM audit_events "
+            "WHERE operation = 'aliases.assignment.replace' AND response_status = 200 "
+            "ORDER BY occurred_at DESC, event_id DESC LIMIT 1"
+        ).fetchone()
+    assert audit is not None
+    assert audit[0] is not None and audit[1] is not None
+    assert audit[2] is None
+    assert "admin-human" not in json.dumps(audit)
+    success_event = latest_audit_event("aliases.assignment.replace", 200)
+    conflict_event = latest_audit_event("aliases.assignment.replace", 409)
+    assert success_event.reason_code == "grant_matched"
+    assert conflict_event.reason_code == "status_conflict"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+    assert_valid(audit_23, conflict_event.model_dump(mode="json", exclude_none=True))
+
+
+def assignment_payload() -> dict[str, str]:
+    return {
+        "concrete_model": "openai/gpt-4o-mini",
+        "router": "openrouter",
+        "inference_provider": "openai",
+    }
+
+
+def test_alias_status_replace_conflicts_safely_and_hides_retired(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
+    stored = _prepare_t5_alias("t5-status", client)
+    token = stored["updated_at"]
+    path = "/v1/model-aliases/t5-status/status"
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
+            "alias, concrete_model, router, inference_provider, updated_at) VALUES "
+            "('llm_model', 't5-status-retired', 'inactive', 't5-status-retired', "
+            "'t5-status-retired', 'openai/gpt-4o-mini', 'openrouter', 'openai', now()) "
+            "ON CONFLICT (resource_type, resource_id) DO UPDATE SET status = 'inactive'"
+        )
+        connection.commit()
+
+    anonymous = client.put(path, json={"status": "inactive", "expected_updated_at": token})
+    assert anonymous.status_code == 401
+    denied = client.put(
+        path,
+        json={"status": "inactive", "expected_updated_at": token},
+        headers=headers(RESTRICTED_KEY),
+    )
+    assert denied.status_code == 403
+    assert client.put(path, json={"status": "inactive"}, headers=headers()).status_code == 422
+    rejected_assignment = client.put(
+        path,
+        json={"status": "inactive", "expected_updated_at": token, "router": "openrouter"},
+        headers=headers(),
+    )
+    assert rejected_assignment.status_code == 422
+    for missing in ("t5-status-absent", "t5-status-retired", "model-aliases"):
+        response = client.put(
+            f"/v1/model-aliases/{missing}/status",
+            json={"status": "inactive", "expected_updated_at": token},
+            headers=headers(),
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "resource_not_found"
+
+    bumped = client.put(
+        path, json={"status": "active", "expected_updated_at": token}, headers=headers()
+    )
+    assert bumped.status_code == 200
+    assert bumped.json()["status"] == "active"
+    fresh = bumped.json()["updated_at"]
+    assert fresh != token
+
+    stale = client.put(
+        path, json={"status": "inactive", "expected_updated_at": token}, headers=headers()
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "status_conflict"
+    conflict_event = latest_audit_event("aliases.status.replace", 409)
+    assert conflict_event.reason_code == "status_conflict"
+    assert_valid(audit_23, conflict_event.model_dump(mode="json", exclude_none=True))
+
+    changed = client.put(
+        path, json={"status": "inactive", "expected_updated_at": fresh}, headers=headers()
+    )
+    assert changed.status_code == 200
+    assert changed.json()["status"] == "inactive"
+    assert changed.json()["updated_at"] != fresh
+
+    # Deactivation hides the alias: late writers observe the safe 404, never an
+    # overwrite, and reactivation through the mutation API stays unavailable.
+    hidden = client.put(
+        path, json={"status": "active", "expected_updated_at": fresh}, headers=headers()
+    )
+    assert hidden.status_code == 404
+    assert hidden.json()["error"]["code"] == "resource_not_found"
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT status FROM resources "
+            "WHERE resource_type = 'llm_model' AND model_alias_id = 't5-status'"
+        ).fetchone() == ("inactive",)
+        assert connection.execute(
+            "SELECT status FROM resources "
+            "WHERE resource_type = 'llm_model' AND model_alias_id = 't5-status-retired'"
+        ).fetchone() == ("inactive",)
+    success_event = latest_audit_event("aliases.status.replace", 200)
+    assert success_event.reason_code == "grant_matched"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+
+
+def test_alias_mutations_and_audit_roll_back_together(client: TestClient) -> None:
+    _prepare_t5_alias("t5-audit-rollback", client)
+    before = client.get("/v1/model-aliases/t5-audit-rollback", headers=headers()).json()
+
+    class RejectingAudit:
+        async def append(self, event: object) -> object:
+            return event
+
+        async def append_in_transaction(self, event: object, session: object) -> None:
+            raise RuntimeError("intentional alias mutation audit rejection")
+
+    app = create_application(
+        Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY), audit_store=RejectingAudit()
+    )
+    with TestClient(app, raise_server_exceptions=False) as failing_client:
+        assignment = failing_client.put(
+            "/v1/model-aliases/t5-audit-rollback/assignment",
+            json={**assignment_payload(), "expected_updated_at": before["updated_at"]},
+            headers=headers(),
+        )
+        status = failing_client.put(
+            "/v1/model-aliases/t5-audit-rollback/status",
+            json={"status": "inactive", "expected_updated_at": before["updated_at"]},
+            headers=headers(),
+        )
+
+    assert assignment.status_code == 503
+    assert status.status_code == 503
+    with psycopg.connect(DATABASE_URL) as connection:
+        row = connection.execute(
+            "SELECT concrete_model, status, updated_at FROM resources "
+            "WHERE resource_type = 'llm_model' AND model_alias_id = 't5-audit-rollback'"
+        ).fetchone()
+    assert row is not None
+    assert (row[0], row[1]) == ("openai/gpt-4o-mini", "active")
+    assert row[2].isoformat().replace("+00:00", "Z") == before["updated_at"].replace("+00:00", "Z")
