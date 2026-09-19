@@ -434,6 +434,64 @@ class ResourceRepository:
         return project_model_alias(row._mapping) if row is not None else None
 
 
+class ModelAliasRepository:
+    """Closed ModelAlias reads and creates over llm_model resource rows.
+
+    Only active llm_model assignments are visible as aliases: absent rows,
+    inactive rows, and non-llm resources never enumerate through this port.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        model_alias_id: str,
+        alias: str,
+        concrete_model: str,
+        router: str,
+        inference_provider: str,
+    ) -> ModelAlias:
+        row = ResourceRow(
+            resource_type="llm_model",
+            resource_id=model_alias_id,
+            status="active",
+            model_alias_id=model_alias_id,
+            alias=alias,
+            concrete_model=concrete_model,
+            router=router,
+            inference_provider=inference_provider,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return project_model_alias(row)
+
+    async def get(self, model_alias_id: str) -> ModelAlias | None:
+        row = await self._session.scalar(
+            select(ResourceRow).where(
+                ResourceRow.resource_type == "llm_model",
+                ResourceRow.model_alias_id == model_alias_id,
+                ResourceRow.status == "active",
+            )
+        )
+        return project_model_alias(row) if row is not None else None
+
+    async def list(self, *, limit: int) -> tuple[list[ModelAlias], bool]:
+        rows = (
+            await self._session.scalars(
+                select(ResourceRow)
+                .where(
+                    ResourceRow.resource_type == "llm_model",
+                    ResourceRow.status == "active",
+                )
+                .order_by(ResourceRow.model_alias_id.asc(), ResourceRow.alias.asc())
+                .limit(limit + 1)
+            )
+        ).all()
+        truncated = len(rows) > limit
+        return [project_model_alias(row) for row in rows[:limit]], truncated
+
+
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

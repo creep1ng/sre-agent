@@ -690,9 +690,7 @@ def _prepare_t2_grant_facts() -> None:
             )
 
 
-def test_grant_create_is_closed_idempotent_owned_and_metadata_only(
-    client: TestClient,
-) -> None:
+def test_grant_create_is_closed_idempotent_owned_and_metadata_only(client: TestClient) -> None:
     _prepare_t2_grant_facts()
     body = {
         "grant_id": "grant-t2-created",
@@ -895,6 +893,269 @@ def test_grant_create_and_audit_roll_back_together() -> None:
                 "SELECT count(*) FROM idempotency_records "
                 "WHERE canonical_path = '/v1/grants' AND outcome ->> 'resource_id' = "
                 "'grant-t2-audit-rollback'"
+            ).fetchone()[0]
+            == 0
+        )
+
+
+def alias_body(model_alias_id: str) -> dict[str, str]:
+    return {
+        "model_alias_id": model_alias_id,
+        "alias": model_alias_id,
+        "concrete_model": "openai/gpt-4o-mini",
+        "router": "openrouter",
+        "inference_provider": "openai",
+    }
+
+
+def _prepare_t3_alias_facts() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status) "
+            "VALUES ('administrative_control', 'model_aliases', 'active') "
+            "ON CONFLICT DO NOTHING"
+        )
+        for action in ("admin.read", "admin.write"):
+            connection.execute(
+                "INSERT INTO grants (grant_id, principal_id, action, resource_type, "
+                "resource_id, effect, status, created_at) VALUES (%s, 'admin-human', %s, "
+                "'administrative_control', 'model_aliases', 'allow', 'active', now()) "
+                "ON CONFLICT DO NOTHING",
+                (f"grant-admin-human-{action.replace('.', '-')}-model-aliases", action),
+            )
+        connection.commit()
+
+
+def test_alias_create_is_closed_idempotent_owned_and_metadata_only(client: TestClient) -> None:
+    _prepare_t3_alias_facts()
+    body = alias_body("t3-created")
+    request_headers = headers(idempotency_key="create-alias-t3-unit")
+
+    denied = client.post(
+        "/v1/model-aliases",
+        json=body,
+        headers=headers(RESTRICTED_KEY, "denied-alias-t3-unit"),
+    )
+    first = client.post("/v1/model-aliases", json=body, headers=request_headers)
+    replay = client.post("/v1/model-aliases", json=body, headers=request_headers)
+    conflict = client.post(
+        "/v1/model-aliases",
+        json={**body, "concrete_model": "anthropic/claude-3-5-haiku"},
+        headers=request_headers,
+    )
+    rejected_secret = client.post(
+        "/v1/model-aliases",
+        json={**body, "model_alias_id": "t3-secret", "alias": "t3-secret", "secret": "x"},
+        headers=headers(idempotency_key="create-alias-t3-secret"),
+    )
+    rejected_status = client.post(
+        "/v1/model-aliases",
+        json={**body, "model_alias_id": "t3-status", "alias": "t3-status", "status": "active"},
+        headers=headers(idempotency_key="create-alias-t3-status"),
+    )
+
+    assert denied.status_code == 403
+    assert first.status_code == replay.status_code == 201
+    assert first.json() == replay.json()
+    assert first.json() == {**body, "status": "active"}
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "idempotency_conflict"
+    assert rejected_secret.status_code == 422
+    assert rejected_status.status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources "
+                "WHERE resource_type = 'llm_model' AND model_alias_id = 't3-created'"
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources "
+                "WHERE resource_type = 'llm_model' AND model_alias_id IN ('t3-secret','t3-status')"
+            ).fetchone()[0]
+            == 0
+        )
+        audit = connection.execute(
+            "SELECT identity, resource, redacted_content FROM audit_events "
+            "WHERE operation = 'aliases.create' AND response_status = 201 "
+            "ORDER BY occurred_at DESC, event_id DESC LIMIT 1"
+        ).fetchone()
+    assert audit is not None
+    assert audit[0] is not None and audit[1] is not None
+    assert audit[2] is None
+    assert "admin-human" not in json.dumps(audit)
+    success_event = latest_audit_event("aliases.create", 201)
+    conflict_event = latest_audit_event("aliases.create", 409)
+    assert success_event.reason_code == "grant_matched"
+    assert conflict_event.reason_code == "status_conflict"
+
+
+def test_alias_create_replays_original_response_after_alias_mutation(client: TestClient) -> None:
+    _prepare_t3_alias_facts()
+    body = alias_body("t3-stable-replay")
+    request_headers = headers(idempotency_key="create-alias-t3-stable-replay")
+
+    first = client.post("/v1/model-aliases", json=body, headers=request_headers)
+    assert first.status_code == 201
+    with psycopg.connect(DATABASE_URL) as connection:
+        before_audits = connection.execute(
+            "SELECT count(*) FROM audit_events WHERE operation = 'aliases.create' "
+            "AND response_status = 201"
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE resources SET status = 'inactive' "
+            "WHERE resource_type = 'llm_model' AND model_alias_id = 't3-stable-replay'"
+        )
+        connection.commit()
+
+    replay = client.post("/v1/model-aliases", json=body, headers=request_headers)
+
+    assert replay.status_code == 201
+    assert replay.content == first.content
+    assert replay.json()["status"] == "active"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT status FROM resources "
+            "WHERE resource_type = 'llm_model' AND model_alias_id = 't3-stable-replay'"
+        ).fetchone() == ("inactive",)
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM audit_events WHERE operation = 'aliases.create' "
+                "AND response_status = 201"
+            ).fetchone()[0]
+            == before_audits
+        )
+        stored = connection.execute(
+            "SELECT outcome -> 'response_payload' FROM idempotency_records "
+            "WHERE canonical_path = '/v1/model-aliases' AND outcome ->> 'resource_id' = %s",
+            (body["model_alias_id"],),
+        ).fetchone()
+    assert stored is not None
+    assert stored[0] == first.json()
+
+
+def test_alias_listing_is_ordered_bounded_and_non_enumerating(client: TestClient) -> None:
+    _prepare_t3_alias_facts()
+    with psycopg.connect(DATABASE_URL) as connection:
+        for suffix in ("a", "b", "c"):
+            connection.execute(
+                "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
+                "alias, concrete_model, router, inference_provider) VALUES "
+                "( 'llm_model', %s, 'active', %s, %s, 'openai/gpt-4o-mini', "
+                "'openrouter', 'openai') ON CONFLICT DO NOTHING",
+                (f"t3-order-{suffix}", f"t3-order-{suffix}", f"t3-order-{suffix}"),
+            )
+        connection.commit()
+
+    assert client.get("/v1/model-aliases?limit=0", headers=headers()).status_code == 422
+    assert client.get("/v1/model-aliases?limit=101", headers=headers()).status_code == 422
+    assert client.get("/v1/model-aliases?cursor=opaque", headers=headers()).status_code == 422
+    assert client.get("/v1/model-aliases?limit=2&unknown=1", headers=headers()).status_code == 422
+    anonymous = client.get("/v1/model-aliases")
+    assert anonymous.status_code == 401
+    denied = client.get("/v1/model-aliases", headers=headers(RESTRICTED_KEY))
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "resource_unavailable"
+
+    full = client.get("/v1/model-aliases", headers=headers())
+    assert full.status_code == 200
+    assert full.json()["limit"] == 100
+    assert full.json()["truncated"] is False
+    identifiers = [item["model_alias_id"] for item in full.json()["items"]]
+    assert identifiers == sorted(identifiers)
+    ordered = [name for name in identifiers if name.startswith("t3-order-")]
+    assert ordered == ["t3-order-a", "t3-order-b", "t3-order-c"]
+    assert all(
+        set(item)
+        == {"model_alias_id", "alias", "concrete_model", "router", "inference_provider", "status"}
+        for item in full.json()["items"]
+    )
+
+    bounded = client.get("/v1/model-aliases?limit=2", headers=headers())
+    assert bounded.status_code == 200
+    assert bounded.json()["limit"] == 2
+    assert bounded.json()["truncated"] is True
+    assert [item["model_alias_id"] for item in bounded.json()["items"]] == identifiers[:2]
+    again = client.get("/v1/model-aliases?limit=2", headers=headers())
+    assert again.content == bounded.content
+    success_event = latest_audit_event("aliases.list", 200)
+    assert success_event.reason_code == "grant_matched"
+
+
+def test_alias_get_is_authorized_and_non_enumerating(client: TestClient) -> None:
+    _prepare_t3_alias_facts()
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
+            "alias, concrete_model, router, inference_provider) VALUES "
+            "('llm_model', 't3-get-active', 'active', 't3-get-active', 't3-get-active', "
+            "'openai/gpt-4o-mini', 'openrouter', 'openai') ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
+            "alias, concrete_model, router, inference_provider) VALUES "
+            "('llm_model', 't3-get-retired', 'inactive', 't3-get-retired', 't3-get-retired', "
+            "'openai/gpt-4o-mini', 'openrouter', 'openai') "
+            "ON CONFLICT (resource_type, resource_id) DO UPDATE SET status = 'inactive'"
+        )
+        connection.commit()
+
+    assert client.get("/v1/model-aliases/t3-get-active").status_code == 401
+    denied = client.get("/v1/model-aliases/t3-get-active", headers=headers(RESTRICTED_KEY))
+    assert denied.status_code == 403
+    assert denied.json()["error"]["code"] == "resource_unavailable"
+    assert client.get("/v1/model-aliases/INVALID", headers=headers()).status_code == 422
+    for missing in ("t3-get-absent", "t3-get-retired"):
+        response = client.get(f"/v1/model-aliases/{missing}", headers=headers())
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "resource_not_found"
+
+    fetched = client.get("/v1/model-aliases/t3-get-active", headers=headers())
+    assert fetched.status_code == 200
+    assert fetched.json() == {**alias_body("t3-get-active"), "status": "active"}
+    assert "secret" not in json.dumps(fetched.json()).lower()
+    success_event = latest_audit_event("aliases.get", 200)
+    assert success_event.reason_code == "grant_matched"
+
+
+def test_alias_create_and_audit_roll_back_together() -> None:
+    _prepare_t3_alias_facts()
+
+    class RejectingAudit:
+        async def append(self, event: object) -> object:
+            return event
+
+        async def append_in_transaction(self, event: object, session: object) -> None:
+            raise RuntimeError("intentional alias create audit rejection")
+
+    app = create_application(
+        Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY), audit_store=RejectingAudit()
+    )
+    body = alias_body("t3-audit-rollback")
+    with TestClient(app, raise_server_exceptions=False) as failing_client:
+        response = failing_client.post(
+            "/v1/model-aliases",
+            json=body,
+            headers=headers(idempotency_key="create-alias-t3-rollback"),
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM resources "
+                "WHERE resource_type = 'llm_model' AND model_alias_id = 't3-audit-rollback'"
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM idempotency_records "
+                "WHERE canonical_path = '/v1/model-aliases' AND outcome ->> 'resource_id' = "
+                "'t3-audit-rollback'"
             ).fetchone()[0]
             == 0
         )

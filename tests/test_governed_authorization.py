@@ -128,6 +128,21 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "grants",
     },
+    ("POST", "/v1/model-aliases"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
+    ("GET", "/v1/model-aliases"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
+    ("GET", "/v1/model-aliases/{alias_id}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
 }
 
 

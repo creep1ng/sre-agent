@@ -421,6 +421,9 @@ class AuditEvent(StrictDTO):
         "grants.create",
         "grants.list",
         "grants.revoke",
+        "aliases.create",
+        "aliases.list",
+        "aliases.get",
     ]
     action: Literal[
         "authenticate",

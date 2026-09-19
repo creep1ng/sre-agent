@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="360" viewBox="0 0 1040 360">
+  <rect width="1040" height="360" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #184 T3 alias create/read</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ docker compose --profile checks run --build --rm python-checks</text>
+  <text x="28" y="126" fill="#d1fae5" font-family="monospace" font-size="20">  pytest -q tests/test_control_plane.py tests/test_control_authorization_order.py</text>
+  <text x="28" y="156" fill="#d1fae5" font-family="monospace" font-size="20">  tests/test_health.py tests/test_governed_authorization.py</text>
+  <text x="28" y="186" fill="#d1fae5" font-family="monospace" font-size="20">  tests/test_control_model_aliases.py -k not-release-230-schema</text>
+  <text x="28" y="236" fill="#f9fafb" font-family="monospace" font-size="20">75 passed, 1 deselected (2.3.0 schema deferred to PR4)</text>
+  <text x="28" y="286" fill="#f9fafb" font-family="monospace" font-size="20">Focused T3 unit verification; alias DB replay present, contract re-run in PR4.</text>
+  <text x="28" y="326" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #184 PR3; no secrets or environment values shown.</text>
+</svg>
