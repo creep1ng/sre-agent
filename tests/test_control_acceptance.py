@@ -49,6 +49,7 @@ SEED_ENV = {
     "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 RELEASE = Path(__file__).parents[1] / "schemas/releases/2.0.0/json-schema"
+RELEASE_23 = Path(__file__).parents[1] / "schemas/releases/2.3.0/json-schema"
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -102,6 +103,18 @@ def canonical() -> dict[str, Draft202012Validator]:
         "list": validator("ListEnvelope"),
         "error": validator("ErrorEnvelope"),
     }
+
+
+@pytest.fixture(scope="module")
+def audit_23() -> Draft202012Validator:
+    documents = [json.loads(path.read_text()) for path in RELEASE_23.rglob("*.json")]
+    registry = Registry().with_resources(
+        (document["$id"], DRAFT202012.create_resource(document))
+        for document in documents
+        if "$id" in document
+    )
+    document = next(item for item in documents if item.get("title") == "AuditEvent")
+    return Draft202012Validator(document, registry=registry, format_checker=FormatChecker())
 
 
 def headers(key: str = ADMIN_KEY, idempotency_key: str | None = None) -> dict[str, str]:
@@ -600,7 +613,26 @@ def test_grant_revocation_stages_mutation_and_audit_in_the_same_session(monkeypa
     assert response.status_code == 204
     assert len(mutation_sessions) == len(audit_sessions) == 1
     assert mutation_sessions[0] is audit_sessions[0]
-    assert len(emitted_events) == 1
+    documents = [
+        json.loads(path.read_text())
+        for path in (Path(__file__).parents[1] / "schemas/releases/2.3.0/json-schema").rglob(
+            "*.json"
+        )
+    ]
+    registry = Registry().with_resources(
+        (document["$id"], DRAFT202012.create_resource(document))
+        for document in documents
+        if "$id" in document
+    )
+    audit_schema = next(
+        document
+        for document in documents
+        if document.get("$id") == "urn:sre-agent:schema:audit-event:2.3.0"
+    )
+    assert_valid(
+        Draft202012Validator(audit_schema, registry=registry, format_checker=FormatChecker()),
+        emitted_events[0].model_dump(mode="json", exclude_none=True),
+    )
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute(
             "SELECT status FROM grants WHERE grant_id = %s", (grant_id,)
@@ -690,7 +722,9 @@ def _prepare_t2_grant_facts() -> None:
             )
 
 
-def test_grant_create_is_closed_idempotent_owned_and_metadata_only(client: TestClient) -> None:
+def test_grant_create_is_closed_idempotent_owned_and_metadata_only(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
     _prepare_t2_grant_facts()
     body = {
         "grant_id": "grant-t2-created",
@@ -752,6 +786,8 @@ def test_grant_create_is_closed_idempotent_owned_and_metadata_only(client: TestC
     conflict_event = latest_audit_event("grants.create", 409)
     assert success_event.reason_code == "grant_matched"
     assert conflict_event.reason_code == "status_conflict"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+    assert_valid(audit_23, conflict_event.model_dump(mode="json", exclude_none=True))
 
 
 def test_grant_create_replays_original_response_after_grant_mutation(client: TestClient) -> None:
@@ -802,7 +838,7 @@ def test_grant_create_replays_original_response_after_grant_mutation(client: Tes
 
 
 def test_grant_listing_requires_a_filter_and_is_bounded_stable_and_non_enumerating(
-    client: TestClient,
+    client: TestClient, audit_23: Draft202012Validator
 ) -> None:
     _prepare_t2_grant_facts()
     with psycopg.connect(DATABASE_URL) as connection:
@@ -850,6 +886,7 @@ def test_grant_listing_requires_a_filter_and_is_bounded_stable_and_non_enumerati
     )
     success_event = latest_audit_event("grants.list", 200)
     assert success_event.reason_code == "grant_matched"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
 
 
 def test_grant_create_and_audit_roll_back_together() -> None:
@@ -926,7 +963,9 @@ def _prepare_t3_alias_facts() -> None:
         connection.commit()
 
 
-def test_alias_create_is_closed_idempotent_owned_and_metadata_only(client: TestClient) -> None:
+def test_alias_create_is_closed_idempotent_owned_and_metadata_only(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
     _prepare_t3_alias_facts()
     body = alias_body("t3-created")
     request_headers = headers(idempotency_key="create-alias-t3-unit")
@@ -990,6 +1029,8 @@ def test_alias_create_is_closed_idempotent_owned_and_metadata_only(client: TestC
     conflict_event = latest_audit_event("aliases.create", 409)
     assert success_event.reason_code == "grant_matched"
     assert conflict_event.reason_code == "status_conflict"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
+    assert_valid(audit_23, conflict_event.model_dump(mode="json", exclude_none=True))
 
 
 def test_alias_create_replays_original_response_after_alias_mutation(client: TestClient) -> None:
@@ -1036,7 +1077,9 @@ def test_alias_create_replays_original_response_after_alias_mutation(client: Tes
     assert stored[0] == first.json()
 
 
-def test_alias_listing_is_ordered_bounded_and_non_enumerating(client: TestClient) -> None:
+def test_alias_listing_is_ordered_bounded_and_non_enumerating(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
     _prepare_t3_alias_facts()
     with psycopg.connect(DATABASE_URL) as connection:
         for suffix in ("a", "b", "c"):
@@ -1082,9 +1125,12 @@ def test_alias_listing_is_ordered_bounded_and_non_enumerating(client: TestClient
     assert again.content == bounded.content
     success_event = latest_audit_event("aliases.list", 200)
     assert success_event.reason_code == "grant_matched"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
 
 
-def test_alias_get_is_authorized_and_non_enumerating(client: TestClient) -> None:
+def test_alias_get_is_authorized_and_non_enumerating(
+    client: TestClient, audit_23: Draft202012Validator
+) -> None:
     _prepare_t3_alias_facts()
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
@@ -1118,6 +1164,7 @@ def test_alias_get_is_authorized_and_non_enumerating(client: TestClient) -> None
     assert "secret" not in json.dumps(fetched.json()).lower()
     success_event = latest_audit_event("aliases.get", 200)
     assert success_event.reason_code == "grant_matched"
+    assert_valid(audit_23, success_event.model_dump(mode="json", exclude_none=True))
 
 
 def test_alias_create_and_audit_roll_back_together() -> None:
