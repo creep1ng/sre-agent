@@ -304,6 +304,23 @@ test("release 2.3.0 traces issue-184 T5 alias mutation conformance", async () =>
     ),
   );
 });
+test("release 2.3.0 traces issue-184 T6 catalog conformance", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.3.0/", import.meta.url));
+  const coverage = await validateCoverage(root);
+  assert.deepEqual(coverage.consumers.consumers.find(({ id }) => id === "issue-184-t6"), {
+    id: "issue-184-t6",
+    owner: "release",
+    obligations: ["issue-184.catalog-contract"],
+    internal_models_are_authority: false,
+  });
+  const result = await runConsumer("issue-184-t6", root);
+  assert.deepEqual(result, {
+    consumer: "issue-184-t6",
+    action: "catalog-contract",
+    fixture: "fixtures/positive/control.audit.catalog-create-allow.positive.v2.3.0.fixture.json",
+    status: "passed",
+  });
+});
 test("2.1.0 is additive over immutable 2.0.0", async () => {
   const result = await validateRelease("2.1.0"), manifest = parse(await readFile(new URL("../../releases/2.1.0/manifest.yaml", import.meta.url), "utf8")), previous = parse(await readFile(new URL("../../releases/2.0.0/manifest.yaml", import.meta.url), "utf8"));
   assert.ok(result.artifacts > 0);

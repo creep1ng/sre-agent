@@ -12,4 +12,5 @@ consumers:
   - { id: issue-184-t2, owner: release, obligations: [issue-184.grant-create-list-contract], internal_models_are_authority: false }
   - { id: issue-184-t3, owner: release, obligations: [issue-184.alias-create-read-contract], internal_models_are_authority: false }
   - { id: issue-184-t5, owner: release, obligations: [issue-184.alias-mutation-contract], internal_models_are_authority: false }
+  - { id: issue-184-t6, owner: release, obligations: [issue-184.catalog-contract], internal_models_are_authority: false }
 prohibited_authorities: [framework_dto, orm_model, database_model, provider_sdk_type]

@@ -174,6 +174,42 @@ def _context() -> PrincipalContext:
             ),
             403,
         ),
+        (
+            ("POST", "/v1/catalog/resources"),
+            lambda service: service.create_catalog_resource(
+                {
+                    "resource_type": "mcp_server",
+                    "resource_id": "server-tools",
+                    "owner_id": "mcp-platform",
+                    "source": "mcp",
+                    "source_ref": "mcp-platform/server-tools",
+                    "status": "registered",
+                    "discoverability": {
+                        "display_name": "Tool server",
+                        "visibility": "private",
+                        "description": "Registered MCP tool server.",
+                        "tags": ["mcp"],
+                    },
+                },
+                "Bearer safe-key",
+                "create-target-catalog",
+            ),
+            403,
+        ),
+        (
+            ("GET", "/v1/catalog/resources"),
+            lambda service: service.list_catalog_resources(
+                "Bearer safe-key", None, None, None, None, "100", {}
+            ),
+            403,
+        ),
+        (
+            ("GET", "/v1/catalog/resources/{type}/{id}"),
+            lambda service: service.get_catalog_resource(
+                "mcp_server", "server-tools", "Bearer safe-key"
+            ),
+            403,
+        ),
     ],
 )
 def test_engine_denial_precedes_target_access_for_every_control_operation(
@@ -191,6 +227,7 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
         "GrantRepository",
         "IdempotencyRepository",
         "ModelAliasRepository",
+        "CatalogRepository",
     ):
         monkeypatch.setattr(service_module, repository, _TargetAccessed)
 
@@ -223,6 +260,8 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
         ("GET", "/v1/grants"),
         ("POST", "/v1/model-aliases"),
         ("GET", "/v1/model-aliases"),
+        ("POST", "/v1/catalog/resources"),
+        ("GET", "/v1/catalog/resources"),
     }:
         shared.assert_awaited_once_with(
             service.sessions, "Bearer safe-key", action, resource_type, resource_id
