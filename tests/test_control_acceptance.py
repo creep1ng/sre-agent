@@ -148,6 +148,23 @@ def latest_rotation_audit() -> tuple[object, ...]:
     return row
 
 
+def latest_audit_event(operation: str, response_status: int):
+    async def read():
+        database = Database(DATABASE_URL)
+        try:
+            async with database.sessions() as session:
+                events = await AuditRepository(session).read_recent(limit=100)
+                return next(
+                    event
+                    for event in events
+                    if event.operation == operation and event.response_status == response_status
+                )
+        finally:
+            await database.dispose()
+
+    return asyncio.run(read())
+
+
 def test_rotation_operation_ref_matches_runtime_canonical_envelope() -> None:
     document = yaml.safe_load((RELEASE.parent / "openapi/control-plane.yaml").read_text())
     response_schema = document["paths"]["/v1/credentials/{id}/rotation"]["post"]["responses"][
@@ -629,3 +646,255 @@ def test_grant_revocation_rolls_back_when_authoritative_audit_rejects() -> None:
         assert connection.execute(
             "SELECT status FROM grants WHERE grant_id = 'grant-t1-audit-rollback'"
         ).fetchone() == ("active",)
+
+
+def _prepare_t2_grant_facts() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status) "
+            "VALUES ('administrative_control', 'grants', 'active') ON CONFLICT DO NOTHING"
+        )
+        for action in ("admin.read", "admin.write"):
+            connection.execute(
+                "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+                "effect, status, created_at) VALUES (%s, 'admin-human', %s, "
+                "'administrative_control', 'grants', 'allow', 'active', now()) "
+                "ON CONFLICT DO NOTHING",
+                (f"grant-admin-human-{action.replace('.', '-')}-grants", action),
+            )
+        connection.execute(
+            "INSERT INTO principals "
+            "(principal_id, kind, display_name, status, created_at, updated_at) VALUES "
+            "('t2-list-human', 'human', 'T2 list human', 'active', now(), now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        connection.execute(
+            "INSERT INTO principals "
+            "(principal_id, kind, display_name, status, created_at, updated_at) VALUES "
+            "('t2-order-human', 'human', 'T2 order human', 'active', now(), now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+        for resource_id in (
+            "t2-model",
+            "t2-order-a",
+            "t2-order-b",
+            "t2-order-c",
+            "t2-resource-only",
+        ):
+            connection.execute(
+                "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, "
+                "alias, concrete_model, router, inference_provider) VALUES "
+                "('llm_model', %s, 'active', %s, %s, 'openai/gpt-4o-mini', "
+                "'openrouter', 'openai') ON CONFLICT DO NOTHING",
+                (resource_id, f"alias-{resource_id}", resource_id),
+            )
+
+
+def test_grant_create_is_closed_idempotent_owned_and_metadata_only(
+    client: TestClient,
+) -> None:
+    _prepare_t2_grant_facts()
+    body = {
+        "grant_id": "grant-t2-created",
+        "principal_id": "t2-list-human",
+        "action": "invoke.t2",
+        "resource": {"resource_type": "llm_model", "resource_id": "t2-model"},
+        "effect": "allow",
+    }
+    request_headers = headers(idempotency_key="create-grant-t2-unit")
+
+    denied = client.post(
+        "/v1/grants",
+        json=body,
+        headers=headers(RESTRICTED_KEY, "denied-grant-t2-unit"),
+    )
+    first = client.post("/v1/grants", json=body, headers=request_headers)
+    replay = client.post("/v1/grants", json=body, headers=request_headers)
+    conflict = client.post(
+        "/v1/grants",
+        json={**body, "action": "invoke.changed"},
+        headers=request_headers,
+    )
+    rejected_secret = client.post(
+        "/v1/grants",
+        json={**body, "grant_id": "grant-t2-secret", "router": "do-not-store"},
+        headers=headers(idempotency_key="create-grant-t2-secret"),
+    )
+
+    assert denied.status_code == 403
+    assert first.status_code == replay.status_code == 201
+    assert first.json() == replay.json()
+    assert first.json() == {**body, "status": "active", "created_at": first.json()["created_at"]}
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "idempotency_conflict"
+    assert rejected_secret.status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM grants WHERE grant_id = 'grant-t2-created'"
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM grants WHERE grant_id = 'grant-t2-secret'"
+            ).fetchone()[0]
+            == 0
+        )
+        audit = connection.execute(
+            "SELECT identity, resource, redacted_content FROM audit_events "
+            "WHERE operation = 'grants.create' AND response_status = 201 "
+            "ORDER BY occurred_at DESC, event_id DESC LIMIT 1"
+        ).fetchone()
+    assert audit is not None
+    assert audit[0] is not None and audit[1] is not None
+    assert audit[2] is None
+    assert "admin-human" not in json.dumps(audit)
+    success_event = latest_audit_event("grants.create", 201)
+    conflict_event = latest_audit_event("grants.create", 409)
+    assert success_event.reason_code == "grant_matched"
+    assert conflict_event.reason_code == "status_conflict"
+
+
+def test_grant_create_replays_original_response_after_grant_mutation(client: TestClient) -> None:
+    _prepare_t2_grant_facts()
+    body = {
+        "grant_id": "grant-t2-stable-replay",
+        "principal_id": "t2-list-human",
+        "action": "invoke.stable",
+        "resource": {"resource_type": "llm_model", "resource_id": "t2-model"},
+        "effect": "allow",
+    }
+    request_headers = headers(idempotency_key="create-grant-t2-stable-replay")
+
+    first = client.post("/v1/grants", json=body, headers=request_headers)
+    assert first.status_code == 201
+    with psycopg.connect(DATABASE_URL) as connection:
+        before_audits = connection.execute(
+            "SELECT count(*) FROM audit_events WHERE operation = 'grants.create' "
+            "AND response_status = 201"
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE grants SET status = 'revoked' WHERE grant_id = 'grant-t2-stable-replay'"
+        )
+
+    replay = client.post("/v1/grants", json=body, headers=request_headers)
+
+    assert replay.status_code == 201
+    assert replay.content == first.content
+    assert replay.json()["status"] == "active"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT status FROM grants WHERE grant_id = 'grant-t2-stable-replay'"
+        ).fetchone() == ("revoked",)
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM audit_events WHERE operation = 'grants.create' "
+                "AND response_status = 201"
+            ).fetchone()[0]
+            == before_audits
+        )
+        stored = connection.execute(
+            "SELECT outcome -> 'response_payload' FROM idempotency_records "
+            "WHERE canonical_path = '/v1/grants' AND outcome ->> 'resource_id' = %s",
+            (body["grant_id"],),
+        ).fetchone()
+    assert stored is not None
+    assert stored[0] == first.json()
+
+
+def test_grant_listing_requires_a_filter_and_is_bounded_stable_and_non_enumerating(
+    client: TestClient,
+) -> None:
+    _prepare_t2_grant_facts()
+    with psycopg.connect(DATABASE_URL) as connection:
+        for suffix in ("a", "b", "c"):
+            connection.execute(
+                "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+                "effect, status, created_at) VALUES (%s, 't2-order-human', %s, 'llm_model', %s, "
+                "'allow', 'active', '2026-09-17T12:00:00Z') ON CONFLICT DO NOTHING",
+                (f"grant-t2-order-{suffix}", f"invoke.{suffix}", f"t2-order-{suffix}"),
+            )
+        connection.execute(
+            "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
+            "effect, status, created_at) VALUES ('grant-t2-resource', 't2-list-human', "
+            "'invoke.resource', 'llm_model', 't2-resource-only', 'allow', 'active', now()) "
+            "ON CONFLICT DO NOTHING"
+        )
+
+    assert client.get("/v1/grants", headers=headers()).status_code == 422
+    assert (
+        client.get("/v1/grants?principal_id=t2-list-human&limit=0", headers=headers()).status_code
+        == 422
+    )
+    assert (
+        client.get("/v1/grants?resource_id=t2-model&cursor=opaque", headers=headers()).status_code
+        == 422
+    )
+    for query in ("principal_id=t2-list-human", "principal_id=absent-human"):
+        response = client.get(f"/v1/grants?{query}", headers=headers(RESTRICTED_KEY))
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "resource_unavailable"
+
+    listed = client.get("/v1/grants?principal_id=t2-order-human&limit=2", headers=headers())
+    assert listed.status_code == 200
+    assert listed.json()["limit"] == 2
+    assert listed.json()["truncated"] is True
+    assert [item["grant_id"] for item in listed.json()["items"]] == [
+        "grant-t2-order-c",
+        "grant-t2-order-b",
+    ]
+    by_resource = client.get("/v1/grants?resource_id=t2-resource-only", headers=headers())
+    assert by_resource.status_code == 200
+    assert {item["grant_id"] for item in by_resource.json()["items"]} == {"grant-t2-resource"}
+    assert all(
+        "router" not in item and "secret" not in item for item in by_resource.json()["items"]
+    )
+    success_event = latest_audit_event("grants.list", 200)
+    assert success_event.reason_code == "grant_matched"
+
+
+def test_grant_create_and_audit_roll_back_together() -> None:
+    _prepare_t2_grant_facts()
+
+    class RejectingAudit:
+        async def append(self, event: object) -> object:
+            return event
+
+        async def append_in_transaction(self, event: object, session: object) -> None:
+            raise RuntimeError("intentional grant create audit rejection")
+
+    app = create_application(
+        Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY), audit_store=RejectingAudit()
+    )
+    body = {
+        "grant_id": "grant-t2-audit-rollback",
+        "principal_id": "t2-list-human",
+        "action": "invoke.rollback",
+        "resource": {"resource_type": "llm_model", "resource_id": "t2-model"},
+        "effect": "allow",
+    }
+    with TestClient(app, raise_server_exceptions=False) as failing_client:
+        response = failing_client.post(
+            "/v1/grants",
+            json=body,
+            headers=headers(idempotency_key="create-grant-t2-rollback"),
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM grants WHERE grant_id = 'grant-t2-audit-rollback'"
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM idempotency_records "
+                "WHERE canonical_path = '/v1/grants' AND outcome ->> 'resource_id' = "
+                "'grant-t2-audit-rollback'"
+            ).fetchone()[0]
+            == 0
+        )
