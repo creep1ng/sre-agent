@@ -56,7 +56,7 @@ mostrando triage aunque el incidente haya avanzado (regresión en
 
 Bearer (`#13`) → 401 con `WWW-Authenticate: Bearer`. Autorización con el engine
 compartido: `run.read` sobre `incident_workflow`/`incident-response`
-(extensión aprobada en `authorization.v1.yaml`; recurso = workflow pinnado,
+(extensión aprobada en `agent/api/authorization.v1.yaml`; recurso = workflow pinnado,
 sin joins al gateway). Denegado → **403 sin contenido parcial** (se autoriza
 antes de leer existencia). Inexistente → 404 (`incident_not_found`,
 `run_not_found`, `snapshot_absent`). IDs/cursor/limit malformados y datos con
