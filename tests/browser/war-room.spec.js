@@ -406,3 +406,33 @@ test("shows a recoverable 503 state when the network fails", async ({ page }) =>
   await expect(page.locator("#error-503")).toBeVisible();
   await expect(page.locator("#refresh-button")).toBeVisible();
 });
+
+test("refresh re-derives the latest run when a new run appears", async ({ page }) => {
+  await mockApi(page, { pages: [pageOne, pageTwo], snapshot: snapshotPayload() });
+  await openWarRoom(page);
+  await expect(page.locator(".war-room__event")).toHaveCount(2);
+
+  const pageNew = {
+    events: [eventPayload(0, "New run started."), eventPayload(1, "New run continued.")],
+    next_cursor: "seq:1",
+    has_more: false,
+  };
+  await page.unroute("**/api/v1/incidents/**");
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/timeline")) return route.fulfill({ json: pageNew });
+    if (url.pathname.endsWith("/snapshot")) return route.fulfill({ json: snapshotPayload() });
+    const detail = detailPayload();
+    detail.runs.push({
+      run_id: "run_demo0002",
+      version: 1,
+      status: "running",
+      current_state: "triage",
+      updated_at: "2026-08-24T14:20:00Z",
+    });
+    return route.fulfill({ json: detail });
+  });
+  await page.locator("#refresh-button").click();
+  await expect(page.locator(".war-room__event")).toHaveCount(2);
+  await expect(page.locator(".war-room__event").first()).toContainText("New run started.");
+});
