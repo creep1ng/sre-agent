@@ -31,6 +31,20 @@ def test_detail_missing_incident_is_explicit() -> None:
     assert response.json()["error"]["code"] == "incident_not_found"
 
 
+def test_malformed_incident_id_is_rejected_on_all_endpoints() -> None:
+    units = MemoryUnits()
+    _seed(units)
+    client = _client(_service(units))
+    for path in (
+        "/v1/incidents/12",
+        "/v1/incidents/12/timeline",
+        "/v1/incidents/12/snapshot",
+    ):
+        response = client.get(path, headers=AUTH)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+
+
 def test_unauthenticated_and_unauthorized_reads_reveal_nothing() -> None:
     units = MemoryUnits()
     _seed(units)
