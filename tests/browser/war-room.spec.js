@@ -436,3 +436,21 @@ test("refresh re-derives the latest run when a new run appears", async ({ page }
   await expect(page.locator(".war-room__event")).toHaveCount(2);
   await expect(page.locator(".war-room__event").first()).toContainText("New run started.");
 });
+
+test("renders approvals as responsible persons", async ({ page }) => {
+  const detail = detailPayload();
+  detail.approvals = [
+    {
+      approval_id: "apr_demo0001",
+      subject_id: "demo-human",
+      granted: true,
+      decided_at: "2026-08-24T14:20:00Z",
+    },
+  ];
+  await mockApi(page, { detail, pages: [pageOne, pageTwo], snapshot: snapshotPayload() });
+  await openWarRoom(page);
+
+  await expect(page.locator("#approvals-list")).toContainText("demo-human");
+  await expect(page.locator("#approvals-list")).toContainText("Aprobado");
+  await expect(page.locator("#approvals-empty")).toBeHidden();
+});
