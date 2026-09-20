@@ -31,6 +31,15 @@ def test_detail_missing_incident_is_explicit() -> None:
     assert response.json()["error"]["code"] == "incident_not_found"
 
 
+def test_detail_with_unsupported_workflow_is_rejected() -> None:
+    units = MemoryUnits()
+    incident_id, _ = _seed(units)
+    units._incidents[incident_id].state["workflow_version"] = "9.9.9"
+    response = _client(_service(units)).get(f"/v1/incidents/{incident_id}", headers=AUTH)
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
 def test_unauthenticated_and_unauthorized_reads_reveal_nothing() -> None:
     units = MemoryUnits()
     _seed(units)
