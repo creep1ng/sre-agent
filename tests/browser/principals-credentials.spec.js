@@ -259,7 +259,7 @@ test("reloads credentials for expanded principals after principals refresh", asy
   test.skip(!connected, "requires the connected control-plane API");
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
   const id = await createActivePrincipal(page, adminKey, "c08");
-  await page.evaluate(async ({ key, principalId }) => {
+  const issued = await page.evaluate(async ({ key, principalId }) => {
     const { createAdministrativeApiClient, createMemoryCredentialStore } = await import("/public/api/client.js");
     const store = createMemoryCredentialStore();
     store.set(key);
@@ -267,24 +267,56 @@ test("reloads credentials for expanded principals after principals refresh", asy
     const b = new Uint8Array(16);
     crypto.getRandomValues(b);
     const idem = `credential-issue-${[...b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
-    await client.issueCredential(principalId, {}, idem);
+    const result = await client.issueCredential(principalId, {}, idem);
+    return result?.credential?.credential_id ?? null;
   }, { key: adminKey, principalId: id });
   await connect(page, adminKey);
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
-  let credGets = 0;
+  let getCount = 0;
+  let firstHeld = false;
+  let firstSettled = false;
+  let firstReleased = false;
+  let releaseFirst = null;
   const credList = (url) => url.pathname === `/api/v1/principals/${id}/credentials`;
   await page.route(credList, async (route) => {
-    if (route.request().method() === "GET") credGets += 1;
-    await route.continue();
+    if (route.request().method() !== "GET") return route.continue();
+    getCount += 1;
+    if (getCount === 1) {
+      firstHeld = true;
+      await new Promise((resolve) => { releaseFirst = resolve; });
+      firstReleased = true;
+      try {
+        // The first credential read is intentionally held across principals Refresh. Refresh increments sessionGeneration and starts a replacement read for the still-expanded Principal. The stale first response is released only after the new read is authoritative.
+        await route.fulfill({ status: 200, contentType: "application/json", body: '{"items":[],"limit":100,"truncated":false}' });
+      } finally {
+        firstSettled = true;
+      }
+      return;
+    }
+    return route.continue();
   });
   await openCredentials(page, id);
-  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1, { timeout: 20_000 });
-  await expect.poll(async () => credGets).toBe(1);
+  await expect.poll(async () => firstHeld).toBe(true);
+  await expect.poll(async () => getCount).toBe(1);
   await page.click("#refresh-button");
-  await expect.poll(async () => credGets).toBeGreaterThanOrEqual(2);
-  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
+  await expect.poll(async () => getCount).toBeGreaterThanOrEqual(2);
   await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1, { timeout: 20_000 });
+  if (typeof issued === "string" && issued.length > 0) {
+    await expect(page.locator(`[data-credential-list='${id}']`)).toContainText(issued, { timeout: 20_000 });
+  }
   await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("Loading credentials");
+  releaseFirst();
+  await expect.poll(async () => firstSettled).toBe(true);
+  await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1);
+  if (typeof issued === "string" && issued.length > 0) {
+    await expect(page.locator(`[data-credential-list='${id}']`)).toContainText(issued);
+  }
+  await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("Loading credentials");
+  await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("No credentials");
+  await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("unavailable");
+  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveCount(0);
+  await expect(page.locator(`[data-principal-detail='${id}']`)).toBeVisible();
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1);
   await page.unroute(credList);
 });
 test("shows distinct list errors for invalid and restricted sessions", async ({ page }) => {
