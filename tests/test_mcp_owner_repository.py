@@ -8,7 +8,11 @@ from alembic.config import Config
 
 from sre_agent.governance.dto import MCPServer, MCPTool
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.repositories import MCPOwnerRepository
+from sre_agent.persistence.repositories import (
+    CatalogRepository,
+    GrantRepository,
+    MCPOwnerRepository,
+)
 
 DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
@@ -136,4 +140,35 @@ async def test_owner_repository_rejects_missing_or_cross_owner_relations() -> No
             await repository.register_tool(tool("wrong-owner", "mcp-related", "other-owner"))
         with pytest.raises(ValueError, match="immutable"):
             await repository.update_server("mcp-related", owner_id="other-owner")
+    await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_catalog_projection_follows_owner_state_without_granting_authority() -> None:
+    database = Database(DATABASE_URL)
+    async with database.transaction() as session:
+        owner = MCPOwnerRepository(session)
+        catalog = CatalogRepository(session)
+        registered_server = await owner.register_server(server("mcp-catalog"))
+        registered_tool = await owner.register_tool(tool("query-catalog", "mcp-catalog"))
+
+        server_entry = await catalog.project_mcp_server(registered_server)
+        tool_entry = await catalog.project_mcp_tool(registered_tool)
+        assert server_entry.source_ref == "mcp-owner/mcp-catalog"
+        assert tool_entry.source_ref == "mcp-owner/mcp-catalog/query-catalog"
+        assert (
+            await GrantRepository(session).find_active(
+                "mcp-owner", "invoke", "mcp_server", "mcp-catalog"
+            )
+            is None
+        )
+
+        updated_server = await owner.update_server("mcp-catalog", status="active")
+        updated_tool = await owner.update_tool("query-catalog", status="active")
+        assert (await catalog.project_mcp_server(updated_server)).status == "active"
+        assert (await catalog.project_mcp_tool(updated_tool)).status == "active"
+
+        inactive_server, inactive_tools = await owner.deactivate_server("mcp-catalog")
+        assert (await catalog.project_mcp_server(inactive_server)).status == "inactive"
+        assert (await catalog.project_mcp_tool(inactive_tools[0])).status == "inactive"
     await database.dispose()
