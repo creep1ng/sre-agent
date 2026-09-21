@@ -92,6 +92,65 @@ class Grant(StrictDTO):
     created_at: AwareDatetime
 
 
+CatalogResourceType = Literal["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"]
+CatalogSource = Literal["model_alias", "mcp", "skill", "bok"]
+CatalogStatus = Literal[
+    "registered", "draft", "published", "indexing", "active", "inactive", "revoked"
+]
+CatalogVisibility = Literal["public", "private", "hidden"]
+CatalogId = Annotated[
+    str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
+]
+CatalogTag = Annotated[str, Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9._-]*$")]
+
+
+class CatalogDiscoverability(StrictDTO):
+    display_name: Annotated[str, Field(min_length=1, max_length=200)]
+    visibility: CatalogVisibility
+    description: Annotated[str, Field(max_length=500)]
+    tags: Annotated[list[CatalogTag], Field(max_length=16)]
+
+
+class ResourceCatalogEntry(StrictDTO):
+    resource_type: CatalogResourceType
+    resource_id: CatalogId
+    owner_id: Identifier
+    status: CatalogStatus
+    source: CatalogSource
+    source_ref: CatalogId
+    discoverability: CatalogDiscoverability
+
+    @model_validator(mode="after")
+    def validate_owner_source_status(self) -> "ResourceCatalogEntry":
+        expected_source: dict[str, str] = {
+            "llm_model": "model_alias",
+            "mcp_server": "mcp",
+            "mcp_tool": "mcp",
+            "skill": "skill",
+            "bok_collection": "bok",
+        }
+        if self.source != expected_source[self.resource_type]:
+            raise ValueError("catalog source does not match resource type")
+        allowed: dict[str, set[str]] = {
+            "llm_model": {"active", "inactive"},
+            "mcp_server": {"registered", "active", "inactive", "revoked"},
+            "mcp_tool": {"registered", "active", "inactive", "revoked"},
+            "skill": {"draft", "published", "active", "inactive", "revoked"},
+            "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
+        }
+        if self.status not in allowed[self.resource_type]:
+            raise ValueError("catalog status is not permitted for this resource type")
+        if len(set(self.discoverability.tags)) != len(self.discoverability.tags):
+            raise ValueError("catalog tags must be unique")
+        return self
+
+
+class ResourceCatalogList(StrictDTO):
+    items: Annotated[list[ResourceCatalogEntry], Field(max_length=100)]
+    limit: Annotated[int, Field(ge=1, le=100)]
+    truncated: bool
+
+
 class PolicyDecision(StrictDTO):
     decision: Literal["allow", "deny"]
     reason_code: Literal["grant_matched", "no_matching_grant"]
@@ -258,6 +317,9 @@ class AuditEvent(StrictDTO):
         "credentials.list",
         "credentials.revoke",
         "credentials.rotate",
+        "catalog.create",
+        "catalog.list",
+        "catalog.read",
     ]
     action: Literal[
         "authenticate",

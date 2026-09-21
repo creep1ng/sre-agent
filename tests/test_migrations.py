@@ -255,6 +255,62 @@ def test_404_denial_evidence_prevents_fail_open_downgrade() -> None:
         command.downgrade(config, "20260902_04")
 
 
+def test_catalog_projection_migration_exposes_mcp_provenance_constraints() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        columns = {
+            row[0]
+            for row in connection.execute(
+                """SELECT column_name FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='resources'
+                  AND column_name IN ('owner_id','source','source_ref','display_name',
+                                      'visibility','description','tags')"""
+            )
+        }
+        assert columns == {
+            "owner_id",
+            "source",
+            "source_ref",
+            "display_name",
+            "visibility",
+            "description",
+            "tags",
+        }
+        constraints = {
+            row[0]
+            for row in connection.execute(
+                "SELECT conname FROM pg_constraint WHERE conrelid='resources'::regclass"
+            )
+        }
+        assert {
+            "ck_resources_catalog_projection",
+            "ck_resources_catalog_source",
+            "ck_resources_catalog_visibility",
+            "ck_resources_catalog_owner",
+        } <= constraints
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+        assert all(
+            f"'{operation}'" in operation_check
+            for operation in (
+                "catalog.create",
+                "catalog.list",
+                "catalog.read",
+            )
+        )
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(
+                """INSERT INTO resources (
+                  resource_type, resource_id, status, updated_at, model_alias_id, alias,
+                  concrete_model, router, inference_provider, owner_id, source, source_ref,
+                  display_name, visibility, description, tags)
+                VALUES ('mcp_tool', 'grafana.alerts.query', 'registered', now(), NULL, NULL,
+                  NULL, NULL, NULL, 'admin', 'skill', 'grafana', 'Grafana alerts', 'private',
+                  '', '[]'::jsonb)"""
+            )
+
+
 def test_consumption_column_is_nullable_jsonb_and_legacy_rows_remain_null() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         metadata = connection.execute(
