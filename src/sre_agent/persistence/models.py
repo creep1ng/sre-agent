@@ -4,6 +4,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy import CheckConstraint as CK
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, mapped_column
+from sqlalchemy.sql import func
 from sqlalchemy.sql.schema import ForeignKeyConstraint, UniqueConstraint
 
 required = partial(mapped_column, nullable=False)
@@ -73,6 +74,7 @@ class ResourceRow(Base):
     resource_type = mapped_column(String(32), primary_key=True)
     resource_id = mapped_column(String(200), primary_key=True)
     status = required(String(16))
+    updated_at = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     model_alias_id = mapped_column(String(64), nullable=True)
     alias = mapped_column(String(64), nullable=True)
     concrete_model = mapped_column(String(200), nullable=True)
@@ -135,7 +137,10 @@ class AuditEventRow(Base):
             "operation IN ('audit.accept','audit.export','audit.project','audit.redact',"
             "'credentials.authenticate','responses.create','principals.create',"
             "'principals.get','principals.list','principals.status.replace',"
-            "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate')",
+            "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
+            "'grants.create','grants.list','grants.revoke',"
+            "'aliases.create','aliases.list','aliases.get',"
+            "'aliases.assignment.replace','aliases.status.replace')",
             name="ck_audit_events_operation",
         ),
         CK(
@@ -197,6 +202,7 @@ class AuditEventRow(Base):
     model_alias_ref = mapped_column(JSONB, nullable=True)
     policy_decision = mapped_column(JSONB, nullable=True)
     routing = mapped_column(JSONB, nullable=True)
+    consumption = mapped_column(JSONB, nullable=True)
     untrusted_input = mapped_column(JSONB, nullable=True)
     redaction = required(JSONB)
     content_state = required(String(32))
