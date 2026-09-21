@@ -442,6 +442,38 @@ class ResourceRepository:
         return project_model_alias(row._mapping) if row is not None else None
 
 
+class OwnerResourceFactReader:
+    """Read authorization state from MCP owner rows, not catalog shadows."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def authorization_view(
+        self, resource_type: str, resource_id: str
+    ) -> ResourceAuthorizationFact | None:
+        if resource_type == "mcp_server":
+            row = await self._session.get(MCPServerRow, resource_id)
+            if row is None:
+                return None
+            return ResourceAuthorizationFact(
+                resource_type="mcp_server",
+                resource_id=row.server_id,
+                status="active" if row.status == "active" else "inactive",
+            )
+        if resource_type == "mcp_tool":
+            row = await self._session.get(MCPToolRow, resource_id)
+            if row is None:
+                return None
+            return ResourceAuthorizationFact(
+                resource_type="mcp_tool",
+                resource_id=row.tool_id,
+                status="active" if row.status == "active" else "inactive",
+            )
+        return await ResourceRepository(self._session).authorization_view(
+            resource_type, resource_id
+        )
+
+
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
