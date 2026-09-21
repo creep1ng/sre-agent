@@ -19,7 +19,7 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, alembic_version CASCADE"
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -40,7 +40,7 @@ def migrated_database() -> None:
     command.upgrade(config, "head")
 
 
-def test_repeated_head_has_exactly_six_domain_tables() -> None:
+def test_repeated_head_has_expected_domain_tables() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         rows = connection.execute(
             "SELECT tablename FROM pg_tables WHERE schemaname='public'"
@@ -51,8 +51,54 @@ def test_repeated_head_has_exactly_six_domain_tables() -> None:
         "credentials",
         "grants",
         "idempotency_records",
+        "mcp_servers",
+        "mcp_tools",
         "principals",
         "resources",
+    }
+
+
+def test_mcp_tool_foreign_key_points_to_owner_server() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        definitions = connection.execute(
+            """SELECT pg_get_constraintdef(constraint_oid)
+            FROM (
+              SELECT oid AS constraint_oid
+              FROM pg_constraint
+              WHERE conrelid = 'mcp_tools'::regclass AND contype = 'f'
+            ) constraints"""
+        ).fetchall()
+    assert any(
+        definition[0] == "FOREIGN KEY (server_id) REFERENCES mcp_servers(server_id)"
+        for definition in definitions
+    )
+
+
+def test_mcp_owner_tables_have_closed_lifecycle_constraints() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        constraints = {
+            table: {
+                row[0]
+                for row in connection.execute(
+                    "SELECT conname FROM pg_constraint WHERE conrelid=%s::regclass", (table,)
+                )
+            }
+            for table in ("mcp_servers", "mcp_tools")
+        }
+    assert constraints["mcp_servers"] >= {
+        "pk_mcp_servers",
+        "ck_mcp_servers_contract_version",
+        "ck_mcp_servers_status",
+        "ck_mcp_servers_visibility",
+        "ck_mcp_servers_lifecycle",
+    }
+    assert constraints["mcp_tools"] >= {
+        "pk_mcp_tools",
+        "uq_mcp_tools_server_upstream",
+        "ck_mcp_tools_contract_version",
+        "ck_mcp_tools_status",
+        "ck_mcp_tools_visibility",
+        "ck_mcp_tools_lifecycle",
     }
 
 
