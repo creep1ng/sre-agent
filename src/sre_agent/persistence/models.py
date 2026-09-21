@@ -223,6 +223,7 @@ class AuditEventRow(Base):
         CK(
             "operation IN ('audit.accept','audit.export','audit.project','audit.redact',"
             "'credentials.authenticate','responses.create','principals.create',"
+            "'mcp.discovery','mcp.invoke',"
             "'principals.get','principals.list','principals.status.replace',"
             "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
             "'grants.create','grants.list','grants.revoke',"

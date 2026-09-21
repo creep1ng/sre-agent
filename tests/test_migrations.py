@@ -74,6 +74,16 @@ def test_mcp_tool_foreign_key_points_to_owner_server() -> None:
     )
 
 
+def test_mcp_audit_migration_allows_metadata_operations() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+    assert "'mcp.discovery'" in operation_check
+    assert "'mcp.invoke'" in operation_check
+
+
 def test_mcp_owner_tables_have_closed_lifecycle_constraints() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         constraints = {
