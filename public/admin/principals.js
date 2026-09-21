@@ -32,11 +32,39 @@ const createCancel = document.getElementById("create-cancel");
 const createErrorBox = document.getElementById("create-error");
 const createErrorTitle = document.getElementById("create-error-title");
 const createErrorDetail = document.getElementById("create-error-detail");
+const deactivateDialog = document.getElementById("deactivate-dialog");
+const deactivateForm = document.getElementById("deactivate-form");
+const deactivateTitle = document.getElementById("deactivate-title");
+const deactivateDetail = document.getElementById("deactivate-detail");
+const deactivateSubmit = document.getElementById("deactivate-submit");
+const deactivateCancel = document.getElementById("deactivate-cancel");
+const deactivateErrorBox = document.getElementById("deactivate-error");
+const deactivateErrorTitle = document.getElementById("deactivate-error-title");
+const deactivateErrorDetail = document.getElementById("deactivate-error-detail");
+const issueDialog = document.getElementById("issue-dialog");
+const issueForm = document.getElementById("issue-form");
+const issueExpiresAt = document.getElementById("issue-expires-at");
+const issueSubmit = document.getElementById("issue-submit");
+const issueCancel = document.getElementById("issue-cancel");
+const issueErrorBox = document.getElementById("issue-error");
+const issueErrorTitle = document.getElementById("issue-error-title");
+const issueErrorDetail = document.getElementById("issue-error-detail");
+const secretDialog = document.getElementById("secret-dialog");
+const secretValue = document.getElementById("secret-value");
+const secretClose = document.getElementById("secret-close");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 const expanded = new Set();
 let currentItems = [];
+// Per-principal read version: every authoritative write of one Principal
+// bumps its version, and a detail GET resolving with an older version never
+// writes. A status mutation is not a session change, so sessionGeneration
+// alone cannot invalidate it.
+const principalVersions = new Map();
+const principalVersionOf = (principalId) => principalVersions.get(principalId) ?? 0;
+const touchPrincipalVersion = (principalId) =>
+  principalVersions.set(principalId, principalVersionOf(principalId) + 1);
 // Monotonic load generation: every loadPrincipals() call owns the UI until a
 // newer load starts or the session is cleared. A late resolution from a
 // previous generation (e.g. fetched with an older credential) must never
@@ -59,6 +87,24 @@ let pendingCreateBodyKey = null;
 // Real-request lock (B1): independent of dialog state. Set while POST +
 // authoritative refresh settle; never cleared by open/cancel/disconnect.
 let createInFlight = false;
+// Real-request lock (B2): PUT status settle; never cleared by UI.
+let statusInFlight = false;
+let pendingDeactivate = null;
+let credentialIssueInFlight = false;
+let pendingIssue = null;
+let pendingSecret = null;
+const credentialCache = new Map();
+// Read version per Principal for its credential collection: every new
+// listCredentials read invalidates older ones, so only the latest read
+// may write the cache. Separate from B2 principalVersions, which guards
+// the Principal object itself.
+const credentialReadVersions = new Map();
+const credentialReadVersionOf = (principalId) => credentialReadVersions.get(principalId) ?? 0;
+const touchCredentialReadVersion = (principalId) => {
+  const next = credentialReadVersionOf(principalId) + 1;
+  credentialReadVersions.set(principalId, next);
+  return next;
+};
 
 const text = (value) => (typeof value === "string" ? value : "");
 const known = (value, allowed) => (allowed.has(value) ? value : "unknown");
@@ -122,6 +168,56 @@ function showCreateError(error) {
   announce(`${title}. ${detail}`);
 }
 
+function hideDeactivateError() {
+  deactivateErrorBox.hidden = true;
+  deactivateErrorTitle.textContent = "";
+  deactivateErrorDetail.textContent = "";
+}
+
+function describeStatusError(error) {
+  if (error?.kind === "api" && error?.code === "validation_error")
+    return ["Invalid status change", "Check the principal state. Nothing was changed."];
+  if (error?.kind === "api" && error?.code === "audit_unavailable")
+    return ["Service unavailable", "The request was not completed. Refresh and retry."];
+  if (error?.kind === "api" || error?.kind === "invalid_response")
+    return ["Request failed", error?.message ?? "Unexpected error. Nothing was changed."];
+  return describeError(error);
+}
+
+function showDeactivateError(error) {
+  const [title, detail] = describeStatusError(error);
+  deactivateErrorTitle.textContent = title;
+  deactivateErrorDetail.textContent = detail;
+  deactivateErrorBox.hidden = false;
+  announce(`${title}. ${detail}`);
+}
+
+function hideIssueError() {
+  issueErrorBox.hidden = true;
+  issueErrorTitle.textContent = "";
+  issueErrorDetail.textContent = "";
+}
+
+function describeCredentialError(error) {
+  if (error?.kind === "conflict")
+    return ["Request conflict", "The retry token was already used with different data. Start a new issuance."];
+  if (error?.kind === "replay")
+    return ["Secret unavailable", error?.message ?? "The secret cannot be shown again."];
+  if (error?.kind === "api" && error?.code === "validation_error")
+    return ["Invalid credential request", "Check the expiry value. Nothing was issued."];
+  if (error?.kind === "api" || error?.kind === "invalid_response")
+    return ["Request failed", error?.message ?? "Unexpected error. Nothing was issued."];
+  return describeError(error);
+}
+
+function showIssueError(error) {
+  const [title, detail] = describeCredentialError(error);
+  issueErrorTitle.textContent = title;
+  issueErrorDetail.textContent = detail;
+  issueErrorBox.hidden = false;
+  announce(`${title}. ${detail}`);
+}
+
 function validateCreateFields() {
   const principalId = createPrincipalId.value.trim();
   const displayName = createDisplayName.value.trim();
@@ -176,6 +272,56 @@ function detailRow(item) {
     list.append(name, data);
   }
   panel.append(title, list);
+  if (item.status === "active") {
+    const deactivate = document.createElement("button");
+    deactivate.className = "ma-button ma-button--secondary ma-button--small";
+    deactivate.type = "button";
+    deactivate.dataset.deactivatePrincipal = principalId;
+    deactivate.textContent = "Deactivate";
+    panel.append(deactivate);
+  } else {
+    const noAction = document.createElement("p");
+    noAction.className = "ma-panel__description";
+    noAction.dataset.deactivateUnavailable = principalId;
+    noAction.textContent = "No actions available.";
+    panel.append(noAction);
+  }
+  const issue = document.createElement("button");
+  issue.className = "ma-button ma-button--secondary ma-button--small";
+  issue.type = "button";
+  issue.dataset.issueCredential = principalId;
+  issue.textContent = "Issue credential";
+  panel.append(issue);
+  const cached = credentialCache.get(principalId);
+  if (cached && !cached.error && cached.items.length > 0) {
+    const credList = document.createElement("ul");
+    credList.dataset.credentialList = principalId;
+    for (const cred of cached.items) {
+      const row = document.createElement("li");
+      const code = document.createElement("code");
+      code.className = "ma-mono";
+      const span = typeof cred.expires_at === "string" ? ` → ${cred.expires_at}` : "";
+      code.textContent = `${text(cred.prefix)} … ${text(cred.credential_id)} · ${text(cred.status)} · ${text(cred.created_at)}${span}`;
+      row.append(code);
+      credList.append(row);
+    }
+    panel.append(credList);
+  } else {
+    const note = document.createElement("p");
+    note.className = "ma-panel__description";
+    if (!cached) {
+      note.textContent = "Loading credentials…";
+    } else if (cached.error) {
+      const [title, detailText] = describeError(cached.error);
+      note.textContent = `${title}. ${detailText}`;
+      note.dataset.credentialsError = principalId;
+      note.dataset.errorKind = cached.error.kind ?? "unknown";
+    } else {
+      note.textContent = "No credentials.";
+      note.dataset.credentialsEmpty = principalId;
+    }
+    panel.append(note);
+  }
   cell.append(panel);
   detail.append(cell);
   return detail;
@@ -218,6 +364,29 @@ function renderRows() {
   }
 }
 
+async function loadCredentials(principalId) {
+  const generation = sessionGeneration;
+  const readVersion = touchCredentialReadVersion(principalId);
+  try {
+    const payload = await controlApi.listCredentials(principalId);
+    if (generation !== sessionGeneration) return false;
+    if (readVersion !== credentialReadVersionOf(principalId)) return false;
+    credentialCache.set(principalId, {
+      items: Array.isArray(payload?.items) ? payload.items : [],
+      error: null,
+      loading: false,
+    });
+    if (expanded.has(principalId)) renderRows();
+    return true;
+  } catch (error) {
+    if (generation !== sessionGeneration) return false;
+    if (readVersion !== credentialReadVersionOf(principalId)) return false;
+    credentialCache.set(principalId, { items: [], error, loading: false });
+    if (expanded.has(principalId)) renderRows();
+    return false;
+  }
+}
+
 async function loadPrincipals() {
   const generation = sessionGeneration + 1;
   sessionGeneration = generation;
@@ -240,12 +409,28 @@ async function loadPrincipals() {
       emptyDetail.textContent = "The API returned an empty principals list.";
       countLine.textContent = "No principals.";
       announce("No principals.");
+      expanded.clear();
+      credentialCache.clear();
+      credentialReadVersions.clear();
       return true;
     }
     page.dataset.state = "ready";
     listWrap.hidden = false;
     countLine.textContent = `${currentItems.length} principal${currentItems.length === 1 ? "" : "s"}${payload?.truncated === true ? " (truncated)" : "."}`;
     announce(countLine.textContent);
+    // A refresh orphans pending credential reads (stale generation) without
+    // replacing them: re-request credentials for still-expanded principals
+    // that still exist, and drop vanished ones entirely.
+    const currentIds = new Set(currentItems.map((item) => text(item.principal_id)));
+    for (const principalId of [...expanded]) {
+      if (!currentIds.has(principalId)) {
+        expanded.delete(principalId);
+        credentialCache.delete(principalId);
+        credentialReadVersions.delete(principalId);
+        continue;
+      }
+      loadCredentials(principalId);
+    }
     return true;
   } catch (error) {
     if (generation !== sessionGeneration) return false;
@@ -264,7 +449,52 @@ async function loadPrincipals() {
   }
 }
 
+function openDeactivateDialog(principalId) {
+  const item = currentItems.find((entry) => text(entry.principal_id) === principalId);
+  if (!item || item.status !== "active" || typeof item.updated_at !== "string") return;
+  hideDeactivateError();
+  pendingDeactivate = { principalId, expected_updated_at: item.updated_at };
+  deactivateTitle.textContent = `Deactivate ${principalId}?`;
+  deactivateDetail.textContent = `Principal ${principalId} is active.`;
+  if (!statusInFlight) {
+    deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+  if (!deactivateDialog.open) {
+    if (typeof deactivateDialog.showModal === "function") deactivateDialog.showModal();
+    else deactivateDialog.setAttribute("open", "");
+  }
+  deactivateSubmit.focus();
+}
+
+function newCredentialKey() {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return `credential-issue-${[...b].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function openIssueDialog(principalId) {
+  if (!currentItems.some((entry) => text(entry.principal_id) === principalId)) return;
+  hideIssueError();
+  issueDialog.dataset.principalId = principalId;
+  if (!issueDialog.open) {
+    if (typeof issueDialog.showModal === "function") issueDialog.showModal();
+    else issueDialog.setAttribute("open", "");
+  }
+  issueSubmit.focus();
+}
+
 rowsBody.addEventListener("click", async (event) => {
+  const issue = event.target.closest("[data-issue-credential]");
+  if (issue) {
+    openIssueDialog(issue.dataset.issueCredential);
+    return;
+  }
+  const deactivate = event.target.closest("[data-deactivate-principal]");
+  if (deactivate) {
+    openDeactivateDialog(deactivate.dataset.deactivatePrincipal);
+    return;
+  }
   const toggle = event.target.closest("[data-expand-principal]");
   if (!toggle) return;
   const principalId = toggle.dataset.expandPrincipal;
@@ -274,17 +504,21 @@ rowsBody.addEventListener("click", async (event) => {
     return;
   }
   const generation = sessionGeneration;
+  const itemVersion = principalVersionOf(principalId);
   try {
     // Capture the session generation before the detail request: a late
     // resolution must not mutate items, DOM, expanded, error or live region
     // once the session changed or was cleared.
     const item = await controlApi.getPrincipal(principalId);
     if (generation !== sessionGeneration) return;
+    if (itemVersion !== principalVersionOf(principalId)) return;
     const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
     if (index >= 0) currentItems[index] = item;
     else currentItems = [...currentItems, item];
+    touchPrincipalVersion(principalId);
     expanded.add(principalId);
     renderRows();
+    loadCredentials(principalId);
   } catch (error) {
     if (generation !== sessionGeneration) return;
     expanded.delete(principalId);
@@ -316,6 +550,7 @@ disconnectButton.addEventListener("click", () => {
   credentialStore.clear();
   expanded.clear();
   currentItems = [];
+  principalVersions.clear();
   renderRows();
   hideError();
   // Clear may close the UI and invalidate the generation, but it never
@@ -331,6 +566,25 @@ disconnectButton.addEventListener("click", () => {
     if (createSubmit) createSubmit.disabled = false;
     if (createCancel) createCancel.disabled = false;
   }
+  if (deactivateDialog?.open) deactivateDialog.close();
+  hideDeactivateError();
+  if (!statusInFlight) {
+    pendingDeactivate = null;
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+  if (issueDialog?.open) issueDialog.close();
+  // The holder is always discarded: an in-flight request already captured
+  // its key/body in locals, so a later session can never reuse this key.
+  pendingIssue = null;
+  if (!credentialIssueInFlight) {
+    issueSubmit.disabled = false;
+    issueCancel.disabled = false;
+  }
+  if (secretDialog?.open) secretDialog.close();
+  wipeSecret();
+  credentialCache.clear();
+  credentialReadVersions.clear();
   loadingState.hidden = true;
   listWrap.hidden = true;
   listEmpty.hidden = false;
@@ -338,6 +592,161 @@ disconnectButton.addEventListener("click", () => {
   countLine.textContent = "Not loaded.";
   page.dataset.state = "idle";
   announce("Session cleared.");
+});
+
+deactivateDialog.addEventListener("cancel", (event) => {
+  if (statusInFlight) event.preventDefault();
+});
+
+deactivateCancel.addEventListener("click", () => {
+  if (statusInFlight) return;
+  deactivateDialog.close();
+});
+
+deactivateForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (statusInFlight) return;
+  if (deactivateSubmit.disabled) return;
+  if (!pendingDeactivate) return;
+  hideDeactivateError();
+  // expected_updated_at from dialog open (authoritative); no second PUT.
+  const generation = sessionGeneration;
+  const { principalId, expected_updated_at } = pendingDeactivate;
+  statusInFlight = true;
+  deactivateSubmit.disabled = true;
+  if (deactivateCancel) deactivateCancel.disabled = true;
+  let allowRetry = true;
+  try {
+    const updated = await controlApi.replacePrincipalStatus(principalId, {
+      status: "inactive",
+      expected_updated_at,
+    });
+    if (generation !== sessionGeneration) return;
+    const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
+    if (index >= 0) currentItems[index] = updated;
+    else currentItems = [...currentItems, updated];
+    touchPrincipalVersion(principalId);
+    pendingDeactivate = null;
+    deactivateDialog.close();
+    renderRows();
+    announce(`Principal ${principalId} deactivated.`);
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    const isConflict =
+      error?.kind === "conflict" || (error?.kind === "api" && error?.code === "status_conflict");
+    showDeactivateError(error);
+    if (isConflict) {
+      allowRetry = false;
+      try {
+        const fresh = await controlApi.getPrincipal(principalId);
+        if (generation !== sessionGeneration) return;
+        const index = currentItems.findIndex((entry) => text(entry.principal_id) === principalId);
+        if (index >= 0) currentItems[index] = fresh;
+        else currentItems = [...currentItems, fresh];
+        touchPrincipalVersion(principalId);
+        if (fresh?.status === "active" && typeof fresh?.updated_at === "string") {
+          pendingDeactivate = { principalId, expected_updated_at: fresh.updated_at };
+          allowRetry = true;
+          renderRows();
+          showDeactivateError(error);
+        } else if (fresh?.status !== "active") {
+          pendingDeactivate = null;
+          deactivateDialog.close();
+          renderRows();
+          announce(`Principal ${principalId} is now inactive.`);
+        } else {
+          pendingDeactivate = null;
+          showDeactivateError({
+            kind: "invalid_response",
+            message: "The principal refresh was unusable. Collapse and expand to retry.",
+          });
+        }
+      } catch (refreshError) {
+        if (generation !== sessionGeneration) return;
+        pendingDeactivate = null;
+        showDeactivateError(refreshError);
+      }
+    }
+  } finally {
+    statusInFlight = false;
+    if (allowRetry && deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+});
+
+function wipeSecret() {
+  pendingSecret = null;
+  secretValue.textContent = "";
+}
+
+issueDialog.addEventListener("cancel", (event) => {
+  if (credentialIssueInFlight) event.preventDefault();
+});
+
+issueCancel.addEventListener("click", () => {
+  if (credentialIssueInFlight) return;
+  pendingIssue = null;
+  issueDialog.close();
+});
+
+secretClose.addEventListener("click", () => {
+  wipeSecret();
+  secretDialog.close();
+});
+
+secretDialog.addEventListener("cancel", () => {
+  wipeSecret();
+});
+
+issueForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (credentialIssueInFlight) return;
+  const principalId = issueDialog.dataset.principalId;
+  if (!principalId) return;
+  hideIssueError();
+  const generation = sessionGeneration;
+  const rawExpiry = issueExpiresAt.value.trim();
+  const body = rawExpiry === "" ? {} : { expires_at: rawExpiry };
+  const bodyKey = `${principalId}\n${JSON.stringify(body)}`;
+  if (pendingIssue === null || pendingIssue.principalId !== principalId || pendingIssue.bodyKey !== bodyKey) {
+    pendingIssue = { principalId, body, bodyKey, idempotencyKey: newCredentialKey() };
+  }
+  credentialIssueInFlight = true;
+  issueSubmit.disabled = true;
+  issueCancel.disabled = true;
+  // The real mutation goes out now: any list read started before this POST
+  // must not overwrite the authoritative refresh that follows it.
+  touchCredentialReadVersion(principalId);
+  try {
+    const issued = await controlApi.issueCredential(principalId, body, pendingIssue.idempotencyKey);
+    if (generation !== sessionGeneration) return;
+    pendingIssue = null;
+    if (issued?.secret_revealed === true && typeof issued?.key === "string") {
+      pendingSecret = issued.key;
+      secretValue.textContent = issued.key;
+      issueDialog.close();
+      if (typeof secretDialog.showModal === "function") secretDialog.showModal();
+      else secretDialog.setAttribute("open", "");
+      announce("Credential issued. Copy the secret now. It will not be shown again.");
+    } else {
+      showIssueError({
+        kind: "replay",
+        message: "Credential exists, but its secret is no longer available. Rotate or revoke it before use.",
+      });
+    }
+    await loadCredentials(principalId);
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    showIssueError(error);
+    // Reconcile: the pre-POST touch invalidated the previous list read, so
+    // refresh authoritatively instead of stranding "Loading credentials…".
+    // This starts the newest read version, keeps the retry key, no success.
+    await loadCredentials(principalId);
+  } finally {
+    credentialIssueInFlight = false;
+    issueSubmit.disabled = false;
+    issueCancel.disabled = false;
+  }
 });
 
 refreshButton.addEventListener("click", () => {
