@@ -18,6 +18,7 @@ from sre_agent.governance.dto import (
     Principal,
     PrincipalContext,
     Resource,
+    ResourceCatalogEntry,
 )
 from sre_agent.persistence.api_keys import (
     api_key_prefix,
@@ -36,6 +37,7 @@ from sre_agent.persistence.models import (
 )
 from sre_agent.persistence.projections import (
     project_audit_event,
+    project_catalog_entry,
     project_credential,
     project_grant,
     project_model_alias,
@@ -434,6 +436,256 @@ class ResourceRepository:
         return project_model_alias(row._mapping) if row is not None else None
 
 
+class ModelAliasRepository:
+    """Closed ModelAlias reads and creates over llm_model resource rows.
+
+    Only active llm_model assignments are visible as aliases: absent rows,
+    inactive rows, and non-llm resources never enumerate through this port.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        model_alias_id: str,
+        alias: str,
+        concrete_model: str,
+        router: str,
+        inference_provider: str,
+        *,
+        now: datetime | None = None,
+        owner_id: str | None = None,
+        source_ref: str | None = None,
+        display_name: str | None = None,
+        visibility: str | None = None,
+        description: str | None = None,
+        tags: list[str] | None = None,
+    ) -> ModelAlias:
+        issued_at = now or datetime.now(UTC)
+        row = ResourceRow(
+            resource_type="llm_model",
+            resource_id=model_alias_id,
+            status="active",
+            updated_at=issued_at,
+            model_alias_id=model_alias_id,
+            alias=alias,
+            concrete_model=concrete_model,
+            router=router,
+            inference_provider=inference_provider,
+            owner_id=owner_id if owner_id is not None else model_alias_id,
+            source="model_alias",
+            source_ref=source_ref if source_ref is not None else model_alias_id,
+            display_name=display_name if display_name is not None else alias,
+            visibility=visibility if visibility is not None else "private",
+            description=description if description is not None else "",
+            tags=list(tags) if tags is not None else [],
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return project_model_alias(row)
+
+    async def get(self, model_alias_id: str) -> ModelAlias | None:
+        row = await self._session.scalar(
+            select(ResourceRow).where(
+                ResourceRow.resource_type == "llm_model",
+                ResourceRow.model_alias_id == model_alias_id,
+                ResourceRow.status == "active",
+            )
+        )
+        return project_model_alias(row) if row is not None else None
+
+    async def list(self, *, limit: int) -> tuple[list[ModelAlias], bool]:
+        rows = (
+            await self._session.scalars(
+                select(ResourceRow)
+                .where(
+                    ResourceRow.resource_type == "llm_model",
+                    ResourceRow.status == "active",
+                )
+                .order_by(ResourceRow.model_alias_id.asc(), ResourceRow.alias.asc())
+                .limit(limit + 1)
+            )
+        ).all()
+        truncated = len(rows) > limit
+        return [project_model_alias(row) for row in rows[:limit]], truncated
+
+    async def replace_assignment(
+        self,
+        model_alias_id: str,
+        *,
+        concrete_model: str,
+        router: str,
+        inference_provider: str,
+        expected_updated_at: datetime,
+        now: datetime | None = None,
+    ) -> ModelAlias | None:
+        """Deterministically replace an alias assignment guarded by optimistic concurrency.
+
+        Returns ``None`` when the alias is absent, inactive, or hidden behind a
+        non-llm resource; raises ``StaleWriteError`` when ``expected_updated_at``
+        no longer matches the stored row. The alias slug itself is immutable.
+        """
+        replacement_at = now or datetime.now(UTC)
+        result = await self._session.execute(
+            update(ResourceRow)
+            .where(
+                ResourceRow.resource_type == "llm_model",
+                ResourceRow.model_alias_id == model_alias_id,
+                ResourceRow.status == "active",
+                ResourceRow.updated_at == expected_updated_at,
+            )
+            .values(
+                concrete_model=concrete_model,
+                router=router,
+                inference_provider=inference_provider,
+                updated_at=replacement_at,
+            )
+            .returning(ResourceRow)
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return project_model_alias(row)
+        if await self.get(model_alias_id) is None:
+            return None
+        raise StaleWriteError(model_alias_id)
+
+    async def replace_status(
+        self,
+        model_alias_id: str,
+        status: str,
+        *,
+        expected_updated_at: datetime,
+        now: datetime | None = None,
+    ) -> ModelAlias | None:
+        """Deterministically replace an alias status guarded by optimistic concurrency.
+
+        Returns ``None`` when the alias is absent, inactive, or hidden behind a
+        non-llm resource; raises ``StaleWriteError`` when ``expected_updated_at``
+        no longer matches the stored row.
+        """
+        replacement_at = now or datetime.now(UTC)
+        result = await self._session.execute(
+            update(ResourceRow)
+            .where(
+                ResourceRow.resource_type == "llm_model",
+                ResourceRow.model_alias_id == model_alias_id,
+                ResourceRow.status == "active",
+                ResourceRow.updated_at == expected_updated_at,
+            )
+            .values(status=status, updated_at=replacement_at)
+            .returning(ResourceRow)
+        )
+        row = result.scalar_one_or_none()
+        if row is not None:
+            return project_model_alias(row)
+        if await self.get(model_alias_id) is None:
+            return None
+        raise StaleWriteError(model_alias_id)
+
+
+class CatalogRepository:
+    """Closed owner-backed catalog reads and admin creates over resource rows.
+
+    Only catalog resource types enumerate here; administrative_control never
+    does. Hidden and inactive entries never enumerate in lists and read as
+    the safe 404; revoked and other lifecycle states remain discoverable.
+    The projection never leaks ModelAlias routing or secrets.
+    """
+
+    CATALOG_TYPES = ("llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection")
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        resource_type: str,
+        resource_id: str,
+        owner_id: str,
+        source: str,
+        source_ref: str,
+        status: str,
+        display_name: str,
+        visibility: str,
+        description: str,
+        tags: list[str],
+        *,
+        now: datetime | None = None,
+    ) -> ResourceCatalogEntry:
+        issued_at = now or datetime.now(UTC)
+        row = ResourceRow(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            status=status,
+            updated_at=issued_at,
+            model_alias_id=None,
+            alias=None,
+            concrete_model=None,
+            router=None,
+            inference_provider=None,
+            owner_id=owner_id,
+            source=source,
+            source_ref=source_ref,
+            display_name=display_name,
+            visibility=visibility,
+            description=description,
+            tags=list(tags),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return project_catalog_entry(row)
+
+    async def get(self, resource_type: str, resource_id: str) -> ResourceCatalogEntry | None:
+        row = await self._session.get(ResourceRow, (resource_type, resource_id))
+        if row is None or row.resource_type not in self.CATALOG_TYPES:
+            return None
+        try:
+            return project_catalog_entry(row)
+        except Exception:
+            return None
+
+    async def list(
+        self,
+        *,
+        resource_type: str | None = None,
+        owner_id: str | None = None,
+        status: str | None = None,
+        visibility: str | None = None,
+        limit: int,
+    ) -> tuple[list[ResourceCatalogEntry], bool]:
+        statement = select(ResourceRow).where(
+            ResourceRow.resource_type.in_(self.CATALOG_TYPES),
+            ResourceRow.visibility != "hidden",
+            ResourceRow.status != "inactive",
+        )
+        if resource_type is not None:
+            statement = statement.where(ResourceRow.resource_type == resource_type)
+        if owner_id is not None:
+            statement = statement.where(ResourceRow.owner_id == owner_id)
+        if status is not None:
+            statement = statement.where(ResourceRow.status == status)
+        if visibility is not None:
+            if visibility == "hidden":
+                return [], False
+            statement = statement.where(ResourceRow.visibility == visibility)
+        rows = (
+            await self._session.scalars(
+                statement.order_by(
+                    ResourceRow.resource_type.asc(), ResourceRow.resource_id.asc()
+                ).limit(limit + 1)
+            )
+        ).all()
+        truncated = len(rows) > limit
+        items = []
+        for row in rows[:limit]:
+            try:
+                items.append(project_catalog_entry(row))
+            except Exception:
+                continue
+        return items, truncated
+
+
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -453,6 +705,61 @@ class GrantRepository:
         )
         if row is None:
             return None
+        return self._project(row)
+
+    async def get(self, grant_id: str) -> Grant | None:
+        row = await self._session.get(GrantRow, grant_id)
+        return self._project(row) if row is not None else None
+
+    async def create(
+        self,
+        grant_id: str,
+        principal_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> Grant:
+        row = GrantRow(
+            grant_id=grant_id,
+            principal_id=principal_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            effect="allow",
+            status="active",
+            created_at=now or datetime.now(UTC),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return self._project(row)
+
+    async def list_filtered(
+        self,
+        *,
+        principal_id: str | None,
+        resource_id: str | None,
+        limit: int,
+    ) -> tuple[list[Grant], bool]:
+        if (principal_id is None) == (resource_id is None):
+            raise ValueError("exactly one grant filter is required")
+        statement = select(GrantRow)
+        if principal_id is not None:
+            statement = statement.where(GrantRow.principal_id == principal_id)
+        else:
+            statement = statement.where(GrantRow.resource_id == resource_id)
+        rows = (
+            await self._session.scalars(
+                statement.order_by(GrantRow.created_at.desc(), GrantRow.grant_id.desc()).limit(
+                    limit + 1
+                )
+            )
+        ).all()
+        return [self._project(row) for row in rows[:limit]], len(rows) > limit
+
+    @staticmethod
+    def _project(row: GrantRow) -> Grant:
         return project_grant(
             {
                 "grant_id": row.grant_id,
@@ -467,6 +774,18 @@ class GrantRepository:
                 "created_at": row.created_at,
             }
         )
+
+    async def revoke(self, grant_id: str) -> Grant | None:
+        """Converge an existing direct grant on revoked without deleting its trace."""
+        await self._session.execute(
+            update(GrantRow)
+            .where(GrantRow.grant_id == grant_id, GrantRow.status == "active")
+            .values(status="revoked")
+        )
+        row = await self._session.get(GrantRow, grant_id)
+        if row is None:
+            return None
+        return self._project(row)
 
 
 class AuditRepository:

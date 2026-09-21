@@ -153,6 +153,13 @@ def _resource_values(route: RouteSetting) -> dict[str, object]:
         "concrete_model": route.model,
         "router": "openrouter",
         "inference_provider": route.provider,
+        "owner_id": route.alias,
+        "source": "model_alias",
+        "source_ref": route.alias,
+        "display_name": route.alias,
+        "visibility": "private",
+        "description": "",
+        "tags": [],
     }
 
 
@@ -239,6 +246,13 @@ async def _seed_session(
                         concrete_model=route.model,
                         router="openrouter",
                         inference_provider=route.provider,
+                        owner_id=route.alias,
+                        source="model_alias",
+                        source_ref=route.alias,
+                        display_name=route.alias,
+                        visibility="private",
+                        description="",
+                        tags=[],
                     )
                 )
         await session.flush()
@@ -261,16 +275,14 @@ async def _seed_session(
         # inserted with the same deterministic values as a fresh seed; existing
         # rows are then validated by the convergence check below.
         present_resources = {(row.resource_type, row.resource_id) for row in admin_resources}
+        # Administrative rows carry no llm or catalog metadata; omit those
+        # columns so they default to SQL NULL (explicit JSONB None would fail
+        # the catalog projection CHECK).
         missing_resources = [
             dict(
                 resource_type=resource_type,
                 resource_id=resource_id,
                 status="active",
-                model_alias_id=None,
-                alias=None,
-                concrete_model=None,
-                router=None,
-                inference_provider=None,
             )
             for resource_type, resource_id in ADMIN_RESOURCES
             if (resource_type, resource_id) not in present_resources
@@ -320,9 +332,9 @@ async def _seed_session(
         await session.execute(insert(ResourceRow), [_resource_values(route) for route in routes])
         await session.execute(insert(GrantRow), [_grant_values(route) for route in routes])
         fresh_admin_resources = [
-            dict(resource_type=resource_type, resource_id=resource_id, status="active",
-                 model_alias_id=None, alias=None, concrete_model=None, router=None,
-                 inference_provider=None)
+            dict(
+                resource_type=resource_type, resource_id=resource_id, status="active",
+            )
             for resource_type, resource_id in ADMIN_RESOURCES]
         if fresh_admin_resources:
             await session.execute(insert(ResourceRow), fresh_admin_resources)
@@ -368,8 +380,30 @@ async def _seed_session(
     for route in routes:
         _require(
             by_alias[route.alias],
-            ("status", "model_alias_id", "alias", "concrete_model", "router", "inference_provider"),
-            ("active", route.alias, route.alias, route.model, "openrouter", route.provider),
+            (
+                "status",
+                "model_alias_id",
+                "alias",
+                "concrete_model",
+                "router",
+                "inference_provider",
+                "owner_id",
+                "source",
+                "source_ref",
+                "visibility",
+            ),
+            (
+                "active",
+                route.alias,
+                route.alias,
+                route.model,
+                "openrouter",
+                route.provider,
+                route.alias,
+                "model_alias",
+                route.alias,
+                "private",
+            ),
             "resources",
         )
         _require(

@@ -4,6 +4,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy import CheckConstraint as CK
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, mapped_column
+from sqlalchemy.sql import func
 from sqlalchemy.sql.schema import ForeignKeyConstraint, UniqueConstraint
 
 required = partial(mapped_column, nullable=False)
@@ -58,7 +59,10 @@ class ResourceRow(Base):
             "'administrative_control')",
             name="ck_resources_type",
         ),
-        CK("status IN ('active','inactive')", name="ck_resources_status"),
+        CK(
+            "status IN ('registered','draft','published','indexing','active','inactive','revoked')",
+            name="ck_resources_status",
+        ),
         CK(
             "(resource_type='llm_model' AND model_alias_id IS NOT NULL AND alias IS NOT NULL "
             "AND concrete_model IS NOT NULL AND router='openrouter' "
@@ -67,17 +71,56 @@ class ResourceRow(Base):
             "AND router IS NULL AND inference_provider IS NULL)",
             name="ck_resources_llm_assignment",
         ),
+        CK(
+            "(resource_type='administrative_control' AND owner_id IS NULL AND source IS NULL "
+            "AND source_ref IS NULL AND display_name IS NULL AND visibility IS NULL "
+            "AND description IS NULL AND tags IS NULL) OR "
+            "(resource_type<>'administrative_control' AND owner_id IS NOT NULL "
+            "AND source IS NOT NULL AND source_ref IS NOT NULL AND display_name IS NOT NULL "
+            "AND visibility IS NOT NULL AND description IS NOT NULL)",
+            name="ck_resources_catalog_projection",
+        ),
+        CK(
+            "source IS NULL OR source IN ('model_alias','mcp','skill','bok')",
+            name="ck_resources_catalog_source",
+        ),
+        CK(
+            "visibility IS NULL OR visibility IN ('public','private','hidden')",
+            name="ck_resources_catalog_visibility",
+        ),
+        CK(
+            "(resource_type='llm_model' AND source='model_alias') OR "
+            "(resource_type IN ('mcp_server','mcp_tool') AND source='mcp') OR "
+            "(resource_type='skill' AND source='skill') OR "
+            "(resource_type='bok_collection' AND source='bok') OR "
+            "(resource_type='administrative_control' AND source IS NULL)",
+            name="ck_resources_catalog_owner",
+        ),
         UniqueConstraint("model_alias_id", name="uq_resources_model_alias_id"),
         UniqueConstraint("alias", name="uq_resources_alias"),
     )
     resource_type = mapped_column(String(32), primary_key=True)
     resource_id = mapped_column(String(200), primary_key=True)
     status = required(String(16))
+    # Optimistic-concurrency version for llm_model alias mutations. Every
+    # alias PUT conditions its write on this value (expected_updated_at);
+    # readers expose it so callers can mint a fresh token per attempt.
+    updated_at = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     model_alias_id = mapped_column(String(64), nullable=True)
     alias = mapped_column(String(64), nullable=True)
     concrete_model = mapped_column(String(200), nullable=True)
     router = mapped_column(String(100), nullable=True)
     inference_provider = mapped_column(String(100), nullable=True)
+    # Closed catalog projection owned by the subsystem owner of the RESOURCE.
+    # Administrative control rows never carry catalog metadata; catalog rows
+    # always carry owner/source/discoverability supplied by ADMIN in POST.
+    owner_id = mapped_column(String(64), nullable=True)
+    source = mapped_column(String(32), nullable=True)
+    source_ref = mapped_column(String(200), nullable=True)
+    display_name = mapped_column(String(200), nullable=True)
+    visibility = mapped_column(String(16), nullable=True)
+    description = mapped_column(String(500), nullable=True)
+    tags = mapped_column(JSONB, nullable=True)
 
 
 class GrantRow(Base):
@@ -135,7 +178,10 @@ class AuditEventRow(Base):
             "operation IN ('audit.accept','audit.export','audit.project','audit.redact',"
             "'credentials.authenticate','responses.create','principals.create',"
             "'principals.get','principals.list','principals.status.replace',"
-            "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate')",
+            "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
+            "'grants.create','grants.list','grants.revoke',"
+            "'aliases.create','aliases.list','aliases.get',"
+            "'aliases.assignment.replace','aliases.status.replace')",
             name="ck_audit_events_operation",
         ),
         CK(

@@ -118,6 +118,56 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "principals",
     },
+    ("POST", "/v1/grants"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "grants",
+    },
+    ("GET", "/v1/grants"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "grants",
+    },
+    ("POST", "/v1/model-aliases"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
+    ("GET", "/v1/model-aliases"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
+    ("GET", "/v1/model-aliases/{alias_id}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
+    ("PUT", "/v1/model-aliases/{alias_id}/assignment"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
+    ("PUT", "/v1/model-aliases/{alias_id}/status"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "model_aliases",
+    },
+    ("POST", "/v1/catalog/resources"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/catalog/resources"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/catalog/resources/{resource_type}/{id}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
 }
 
 

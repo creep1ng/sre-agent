@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="320" viewBox="0 0 1040 320">
+  <rect width="1040" height="320" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #184 T2 grant create/list</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ docker compose --profile checks run --build --rm python-checks</text>
+  <text x="28" y="126" fill="#d1fae5" font-family="monospace" font-size="20">  pytest -q tests/test_control_plane.py tests/test_control_authorization_order.py</text>
+  <text x="28" y="156" fill="#d1fae5" font-family="monospace" font-size="20">  tests/test_health.py tests/test_governed_authorization.py</text>
+  <text x="28" y="206" fill="#f9fafb" font-family="monospace" font-size="20">35 passed</text>
+  <text x="28" y="256" fill="#f9fafb" font-family="monospace" font-size="20">Focused T2 unit verification; DB replay/rollback present for review, re-run in PR4.</text>
+  <text x="28" y="286" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #184 PR2; no secrets or environment values shown.</text>
+</svg>
