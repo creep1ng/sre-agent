@@ -8,7 +8,9 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx
+from fastapi import APIRouter, Request, Security
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sre_agent.gateway.audit import AuditProjector
@@ -579,3 +581,52 @@ class MCPGatewayService:
                 status_code=503,
             )
         return response
+
+
+def mcp_router(service: MCPGatewayService) -> APIRouter:
+    router = APIRouter()
+    bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
+
+    @router.get(
+        "/v1/mcp/discovery",
+        responses={
+            401: {"description": "Authentication failed."},
+            403: {"description": "Resource unavailable."},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "mcp.discovery",
+                "resource_type": "mcp_server",
+                "resource_id": MCP_SERVER_ID,
+            }
+        },
+    )
+    async def discovery(
+        request: Request,
+        _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
+    ) -> JSONResponse:
+        return await service.discovery(request.headers.get("authorization"))
+
+    @router.post(
+        "/v1/mcp/tools/{tool_id}",
+        responses={403: {"description": "Resource unavailable."}},
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "mcp.invoke",
+                "resource_type": "mcp_tool",
+                "resource_id": "path.tool_id",
+            }
+        },
+    )
+    async def invoke(
+        request: Request,
+        tool_id: str,
+        _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
+    ) -> JSONResponse:
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        return await service.invoke(tool_id, body, request.headers.get("authorization"))
+
+    return router

@@ -4,7 +4,9 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
 from sre_agent.gateway import mcp
 from sre_agent.gateway.audit import AuditProjector
@@ -587,3 +589,93 @@ async def test_timeout_maps_to_public_504_after_one_transport_call(
     assert response.status_code == 504
     assert json.loads(response.body)["error"]["code"] == "upstream_timeout"
     assert len(client.calls) == 1
+
+
+def _route_app(service: Any) -> FastAPI:
+    app = FastAPI()
+    app.include_router(mcp.mcp_router(service))
+    return app
+
+
+@pytest.mark.asyncio
+async def test_http_discovery_returns_401_without_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _ = _service(monkeypatch, MemoryOwner())
+
+    async def fail(*_args: Any) -> Any:
+        raise AuthenticationFailed
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", fail)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_route_app(service)), base_url="http://test"
+    ) as client:
+        response = await client.get("/v1/mcp/discovery")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.asyncio
+async def test_http_invocation_returns_403_before_owner_or_upstream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, client_stub = _service(monkeypatch, MemoryOwner())
+
+    async def deny(*_args: Any) -> Any:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_route_app(service)), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/mcp/tools/query_prometheus",
+            headers={"Authorization": AUTHORIZATION},
+            json={},
+        )
+
+    assert response.status_code == 403
+    assert client_stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_http_invalid_input_returns_422_without_upstream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, client_stub = _service(monkeypatch, MemoryOwner())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_route_app(service)), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/mcp/tools/query_prometheus",
+            headers={"Authorization": AUTHORIZATION},
+            json={"unexpected": True},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "contract_validation_failed"
+    assert client_stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_http_allowed_invocation_calls_upstream_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, client_stub = _service(monkeypatch, MemoryOwner())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_route_app(service)), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/v1/mcp/tools/query_prometheus",
+            headers={"Authorization": AUTHORIZATION},
+            json={
+                "datasource_uid": "webstore-metrics",
+                "expr": "up",
+                "query_type": "instant",
+                "end_time": "now",
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(client_stub.calls) == 1
