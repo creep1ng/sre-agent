@@ -2,11 +2,10 @@
 """Operate the pinned OpenTelemetry Demo environment (HT-DEMO-ENV, issue #186).
 
 Usage:
-    python scripts/demo_env.py up|verify|down
+    python scripts/demo_env.py up|fail|verify|reset|down
 
 Every operation is idempotent and bounded to the Compose project declared in
 demo/manifest.yaml, removes nothing outside it, and never writes to upstream.
-Failure injection and its verification arrive in a follow-up PR.
 """
 
 from __future__ import annotations
@@ -225,6 +224,19 @@ def op_verify(cfg: dict) -> None:
     print("OK every service is available and image digests match the lock.")
 
 
+def op_fail(cfg: dict) -> None:
+    flag = cfg["failure_injection"]["flag"]
+    set_variants({flag: "on"})
+    run(compose(cfg) + ["restart", "flagd"])
+    print(f"{flag} is on; synthetic traffic keeps running.")
+
+
+def op_reset(cfg: dict) -> None:
+    set_variants(baseline(cfg))
+    run(compose(cfg) + ["restart", "flagd"])
+    print("Flag baseline restored.")
+
+
 def op_down(cfg: dict) -> None:
     project = cfg["compose"]["project_name"]
     run(compose(cfg) + ["down"])
@@ -245,7 +257,7 @@ def op_down(cfg: dict) -> None:
     print("Environment is down; nothing outside the project was touched.")
 
 
-OPERATIONS = {"up": op_up, "verify": op_verify, "down": op_down}
+OPERATIONS = {"up": op_up, "fail": op_fail, "verify": op_verify, "reset": op_reset, "down": op_down}
 
 
 def main() -> None:
