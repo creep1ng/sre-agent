@@ -192,7 +192,8 @@ async def test_seed_converges_after_real_09_to_10_upgrade(monkeypatch: pytest.Mo
     # Seeding requires the resources.updated_at CAS column, so the legacy shape
     # is staged at head, narrowed to the pre-T5 graph, then carried across the
     # real 20260918_10 migration before convergence. T6 adds the catalog
-    # projection (20260918_11); head is now 11 but the 09->10 path is still
+    # projection (20260918_11) and issue #189 A1 admits incident_workflow
+    # (20260922_12); head is now 12 but the 09->10 path is still
     # exercised through the full upgrade chain.
     schema = "seed_upgrade_09_10_test"
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
@@ -229,7 +230,7 @@ async def test_seed_converges_after_real_09_to_10_upgrade(monkeypatch: pytest.Mo
         admin_grants = connection.execute(
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
-    assert version == "20260918_11"
+    assert version == "20260922_12"
     assert admin_resources == 3
     assert admin_grants == 6
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:

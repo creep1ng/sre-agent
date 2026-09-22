@@ -56,7 +56,7 @@ class ResourceRow(Base):
     __table_args__ = (
         CK(
             "resource_type IN ('llm_model','mcp_server','mcp_tool','skill','bok_collection',"
-            "'administrative_control')",
+            "'administrative_control','incident_workflow')",
             name="ck_resources_type",
         ),
         CK(
@@ -81,7 +81,7 @@ class ResourceRow(Base):
             name="ck_resources_catalog_projection",
         ),
         CK(
-            "source IS NULL OR source IN ('model_alias','mcp','skill','bok')",
+            "source IS NULL OR source IN ('model_alias','mcp','skill','bok','incident_workflow')",
             name="ck_resources_catalog_source",
         ),
         CK(
@@ -93,7 +93,8 @@ class ResourceRow(Base):
             "(resource_type IN ('mcp_server','mcp_tool') AND source='mcp') OR "
             "(resource_type='skill' AND source='skill') OR "
             "(resource_type='bok_collection' AND source='bok') OR "
-            "(resource_type='administrative_control' AND source IS NULL)",
+            "(resource_type='administrative_control' AND source IS NULL) OR "
+            "(resource_type='incident_workflow' AND source='incident_workflow')",
             name="ck_resources_catalog_owner",
         ),
         UniqueConstraint("model_alias_id", name="uq_resources_model_alias_id"),
