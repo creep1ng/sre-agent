@@ -1,7 +1,6 @@
-"""Issue #188 B1: audit events contract gates (OpenAPI + schemas + examples)."""
+"""The published v2.3.0 control-plane contract owns audit read semantics."""
 
 import json
-import re
 from pathlib import Path
 
 import yaml
@@ -9,154 +8,156 @@ from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
 
 ROOT = Path(__file__).parents[1]
-OPENAPI = yaml.safe_load((ROOT / "agent/api/audit-events.openapi.yaml").read_text())
-SCHEMAS = {
-    name: yaml.safe_load((ROOT / f"agent/schemas/{name}.schema.yaml").read_text())
-    for name in ("audit-metadata", "audit-events-page")
-}
-ENVELOPE = json.loads(
-    (ROOT / "schemas/releases/2.0.0/json-schema/http/error-envelope.schema.json").read_text()
-)
-URN = r"urn:sre-agent:schema:[a-z][a-z0-9-]*:[0-9]+\.[0-9]+\.[0-9]+"
-APPROVED_FIELDS = {
-    "event_id",
-    "occurred_at",
-    "operation",
-    "action",
-    "stage",
-    "outcome",
-    "reason_code",
-    "authorization_denial_cause",
-    "response_status",
-    "retryable",
-    "latency_ms",
-    "correlation",
-    "identity",
-    "resource",
-    "model_alias_ref",
-    "policy_decision",
-    "routing",
-}
-FORBIDDEN = {
-    "consumption",
-    "redacted_content",
-    "prompts",
-    "responses",
-    "headers",
-    "tool_arguments",
-    "tool_calls",
-    "content",
-}
+RELEASE = ROOT / "schemas/releases/2.3.0"
+OPENAPI = yaml.safe_load((RELEASE / "openapi/control-plane.yaml").read_text())
+SCHEMA_PATHS = sorted((RELEASE / "json-schema").rglob("*.schema.json"))
+SCHEMAS = [json.loads(path.read_text()) for path in SCHEMA_PATHS]
+BY_ID = {schema["$id"]: schema for schema in SCHEMAS}
+AUDIT_METADATA = BY_ID["urn:sre-agent:schema:audit-event-metadata:2.3.0"]
 
 
-def _walk(node, refs):
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key == "$ref" and isinstance(value, str):
-                refs.append(value)
-            _walk(value, refs)
-    elif isinstance(node, list):
-        for value in node:
-            _walk(value, refs)
-
-
-def _resolve(doc, pointer):
-    current = doc
-    for raw in pointer[1:].split("/"):
-        token = raw.replace("~1", "/").replace("~0", "~")
-        if isinstance(current, dict) and token in current:
-            current = current[token]
-        elif isinstance(current, list) and token.isdigit() and int(token) < len(current):
-            current = current[int(token)]
-        else:
+def _resolve_local(document: dict, reference: str) -> bool:
+    current = document
+    for token in reference.removeprefix("#/").split("/"):
+        token = token.replace("~1", "/").replace("~0", "~")
+        if not isinstance(current, dict) or token not in current:
             return False
+        current = current[token]
     return True
 
 
-def _params():
-    found = {}
-    for entry in OPENAPI["paths"]["/v1/audit/events"]["get"]["parameters"]:
-        if "$ref" in entry:
-            node = OPENAPI
-            for token in entry["$ref"][1:].split("/")[1:]:
-                node = node[token]
-            entry = node
-        if "name" in entry:
-            found[entry["name"]] = entry
-    return found
+def _parameters(operation: dict) -> dict[str, dict]:
+    resolved = {}
+    for parameter in operation.get("parameters", []):
+        if "$ref" in parameter:
+            name = parameter["$ref"].rsplit("/", 1)[1]
+            parameter = OPENAPI["components"]["parameters"][name]
+        resolved[parameter["name"]] = parameter
+    return resolved
 
 
-def _forbidden(node, where, errors):
+def _walk(node):
     if isinstance(node, dict):
-        for key, value in node.items():
-            if key in FORBIDDEN:
-                errors.append(f"forbidden field '{key}' at {where}")
-            _forbidden(value, f"{where}.{key}", errors)
+        yield node
+        for value in node.values():
+            yield from _walk(value)
     elif isinstance(node, list):
-        for index, value in enumerate(node):
-            _forbidden(value, f"{where}[{index}]", errors)
+        for value in node:
+            yield from _walk(value)
 
 
-def test_contract_schemas_paths_and_window() -> None:
-    for name, schema in SCHEMAS.items():
-        Draft202012Validator.check_schema(schema)
-        assert re.fullmatch(URN, schema["$id"]), name
-    assert OPENAPI["openapi"].split(".")[0] == "3"
-    assert {"/v1/audit/events", "/v1/audit/events/{event_id}"} <= set(OPENAPI["paths"])
-    params = _params()
-    assert params["from"]["required"] is True and params["to"]["required"] is True
-    assert params["limit"]["schema"] == {
+def test_versioned_audit_read_routes_filters_and_rejections() -> None:
+    listing = OPENAPI["paths"]["/v1/audit-events"]["get"]
+    detail = OPENAPI["paths"]["/v1/audit-events/{id}"]["get"]
+    parameters = _parameters(listing)
+
+    assert OPENAPI["info"]["version"] == "2.3.0"
+    assert set(OPENAPI["paths"]) >= {"/v1/audit-events", "/v1/audit-events/{id}"}
+    assert set(parameters) == {
+        "principal_id",
+        "decision",
+        "model_alias_id",
+        "request_id",
+        "incident_id",
+        "run_id",
+        "task_id",
+        "trace_id",
+        "from",
+        "to",
+        "limit",
+    }
+    assert listing["x-required-query-any-of"] == [
+        "principal_id",
+        "decision",
+        "model_alias_id",
+        "request_id",
+        "incident_id",
+        "run_id",
+        "task_id",
+        "trace_id",
+        "from",
+        "to",
+    ]
+    assert parameters["limit"]["schema"] == {
         "type": "integer",
         "minimum": 1,
         "maximum": 100,
-        "default": 50,
+        "default": 100,
     }
-    listing = set(OPENAPI["paths"]["/v1/audit/events"]["get"]["responses"])
-    assert listing == {"200", "401", "403", "422", "503"}
-    detail = set(OPENAPI["paths"]["/v1/audit/events/{event_id}"]["get"]["responses"])
-    assert detail == {"200", "401", "403", "404", "503"}
-
-
-def test_contract_refs_resolve() -> None:
-    known = {s["$id"] for s in SCHEMAS.values()} | {ENVELOPE["$id"]}
-    refs: list[str] = []
-    _walk(OPENAPI, refs)
-    for ref in refs:
-        if ref.startswith("#"):
-            assert _resolve(OPENAPI, ref[1:]), ref
-        elif ref.startswith("urn:"):
-            assert ref in known, ref
-        else:
-            assert (ROOT / "agent/api" / ref[2:]).exists(), ref
-
-
-def test_metadata_projection_is_closed() -> None:
-    assert set(SCHEMAS["audit-metadata"]["properties"]) == APPROVED_FIELDS
-    errors: list[str] = []
-    for name, schema in SCHEMAS.items():
-        _forbidden(schema, f"schema:{name}", errors)
-    assert errors == []
-
-
-def test_contract_examples_validate() -> None:
-    by_id = {s["$id"]: s for s in SCHEMAS.values()}
-    by_id[ENVELOPE["$id"]] = ENVELOPE
-    registry = Registry().with_resources(
-        [(sid, Resource.from_contents(s)) for sid, s in by_id.items()]
+    assert listing["x-forbidden-query-parameters"] == [
+        "cursor",
+        "page",
+        "offset",
+        "continuation_token",
+        "next",
+        "content",
+        "raw_content",
+        "redacted_content",
+        "include_content",
+    ]
+    assert set(listing["responses"]) == {"200", "401", "403", "422", "503"}
+    assert set(detail["responses"]) == {"200", "401", "403", "404", "422", "503"}
+    assert detail["parameters"] == [{"$ref": "#/components/parameters/Id"}]
+    assert listing["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "#/components/schemas/AuditEventList"
     )
-    cases = {
-        "events-page.json": "urn:sre-agent:schema:audit-events-page:1.0.0",
-        "event-detail.json": "urn:sre-agent:schema:audit-metadata:1.0.0",
-        "error-422.json": "urn:sre-agent:schema:error-envelope:2.0.0",
-        "error-503.json": "urn:sre-agent:schema:error-envelope:2.0.0",
+    assert detail["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "urn:sre-agent:schema:audit-event-metadata:2.3.0"
+    )
+
+
+def test_versioned_audit_metadata_projection_is_closed_and_resolves() -> None:
+    assert AUDIT_METADATA["unevaluatedProperties"] is False
+    for schema in SCHEMAS:
+        for item in _walk(schema):
+            reference = item.get("$ref")
+            if reference is None:
+                continue
+            if reference.startswith("#"):
+                assert _resolve_local(schema, reference), reference
+            else:
+                assert reference in BY_ID, reference
+
+    forbidden = {
+        "prompt",
+        "prompts",
+        "provider_body",
+        "model_output",
+        "request_body",
+        "response_body",
+        "bearer_token",
+        "api_key",
     }
-    errors: list[str] = []
-    for filename, schema_id in cases.items():
-        document = json.loads((ROOT / "agent/api/examples/audit-read" / filename).read_text())
-        validator = Draft202012Validator(
-            by_id[schema_id], registry=registry, format_checker=FormatChecker()
-        )
-        for problem in validator.iter_errors(document["value"]):
-            errors.append(f"{filename}: {problem.message}")
-        _forbidden(document["value"], f"example:{filename}", errors)
+    assert (
+        not {
+            key
+            for schema in (AUDIT_METADATA, BY_ID["urn:sre-agent:schema:audit-event:2.3.0"])
+            for item in _walk(schema)
+            for key in item
+        }
+        & forbidden
+    )
+
+
+def test_published_metadata_example_validates_against_release_schema() -> None:
+    registry = Registry().with_resources(
+        [(schema_id, Resource.from_contents(schema)) for schema_id, schema in BY_ID.items()]
+    )
+    example = json.loads((RELEASE / "examples/audit/metadata-only.example.json").read_text())
+    validator = Draft202012Validator(
+        AUDIT_METADATA, registry=registry, format_checker=FormatChecker()
+    )
+    errors = list(validator.iter_errors(example))
     assert errors == []
+    assert list(validator.iter_errors({**example, "redacted_content": "sensitive"}))
+
+
+def test_release_openapi_references_resolve() -> None:
+    references = [
+        item["$ref"] for item in _walk(OPENAPI) if "$ref" in item and isinstance(item["$ref"], str)
+    ]
+    for reference in references:
+        if reference.startswith("#"):
+            assert _resolve_local(OPENAPI, reference), reference
+        elif reference.startswith("urn:"):
+            assert reference in BY_ID, reference
