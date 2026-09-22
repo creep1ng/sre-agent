@@ -53,6 +53,10 @@ class Scenario:
     name: str
     expected: str
     key: str
+    expected_turns: int
+    expected_gateway_calls: int
+    expected_tool_calls: int
+    expected_evidence_sources: list[str]
     replies: list[str | int] = field(default_factory=list)
 
 
@@ -61,22 +65,61 @@ SCENARIOS = [
         "valid context and objective",
         "completed",
         ALLOWED,
-        [TOOL, hypothesis("ev_payment_error_rate")],
+        expected_turns=2,
+        expected_gateway_calls=2,
+        expected_tool_calls=1,
+        expected_evidence_sources=["fixture"],
+        replies=[TOOL, hypothesis("ev_payment_error_rate")],
     ),
     Scenario(
-        "invalid output twice", "invalid_output", ALLOWED, ["Payment looks broken.", "Still prose."]
+        "invalid output twice",
+        "invalid_output",
+        ALLOWED,
+        expected_turns=2,
+        expected_gateway_calls=2,
+        expected_tool_calls=0,
+        expected_evidence_sources=[],
+        replies=["Payment looks broken.", "Still prose."],
     ),
     Scenario(
-        "citation outside the context", "invalid_output", ALLOWED, [hypothesis("ev_invented")] * 2
+        "citation outside the context",
+        "invalid_output",
+        ALLOWED,
+        expected_turns=2,
+        expected_gateway_calls=2,
+        expected_tool_calls=0,
+        expected_evidence_sources=[],
+        replies=[hypothesis("ev_invented")] * 2,
     ),
     Scenario(
         "tool not authorized",
         "denied",
         ALLOWED,
-        ['{"action": "use_tool", "tool": "query_elasticsearch"}'],
+        expected_turns=1,
+        expected_gateway_calls=1,
+        expected_tool_calls=0,
+        expected_evidence_sources=[],
+        replies=['{"action": "use_tool", "tool": "query_elasticsearch"}'],
     ),
-    Scenario("gateway denial", "denied", RESTRICTED),
-    Scenario("step budget exhausted", "max_steps", ALLOWED, [TOOL] * 6),
+    Scenario(
+        "gateway denial",
+        "denied",
+        RESTRICTED,
+        expected_turns=0,
+        expected_gateway_calls=1,
+        expected_tool_calls=0,
+        expected_evidence_sources=[],
+    ),
+    Scenario(
+        "step budget exhausted",
+        "max_steps",
+        ALLOWED,
+        expected_turns=6,
+        expected_gateway_calls=6,
+        expected_tool_calls=6,
+        expected_evidence_sources=["fixture"],
+        replies=[TOOL] * 6,
+    ),
 ]
 
 
@@ -164,10 +207,28 @@ async def run(scenario: Scenario, request: InvestigationRequest) -> dict[str, An
         "gateway_calls": len(stub.received),
         "tool_calls": provider.calls,
         "evidence_sources": sorted({item.source for item in result.evidence}),
+        "expected_turns": scenario.expected_turns,
+        "expected_gateway_calls": scenario.expected_gateway_calls,
+        "expected_tool_calls": scenario.expected_tool_calls,
+        "expected_evidence_sources": scenario.expected_evidence_sources,
         "detail": result.detail,
         "provider_secret_sent": PROVIDER_SECRET in received,
         "turn_id_sent": '"turn_id"' in received,
     }
+
+
+def matches_expectations(observed: dict[str, Any], scenario: Scenario) -> bool:
+    """Check every advertised scenario result, including interaction counts."""
+    return (
+        observed.get("scenario") == scenario.name
+        and observed.get("status") == scenario.expected
+        and observed.get("turns") == scenario.expected_turns
+        and observed.get("gateway_calls") == scenario.expected_gateway_calls
+        and observed.get("tool_calls") == scenario.expected_tool_calls
+        and observed.get("evidence_sources") == scenario.expected_evidence_sources
+        and observed.get("provider_secret_sent") is False
+        and observed.get("turn_id_sent") is False
+    )
 
 
 def main() -> int:
@@ -188,10 +249,7 @@ def main() -> int:
     unchanged = hashlib.sha256(STATE.read_bytes()).hexdigest() == before
     print(json.dumps({"incident_state_unchanged": unchanged, "gateway": "demo stub"}))
     passed = unchanged and all(
-        row["status"] == row["expected"]
-        and not row["provider_secret_sent"]
-        and not row["turn_id_sent"]
-        for row in rows
+        matches_expectations(row, scenario) for row, scenario in zip(rows, SCENARIOS, strict=True)
     )
     print("RESULT: " + ("all scenarios as expected" if passed else "MISMATCH"))
     return 0 if passed else 1
