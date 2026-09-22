@@ -27,6 +27,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
 from provision_incident_workflow import (  # noqa: E402
+    _run,
     build_service,
     provision,
     revoke_run_read,
@@ -108,17 +109,34 @@ async def _decision() -> str:
 
 
 @pytest.mark.asyncio
-async def test_governed_provision_opens_and_revoke_closes() -> None:
+async def test_governed_provision_opens_and_revoke_closes(monkeypatch, capsys) -> None:
     assert await _decision() == f"deny:{AuthorizationDenialCause.RESOURCE_MISSING}"
     database = Database(DATABASE_URL)
     try:
         service = build_service(database, b"0" * 32)
         result = await provision(service, BEARER[0])
-        assert (result.catalog_status, result.grant_status) == (201, 201)
+        assert (result.catalog_status, result.grant_status, result.run_read_active) == (
+            201,
+            201,
+            True,
+        )
         assert await _decision() == "allow"
         replayed = await provision(service, BEARER[0])
-        assert (replayed.catalog_status, replayed.grant_status) == (201, 201)
+        assert (replayed.catalog_status, replayed.grant_status, replayed.run_read_active) == (
+            201,
+            201,
+            True,
+        )
         assert await revoke_run_read(service, BEARER[0]) == 204
+        revoked_replay = await provision(service, BEARER[0])
+        assert (revoked_replay.catalog_status, revoked_replay.grant_status) == (201, 201)
+        assert revoked_replay.run_read_active is False
     finally:
         await database.dispose()
     assert await _decision() == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    monkeypatch.setenv("ADMIN_API_KEY", BEARER[0].removeprefix("Bearer "))
+    monkeypatch.setenv("AUDIT_KEY_HEX", "00" * 32)
+    assert await _run(revoke=False) == 1
+    assert '"run_read_active": false' in capsys.readouterr().out

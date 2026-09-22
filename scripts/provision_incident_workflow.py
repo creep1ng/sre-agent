@@ -51,6 +51,7 @@ GRANT_IDEMPOTENCY_KEY = "incident-workflow-provision-grant-v1"
 class ProvisionResult:
     catalog_status: int
     grant_status: int
+    run_read_active: bool
 
 
 def build_service(database, audit_key: bytes):
@@ -66,7 +67,21 @@ def build_service(database, audit_key: bytes):
 async def provision(service, bearer: str) -> ProvisionResult:
     catalog = await service.create_catalog_resource(CATALOG_BODY, bearer, CATALOG_IDEMPOTENCY_KEY)
     grant = await service.create_grant(GRANT_BODY, bearer, GRANT_IDEMPOTENCY_KEY)
-    return ProvisionResult(catalog.status_code, grant.status_code)
+    from sre_agent.persistence.repositories import GrantRepository
+
+    async with service.sessions() as session:
+        persisted_grant = await GrantRepository(session).get(GRANT_BODY["grant_id"])
+    run_read_active = bool(
+        persisted_grant
+        and persisted_grant.grant_id == GRANT_BODY["grant_id"]
+        and persisted_grant.principal_id == GRANT_BODY["principal_id"]
+        and persisted_grant.action == GRANT_BODY["action"]
+        and persisted_grant.resource.resource_type == GRANT_BODY["resource"]["resource_type"]
+        and persisted_grant.resource.resource_id == GRANT_BODY["resource"]["resource_id"]
+        and persisted_grant.effect == GRANT_BODY["effect"]
+        and persisted_grant.status == "active"
+    )
+    return ProvisionResult(catalog.status_code, grant.status_code, run_read_active)
 
 
 async def revoke_run_read(service, bearer: str) -> int:
@@ -102,10 +117,18 @@ async def _run(*, revoke: bool) -> int:
         result = await provision(service, bearer)
         print(
             json.dumps(
-                {"catalog_status": result.catalog_status, "grant_status": result.grant_status}
+                {
+                    "catalog_status": result.catalog_status,
+                    "grant_status": result.grant_status,
+                    "run_read_active": result.run_read_active,
+                }
             )
         )
-        return 0 if (result.catalog_status, result.grant_status) == (201, 201) else 1
+        return (
+            0
+            if (result.catalog_status, result.grant_status) == (201, 201) and result.run_read_active
+            else 1
+        )
     finally:
         await database.dispose()
 
