@@ -15,3 +15,5 @@ test-results/
 schemas/tooling/node_modules/
 schemas/tooling/.tmp/
 /.atl/
+/otel-demo/
+/.demo-state/
