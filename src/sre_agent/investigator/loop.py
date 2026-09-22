@@ -37,6 +37,7 @@ from sre_agent.investigator.ports import (
 from sre_agent.investigator.prompt import assemble
 
 MAX_INPUT = 65_536
+MAX_OUTPUT = 65_536
 
 
 def _new_id(prefix: str) -> str:
@@ -91,11 +92,13 @@ async def investigate(
             task_id=task_id_for(turn_id),
             sequence=len(turns),
             assembled_input=prompt,
-            model_output=reply.text,
+            model_output=reply.text if len(reply.text) <= MAX_OUTPUT else None,
             request_id=reply.request_id,
             occurred_at=clock(),
         )
         try:
+            if len(reply.text) > MAX_OUTPUT:
+                raise InvalidOutput("output exceeds the 65536-character limit")
             action = parse_action(reply.text)
             unknown = unknown_references(action, request, {item.evidence_id for item in evidence})
             if unknown:

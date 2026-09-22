@@ -130,6 +130,17 @@ def test_the_retry_explains_the_rejection_to_the_model() -> None:
     assert "previous reply was rejected: output: Invalid JSON" in gateway.calls[1]["input"]
 
 
+def test_oversized_model_output_is_rejected_without_retaining_it() -> None:
+    oversized = "x" * 65_537
+    result = run(ScriptedGateway(oversized, oversized))
+
+    assert result.status == "invalid_output"
+    assert len(result.turns) == 2
+    assert all(turn.model_output is None for turn in result.turns)
+    assert result.detail is not None and "limit" in result.detail
+    assert oversized not in str(result.model_dump())
+
+
 def test_a_transient_failure_repeats_the_same_turn() -> None:
     gateway = ScriptedGateway(TRANSIENT, HYPOTHESIS)
     result = run(gateway)
