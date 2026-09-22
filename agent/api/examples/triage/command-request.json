@@ -1,0 +1,8 @@
+{
+  "summary": "Declare request with concurrency token and reason.",
+  "value": {
+    "operation": "triage_declare",
+    "expected_version": 1,
+    "reason": "Sustained 5xx spike on checkout, declaring incident."
+  }
+}

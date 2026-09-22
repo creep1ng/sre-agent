@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="360" viewBox="0 0 1040 360">
+  <rect width="1040" height="360" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #23 C1 triage contract</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q tests/test_triage_contract.py</text>
+  <text x="28" y="136" fill="#f9fafb" font-family="monospace" font-size="20">5 passed in 0.26s</text>
+  <text x="28" y="186" fill="#f9fafb" font-family="monospace" font-size="20">3 paths, 2 schemas, 4 examples; closed payloads per command;</text>
+  <text x="28" y="226" fill="#f9fafb" font-family="monospace" font-size="20">Idempotency-Key required, no browser actor. No backend yet.</text>
+  <text x="28" y="276" fill="#f9fafb" font-family="monospace" font-size="20">Slice diff: 382 lines. Contract only, no implementation claimed.</text>
+  <text x="28" y="316" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #23 C1; no secrets or environment values shown.</text>
+</svg>

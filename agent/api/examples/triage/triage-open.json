@@ -1,0 +1,12 @@
+{
+  "summary": "Alert opened for triage; no incident created.",
+  "value": {
+    "alert_id": "al-payment-spike",
+    "status": "open",
+    "incident_id": null,
+    "expected_version": 1,
+    "reason": null,
+    "actor": null,
+    "decided_at": null
+  }
+}
