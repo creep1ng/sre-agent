@@ -73,6 +73,53 @@ test("surfaces network failure without false data", async ({ page }) => {
   await expect(page.locator("[data-alias-row]")).toHaveCount(0);
 });
 
+test("clears stale rows when a loaded list is followed by a 401", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  const staleModel = await page.locator("[data-alias-row='triage-agent'] td").nth(1).textContent();
+  await page.unrouteAll({ behavior: "wait" });
+  await page.route("**/api/v1/model-aliases**", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: "{}" }),
+  );
+  await page.click("#refresh-button");
+  await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "error", { timeout: 20_000 });
+  await expect(page.locator("#page-error-title")).toHaveText("Authentication required");
+  await expect(page.locator("[data-alias-row]")).toHaveCount(0);
+  expect(await page.locator("#alias-rows").textContent()).not.toContain(staleModel);
+  expect(await page.locator("#live-region").textContent()).not.toMatch(/alias(es)?\./);
+});
+
+test("clears stale rows when a loaded list is followed by a 403", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  const staleModel = await page.locator("[data-alias-row='triage-agent'] td").nth(1).textContent();
+  await page.unrouteAll({ behavior: "wait" });
+  await page.route("**/api/v1/model-aliases**", (route) =>
+    route.fulfill({ status: 403, contentType: "application/json", body: "{}" }),
+  );
+  await page.click("#refresh-button");
+  await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "error", { timeout: 20_000 });
+  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expect(page.locator("[data-alias-row]")).toHaveCount(0);
+  expect(await page.locator("#alias-rows").textContent()).not.toContain(staleModel);
+});
+
+test("clears stale rows when a loaded list is followed by a network failure", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  const staleModel = await page.locator("[data-alias-row='triage-agent'] td").nth(1).textContent();
+  await page.unrouteAll({ behavior: "wait" });
+  await page.route("**/api/v1/model-aliases**", (route) => route.abort("failed"));
+  await page.click("#refresh-button");
+  await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "offline", { timeout: 20_000 });
+  await expect(page.locator("#page-error-title")).toHaveText("API unavailable");
+  await expect(page.locator("[data-alias-row]")).toHaveCount(0);
+  expect(await page.locator("#alias-rows").textContent()).not.toContain(staleModel);
+});
+
 test("clears the session and removes alias rows", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");

@@ -115,6 +115,8 @@ async function loadAliases() {
     return true;
   } catch (error) {
     if (generation !== sessionGeneration) return false;
+    currentItems = [];
+    renderRows();
     loadingState.hidden = true;
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     listEmpty.hidden = false;
