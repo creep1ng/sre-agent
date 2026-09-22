@@ -51,9 +51,13 @@ def repository_database() -> None:
              'scrypt$do-not-project','active',now(),NULL,NULL)"""
         )
         connection.execute(
-            """INSERT INTO resources VALUES
-            ('llm_model','triage-agent','active','triage-agent','triage-agent',
-             'openai/gpt-4o-mini','openrouter','openai')"""
+            """INSERT INTO resources (
+              resource_type, resource_id, status, model_alias_id, alias, concrete_model,
+              router, inference_provider, owner_id, source, source_ref, display_name,
+              visibility, description)
+            VALUES ('llm_model','triage-agent','active','triage-agent','triage-agent',
+              'openai/gpt-4o-mini','openrouter','openai','triage-agent','model_alias',
+              'triage-agent','triage-agent','private','')"""
         )
         connection.execute(
             """INSERT INTO grants VALUES
