@@ -700,7 +700,7 @@ def test_incident_migration_downgrade_and_recovery_are_reproducible() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         assert (
             connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-            == "20260918_10"
+            == "20260918_11"
         )
         assert (
             connection.execute("SELECT to_regclass('incident.run_events') IS NOT NULL").fetchone()[
