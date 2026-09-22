@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="360" viewBox="0 0 1040 360">
+  <rect width="1040" height="360" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #188 B1 audit events contract</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q tests/test_audit_events_contract.py</text>
+  <text x="28" y="136" fill="#f9fafb" font-family="monospace" font-size="20">4 passed in 0.53s</text>
+  <text x="28" y="186" fill="#f9fafb" font-family="monospace" font-size="20">2 paths, 2 schemas, 4 examples; closed AuditMetadata projection;</text>
+  <text x="28" y="226" fill="#f9fafb" font-family="monospace" font-size="20">from/to mandatory, limit 50 in 1..100, refs resolve. No gateway yet.</text>
+  <text x="28" y="276" fill="#f9fafb" font-family="monospace" font-size="20">Slice diff: 388 lines. Contract only, no implementation claimed.</text>
+  <text x="28" y="316" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #188 B1; no secrets or environment values shown.</text>
+</svg>

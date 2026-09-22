@@ -1,0 +1,8 @@
+{
+  "summary": "Reports unavailable audit storage as retryable, never as an empty list.",
+  "value": {
+    "error": { "code": "audit_unavailable", "message": "Audit storage is temporarily unavailable." },
+    "request_id": "77777777-7777-4777-8777-777777777777",
+    "retryable": true
+  }
+}

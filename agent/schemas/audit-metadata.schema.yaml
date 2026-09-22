@@ -1,0 +1,56 @@
+# Closed audit metadata projection — HT-AUDIT-READ (issue #188).
+# Only PO-approved fields; content fields absent by construction.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:audit-metadata:1.0.0
+type: object
+additionalProperties: false
+required: [event_id, occurred_at, operation, action, stage, outcome,
+  response_status, retryable, latency_ms, correlation]
+properties:
+  event_id: { type: string, minLength: 1, maxLength: 200 }
+  occurred_at: { type: string, format: date-time }
+  operation: { type: string, minLength: 1, maxLength: 80 }
+  action: { type: string, minLength: 1, maxLength: 80 }
+  stage: { enum: [validation, authentication, authorization, routing, upstream, response, audit] }
+  outcome: { enum: [success, denied, error] }
+  reason_code: { type: [string, "null"], maxLength: 80, default: null }
+  authorization_denial_cause: { type: [string, "null"], maxLength: 80, default: null }
+  response_status: { type: integer, minimum: 100, maximum: 599 }
+  retryable: { type: boolean }
+  latency_ms: { type: [integer, "null"], minimum: 0, default: null }
+  correlation:
+    type: [object, "null"]
+    additionalProperties: false
+    properties:
+      request_id: { type: string, maxLength: 200 }
+      trace_id: { type: string, maxLength: 200 }
+  identity:
+    type: [object, "null"]
+    additionalProperties: false
+    properties:
+      principal_digest: { type: string, maxLength: 200 }
+      principal_key_version: { type: integer, minimum: 1 }
+  resource:
+    type: [object, "null"]
+    additionalProperties: false
+    properties:
+      resource_digest: { type: string, maxLength: 200 }
+      resource_key_version: { type: integer, minimum: 1 }
+  model_alias_ref:
+    type: [object, "null"]
+    additionalProperties: false
+    properties:
+      alias: { type: string, maxLength: 200 }
+  policy_decision:
+    type: [object, "null"]
+    additionalProperties: false
+    properties:
+      decision: { enum: [allow, deny] }
+      reason_code: { type: string, maxLength: 80 }
+  routing:
+    type: [object, "null"]
+    additionalProperties: false
+    properties:
+      router: { type: string, maxLength: 80 }
+      inference_provider: { type: string, maxLength: 100 }

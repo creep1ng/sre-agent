@@ -1,0 +1,8 @@
+{
+  "summary": "Rejects an expired or filter-reused cursor without resetting silently.",
+  "value": {
+    "error": { "code": "invalid_cursor", "message": "The audit cursor is invalid or expired." },
+    "request_id": "66666666-6666-4666-8666-666666666666",
+    "retryable": false
+  }
+}

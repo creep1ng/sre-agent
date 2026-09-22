@@ -1,0 +1,8 @@
+{
+  "summary": "Empty window returns 200 with empty items, never an error envelope.",
+  "value": {
+    "items": [],
+    "limit": 50,
+    "next_cursor": null
+  }
+}
