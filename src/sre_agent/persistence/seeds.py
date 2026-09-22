@@ -218,7 +218,7 @@ async def _seed_session(
     await session.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
     await session.execute(text("SELECT pg_advisory_xact_lock(112024)"))
     catalog_projection = bool(
-        await session.scalar(text("SELECT version_num = '20260918_11' FROM alembic_version"))
+        await session.scalar(text("SELECT version_num >= '20260918_11' FROM alembic_version"))
     )
     ids = [principal_id for principal_id, _, _ in PRINCIPALS]
     principals = [row for pid in ids if (row := await session.get(PrincipalRow, pid)) is not None]
