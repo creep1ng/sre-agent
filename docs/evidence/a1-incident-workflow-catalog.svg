@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="420" viewBox="0 0 1040 420">
+  <rect width="1040" height="420" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #189 A1 incident_workflow catalog</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q tests/test_control_incident_workflow_catalog.py</text>
+  <text x="28" y="136" fill="#f9fafb" font-family="monospace" font-size="20">6 passed in 2.11s (real PostgreSQL 17.4)</text>
+  <text x="28" y="176" fill="#d1fae5" font-family="monospace" font-size="20">$ python scripts/validate_incident_contracts.py</text>
+  <text x="28" y="216" fill="#f9fafb" font-family="monospace" font-size="20">incident contracts: OK (11 states, 13 transitions, 4 decision points)</text>
+  <text x="28" y="256" fill="#d1fae5" font-family="monospace" font-size="20">$ python scripts/validate_run_api.py</text>
+  <text x="28" y="296" fill="#f9fafb" font-family="monospace" font-size="20">run api: OK (5 paths, 5 schemas, 6 positive and 8 negative examples)</text>
+  <text x="28" y="336" fill="#f9fafb" font-family="monospace" font-size="20">register -&gt; catalog read -&gt; deny -&gt; allow -&gt; revoke -&gt; deny; migration 20260922_12.</text>
+  <text x="28" y="376" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #189 A1; no secrets or environment values shown.</text>
+</svg>
