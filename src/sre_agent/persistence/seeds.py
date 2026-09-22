@@ -11,6 +11,7 @@ from os import environ
 from sqlalchemy import insert, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from sre_agent.governance.dto import ModelAlias
 from sre_agent.persistence.api_keys import hash_api_key, is_api_key, verify_api_key
@@ -143,6 +144,20 @@ def _grant_id(alias: str) -> str:
     return f"grant-incident-harness-invoke-{alias}"
 
 
+async def _resource(session: AsyncSession, key: tuple[str, str]) -> ResourceRow | None:
+    """Read seed-owned resources without requiring post-03 columns."""
+    return await session.get(ResourceRow, key, options=(defer(ResourceRow.updated_at),))
+
+
+async def _resources(session: AsyncSession, keys: tuple[tuple[str, str], ...]) -> list[ResourceRow]:
+    rows = []
+    for key in keys:
+        row = await _resource(session, key)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
 def _resource_values(route: RouteSetting) -> dict[str, object]:
     return {
         "resource_type": "llm_model",
@@ -189,7 +204,7 @@ async def _seed_session(
     resources = [
         row
         for route in routes
-        if (row := await session.get(ResourceRow, ("llm_model", route.alias))) is not None
+        if (row := await _resource(session, ("llm_model", route.alias))) is not None
     ]
     grants = [
         row
@@ -197,7 +212,7 @@ async def _seed_session(
         if (row := await session.get(GrantRow, _grant_id(route.alias))) is not None
     ]
     admin_resources = [
-        row for key in ADMIN_RESOURCES if (row := await session.get(ResourceRow, key)) is not None
+        row for key in ADMIN_RESOURCES if (row := await _resource(session, key)) is not None
     ]
     admin_grants = [
         row
@@ -245,7 +260,7 @@ async def _seed_session(
         resources = [
             row
             for route in routes
-            if (row := await session.get(ResourceRow, ("llm_model", route.alias))) is not None
+            if (row := await _resource(session, ("llm_model", route.alias))) is not None
         ]
         grants = [
             row
@@ -295,11 +310,7 @@ async def _seed_session(
         if missing_grants:
             await session.execute(insert(GrantRow), missing_grants)
         await session.flush()
-        admin_resources = [
-            row
-            for key in ADMIN_RESOURCES
-            if (row := await session.get(ResourceRow, key)) is not None
-        ]
+        admin_resources = await _resources(session, ADMIN_RESOURCES)
         admin_grants = [
             row
             for grant_id, _, _ in ADMIN_GRANTS
@@ -423,7 +434,7 @@ async def routing_drift(
     drift: dict[str, tuple[str, ...]] = {}
     async with database.sessions() as session:
         for route in settings.routes:
-            row = await session.get(ResourceRow, ("llm_model", route.alias))
+            row = await _resource(session, ("llm_model", route.alias))
             if row is None:
                 drift[route.alias] = ("missing",)
                 continue
@@ -468,7 +479,7 @@ async def routing_digest(database: Database, settings: RoutingSettings) -> str:
         rows = [
             row
             for route in settings.routes
-            if (row := await session.get(ResourceRow, ("llm_model", route.alias))) is not None
+            if (row := await _resource(session, ("llm_model", route.alias))) is not None
         ]
         return _routing_digest(settings, rows)
 
