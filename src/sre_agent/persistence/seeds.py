@@ -47,6 +47,7 @@ ROUTING_ENV = (
     "REMEDIATION_AGENT_MODEL",
     "REMEDIATION_AGENT_PROVIDER",
 )
+CATALOG_RESOURCE_FIELDS = "owner_id source source_ref display_name visibility description".split()
 
 
 class SeedConflict(RuntimeError):
@@ -146,7 +147,15 @@ def _grant_id(alias: str) -> str:
 
 async def _resource(session: AsyncSession, key: tuple[str, str]) -> ResourceRow | None:
     """Read seed-owned resources without requiring post-03 columns."""
-    return await session.get(ResourceRow, key, options=(defer(ResourceRow.updated_at),))
+    return await session.get(
+        ResourceRow,
+        key,
+        options=(
+            defer(ResourceRow.updated_at),
+            defer(ResourceRow.tags),
+            *(defer(getattr(ResourceRow, field)) for field in CATALOG_RESOURCE_FIELDS),
+        ),
+    )
 
 
 async def _resources(session: AsyncSession, keys: tuple[tuple[str, str], ...]) -> list[ResourceRow]:
@@ -168,7 +177,22 @@ def _resource_values(route: RouteSetting) -> dict[str, object]:
         "concrete_model": route.model,
         "router": "openrouter",
         "inference_provider": route.provider,
+        "owner_id": route.alias,
+        "source": "model_alias",
+        "source_ref": route.alias,
+        "display_name": route.alias,
+        "visibility": "private",
+        "description": "",
     }
+
+
+def _seed_resource_values(routes, *, catalog_projection: bool) -> list[dict[str, object]]:
+    values = [_resource_values(route) for route in routes]
+    if not catalog_projection:
+        for value in values:
+            for field in CATALOG_RESOURCE_FIELDS:
+                value.pop(field, None)
+    return values
 
 
 def _grant_values(route: RouteSetting) -> dict[str, object]:
@@ -193,6 +217,9 @@ async def _seed_session(
 ) -> bool:
     await session.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
     await session.execute(text("SELECT pg_advisory_xact_lock(112024)"))
+    catalog_projection = bool(
+        await session.scalar(text("SELECT version_num = '20260918_11' FROM alembic_version"))
+    )
     ids = [principal_id for principal_id, _, _ in PRINCIPALS]
     principals = [row for pid in ids if (row := await session.get(PrincipalRow, pid)) is not None]
     credentials = [
@@ -231,7 +258,8 @@ async def _seed_session(
         missing_routes = [route for route in routes if route.alias not in present_resources]
         if missing_routes:
             await session.execute(
-                insert(ResourceRow), [_resource_values(route) for route in missing_routes]
+                insert(ResourceRow),
+                _seed_resource_values(missing_routes, catalog_projection=catalog_projection),
             )
         present_grants = {row.resource_id for row in grants}
         missing_grants = [route for route in routes if route.alias not in present_grants]
@@ -328,7 +356,10 @@ async def _seed_session(
                  key_hash=hash_api_key(key), status="active", created_at=SEED_TIME,
                  expires_at=None, revoked_at=None)
             for (pid, _, _), key in zip(PRINCIPALS, settings.keys, strict=True)])
-        await session.execute(insert(ResourceRow), [_resource_values(route) for route in routes])
+        await session.execute(
+            insert(ResourceRow),
+            _seed_resource_values(routes, catalog_projection=catalog_projection),
+        )
         await session.execute(insert(GrantRow), [_grant_values(route) for route in routes])
         fresh_admin_resources = [
             dict(resource_type=resource_type, resource_id=resource_id, status="active",
