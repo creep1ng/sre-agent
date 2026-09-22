@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900">
+<rect width="1280" height="900" fill="#0b1020"/>
+<rect x="0" y="0" width="1280" height="48" fill="#182338"/>
+<circle cx="24" cy="24" r="7" fill="#ff5f57"/><circle cx="48" cy="24" r="7" fill="#febc2e"/><circle cx="72" cy="24" r="7" fill="#28c840"/>
+<text x="100" y="30" fill="#f2f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">Issue #187 / PR #336 · Isolated Grafana MCP overlay boundary</text>
+<text x="36" y="75" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ candidate identity</text>
+<text x="36" y="99" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Tested head: 605e679d902a16c72016a02c966b224d07ff31c0</text>
+<text x="36" y="121" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Base SHA:     d5fa94bd523635a0a35ed5b07ff6a8acb36857fe</text>
+<text x="36" y="152" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ criterion-specific check</text>
+<text x="36" y="176" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Overlay pins endpoint/token boundary and orders MCP seeding before API startup.</text>
+<text x="36" y="205" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ real container command (isolated Compose project; no host ports)</text>
+<text x="36" y="229" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">docker compose --project-name sre-e187-evidence-pr336 --profile checks run --build --rm -e &#x27;PYTEST_ADDOPTS=-p no:cacheprovider&#x27; python-checks</text>
+<text x="36" y="246" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">pytest -vv --no-header tests/test_mcp_overlay.py::test_overlay_confines_endpoint_token_and_boundary</text>
+<text x="36" y="263" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">tests/test_mcp_overlay.py::test_overlay_orders_mcp_seed_before_api</text>
+<text x="36" y="294" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ observed result</text>
+<text x="36" y="317" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">test_overlay_confines_endpoint_token_and_boundary PASSED</text>
+<text x="36" y="335" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">test_overlay_orders_mcp_seed_before_api PASSED</text>
+<text x="36" y="353" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">2 passed in 0.36s</text>
+<text x="36" y="384" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="700">Source assertion in this candidate:</text>
+<text x="52" y="403" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">https://github.com/creep1ng/sre-agent/blob/605e679d902a16c72016a02c966b224d07ff31c0/tests/test_mcp_overlay.py#L19</text>
+<text x="36" y="425" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">ci.yml: completed / success</text>
+<text x="52" y="445" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">https://github.com/creep1ng/sre-agent/actions/runs/35780640325</text>
+<text x="36" y="471" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">Evidence boundary: Overlay contract tests at this PR head; live CA5 below was tested on final descendant #339 SHA, not #336 head.</text>
+<text x="36" y="495" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ live Grafana CA5 evidence (separate from controlled unit tests)</text>
+<text x="36" y="518" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">LIVE CA5 — descendant candidate (not this PR head): 92da6eafe047efafe52fde78afa2d6e752772d56</text>
+<text x="36" y="535" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">python3 .ca5-probe.py → discovery exactly 2 tools; denied discovery/invoke = 403 and 0 real calls; allowed Prometheus = 200 and exactly 1 real</text>
+<text x="36" y="552" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">tools/call.</text>
+<text x="36" y="569" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">Post-rotation persisted audit readback: denied discovery 1, denied invoke 2, allowed invoke 2; content_state=absent; raw args/results absent.</text>
+<text x="36" y="586" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">Controlled proxy 503/504: synthetic only, not forwarded to Grafana; real Grafana calls 0. All 26 locked digests verified.</text>
+<text x="36" y="603" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">Detailed sanitized JSON: evidence/issue-187/ca5-live-evidence.json</text>
+<text x="36" y="620" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">Final descendant ci.yml: https://github.com/creep1ng/sre-agent/actions/runs/35780643881</text>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="1280" height="720" fill="#0b1020"/>
+<rect x="0" y="0" width="1280" height="48" fill="#182338"/>
+<circle cx="24" cy="24" r="7" fill="#ff5f57"/><circle cx="48" cy="24" r="7" fill="#febc2e"/><circle cx="72" cy="24" r="7" fill="#28c840"/>
+<text x="100" y="30" fill="#f2f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">Issue #187 / PR #329 · Idempotent governed MCP seed</text>
+<text x="36" y="75" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ candidate identity</text>
+<text x="36" y="99" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Tested head: d5fa94bd523635a0a35ed5b07ff6a8acb36857fe</text>
+<text x="36" y="121" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Base SHA:     fd20bb6edf053192cb28f05ae0aa7d183c16472f</text>
+<text x="36" y="152" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ criterion-specific check</text>
+<text x="36" y="176" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Bootstrap yields exact owner/two-tool/grant state and repairs stale or missing catalog projections.</text>
+<text x="36" y="205" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ real container command (isolated Compose project; no host ports)</text>
+<text x="36" y="229" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">docker compose --project-name sre-e187-evidence-pr329 --profile checks run --build --rm -e &#x27;PYTEST_ADDOPTS=-p no:cacheprovider&#x27; python-checks</text>
+<text x="36" y="246" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">pytest -vv --no-header tests/test_mcp_seed.py::test_bootstrap_is_idempotent_with_exact_owner_tools_and_grants</text>
+<text x="36" y="263" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">tests/test_mcp_seed.py::test_bootstrap_repairs_missing_and_stale_catalog_projection</text>
+<text x="36" y="294" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ observed result</text>
+<text x="36" y="317" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">test_bootstrap_is_idempotent_with_exact_owner_tools_and_grants PASSED</text>
+<text x="36" y="335" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">test_bootstrap_repairs_missing_and_stale_catalog_projection PASSED</text>
+<text x="36" y="353" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">2 passed in 2.56s</text>
+<text x="36" y="384" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="700">Source assertion in this candidate:</text>
+<text x="52" y="403" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">https://github.com/creep1ng/sre-agent/blob/d5fa94bd523635a0a35ed5b07ff6a8acb36857fe/tests/test_mcp_seed.py#L52</text>
+<text x="36" y="425" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">ci.yml: completed / success — attempt 2 only</text>
+<text x="52" y="445" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">https://github.com/creep1ng/sre-agent/actions/runs/35780635394/attempts/2</text>
+<text x="36" y="471" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">Evidence boundary: PostgreSQL seed tests. ci.yml URL is attempt 2 (attempt 1 static-web browser flake excluded).</text>
+</svg>

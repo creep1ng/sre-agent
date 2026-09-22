@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="1280" height="720" fill="#0b1020"/>
+<rect x="0" y="0" width="1280" height="48" fill="#182338"/>
+<circle cx="24" cy="24" r="7" fill="#ff5f57"/><circle cx="48" cy="24" r="7" fill="#febc2e"/><circle cx="72" cy="24" r="7" fill="#28c840"/>
+<text x="36" y="30" fill="#f2f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">Issue #187 / PR #323 · Authorization reads owner state, not catalog shadow</text>
+<text x="36" y="75" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ candidate identity</text>
+<text x="36" y="99" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Tested head: f830fbd4c980f54a1bcd95de0a9ca341ec1fa41e</text>
+<text x="36" y="121" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Base SHA:     55dab3008b1df9ae60ce7e5e6cccbadb23f425b0</text>
+<text x="36" y="152" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ criterion-specific check</text>
+<text x="36" y="176" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">An inactive owner row denies access even when catalog projection remains active.</text>
+<text x="36" y="225" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ real container command (isolated Compose project; no host ports)</text>
+<text x="36" y="249" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">docker compose --project-name sre-e187-evidence-pr323 --profile checks run --build --rm -e &#x27;PYTEST_ADDOPTS=-p no:cacheprovider&#x27; python-checks</text>
+<text x="36" y="267" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">pytest -vv --no-header tests/test_mcp_authorization.py::test_inactive_owner_state_denies_even_with_active_catalog_shadow</text>
+<text x="36" y="302" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ observed result</text>
+<text x="36" y="325" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">test_inactive_owner_state_denies_even_with_active_catalog_shadow PASSED</text>
+<text x="36" y="344" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">1 passed in 1.16s</text>
+<text x="36" y="383" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="700">Source assertion / candidate contract:</text>
+<text x="36" y="401" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">https://github.com/creep1ng/sre-agent/blob/f830fbd4c980f54a1bcd95de0a9ca341ec1fa41e/tests/test_mcp_authorization.py#L112</text>
+<text x="36" y="426" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">ci.yml workflow: completed / success</text>
+<text x="36" y="447" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">https://github.com/creep1ng/sre-agent/actions/runs/35775411013</text>
+<text x="36" y="474" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">Evidence boundary: PostgreSQL test service started and stopped; owner-first denial assertion. CI run is separate corroboration; this check is not live Grafana CA5.</text>
+</svg>

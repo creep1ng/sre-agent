@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+<rect width="1280" height="720" fill="#0b1020"/>
+<rect x="0" y="0" width="1280" height="48" fill="#182338"/>
+<circle cx="24" cy="24" r="7" fill="#ff5f57"/><circle cx="48" cy="24" r="7" fill="#febc2e"/><circle cx="72" cy="24" r="7" fill="#28c840"/>
+<text x="36" y="30" fill="#f2f6fc" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">Issue #187 / PR #338 · MCP catalog projection — metadata boundary</text>
+<text x="36" y="75" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ candidate identity</text>
+<text x="36" y="99" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Tested head: fbdcf5e7fda3108c55a3ce47a0bbb2a2f65142b5</text>
+<text x="36" y="121" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Base SHA:     fd2d5ab7c8952b806a9558d15f228e8a948874a0</text>
+<text x="36" y="152" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ criterion-specific check</text>
+<text x="36" y="176" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="400">Projection retains MCP provenance while exposing no routing detail.</text>
+<text x="36" y="225" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ real container command (isolated Compose project; no host ports)</text>
+<text x="36" y="249" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">docker compose --project-name sre-e187-evidence-pr338 --profile checks run --build --rm -e &#x27;PYTEST_ADDOPTS=-p no:cacheprovider&#x27; python-checks</text>
+<text x="36" y="267" fill="#dce6f2" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">pytest -vv --no-header tests/test_catalog_projection.py::test_mcp_projection_preserves_provenance_without_routing_details</text>
+<text x="36" y="302" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">$ observed result</text>
+<text x="36" y="325" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">test_mcp_projection_preserves_provenance_without_routing_details PASSED</text>
+<text x="36" y="344" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="400">1 passed in 0.28s</text>
+<text x="36" y="383" fill="#80b8ff" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="700">Source assertion / candidate contract:</text>
+<text x="36" y="401" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">https://github.com/creep1ng/sre-agent/blob/fbdcf5e7fda3108c55a3ce47a0bbb2a2f65142b5/tests/test_catalog_projection.py#L30</text>
+<text x="36" y="426" fill="#77dfad" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">ci.yml workflow: completed / success</text>
+<text x="36" y="447" fill="#8ed8c0" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="400">https://github.com/creep1ng/sre-agent/actions/runs/35775393948</text>
+<text x="36" y="474" fill="#c0cddd" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" font-weight="400">Evidence boundary: PostgreSQL test service started and stopped; projection unit assertion. CI run is separate corroboration; this check is not live Grafana CA5.</text>
+</svg>

@@ -1,0 +1,260 @@
+{
+  "acceptance_note": "Live CA5 runtime checks at the exact final #339 SHA now prove authenticated denied discovery and invocation, zero real upstream calls for denials, exactly one real Grafana tools/call for the allowed invocation, and metadata-only denied/allowed audit rows. The independently fixable denial-audit gap is closed at this tested SHA. This local runtime evidence does not itself close issue #187 or substitute for required PR evidence/governance.",
+  "allowed_invocation": {
+    "http_status": 200,
+    "result_type": "vector",
+    "warning_count": 0,
+    "route": "POST /v1/mcp/tools/query_prometheus",
+    "upstream_tools_call_count": 1,
+    "upstream_event": {
+      "method": "POST",
+      "path": "/mcp",
+      "rpc_method": "tools/call",
+      "status": 200,
+      "count": 1
+    },
+    "audit": {
+      "operation": "mcp.invoke",
+      "stage": "response",
+      "outcome": "success",
+      "action": "invoke",
+      "policy_decision": "allow",
+      "resource_type": "mcp_tool",
+      "identity_present": true,
+      "correlation_request_id_present": true,
+      "content_state": "absent",
+      "untrusted_input": "JSON null",
+      "redacted_content": "JSON null",
+      "routing": "JSON null",
+      "redaction_result": "success"
+    },
+    "post_rotation_retest": true
+  },
+  "captured_at_utc": "2026-09-22T20:40:45Z",
+  "denied_invocation": {
+    "http_status": 403,
+    "public_error_code": "resource_unavailable",
+    "route": "POST /v1/mcp/tools/query_prometheus",
+    "upstream_tools_call_count": 0,
+    "upstream_events": [],
+    "audit": {
+      "operation": "mcp.invoke",
+      "stage": "authorization",
+      "outcome": "denied",
+      "action": "invoke",
+      "reason_code": "no_matching_grant",
+      "policy_decision": "deny",
+      "resource_type": "mcp_tool",
+      "identity_present": true,
+      "identity_field_names": [
+        "authenticated_at",
+        "credential_ref",
+        "principal_kind",
+        "principal_ref",
+        "principal_status"
+      ],
+      "correlation_field_names": [
+        "incident_ref",
+        "request_id",
+        "run_ref",
+        "task_ref",
+        "trace_ref"
+      ],
+      "correlation_request_id_present": true,
+      "content_state": "absent",
+      "untrusted_input": "JSON null",
+      "redacted_content": "JSON null",
+      "routing": "JSON null",
+      "redaction_result": "success"
+    },
+    "post_rotation_retest": true
+  },
+  "discovery": {
+    "count": 2,
+    "http_status": 200,
+    "tools": [
+      "query_elasticsearch",
+      "query_prometheus"
+    ]
+  },
+  "evidence_type": "local-live-ca5",
+  "grafana_mcp_image": "grafana/mcp-grafana:1.3.0@sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e",
+  "persisted_audit": {
+    "denied_discovery_rows": 1,
+    "denied_mcp_invoke_rows": 2,
+    "allowed_mcp_invoke_rows": 2,
+    "denied_identity_resource_action_decision_correlation_verified": true,
+    "correlation_request_id_non_null": true,
+    "raw_args_or_results_included": false,
+    "content_state": "absent",
+    "untrusted_input_redacted_content_and_routing": "JSON null",
+    "redaction_result": "success",
+    "controlled_503_mcp_invoke_error_rows": 1,
+    "controlled_504_mcp_invoke_error_rows": 1,
+    "latest_window_minutes": 10,
+    "all_rows_have_identity_and_non_null_request_correlation": true,
+    "all_rows_have_absent_content_json_null_payload_routing_and_redaction_success": true,
+    "post_rotation_window_minutes": 2,
+    "post_rotation_denied_discovery_rows": 1,
+    "post_rotation_denied_mcp_invoke_rows": 2,
+    "post_rotation_allowed_mcp_invoke_rows": 2,
+    "post_rotation_rows_all_have_identity_and_non_null_request_correlation": true,
+    "post_rotation_rows_all_have_absent_content_json_null_payload_routing_and_redaction_success": true
+  },
+  "pinned_demo_images": {
+    "compose_image_refs": 26,
+    "unpinned": 0,
+    "verified_exact_lock_digests": 26
+  },
+  "probe_command": "python3 .ca5-probe.py",
+  "sensitive_material": "No credentials, authorization headers, correlation identifiers, response payloads, query results, or raw logs are present.",
+  "stack": {
+    "compose_projects": [
+      "otel-demo",
+      "ca5-live"
+    ],
+    "gateway_api_healthy": true,
+    "gateway_database_healthy": true,
+    "migrations_seed_and_mcp_seed_exit_code": 0,
+    "ports_match_manifest": true,
+    "upstream_published_ports": [
+      8090,
+      9090,
+      10000
+    ],
+    "upstream_services_running_healthy": 26
+  },
+  "tested_sre_agent_sha": "92da6eafe047efafe52fde78afa2d6e752772d56",
+  "upstream_demo_sha": "1755859a9de82c2e5e225be68abc401a5ebf2b4f",
+  "controlled_fault_injection": {
+    "harness": "untracked ephemeral HTTP proxy fault modes; no gateway/application source changes",
+    "not_real_grafana_evidence": true,
+    "http_failure": {
+      "fault": "proxy returned synthetic HTTP 503 without forwarding to Grafana MCP",
+      "gateway_http_status": 503,
+      "gateway_public_error": "upstream_unavailable",
+      "real_grafana_tools_call_count": 0,
+      "real_grafana_events": [],
+      "synthetic_events": [
+        {
+          "rpc_method": "tools/call",
+          "fault_mode": "http_failure",
+          "upstream_forwarded": false
+        }
+      ],
+      "audit": {
+        "operation": "mcp.invoke",
+        "stage": "upstream",
+        "outcome": "error",
+        "response_status": 503,
+        "reason_code": "upstream_unavailable",
+        "policy_decision": "allow",
+        "resource_type": "mcp_tool",
+        "content_state": "absent",
+        "untrusted_input": "JSON null",
+        "redacted_content": "JSON null",
+        "routing": "JSON null",
+        "redaction_result": "success"
+      }
+    },
+    "timeout": {
+      "fault": "proxy withheld response for 33 seconds then closed connection without forwarding to Grafana MCP",
+      "gateway_http_status": 504,
+      "gateway_public_error": "upstream_timeout",
+      "real_grafana_tools_call_count": 0,
+      "real_grafana_events": [],
+      "synthetic_events": [
+        {
+          "rpc_method": "tools/call",
+          "fault_mode": "timeout",
+          "upstream_forwarded": false
+        }
+      ],
+      "audit": {
+        "operation": "mcp.invoke",
+        "stage": "upstream",
+        "outcome": "error",
+        "response_status": 504,
+        "reason_code": "upstream_failed",
+        "policy_decision": "allow",
+        "resource_type": "mcp_tool",
+        "content_state": "absent",
+        "untrusted_input": "JSON null",
+        "redacted_content": "JSON null",
+        "routing": "JSON null",
+        "redaction_result": "success"
+      }
+    },
+    "assertions": "Both normalized error probe assertions passed. Synthetic fault events are kept separate from the real Grafana MCP tools/call counter.",
+    "gateway_sha": "92da6eafe047efafe52fde78afa2d6e752772d56"
+  },
+  "historical_pre_denial_audit_fix": {
+    "gateway_sha": "19cba3632bb320cfb57e43eb64c0c875553c5c13",
+    "observed_audit": {
+      "allowed_mcp_invoke_rows": 1,
+      "content_state": "absent",
+      "denied_mcp_invoke_rows": 0,
+      "exporter_result": "not_attempted",
+      "ordinary_result": "released",
+      "outcome": "success",
+      "policy_decision": "allow",
+      "policy_reason_code": "grant_matched",
+      "redacted_content": "JSON null",
+      "redaction_result": "success",
+      "resource_type": "mcp_tool",
+      "response_status": 200,
+      "routing": "JSON null",
+      "stage": "response",
+      "untrusted_input": "JSON null"
+    },
+    "status": "historical: denied mcp.invoke was missing before the #327 fix; retained without treating it as current evidence"
+  },
+  "gateway_build_revision": "92da6eafe047efafe52fde78afa2d6e752772d56",
+  "denied_discovery": {
+    "http_status": 403,
+    "public_error_code": "resource_unavailable",
+    "route": "GET /v1/mcp/discovery",
+    "upstream_tools_call_count": 0,
+    "upstream_events": [],
+    "audit": {
+      "operation": "mcp.discovery",
+      "stage": "authorization",
+      "outcome": "denied",
+      "action": "read_metadata",
+      "reason_code": "no_matching_grant",
+      "policy_decision": "deny",
+      "resource_type": "mcp_server",
+      "identity_present": true,
+      "correlation_request_id_present": true,
+      "content_state": "absent",
+      "untrusted_input": "JSON null",
+      "redacted_content": "JSON null",
+      "routing": "JSON null",
+      "redaction_result": "success"
+    },
+    "post_rotation_retest": true
+  },
+  "real_grafana_zero_one_probe_reconfirmed_after_fault_probes": true,
+  "token_rotation": {
+    "credential_type": "locally generated synthetic Grafana MCP caller token",
+    "status": "rotated after accidental local tool-output exposure; superseded token not present in evidence/artifacts",
+    "new_env_file_permissions": "0600",
+    "consuming_services_restarted": [
+      "grafana-mcp",
+      "ca5-live-api"
+    ],
+    "post_rotation_retest": "passed at exact gateway SHA 92da6eafe047efafe52fde78afa2d6e752772d56; denied invocation zero real calls; allowed invocation exactly one real tools/call",
+    "secret_value_recorded": false
+  },
+  "cleanup": {
+    "isolated_projects": [
+      "ca5-live",
+      "otel-demo"
+    ],
+    "isolated_network": "sre-mcp-boundary",
+    "status": "complete",
+    "volumes_removed": false,
+    "generated_token_files_removed": true,
+    "unrelated_containers_touched": false
+  }
+}
