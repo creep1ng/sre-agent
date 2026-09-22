@@ -237,7 +237,16 @@ class MCPGatewayService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if evaluation.decision.decision != "allow":
-            return self._unavailable(request_id)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._unavailable(request_id),
+                operation="mcp.discovery",
+                stage="authorization",
+                context=context,
+                evaluation=evaluation,
+                reason="no_matching_grant",
+            )
         server, tools = await self._active_contract()
         if server is None or tools is None:
             return self._unavailable(request_id)
@@ -294,7 +303,17 @@ class MCPGatewayService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if evaluation.decision.decision != "allow":
-            return self._unavailable(request_id)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._unavailable(request_id),
+                operation="mcp.invoke",
+                stage="authorization",
+                context=context,
+                evaluation=evaluation,
+                tool_id=tool_id,
+                reason="no_matching_grant",
+            )
         _, tools = await self._active_contract(tool_id)
         tool = tools[0] if tools else None
         if tool is None:
@@ -545,6 +564,7 @@ class MCPGatewayService:
                     operation=operation,
                     context=context,
                     decision=evaluation.decision if evaluation else None,
+                    authorization_denial_cause=(evaluation.denial_cause if evaluation else None),
                     resource_ref=("mcp_tool", tool_id) if tool_id else ("mcp_server", server_id),
                     reason=reason,
                 )

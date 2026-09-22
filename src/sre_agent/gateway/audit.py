@@ -170,6 +170,7 @@ class AuditProjector:
         context: PrincipalContext | None = None,
         resource_ref: tuple[str, str] | None = None,
         decision: PolicyDecision | None = None,
+        authorization_denial_cause: AuthorizationDenialCause | None = None,
         reason: str | None = None,
         retryable: bool = False,
     ) -> AuditEvent:
@@ -194,4 +195,5 @@ class AuditProjector:
             context=context,
             resource_ref=resource_ref if stage != "authentication" else None,
             decision=decision,
+            authorization_denial_cause=authorization_denial_cause,
         )

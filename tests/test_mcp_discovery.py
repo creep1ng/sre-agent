@@ -211,6 +211,49 @@ async def test_denied_server_grant_stops_before_owner_lookup_or_upstream(
 
 
 @pytest.mark.asyncio
+async def test_denied_discovery_writes_metadata_only_audit_without_owner_lookup_or_upstream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    audit = RecordingAudit()
+
+    async def deny(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
+    )
+    response = await service.discovery(AUTHORIZATION)
+
+    assert response.status_code == 403
+    assert owner.reads == []
+    assert client.calls == []
+    assert len(audit.events) == 1
+    event = audit.events[0].model_dump(mode="json")
+    assert event["operation"] == "mcp.discovery"
+    assert event["action"] == "read_metadata"
+    assert event["stage"] == "authorization"
+    assert event["outcome"] == "denied"
+    assert event["authorization_denial_cause"] == "grant_not_applicable"
+    assert event["identity"] is not None
+    assert event["resource"]["resource_type"] == "mcp_server"
+    assert event["policy_decision"] == {
+        "decision": "deny",
+        "reason_code": "no_matching_grant",
+    }
+    assert event["correlation"]["request_id"] == json.loads(response.body)["request_id"]
+    assert event["content_state"] == "absent"
+    assert AUTHORIZATION not in str(event)
+    assert MCP_SERVER_ID not in str(event)
+
+
+@pytest.mark.asyncio
 async def test_authentication_failure_stops_before_owner_lookup_or_upstream(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -375,6 +418,81 @@ async def test_denied_invocation_stops_before_owner_lookup_and_transport(
     assert response.status_code == 403
     assert owner.reads == []
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_denied_invocation_writes_metadata_only_audit_without_owner_lookup_or_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    audit = RecordingAudit()
+    raw = {"datasource_uid": "private-datasource", "expr": 'up{secret="value"}'}
+
+    async def deny(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
+    )
+    response = await service.invoke("query_prometheus", raw, AUTHORIZATION)
+
+    assert response.status_code == 403
+    assert owner.reads == []
+    assert client.calls == []
+    assert len(audit.events) == 1
+    event = audit.events[0].model_dump(mode="json")
+    assert event["operation"] == "mcp.invoke"
+    assert event["action"] == "invoke"
+    assert event["stage"] == "authorization"
+    assert event["outcome"] == "denied"
+    assert event["authorization_denial_cause"] == "grant_not_applicable"
+    assert event["identity"] is not None
+    assert event["resource"]["resource_type"] == "mcp_tool"
+    assert event["policy_decision"] == {
+        "decision": "deny",
+        "reason_code": "no_matching_grant",
+    }
+    assert event["correlation"]["request_id"] == json.loads(response.body)["request_id"]
+    assert event["content_state"] == "absent"
+    assert AUTHORIZATION not in str(event)
+    assert "query_prometheus" not in str(event)
+    assert "private-datasource" not in str(event)
+    assert "secret" not in str(event) and "value" not in str(event)
+
+
+@pytest.mark.asyncio
+async def test_denied_invocation_fails_closed_when_audit_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    raw = {"datasource_uid": "private-datasource", "expr": 'up{secret="value"}'}
+
+    async def deny(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client,
+        audit=FailingAudit(),
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
+    )
+    response = await service.invoke("query_prometheus", raw, AUTHORIZATION)
+
+    assert response.status_code == 503
+    assert json.loads(response.body)["error"]["code"] == "audit_unavailable"
+    assert owner.reads == []
+    assert client.calls == []
+    assert "private-datasource" not in response.body.decode()
+    assert "secret" not in response.body.decode() and "value" not in response.body.decode()
 
 
 @pytest.mark.asyncio
