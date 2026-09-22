@@ -27,12 +27,15 @@ PRINCIPALS = (
 ADMIN_RESOURCES = (
     ("administrative_control", "principals"),
     ("administrative_control", "credentials"),
+    ("administrative_control", "model_aliases"),
 )
 ADMIN_GRANTS = (
     ("grant-admin-human-admin-read-principals", "admin-human", "admin.read"),
     ("grant-admin-human-admin-write-principals", "admin-human", "admin.write"),
     ("grant-admin-human-admin-read-credentials", "admin-human", "admin.read"),
     ("grant-admin-human-admin-write-credentials", "admin-human", "admin.write"),
+    ("grant-admin-human-admin-read-model-aliases", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-model-aliases", "admin-human", "admin.write"),
 )
 KEY_ENV = (
     "ADMIN_HUMAN_API_KEY",
@@ -141,6 +144,13 @@ def _require(
 
 def _grant_id(alias: str) -> str:
     return f"grant-incident-harness-invoke-{alias}"
+
+
+def _admin_grant_resource_id(grant_id: str) -> str:
+    for _, resource_id in ADMIN_RESOURCES:
+        if resource_id.replace("_", "-") in grant_id:
+            return resource_id
+    raise ValueError("administrative grant identifier must name a seeded resource")
 
 
 def _resource_values(route: RouteSetting) -> dict[str, object]:
@@ -296,7 +306,7 @@ async def _seed_session(
                 principal_id=principal_id,
                 action=action,
                 resource_type="administrative_control",
-                resource_id="principals" if "principals" in grant_id else "credentials",
+                resource_id=_admin_grant_resource_id(grant_id),
                 effect="allow",
                 status="active",
                 created_at=SEED_TIME,
@@ -341,7 +351,7 @@ async def _seed_session(
         fresh_admin_grants = [
             dict(grant_id=grant_id, principal_id="admin-human", action=action,
                  resource_type="administrative_control",
-                 resource_id="principals" if "principals" in grant_id else "credentials",
+                 resource_id=_admin_grant_resource_id(grant_id),
                  effect="allow", status="active", created_at=SEED_TIME)
             for grant_id, _, action in ADMIN_GRANTS]
         if fresh_admin_grants:
@@ -355,7 +365,7 @@ async def _seed_session(
         len(grants),
         len(admin_resources),
         len(admin_grants),
-    ) != (4, 4, 2, 2, 2, 4):
+    ) != (4, 4, 2, 2, 3, 6):
         raise SeedConflict("seed_state_conflict: incomplete_seed_graph")
     by_principal = {row.principal_id: row for row in principals}
     by_credential = {row.principal_id: row for row in credentials}

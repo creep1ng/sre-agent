@@ -31,14 +31,29 @@ ENV = {
 def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_10_test CASCADE")
+        for table in (
+            "audit_events",
+            "grants",
+            "credentials",
+            "resources",
+            "principals",
+            "idempotency_records",
+            "alembic_version",
+        ):
+            connection.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, alembic_version CASCADE"
+            "DO $$ BEGIN"
+            " DROP TYPE IF EXISTS alembic_version CASCADE;"
+            " EXCEPTION WHEN dependent_objects_still_exist THEN NULL;"
+            " END $$"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
 
 
 def test_seed_settings_reject_placeholders_and_malformed_values() -> None:
@@ -90,9 +105,9 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         ).fetchone()[0]
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 4, 6]
-    assert admin_resources == 2
-    assert admin_grants == 4
+    assert counts == [4, 4, 5, 8]
+    assert admin_resources == 3
+    assert admin_grants == 6
     assert before == after
     by_id = dict(before)
     seeded_principals = (
@@ -136,9 +151,9 @@ async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
     await database.dispose()
-    assert counts == [4, 4, 4, 6]
-    assert admin_resources == 2
-    assert admin_grants == 4
+    assert counts == [4, 4, 5, 8]
+    assert admin_resources == 3
+    assert admin_grants == 6
 
 
 @pytest.mark.asyncio
@@ -152,7 +167,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             connection.execute(
                 "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
             ).fetchone()[0]
-            == 2
+            == 3
         )
 
     database = Database(DATABASE_URL)
@@ -169,7 +184,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
         ).fetchone()
     assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
-    assert counts == (4, 6)
+    assert counts == (6, 8)
 
 
 @pytest.mark.asyncio
@@ -215,16 +230,53 @@ async def test_seed_converges_after_real_09_to_10_upgrade(monkeypatch: pytest.Mo
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
     assert version == "20260918_11"
-    assert admin_resources == 2
-    assert admin_grants == 4
+    assert admin_resources == 3
+    assert admin_grants == 6
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         # The incident store migration escapes the isolated search_path with a
         # top-level schema; remove the residue for the incident suites.
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_10_test CASCADE")
+
+
+@pytest.mark.asyncio
+async def test_seed_grants_admin_human_model_aliases_admin_scope_only() -> None:
+    settings = SeedSettings.from_environment(ENV)
+    database = Database(DATABASE_URL)
+    try:
+        await seed(database, settings)
+        assert await seed(database, settings) is False
+    finally:
+        await database.dispose()
+    await database.dispose()
+    with psycopg.connect(DATABASE_URL) as connection:
+        resource = connection.execute(
+            "SELECT status FROM resources "
+            "WHERE resource_type='administrative_control' AND resource_id='model_aliases'"
+        ).fetchone()
+        grants = connection.execute(
+            "SELECT principal_id, action FROM grants "
+            "WHERE resource_type='administrative_control' AND resource_id='model_aliases' "
+            "ORDER BY action"
+        ).fetchall()
+        unseeded_principals = connection.execute(
+            "SELECT principal_id FROM grants "
+            "WHERE resource_id='model_aliases' AND principal_id != 'admin-human' "
+            "ORDER BY principal_id"
+        ).fetchall()
+    assert resource == ("active",)
+    assert grants == [("admin-human", "admin.read"), ("admin-human", "admin.write")]
+    assert unseeded_principals == []
 
 
 @pytest.mark.asyncio
 async def test_seed_conflict_is_atomic_and_secret_free() -> None:
+    settings = SeedSettings.from_environment(ENV)
+    database = Database(DATABASE_URL)
+    try:
+        await seed(database, settings)
+    finally:
+        await database.dispose()
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "UPDATE principals SET display_name='conflict' WHERE principal_id='admin-human'"
@@ -232,9 +284,11 @@ async def test_seed_conflict_is_atomic_and_secret_free() -> None:
         connection.commit()
         before = connection.execute("SELECT count(*), min(display_name) FROM principals").fetchone()
     database = Database(DATABASE_URL)
-    with pytest.raises(SeedConflict) as captured:
-        await seed(database, SeedSettings.from_environment(ENV))
-    await database.dispose()
+    try:
+        with pytest.raises(SeedConflict) as captured:
+            await seed(database, SeedSettings.from_environment(ENV))
+    finally:
+        await database.dispose()
     with psycopg.connect(DATABASE_URL) as connection:
         after = connection.execute("SELECT count(*), min(display_name) FROM principals").fetchone()
     message = str(captured.value)
