@@ -47,6 +47,7 @@ def request(**changes: Any) -> InvestigationRequest:
 def test_a_full_incident_state_is_a_valid_context() -> None:
     subject = request()
 
+    assert subject.context.incident_id == subject.incident_id
     assert [item.evidence_id for item in subject.context.evidence] == ["ev_payment_error_rate"]
     assert subject.authorizes_tool("query_prometheus")
     assert not subject.authorizes_tool("query_elasticsearch")
@@ -63,6 +64,11 @@ def test_request_rejects_a_state_without_agentic_step() -> None:
     state = load("agent/fixtures/incidents/otel-payment-failure/declared-state.yaml")
     with pytest.raises(ValidationError):
         request(context=state | {"state": "active"})
+
+
+def test_request_rejects_context_for_a_different_incident() -> None:
+    with pytest.raises(ValidationError, match="context incident_id must match request incident_id"):
+        request(incident_id="inc-another-incident")
 
 
 def test_task_id_is_derived_from_the_turn() -> None:

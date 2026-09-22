@@ -21,6 +21,7 @@ from pydantic import (
 
 EvidenceId = Annotated[str, Field(pattern=r"^ev_[a-z0-9_-]{1,60}$")]
 HypothesisId = Annotated[str, Field(pattern=r"^hyp_[a-z0-9_-]{1,60}$")]
+IncidentId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
 Name = Annotated[str, Field(min_length=1, max_length=200)]
 Text = Annotated[str, Field(min_length=1, max_length=4000)]
 Step = Annotated[str, Field(min_length=1, max_length=1000)]
@@ -72,6 +73,7 @@ class EvidenceContext(_Projection):
 
 
 class IncidentContext(_Projection):
+    incident_id: IncidentId
     state: Literal["triage", "investigating", "mitigating", "verifying", "postmortem"]
     alert: AlertContext
     hypotheses: list[HypothesisContext] = Field(default_factory=list)
@@ -79,11 +81,17 @@ class IncidentContext(_Projection):
 
 
 class InvestigationRequest(_Strict):
-    incident_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    incident_id: IncidentId
     run_id: Annotated[str, Field(pattern=r"^run_[a-z0-9]{8,32}$")]
     objective: Objective
     context: IncidentContext
     authorized_capabilities: list[Capability] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _context_incident_matches_request(self) -> InvestigationRequest:
+        if self.context.incident_id != self.incident_id:
+            raise ValueError("context incident_id must match request incident_id")
+        return self
 
     def authorizes_tool(self, tool: str) -> bool:
         return any(
@@ -179,7 +187,7 @@ class CollectedEvidence(_Strict):
 
 
 class InvestigationResult(_Strict):
-    incident_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    incident_id: IncidentId
     run_id: Annotated[str, Field(pattern=r"^run_[a-z0-9]{8,32}$")]
     status: Status
     outcome: Annotated[Outcome, Field(discriminator="action")] | None = None
