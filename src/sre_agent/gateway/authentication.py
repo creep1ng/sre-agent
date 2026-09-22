@@ -15,7 +15,7 @@ from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import (
     CredentialRepository,
     GrantRepository,
-    ResourceRepository,
+    OwnerResourceFactReader,
 )
 
 
@@ -44,7 +44,7 @@ async def authorize_governed_access(
     context = await _authorization_context(sessions, authorization)
     async with sessions() as session:
         evaluation = await AuthorizationDecisionEngine(
-            ResourceRepository(session), GrantRepository(session)
+            OwnerResourceFactReader(session), GrantRepository(session)
         ).evaluate(context.principal, action, resource_type, resource_id)
     return context, evaluation
 

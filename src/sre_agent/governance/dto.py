@@ -365,6 +365,8 @@ class AuditEvent(StrictDTO):
         "audit.redact",
         "credentials.authenticate",
         "responses.create",
+        "mcp.discovery",
+        "mcp.invoke",
         "principals.create",
         "principals.get",
         "principals.list",
@@ -425,10 +427,9 @@ class AuditEvent(StrictDTO):
         subject = (self.identity, self.resource, self.model_alias_ref, self.policy_decision)
         if no_subject and any(value is not None for value in (*subject, self.routing)):
             raise ValueError("this audit stage cannot carry subject evidence")
-        is_control = (
-            isinstance(self.resource, ResourceEvidence)
-            and self.resource.resource_type == "administrative_control"
-        )
+        is_control = isinstance(
+            self.resource, ResourceEvidence
+        ) and self.resource.resource_type in {"administrative_control", "mcp_server", "mcp_tool"}
         if (
             self.stage in {"authorization", "routing", "upstream", "response"}
             and not is_control
