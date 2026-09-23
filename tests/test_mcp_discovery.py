@@ -1,3 +1,4 @@
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -219,3 +220,167 @@ async def test_unknown_or_inactive_owner_is_not_enumerated_upstream(
     assert response.status_code == 403
     assert owner.reads == [("server", MCP_SERVER_ID)]
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_allowed_invocation_uses_exact_scope_and_calls_transport_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    scopes: list[tuple[str | None, str, str, str]] = []
+
+    async def authorize(
+        _sessions: Any,
+        authorization: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+    ) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        scopes.append((authorization, action, resource_type, resource_id))
+        return _context(), _decision()
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", authorize)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner), client, owner_repository_factory=lambda session: session
+    )
+    response = await service.invoke(
+        "query_prometheus",
+        {
+            "datasource_uid": "webstore-metrics",
+            "expr": "up",
+            "query_type": "instant",
+            "end_time": "now",
+        },
+        AUTHORIZATION,
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {"result_type": "vector", "result": [], "warnings": []}
+    assert scopes == [(AUTHORIZATION, "mcp.invoke", "mcp_tool", "query_prometheus")]
+    assert client.calls == [
+        (
+            "query_prometheus",
+            {
+                "datasourceUid": "webstore-metrics",
+                "expr": "up",
+                "queryType": "instant",
+                "endTime": "now",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_denied_invocation_stops_before_owner_lookup_and_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+
+    async def deny(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner), client, owner_repository_factory=lambda session: session
+    )
+    response = await service.invoke("query_prometheus", {}, AUTHORIZATION)
+
+    assert response.status_code == 403
+    assert owner.reads == []
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_input_returns_422_without_transport_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, client = _service(monkeypatch, MemoryOwner())
+    response = await service.invoke(
+        "query_prometheus", {"expr": "up", "unexpected": True}, AUTHORIZATION
+    )
+
+    assert response.status_code == 422
+    assert json.loads(response.body)["error"]["code"] == "contract_validation_failed"
+    assert client.calls == []
+
+
+class RaisingClient(RecordingClient):
+    def __init__(self, error: Exception) -> None:
+        super().__init__()
+        self.error = error
+
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        self.calls.append((tool_name, arguments))
+        raise self.error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("error", "status", "code"),
+    [
+        (mcp.MCPUpstreamTimeout(), 504, "upstream_timeout"),
+        (mcp.MCPUpstreamUnavailable(), 503, "upstream_unavailable"),
+        (mcp.MCPUpstreamInvalid(), 502, "upstream_invalid"),
+    ],
+)
+async def test_upstream_failures_have_closed_errors_and_one_call(
+    monkeypatch: pytest.MonkeyPatch, error: Exception, status: int, code: str
+) -> None:
+    owner = MemoryOwner()
+    client = RaisingClient(error)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner), client, owner_repository_factory=lambda session: session
+    )
+    monkeypatch.setattr(mcp, "authorize_governed_access", _allow)
+    response = await service.invoke(
+        "query_prometheus",
+        {
+            "datasource_uid": "webstore-metrics",
+            "expr": "up",
+            "query_type": "instant",
+            "end_time": "now",
+        },
+        AUTHORIZATION,
+    )
+
+    assert response.status_code == status
+    assert json.loads(response.body)["error"]["code"] == code
+    assert len(client.calls) == 1
+
+
+async def _allow(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+    return _context(), _decision()
+
+
+@pytest.mark.asyncio
+async def test_timeout_maps_to_public_504_after_one_transport_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowClient(RecordingClient):
+        async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+            self.calls.append((tool_name, arguments))
+            await asyncio.sleep(0.05)
+            return {"data": []}
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", _allow)
+    monkeypatch.setattr(mcp, "MCP_TIMEOUT_SECONDS", 0.001)
+    client = SlowClient()
+    service = mcp.MCPGatewayService(
+        MemorySessions(MemoryOwner()), client, owner_repository_factory=lambda session: session
+    )
+    response = await service.invoke(
+        "query_prometheus",
+        {
+            "datasource_uid": "webstore-metrics",
+            "expr": "up",
+            "query_type": "instant",
+            "end_time": "now",
+        },
+        AUTHORIZATION,
+    )
+
+    assert response.status_code == 504
+    assert json.loads(response.body)["error"]["code"] == "upstream_timeout"
+    assert len(client.calls) == 1

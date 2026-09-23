@@ -1,13 +1,14 @@
 """Confined streamable-HTTP transport for the governed Grafana MCP."""
 
 import json
-from asyncio import Lock
-from typing import Any, Protocol
+from asyncio import Lock, wait_for
+from typing import Annotated, Any, Protocol
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.governance.dto import MCPServer, MCPTool
@@ -15,6 +16,7 @@ from sre_agent.mcp.owner import MCP_CONTRACT_VERSION, MCP_SERVER_ID, MCP_TOOL_ID
 from sre_agent.persistence.repositories import MCPOwnerRepository
 
 MCP_TIMEOUT_SECONDS = 30.0
+_TIME_PATTERN = r"^(now|now-[1-9][0-9]*[smhd])$"
 
 
 class MCPUpstreamTimeout(Exception):
@@ -137,6 +139,42 @@ class GrafanaMCPClient:
         return json.loads(data_lines[0] if data_lines else text)
 
 
+class PrometheusQuery(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    datasource_uid: str = Field(pattern=r"^webstore-metrics$")
+    expr: str = Field(min_length=1, max_length=4096)
+    query_type: str = Field(pattern=r"^instant$")
+    end_time: str = Field(pattern=_TIME_PATTERN)
+
+
+class ElasticsearchQuery(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    datasource_uid: str = Field(pattern=r"^webstore-logs$")
+    index: str = Field(pattern=r"^otel-logs-\*$")
+    query: str = Field(min_length=1, max_length=4096)
+    start_time: str = Field(pattern=r"^now-[1-9][0-9]*[smhd]$")
+    end_time: str = Field(pattern=r"^now$")
+    limit: int = Field(ge=1, le=100)
+
+
+class PrometheusResult(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    result_type: str = Field(pattern=r"^(matrix|vector|scalar|string)$")
+    result: list[dict[str, Any]] = Field(max_length=1000)
+    warnings: list[Annotated[str, Field(max_length=500)]] = Field(max_length=16)
+
+
+class ElasticsearchResult(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+
+    total: int = Field(ge=0)
+    documents: list[dict[str, Any]] = Field(max_length=100)
+    warnings: list[Annotated[str, Field(max_length=500)]] = Field(max_length=16)
+
+
 class _OwnerRepository(Protocol):
     async def get_server(self, server_id: str) -> MCPServer | None: ...
 
@@ -205,7 +243,47 @@ class MCPGatewayService:
             }
         )
 
-    async def _active_contract(self) -> tuple[MCPServer | None, list[MCPTool] | None]:
+    async def invoke(self, tool_id: str, raw: Any, authorization: str | None) -> JSONResponse:
+        request_id = str(uuid4())
+        try:
+            _, evaluation = await authorize_governed_access(
+                self.sessions, authorization, "mcp.invoke", "mcp_tool", tool_id
+            )
+        except AuthenticationFailed:
+            return JSONResponse(
+                {
+                    "error": {"code": "authentication_failed", "message": "Authentication failed."},
+                    "request_id": request_id,
+                    "retryable": False,
+                },
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if evaluation.decision.decision != "allow":
+            return self._unavailable(request_id)
+        _, tools = await self._active_contract(tool_id)
+        tool = tools[0] if tools else None
+        if tool is None:
+            return self._unavailable(request_id)
+        try:
+            arguments = self._validate_input(tool_id, raw)
+        except ValidationError:
+            return self._error(request_id, 422, "contract_validation_failed", False)
+        try:
+            result = await wait_for(
+                self.client.call_tool(tool.upstream_name, arguments), MCP_TIMEOUT_SECONDS
+            )
+            return JSONResponse(self._map_result(tool_id, result))
+        except (TimeoutError, MCPUpstreamTimeout):
+            return self._error(request_id, 504, "upstream_timeout", True)
+        except MCPUpstreamUnavailable:
+            return self._error(request_id, 503, "upstream_unavailable", True)
+        except MCPUpstreamInvalid:
+            return self._error(request_id, 502, "upstream_invalid", False)
+
+    async def _active_contract(
+        self, tool_id: str | None = None
+    ) -> tuple[MCPServer | None, list[MCPTool] | None]:
         try:
             async with self.sessions() as session:
                 owner: _OwnerRepository = self.owner_repository_factory(session)
@@ -216,6 +294,20 @@ class MCPGatewayService:
                     or server.contract_version != MCP_CONTRACT_VERSION
                 ):
                     return None, None
+                if tool_id is not None:
+                    tool = await owner.get_tool(tool_id)
+                    if (
+                        tool is None
+                        or tool.status != "active"
+                        or tool.contract_version != MCP_CONTRACT_VERSION
+                        or tool.server_id != server.server_id
+                        or tool.owner_id != server.owner_id
+                        or tool.tool_id != tool_id
+                        or tool.upstream_name != tool.tool_id
+                        or tool.tool_id not in MCP_TOOL_IDS
+                    ):
+                        return server, None
+                    return server, [tool]
                 tools: list[MCPTool] = []
                 for tool_id in MCP_TOOL_IDS:
                     tool = await owner.get_tool(tool_id)
@@ -235,12 +327,102 @@ class MCPGatewayService:
             return None, None
 
     @staticmethod
+    def _validate_input(tool_id: str, raw: Any) -> dict[str, Any]:
+        if tool_id == "query_prometheus":
+            request = PrometheusQuery.model_validate(raw)
+            return {
+                "datasourceUid": request.datasource_uid,
+                "expr": request.expr,
+                "queryType": request.query_type,
+                "endTime": request.end_time,
+            }
+        if tool_id == "query_elasticsearch":
+            request = ElasticsearchQuery.model_validate(raw)
+            return {
+                "datasourceUid": request.datasource_uid,
+                "index": request.index,
+                "query": request.query,
+                "startTime": request.start_time,
+                "endTime": request.end_time,
+                "limit": request.limit,
+            }
+        raise ValidationError.from_exception_data("MCP tool", [])
+
+    @classmethod
+    def _map_result(cls, tool_id: str, raw: Any) -> dict[str, Any]:
+        payload = cls._unwrap_upstream(raw)
+        if tool_id == "query_prometheus":
+            if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+                payload = payload["data"]
+            if not isinstance(payload, dict):
+                raise MCPUpstreamInvalid
+            if "result" in payload:
+                result = payload
+            elif "data" in payload:
+                result = {
+                    "result": payload["data"],
+                    "resultType": payload.get("resultType", "vector"),
+                }
+            else:
+                raise MCPUpstreamInvalid
+            try:
+                return PrometheusResult(
+                    result_type=result.get("resultType", "vector"),
+                    result=result["result"],
+                    warnings=result.get("warnings", []),
+                ).model_dump(mode="json")
+            except (KeyError, ValidationError) as error:
+                raise MCPUpstreamInvalid from error
+        if tool_id == "query_elasticsearch":
+            if isinstance(payload, list):
+                result = {"total": len(payload), "documents": payload, "warnings": []}
+            elif isinstance(payload, dict):
+                documents = payload.get("documents", payload.get("hits", []))
+                result = {
+                    "total": payload.get(
+                        "total", len(documents) if isinstance(documents, list) else 0
+                    ),
+                    "documents": documents,
+                    "warnings": payload.get("warnings", []),
+                }
+            else:
+                raise MCPUpstreamInvalid
+            try:
+                return ElasticsearchResult.model_validate(result).model_dump(mode="json")
+            except ValidationError as error:
+                raise MCPUpstreamInvalid from error
+        raise MCPUpstreamInvalid
+
+    @staticmethod
+    def _unwrap_upstream(raw: Any) -> Any:
+        payload = raw
+        if isinstance(payload, dict) and "error" in payload:
+            raise MCPUpstreamInvalid
+        if isinstance(payload, dict) and "result" in payload and "jsonrpc" in payload:
+            payload = payload["result"]
+        if isinstance(payload, dict) and payload.get("isError") is True:
+            raise MCPUpstreamInvalid
+        if isinstance(payload, dict) and isinstance(payload.get("content"), list):
+            texts = [item.get("text") for item in payload["content"] if isinstance(item, dict)]
+            if not texts or not isinstance(texts[0], str):
+                raise MCPUpstreamInvalid
+            try:
+                return json.loads(texts[0])
+            except ValueError as error:
+                raise MCPUpstreamInvalid from error
+        return payload
+
+    @staticmethod
     def _unavailable(request_id: str) -> JSONResponse:
+        return MCPGatewayService._error(request_id, 403, "resource_unavailable", False)
+
+    @staticmethod
+    def _error(request_id: str, status: int, code: str, retryable: bool) -> JSONResponse:
         return JSONResponse(
             {
-                "error": {"code": "resource_unavailable", "message": "Resource unavailable."},
+                "error": {"code": code, "message": code.replace("_", " ").capitalize() + "."},
                 "request_id": request_id,
-                "retryable": False,
+                "retryable": retryable,
             },
-            status_code=403,
+            status_code=status,
         )
