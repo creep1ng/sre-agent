@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="410" viewBox="0 0 1420 410" role="img" aria-label="Sanitized terminal evidence for PR 355">
+<rect width="100%" height="100%" fill="#0d1117"/><rect width="100%" height="7" fill="#238636"/>
+<g fill="#e6edf3" font-family="monospace" font-size="16">
+<text x="24" y="40">PR #355 | governed MCP invocation | Docker/PostgreSQL</text>
+<text x="24" y="68">Tested SHA: d2d0817914d076a8fbb25d753890b07203ebd7d5</text>
+<text x="24" y="96">Base SHA:   f618f6959141974fff63439e3169c7baa87df5b9</text>
+<text x="24" y="132">$ scripts/worktree-compose --profile checks run --build --rm python-checks</text>
+<text x="24" y="160">  pytest -q tests/test_mcp_discovery.py</text>
+<text x="24" y="188" fill="#ffb86c">RED: 7 invocation tests failed; invoke() missing before implementation</text>
+<text x="24" y="216" fill="#9fe870">GREEN: 11 passed; independent repeat: 11 passed in 1.40s</text>
+<text x="24" y="252">Broader Docker/PostgreSQL discovery/invocation/auth suite: 50 passed</text>
+<text x="24" y="280">Denied: zero owner reads and zero upstream calls</text>
+<text x="24" y="308">Allowed: exactly one explicit tools/call; deterministic error mapping</text>
+<text x="24" y="344">CI: https://github.com/creep1ng/sre-agent/actions/runs/35809472565</text>
+<text x="24" y="380">No credentials, headers, application payloads, or upstream responses captured.</text>
+</g></svg>
