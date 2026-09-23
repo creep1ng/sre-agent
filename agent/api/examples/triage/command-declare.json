@@ -1,0 +1,12 @@
+{
+  "summary": "Declare creates the incident exactly once; retry replays this result.",
+  "value": {
+    "alert_id": "al-payment-spike",
+    "status": "declared",
+    "incident_id": "inc-payment-spike",
+    "expected_version": 2,
+    "reason": "Sustained 5xx spike on checkout, declaring incident.",
+    "actor": "demo-human",
+    "decided_at": "2026-09-20T14:00:00Z"
+  }
+}

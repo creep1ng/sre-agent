@@ -1,0 +1,138 @@
+openapi: 3.1.0
+info:
+  title: SRE Agent Alert Triage API
+  version: 1.0.0
+  description: >-
+    Alert triage commands and reads (TRIAGE, issue #23) over the stable
+    incident_workflow/incident-response resource. Reads need alert.read;
+    open_triage needs alert.triage, triage_dismiss alert.dismiss, triage_link
+    alert.associate, triage_declare incident.declare; link destinations also
+    need run.read. Commands carry Idempotency-Key and expected_version;
+    retries return the original result after authn/authz. The server sets
+    actor/timestamp; browsers never supply an authoritative actor. Eligible
+    destinations are active, investigating, mitigating, verifying (resolved,
+    postmortem, closed excluded, re-evaluated inside the operation).
+    Dismissed/linked answer 200, declare answers 201 once, races answer 409.
+    The mapped alert severity is a suggestion; triage_declare requires the
+    operator's explicit choice, which may match or override it. Current state
+    retains the latest reason, actor, time and incident ID, not full history.
+    No severity rubric or impact assignment is defined here; impact remains
+    unresolved under issue #23.
+    No generic comments: the triage reason is not a comment system.
+servers: [{ url: / }]
+security: [{ bearerAuth: [] }]
+
+paths:
+  /v1/alerts/{alert_id}/triage:
+    get:
+      operationId: getAlertTriage
+      parameters:
+        - { name: alert_id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+      responses:
+        '200':
+          description: Current triage state
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:triage-state:1.0.0' }
+              examples:
+                current: { $ref: './examples/triage/triage-open.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/alerts/{alert_id}/triage/eligible-incidents:
+    get:
+      operationId: listEligibleIncidents
+      parameters:
+        - { name: alert_id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+      responses:
+        '200':
+          description: Link candidates in eligible states
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EligibleIncidents' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/alerts/{alert_id}/triage/commands:
+    post:
+      operationId: postTriageCommand
+      parameters:
+        - { name: alert_id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 200 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: 'urn:sre-agent:schema:triage-command:1.0.0' }
+            examples:
+              declare: { $ref: './examples/triage/command-request.json' }
+      responses:
+        '200':
+          description: open/dismiss/link applied (or idempotent replay)
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:triage-state:1.0.0' }
+        '201':
+          description: declare created the incident exactly once
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:triage-state:1.0.0' }
+              examples:
+                current: { $ref: './examples/triage/command-declare.json' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  schemas:
+    EligibleIncidents:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [incident_id, state]
+            properties:
+              incident_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
+              state: { enum: [active, investigating, mitigating, verifying] }
+  responses:
+    BadRequest:
+      description: Malformed command envelope
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
+    Unauthorized:
+      description: Missing or invalid bearer credential
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
+    Forbidden:
+      description: Authenticated without the command action
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
+    NotFound:
+      description: Unknown alert or target incident
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
+    Conflict:
+      description: Stale expected_version or duplicate declare
+      content:
+        application/json:
+          schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }
+          examples:
+            current: { $ref: './examples/triage/error-409.json' }
+    ValidationError:
+      description: Closed payload or reason rule violated
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
+    Unavailable:
+      description: Storage unavailable
+      content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }

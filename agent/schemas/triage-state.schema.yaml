@@ -1,0 +1,21 @@
+# Triage read models — TRIAGE (issue #23).
+#
+# GET .../triage returns the alert triage state; GET .../eligible-incidents
+# returns link candidates. Destinations are active, investigating,
+# mitigating or verifying; resolved, postmortem and closed never qualify.
+# open creates no incident; declare creates exactly one (201).
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:triage-state:1.0.0
+title: TriageState
+type: object
+additionalProperties: false
+required: [alert_id, status, expected_version]
+properties:
+  alert_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
+  status: { enum: [open, dismissed, linked, declared] }
+  incident_id: { type: [string, "null"], pattern: '^[a-z][a-z0-9_-]{2,63}$', default: null }
+  expected_version: { type: integer, minimum: 1 }
+  reason: { type: [string, "null"], maxLength: 1000, default: null }
+  actor: { type: [string, "null"], maxLength: 200, default: null }
+  decided_at: { type: [string, "null"], format: date-time, default: null }
