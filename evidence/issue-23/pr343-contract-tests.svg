@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1550" height="430" viewBox="0 0 1550 430" role="img" aria-label="PR 343 triage contract verification on its tested commit">
+  <rect width="1550" height="430" fill="#10151b"/>
+  <rect x="18" y="18" width="1514" height="394" rx="10" fill="#17212b" stroke="#526578"/>
+  <g fill="#d1e4f1" font-family="monospace" font-size="17">
+    <text x="36" y="50">PR #343 / issue #23 — triage contract slice C1 (no backend claimed)</text>
+    <text x="36" y="80">Tested SHA: 77780f36a9acb277654e9aa40ca12968bba99750</text>
+    <text x="36" y="110">$ docker compose -p sre-agent-pr343 --env-file &lt;local config&gt; --profile checks</text>
+    <text x="36" y="138">  run --build --rm python-checks pytest -q -vv tests/test_triage_contract.py tests/test_incident_runtime.py</text>
+    <text x="36" y="178">test_contract_schemas_and_paths ............................... PASSED</text>
+    <text x="36" y="208">test_command_payloads_are_closed_per_operation ............... PASSED</text>
+    <text x="36" y="238">test_eligible_states_exclude_terminal ......................... PASSED</text>
+    <text x="36" y="268">test_contract_examples_validate .............................. PASSED</text>
+    <text x="36" y="298">test_declaration_from_contract_fixture_emits_schema_valid_identity PASSED</text>
+    <text x="36" y="328">18 passed in 2.47s; exact candidate CI: github.com/creep1ng/sre-agent/actions/runs/35816795737</text>
+    <text x="36" y="368">Evidence kind: executable contract tests; live HTTP/backend and C2/C3 remain out of scope.</text>
+  </g>
+</svg>
