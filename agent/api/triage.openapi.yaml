@@ -18,8 +18,6 @@ info:
     retains the latest reason, actor, time and incident ID, not full history.
     No severity rubric or impact assignment is defined here; impact remains
     unresolved under issue #23.
-    The mapped alert severity is a suggestion; triage_declare requires the
-    operator's explicit choice, which may match or override it.
     No generic comments: the triage reason is not a comment system.
 servers: [{ url: / }]
 security: [{ bearerAuth: [] }]

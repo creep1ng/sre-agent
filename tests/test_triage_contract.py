@@ -109,6 +109,18 @@ def test_command_payloads_are_closed_per_operation() -> None:
         "sev3",
         "sev4",
     ]
+    validator = Draft202012Validator(SCHEMAS["triage-command"])
+    request = {"operation": "triage_declare", "expected_version": 1, "reason": "test"}
+    suggested = "sev2"
+    cases = [
+        ({}, False),
+        ({"severity": "critical"}, False),
+        ({"severity": "sev1"}, True),
+        ({"severity": "sev1", "suggested_severity": suggested}, False),
+    ]
+    assert "sev1" != suggested
+    for addition, valid in cases:
+        assert validator.is_valid(request | addition) is valid
     assert "actor" not in by_op["triage_declare"]["properties"]
     assert by_op["triage_dismiss"]["properties"]["reason"] == {
         "type": "string",
