@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1460" height="460" viewBox="0 0 1460 460" role="img" aria-label="Sanitized terminal evidence for corrected PR 349">
+<rect width="100%" height="100%" fill="#0d1117"/><rect width="100%" height="7" fill="#238636"/>
+<g fill="#e6edf3" font-family="monospace" font-size="16">
+<text x="24" y="40">PR #349 | migration 12 fixture isolation correction | Docker/PostgreSQL</text>
+<text x="24" y="68">Tested SHA: 138b625a1fa5b13b6048b93add4cf69519688166</text>
+<text x="24" y="96">Base SHA:   afea818c210604f58e6ca9de632567c7c7797206</text>
+<text x="24" y="132">$ scripts/worktree-compose --profile checks run --build --rm python-checks</text>
+<text x="24" y="160">  pytest -q tests/test_migrations.py tests/test_incident_query_timeline.py</text>
+<text x="24" y="188" fill="#ffb86c">RED before fixture fix: 13 passed, 11 errors (DuplicateTable: mcp_servers)</text>
+<text x="24" y="216" fill="#9fe870">GREEN after child-first MCP table reset: 24 passed in 3.69s</text>
+<text x="24" y="252">Expanded migration/persistence/auth/readiness Docker suite: 144 passed in 32.01s</text>
+<text x="24" y="280">Alembic: 20260921_12 (head); No new upgrade operations detected.</text>
+<text x="24" y="308">Isolated readiness: HTTP 200; {"status":"ok","dependency":"postgresql"}</text>
+<text x="24" y="344">Exact-head CI: https://github.com/creep1ng/sre-agent/actions/runs/35806569675</text>
+<text x="24" y="380">Root cause: timeline fixture retained mcp_servers from prior migration tests.</text>
+<text x="24" y="408">Fix: drop mcp_tools before mcp_servers; no owner runtime behavior changed.</text>
+<text x="24" y="436">No credentials, headers, application payloads, or upstream responses captured.</text>
+</g></svg>
