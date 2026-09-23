@@ -13,6 +13,13 @@ info:
     destinations are active, investigating, mitigating, verifying (resolved,
     postmortem, closed excluded, re-evaluated inside the operation).
     Dismissed/linked answer 200, declare answers 201 once, races answer 409.
+    The mapped alert severity is a suggestion; triage_declare requires the
+    operator's explicit choice, which may match or override it. Current state
+    retains the latest reason, actor, time and incident ID, not full history.
+    No severity rubric or impact assignment is defined here; impact remains
+    unresolved under issue #23.
+    The mapped alert severity is a suggestion; triage_declare requires the
+    operator's explicit choice, which may match or override it.
     No generic comments: the triage reason is not a comment system.
 servers: [{ url: / }]
 security: [{ bearerAuth: [] }]

@@ -3,6 +3,7 @@
   "value": {
     "operation": "triage_declare",
     "expected_version": 1,
-    "reason": "Sustained 5xx spike on checkout, declaring incident."
+    "reason": "Sustained 5xx spike on checkout, declaring incident.",
+    "severity": "sev1"
   }
 }

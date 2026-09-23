@@ -3,8 +3,9 @@
 # POST /v1/alerts/{alert_id}/triage/commands. One closed variant per
 # operation; expected_version is always required (optimistic concurrency).
 # reason is required non-empty (max 1000) for dismiss/link/declare and absent
-# for open. target_incident_id only exists for link. The server determines
-# actor/timestamp: no actor field is admitted here.
+# for open. target_incident_id only exists for link. Declaration severity is
+# operator-selected and may override the intake suggestion. The server
+# determines actor/timestamp: no actor field is admitted here.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: urn:sre-agent:schema:triage-command:1.0.0
@@ -33,8 +34,9 @@ oneOf:
       target_incident_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
   - type: object
     additionalProperties: false
-    required: [operation, expected_version, reason]
+    required: [operation, expected_version, reason, severity]
     properties:
       operation: { const: triage_declare }
       expected_version: { type: integer, minimum: 1 }
       reason: { type: string, minLength: 1, maxLength: 1000 }
+      severity: { enum: [sev1, sev2, sev3, sev4], description: Operator-confirmed severity; may override the intake suggestion. }

@@ -97,10 +97,18 @@ def test_command_payloads_are_closed_per_operation() -> None:
         assert by_op[operation]["required"] == (
             ["operation", "expected_version"]
             if operation == "open_triage"
-            else ["operation", "expected_version", "reason"]
-            if operation != "triage_link"
+            else ["operation", "expected_version", "reason", "severity"]
+            if operation == "triage_declare"
             else ["operation", "expected_version", "reason", "target_incident_id"]
+            if operation == "triage_link"
+            else ["operation", "expected_version", "reason"]
         )
+    assert by_op["triage_declare"]["properties"]["severity"]["enum"] == [
+        "sev1",
+        "sev2",
+        "sev3",
+        "sev4",
+    ]
     assert "actor" not in by_op["triage_declare"]["properties"]
     assert by_op["triage_dismiss"]["properties"]["reason"] == {
         "type": "string",
