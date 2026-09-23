@@ -69,6 +69,21 @@ def test_import_linter_rejects_direct_incident_runtime_persistence_import(
     assert "Incident core does not use concrete adapters BROKEN" in result.stdout
 
 
+def test_import_linter_rejects_investigator_state_access(
+    copied_candidate: CopiedCandidate,
+) -> None:
+    contract = copied_candidate.source_root / "sre_agent" / "investigator" / "contract.py"
+    contract.write_text(
+        contract.read_text(encoding="utf-8") + "\nfrom sre_agent.persistence import repositories\n",
+        encoding="utf-8",
+    )
+
+    result = copied_candidate.lint()
+
+    assert result.returncode != 0
+    assert "cannot write state BROKEN" in result.stdout
+
+
 def test_import_linter_rejects_indirect_incident_runtime_persistence_import(
     copied_candidate: CopiedCandidate,
 ) -> None:
