@@ -1,0 +1,16 @@
+     resource_type      |  resource_id  | status 
+------------------------+---------------+--------
+ administrative_control | model_aliases | active
+(1 row)
+
+ principal_id |   action    |     resource_type      |  resource_id  | effect | status 
+--------------+-------------+------------------------+---------------+--------+--------
+ admin-human  | admin.read  | administrative_control | model_aliases | allow  | active
+ admin-human  | admin.write | administrative_control | model_aliases | allow  | active
+(2 rows)
+
+ admin_grants_for_other_principals 
+-----------------------------------
+                                 0
+(1 row)
+
