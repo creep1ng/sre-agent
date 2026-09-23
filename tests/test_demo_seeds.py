@@ -33,7 +33,7 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, alembic_version CASCADE"
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -176,7 +176,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
 async def test_seed_converges_across_alias_and_catalog_migrations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    schema = "seed_upgrade_09_11_test"
+    schema = "seed_upgrade_09_12_test"
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
@@ -210,7 +210,7 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260918_11"
+    assert version == "20260921_12"
     assert admin_resources == 2
     assert admin_grants == 4
     assert projection == [
