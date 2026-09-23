@@ -499,6 +499,48 @@ async def test_http_discovery_returns_401_without_credentials(
 
 
 @pytest.mark.asyncio
+async def test_http_granted_discovery_returns_exactly_two_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client_stub = RecordingClient()
+    scopes: list[tuple[str | None, str, str, str]] = []
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client_stub,
+        owner_repository_factory=lambda session: session,
+    )
+
+    async def authorize(
+        _sessions: Any,
+        authorization: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+    ) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        scopes.append((authorization, action, resource_type, resource_id))
+        return _context(), _decision()
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", authorize)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_route_app(service)), base_url="http://test"
+    ) as client:
+        response = await client.get(
+            "/v1/mcp/discovery",
+            headers={"Authorization": AUTHORIZATION},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["server"]["server_id"] == MCP_SERVER_ID
+    assert [tool["tool_id"] for tool in body["tools"]] == list(MCP_TOOL_IDS)
+    assert len(body["tools"]) == 2
+    assert "endpoint" not in body["server"]
+    assert scopes == [(AUTHORIZATION, "mcp.discovery", "mcp_server", MCP_SERVER_ID)]
+    assert client_stub.calls == []
+
+
+@pytest.mark.asyncio
 async def test_http_invocation_returns_403_before_owner_or_upstream(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
