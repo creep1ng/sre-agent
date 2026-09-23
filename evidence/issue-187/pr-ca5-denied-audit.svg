@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1040" viewBox="0 0 1500 1040" role="img" aria-label="Sanitized local Docker evidence for denied Grafana MCP invocation audit regression">
+<rect width="100%" height="100%" fill="#0d1117"/><rect width="100%" height="7" fill="#d29922"/>
+<g fill="#e6edf3" font-family="monospace" font-size="16">
+<text x="28" y="42">Issue #187 | CA5 denial-audit regression | Docker/PostgreSQL local verification</text>
+<text x="28" y="76">Tested SHA: b055e5822ce4a46e8f5c6dfbe7ea1f0c73e12142</text>
+<text x="28" y="105">Base SHA:   91178af94c662d81b41322c2e22c318d0b7c46e4 (#339)</text>
+<text x="28" y="146" fill="#79c0ff">Behavior: denied MCP invocation remains public 403; zero owner/upstream calls; one metadata-only audit row.</text>
+<text x="28" y="190" fill="#ffb86c">STRICT TDD — RED (before implementation)</text>
+<text x="28" y="220">$ scripts/worktree-compose --profile checks run --build --rm python-checks pytest -q</text>
+<text x="28" y="244">  tests/test_mcp_discovery.py::test_denied_invocation_is_audited_metadata_only_without_owner_or_transport</text>
+<text x="28" y="278" fill="#ff7b72">FAILED: expected one audit event, found zero; 1 failed in 3.68s.</text>
+<text x="28" y="307">Observed public 403; owner reads = 0; upstream calls = 0.</text>
+<text x="28" y="351" fill="#9fe870">STRICT TDD — GREEN (after routing denial through fail-closed audit)</text>
+<text x="28" y="381">$ scripts/worktree-compose --profile checks run --build --rm python-checks pytest -q</text>
+<text x="28" y="405">  tests/test_mcp_discovery.py::test_denied_invocation_is_audited_metadata_only_without_owner_or_transport</text>
+<text x="28" y="439" fill="#9fe870">1 passed in 3.47s. Public response: generic 403/resource_unavailable.</text>
+<text x="28" y="468" fill="#9fe870">Owner reads = 0; upstream calls = 0; exactly 1 denial audit row.</text>
+<text x="28" y="497">Audit metadata: mcp.invoke | authorization | denied | HTTP 403 | correlated request.</text>
+<text x="28" y="526">No content, raw query, credential, sensitive header, or application payload was recorded.</text>
+<text x="28" y="570">$ scripts/worktree-compose --profile checks run --build --rm python-checks pytest -q tests/test_mcp_*.py</text>
+<text x="28" y="599" fill="#9fe870">52 passed in 5.89s. Existing allowed-call coverage asserts exactly one upstream call and audit.</text>
+<text x="28" y="644">$ scripts/worktree-compose --profile checks run --build --rm python-checks pytest -q</text>
+<text x="28" y="673" fill="#9fe870">Docker/PostgreSQL full Python suite: 1041 passed, 1 skipped in 61.53s.</text>
+<text x="28" y="718">$ scripts/worktree-compose --profile checks run --build --rm python-checks sh -c</text>
+<text x="28" y="742">  'ruff check --no-cache src/sre_agent/gateway/mcp.py tests/test_mcp_discovery.py &amp;&amp;</text>
+<text x="28" y="766">   ruff format --check --no-cache src/sre_agent/gateway/mcp.py tests/test_mcp_discovery.py'</text>
+<text x="28" y="796" fill="#9fe870">Ruff: all checks passed; both files already formatted. git diff --check: clean.</text>
+<text x="28" y="842">Scope: gateway denial path plus its regression test; no immutable release snapshot changed.</text>
+<text x="28" y="888" fill="#ffb86c">LOCAL TEST PROOF ONLY — NOT A LIVE CA5 RERUN. HOSTED CI NOT RUN/CLAIMED.</text>
+<text x="28" y="932" fill="#ffb86c">This proves the denial audit regression test, not real Grafana MCP zero/one live counters.</text>
+<text x="28" y="986" fill="#8b949e">Sanitized test evidence; no credentials, sensitive headers, or application payloads.</text>
+</g></svg>
