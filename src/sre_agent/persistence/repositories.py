@@ -631,7 +631,14 @@ class CatalogRepository:
     The projection never leaks ModelAlias routing or secrets.
     """
 
-    CATALOG_TYPES = ("llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection")
+    CATALOG_TYPES = (
+        "llm_model",
+        "mcp_server",
+        "mcp_tool",
+        "skill",
+        "bok_collection",
+        "incident_workflow",
+    )
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

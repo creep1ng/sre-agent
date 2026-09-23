@@ -351,12 +351,12 @@ class CatalogCreate(BaseModel):
     """
 
     model_config = ConfigDict(strict=True, extra="forbid")
-    resource_type: Literal["mcp_server", "mcp_tool", "skill", "bok_collection"]
+    resource_type: Literal["mcp_server", "mcp_tool", "skill", "bok_collection", "incident_workflow"]
     resource_id: Annotated[
         str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
     ]
     owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
-    source: Literal["mcp", "skill", "bok"]
+    source: Literal["mcp", "skill", "bok", "incident_workflow"]
     source_ref: Annotated[
         str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
     ]
@@ -2270,6 +2270,7 @@ class ControlService:  # noqa: E305
             "mcp_tool": "mcp",
             "skill": "skill",
             "bok_collection": "bok",
+            "incident_workflow": "incident_workflow",
         }[body.resource_type]
         if body.source != expected_source:
             return await self._finish(
@@ -2286,6 +2287,7 @@ class ControlService:  # noqa: E305
             "mcp_tool": {"registered", "active", "inactive", "revoked"},
             "skill": {"draft", "published", "active", "inactive", "revoked"},
             "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
+            "incident_workflow": {"active", "inactive"},
         }
         if body.status not in allowed_status[body.resource_type]:
             return await self._finish(
@@ -2422,7 +2424,14 @@ class ControlService:  # noqa: E305
     ) -> Response:
         request_id, started = uuid4(), monotonic()
         operation, action = "catalog.list", "admin.read"
-        valid_types = {"llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"}
+        valid_types = {
+            "llm_model",
+            "mcp_server",
+            "mcp_tool",
+            "skill",
+            "bok_collection",
+            "incident_workflow",
+        }
         valid_status = {
             "registered",
             "draft",
@@ -2536,6 +2545,7 @@ class ControlService:  # noqa: E305
             "mcp_tool",
             "skill",
             "bok_collection",
+            "incident_workflow",
         } or (re.match(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$", resource_id) is None):
             return await self._finish(
                 request_id,

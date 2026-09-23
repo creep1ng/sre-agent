@@ -5,8 +5,8 @@ from sre_agent.gateway.health import REQUIRED_SCHEMA_VERSION
 from sre_agent.settings import Settings
 
 
-def test_readiness_requires_audit_migration() -> None:
-    assert REQUIRED_SCHEMA_VERSION == "20260921_13"
+def test_readiness_requires_incident_workflow_catalog_migration() -> None:
+    assert REQUIRED_SCHEMA_VERSION == "20260922_12"
 
 
 def test_liveness_does_not_call_readiness_dependency() -> None:

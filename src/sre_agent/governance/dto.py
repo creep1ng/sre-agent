@@ -99,8 +99,10 @@ class Grant(StrictDTO):
     created_at: AwareDatetime
 
 
-CatalogResourceType = Literal["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"]
-CatalogSource = Literal["model_alias", "mcp", "skill", "bok"]
+CatalogResourceType = Literal[
+    "llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection", "incident_workflow"
+]
+CatalogSource = Literal["model_alias", "mcp", "skill", "bok", "incident_workflow"]
 CatalogStatus = Literal[
     "registered", "draft", "published", "indexing", "active", "inactive", "revoked"
 ]
@@ -191,6 +193,7 @@ class ResourceCatalogEntry(StrictDTO):
             "mcp_tool": "mcp",
             "skill": "skill",
             "bok_collection": "bok",
+            "incident_workflow": "incident_workflow",
         }
         if self.source != expected_source[self.resource_type]:
             raise ValueError("catalog source does not match resource type")
@@ -200,6 +203,7 @@ class ResourceCatalogEntry(StrictDTO):
             "mcp_tool": {"registered", "active", "inactive", "revoked"},
             "skill": {"draft", "published", "active", "inactive", "revoked"},
             "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
+            "incident_workflow": {"active", "inactive"},
         }
         if self.status not in allowed[self.resource_type]:
             raise ValueError("catalog status is not permitted for this resource type")

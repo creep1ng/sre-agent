@@ -180,6 +180,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
 async def test_seed_converges_across_alias_and_catalog_migrations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The upgrade crosses CAS, catalog, MCP audit, and workflow migrations.
     schema = "seed_upgrade_09_12_test"
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
@@ -214,7 +215,7 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260921_13"
+    assert version == "20260922_12"
     assert admin_resources == 3
     assert admin_grants == 6
     assert projection == [
