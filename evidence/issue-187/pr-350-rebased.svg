@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="410" viewBox="0 0 1400 410" role="img" aria-label="Sanitized terminal evidence for PR 350">
+<rect width="100%" height="100%" fill="#0d1117"/><rect width="100%" height="7" fill="#238636"/>
+<g fill="#e6edf3" font-family="monospace" font-size="16">
+<text x="24" y="40">PR #350 | governed MCP owner repository | Docker/PostgreSQL</text>
+<text x="24" y="68">Tested SHA: c04fd807f218bbcc9d58d9dd139d4234d912b1fc</text>
+<text x="24" y="96">Base SHA:   138b625a1fa5b13b6048b93add4cf69519688166</text>
+<text x="24" y="132">$ scripts/worktree-compose --profile checks run --build --rm python-checks</text>
+<text x="24" y="160">  pytest -q tests/test_mcp_owner_repository.py</text>
+<text x="24" y="188" fill="#ffb86c">RED: ImportError, MCPOwnerRepository missing before implementation</text>
+<text x="24" y="216" fill="#9fe870">GREEN: 3 passed in 2.48s; independent repeat: 3 passed in 1.74s</text>
+<text x="24" y="252">$ scripts/worktree-compose --profile checks run --build --rm python-checks</text>
+<text x="24" y="280">  pytest -q tests/test_mcp_owner_repository.py tests/test_mcp_owner.py tests/test_governance_dto.py</text>
+<text x="24" y="308" fill="#9fe870">296 passed in 3.05s; Ruff and diff-check passed</text>
+<text x="24" y="344">CI: https://github.com/creep1ng/sre-agent/actions/runs/35806713359</text>
+<text x="24" y="380">No credentials, headers, application payloads, or upstream responses captured.</text>
+</g></svg>
