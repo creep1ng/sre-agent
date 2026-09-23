@@ -7,8 +7,12 @@ pull request inside the size budget.
 |---|---|---|---|
 | 1 | Planning artifacts, manifest, digest lock, env overrides | 1 | Merged |
 | 2a | Lifecycle: `up`, `verify`, `down`, composition overlay, operator guide | 2, partial | Open, #273 |
-| 2b | Failure cycle: `fail` and `reset` | 2, complete | This PR |
-| 3 | Grafana MCP and its boundary, MCP availability, signal guide | 3 and 4 | Pending |
+| 2b | Failure cycle: `fail` and `reset` | 2, complete | Open, #275 |
+| 3a | Grafana MCP, its network boundary, MCP and port checks in `verify` | 3 | Open, #291 |
+| 3b | Signal guide and sanitized output of two cycles | 4 | This PR |
+
+PR 3 is split in two because the MCP boundary and the signal guide carry
+different evidence and would not fit one review budget together.
 
 ## Scope correction
 
@@ -60,3 +64,41 @@ running, the flag working copy leaked a previous session's state into a
 supposedly clean start, verification approved the environment while checking
 only six of its services, and the synthetic traffic never reached the store
 because k6 targeted the proxy's upstream port instead of 8090.
+
+## PR 3a findings
+
+**Upstream published most services to the host.** The short port syntax used
+upstream (`"3000"`) binds every host interface to a random port, so Grafana
+with anonymous Admin, OpenSearch, flagd-ui and the store database were reachable
+outside the proxy. Measured on the reference host: Grafana answered on
+`0.0.0.0:58224`. That contradicted the manifest, which declared three host ports,
+and was a bypass of both the proxy and Grafana MCP. The overlay now resets every
+undeclared publication and `verify` fails if one reappears.
+
+**The MCP was validated before writing the overlay**, with a disposable
+container on the demo network: ten tools with the chosen categories and none
+that writes, HTTP 401 without the caller token, Prometheus and OpenSearch
+queries answered through Grafana's datasources, and a container outside the demo
+network unable to resolve it. `query_elasticsearch` works against the
+`grafana-opensearch-datasource` plugin the demo provisions. The image reports
+its version as `(devel)`, so the pin rests on the digest in `demo/digests.lock`.
+
+## PR 3b findings
+
+**checkout does not log the failure.** A first reading searched for `ERROR`
+logs and found only the Collector's own, about fifty per window in every state,
+from Kafka and PostgreSQL receivers without a target in the minimal profile.
+The checkout source returns a failed charge to its caller without logging it;
+its `INFO` logs mark the stages of an order instead. The log signal is therefore
+an order that reaches `[PlaceOrder]` and never `order placed`, confirmed by the
+proxy access logs of `POST /api/checkout` answering 500.
+
+**Measured over two cycles on the reference host**, two-minute windows read 150
+seconds after each operation: error calls in checkout went from 0 to 12 and back
+to 0 in both cycles, split evenly between `PlaceOrder` and
+`PaymentService/Charge`; every order stalled while the flag was on and every
+checkout request answered 500; after each `reset` orders completed and the proxy
+answered 200. One order in flight at the edge of a window appeared started
+without completion after the second `reset`, so the guide reads the log signal
+together with the metrics and the proxy codes, never alone.
+

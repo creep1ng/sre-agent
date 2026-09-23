@@ -13,6 +13,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -25,7 +27,9 @@ MANIFEST_PATH = ROOT / "demo" / "manifest.yaml"
 LOCK_PATH = ROOT / "demo" / "digests.lock"
 OVERLAY = ROOT / "compose.demo.yaml"
 CHECKOUT = ROOT / "otel-demo"
-FLAGS_DIR = ROOT / ".demo-state" / "flagd"
+STATE_DIR = ROOT / ".demo-state"
+FLAGS_DIR = STATE_DIR / "flagd"
+MCP_ENV = STATE_DIR / "grafana-mcp.env"
 
 
 def abort(message: str) -> None:
@@ -33,10 +37,10 @@ def abort(message: str) -> None:
     raise SystemExit(1)
 
 
-def run(args: list[str], capture: bool = False) -> str:
-    env = {**os.environ, "DEMO_FLAGS_DIR": str(FLAGS_DIR)}
+def run(args: list[str], capture: bool = False, check: bool = True) -> str:
+    env = {**os.environ, "DEMO_FLAGS_DIR": str(FLAGS_DIR), "DEMO_STATE_DIR": str(STATE_DIR)}
     done = subprocess.run(args, text=True, capture_output=capture, env=env)
-    if done.returncode != 0:
+    if check and done.returncode != 0:
         if capture:
             print(done.stderr, file=sys.stderr, end="")
         abort(f"command failed: {' '.join(args)}")
@@ -109,6 +113,17 @@ def ensure_flags() -> None:
     FLAGS_DIR.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(CHECKOUT / "src" / "flagd", FLAGS_DIR)
     print(f"Flag working copy created at {FLAGS_DIR.relative_to(ROOT)}")
+
+
+def ensure_mcp_token() -> None:
+    """Create the Grafana MCP caller token once. The gateway will hold it; the harness never."""
+    if MCP_ENV.exists():
+        return
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    # LF endings on every host: a CR would become part of the token.
+    token = f"MCP_GRAFANA_SERVER_TOKEN={secrets.token_hex(24)}\n"
+    MCP_ENV.write_text(token, encoding="utf-8", newline="\n")
+    print(f"Grafana MCP caller token created at {MCP_ENV.relative_to(ROOT)}")
 
 
 def flags_file() -> Path:
@@ -203,6 +218,48 @@ def digest_drift(cfg: dict) -> list[str]:
     return problems
 
 
+def undeclared_ports(cfg: dict) -> list[str]:
+    """Only the host ports declared in the manifest may be published."""
+    declared = {str(entry["port"]) for entry in cfg["host_ports"]}
+    project = cfg["compose"]["project_name"]
+    listing = run(
+        [
+            "docker",
+            "ps",
+            "--filter",
+            f"label=com.docker.compose.project={project}",
+            "--format",
+            "{{.Names}}\t{{.Ports}}",
+        ],
+        capture=True,
+    )
+    return [
+        f"{name}: publishes undeclared host port {port}"
+        for name, _, ports in (line.partition("\t") for line in listing.splitlines())
+        for port in sorted(set(re.findall(r":(\d+)->", ports)) - declared)
+    ]
+
+
+def mcp_problems(cfg: dict) -> list[str]:
+    """Grafana MCP answers its health check and rejects callers without the token.
+
+    The MCP image ships no HTTP client, so the probes run from a demo service that does.
+    """
+    mcp = cfg["grafana_mcp"]
+    base = f"http://{mcp['service']}:{mcp['port']}"
+    curl = ["exec", "-T", mcp["probe_from"], "curl", "-s", "-m", "5", "-o", "/dev/null"]
+    checks = {
+        "health check": (["-w", "%{http_code}", f"{base}/healthz"], "200"),
+        "call without token": (["-w", "%{http_code}", "-X", "POST", f"{base}/mcp"], "401"),
+    }
+    problems = []
+    for label, (args, expected) in checks.items():
+        got = run(compose(cfg) + curl + args, capture=True, check=False).strip() or "none"
+        if got != expected:
+            problems.append(f"{mcp['service']} {label}: expected HTTP {expected}, got {got}")
+    return problems
+
+
 def op_up(cfg: dict) -> None:
     ensure_checkout(cfg)
     conflicts = conflicting_containers(cfg)
@@ -216,12 +273,13 @@ def op_up(cfg: dict) -> None:
 
 
 def op_verify(cfg: dict) -> None:
-    problems = unavailable(cfg) + digest_drift(cfg)
+    problems = unavailable(cfg) + digest_drift(cfg) + undeclared_ports(cfg) + mcp_problems(cfg)
     for line in problems:
         print(f"FAIL {line}")
     if problems:
         raise SystemExit(1)
     print("OK every service is available and image digests match the lock.")
+    print("OK only declared host ports are published; Grafana MCP requires its caller token.")
 
 
 def op_fail(cfg: dict) -> None:
@@ -265,6 +323,7 @@ def main() -> None:
     parser.add_argument("operation", choices=sorted(OPERATIONS))
     operation = parser.parse_args().operation
     require_docker()
+    ensure_mcp_token()
     OPERATIONS[operation](manifest())
 
 
