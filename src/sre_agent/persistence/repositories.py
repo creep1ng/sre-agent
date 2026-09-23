@@ -709,9 +709,7 @@ class CatalogRepository:
             )
             self._session.add(row)
         else:
-            self._refresh_mcp_projection(
-                row, server, source_ref=f"mcp-owner/{server.server_id}"
-            )
+            self._refresh_mcp_projection(row, server, source_ref=f"mcp-owner/{server.server_id}")
         await self._session.flush()
         return project_catalog_entry(row)
 
