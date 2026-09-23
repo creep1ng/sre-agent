@@ -11,6 +11,7 @@ from os import environ
 from sqlalchemy import insert, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from sre_agent.governance.dto import ModelAlias
 from sre_agent.persistence.api_keys import hash_api_key, is_api_key, verify_api_key
@@ -143,8 +144,55 @@ def _grant_id(alias: str) -> str:
     return f"grant-incident-harness-invoke-{alias}"
 
 
-def _resource_values(route: RouteSetting) -> dict[str, object]:
-    return {
+async def _resource(session: AsyncSession, key: tuple[str, str]) -> ResourceRow | None:
+    """Read resources across schemas predating the CAS and catalog migrations."""
+    columns = await _resource_columns(session)
+    deferred = tuple(
+        defer(getattr(ResourceRow, name))
+        for name in RESOURCE_COLUMNS_ADDED_AFTER_09
+        if name not in columns
+    )
+    return await session.get(ResourceRow, key, options=deferred)
+
+
+RESOURCE_COLUMNS_ADDED_AFTER_09 = (
+    "updated_at",
+    "owner_id",
+    "source",
+    "source_ref",
+    "display_name",
+    "visibility",
+    "description",
+    "tags",
+)
+
+
+async def _resource_columns(session: AsyncSession) -> frozenset[str]:
+    """Cache the current resource shape for this seed transaction."""
+    cached = session.info.get("seed_resource_columns")
+    if cached is None:
+        result = await session.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND table_name = 'resources'"
+            )
+        )
+        cached = frozenset(result.scalars().all())
+        session.info["seed_resource_columns"] = cached
+    return cached
+
+
+async def _resources(session: AsyncSession, keys: tuple[tuple[str, str], ...]) -> list[ResourceRow]:
+    rows = []
+    for key in keys:
+        row = await _resource(session, key)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
+def _resource_values(route: RouteSetting, columns: frozenset[str]) -> dict[str, object]:
+    values = {
         "resource_type": "llm_model",
         "resource_id": route.alias,
         "status": "active",
@@ -153,14 +201,27 @@ def _resource_values(route: RouteSetting) -> dict[str, object]:
         "concrete_model": route.model,
         "router": "openrouter",
         "inference_provider": route.provider,
-        "owner_id": route.alias,
-        "source": "model_alias",
-        "source_ref": route.alias,
-        "display_name": route.alias,
-        "visibility": "private",
-        "description": "",
-        "tags": [],
     }
+    catalog_columns = {
+        "owner_id",
+        "source",
+        "source_ref",
+        "display_name",
+        "visibility",
+        "description",
+        "tags",
+    }
+    if catalog_columns <= columns:
+        values.update(
+            owner_id=route.alias,
+            source="model_alias",
+            source_ref=route.alias,
+            display_name=route.alias,
+            visibility="private",
+            description="",
+            tags=[],
+        )
+    return values
 
 
 def _grant_values(route: RouteSetting) -> dict[str, object]:
@@ -185,6 +246,7 @@ async def _seed_session(
 ) -> bool:
     await session.execute(text("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"))
     await session.execute(text("SELECT pg_advisory_xact_lock(112024)"))
+    resource_columns = await _resource_columns(session)
     ids = [principal_id for principal_id, _, _ in PRINCIPALS]
     principals = [row for pid in ids if (row := await session.get(PrincipalRow, pid)) is not None]
     credentials = [
@@ -196,7 +258,7 @@ async def _seed_session(
     resources = [
         row
         for route in routes
-        if (row := await session.get(ResourceRow, ("llm_model", route.alias))) is not None
+        if (row := await _resource(session, ("llm_model", route.alias))) is not None
     ]
     grants = [
         row
@@ -204,7 +266,7 @@ async def _seed_session(
         if (row := await session.get(GrantRow, _grant_id(route.alias))) is not None
     ]
     admin_resources = [
-        row for key in ADMIN_RESOURCES if (row := await session.get(ResourceRow, key)) is not None
+        row for key in ADMIN_RESOURCES if (row := await _resource(session, key)) is not None
     ]
     admin_grants = [
         row
@@ -223,7 +285,8 @@ async def _seed_session(
         missing_routes = [route for route in routes if route.alias not in present_resources]
         if missing_routes:
             await session.execute(
-                insert(ResourceRow), [_resource_values(route) for route in missing_routes]
+                insert(ResourceRow),
+                [_resource_values(route, resource_columns) for route in missing_routes],
             )
         present_grants = {row.resource_id for row in grants}
         missing_grants = [route for route in routes if route.alias not in present_grants]
@@ -239,27 +302,13 @@ async def _seed_session(
                         ResourceRow.resource_type == "llm_model",
                         ResourceRow.resource_id == route.alias,
                     )
-                    .values(
-                        status="active",
-                        model_alias_id=route.alias,
-                        alias=route.alias,
-                        concrete_model=route.model,
-                        router="openrouter",
-                        inference_provider=route.provider,
-                        owner_id=route.alias,
-                        source="model_alias",
-                        source_ref=route.alias,
-                        display_name=route.alias,
-                        visibility="private",
-                        description="",
-                        tags=[],
-                    )
+                    .values(**_resource_values(route, resource_columns))
                 )
         await session.flush()
         resources = [
             row
             for route in routes
-            if (row := await session.get(ResourceRow, ("llm_model", route.alias))) is not None
+            if (row := await _resource(session, ("llm_model", route.alias))) is not None
         ]
         grants = [
             row
@@ -307,11 +356,7 @@ async def _seed_session(
         if missing_grants:
             await session.execute(insert(GrantRow), missing_grants)
         await session.flush()
-        admin_resources = [
-            row
-            for key in ADMIN_RESOURCES
-            if (row := await session.get(ResourceRow, key)) is not None
-        ]
+        admin_resources = await _resources(session, ADMIN_RESOURCES)
         admin_grants = [
             row
             for grant_id, _, _ in ADMIN_GRANTS
@@ -329,7 +374,10 @@ async def _seed_session(
                  key_hash=hash_api_key(key), status="active", created_at=SEED_TIME,
                  expires_at=None, revoked_at=None)
             for (pid, _, _), key in zip(PRINCIPALS, settings.keys, strict=True)])
-        await session.execute(insert(ResourceRow), [_resource_values(route) for route in routes])
+        await session.execute(
+            insert(ResourceRow),
+            [_resource_values(route, resource_columns) for route in routes],
+        )
         await session.execute(insert(GrantRow), [_grant_values(route) for route in routes])
         fresh_admin_resources = [
             dict(
@@ -378,32 +426,34 @@ async def _seed_session(
     by_alias = {row.resource_id: row for row in resources}
     grants_by_resource = {row.resource_id: row for row in grants}
     for route in routes:
+        resource_fields = [
+            "status",
+            "model_alias_id",
+            "alias",
+            "concrete_model",
+            "router",
+            "inference_provider",
+        ]
+        resource_values = [
+            "active",
+            route.alias,
+            route.alias,
+            route.model,
+            "openrouter",
+            route.provider,
+        ]
+        if {
+            "owner_id",
+            "source",
+            "source_ref",
+            "visibility",
+        } <= resource_columns:
+            resource_fields.extend(("owner_id", "source", "source_ref", "visibility"))
+            resource_values.extend((route.alias, "model_alias", route.alias, "private"))
         _require(
             by_alias[route.alias],
-            (
-                "status",
-                "model_alias_id",
-                "alias",
-                "concrete_model",
-                "router",
-                "inference_provider",
-                "owner_id",
-                "source",
-                "source_ref",
-                "visibility",
-            ),
-            (
-                "active",
-                route.alias,
-                route.alias,
-                route.model,
-                "openrouter",
-                route.provider,
-                route.alias,
-                "model_alias",
-                route.alias,
-                "private",
-            ),
+            resource_fields,
+            tuple(resource_values),
             "resources",
         )
         _require(
@@ -456,12 +506,13 @@ async def routing_drift(
     """Return only alias and field names; configured and persisted values stay private."""
     drift: dict[str, tuple[str, ...]] = {}
     async with database.sessions() as session:
+        resource_columns = await _resource_columns(session)
         for route in settings.routes:
-            row = await session.get(ResourceRow, ("llm_model", route.alias))
+            row = await _resource(session, ("llm_model", route.alias))
             if row is None:
                 drift[route.alias] = ("missing",)
                 continue
-            expected = _resource_values(route)
+            expected = _resource_values(route, resource_columns)
             fields = tuple(
                 field
                 for field in (
@@ -502,7 +553,7 @@ async def routing_digest(database: Database, settings: RoutingSettings) -> str:
         rows = [
             row
             for route in settings.routes
-            if (row := await session.get(ResourceRow, ("llm_model", route.alias))) is not None
+            if (row := await _resource(session, ("llm_model", route.alias))) is not None
         ]
         return _routing_digest(settings, rows)
 
