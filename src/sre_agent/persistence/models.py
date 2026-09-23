@@ -124,6 +124,55 @@ class ResourceRow(Base):
     tags = mapped_column(JSONB, nullable=True)
 
 
+class MCPServerRow(Base):
+    """Owner-authoritative MCP server identity; catalog rows are projections."""
+
+    __tablename__ = "mcp_servers"
+    __table_args__ = (
+        CK("contract_version = '1.0.0'", name="ck_mcp_servers_contract_version"),
+        CK("status IN ('registered','active','inactive')", name="ck_mcp_servers_status"),
+        CK("visibility IN ('public','private','hidden')", name="ck_mcp_servers_visibility"),
+        CK("updated_at >= created_at", name="ck_mcp_servers_lifecycle"),
+    )
+    server_id = mapped_column(String(64), primary_key=True)
+    owner_id = required(String(64))
+    contract_version = required(String(32))
+    status = required(String(16))
+    endpoint = required(String(500))
+    display_name = required(String(200))
+    visibility = required(String(16))
+    description = required(String(500))
+    tags = required(JSONB)
+    created_at = required(DateTime(timezone=True))
+    updated_at = required(DateTime(timezone=True))
+
+
+class MCPToolRow(Base):
+    """Owner-authoritative MCP tool identity linked to exactly one server."""
+
+    __tablename__ = "mcp_tools"
+    __table_args__ = (
+        ForeignKeyConstraint(["server_id"], ["mcp_servers.server_id"]),
+        CK("contract_version = '1.0.0'", name="ck_mcp_tools_contract_version"),
+        CK("status IN ('registered','active','inactive')", name="ck_mcp_tools_status"),
+        CK("visibility IN ('public','private','hidden')", name="ck_mcp_tools_visibility"),
+        CK("updated_at >= created_at", name="ck_mcp_tools_lifecycle"),
+        UniqueConstraint("server_id", "upstream_name", name="uq_mcp_tools_server_upstream"),
+    )
+    tool_id = mapped_column(String(64), primary_key=True)
+    server_id = required(String(64))
+    owner_id = required(String(64))
+    contract_version = required(String(32))
+    status = required(String(16))
+    upstream_name = required(String(200))
+    display_name = required(String(200))
+    visibility = required(String(16))
+    description = required(String(500))
+    tags = required(JSONB)
+    created_at = required(DateTime(timezone=True))
+    updated_at = required(DateTime(timezone=True))
+
+
 class GrantRow(Base):
     __tablename__ = "grants"
     __table_args__ = (
@@ -178,6 +227,7 @@ class AuditEventRow(Base):
         CK(
             "operation IN ('audit.accept','audit.export','audit.project','audit.redact',"
             "'credentials.authenticate','responses.create','principals.create',"
+            "'mcp.discovery','mcp.invoke',"
             "'principals.get','principals.list','principals.status.replace',"
             "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
             "'grants.create','grants.list','grants.revoke',"

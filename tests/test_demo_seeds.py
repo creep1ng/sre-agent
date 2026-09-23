@@ -32,21 +32,10 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_10_test CASCADE")
-        for table in (
-            "audit_events",
-            "grants",
-            "credentials",
-            "resources",
-            "principals",
-            "idempotency_records",
-            "alembic_version",
-        ):
-            connection.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+        connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_12_test CASCADE")
         connection.execute(
-            "DO $$ BEGIN"
-            " DROP TYPE IF EXISTS alembic_version CASCADE;"
-            " EXCEPTION WHEN dependent_objects_still_exist THEN NULL;"
-            " END $$"
+            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -188,14 +177,11 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
 
 
 @pytest.mark.asyncio
-async def test_seed_converges_after_real_09_to_10_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Seeding requires the resources.updated_at CAS column, so the legacy shape
-    # is staged at head, narrowed to the pre-T5 graph, then carried across the
-    # real 20260918_10 migration before convergence. T6 adds the catalog
-    # projection (20260918_11) and issue #189 A1 admits incident_workflow
-    # (20260922_12); head is now 12 but the 09->10 path is still
-    # exercised through the full upgrade chain.
-    schema = "seed_upgrade_09_10_test"
+async def test_seed_converges_across_alias_and_catalog_migrations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The upgrade crosses CAS, catalog, MCP audit, and workflow migrations.
+    schema = "seed_upgrade_09_12_test"
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
@@ -205,17 +191,12 @@ async def test_seed_converges_after_real_09_to_10_upgrade(monkeypatch: pytest.Mo
     config.set_main_option("sqlalchemy.url", dsn)
     monkeypatch.setenv("DATABASE_URL", dsn)
     monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema}")
-    command.upgrade(config, "head")
+    command.upgrade(config, "20260917_09")
 
     settings = SeedSettings.from_environment(ENV)
     legacy_database = Database(dsn)
     assert await seed(legacy_database, settings) is True
     await legacy_database.dispose()
-    command.downgrade(config, "20260917_09")
-    with psycopg.connect(dsn, autocommit=True) as connection:
-        connection.execute("DELETE FROM grants WHERE action LIKE 'admin.%'")
-        connection.execute("DELETE FROM resources WHERE resource_type='administrative_control'")
-
     command.upgrade(config, "head")
     database = Database(dsn)
     assert await seed(database, settings) is False
@@ -230,14 +211,38 @@ async def test_seed_converges_after_real_09_to_10_upgrade(monkeypatch: pytest.Mo
         admin_grants = connection.execute(
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
+        projection = connection.execute(
+            "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
+            "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
+        ).fetchall()
     assert version == "20260922_12"
     assert admin_resources == 3
     assert admin_grants == 6
+    assert projection == [
+        (
+            "remediation-agent",
+            "model_alias",
+            "remediation-agent",
+            "remediation-agent",
+            "private",
+            "",
+            [],
+        ),
+        (
+            "triage-agent",
+            "model_alias",
+            "triage-agent",
+            "triage-agent",
+            "private",
+            "",
+            [],
+        ),
+    ]
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         # The incident store migration escapes the isolated search_path with a
         # top-level schema; remove the residue for the incident suites.
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_10_test CASCADE")
+        connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_12_test CASCADE")
 
 
 @pytest.mark.asyncio

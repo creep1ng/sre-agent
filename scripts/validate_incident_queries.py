@@ -108,7 +108,16 @@ def check_schemas() -> tuple[dict[str, dict], list[str]]:
             continue
         schemas[name] = schema
     run_event = load_yaml(RUN_EVENT_SCHEMA_PATH)
-    schemas["run-event"] = run_event
+    try:
+        Draft202012Validator.check_schema(run_event)
+    except Exception as error:  # noqa: BLE001
+        errors.append(f"schema 'run-event' is not valid draft 2020-12: {error}")
+    else:
+        run_event_id = run_event.get("$id", "") if isinstance(run_event, dict) else ""
+        if not URN_REFERENCE.fullmatch(run_event_id):
+            errors.append(f"schema 'run-event' has malformed immutable $id {run_event_id!r}")
+        else:
+            schemas["run-event"] = run_event
     try:
         envelope = load_json(ERROR_ENVELOPE_PATH)
         Draft202012Validator.check_schema(envelope)

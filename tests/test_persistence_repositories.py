@@ -12,6 +12,7 @@ from sqlalchemy.exc import DBAPIError
 from sre_agent.governance.authorization import ResourceAuthorizationFact
 from sre_agent.governance.dto import AuditEvent, Consumption, PricingContext
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.projections import project_audit_event
 from sre_agent.persistence.repositories import (
     AuditRepository,
     CredentialRepository,
@@ -31,6 +32,7 @@ def repository_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -321,3 +323,41 @@ async def test_audit_repository_round_trips_consumption_and_keeps_denials_empty(
         )
         assert denied.consumption is None
     await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_audit_read_recent_is_stable_and_repeatable() -> None:
+    first = audit_event(allowed=True, latency_ms=5).model_copy(
+        update={
+            "event_id": UUID(int=201),
+            "occurred_at": datetime(2026, 9, 12, 12, tzinfo=UTC),
+        }
+    )
+    second = audit_event(allowed=False, latency_ms=7).model_copy(
+        update={
+            "event_id": UUID(int=202),
+            "occurred_at": datetime(2026, 9, 12, 12, tzinfo=UTC),
+        }
+    )
+    database = Database(DATABASE_URL)
+    async with database.transaction() as session:
+        await AuditRepository(session).append(first)
+        await AuditRepository(session).append(second)
+    async with database.transaction() as session:
+        repository = AuditRepository(session)
+        first_read = await repository.read_recent(limit=10)
+        second_read = await repository.read_recent(limit=10)
+    await database.dispose()
+    assert [event.event_id for event in first_read] == [event.event_id for event in second_read]
+    mine = [event for event in first_read if event.event_id in {UUID(int=201), UUID(int=202)}]
+    assert [event.event_id for event in mine] == [UUID(int=202), UUID(int=201)]
+
+
+def test_audit_projection_keeps_only_dto_fields() -> None:
+    row = audit_event(allowed=True, latency_ms=5).model_dump(mode="json")
+    row["prompt"] = "summarize this incident"
+    row["request_body"] = {"secret": "value"}
+    projected = project_audit_event(row)
+    dumped = projected.model_dump(mode="json")
+    assert "prompt" not in dumped and "request_body" not in dumped
+    assert dumped["latency_ms"] == 5
