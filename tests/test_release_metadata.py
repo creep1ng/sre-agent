@@ -37,7 +37,7 @@ def test_empty_environment_values_keep_source_archive_defaults() -> None:
         }
     )
 
-    assert settings.release_metadata.contract_version == CONTRACT_VERSION == "2.1.0"
+    assert settings.release_metadata.contract_version == CONTRACT_VERSION == "2.4.0"
     assert settings.release_metadata.build_revision == SOURCE_ARCHIVE_BUILD_REVISION
     assert settings.release_metadata.application_version
 
