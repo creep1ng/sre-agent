@@ -1,0 +1,8 @@
+{
+  "datasource_uid": "webstore-logs",
+  "index": "otel-logs-*",
+  "query": "resource.service.name:checkout",
+  "start_time": "now-2m",
+  "end_time": "now",
+  "limit": 100
+}

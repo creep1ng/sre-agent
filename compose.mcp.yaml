@@ -1,0 +1,35 @@
+# Optional gateway overlay for the locally generated Grafana MCP demo.
+#
+# The external network and token file are created by the isolated demo
+# bootstrap. This file intentionally does not define or copy the upstream MCP
+# service, and it contains no credential value.
+services:
+  api:
+    env_file:
+      - ${DEMO_STATE_DIR:?DEMO_STATE_DIR is required}/grafana-mcp.env
+    environment:
+      GRAFANA_MCP_ENDPOINT: http://grafana-mcp:8000/mcp
+    depends_on:
+      mcp-seed:
+        condition: service_completed_successfully
+    networks:
+      - runtime
+      - mcp-boundary
+
+  mcp-seed:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["python", "-m", "sre_agent.persistence.seeds", "--seed-mcp"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    restart: "no"
+    networks: [runtime]
+
+networks:
+  mcp-boundary:
+    name: sre-mcp-boundary
+    external: true

@@ -1,0 +1,79 @@
+# External composition overlay for the pinned OpenTelemetry Demo.
+# Passed last, so its values win. See demo/manifest.yaml for the environment.
+# Uses the !reset tag, so it requires Docker Compose 2.24 or later.
+#
+# Upstream mounts ./src/flagd, inside its own checkout, as the flagd config
+# directory. Injecting a failure by editing that file would modify the demo,
+# which the issue contract forbids. This overlay replaces the mount with a
+# working copy the project owns, created by scripts/demo_env.py from the
+# upstream definitions. DEMO_FLAGS_DIR is an absolute path set by that script.
+#
+# Upstream also publishes most services on an ephemeral host port: the short
+# syntax "3000" binds every host interface to a random port. That exposed
+# Grafana with anonymous Admin, OpenSearch, flagd-ui and the store database
+# outside the proxy, a bypass of both the proxy and Grafana MCP. Only the ports
+# declared in demo/manifest.yaml stay published; the rest are reset below.
+
+services:
+  flagd:
+    volumes:
+      - ${DEMO_FLAGS_DIR:?run operations through scripts/demo_env.py}:/etc/flagd
+    ports: !reset []
+
+  # The flagd provider in checkout kept a cached evaluation after flagd
+  # restarted, so the store went on failing after reset until checkout itself
+  # was restarted. Evaluating on every call lets fail and reset take effect
+  # without touching checkout.
+  checkout:
+    environment:
+      FLAGD_CACHE: disabled
+    ports: !reset []
+
+  # Grafana MCP: read-only, minimal tool categories, caller authentication and
+  # no published port. It joins the demo network to reach Grafana and a
+  # dedicated internal network reserved for the gateway (#187). The harness
+  # joins neither, and never receives the caller token.
+  grafana-mcp:
+    image: grafana/mcp-grafana:1.3.0
+    container_name: grafana-mcp
+    command:
+      - --transport=streamable-http
+      - --address=0.0.0.0:8000
+      - --allowed-hosts=grafana-mcp:8000
+      - --disable-write
+      - --enabled-tools=prometheus,elasticsearch,datasource
+    environment:
+      GRAFANA_URL: http://grafana:3000/grafana
+      GRAFANA_ORG_ID: "1"
+    env_file:
+      - ${DEMO_STATE_DIR:?run operations through scripts/demo_env.py}/grafana-mcp.env
+    depends_on:
+      grafana:
+        condition: service_started
+    restart: unless-stopped
+    networks: [default, mcp-boundary]
+
+  ad: {ports: !reset []}
+  astronomy-db: {ports: !reset []}
+  cart: {ports: !reset []}
+  currency: {ports: !reset []}
+  email: {ports: !reset []}
+  flagd-ui: {ports: !reset []}
+  frontend: {ports: !reset []}
+  grafana: {ports: !reset []}
+  image-provider: {ports: !reset []}
+  jaeger: {ports: !reset []}
+  opensearch: {ports: !reset []}
+  otel-collector: {ports: !reset []}
+  payment: {ports: !reset []}
+  product-catalog: {ports: !reset []}
+  quote: {ports: !reset []}
+  recommendation: {ports: !reset []}
+  shipping: {ports: !reset []}
+  telemetry-docs: {ports: !reset []}
+  valkey-cart: {ports: !reset []}
+
+networks:
+  mcp-boundary:
+    name: sre-mcp-boundary
+    internal: true

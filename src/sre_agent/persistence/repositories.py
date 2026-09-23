@@ -14,6 +14,8 @@ from sre_agent.governance.dto import (
     AuditEvent,
     CredentialReference,
     Grant,
+    MCPServer,
+    MCPTool,
     ModelAlias,
     Principal,
     PrincipalContext,
@@ -32,6 +34,8 @@ from sre_agent.persistence.models import (
     CredentialRow,
     GrantRow,
     IdempotencyRecordRow,
+    MCPServerRow,
+    MCPToolRow,
     PrincipalRow,
     ResourceRow,
 )
@@ -40,6 +44,8 @@ from sre_agent.persistence.projections import (
     project_catalog_entry,
     project_credential,
     project_grant,
+    project_mcp_server,
+    project_mcp_tool,
     project_model_alias,
     project_principal,
     project_resource,
@@ -436,6 +442,38 @@ class ResourceRepository:
         return project_model_alias(row._mapping) if row is not None else None
 
 
+class OwnerResourceFactReader:
+    """Read authorization state from MCP owner rows, not catalog shadows."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def authorization_view(
+        self, resource_type: str, resource_id: str
+    ) -> ResourceAuthorizationFact | None:
+        if resource_type == "mcp_server":
+            row = await self._session.get(MCPServerRow, resource_id)
+            if row is None:
+                return None
+            return ResourceAuthorizationFact(
+                resource_type="mcp_server",
+                resource_id=row.server_id,
+                status="active" if row.status == "active" else "inactive",
+            )
+        if resource_type == "mcp_tool":
+            row = await self._session.get(MCPToolRow, resource_id)
+            if row is None:
+                return None
+            return ResourceAuthorizationFact(
+                resource_type="mcp_tool",
+                resource_id=row.tool_id,
+                status="active" if row.status == "active" else "inactive",
+            )
+        return await ResourceRepository(self._session).authorization_view(
+            resource_type, resource_id
+        )
+
+
 class ModelAliasRepository:
     """Closed ModelAlias reads and creates over llm_model resource rows.
 
@@ -692,6 +730,66 @@ class CatalogRepository:
                 continue
         return items, truncated
 
+    async def project_mcp_server(self, server: MCPServer) -> ResourceCatalogEntry:
+        row = await self._session.get(ResourceRow, ("mcp_server", server.server_id))
+        if row is None:
+            row = ResourceRow(
+                resource_type="mcp_server",
+                resource_id=server.server_id,
+                status=server.status,
+                updated_at=server.updated_at,
+                owner_id=server.owner_id,
+                source="mcp",
+                source_ref=f"mcp-owner/{server.server_id}",
+                display_name=server.display_name,
+                visibility=server.visibility,
+                description=server.description,
+                tags=list(server.tags),
+            )
+            self._session.add(row)
+        else:
+            self._refresh_mcp_projection(row, server, source_ref=f"mcp-owner/{server.server_id}")
+        await self._session.flush()
+        return project_catalog_entry(row)
+
+    async def project_mcp_tool(self, tool: MCPTool) -> ResourceCatalogEntry:
+        row = await self._session.get(ResourceRow, ("mcp_tool", tool.tool_id))
+        if row is None:
+            row = ResourceRow(
+                resource_type="mcp_tool",
+                resource_id=tool.tool_id,
+                status=tool.status,
+                updated_at=tool.updated_at,
+                owner_id=tool.owner_id,
+                source="mcp",
+                source_ref=f"mcp-owner/{tool.server_id}/{tool.tool_id}",
+                display_name=tool.display_name,
+                visibility=tool.visibility,
+                description=tool.description,
+                tags=list(tool.tags),
+            )
+            self._session.add(row)
+        else:
+            self._refresh_mcp_projection(
+                row, tool, source_ref=f"mcp-owner/{tool.server_id}/{tool.tool_id}"
+            )
+        await self._session.flush()
+        return project_catalog_entry(row)
+
+    @staticmethod
+    def _refresh_mcp_projection(
+        row: ResourceRow, resource: MCPServer | MCPTool, *, source_ref: str
+    ) -> None:
+        row.status = resource.status
+        row.updated_at = resource.updated_at
+        row.owner_id = resource.owner_id
+        row.source = "mcp"
+        row.source_ref = source_ref
+        row.display_name = resource.display_name
+        row.visibility = resource.visibility
+        row.description = resource.description
+        row.tags = list(resource.tags)
+
 
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -818,3 +916,79 @@ class AuditRepository:
             .limit(limit)
         )
         return [project_audit_event(row) for row in rows]
+
+
+class MCPOwnerRepository:
+    """Authoritative MCP server/tool lifecycle over dedicated owner tables."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_server(self, server_id: str) -> MCPServer | None:
+        row = await self._session.get(MCPServerRow, server_id)
+        return project_mcp_server(row) if row is not None else None
+
+    async def get_tool(self, tool_id: str) -> MCPTool | None:
+        row = await self._session.get(MCPToolRow, tool_id)
+        return project_mcp_tool(row) if row is not None else None
+
+    async def register_server(self, server: MCPServer) -> MCPServer:
+        row = MCPServerRow(**server.model_dump())
+        self._session.add(row)
+        await self._session.flush()
+        return project_mcp_server(row)
+
+    async def update_server(self, server_id: str, **changes: object) -> MCPServer:
+        row = await self._session.get(MCPServerRow, server_id)
+        if row is None:
+            raise ValueError("MCP server is not registered")
+        current = project_mcp_server(row)
+        allowed = {"status", "endpoint", "display_name", "visibility", "description", "tags"}
+        for attribute in changes:
+            if attribute not in allowed:
+                raise ValueError(f"MCP server field is immutable: {attribute}")
+        MCPServer.model_validate({**current.model_dump(), **changes})
+        for attribute, value in changes.items():
+            setattr(row, attribute, value)
+        row.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        return project_mcp_server(row)
+
+    async def deactivate_server(self, server_id: str) -> tuple[MCPServer, list[MCPTool]]:
+        server = await self.update_server(server_id, status="inactive")
+        rows = (
+            await self._session.scalars(select(MCPToolRow).where(MCPToolRow.server_id == server_id))
+        ).all()
+        now = datetime.now(UTC)
+        for row in rows:
+            row.status = "inactive"
+            row.updated_at = now
+        await self._session.flush()
+        return server, [project_mcp_tool(row) for row in rows]
+
+    async def register_tool(self, tool: MCPTool) -> MCPTool:
+        server = await self._session.get(MCPServerRow, tool.server_id)
+        if server is None:
+            raise ValueError("MCP tool server relation is absent")
+        if server.owner_id != tool.owner_id:
+            raise ValueError("MCP tool owner must match its server owner")
+        row = MCPToolRow(**tool.model_dump())
+        self._session.add(row)
+        await self._session.flush()
+        return project_mcp_tool(row)
+
+    async def update_tool(self, tool_id: str, **changes: object) -> MCPTool:
+        row = await self._session.get(MCPToolRow, tool_id)
+        if row is None:
+            raise ValueError("MCP tool is not registered")
+        current = project_mcp_tool(row)
+        allowed = {"status", "display_name", "visibility", "description", "tags"}
+        for attribute in changes:
+            if attribute not in allowed:
+                raise ValueError(f"MCP tool field is immutable: {attribute}")
+        MCPTool.model_validate({**current.model_dump(), **changes})
+        for attribute, value in changes.items():
+            setattr(row, attribute, value)
+        row.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        return project_mcp_tool(row)

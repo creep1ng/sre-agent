@@ -1,0 +1,16 @@
+{
+  "target": "urn:sre-agent:schema:mcp-query-elasticsearch-input:1.0.0",
+  "rule": "additionalProperties",
+  "status": "negative",
+  "version": "1.0.0",
+  "tool_id": "query_elasticsearch",
+  "data": {
+    "datasource_uid": "webstore-logs",
+    "index": "otel-logs-*",
+    "query": "resource.service.name:checkout",
+    "start_time": "now-2m",
+    "end_time": "now",
+    "limit": 100,
+    "provider_secret": "must-not-cross-gateway"
+  }
+}

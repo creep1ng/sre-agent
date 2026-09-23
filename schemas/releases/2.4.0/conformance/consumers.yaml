@@ -1,0 +1,17 @@
+contract_version: 2.4.0
+consumers:
+  - { id: issue-10, owner: infrastructure, obligations: [issue-10.fixture-transport], internal_models_are_authority: false }
+  - { id: issue-11, owner: persistence, obligations: [issue-11.schema-persistence], internal_models_are_authority: false }
+  - { id: issue-13, owner: authentication, obligations: [issue-13.bearer-context-401], internal_models_are_authority: false }
+  - { id: issue-14, owner: gateway, obligations: [issue-14.ordered-response-flow], internal_models_are_authority: false }
+  - { id: harness, owner: harness, obligations: [harness.execution-contract], internal_models_are_authority: false }
+  - { id: ui, owner: ui, obligations: [ui.control-contract], internal_models_are_authority: false }
+  - { id: issue-130, owner: release, obligations: [issue-130.consumption-contract], internal_models_are_authority: false }
+  - { id: issue-129, owner: release, obligations: [issue-129.resource-catalog-contract], internal_models_are_authority: false }
+  - { id: issue-184, owner: release, obligations: [issue-184.grant-revocation-contract], internal_models_are_authority: false }
+  - { id: issue-184-t2, owner: release, obligations: [issue-184.grant-create-list-contract], internal_models_are_authority: false }
+  - { id: issue-184-t3, owner: release, obligations: [issue-184.alias-create-read-contract], internal_models_are_authority: false }
+  - { id: issue-184-t5, owner: release, obligations: [issue-184.alias-mutation-contract], internal_models_are_authority: false }
+  - { id: issue-184-t6, owner: release, obligations: [issue-184.catalog-contract], internal_models_are_authority: false }
+  - { id: issue-187, owner: release, obligations: [issue-187.mcp-audit-contract], internal_models_are_authority: false }
+prohibited_authorities: [framework_dto, orm_model, database_model, provider_sdk_type]

@@ -15,6 +15,7 @@ const CONSUMERS = ["issue-10", "issue-11", "issue-13", "issue-14", "harness", "u
 const contractLevel = (version) => version.split(".").slice(0, 2).map(Number);
 const consumersForVersion = (version) => {
   const [major, minor] = contractLevel(version);
+  if (major === 2 && minor >= 4) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6", "issue-187"];
   if (major === 2 && minor >= 3) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6"];
   if (major === 2 && minor >= 2) return [...CONSUMERS, "issue-130", "issue-129"];
   if (major === 2 && minor >= 1) return [...CONSUMERS, "issue-130"];
@@ -33,9 +34,10 @@ const POLICY = {
   "issue-184-t2": ["release", "issue-184.grant-create-list-contract", "grant-create-list-contract", "fixtures/positive/control.audit.grants-create-allow.positive.v{version}.fixture.json"],
   "issue-184-t3": ["release", "issue-184.alias-create-read-contract", "alias-create-read-contract", "fixtures/positive/control.audit.aliases-create-allow.positive.v{version}.fixture.json"],
   "issue-184-t5": ["release", "issue-184.alias-mutation-contract", "alias-mutation-contract", "fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v{version}.fixture.json"],
-  "issue-184-t6": ["release", "issue-184.catalog-contract", "catalog-contract", "fixtures/positive/control.audit.catalog-create-allow.positive.v{version}.fixture.json"]
+  "issue-184-t6": ["release", "issue-184.catalog-contract", "catalog-contract", "fixtures/positive/control.audit.catalog-create-allow.positive.v{version}.fixture.json"],
+  "issue-187": ["release", "issue-187.mcp-audit-contract", "mcp-audit-contract", "fixtures/positive/audit.mcp.discovery.positive.v{version}.fixture.json"]
 };
-const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
+const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6", "issue-187"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
 const versionedPolicy = (version) => Object.fromEntries(Object.entries(POLICY).map(([consumer, values]) => [consumer, values.map((value) => value.replaceAll("1.0.0", version).replaceAll("{version}", version))]));
 const sorted = (value) => Array.isArray(value) ? value.map(sorted) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])])) : value;
 const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`, canonical = (value) => JSON.stringify(sorted(value));
@@ -171,6 +173,20 @@ async function validateResourceCatalogContract(root, version) {
   return { ...groups, resource_types: matrix.resource_types.length, scenarios: evidence.scenarios.length };
 }
 
+async function validateMcpAuditContract(root, version) {
+  const audit = await loadReleaseDirectory(root, "audit");
+  const expected = [
+    { name: `positive/audit.mcp.discovery.positive.v${version}.fixture.json`, operation: "mcp.discovery", resource: "mcp_server" },
+    { name: `positive/audit.mcp.invoke.positive.v${version}.fixture.json`, operation: "mcp.invoke", resource: "mcp_tool" },
+  ];
+  for (const item of expected) {
+    const fixture = audit.fixtures.find(({ name }) => name === item.name);
+    if (!fixture || fixture.data.operation !== item.operation || fixture.data.resource?.resource_type !== item.resource || fixture.data.content_state !== "absent" || "redacted_content" in fixture.data) throw new Error(`MCP audit contract is missing metadata-only ${item.operation} evidence for ${item.resource}`);
+  }
+  validateFixtures(audit.schemas, expected.map(({ name }) => audit.fixtures.find(({ name: path }) => path === name)));
+  return { events: expected.length, status: "passed" };
+}
+
 const ACTIONS = {
   "fixtures-transport": (root) => validateGroup("all", root),
   "schema-persistence": (root) => Promise.all(["identity", "model-resource", "policy"].map((group) => validateGroup(group, root))),
@@ -184,7 +200,8 @@ const ACTIONS = {
   "grant-create-list-contract": (root, version) => validateGrantCreateListContract(root, version),
   "alias-create-read-contract": (root, version) => validateAliasCreateReadContract(root, version),
   "alias-mutation-contract": (root, version) => validateAliasMutationContract(root, version),
-  "catalog-contract": (root, version) => validateCatalogContract(root, version)
+  "catalog-contract": (root, version) => validateCatalogContract(root, version),
+  "mcp-audit-contract": (root, version) => validateMcpAuditContract(root, version)
 };
 
 export async function validateCoverage(root = release) {
@@ -213,7 +230,7 @@ async function inventory(root, version, includeEvidence = true) {
 }
 async function semanticHashes(root, version) { const outputs = [join(tooling, `.tmp/evidence-control-${version}.yaml`), join(tooling, `.tmp/evidence-responses-${version}.yaml`)]; try { await Promise.all([runReleaseOpenapi("control-plane", outputs[0], version), runReleaseOpenapi("responses", outputs[1], version)]); const documents = await Promise.all(outputs.map(readContractFile)); return { control_plane: digest(canonical(normalizeOpenapi(documents[0]))), responses: digest(canonical(normalizeOpenapi(documents[1]))), combined_projection: digest(canonical(combineOpenapi(...documents))) }; } finally { await Promise.all(outputs.map((path) => rm(path, { force: true }))); } }
 async function evidenceObject(root, version, results) { const packageJson = JSON.parse(await readFile(join(tooling, "package.json"))), inputs = await inventory(root, version, false), semantics = await semanticHashes(root, version); semantics.adrs = digest(canonical(inputs.adrs)); semantics.fixtures = digest(canonical(inputs.fixtures)); return { contract_version: version, inputs_sha256: digest(canonical(inputs)), semantics, results: [...results, { consumer: "governance", action: "ownership-and-adrs", status: "passed" }], toolchain: { node: packageJson.engines.node, ajv: packageJson.devDependencies.ajv, redocly: packageJson.devDependencies["@redocly/cli"], yaml: packageJson.devDependencies.yaml } }; }
-const PREVIOUS_RELEASE = { "1.1.0": "1.0.0", "1.2.0": "1.1.0", "1.3.0": "1.2.0", "1.4.0": "1.3.0", "2.0.0": "1.4.0", "2.1.0": "2.0.0", "2.2.0": "2.1.0", "2.3.0": "2.2.0" };
+const PREVIOUS_RELEASE = { "1.1.0": "1.0.0", "1.2.0": "1.1.0", "1.3.0": "1.2.0", "1.4.0": "1.3.0", "2.0.0": "1.4.0", "2.1.0": "2.0.0", "2.2.0": "2.1.0", "2.3.0": "2.2.0", "2.4.0": "2.3.0" };
 const baseline = (version) => version === "1.0.0" ? { previous_release: null, previous_major: null, compatibility: "initial-publication" } : version === "2.0.0" ? { previous_release: "1.4.0", previous_major: "1.0.0", compatibility: "breaking" } : PREVIOUS_RELEASE[version] ? { previous_release: PREVIOUS_RELEASE[version], previous_major: version.startsWith("2.") ? "2.0.0" : "1.0.0", compatibility: "additive" } : null;
 async function manifestObject(root, version) { return { contract_version: version, status: "immutable", baseline: baseline(version), dialects: { json_schema: "https://json-schema.org/draft/2020-12/schema", openapi: "3.1.0" }, inventory: await inventory(root, version, true) }; }
 export function assertImmutableManifest(existing, candidate) { if (canonical(existing) !== canonical(candidate)) throw new Error(`Release ${existing?.contract_version ?? "artifact"} is immutable; publish a new version instead of rewriting it`); }

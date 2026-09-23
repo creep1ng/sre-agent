@@ -56,7 +56,7 @@ Operations MUST act only on the dedicated Compose project. They MUST NOT remove 
 
 ### Requirement: Report availability from observable evidence
 
-Verification MUST report availability for frontend, load generator, Collector, Grafana, Prometheus and OpenSearch, and MUST report real failures rather than assuming health. Availability of Grafana MCP is added by the change that introduces it.
+Verification MUST report availability for frontend, load generator, Collector, Grafana, Prometheus, OpenSearch and Grafana MCP, and MUST report real failures rather than assuming health.
 
 #### Scenario: A degraded service is reported as failing
 
@@ -89,3 +89,52 @@ Reset MUST restore the flag baseline declared in the manifest rather than switch
 - GIVEN a verified baseline
 - WHEN failure injection, verification and reset run twice in sequence
 - THEN the baseline is confirmed before the second failure and both cycles report the same outcome
+
+### Requirement: Keep Grafana MCP private and read-only
+
+Grafana MCP MUST expose only read tools in the categories an investigation needs, MUST reject callers without its token, MUST NOT publish a host port, and MUST NOT share a network with the harness.
+
+#### Scenario: Write tools are absent
+
+- GIVEN the environment is up
+- WHEN a caller with the token lists the tools
+- THEN no tool creates, updates or deletes Grafana resources
+
+#### Scenario: Callers without the token are rejected
+
+- GIVEN the environment is up
+- WHEN a request reaches the MCP endpoint without the caller token
+- THEN it is rejected with HTTP 401
+
+#### Scenario: The harness cannot reach the MCP
+
+- GIVEN the harness running on the project's own network
+- WHEN it attempts to reach the MCP by name or by address
+- THEN every attempt fails before reaching the server
+
+### Requirement: Publish only declared host ports
+
+The environment MUST publish only the host ports declared in the manifest, and verification MUST fail when any other port is published.
+
+#### Scenario: An undeclared port is reported
+
+- GIVEN a service publishes a host port the manifest does not declare
+- WHEN verification runs
+- THEN it names the service and the port and exits with a non-zero status
+
+### Requirement: Document the failure's signals
+
+The environment MUST document how the declared failure shows in Prometheus metrics and OpenSearch logs, with the queries and the time window that read it, and MUST link traces by `trace_id` without claiming a trace query through Grafana MCP.
+
+#### Scenario: Signals separate the failure from the baseline
+
+- GIVEN a verified baseline
+- WHEN the documented queries run over the documented window, before the failure, while it is on and after reset
+- THEN error calls and stalled orders appear only while the failure is on
+
+#### Scenario: A stalled order leads to its trace
+
+- GIVEN the failure is on
+- WHEN the documented log query finds an order that never completed
+- THEN its `trace_id` opens the trace in the Jaeger UI, and no MCP tool is used for it
+
