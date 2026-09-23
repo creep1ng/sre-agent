@@ -9,11 +9,18 @@
     "digest": "sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e",
     "digest_verified": true
   },
-  "observed_protocol_sequence": ["tools/list", "tools/call (denied)", "tools/call (allowed)"],
+  "observed_protocol_sequence": [
+    "tools/list",
+    "gateway denied invocation (no upstream tools/call)",
+    "tools/call (allowed)"
+  ],
   "discovery": {
     "http_status": 200,
     "tool_count": 2,
-    "tools": ["query_prometheus", "query_elasticsearch"]
+    "tools": [
+      "query_prometheus",
+      "query_elasticsearch"
+    ]
   },
   "denied_invocation": {
     "http_status": 403,
@@ -85,5 +92,19 @@
     "request_or_response_bodies_included": false,
     "raw_queries_or_results_included": false,
     "personal_correlation_values_included": false
+  },
+  "separate_docker_regression": {
+    "purpose": "Local code regression proof, separate from the real live Grafana MCP probes.",
+    "command": "scripts/worktree-compose --profile checks run --build --rm python-checks pytest -q tests/test_mcp_discovery.py::test_denied_invocation_is_audited_metadata_only_without_owner_or_transport",
+    "result": "1 passed in 3.47s"
+  },
+  "fixed_project_startup": {
+    "command": "DEMO_STATE_DIR=/tmp/sre-agent-mcp-live/.demo-state docker compose -p sre-agent-ca5-fixed --project-directory /tmp/sre-agent-issue187-fix --env-file /tmp/issue187-ca5-fixed.env -f /tmp/sre-agent-issue187-fix/compose.yaml -f /tmp/sre-agent-issue187-fix/compose.mcp.yaml -f /tmp/issue187-ca5-fixed-network.override.yaml up -d mcp-seed api",
+    "exit_code": 0,
+    "observed": "Database healthy; migration, seed, and MCP-seed completed; API healthy."
+  },
+  "metrics_scrape": {
+    "command": "docker exec sre-agent-ca5-fixed-api-1 python -c 'import urllib.request; b=urllib.request.urlopen(\"http://grafana-mcp:8000/metrics\",timeout=5).read().decode(); xs=[x for x in b.splitlines() if x.startswith(\"mcp_server_operation_duration_seconds_count{\") and \"mcp_method_name=\\\"tools/call\\\"\" in x]; print(\"tools_call_total\",sum(int(x.rsplit(\" \",1)[1]) for x in xs)); [print(x) for x in xs]'",
+    "observed_totals": "denial scrape 1; allowed scrape 2; one query_prometheus tools/call series; no MCP request intervened."
   }
 }

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="880" viewBox="0 0 1500 880" role="img" aria-label="Sanitized final-head live Grafana MCP CA5 evidence for issue 187 pull request 364">
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1220" viewBox="0 0 1800 1220" role="img" aria-label="Sanitized final-head live Grafana MCP CA5 evidence for issue 187 pull request 364">
 <rect width="100%" height="100%" fill="#0d1117"/><rect width="100%" height="7" fill="#238636"/>
 <g fill="#e6edf3" font-family="monospace" font-size="16">
 <text x="28" y="42">Issue #187 / PR #364 | FINAL-HEAD LIVE CA5 | real Grafana MCP + gateway/PostgreSQL</text>
@@ -6,7 +6,7 @@
 <text x="28" y="105">Base SHA:   91178af94c662d81b41322c2e22c318d0b7c46e4</text>
 <text x="28" y="145">Upstream: grafana/mcp-grafana:1.3.0</text>
 <text x="28" y="174">Digest: sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e</text>
-<text x="28" y="218" fill="#79c0ff">Observed sequence: tools/list, denied tools/call, allowed tools/call.</text>
+<text x="28" y="218" fill="#79c0ff">Observed: tools/list; gateway denied invocation (no upstream tools/call); allowed tools/call.</text>
 <text x="28" y="247" fill="#79c0ff">Discovery: HTTP 200; exactly 2 tools — query_prometheus, query_elasticsearch.</text>
 <text x="28" y="290" fill="#ffb86c">Denied invocation | public HTTP 403 / resource_unavailable</text>
 <text x="28" y="320">Real upstream tools/call counter: 1 → 1 (delta 0).</text>
@@ -18,11 +18,21 @@
 <text x="28" y="509">Metadata only: request correlation present; content absent; zero input/redacted-content keys.</text>
 <text x="28" y="553">Host checks: ci.yml SUCCESS — https://github.com/creep1ng/sre-agent/actions/runs/35818430834</text>
 <text x="28" y="582">pr-governance SUCCESS — https://github.com/creep1ng/sre-agent/actions/runs/35818430842</text>
-<text x="28" y="626" fill="#ffb86c">Environment caveat: full-demo payment healthcheck timed out; probed MCP and gateway/PostgreSQL</text>
-<text x="28" y="655" fill="#ffb86c">services were healthy. Synthetic model alias typo was corrected before successful probes.</text>
-<text x="28" y="684">Disk: initial 6.7 GiB; low-water 7,219,023,872 bytes; current 7,348,916,224 bytes.</text>
-<text x="28" y="713">No Docker assets were deleted. Counter baseline 1 was prior activity on the reused upstream.</text>
-<text x="28" y="757" fill="#9fe870">Real live zero/one witness and correlated denied + allowed metadata-only audit observed.</text>
-<text x="28" y="801">Sanitized evidence only: no credentials, sensitive headers, request/response bodies, raw queries, or results.</text>
-<text x="28" y="850" fill="#8b949e">Observed live probes on the exact candidate above; immutable JSON companion is ca5-live-fixed.json.</text>
+<text x="28" y="626" fill="#79c0ff">Exact successful fixed-project Docker startup (wrapped for display):</text>
+<text x="28" y="655">$ DEMO_STATE_DIR=/tmp/sre-agent-mcp-live/.demo-state docker compose -p sre-agent-ca5-fixed</text>
+<text x="28" y="684">  --project-directory /tmp/sre-agent-issue187-fix --env-file /tmp/issue187-ca5-fixed.env</text>
+<text x="28" y="713">  -f /tmp/sre-agent-issue187-fix/compose.yaml -f /tmp/sre-agent-issue187-fix/compose.mcp.yaml</text>
+<text x="28" y="742">  -f /tmp/issue187-ca5-fixed-network.override.yaml up -d mcp-seed api</text>
+<text x="28" y="771" fill="#9fe870">Exit 0; database/API healthy; migration, seed, and MCP-seed completed.</text>
+<text x="28" y="815" fill="#79c0ff">Separate local Docker/PostgreSQL regression command (not the live probe):</text>
+<text x="28" y="844">$ scripts/worktree-compose --profile checks run --build --rm python-checks pytest -q</text>
+<text x="28" y="873">  tests/test_mcp_discovery.py::test_denied_invocation_is_audited_metadata_only_without_owner_or_transport</text>
+<text x="28" y="902" fill="#9fe870">Observed: 1 passed in 3.47s.</text>
+<text x="28" y="946" fill="#ffb86c">Environment caveat: full-demo payment healthcheck timed out; probed MCP and gateway/PostgreSQL</text>
+<text x="28" y="975" fill="#ffb86c">services were healthy. Synthetic model alias typo was corrected before successful probes.</text>
+<text x="28" y="1004">Disk: initial 6.7 GiB; low-water 7,219,023,872 bytes; current 7,348,916,224 bytes.</text>
+<text x="28" y="1033">No Docker assets were deleted. Counter baseline 1 was prior activity on the reused upstream.</text>
+<text x="28" y="1077" fill="#9fe870">Real live zero/one witness and correlated denied + allowed metadata-only audit observed.</text>
+<text x="28" y="1121">Sanitized evidence only: no credentials, sensitive headers, request/response bodies, raw queries, or results.</text>
+<text x="28" y="1175" fill="#8b949e">Exact tested candidate above; immutable JSON companion includes the exact metrics scrape command.</text>
 </g></svg>
