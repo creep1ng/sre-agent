@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from sre_agent.gateway import mcp
+from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
 from sre_agent.governance.dto import MCPServer, MCPTool, PolicyDecision, Principal, PrincipalContext
@@ -111,7 +112,33 @@ class RecordingClient:
         return {"data": []}
 
 
-def _service(monkeypatch: pytest.MonkeyPatch, owner: MemoryOwner) -> tuple[Any, RecordingClient]:
+class RecordingAudit:
+    def __init__(self) -> None:
+        self.events: list[Any] = []
+
+    async def append(self, event: Any) -> None:
+        self.events.append(event)
+
+
+class FailingAudit:
+    async def append(self, event: Any) -> None:
+        del event
+        raise RuntimeError("audit sink unavailable")
+
+
+class FailingProjector:
+    def mcp_event(self, *args: Any, **kwargs: Any) -> Any:
+        del args, kwargs
+        raise RuntimeError("projector unavailable")
+
+
+def _service(
+    monkeypatch: pytest.MonkeyPatch,
+    owner: MemoryOwner,
+    *,
+    audit: Any | None = None,
+    projector: Any | None = None,
+) -> tuple[Any, RecordingClient]:
     client = RecordingClient()
 
     async def authorize(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
@@ -119,7 +146,11 @@ def _service(monkeypatch: pytest.MonkeyPatch, owner: MemoryOwner) -> tuple[Any, 
 
     monkeypatch.setattr(mcp, "authorize_governed_access", authorize)
     service = mcp.MCPGatewayService(
-        MemorySessions(owner), client, owner_repository_factory=lambda session: session
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=projector,
+        owner_repository_factory=lambda session: session,
     )
     return service, client
 
@@ -220,6 +251,60 @@ async def test_unknown_or_inactive_owner_is_not_enumerated_upstream(
     assert response.status_code == 403
     assert owner.reads == [("server", MCP_SERVER_ID)]
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_invocation_audit_is_metadata_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    audit = RecordingAudit()
+    service, client = _service(
+        monkeypatch, MemoryOwner(), audit=audit, projector=AuditProjector(b"mcp-audit-key")
+    )
+    response = await service.invoke(
+        "query_prometheus",
+        {
+            "datasource_uid": "webstore-metrics",
+            "expr": "up",
+            "query_type": "instant",
+            "end_time": "now",
+        },
+        AUTHORIZATION,
+    )
+
+    assert response.status_code == 200
+    event = audit.events[0].model_dump(mode="json")
+    assert event["operation"] == "mcp.invoke"
+    assert event["resource"]["resource_type"] == "mcp_tool"
+    assert event["content_state"] == "absent"
+    assert "up" not in str(event) and "data" not in str(event)
+    assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [FailingAudit(), FailingProjector()])
+async def test_audit_failure_suppresses_success_payload(
+    monkeypatch: pytest.MonkeyPatch, failure: Any
+) -> None:
+    service, _ = _service(
+        monkeypatch, MemoryOwner(), audit=failure, projector=AuditProjector(b"mcp-audit-key")
+    )
+    if isinstance(failure, FailingProjector):
+        service.projector = failure
+    response = await service.invoke(
+        "query_prometheus",
+        {
+            "datasource_uid": "webstore-metrics",
+            "expr": "up",
+            "query_type": "instant",
+            "end_time": "now",
+        },
+        AUTHORIZATION,
+    )
+
+    body = json.loads(response.body)
+    assert response.status_code == 503
+    assert body["error"]["code"] == "audit_unavailable"
+    assert body["retryable"] is True
+    assert "data" not in body and "up" not in body
 
 
 @pytest.mark.asyncio
