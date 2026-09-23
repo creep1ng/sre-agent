@@ -296,7 +296,16 @@ class MCPGatewayService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if evaluation.decision.decision != "allow":
-            return self._unavailable(request_id)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._unavailable(request_id),
+                operation="mcp.invoke",
+                stage="authorization",
+                context=context,
+                evaluation=evaluation,
+                tool_id=tool_id,
+            )
         _, tools = await self._active_contract(tool_id)
         tool = tools[0] if tools else None
         if tool is None:
