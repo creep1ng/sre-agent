@@ -7,6 +7,12 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 import httpx
+from fastapi.responses import JSONResponse
+
+from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.governance.dto import MCPServer, MCPTool
+from sre_agent.mcp.owner import MCP_CONTRACT_VERSION, MCP_SERVER_ID, MCP_TOOL_IDS
+from sre_agent.persistence.repositories import MCPOwnerRepository
 
 MCP_TIMEOUT_SECONDS = 30.0
 
@@ -129,3 +135,112 @@ class GrafanaMCPClient:
             return None
         data_lines = [line[5:] for line in text.splitlines() if line.startswith("data:")]
         return json.loads(data_lines[0] if data_lines else text)
+
+
+class _OwnerRepository(Protocol):
+    async def get_server(self, server_id: str) -> MCPServer | None: ...
+
+    async def get_tool(self, tool_id: str) -> MCPTool | None: ...
+
+
+class MCPGatewayService:
+    """Authenticate and authorize discovery before reading the owner contract."""
+
+    def __init__(
+        self,
+        sessions: Any,
+        client: MCPUpstreamClient,
+        *,
+        owner_repository_factory: Any = MCPOwnerRepository,
+    ) -> None:
+        self.sessions = sessions
+        self.client = client
+        self.owner_repository_factory = owner_repository_factory
+
+    async def discovery(self, authorization: str | None) -> JSONResponse:
+        request_id = str(uuid4())
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, "mcp.discovery", "mcp_server", MCP_SERVER_ID
+            )
+        except AuthenticationFailed:
+            return JSONResponse(
+                {
+                    "error": {"code": "authentication_failed", "message": "Authentication failed."},
+                    "request_id": request_id,
+                    "retryable": False,
+                },
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if evaluation.decision.decision != "allow":
+            return self._unavailable(request_id)
+        server, tools = await self._active_contract()
+        if server is None or tools is None:
+            return self._unavailable(request_id)
+        return JSONResponse(
+            {
+                "contract_version": MCP_CONTRACT_VERSION,
+                "server": {
+                    "resource_type": "mcp_server",
+                    "server_id": server.server_id,
+                    "display_name": server.display_name,
+                    "description": server.description,
+                    "visibility": server.visibility,
+                    "tags": server.tags,
+                },
+                "tools": [
+                    {
+                        "resource_type": "mcp_tool",
+                        "tool_id": tool.tool_id,
+                        "server_id": tool.server_id,
+                        "display_name": tool.display_name,
+                        "description": tool.description,
+                        "visibility": tool.visibility,
+                        "tags": tool.tags,
+                        "action": "mcp.invoke",
+                    }
+                    for tool in tools
+                ],
+            }
+        )
+
+    async def _active_contract(self) -> tuple[MCPServer | None, list[MCPTool] | None]:
+        try:
+            async with self.sessions() as session:
+                owner: _OwnerRepository = self.owner_repository_factory(session)
+                server = await owner.get_server(MCP_SERVER_ID)
+                if (
+                    server is None
+                    or server.status != "active"
+                    or server.contract_version != MCP_CONTRACT_VERSION
+                ):
+                    return None, None
+                tools: list[MCPTool] = []
+                for tool_id in MCP_TOOL_IDS:
+                    tool = await owner.get_tool(tool_id)
+                    if (
+                        tool is None
+                        or tool.status != "active"
+                        or tool.contract_version != MCP_CONTRACT_VERSION
+                        or tool.server_id != server.server_id
+                        or tool.owner_id != server.owner_id
+                        or tool.tool_id != tool_id
+                        or tool.upstream_name != tool.tool_id
+                    ):
+                        return server, None
+                    tools.append(tool)
+                return server, tools
+        except Exception:
+            return None, None
+
+    @staticmethod
+    def _unavailable(request_id: str) -> JSONResponse:
+        return JSONResponse(
+            {
+                "error": {"code": "resource_unavailable", "message": "Resource unavailable."},
+                "request_id": request_id,
+                "retryable": False,
+            },
+            status_code=403,
+        )
