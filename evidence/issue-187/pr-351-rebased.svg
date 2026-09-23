@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="410" viewBox="0 0 1420 410" role="img" aria-label="Sanitized terminal evidence for PR 351">
+<rect width="100%" height="100%" fill="#0d1117"/><rect width="100%" height="7" fill="#238636"/>
+<g fill="#e6edf3" font-family="monospace" font-size="16">
+<text x="24" y="40">PR #351 | owner-derived MCP catalog projection | Docker/PostgreSQL</text>
+<text x="24" y="68">Tested SHA: 20a0ec020d950c0bc798bf77e9cb0ef552af0bb3</text>
+<text x="24" y="96">Base SHA:   c04fd807f218bbcc9d58d9dd139d4234d912b1fc</text>
+<text x="24" y="132">$ scripts/worktree-compose --profile checks run --build --rm python-checks</text>
+<text x="24" y="160">  pytest -q tests/test_mcp_owner_repository.py</text>
+<text x="24" y="188" fill="#ffb86c">RED: 1 failed, 3 passed; CatalogRepository lacked project_mcp_server</text>
+<text x="24" y="216" fill="#9fe870">GREEN: 4 passed; owner projection converges without creating grants</text>
+<text x="24" y="252">$ scripts/worktree-compose --profile checks run --build --rm python-checks</text>
+<text x="24" y="280">  pytest -q tests/test_migrations.py tests/test_mcp_owner.py tests/test_mcp_owner_repository.py</text>
+<text x="24" y="308">  tests/test_catalog_projection.py tests/test_governance_dto.py tests/test_persistence_projections.py tests/test_incident_query_timeline.py</text>
+<text x="24" y="336" fill="#9fe870">468 passed; post-refactor focused 8 passed; Ruff and diff-check passed</text>
+<text x="24" y="372">CI: https://github.com/creep1ng/sre-agent/actions/runs/35807278989</text>
+<text x="24" y="400">No credentials, headers, application payloads, or upstream responses captured.</text>
+</g></svg>
