@@ -389,3 +389,20 @@ test("a newer session paginates while the old request is still pending", async (
   await expect(page.locator("#load-more")).toBeHidden();
   await expect(page.locator("#load-more")).toBeEnabled();
 });
+
+test("shows an explicit no-snapshot state instead of failing", async ({ page }) => {
+  await mockApi(page, { pages: [pageOne, pageTwo] });
+  await openWarRoom(page);
+
+  await expect(page.locator("#summary-section")).toBeVisible();
+  await expect(page.locator("#fact-snapshot")).toHaveText("Sin snapshot todavía");
+});
+
+test("shows a recoverable 503 state when the network fails", async ({ page }) => {
+  await page.route("**/api/v1/incidents/**", async (route) => route.abort());
+  await page.goto(`/public/incident-ui/war-room.html?incident_id=${INCIDENT}`);
+  await authenticate(page);
+
+  await expect(page.locator("#error-503")).toBeVisible();
+  await expect(page.locator("#refresh-button")).toBeVisible();
+});
