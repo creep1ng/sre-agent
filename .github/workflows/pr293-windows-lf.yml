@@ -1,0 +1,29 @@
+name: PR 293 native Windows LF checkout evidence
+
+on:
+  push:
+    branches: [evidence/pr-293-lf]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-lf-checkout:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Enable Git for Windows CRLF conversion before checkout
+        shell: pwsh
+        run: git config --global core.autocrlf true
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Verify both container scripts are checked out as LF
+        shell: pwsh
+        run: |
+          git checkout-index --force -- docker/harness-entrypoint.sh scripts/worktree-compose
+          foreach ($path in @('docker/harness-entrypoint.sh', 'scripts/worktree-compose')) {
+            $eol = git ls-files --eol -- $path
+            Write-Output $eol
+            if ($eol -notmatch 'i/lf\s+w/lf\s+attr/text eol=lf') {
+              throw "Expected an LF worktree copy with an LF attribute for $path"
+            }
+          }
