@@ -1,0 +1,89 @@
+{
+  "evidence_type": "final-head-live-ca5",
+  "issue": 187,
+  "pull_request": 364,
+  "tested_candidate_sha": "b055e5822ce4a46e8f5c6dfbe7ea1f0c73e12142",
+  "base_sha": "91178af94c662d81b41322c2e22c318d0b7c46e4",
+  "upstream": {
+    "image": "grafana/mcp-grafana:1.3.0",
+    "digest": "sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e",
+    "digest_verified": true
+  },
+  "observed_protocol_sequence": ["tools/list", "tools/call (denied)", "tools/call (allowed)"],
+  "discovery": {
+    "http_status": 200,
+    "tool_count": 2,
+    "tools": ["query_prometheus", "query_elasticsearch"]
+  },
+  "denied_invocation": {
+    "http_status": 403,
+    "public_error": "resource_unavailable",
+    "real_upstream_tools_call_counter": {
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    "correlated_audit": {
+      "present": true,
+      "operation": "mcp.invoke",
+      "action": "invoke",
+      "stage": "authorization",
+      "outcome": "denied",
+      "response_status": 403,
+      "policy_decision": "deny",
+      "request_correlation_matched": true,
+      "content_state": "absent",
+      "untrusted_input_keys": 0,
+      "redacted_content_keys": 0
+    }
+  },
+  "allowed_invocation": {
+    "http_status": 200,
+    "result_type": "vector",
+    "warning_count": 0,
+    "real_upstream_tools_call_counter": {
+      "before": 1,
+      "after": 2,
+      "delta": 1
+    },
+    "correlated_audit": {
+      "present": true,
+      "operation": "mcp.invoke",
+      "action": "invoke",
+      "stage": "response",
+      "outcome": "success",
+      "response_status": 200,
+      "policy_decision": "allow",
+      "request_correlation_present": true,
+      "content_state": "absent",
+      "untrusted_input_keys": 0,
+      "redacted_content_keys": 0
+    }
+  },
+  "counter_note": "The real upstream instance was reused; its cumulative tools/call counter was 1 before the paired denied/allowed probes. No MCP call occurred between the denied counter observation and the allowed invocation.",
+  "hosted_checks": {
+    "ci_workflow": {
+      "url": "https://github.com/creep1ng/sre-agent/actions/runs/35818430834",
+      "conclusion": "success"
+    },
+    "pr_governance": {
+      "url": "https://github.com/creep1ng/sre-agent/actions/runs/35818430842",
+      "conclusion": "success"
+    }
+  },
+  "environment_notes": {
+    "full_demo_readiness_caveat": "The full demo's payment healthcheck timed out; the Grafana MCP/Grafana/Prometheus/OpenSearch and gateway/PostgreSQL/migration/seed services used for the CA5 probes were healthy.",
+    "synthetic_model_configuration": "An initial temporary synthetic model alias lacked the required openai/ namespace; it was corrected before the successful fixed-head probes.",
+    "docker_asset_deletions": 0,
+    "disk_available_initial": "6.7 GiB (df -h reading)",
+    "disk_low_water_bytes": 7219023872,
+    "disk_available_current_bytes": 7348916224,
+    "disk_stop_threshold_bytes": 1073741824
+  },
+  "privacy": {
+    "credentials_or_authorization_headers_included": false,
+    "request_or_response_bodies_included": false,
+    "raw_queries_or_results_included": false,
+    "personal_correlation_values_included": false
+  }
+}
