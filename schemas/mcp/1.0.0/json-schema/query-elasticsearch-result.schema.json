@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:mcp-query-elasticsearch-result:1.0.0",
+  "title": "Governed Grafana MCP query_elasticsearch result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["total", "documents", "warnings"],
+  "properties": {
+    "total": { "type": "integer", "minimum": 0 },
+    "documents": { "type": "array", "maxItems": 100, "items": { "type": "object" } },
+    "warnings": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "type": "string", "maxLength": 500 }
+    }
+  }
+}

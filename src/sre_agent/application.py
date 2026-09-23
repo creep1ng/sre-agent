@@ -12,6 +12,12 @@ from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.openrouter import OpenRouterProvider
 from sre_agent.gateway.providers import LLMProvider
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.mcp import (
+    GrafanaMCPClient,
+    MCPGatewayService,
+    MCPUpstreamClient,
+    mcp_router,
+)
 from sre_agent.control.service import ControlService, control_router
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
@@ -30,11 +36,13 @@ def create_application(
     provider_client: httpx.AsyncClient | None = None,
     llm_provider: LLMProvider | None = None,
     audit_store: AuditStore | None = None,
+    mcp_client: MCPUpstreamClient | None = None,
 ) -> FastAPI:
     runtime_settings = settings or Settings.from_environment()
     probe = readiness_probe or health.postgres_readiness_probe(runtime_settings.database_url)
     database = Database(runtime_settings.database_url)
     shared_provider_client = None
+    shared_mcp_client = None
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
         shared_provider_client = provider_client or httpx.AsyncClient(
@@ -87,8 +95,33 @@ def create_application(
         store = audit_store or PostgresAuditStore(database.sessions)
         service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()))  # noqa: E501  # fmt: skip
         application.include_router(responses_router(service))
+    configured_mcp_client = mcp_client
+    if configured_mcp_client is None and runtime_settings.grafana_mcp_endpoint:
+        if not runtime_settings.grafana_mcp_token:
+            raise RuntimeError("GRAFANA_MCP_TOKEN is required with GRAFANA_MCP_ENDPOINT")
+        shared_mcp_client = httpx.AsyncClient()
+        configured_mcp_client = GrafanaMCPClient(
+            shared_mcp_client,
+            runtime_settings.grafana_mcp_endpoint,
+            runtime_settings.grafana_mcp_token,
+        )
+    if configured_mcp_client is not None and runtime_settings.audit_hmac_key:
+        mcp_store = audit_store or PostgresAuditStore(database.sessions)
+        mcp_projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+        application.include_router(
+            mcp_router(
+                MCPGatewayService(
+                    database.sessions,
+                    configured_mcp_client,
+                    audit=mcp_store,
+                    projector=mcp_projector,
+                )
+            )
+        )
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:
         application.add_event_handler("shutdown", shared_provider_client.aclose)
+    if shared_mcp_client is not None:
+        application.add_event_handler("shutdown", shared_mcp_client.aclose)
     return application
