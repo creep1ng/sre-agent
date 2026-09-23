@@ -104,6 +104,40 @@
           </div>
         </form>
       </dialog>
+      <dialog id="deactivate-dialog" class="principals__dialog" aria-labelledby="deactivate-title">
+        <form id="deactivate-form" class="principals__create-form" novalidate>
+          <h2 id="deactivate-title" class="ma-panel__title">Deactivate principal</h2>
+          <p id="deactivate-detail" class="ma-panel__description"></p>
+          <p class="ma-panel__description">This sets status to inactive. History is preserved; nothing is deleted.</p>
+          <div id="deactivate-error" class="ma-alert" data-tone="critical" hidden><div><p id="deactivate-error-title" class="ma-alert__title">Request failed</p><p id="deactivate-error-detail" class="ma-alert__detail"></p></div></div>
+          <div class="ma-button-row">
+            <button id="deactivate-submit" class="ma-button ma-button--primary" type="submit">Deactivate</button>
+            <button id="deactivate-cancel" class="ma-button ma-button--secondary" type="button" value="cancel" formnovalidate>Cancel</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="issue-dialog" class="principals__dialog" aria-labelledby="issue-title">
+        <form id="issue-form" class="principals__create-form" novalidate>
+          <h2 id="issue-title" class="ma-panel__title">Issue credential</h2>
+          <div id="issue-error" class="ma-alert" data-tone="critical" hidden><div><p id="issue-error-title" class="ma-alert__title">Request failed</p><p id="issue-error-detail" class="ma-alert__detail"></p></div></div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="issue-expires-at">Expires at (optional)</label>
+            <input class="ma-input ma-mono" id="issue-expires-at" name="expires-at" type="text" autocomplete="off" spellcheck="false" placeholder="2031-01-02T03:04:05Z" />
+          </div>
+          <div class="ma-button-row">
+            <button id="issue-submit" class="ma-button ma-button--primary" type="submit">Issue</button>
+            <button id="issue-cancel" class="ma-button ma-button--secondary" type="button" value="cancel" formnovalidate>Cancel</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="secret-dialog" class="principals__dialog" aria-labelledby="secret-title">
+        <h2 id="secret-title" class="ma-panel__title">Credential secret</h2>
+        <p class="ma-panel__description">Copy this secret now. It will not be shown again.</p>
+        <pre class="ma-mono"><code id="secret-value"></code></pre>
+        <div class="ma-button-row">
+          <button id="secret-close" class="ma-button ma-button--primary" type="button">Close</button>
+        </div>
+      </dialog>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
     </main>
     <script type="module" src="/public/admin/principals.js"></script>

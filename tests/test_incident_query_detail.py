@@ -67,3 +67,12 @@ def test_reads_do_not_mutate_authoritative_state() -> None:
     assert units._incidents[incident_id].version == 4
     assert units._runs[run_id].version == 4
     assert len(units._events[run_id]) == 3
+
+
+def test_detail_without_runs_returns_empty_runs_not_absence() -> None:
+    units = MemoryUnits()
+    incident_id, _ = _seed(units)
+    units._runs.clear()
+    response = _client(_service(units)).get(f"/v1/incidents/{incident_id}", headers=AUTH)
+    assert response.status_code == 200
+    assert response.json()["runs"] == []

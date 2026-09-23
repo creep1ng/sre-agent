@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:mcp-query-elasticsearch-input:1.0.0",
+  "title": "Governed Grafana MCP query_elasticsearch input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["datasource_uid", "index", "query", "start_time", "end_time", "limit"],
+  "properties": {
+    "datasource_uid": { "const": "webstore-logs" },
+    "index": { "const": "otel-logs-*" },
+    "query": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "start_time": { "type": "string", "pattern": "^now-[1-9][0-9]*[smhd]$" },
+    "end_time": { "const": "now" },
+    "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+  }
+}

@@ -7,7 +7,6 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
-from sre_agent.persistence import seeds as seeds_module
 from sre_agent.persistence.api_keys import verify_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import KEY_ENV, SeedConflict, SeedSettings, seed
@@ -34,7 +33,7 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, alembic_version CASCADE"
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -174,30 +173,26 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
 
 
 @pytest.mark.asyncio
-async def test_seed_converges_after_real_03_to_04_upgrade(monkeypatch: pytest.MonkeyPatch) -> None:
-    schema = "seed_upgrade_03_04_test"
+async def test_seed_converges_across_alias_and_catalog_migrations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    schema = "seed_upgrade_09_12_test"
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(f"DROP SCHEMA IF EXISTS {schema} CASCADE")
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(f"CREATE SCHEMA {schema}")
     dsn = DATABASE_URL
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", dsn)
     monkeypatch.setenv("DATABASE_URL", dsn)
     monkeypatch.setenv("PGOPTIONS", f"-csearch_path={schema}")
-    command.upgrade(config, "20260901_03")
+    command.upgrade(config, "20260917_09")
 
     settings = SeedSettings.from_environment(ENV)
     legacy_database = Database(dsn)
-    admin_resources = seeds_module.ADMIN_RESOURCES
-    admin_grants = seeds_module.ADMIN_GRANTS
-    monkeypatch.setattr(seeds_module, "ADMIN_RESOURCES", ())
-    monkeypatch.setattr(seeds_module, "ADMIN_GRANTS", ())
     assert await seed(legacy_database, settings) is True
     await legacy_database.dispose()
-    monkeypatch.setattr(seeds_module, "ADMIN_RESOURCES", admin_resources)
-    monkeypatch.setattr(seeds_module, "ADMIN_GRANTS", admin_grants)
-
-    command.upgrade(config, "20260902_04")
+    command.upgrade(config, "head")
     database = Database(dsn)
     assert await seed(database, settings) is False
     assert await seed(database, settings) is False
@@ -211,9 +206,37 @@ async def test_seed_converges_after_real_03_to_04_upgrade(monkeypatch: pytest.Mo
         admin_grants = connection.execute(
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
-    assert version == "20260902_04"
+        projection = connection.execute(
+            "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
+            "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
+        ).fetchall()
+    assert version == "20260921_13"
     assert admin_resources == 2
     assert admin_grants == 4
+    assert projection == [
+        (
+            "remediation-agent",
+            "model_alias",
+            "remediation-agent",
+            "remediation-agent",
+            "private",
+            "",
+            [],
+        ),
+        (
+            "triage-agent",
+            "model_alias",
+            "triage-agent",
+            "triage-agent",
+            "private",
+            "",
+            [],
+        ),
+    ]
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        # The incident store migration escapes the isolated search_path with a
+        # top-level schema; remove the residue for the incident suites.
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
 
 
 @pytest.mark.asyncio

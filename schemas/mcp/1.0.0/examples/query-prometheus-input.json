@@ -1,0 +1,6 @@
+{
+  "datasource_uid": "webstore-metrics",
+  "expr": "sum(rate(traces_span_metrics_calls_total{status_code=\"STATUS_CODE_ERROR\"}[5m]))",
+  "query_type": "instant",
+  "end_time": "now"
+}

@@ -187,6 +187,68 @@ def test_timeline_beyond_last_cursor_returns_empty_page() -> None:
     assert body["has_more"] is False
 
 
+def test_timeline_rejects_out_of_range_and_non_integer_limit() -> None:
+    units = MemoryUnits()
+    _seed(units)
+    client = _client(_service(units))
+    for params in ({"limit": 0}, {"limit": 201}, {"limit": "many"}):
+        response = client.get("/v1/incidents/inc-demo/timeline", params=params, headers=AUTH)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_timeline_rejects_malformed_run_id() -> None:
+    units = MemoryUnits()
+    _seed(units)
+    response = _client(_service(units)).get(
+        "/v1/incidents/inc-demo/timeline", params={"run_id": "NOT-A-RUN"}, headers=AUTH
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_snapshot_with_foreign_run_is_not_found() -> None:
+    units = MemoryUnits()
+    _seed(units)
+    _seed(units, incident_id="inc-other", run_id="run_other001")
+    response = _client(_service(units)).get(
+        "/v1/incidents/inc-demo/snapshot", params={"run_id": "run_other001"}, headers=AUTH
+    )
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "run_not_found"
+
+
+def test_timeline_includes_events_appended_between_pages() -> None:
+    units = MemoryUnits()
+    incident_id, run_id = _seed(units)
+    client = _client(_service(units))
+    first = client.get("/v1/incidents/inc-demo/timeline", params={"limit": 2}, headers=AUTH).json()
+    assert [event["sequence"] for event in first["events"]] == [0, 1]
+    units._decisions["dec_demo0003"] = _decision_document("system", None)
+    units._events[run_id].append(
+        RunEvent(
+            "evt_demo0003",
+            incident_id,
+            run_id,
+            3,
+            "state_change",
+            {
+                "transition_id": "continue_investigation",
+                "to": "investigating",
+                "decision_id": "dec_demo0003",
+            },
+            NOW,
+            None,
+        )
+    )
+    second = client.get(
+        "/v1/incidents/inc-demo/timeline",
+        params={"after": first["next_cursor"], "limit": 2},
+        headers=AUTH,
+    ).json()
+    assert [event["sequence"] for event in second["events"]] == [2, 3]
+
+
 DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55466/postgres"
 )
@@ -203,6 +265,7 @@ def _postgres_schema():
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "mcp_tools, mcp_servers, "
             "principals, idempotency_records CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")

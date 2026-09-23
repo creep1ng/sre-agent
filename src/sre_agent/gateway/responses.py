@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
 from sre_agent.gateway.audit import AuditProjector
@@ -160,6 +161,10 @@ class AuditStore(Protocol):
     async def append(self, event: AuditEvent) -> None: ...
 
 
+class TransactionalAuditStore(AuditStore, Protocol):
+    async def append_in_transaction(self, event: AuditEvent, session: AsyncSession) -> None: ...
+
+
 class PostgresAuditStore:
     def __init__(self, sessions: Any) -> None:
         self._sessions = sessions
@@ -167,6 +172,9 @@ class PostgresAuditStore:
     async def append(self, event: AuditEvent) -> None:
         async with self._sessions() as session, session.begin():
             await AuditRepository(session).append(event)
+
+    async def append_in_transaction(self, event: AuditEvent, session: AsyncSession) -> None:
+        await AuditRepository(session).append(event)
 
 
 # fmt: off

@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import httpx
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from jsonschema import Draft202012Validator
 
 from sre_agent.control import scopes
@@ -82,6 +82,53 @@ def test_control_grant_actions_cover_read_and_write() -> None:
         "administrative_control",
         "credentials",
     )
+    assert CONTROL_SCOPES[("DELETE", "/v1/grants/{id}")] == (
+        "admin.write",
+        "administrative_control",
+        "grants",
+    )
+    assert CONTROL_SCOPES[("POST", "/v1/grants")][0] == "admin.write"
+    assert CONTROL_SCOPES[("GET", "/v1/grants")][0] == "admin.read"
+    assert CONTROL_SCOPES[("POST", "/v1/model-aliases")] == (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    )
+    assert CONTROL_SCOPES[("GET", "/v1/model-aliases")] == (
+        "admin.read",
+        "administrative_control",
+        "model_aliases",
+    )
+    assert CONTROL_SCOPES[("GET", "/v1/model-aliases/{id}")] == (
+        "admin.read",
+        "administrative_control",
+        "model_aliases",
+    )
+    assert CONTROL_SCOPES[("PUT", "/v1/model-aliases/{id}/assignment")] == (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    )
+    assert CONTROL_SCOPES[("PUT", "/v1/model-aliases/{id}/status")] == (
+        "admin.write",
+        "administrative_control",
+        "model_aliases",
+    )
+    assert CONTROL_SCOPES[("POST", "/v1/catalog/resources")] == (
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    )
+    assert CONTROL_SCOPES[("GET", "/v1/catalog/resources")] == (
+        "admin.read",
+        "administrative_control",
+        "catalog",
+    )
+    assert CONTROL_SCOPES[("GET", "/v1/catalog/resources/{type}/{id}")] == (
+        "admin.read",
+        "administrative_control",
+        "catalog",
+    )
 
 
 def test_control_scopes_cover_all_routes_exactly_once() -> None:
@@ -94,8 +141,19 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("GET", "/v1/principals/{id}/credentials"),
         ("DELETE", "/v1/credentials/{id}"),
         ("POST", "/v1/credentials/{id}/rotation"),
+        ("POST", "/v1/grants"),
+        ("GET", "/v1/grants"),
+        ("DELETE", "/v1/grants/{id}"),
+        ("POST", "/v1/model-aliases"),
+        ("GET", "/v1/model-aliases"),
+        ("GET", "/v1/model-aliases/{id}"),
+        ("PUT", "/v1/model-aliases/{id}/assignment"),
+        ("PUT", "/v1/model-aliases/{id}/status"),
+        ("POST", "/v1/catalog/resources"),
+        ("GET", "/v1/catalog/resources"),
+        ("GET", "/v1/catalog/resources/{type}/{id}"),
     }
-    assert len({*CONTROL_SCOPES.values()}) == 4
+    assert len({*CONTROL_SCOPES.values()}) == 10
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
 
 
@@ -127,6 +185,21 @@ def test_control_operations_match_scopes() -> None:
     assert CONTROL_OPERATIONS[("POST", "/v1/credentials/{id}/rotation")][0] == (
         "credentials.rotate"
     )
+    assert CONTROL_OPERATIONS[("DELETE", "/v1/grants/{id}")][0] == "grants.revoke"
+    assert CONTROL_OPERATIONS[("POST", "/v1/grants")][0] == "grants.create"
+    assert CONTROL_OPERATIONS[("GET", "/v1/grants")][0] == "grants.list"
+    assert CONTROL_OPERATIONS[("POST", "/v1/model-aliases")][0] == "aliases.create"
+    assert CONTROL_OPERATIONS[("GET", "/v1/model-aliases")][0] == "aliases.list"
+    assert CONTROL_OPERATIONS[("GET", "/v1/model-aliases/{id}")][0] == "aliases.get"
+    assert CONTROL_OPERATIONS[("PUT", "/v1/model-aliases/{id}/assignment")][0] == (
+        "aliases.assignment.replace"
+    )
+    assert CONTROL_OPERATIONS[("PUT", "/v1/model-aliases/{id}/status")][0] == (
+        "aliases.status.replace"
+    )
+    assert CONTROL_OPERATIONS[("POST", "/v1/catalog/resources")][0] == "catalog.create"
+    assert CONTROL_OPERATIONS[("GET", "/v1/catalog/resources")][0] == "catalog.list"
+    assert CONTROL_OPERATIONS[("GET", "/v1/catalog/resources/{type}/{id}")][0] == "catalog.read"
 
 
 def test_control_projector_rejects_llm_routing_evidence() -> None:
@@ -258,10 +331,27 @@ def _stub_service(monkey_result=None, status=201, payload=None):
     service.get_principal = AsyncMock(
         return_value=JSONResponse(_public_principal(_principal()), 200)
     )
+    service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
+    service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
+    service.list_grants = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
+    service.create_alias = AsyncMock(return_value=JSONResponse({}, 201))
+    service.list_aliases = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
+    service.get_alias = AsyncMock(return_value=JSONResponse({}, 200))
+    service.replace_alias_assignment = AsyncMock(return_value=JSONResponse({}, 200))
+    service.replace_alias_status = AsyncMock(return_value=JSONResponse({}, 200))
+    service.create_catalog_resource = AsyncMock(return_value=JSONResponse({}, 201))
+    service.list_catalog_resources = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
+    service.get_catalog_resource = AsyncMock(return_value=JSONResponse({}, 200))
     return service
 
 
-def test_router_exposes_all_eight_control_routes() -> None:
+def test_router_exposes_all_control_routes() -> None:
     app = FastAPI()
     app.include_router(control_router(_stub_service()))
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
@@ -276,9 +366,17 @@ def test_router_exposes_all_eight_control_routes() -> None:
         "/v1/principals/{principal_id}/credentials",
         "/v1/credentials/{credential_id}",
         "/v1/credentials/{credential_id}/rotation",
+        "/v1/grants",
+        "/v1/grants/{grant_id}",
+        "/v1/model-aliases",
+        "/v1/model-aliases/{alias_id}",
+        "/v1/model-aliases/{alias_id}/assignment",
+        "/v1/model-aliases/{alias_id}/status",
+        "/v1/catalog/resources",
+        "/v1/catalog/resources/{resource_type}/{id}",
     }
 
-    async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response]:
+    async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response, httpx.Response]:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://test"
         ) as client:
@@ -290,12 +388,14 @@ def test_router_exposes_all_eight_control_routes() -> None:
                 ),
                 await client.get("/v1/principals/INVALID"),
                 await client.get("/v1/principals?limit=101"),
+                await client.delete("/v1/grants/grant-example"),
             )
 
-    created, bad_path, bad_query = asyncio.run(exercise())
+    created, bad_path, bad_query, revoked = asyncio.run(exercise())
     assert created.status_code in {201, 200}
     assert bad_path.status_code == 200
     assert bad_query.status_code == 200
+    assert revoked.status_code == 204
 
 
 def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:

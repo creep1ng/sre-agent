@@ -40,7 +40,15 @@ overrides:
   # Must follow the proxy: left at 8080 the browser would export its traces
   # into the project's own `web` service.
   PUBLIC_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "http://localhost:8090/otlp-http/v1/traces"
+  # Upstream .env derives these from ENVOY_PORT while it is read, before this
+  # file moves the proxy, so they kept 8080: k6 and the Collector's http_check
+  # targeted a closed port and no synthetic traffic reached the store. Written
+  # literally, since a reference here resolves against the upstream value first.
+  FRONTEND_PROXY_ADDR: "frontend-proxy:8090"
+  K6_TARGET_URL: "http://frontend-proxy:8090"
 
+# The only host ports the environment publishes. compose.demo.yaml resets every
+# other upstream publication, and verify fails if an undeclared port appears.
 host_ports:
   - port: 8090
     service: frontend-proxy
@@ -61,7 +69,7 @@ observability_services:
   opensearch: "demo:3.0.0-opensearch"
 
 # CA1 requires availability to be reported for these. Jaeger is pinned above but
-# is not in CA1's list; MCP availability is added by the PR that introduces it.
+# is not in CA1's list.
 services_verified:
   - frontend
   - load-generator
@@ -69,6 +77,24 @@ services_verified:
   - grafana
   - prometheus
   - opensearch
+  - grafana-mcp
+
+# Deliverable 3 and CA5. Private and read-only: no published port, caller token,
+# write tools disabled, only the categories an investigation needs.
+grafana_mcp:
+  service: grafana-mcp
+  image: "grafana/mcp-grafana:1.3.0"
+  released: "2026-08-28"
+  port: 8000  # container only, never published
+  transport: streamable-http
+  read_only: "--disable-write"
+  tool_categories: [prometheus, elasticsearch, datasource]  # elasticsearch serves the OpenSearch logs
+  caller_token: ".demo-state/grafana-mcp.env"  # created by up, git-ignored; the gateway holds it (#187)
+  networks:
+    default: "opentelemetry-demo, to reach Grafana"
+    mcp-boundary: "sre-mcp-boundary, internal, reserved for the gateway (#187)"
+  grafana_access: "anonymous; upstream grants Admin, so read-only rests on --disable-write"
+  probe_from: opensearch  # the MCP image has no HTTP client
 
 failure_injection:
   provider: flagd
@@ -84,6 +110,7 @@ flag_baseline:
   all_other_flags: "off"
 
 host_requirements:
+  compose_minimum: "2.24"  # compose.demo.yaml uses the !reset tag
   cpus_minimum: 4
   memory_minimum_mb: 4096
   disk_minimum_gb: 15
