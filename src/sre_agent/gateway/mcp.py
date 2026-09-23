@@ -2,16 +2,20 @@
 
 import json
 from asyncio import Lock, wait_for
+from time import monotonic
 from typing import Annotated, Any, Protocol
 from urllib.parse import urlsplit
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
-from sre_agent.governance.dto import MCPServer, MCPTool
+from sre_agent.gateway.responses import AuditStore
+from sre_agent.governance.authorization import AuthorizationEvaluation
+from sre_agent.governance.dto import MCPServer, MCPTool, PrincipalContext
 from sre_agent.mcp.owner import MCP_CONTRACT_VERSION, MCP_SERVER_ID, MCP_TOOL_IDS
 from sre_agent.persistence.repositories import MCPOwnerRepository
 
@@ -175,6 +179,22 @@ class ElasticsearchResult(BaseModel):
     warnings: list[Annotated[str, Field(max_length=500)]] = Field(max_length=16)
 
 
+class MCPAuditRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation: str
+    request_id: UUID
+    status: int
+    server_id: str
+    tool_id: str | None
+    principal_kind: str | None
+    decision: str | None
+    latency_ms: int
+    content_state: str = "absent"
+    arguments_recorded: bool = False
+    result_recorded: bool = False
+
+
 class _OwnerRepository(Protocol):
     async def get_server(self, server_id: str) -> MCPServer | None: ...
 
@@ -189,14 +209,19 @@ class MCPGatewayService:
         sessions: Any,
         client: MCPUpstreamClient,
         *,
+        audit: AuditStore | None = None,
+        projector: AuditProjector | None = None,
         owner_repository_factory: Any = MCPOwnerRepository,
     ) -> None:
         self.sessions = sessions
         self.client = client
+        self.audit = audit
+        self.projector = projector
         self.owner_repository_factory = owner_repository_factory
 
     async def discovery(self, authorization: str | None) -> JSONResponse:
         request_id = str(uuid4())
+        started = monotonic()
         try:
             context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, "mcp.discovery", "mcp_server", MCP_SERVER_ID
@@ -216,37 +241,46 @@ class MCPGatewayService:
         server, tools = await self._active_contract()
         if server is None or tools is None:
             return self._unavailable(request_id)
-        return JSONResponse(
-            {
-                "contract_version": MCP_CONTRACT_VERSION,
-                "server": {
-                    "resource_type": "mcp_server",
-                    "server_id": server.server_id,
-                    "display_name": server.display_name,
-                    "description": server.description,
-                    "visibility": server.visibility,
-                    "tags": server.tags,
-                },
-                "tools": [
-                    {
-                        "resource_type": "mcp_tool",
-                        "tool_id": tool.tool_id,
-                        "server_id": tool.server_id,
-                        "display_name": tool.display_name,
-                        "description": tool.description,
-                        "visibility": tool.visibility,
-                        "tags": tool.tags,
-                        "action": "mcp.invoke",
-                    }
-                    for tool in tools
-                ],
-            }
+        return await self._audited(
+            UUID(request_id),
+            started,
+            JSONResponse(
+                {
+                    "contract_version": MCP_CONTRACT_VERSION,
+                    "server": {
+                        "resource_type": "mcp_server",
+                        "server_id": server.server_id,
+                        "display_name": server.display_name,
+                        "description": server.description,
+                        "visibility": server.visibility,
+                        "tags": server.tags,
+                    },
+                    "tools": [
+                        {
+                            "resource_type": "mcp_tool",
+                            "tool_id": tool.tool_id,
+                            "server_id": tool.server_id,
+                            "display_name": tool.display_name,
+                            "description": tool.description,
+                            "visibility": tool.visibility,
+                            "tags": tool.tags,
+                            "action": "mcp.invoke",
+                        }
+                        for tool in tools
+                    ],
+                }
+            ),
+            operation="mcp.discovery",
+            stage="response",
+            context=context,
+            evaluation=evaluation,
         )
 
     async def invoke(self, tool_id: str, raw: Any, authorization: str | None) -> JSONResponse:
         request_id = str(uuid4())
+        started = monotonic()
         try:
-            _, evaluation = await authorize_governed_access(
+            context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, "mcp.invoke", "mcp_tool", tool_id
             )
         except AuthenticationFailed:
@@ -268,18 +302,65 @@ class MCPGatewayService:
         try:
             arguments = self._validate_input(tool_id, raw)
         except ValidationError:
-            return self._error(request_id, 422, "contract_validation_failed", False)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._error(request_id, 422, "contract_validation_failed", False),
+                operation="mcp.invoke",
+                stage="validation",
+                reason="contract_validation_failed",
+                tool_id=tool_id,
+            )
         try:
             result = await wait_for(
                 self.client.call_tool(tool.upstream_name, arguments), MCP_TIMEOUT_SECONDS
             )
-            return JSONResponse(self._map_result(tool_id, result))
+            return await self._audited(
+                UUID(request_id),
+                started,
+                JSONResponse(self._map_result(tool_id, result)),
+                operation="mcp.invoke",
+                stage="response",
+                context=context,
+                evaluation=evaluation,
+                tool_id=tool_id,
+            )
         except (TimeoutError, MCPUpstreamTimeout):
-            return self._error(request_id, 504, "upstream_timeout", True)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._error(request_id, 504, "upstream_timeout", True),
+                operation="mcp.invoke",
+                stage="upstream",
+                context=context,
+                evaluation=evaluation,
+                reason="upstream_timeout",
+                tool_id=tool_id,
+            )
         except MCPUpstreamUnavailable:
-            return self._error(request_id, 503, "upstream_unavailable", True)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._error(request_id, 503, "upstream_unavailable", True),
+                operation="mcp.invoke",
+                stage="upstream",
+                context=context,
+                evaluation=evaluation,
+                reason="upstream_unavailable",
+                tool_id=tool_id,
+            )
         except MCPUpstreamInvalid:
-            return self._error(request_id, 502, "upstream_invalid", False)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._error(request_id, 502, "upstream_invalid", False),
+                operation="mcp.invoke",
+                stage="upstream",
+                context=context,
+                evaluation=evaluation,
+                reason="upstream_invalid",
+                tool_id=tool_id,
+            )
 
     async def _active_contract(
         self, tool_id: str | None = None
@@ -426,3 +507,55 @@ class MCPGatewayService:
             },
             status_code=status,
         )
+
+    async def _audited(
+        self,
+        request_id: UUID,
+        started: float,
+        response: JSONResponse,
+        *,
+        operation: str,
+        stage: str,
+        context: PrincipalContext | None = None,
+        evaluation: AuthorizationEvaluation | None = None,
+        server_id: str = MCP_SERVER_ID,
+        tool_id: str | None = None,
+        reason: str | None = None,
+    ) -> JSONResponse:
+        if self.audit is None:
+            return response
+        try:
+            if self.projector is None:
+                event = MCPAuditRecord(
+                    operation=operation,
+                    request_id=request_id,
+                    status=response.status_code,
+                    server_id=server_id,
+                    tool_id=tool_id,
+                    principal_kind=context.principal.kind if context else None,
+                    decision=evaluation.decision.decision if evaluation else None,
+                    latency_ms=max(0, int((monotonic() - started) * 1000)),
+                )
+            else:
+                event = self.projector.mcp_event(
+                    request_id,
+                    response.status_code,
+                    max(0, int((monotonic() - started) * 1000)),
+                    stage,
+                    operation=operation,
+                    context=context,
+                    decision=evaluation.decision if evaluation else None,
+                    resource_ref=("mcp_tool", tool_id) if tool_id else ("mcp_server", server_id),
+                    reason=reason,
+                )
+            await self.audit.append(event)
+        except Exception:
+            return JSONResponse(
+                {
+                    "error": {"code": "audit_unavailable", "message": "Audit unavailable."},
+                    "request_id": str(request_id),
+                    "retryable": True,
+                },
+                status_code=503,
+            )
+        return response
