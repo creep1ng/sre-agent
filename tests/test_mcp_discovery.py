@@ -380,6 +380,45 @@ async def test_denied_invocation_stops_before_owner_lookup_and_transport(
 
 
 @pytest.mark.asyncio
+async def test_denied_invocation_is_audited_metadata_only_without_owner_or_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    audit = RecordingAudit()
+
+    async def deny(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
+    )
+    response = await service.invoke("query_prometheus", {"expr": "sensitive-query"}, AUTHORIZATION)
+
+    assert response.status_code == 403
+    assert json.loads(response.body)["error"]["code"] == "resource_unavailable"
+    assert owner.reads == []
+    assert client.calls == []
+    assert len(audit.events) == 1
+    event = audit.events[0].model_dump(mode="json")
+    assert event["operation"] == "mcp.invoke"
+    assert event["action"] == "invoke"
+    assert event["stage"] == "authorization"
+    assert event["outcome"] == "denied"
+    assert event["response_status"] == 403
+    assert event["content_state"] == "absent"
+    assert event["correlation"]["request_id"] == json.loads(response.body)["request_id"]
+    assert event["policy_decision"]["decision"] == "deny"
+    assert event["policy_decision"]["reason_code"] == "no_matching_grant"
+    assert "sensitive-query" not in str(event)
+
+
+@pytest.mark.asyncio
 async def test_invalid_input_returns_422_without_transport_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
