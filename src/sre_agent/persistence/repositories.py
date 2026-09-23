@@ -14,6 +14,8 @@ from sre_agent.governance.dto import (
     AuditEvent,
     CredentialReference,
     Grant,
+    MCPServer,
+    MCPTool,
     ModelAlias,
     Principal,
     PrincipalContext,
@@ -32,6 +34,8 @@ from sre_agent.persistence.models import (
     CredentialRow,
     GrantRow,
     IdempotencyRecordRow,
+    MCPServerRow,
+    MCPToolRow,
     PrincipalRow,
     ResourceRow,
 )
@@ -40,6 +44,8 @@ from sre_agent.persistence.projections import (
     project_catalog_entry,
     project_credential,
     project_grant,
+    project_mcp_server,
+    project_mcp_tool,
     project_model_alias,
     project_principal,
     project_resource,
@@ -811,3 +817,79 @@ class AuditRepository:
             .limit(limit)
         )
         return [project_audit_event(row) for row in rows]
+
+
+class MCPOwnerRepository:
+    """Authoritative MCP server/tool lifecycle over dedicated owner tables."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_server(self, server_id: str) -> MCPServer | None:
+        row = await self._session.get(MCPServerRow, server_id)
+        return project_mcp_server(row) if row is not None else None
+
+    async def get_tool(self, tool_id: str) -> MCPTool | None:
+        row = await self._session.get(MCPToolRow, tool_id)
+        return project_mcp_tool(row) if row is not None else None
+
+    async def register_server(self, server: MCPServer) -> MCPServer:
+        row = MCPServerRow(**server.model_dump())
+        self._session.add(row)
+        await self._session.flush()
+        return project_mcp_server(row)
+
+    async def update_server(self, server_id: str, **changes: object) -> MCPServer:
+        row = await self._session.get(MCPServerRow, server_id)
+        if row is None:
+            raise ValueError("MCP server is not registered")
+        current = project_mcp_server(row)
+        allowed = {"status", "endpoint", "display_name", "visibility", "description", "tags"}
+        for attribute in changes:
+            if attribute not in allowed:
+                raise ValueError(f"MCP server field is immutable: {attribute}")
+        MCPServer.model_validate({**current.model_dump(), **changes})
+        for attribute, value in changes.items():
+            setattr(row, attribute, value)
+        row.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        return project_mcp_server(row)
+
+    async def deactivate_server(self, server_id: str) -> tuple[MCPServer, list[MCPTool]]:
+        server = await self.update_server(server_id, status="inactive")
+        rows = (
+            await self._session.scalars(select(MCPToolRow).where(MCPToolRow.server_id == server_id))
+        ).all()
+        now = datetime.now(UTC)
+        for row in rows:
+            row.status = "inactive"
+            row.updated_at = now
+        await self._session.flush()
+        return server, [project_mcp_tool(row) for row in rows]
+
+    async def register_tool(self, tool: MCPTool) -> MCPTool:
+        server = await self._session.get(MCPServerRow, tool.server_id)
+        if server is None:
+            raise ValueError("MCP tool server relation is absent")
+        if server.owner_id != tool.owner_id:
+            raise ValueError("MCP tool owner must match its server owner")
+        row = MCPToolRow(**tool.model_dump())
+        self._session.add(row)
+        await self._session.flush()
+        return project_mcp_tool(row)
+
+    async def update_tool(self, tool_id: str, **changes: object) -> MCPTool:
+        row = await self._session.get(MCPToolRow, tool_id)
+        if row is None:
+            raise ValueError("MCP tool is not registered")
+        current = project_mcp_tool(row)
+        allowed = {"status", "display_name", "visibility", "description", "tags"}
+        for attribute in changes:
+            if attribute not in allowed:
+                raise ValueError(f"MCP tool field is immutable: {attribute}")
+        MCPTool.model_validate({**current.model_dump(), **changes})
+        for attribute, value in changes.items():
+            setattr(row, attribute, value)
+        row.updated_at = datetime.now(UTC)
+        await self._session.flush()
+        return project_mcp_tool(row)
