@@ -53,6 +53,19 @@ services:
     restart: unless-stopped
     networks: [default, mcp-boundary]
 
+  # The two declared ports, bound to the loopback interface. Upstream publishes
+  # them on every interface, which put Grafana's anonymous Admin session and the
+  # Envoy admin interface on whatever network the host is attached to. The admin
+  # interface is no longer published at all: no acceptance criterion uses it and
+  # it can drain or stop the proxy.
+  frontend-proxy:
+    ports: !override
+      - "127.0.0.1:${ENVOY_PORT}:${ENVOY_PORT}"
+
+  prometheus:
+    ports: !override
+      - "127.0.0.1:${PROMETHEUS_PORT}:${PROMETHEUS_PORT}"
+
   ad: {ports: !reset []}
   astronomy-db: {ports: !reset []}
   cart: {ports: !reset []}

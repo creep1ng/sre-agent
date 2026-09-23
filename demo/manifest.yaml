@@ -47,16 +47,18 @@ overrides:
   FRONTEND_PROXY_ADDR: "frontend-proxy:8090"
   K6_TARGET_URL: "http://frontend-proxy:8090"
 
-# The only host ports the environment publishes. compose.demo.yaml resets every
-# other upstream publication, and verify fails if an undeclared port appears.
+# The only host ports the environment publishes, each bound to the loopback
+# interface so the demo is reachable from this host and from nowhere else.
+# compose.demo.yaml resets every other upstream publication, including the Envoy
+# admin interface on 10000, and verify fails if a port is undeclared or leaves
+# the interface declared here.
 host_ports:
   - port: 8090
+    bind: 127.0.0.1
     service: frontend-proxy
     purpose: "Single entry point: store, /grafana, /jaeger/ui, /feature"
-  - port: 10000
-    service: frontend-proxy
-    purpose: "Envoy admin"
   - port: 9090
+    bind: 127.0.0.1
     service: prometheus
     purpose: "Prometheus UI and API"
 
