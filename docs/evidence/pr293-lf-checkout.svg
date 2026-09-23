@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1580" height="390" viewBox="0 0 1580 390" role="img" aria-label="PR 293 LF checkout and Docker harness evidence">
+  <rect width="1580" height="390" fill="#10151b"/>
+  <rect x="18" y="18" width="1544" height="354" rx="10" fill="#17212b" stroke="#526578"/>
+  <g fill="#d1e4f1" font-family="monospace" font-size="17">
+    <text x="36" y="53">PR #293 — LF checkout and harness entrypoint (Linux controlled integration)</text>
+    <text x="36" y="83">Tested SHA: 154276c1632d9c1ab386054b628e20b1c4d3294e</text>
+    <text x="36" y="113">$ docker build -t sre-agent-pr293-lf:154276c -f docker/harness.Dockerfile .</text>
+    <text x="36" y="143">Build exit: 0</text>
+    <text x="36" y="173">$ docker run --network none --rm -v "$PWD/schemas:/source/schemas:ro" -v "$PWD/scripts:/source/scripts:ro"</text>
+    <text x="36" y="200">  --tmpfs /workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0755 sre-agent-pr293-lf:154276c node --version</text>
+    <text x="36" y="230">v22.14.0 (exit 0)</text>
+    <text x="36" y="260">$ git check-attr text eol -- docker/harness-entrypoint.sh scripts/worktree-compose</text>
+    <text x="36" y="288">Both: text=set, eol=lf; git ls-files --eol: i/lf, w/lf, attr/text eol=lf</text>
+    <text x="36" y="318">CI: github.com/creep1ng/sre-agent/actions/runs/35796472064 — success</text>
+    <text x="36" y="348">Scope: Linux checkout verification only; native Windows behavior not claimed.</text>
+  </g>
+</svg>
