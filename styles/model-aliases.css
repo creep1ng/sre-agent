@@ -1,0 +1,11 @@
+.model-aliases__layout {
+  display: grid;
+  gap: var(--ma-space-6);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .model-aliases__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

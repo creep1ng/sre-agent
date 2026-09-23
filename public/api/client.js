@@ -168,6 +168,10 @@ export function createAdministrativeApiClient({
     listPrincipals({ limit = 100 } = {}) {
       return request(`/v1/principals?limit=${encodeURIComponent(limit)}`);
     },
+    listModelAliases({ limit = 100 } = {}) {
+      const query = limit === undefined ? "" : `?limit=${encodeURIComponent(String(limit))}`;
+      return request(`/v1/model-aliases${query}`);
+    },
     replacePrincipalStatus(principalId, body) {
       return request(`/v1/principals/${encodeURIComponent(principalId)}/status`, {
         method: "PUT",
