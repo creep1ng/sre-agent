@@ -175,6 +175,18 @@ def test_cross_incident_run_is_not_found() -> None:
     assert response.json()["error"]["code"] == "run_not_found"
 
 
+def test_timeline_beyond_last_cursor_returns_empty_page() -> None:
+    units = MemoryUnits()
+    _seed(units)
+    response = _client(_service(units)).get(
+        "/v1/incidents/inc-demo/timeline", params={"after": "seq:99"}, headers=AUTH
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["events"] == []
+    assert body["has_more"] is False
+
+
 def test_timeline_rejects_out_of_range_and_non_integer_limit() -> None:
     units = MemoryUnits()
     _seed(units)
