@@ -11,8 +11,10 @@
 # deny-list fails open, because a field added later leaks until someone remembers to ban
 # it. An allow-list fails closed: an unregistered field breaks CI before it ships.
 #
-# The validator walks the public schemas and asserts that every property they declare is
-# named here. That is what makes this a policy and not a paragraph.
+# validate_run_api walks the listed schemas and rejects unclosed objects and
+# forbidden fields; validate_incident_queries asserts the incident schemas stay
+# registered here. Registration alone is not a property walk. That split is
+# what makes this a policy and not a paragraph.
 ---
 schema_version: "v1"
 maturity: "contracted"
