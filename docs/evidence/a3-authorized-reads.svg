@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="440" viewBox="0 0 1040 440">
+  <rect width="1040" height="440" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #189 A3 authorized HTTP reads</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q tests/test_incident_authorized_reads.py</text>
+  <text x="28" y="136" fill="#f9fafb" font-family="monospace" font-size="20">4 passed (real PostgreSQL 17.4, real gateway, demo-human)</text>
+  <text x="28" y="186" fill="#f9fafb" font-family="monospace" font-size="20">GET /v1/incidents/inc-a3-authorized -&gt; 200 (version 3)</text>
+  <text x="28" y="226" fill="#f9fafb" font-family="monospace" font-size="20">GET .../timeline -&gt; 200 (events, next_cursor, has_more)</text>
+  <text x="28" y="266" fill="#f9fafb" font-family="monospace" font-size="20">GET .../snapshot -&gt; 200 (snapshot v1 &lt; live v3, preserved)</text>
+  <text x="28" y="306" fill="#f9fafb" font-family="monospace" font-size="20">401 unauthenticated / 403 bystander without partials.</text>
+  <text x="28" y="356" fill="#f9fafb" font-family="monospace" font-size="20">Provisioning + authorized reads only; restart is A4, not claimed.</text>
+  <text x="28" y="396" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #189 A3; credential redacted, no secrets shown.</text>
+</svg>
