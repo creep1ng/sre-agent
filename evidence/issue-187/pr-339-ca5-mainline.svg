@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="530" viewBox="0 0 1160 530" role="img" aria-label="Issue 187 final mainline live Grafana MCP evidence">
+  <rect width="1160" height="530" fill="#10151b"/>
+  <rect x="20" y="20" width="1120" height="490" rx="10" fill="#17212b" stroke="#4f6070"/>
+  <text x="40" y="55" fill="#ecf4fb" font-family="monospace" font-size="21">Issue #187 — final mainline CA5 (real Grafana MCP)</text>
+  <g fill="#b9d3e8" font-family="monospace" font-size="16">
+    <text x="40" y="92">Tested SHA: 78845c834eadba161677118e387076036fa58299</text>
+    <text x="40" y="122">Upstream: grafana/mcp-grafana:1.3.0 (pinned digest verified)</text>
+    <text x="40" y="165">$ docker compose -p sre-agent-ca5-main ... up -d mcp-seed api</text>
+    <text x="40" y="193">API and PostgreSQL healthy; actual upstream Grafana MCP connected</text>
+    <text x="40" y="236">$ GET /v1/mcp/discovery</text>
+    <text x="40" y="264">HTTP 200 — query_prometheus, query_elasticsearch only</text>
+    <text x="40" y="307">$ POST /v1/mcp/tools/query_prometheus (restricted principal)</text>
+    <text x="40" y="335">HTTP 403 — resource_unavailable; real upstream tools/call 2 → 2 (delta 0)</text>
+    <text x="40" y="363">PostgreSQL audit: authorization / denied / no content / zero input keys</text>
+    <text x="40" y="406">$ POST /v1/mcp/tools/query_prometheus (granted principal)</text>
+    <text x="40" y="434">HTTP 200 — vector; real upstream tools/call 2 → 3 (delta 1)</text>
+    <text x="40" y="462">PostgreSQL audit: response / success / no content / zero input keys</text>
+    <text x="40" y="493">CI: github.com/creep1ng/sre-agent/actions/runs/35823186310</text>
+  </g>
+</svg>

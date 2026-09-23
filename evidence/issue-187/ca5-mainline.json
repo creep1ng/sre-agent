@@ -1,0 +1,63 @@
+{
+  "issue": 187,
+  "evidence_type": "final-mainline-live-ca5",
+  "tested_main_sha": "78845c834eadba161677118e387076036fa58299",
+  "environment": {
+    "gateway": "Docker Compose project sre-agent-ca5-main",
+    "database": "isolated PostgreSQL container",
+    "upstream": "grafana/mcp-grafana:1.3.0@sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e",
+    "upstream_metric": "mcp_server_operation_duration_seconds_count, mcp_method_name=tools/call",
+    "probes": "runbook HTTP discovery, restricted invocation, allowed synthetic Prometheus query; credentials supplied privately"
+  },
+  "discovery": {
+    "http_status": 200,
+    "tool_ids": ["query_prometheus", "query_elasticsearch"]
+  },
+  "denied_invocation": {
+    "http_status": 403,
+    "public_error": "resource_unavailable",
+    "upstream_tools_call_counter_before": 2,
+    "upstream_tools_call_counter_after": 2,
+    "upstream_tools_call_delta": 0,
+    "correlated_postgresql_audit": {
+      "operation": "mcp.invoke",
+      "action": "invoke",
+      "stage": "authorization",
+      "outcome": "denied",
+      "response_status": 403,
+      "policy_decision": "deny",
+      "content_state": "absent",
+      "untrusted_input_keys": 0,
+      "redacted_content_keys": 0
+    }
+  },
+  "allowed_invocation": {
+    "http_status": 200,
+    "result_type": "vector",
+    "upstream_tools_call_counter_before": 2,
+    "upstream_tools_call_counter_after": 3,
+    "upstream_tools_call_delta": 1,
+    "postgresql_audit": {
+      "operation": "mcp.invoke",
+      "action": "invoke",
+      "stage": "response",
+      "outcome": "success",
+      "response_status": 200,
+      "policy_decision": "allow",
+      "content_state": "absent",
+      "untrusted_input_keys": 0,
+      "redacted_content_keys": 0
+    }
+  },
+  "commands": {
+    "startup": "DEMO_STATE_DIR=/tmp/sre-agent-mcp-live/.demo-state docker compose -p sre-agent-ca5-main --project-directory /tmp/sre-agent-issue187-final --env-file /tmp/issue187-ca5-main.env -f compose.yaml -f compose.mcp.yaml -f /tmp/issue187-ca5-main-network.override.yaml up -d mcp-seed api",
+    "counter": "docker exec sre-agent-ca5-main-api-1 python -c '<scrape Grafana MCP /metrics and sum tools/call count series>'",
+    "audit": "docker exec sre-agent-ca5-main-db-1 psql -c '<select only operation, action, stage, outcome, status, decision, content_state, empty-content indicators from audit_events>'"
+  },
+  "privacy": {
+    "credentials_or_headers_included": false,
+    "raw_queries_or_results_included": false,
+    "request_or_response_bodies_included": false,
+    "personal_correlation_values_included": false
+  }
+}
