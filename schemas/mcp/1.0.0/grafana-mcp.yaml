@@ -1,0 +1,90 @@
+contract_version: "1.0.0"
+protocol: "mcp"
+
+# This is the gateway-owned contract. The upstream Grafana MCP may expose more
+# tools; none of them are part of this resource surface.
+server:
+  resource_type: "mcp_server"
+  resource_id: "grafana-mcp"
+
+actions:
+  discovery:
+    name: "mcp.discovery"
+    resource_type: "mcp_server"
+    resource_id: "grafana-mcp"
+  invoke:
+    name: "mcp.invoke"
+    resource_type: "mcp_tool"
+
+tools:
+  - tool_id: "query_prometheus"
+    server_id: "grafana-mcp"
+    resource_type: "mcp_tool"
+    action: "mcp.invoke"
+    upstream_name: "query_prometheus"
+    input_schema: "json-schema/query-prometheus-input.schema.json"
+    result_schema: "json-schema/query-prometheus-result.schema.json"
+    input_example: "examples/query-prometheus-input.json"
+    result_example: "examples/query-prometheus-result.json"
+  - tool_id: "query_elasticsearch"
+    server_id: "grafana-mcp"
+    resource_type: "mcp_tool"
+    action: "mcp.invoke"
+    upstream_name: "query_elasticsearch"
+    input_schema: "json-schema/query-elasticsearch-input.schema.json"
+    result_schema: "json-schema/query-elasticsearch-result.schema.json"
+    input_example: "examples/query-elasticsearch-input.json"
+    result_example: "examples/query-elasticsearch-result.json"
+
+public_errors:
+  - { code: "authentication_failed", status: 401, retryable: false }
+  - { code: "resource_unavailable", status: 403, retryable: false }
+  - { code: "contract_validation_failed", status: 422, retryable: false }
+  - { code: "upstream_unavailable", status: 503, retryable: true }
+  - { code: "upstream_timeout", status: 504, retryable: true }
+  - { code: "upstream_invalid", status: 502, retryable: false }
+  - { code: "audit_unavailable", status: 503, retryable: true }
+
+timeout:
+  seconds: 30
+  status: 504
+  error_code: "upstream_timeout"
+
+audit:
+  projection: "metadata_only"
+  content_state: "absent"
+  records_arguments: false
+  records_result: false
+  records_tool_id: true
+  records_server_id: true
+
+# These are contract scenarios, not runtime claims. They freeze the boundary
+# that T2/T3 must implement: authorization and target identity never enumerate
+# the server/tool graph or call Grafana before a valid decision.
+non_enumeration_scenarios:
+  - id: "missing-credential"
+    operation: "mcp.discovery"
+    expected: { status: 401, error_code: "authentication_failed", upstream_calls: 0, enumerates: false }
+  - id: "discovery-denied"
+    operation: "mcp.discovery"
+    expected: { status: 403, error_code: "resource_unavailable", upstream_calls: 0, enumerates: false }
+  - id: "unknown-server"
+    operation: "mcp.discovery"
+    expected: { status: 403, error_code: "resource_unavailable", upstream_calls: 0, enumerates: false }
+  - id: "unknown-tool"
+    operation: "mcp.invoke"
+    expected: { status: 403, error_code: "resource_unavailable", upstream_calls: 0, enumerates: false }
+  - id: "invalid-input"
+    operation: "mcp.invoke"
+    expected: { status: 422, error_code: "contract_validation_failed", upstream_calls: 0, enumerates: false }
+
+failure_scenarios:
+  - id: "upstream-timeout"
+    operation: "mcp.invoke"
+    expected: { status: 504, error_code: "upstream_timeout", upstream_calls: 1 }
+  - id: "upstream-failure"
+    operation: "mcp.invoke"
+    expected: { status: 503, error_code: "upstream_unavailable", upstream_calls: 1 }
+  - id: "allowed-invocation"
+    operation: "mcp.invoke"
+    expected: { status: 200, error_code: null, upstream_calls: 1 }
