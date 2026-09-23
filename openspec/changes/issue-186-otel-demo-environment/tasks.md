@@ -27,8 +27,8 @@ Each PR stays below 400 lines including planning overhead (PR 1 ~330, PR 2 ~280,
 | Lifecycle | `up`, `down`, residue detection | PR 2 | `scripts/demo.sh up` then `down` | Docker Compose | Remove script |
 | Failure cycle | `fail`, `verify`, `reset`, baseline restore | PR 2 | two `fail -> verify -> reset` cycles | Docker Compose, flagd | Revert script |
 | Operator guide | Documented operations and prerequisites | PR 2 | link and lint checks | none | Remove doc |
-| MCP boundary | Grafana MCP, read-only, network boundary, MCP availability in `verify` | PR 3 | isolation probe | Docker Compose | Remove overlay |
-| Signal guide | Prometheus metrics and OpenSearch logs with queries and window | PR 3 | manual two-cycle sanitized output | Docker Compose | Remove doc |
+| MCP boundary | Grafana MCP, read-only, network boundary, MCP availability in `verify` | PR 3a | isolation probe | Docker Compose | Remove overlay |
+| Signal guide | Prometheus metrics and OpenSearch logs with queries and window | PR 3b | manual two-cycle sanitized output | Docker Compose | Remove doc |
 
 ## Acceptance mapping
 
@@ -38,8 +38,8 @@ Each PR stays below 400 lines including planning overhead (PR 1 ~330, PR 2 ~280,
 | CA2 failure injection keeping synthetic traffic | Failure cycle | 2 |
 | CA3 explicit revert without foreign deletion | Failure cycle | 2 |
 | CA4 two reproducible cycles | Failure cycle | 2 |
-| CA5 MCP isolation | MCP boundary | 3 |
-| CA6 metrics and logs guide | Signal guide | 3 |
+| CA5 MCP isolation | MCP boundary | 3a |
+| CA6 metrics and logs guide | Signal guide | 3b |
 
 ## Definition of Ready
 

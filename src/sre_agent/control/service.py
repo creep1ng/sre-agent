@@ -2424,7 +2424,14 @@ class ControlService:  # noqa: E305
     ) -> Response:
         request_id, started = uuid4(), monotonic()
         operation, action = "catalog.list", "admin.read"
-        valid_types = {"llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"}
+        valid_types = {
+            "llm_model",
+            "mcp_server",
+            "mcp_tool",
+            "skill",
+            "bok_collection",
+            "incident_workflow",
+        }
         valid_status = {
             "registered",
             "draft",
@@ -2538,6 +2545,7 @@ class ControlService:  # noqa: E305
             "mcp_tool",
             "skill",
             "bok_collection",
+            "incident_workflow",
         } or (re.match(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$", resource_id) is None):
             return await self._finish(
                 request_id,

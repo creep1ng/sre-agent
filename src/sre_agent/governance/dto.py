@@ -120,6 +120,62 @@ class CatalogDiscoverability(StrictDTO):
     tags: Annotated[list[CatalogTag], Field(max_length=16)]
 
 
+# MCP owner lifecycle is intentionally narrower than the generic catalog's
+# legacy vocabulary: revocation is not an owner transition in T2.
+MCPStatus = Literal["registered", "active", "inactive"]
+
+
+class MCPServer(StrictDTO):
+    """Owner-authoritative identity for one governed MCP server."""
+
+    server_id: Identifier
+    owner_id: Identifier
+    contract_version: Literal["1.0.0"]
+    status: MCPStatus
+    endpoint: Annotated[str, Field(min_length=1, max_length=500)]
+    display_name: Annotated[str, Field(min_length=1, max_length=200)]
+    visibility: CatalogVisibility
+    description: Annotated[str, Field(max_length=500)]
+    tags: Annotated[list[CatalogTag], Field(max_length=16)]
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+    @property
+    def discoverability(self) -> CatalogDiscoverability:
+        return CatalogDiscoverability(
+            display_name=self.display_name,
+            visibility=self.visibility,
+            description=self.description,
+            tags=self.tags,
+        )
+
+
+class MCPTool(StrictDTO):
+    """Owner-authoritative identity for one governed MCP tool."""
+
+    tool_id: Identifier
+    server_id: Identifier
+    owner_id: Identifier
+    contract_version: Literal["1.0.0"]
+    status: MCPStatus
+    upstream_name: Annotated[str, Field(min_length=1, max_length=200)]
+    display_name: Annotated[str, Field(min_length=1, max_length=200)]
+    visibility: CatalogVisibility
+    description: Annotated[str, Field(max_length=500)]
+    tags: Annotated[list[CatalogTag], Field(max_length=16)]
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+    @property
+    def discoverability(self) -> CatalogDiscoverability:
+        return CatalogDiscoverability(
+            display_name=self.display_name,
+            visibility=self.visibility,
+            description=self.description,
+            tags=self.tags,
+        )
+
+
 class ResourceCatalogEntry(StrictDTO):
     resource_type: CatalogResourceType
     resource_id: CatalogId
@@ -480,6 +536,8 @@ class AuditEvent(StrictDTO):
         "audit.redact",
         "credentials.authenticate",
         "responses.create",
+        "mcp.discovery",
+        "mcp.invoke",
         "principals.create",
         "principals.get",
         "principals.list",
@@ -551,10 +609,9 @@ class AuditEvent(StrictDTO):
             raise ValueError("this audit stage cannot carry subject evidence")
         if self.outcome == "denied" and self.consumption is not None:
             raise ValueError("denied audit events cannot carry provider consumption")
-        is_control = (
-            isinstance(self.resource, ResourceEvidence)
-            and self.resource.resource_type == "administrative_control"
-        )
+        is_control = isinstance(
+            self.resource, ResourceEvidence
+        ) and self.resource.resource_type in {"administrative_control", "mcp_server", "mcp_tool"}
         if (
             self.stage in {"authorization", "routing", "upstream", "response"}
             and not is_control

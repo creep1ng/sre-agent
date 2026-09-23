@@ -1,0 +1,14 @@
+{
+  "target": "urn:sre-agent:schema:mcp-query-prometheus-input:1.0.0",
+  "rule": "additionalProperties",
+  "status": "negative",
+  "version": "1.0.0",
+  "tool_id": "query_prometheus",
+  "data": {
+    "datasource_uid": "webstore-metrics",
+    "expr": "up",
+    "query_type": "instant",
+    "end_time": "now",
+    "secret": "must-not-cross-gateway"
+  }
+}

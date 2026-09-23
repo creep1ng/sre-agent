@@ -1,0 +1,5 @@
+{
+  "result_type": "vector",
+  "result": [{ "metric": { "service_name": "checkout" }, "value": [1779400000, "4"] }],
+  "warnings": []
+}

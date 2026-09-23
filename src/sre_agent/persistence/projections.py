@@ -9,6 +9,8 @@ from sre_agent.governance.dto import (
     AuditEvent,
     CredentialReference,
     Grant,
+    MCPServer,
+    MCPTool,
     ModelAlias,
     PolicyDecision,
     Principal,
@@ -31,6 +33,8 @@ project_resource = partial(_project, Resource)
 project_model_alias = partial(_project, ModelAlias)
 project_grant = partial(_project, Grant)
 project_policy_decision = partial(_project, PolicyDecision)
+project_mcp_server = partial(_project, MCPServer)
+project_mcp_tool = partial(_project, MCPTool)
 
 
 def project_catalog_entry(row: Mapping[str, Any] | object) -> ResourceCatalogEntry:

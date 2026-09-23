@@ -19,7 +19,7 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, alembic_version CASCADE"
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -40,7 +40,7 @@ def migrated_database() -> None:
     command.upgrade(config, "head")
 
 
-def test_repeated_head_has_exactly_six_domain_tables() -> None:
+def test_repeated_head_has_expected_domain_tables() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         rows = connection.execute(
             "SELECT tablename FROM pg_tables WHERE schemaname='public'"
@@ -51,8 +51,64 @@ def test_repeated_head_has_exactly_six_domain_tables() -> None:
         "credentials",
         "grants",
         "idempotency_records",
+        "mcp_servers",
+        "mcp_tools",
         "principals",
         "resources",
+    }
+
+
+def test_mcp_tool_foreign_key_points_to_owner_server() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        definitions = connection.execute(
+            """SELECT pg_get_constraintdef(constraint_oid)
+            FROM (
+              SELECT oid AS constraint_oid
+              FROM pg_constraint
+              WHERE conrelid = 'mcp_tools'::regclass AND contype = 'f'
+            ) constraints"""
+        ).fetchall()
+    assert any(
+        definition[0] == "FOREIGN KEY (server_id) REFERENCES mcp_servers(server_id)"
+        for definition in definitions
+    )
+
+
+def test_mcp_audit_migration_allows_metadata_operations() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+    assert "'mcp.discovery'" in operation_check
+    assert "'mcp.invoke'" in operation_check
+
+
+def test_mcp_owner_tables_have_closed_lifecycle_constraints() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        constraints = {
+            table: {
+                row[0]
+                for row in connection.execute(
+                    "SELECT conname FROM pg_constraint WHERE conrelid=%s::regclass", (table,)
+                )
+            }
+            for table in ("mcp_servers", "mcp_tools")
+        }
+    assert constraints["mcp_servers"] >= {
+        "pk_mcp_servers",
+        "ck_mcp_servers_contract_version",
+        "ck_mcp_servers_status",
+        "ck_mcp_servers_visibility",
+        "ck_mcp_servers_lifecycle",
+    }
+    assert constraints["mcp_tools"] >= {
+        "pk_mcp_tools",
+        "uq_mcp_tools_server_upstream",
+        "ck_mcp_tools_contract_version",
+        "ck_mcp_tools_status",
+        "ck_mcp_tools_visibility",
+        "ck_mcp_tools_lifecycle",
     }
 
 
@@ -253,6 +309,62 @@ def test_404_denial_evidence_prevents_fail_open_downgrade() -> None:
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     with pytest.raises(RuntimeError, match="cannot downgrade"):
         command.downgrade(config, "20260902_04")
+
+
+def test_catalog_projection_migration_exposes_mcp_provenance_constraints() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        columns = {
+            row[0]
+            for row in connection.execute(
+                """SELECT column_name FROM information_schema.columns
+                WHERE table_schema='public' AND table_name='resources'
+                  AND column_name IN ('owner_id','source','source_ref','display_name',
+                                      'visibility','description','tags')"""
+            )
+        }
+        assert columns == {
+            "owner_id",
+            "source",
+            "source_ref",
+            "display_name",
+            "visibility",
+            "description",
+            "tags",
+        }
+        constraints = {
+            row[0]
+            for row in connection.execute(
+                "SELECT conname FROM pg_constraint WHERE conrelid='resources'::regclass"
+            )
+        }
+        assert {
+            "ck_resources_catalog_projection",
+            "ck_resources_catalog_source",
+            "ck_resources_catalog_visibility",
+            "ck_resources_catalog_owner",
+        } <= constraints
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+        assert all(
+            f"'{operation}'" in operation_check
+            for operation in (
+                "catalog.create",
+                "catalog.list",
+                "catalog.read",
+            )
+        )
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(
+                """INSERT INTO resources (
+                  resource_type, resource_id, status, updated_at, model_alias_id, alias,
+                  concrete_model, router, inference_provider, owner_id, source, source_ref,
+                  display_name, visibility, description, tags)
+                VALUES ('mcp_tool', 'grafana.alerts.query', 'registered', now(), NULL, NULL,
+                  NULL, NULL, NULL, 'admin', 'skill', 'grafana', 'Grafana alerts', 'private',
+                  '', '[]'::jsonb)"""
+            )
 
 
 def test_consumption_column_is_nullable_jsonb_and_legacy_rows_remain_null() -> None:

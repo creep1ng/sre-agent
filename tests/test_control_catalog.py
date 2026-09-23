@@ -190,6 +190,75 @@ def test_catalog_read_rejects_malformed_identifiers() -> None:
     assert response.status_code == 422
 
 
+def test_catalog_reads_admit_incident_workflow(monkeypatch) -> None:
+    from contextlib import asynccontextmanager
+
+    import sre_agent.control.service as service_module
+    from sre_agent.governance.dto import CatalogDiscoverability, ResourceCatalogEntry
+
+    service = _service()
+    context = _context()
+    allowed = AuthorizationEvaluation(
+        PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="test-policy"),
+        None,
+    )
+
+    async def governed_access(*_args: object, **_kwargs: object):
+        return context, allowed
+
+    monkeypatch.setattr(service_module, "authorize_governed_access", governed_access)
+    service._authenticate = AsyncMock(return_value=context)
+    service._authorize = AsyncMock(return_value=allowed)
+
+    entry = ResourceCatalogEntry(
+        resource_type="incident_workflow",
+        resource_id="incident-response",
+        owner_id="papiarcacamilo",
+        source="incident_workflow",
+        source_ref="incident-response@1.0.0",
+        status="active",
+        discoverability=CatalogDiscoverability(
+            display_name="Incident response workflow",
+            visibility="private",
+            description="Stable governed incident workflow resource.",
+            tags=["incident", "workflow"],
+        ),
+    )
+
+    class Catalog:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        async def list(self, **_filters: object):
+            return [entry], False
+
+        async def get(self, resource_type: str, resource_id: str):
+            assert (resource_type, resource_id) == ("incident_workflow", "incident-response")
+            return entry
+
+    monkeypatch.setattr(service_module, "CatalogRepository", Catalog)
+
+    @asynccontextmanager
+    async def sessions():
+        yield object()
+
+    service.sessions = sessions
+
+    async def run():
+        listed = await service.list_catalog_resources(
+            "Bearer safe", "incident_workflow", None, "active", "private", "100", {}
+        )
+        read = await service.get_catalog_resource(
+            "incident_workflow", "incident-response", "Bearer safe"
+        )
+        return listed, read
+
+    listed, read = asyncio.run(run())
+    assert listed.status_code == read.status_code == 200
+    assert json.loads(listed.body)["items"][0]["resource_type"] == "incident_workflow"
+    assert json.loads(read.body)["resource_id"] == "incident-response"
+
+
 def test_catalog_denial_precedes_lookup(monkeypatch) -> None:
     import sre_agent.control.service as service_module
 
