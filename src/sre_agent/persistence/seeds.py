@@ -13,10 +13,17 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
-from sre_agent.governance.dto import ModelAlias
+from sre_agent.governance.dto import MCPServer, MCPTool, ModelAlias
+from sre_agent.mcp.owner import MCP_CONTRACT_VERSION, MCP_SERVER_ID, MCP_TOOL_IDS, MCPRegistry
 from sre_agent.persistence.api_keys import hash_api_key, is_api_key, verify_api_key
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.models import CredentialRow, GrantRow, PrincipalRow, ResourceRow
+from sre_agent.persistence.models import (
+    CredentialRow,
+    GrantRow,
+    PrincipalRow,
+    ResourceRow,
+)
+from sre_agent.persistence.repositories import CatalogRepository, MCPOwnerRepository
 
 SEED_TIME = datetime(2026, 8, 22, tzinfo=UTC)
 PRINCIPALS = (
@@ -46,6 +53,31 @@ ROUTING_ENV = (
     "TRIAGE_AGENT_PROVIDER",
     "REMEDIATION_AGENT_MODEL",
     "REMEDIATION_AGENT_PROVIDER",
+)
+MCP_ENDPOINT = "http://grafana-mcp:8000/mcp"
+MCP_OWNER_ID = "mcp-platform"
+MCP_DEMO_GRANTS = (
+    (
+        "grant-demo-human-mcp-discovery",
+        "demo-human",
+        "mcp.discovery",
+        "mcp_server",
+        MCP_SERVER_ID,
+    ),
+    (
+        "grant-demo-human-mcp-query-prometheus",
+        "demo-human",
+        "mcp.invoke",
+        "mcp_tool",
+        "query_prometheus",
+    ),
+    (
+        "grant-demo-human-mcp-query-elasticsearch",
+        "demo-human",
+        "mcp.invoke",
+        "mcp_tool",
+        "query_elasticsearch",
+    ),
 )
 
 
@@ -500,6 +532,108 @@ async def seed(
         raise SeedConflict("seed_state_conflict: database_constraint") from None
 
 
+async def bootstrap_mcp_demo(session: AsyncSession) -> bool:
+    """Converge the explicit demo MCP owner graph and direct grants."""
+    for principal_id in ("demo-human", "restricted-harness"):
+        if await session.get(PrincipalRow, principal_id) is None:
+            raise SeedConflict(f"seed_state_conflict: missing_principal:{principal_id}")
+
+    owner = MCPOwnerRepository(session)
+    catalog = CatalogRepository(session)
+    registry = MCPRegistry(owner, catalog)
+    created = False
+    server = MCPServer(
+        server_id=MCP_SERVER_ID,
+        owner_id=MCP_OWNER_ID,
+        contract_version=MCP_CONTRACT_VERSION,
+        status="active",
+        endpoint=MCP_ENDPOINT,
+        display_name="Grafana MCP",
+        visibility="private",
+        description="Governed Grafana read-only MCP.",
+        tags=["grafana", "mcp"],
+        created_at=SEED_TIME,
+        updated_at=SEED_TIME,
+    )
+    existing_server = await owner.get_server(MCP_SERVER_ID)
+    if existing_server is None:
+        stored_server = await registry.register_server(server)
+        created = True
+    elif existing_server != server:
+        raise SeedConflict("seed_state_conflict: mcp_server")
+    else:
+        stored_server = existing_server
+    await catalog.project_mcp_server(stored_server)
+
+    tool_values = {
+        "query_prometheus": (
+            "Query Prometheus",
+            "Read Prometheus metrics.",
+            ["grafana", "prometheus"],
+        ),
+        "query_elasticsearch": (
+            "Query Elasticsearch",
+            "Read Elasticsearch logs.",
+            ["grafana", "elasticsearch"],
+        ),
+    }
+    for tool_id in MCP_TOOL_IDS:
+        display_name, description, tags = tool_values[tool_id]
+        tool = MCPTool(
+            tool_id=tool_id,
+            server_id=MCP_SERVER_ID,
+            owner_id=MCP_OWNER_ID,
+            contract_version=MCP_CONTRACT_VERSION,
+            status="active",
+            upstream_name=tool_id,
+            display_name=display_name,
+            visibility="private",
+            description=description,
+            tags=tags,
+            created_at=SEED_TIME,
+            updated_at=SEED_TIME,
+        )
+        existing_tool = await owner.get_tool(tool_id)
+        if existing_tool is None:
+            stored_tool = await registry.register_tool(tool)
+            created = True
+        elif existing_tool != tool:
+            raise SeedConflict(f"seed_state_conflict: mcp_tool:{tool_id}")
+        else:
+            stored_tool = existing_tool
+        await catalog.project_mcp_tool(stored_tool)
+
+    for grant_id, principal_id, action, resource_type, resource_id in MCP_DEMO_GRANTS:
+        expected = {
+            "grant_id": grant_id,
+            "principal_id": principal_id,
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "effect": "allow",
+            "status": "active",
+            "created_at": SEED_TIME,
+        }
+        existing_grant = await session.get(GrantRow, grant_id)
+        if existing_grant is None:
+            session.add(GrantRow(**expected))
+            created = True
+        else:
+            _require(
+                existing_grant,
+                tuple(expected),
+                tuple(expected.values()),
+                f"mcp_grants:{grant_id}",
+            )
+    await session.flush()
+    return created
+
+
+async def seed_mcp_demo(database: Database) -> bool:
+    async with database.transaction() as session:
+        return await bootstrap_mcp_demo(session)
+
+
 async def routing_drift(
     database: Database, settings: RoutingSettings
 ) -> dict[str, tuple[str, ...]]:
@@ -563,12 +697,17 @@ async def _run() -> None:
     actions = parser.add_mutually_exclusive_group()
     actions.add_argument("--check-routing", action="store_true")
     actions.add_argument("--reconcile-routing", metavar="EXPECTED_SHA256")
+    actions.add_argument("--seed-mcp", action="store_true")
     arguments = parser.parse_args()
     dsn = environ.get("DATABASE_URL")
     if not dsn:
         raise ValueError("DATABASE_URL is required")
     database = Database(dsn)
     try:
+        if arguments.seed_mcp:
+            created = await seed_mcp_demo(database)
+            print("mcp seed created" if created else "mcp seed converged")
+            return
         if arguments.check_routing:
             drift = await routing_drift(database, RoutingSettings.from_environment())
             if not drift:
