@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1640" height="445" viewBox="0 0 1640 445" role="img" aria-label="PR 293 native Windows LF checkout and Linux Compose harness evidence">
+  <rect width="1640" height="445" fill="#10151b"/>
+  <rect x="18" y="18" width="1604" height="409" rx="10" fill="#17212b" stroke="#526578"/>
+  <g fill="#d1e4f1" font-family="monospace" font-size="17">
+    <text x="36" y="50">PR #293 / issue #292 — native Windows LF checkout + Linux Compose harness</text>
+    <text x="36" y="79">Candidate SHA: 154276c1632d9c1ab386054b628e20b1c4d3294e</text>
+    <text x="36" y="108">$ git config --global core.autocrlf true  # windows-latest before checkout</text>
+    <text x="36" y="137">$ git checkout-index --force -- docker/harness-entrypoint.sh scripts/worktree-compose</text>
+    <text x="36" y="166">$ git ls-files --eol -- docker/harness-entrypoint.sh scripts/worktree-compose</text>
+    <text x="36" y="195">Both: i/lf  w/lf  attr/text eol=lf  (Windows job SUCCESS)</text>
+    <text x="36" y="224">Windows run: github.com/creep1ng/sre-agent/actions/runs/35828677527</text>
+    <text x="36" y="263">$ docker compose -p sre-agent-pr293 --env-file &lt;local config&gt; -f compose.yaml</text>
+    <text x="36" y="290">  -f &lt;isolated network override&gt; --profile harness run --build --rm --no-deps harness node --version</text>
+    <text x="36" y="319">v22.14.0 (exit 0; pinned node:22.14-alpine image)</text>
+    <text x="36" y="348">Linux candidate CI: github.com/creep1ng/sre-agent/actions/runs/35796472064 — success</text>
+    <text x="36" y="386">Sanitized: no credentials, raw requests, or private data; Windows CA1 and Compose CA2 observed.</text>
+  </g>
+</svg>
