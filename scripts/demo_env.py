@@ -219,8 +219,8 @@ def digest_drift(cfg: dict) -> list[str]:
 
 
 def undeclared_ports(cfg: dict) -> list[str]:
-    """Only the host ports declared in the manifest may be published."""
-    declared = {str(entry["port"]) for entry in cfg["host_ports"]}
+    """Only the declared host ports may be published, each on its declared interface."""
+    declared = {str(entry["port"]): entry["bind"] for entry in cfg["host_ports"]}
     project = cfg["compose"]["project_name"]
     listing = run(
         [
@@ -233,11 +233,17 @@ def undeclared_ports(cfg: dict) -> list[str]:
         ],
         capture=True,
     )
-    return [
-        f"{name}: publishes undeclared host port {port}"
-        for name, _, ports in (line.partition("\t") for line in listing.splitlines())
-        for port in sorted(set(re.findall(r":(\d+)->", ports)) - declared)
-    ]
+    problems = []
+    for line in listing.splitlines():
+        name, _, ports = line.partition("\t")
+        for bind, port in sorted(set(re.findall(r"([^\s,]*):(\d+)->", ports))):
+            if port not in declared:
+                problems.append(f"{name}: publishes undeclared host port {port}")
+            elif bind != declared[port]:
+                problems.append(
+                    f"{name}: publishes host port {port} on {bind}, not on {declared[port]}"
+                )
+    return problems
 
 
 def mcp_problems(cfg: dict) -> list[str]:
@@ -279,7 +285,7 @@ def op_verify(cfg: dict) -> None:
     if problems:
         raise SystemExit(1)
     print("OK every service is available and image digests match the lock.")
-    print("OK only declared host ports are published; Grafana MCP requires its caller token.")
+    print("OK declared host ports only, on their interface; Grafana MCP requires its token.")
 
 
 def op_fail(cfg: dict) -> None:

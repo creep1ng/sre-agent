@@ -11,7 +11,9 @@ it. Issue: #186.
   readable message if it is unreachable.
 - 4 CPUs, 4 GB of free memory, 15 GB of free disk. Observed on a reference host:
   2.8 GB of memory and 8.7 GB of images.
-- Host ports 8090, 10000 and 9090 free.
+- Host ports 8090 and 9090 free on `127.0.0.1`. Both are published on the
+  loopback interface only, so the environment answers on this host and on no
+  other machine. The Envoy admin interface is not published.
 - Python with `pyyaml`. On Windows the interpreter is `python` or `py`.
 
 Nothing is prepared by hand: `up` clones the pinned tag into `otel-demo/`,
@@ -25,7 +27,7 @@ which git ignores.
 |---|---|
 | `up` | Clones the pinned tag if absent, refuses to run over residue, applies the flag baseline, starts the minimal profile and waits for health |
 | `fail` | Switches the declared failure flag on and restarts flagd; synthetic traffic keeps running |
-| `verify` | Checks every service of the project, compares image digests against `demo/digests.lock`, rejects undeclared host ports and probes Grafana MCP |
+| `verify` | Checks every service of the project, compares image digests against `demo/digests.lock`, rejects a host port that is undeclared or published outside its declared interface, and probes Grafana MCP |
 | `reset` | Restores the flag baseline declared in the manifest and restarts flagd |
 | `down` | Stops the environment and confirms no container of the project survived |
 
@@ -42,9 +44,9 @@ removes resources of another project, and none runs a host-wide cleanup such as
     python scripts/demo_env.py down
 
 `verify` exits non-zero when a service is unavailable, a digest no longer
-matches the lock, an undeclared host port is published, or Grafana MCP stops
-answering or accepts a caller without its token, so the sequence can be
-scripted.
+matches the lock, a host port is undeclared or leaves its declared interface, or
+Grafana MCP stops answering or accepts a caller without its token, so the
+sequence can be scripted.
 
 `verify` reports availability, not behaviour: it does not yet tell a degraded
 environment from a healthy one. How the injected failure shows in metrics, logs
@@ -117,11 +119,12 @@ expands the token.
 
 ## Reaching the services
 
-Everything goes through the proxy on 8090: the store at the root, Grafana under
-`/grafana`, Jaeger under `/jaeger/ui`, the flagd UI under `/feature`. Upstream
-publishes most services on random host ports; the overlay resets every
-publication the manifest does not declare, so Grafana, Jaeger and OpenSearch
-are reachable only through the proxy.
+Everything goes through the proxy on `127.0.0.1:8090`: the store at the root,
+Grafana under `/grafana`, Jaeger under `/jaeger/ui`, the flagd UI under
+`/feature`. Upstream publishes most services on random host ports and the rest
+on every interface; the overlay resets every publication the manifest does not
+declare and binds the two it does to loopback, so Grafana, Jaeger and OpenSearch
+are reachable only through the proxy, and the proxy only from this host.
 
 Do not use the flagd UI to inject failures: it writes to the upstream file and
 `reset` would not know about the change.
