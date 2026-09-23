@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1420" height="390" viewBox="0 0 1420 390" role="img" aria-label="Sanitized terminal evidence for PR 357">
+<rect width="100%" height="100%" fill="#0d1117"/><rect width="100%" height="7" fill="#238636"/>
+<g fill="#e6edf3" font-family="monospace" font-size="16">
+<text x="24" y="40">PR #357 | successful governed HTTP discovery characterization</text>
+<text x="24" y="68">Tested SHA: e69c4ac69fcf664de5e9ec7cd30246bc2f6f2dfd</text>
+<text x="24" y="96">Base SHA:   8beb054065d0e509a01731f7d3b569d5f5574b07</text>
+<text x="24" y="132">$ scripts/worktree-compose --profile checks run --rm python-checks</text>
+<text x="24" y="160">  pytest -q tests/test_mcp_discovery.py::test_http_granted_discovery_returns_exactly_two_tools</text>
+<text x="24" y="188" fill="#9fe870">1 passed; independent repeat: 1 passed in 1.42s</text>
+<text x="24" y="224">$ scripts/worktree-compose --profile checks run --build --rm python-checks</text>
+<text x="24" y="252">  pytest -q tests/test_mcp_discovery.py</text>
+<text x="24" y="280" fill="#9fe870">19 passed; Ruff and full format check passed (125 files)</text>
+<text x="24" y="308">HTTP 200: exactly two tool IDs; endpoint omitted; zero upstream calls</text>
+<text x="24" y="344">CI: https://github.com/creep1ng/sre-agent/actions/runs/35811824593</text>
+<text x="24" y="372">No credentials, headers, application payloads, or upstream responses captured.</text>
+</g></svg>
