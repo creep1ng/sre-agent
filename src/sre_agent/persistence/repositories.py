@@ -691,6 +691,68 @@ class CatalogRepository:
                 continue
         return items, truncated
 
+    async def project_mcp_server(self, server: MCPServer) -> ResourceCatalogEntry:
+        row = await self._session.get(ResourceRow, ("mcp_server", server.server_id))
+        if row is None:
+            row = ResourceRow(
+                resource_type="mcp_server",
+                resource_id=server.server_id,
+                status=server.status,
+                updated_at=server.updated_at,
+                owner_id=server.owner_id,
+                source="mcp",
+                source_ref=f"mcp-owner/{server.server_id}",
+                display_name=server.display_name,
+                visibility=server.visibility,
+                description=server.description,
+                tags=list(server.tags),
+            )
+            self._session.add(row)
+        else:
+            self._refresh_mcp_projection(
+                row, server, source_ref=f"mcp-owner/{server.server_id}"
+            )
+        await self._session.flush()
+        return project_catalog_entry(row)
+
+    async def project_mcp_tool(self, tool: MCPTool) -> ResourceCatalogEntry:
+        row = await self._session.get(ResourceRow, ("mcp_tool", tool.tool_id))
+        if row is None:
+            row = ResourceRow(
+                resource_type="mcp_tool",
+                resource_id=tool.tool_id,
+                status=tool.status,
+                updated_at=tool.updated_at,
+                owner_id=tool.owner_id,
+                source="mcp",
+                source_ref=f"mcp-owner/{tool.server_id}/{tool.tool_id}",
+                display_name=tool.display_name,
+                visibility=tool.visibility,
+                description=tool.description,
+                tags=list(tool.tags),
+            )
+            self._session.add(row)
+        else:
+            self._refresh_mcp_projection(
+                row, tool, source_ref=f"mcp-owner/{tool.server_id}/{tool.tool_id}"
+            )
+        await self._session.flush()
+        return project_catalog_entry(row)
+
+    @staticmethod
+    def _refresh_mcp_projection(
+        row: ResourceRow, resource: MCPServer | MCPTool, *, source_ref: str
+    ) -> None:
+        row.status = resource.status
+        row.updated_at = resource.updated_at
+        row.owner_id = resource.owner_id
+        row.source = "mcp"
+        row.source_ref = source_ref
+        row.display_name = resource.display_name
+        row.visibility = resource.visibility
+        row.description = resource.description
+        row.tags = list(resource.tags)
+
 
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:
