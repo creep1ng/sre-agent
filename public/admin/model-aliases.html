@@ -65,13 +65,31 @@
             <div id="list-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading aliases…</div>
             <div class="ma-table-wrap" id="list-wrap" hidden>
               <table class="ma-table principals__table">
-                <thead><tr><th scope="col">Alias</th><th scope="col">Effective model</th><th scope="col">Router</th><th scope="col">Inference provider</th><th scope="col">Status</th><th scope="col">Updated</th></tr></thead>
+                <thead><tr><th scope="col">Alias</th><th scope="col">Effective model</th><th scope="col">Router</th><th scope="col">Inference provider</th><th scope="col">Status</th><th scope="col">Updated</th><th scope="col"><span class="ma-sr-only">Action</span></th></tr></thead>
                 <tbody id="alias-rows"></tbody>
               </table>
             </div>
             <div id="list-empty" class="principals__empty" hidden>
               <h3>No aliases to show</h3>
               <p id="list-empty-detail">Connect with an administrative API key to load the list.</p>
+            </div>
+          </div>
+        </section>
+        <section id="alias-detail" class="ma-panel" aria-labelledby="alias-detail-title" hidden>
+          <div class="ma-panel__header">
+            <div>
+              <h2 id="alias-detail-title" class="ma-panel__title">Alias detail</h2>
+              <p id="alias-detail-subtitle" class="ma-panel__description" aria-live="polite">No alias selected.</p>
+            </div>
+            <div class="ma-button-row">
+              <button id="detail-close-button" class="ma-button ma-button--secondary ma-button--small" type="button">Close</button>
+            </div>
+          </div>
+          <div class="ma-panel__body">
+            <div id="detail-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading alias…</div>
+            <dl id="detail-content" class="ma-detail-list" hidden></dl>
+            <div id="detail-error" class="ma-alert" data-tone="critical" hidden>
+              <p id="detail-error-title" class="ma-alert__title">Request failed</p>
             </div>
           </div>
         </section>

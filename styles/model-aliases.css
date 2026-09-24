@@ -9,3 +9,25 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+@media (min-width: 80rem) {
+  .model-aliases__layout {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+}
+
+.ma-detail-list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--ma-space-2) var(--ma-space-4);
+  margin: 0;
+}
+
+.ma-detail-list dt {
+  color: var(--ma-text-muted, #6b7280);
+}
+
+.ma-detail-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

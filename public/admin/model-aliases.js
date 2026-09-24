@@ -17,11 +17,20 @@ const countLine = document.getElementById("alias-count");
 const rowsBody = document.getElementById("alias-rows");
 const refreshButton = document.getElementById("refresh-button");
 const disconnectButton = document.getElementById("disconnect-button");
+const detailSection = document.getElementById("alias-detail");
+const detailSubtitle = document.getElementById("alias-detail-subtitle");
+const detailLoading = document.getElementById("detail-loading");
+const detailContent = document.getElementById("detail-content");
+const detailErrorBox = document.getElementById("detail-error");
+const detailErrorTitle = document.getElementById("detail-error-title");
+const detailCloseButton = document.getElementById("detail-close-button");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 let currentItems = [];
 let sessionGeneration = 0;
+let detailReadVersion = 0;
+let activeDetailId = null;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const announce = (message) => {
@@ -34,6 +43,7 @@ function describeError(error) {
   if (error?.kind === "authorization") return "Access unavailable";
   if (error?.kind === "validation" || error?.code === "validation_error")
     return "Invalid request";
+  if (error?.kind === "not_found") return "Alias unavailable";
   return "Request failed";
 }
 
@@ -79,8 +89,104 @@ function renderRows() {
       monoCell(text(item.inference_provider)),
       statusCell(item.status),
       monoCell(text(item.updated_at)),
+      detailCell(aliasId),
     );
     rowsBody.append(row);
+  }
+}
+
+function detailCell(aliasId) {
+  const cell = document.createElement("td");
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "ma-button ma-button--secondary ma-button--small";
+  action.dataset.detailOpen = aliasId;
+  action.textContent = "Details";
+  action.setAttribute("aria-label", `Open details for ${aliasId}`);
+  cell.append(action);
+  return cell;
+}
+
+function hideDetailError() {
+  detailErrorBox.hidden = true;
+  detailErrorTitle.textContent = "";
+}
+
+function showDetailError(error) {
+  const message = describeError(error);
+  detailErrorTitle.textContent = message;
+  detailErrorBox.hidden = false;
+  announce(message);
+}
+
+function closeDetailState() {
+  activeDetailId = null;
+  detailSection.hidden = true;
+  detailLoading.hidden = true;
+  detailContent.hidden = true;
+  detailContent.replaceChildren();
+  hideDetailError();
+  detailSubtitle.textContent = "No alias selected.";
+}
+
+function closeDetail() {
+  detailReadVersion += 1;
+  closeDetailState();
+}
+
+function detailFields(item) {
+  return [
+    ["model_alias_id", item.model_alias_id],
+    ["alias", item.alias],
+    ["concrete_model", item.concrete_model],
+    ["router", item.router],
+    ["inference_provider", item.inference_provider],
+    ["status", item.status],
+    ["updated_at", item.updated_at],
+  ];
+}
+
+function renderDetail(item) {
+  detailContent.replaceChildren();
+  for (const [name, value] of detailFields(item)) {
+    const term = document.createElement("dt");
+    term.textContent = name;
+    const def = document.createElement("dd");
+    def.className = "ma-mono";
+    def.dataset.detailField = name;
+    def.textContent = text(value) || "—";
+    detailContent.append(term, def);
+  }
+  detailContent.hidden = false;
+}
+
+async function openDetail(aliasId) {
+  const generation = sessionGeneration;
+  const readVersion = detailReadVersion + 1;
+  detailReadVersion = readVersion;
+  activeDetailId = aliasId;
+  hideDetailError();
+  detailSection.hidden = false;
+  detailContent.hidden = true;
+  detailContent.replaceChildren();
+  detailLoading.hidden = false;
+  detailSubtitle.textContent = `Loading ${aliasId}…`;
+  try {
+    const item = await controlApi.getModelAlias(aliasId);
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return false;
+    renderDetail(item);
+    detailLoading.hidden = true;
+    detailSubtitle.textContent = `${text(item.alias) || aliasId} · authoritative detail.`;
+    announce(`Detail loaded for ${aliasId}.`);
+    return true;
+  } catch (error) {
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return false;
+    detailLoading.hidden = true;
+    detailContent.hidden = true;
+    detailContent.replaceChildren();
+    detailSubtitle.textContent = "Detail unavailable.";
+    showDetailError(error);
+    return false;
   }
 }
 
@@ -117,6 +223,8 @@ async function loadAliases() {
     if (generation !== sessionGeneration) return false;
     currentItems = [];
     renderRows();
+    activeDetailId = null;
+    closeDetailState();
     loadingState.hidden = true;
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     listEmpty.hidden = false;
@@ -149,6 +257,9 @@ sessionForm.addEventListener("submit", (event) => {
 
 disconnectButton.addEventListener("click", () => {
   sessionGeneration += 1;
+  detailReadVersion += 1;
+  activeDetailId = null;
+  closeDetailState();
   credentialStore.clear();
   currentItems = [];
   renderRows();
@@ -164,6 +275,16 @@ disconnectButton.addEventListener("click", () => {
 
 refreshButton.addEventListener("click", () => {
   loadAliases();
+});
+
+rowsBody.addEventListener("click", (event) => {
+  const action = event.target.closest("[data-detail-open]");
+  if (!action) return;
+  openDetail(action.dataset.detailOpen);
+});
+
+detailCloseButton.addEventListener("click", () => {
+  closeDetail();
 });
 
 page.dataset.state = "idle";

@@ -172,6 +172,9 @@ export function createAdministrativeApiClient({
       const query = limit === undefined ? "" : `?limit=${encodeURIComponent(String(limit))}`;
       return request(`/v1/model-aliases${query}`);
     },
+    getModelAlias(modelAliasId) {
+      return request(`/v1/model-aliases/${encodeURIComponent(modelAliasId)}`);
+    },
     replacePrincipalStatus(principalId, body) {
       return request(`/v1/principals/${encodeURIComponent(principalId)}/status`, {
         method: "PUT",

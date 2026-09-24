@@ -120,6 +120,146 @@ test("clears stale rows when a loaded list is followed by a network failure", as
   expect(await page.locator("#alias-rows").textContent()).not.toContain(staleModel);
 });
 
+test("opens real detail for triage-agent", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("#alias-detail")).not.toHaveAttribute("hidden");
+  await expect(page.locator("#alias-detail-subtitle")).toContainText("triage-agent");
+  await expect(page.locator("[data-detail-field='model_alias_id']")).toHaveText("triage-agent");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  await expect(page.locator("[data-detail-field='concrete_model']")).not.toBeEmpty();
+  await expect(page.locator("[data-detail-field='router']")).toHaveText("openrouter");
+  await expect(page.locator("[data-detail-field='inference_provider']")).not.toBeEmpty();
+  await expect(page.locator("[data-detail-field='status']")).toHaveText("active");
+});
+
+test("detail fields match the selected list alias", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='remediation-agent']")).toHaveCount(1, { timeout: 20_000 });
+  const rowModel = await page.locator("[data-alias-row='remediation-agent'] td").nth(1).textContent();
+  await page.click("[data-detail-open='remediation-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("remediation-agent");
+  await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText(rowModel.trim());
+});
+
+test("selecting B after A renders B authoritatively", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  await page.click("[data-detail-open='remediation-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("remediation-agent");
+  await expect(page.locator("[data-detail-field='concrete_model']")).not.toBeEmpty();
+});
+
+test("a stale A response cannot overwrite a newer B", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  let releaseA;
+  const gateA = new Promise((resolve) => {
+    releaseA = resolve;
+  });
+  await page.route("**/api/v1/model-aliases/triage-agent", async (route) => {
+    await gateA;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        model_alias_id: "triage-agent",
+        alias: "triage-agent",
+        concrete_model: "openai/stale-model",
+        router: "openrouter",
+        inference_provider: "openai",
+        status: "active",
+        updated_at: "2026-01-01T00:00:00Z",
+      }),
+    });
+  });
+  await page.route("**/api/v1/model-aliases/remediation-agent", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        model_alias_id: "remediation-agent",
+        alias: "remediation-agent",
+        concrete_model: "anthropic/fresh-model",
+        router: "openrouter",
+        inference_provider: "anthropic",
+        status: "active",
+        updated_at: "2026-01-02T00:00:00Z",
+      }),
+    }),
+  );
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("#alias-detail-subtitle")).toContainText("Loading triage-agent");
+  await page.click("[data-detail-open='remediation-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("remediation-agent");
+  await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText("anthropic/fresh-model");
+  releaseA();
+  await page.waitForTimeout(500);
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("remediation-agent");
+  await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText("anthropic/fresh-model");
+});
+
+test("safe 404 shows Alias unavailable without stale metadata", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  await page.unrouteAll({ behavior: "wait" });
+  await page.route("**/api/v1/model-aliases/triage-agent", (route) =>
+    route.fulfill({ status: 404, contentType: "application/json", body: "{}" }),
+  );
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("#detail-error-title")).toHaveText("Alias unavailable");
+  await expect(page.locator("[data-detail-field]")).toHaveCount(0);
+  expect(await page.locator("#alias-detail").textContent()).not.toContain("openai/gpt-4o-mini");
+});
+
+test("late detail response cannot repopulate after Clear session", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  let releaseDetail;
+  const gate = new Promise((resolve) => {
+    releaseDetail = resolve;
+  });
+  await page.route("**/api/v1/model-aliases/triage-agent", async (route) => {
+    await gate;
+    route.continue();
+  });
+  const pending = page.click("[data-detail-open='triage-agent']");
+  await page.waitForTimeout(500);
+  await page.click("#disconnect-button");
+  await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "idle");
+  releaseDetail();
+  await pending;
+  await page.waitForTimeout(500);
+  await expect(page.locator("#alias-detail")).toHaveAttribute("hidden", "");
+  await expect(page.locator("[data-detail-field]")).toHaveCount(0);
+});
+
+test("detail does not expose credentials or secrets", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  await connect(page, adminKey);
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1, { timeout: 20_000 });
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  const detailText = (await page.locator("#alias-detail").textContent()) ?? "";
+  expect(detailText).not.toContain(adminKey);
+  expect(/\bsre_[A-Za-z0-9_-]{24,128}\b/.test(detailText)).toBe(false);
+  expect(detailText.toLowerCase()).not.toContain("secret");
+  expect(detailText.toLowerCase()).not.toContain("api_key");
+  expect(await storageContents(page)).toEqual({ local: {}, session: {} });
+});
+
 test("clears the session and removes alias rows", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
