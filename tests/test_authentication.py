@@ -41,6 +41,7 @@ def authentication_database() -> Database:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "alert_triage, "
             "mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
