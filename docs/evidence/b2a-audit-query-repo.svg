@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="400" viewBox="0 0 1040 400">
+  <rect width="1040" height="400" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #25 B2a audit storage filters (2.3.0)</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q tests/test_audit_filtered_query.py</text>
+  <text x="28" y="136" fill="#f9fafb" font-family="monospace" font-size="20">4 passed (real PostgreSQL 17.4)</text>
+  <text x="28" y="186" fill="#f9fafb" font-family="monospace" font-size="20">window, request_id, decision, principal/model/incident/run/task/trace</text>
+  <text x="28" y="226" fill="#f9fafb" font-family="monospace" font-size="20">digests; ordering (occurred_at, event_id) DESC; limit 1..100.</text>
+  <text x="28" y="266" fill="#f9fafb" font-family="monospace" font-size="20">Filters in storage. No gateway, no cursor, no projection yet.</text>
+  <text x="28" y="316" fill="#f9fafb" font-family="monospace" font-size="20">Slice diff: 264 lines. HTTP and exclusion belong to B2b.</text>
+  <text x="28" y="356" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #25 B2a; no secrets or environment values shown.</text>
+</svg>
