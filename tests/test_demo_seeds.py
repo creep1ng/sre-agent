@@ -38,7 +38,7 @@ def migrated_database() -> None:
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
-            "resources, mcp_tools, mcp_servers, "
+            "resources, alert_triage, mcp_tools, mcp_servers, "
             "principals, idempotency_records, "
             "alembic_version CASCADE"
         )
@@ -237,7 +237,7 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260929_18"
+    assert version == "20260923_13"
     assert admin_resources == 7
     assert admin_grants == 13
     assert projection == [

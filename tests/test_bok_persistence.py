@@ -35,7 +35,8 @@ def migrated_database() -> None:
             "DROP TABLE IF EXISTS consumption_reservations, consumption_limit_policies, "
             "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, principals, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
+            "principals, "
             "idempotency_records, "
             "mcp_tools, mcp_servers, alembic_version CASCADE"
         )

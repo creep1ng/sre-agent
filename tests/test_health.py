@@ -19,8 +19,7 @@ DATABASE_URL = os.environ.get(
 
 
 def test_readiness_requires_incident_workflow_catalog_migration() -> None:
-    assert REQUIRED_SCHEMA_VERSION == "20260929_18"
-    assert REQUIRED_SCHEMA_VERSION == "20260929_18"
+    assert REQUIRED_SCHEMA_VERSION == "20260923_13"
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +30,7 @@ def migrated_database() -> None:
             "DROP TABLE IF EXISTS consumption_reservations, consumption_limit_policies, "
             "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
             "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -44,7 +43,7 @@ def migrated_database() -> None:
 def test_readiness_accepts_database_at_current_migration_head() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         version = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    assert version == "20260929_18"
+    assert version == "20260923_13"
 
     client = TestClient(
         create_application(
