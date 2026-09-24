@@ -47,7 +47,7 @@ def test_overlay_orders_mcp_seed_before_api(overlay: dict[str, object]) -> None:
 def test_runbook_allowed_example_matches_prometheus_schema() -> None:
     runbook = (ROOT / "docs/governed-grafana-mcp-demo.md").read_text()
     match = re.search(
-        r"-d '(\{[^']+\})' \\\n\s+http://127\.0\.0\.1:8000/v1/mcp/tools/query_prometheus",
+        r"-d '(\{[^']+\})' \\\n\s+\"\$API_BASE_URL/v1/mcp/tools/query_prometheus\"",
         runbook,
     )
     assert match is not None
@@ -66,3 +66,27 @@ def test_runbook_preserves_exact_grafana_mcp_image_digest() -> None:
     )
 
     assert image in runbook
+
+
+def test_runbook_uses_current_checkout_and_existing_mcp_checks() -> None:
+    runbook = (ROOT / "docs/governed-grafana-mcp-demo.md").read_text()
+
+    assert "python scripts/demo_env.py up" in runbook
+    assert "scripts/bootstrap-worktree.py" in runbook
+    assert "tests/test_mcp_discovery.py" in runbook
+    assert "tests/test_mcp_gateway.py" not in runbook
+    assert "tests/test_mcp_evidence.py" not in runbook
+    assert "UPSTREAM_ROOT" not in runbook
+
+
+def test_demo_payment_healthcheck_allows_instrumented_node_startup() -> None:
+    class DemoLoader(yaml.SafeLoader):
+        pass
+
+    DemoLoader.add_constructor("!reset", lambda loader, node: loader.construct_sequence(node))
+    demo_overlay = yaml.load((ROOT / "compose.demo.yaml").read_text(), Loader=DemoLoader)
+    payment = demo_overlay["services"]["payment"]
+
+    assert payment["ports"] == []
+    assert payment["healthcheck"]["timeout"] == "20s"
+    assert "environment" not in payment
