@@ -303,3 +303,35 @@ class AuditEventRow(Base):
     ordinary_result = required(String(16))
     exporter_result = required(String(16))
     correction_of_event_id = mapped_column(String(40), nullable=True)
+
+
+class AlertTriageRow(Base):
+    __tablename__ = "alert_triage"
+    __table_args__ = (
+        CK(
+            "status IN ('open','dismissed','linked','declared')",
+            name="ck_alert_triage_status",
+        ),
+        CK(
+            "severity IS NULL OR severity IN ('sev1','sev2','sev3','sev4')",
+            name="ck_alert_triage_severity",
+        ),
+        CK(
+            "(status='linked' AND incident_id IS NOT NULL) OR "
+            "(status='declared' AND incident_id IS NOT NULL) OR "
+            "(status IN ('open','dismissed') AND incident_id IS NULL)",
+            name="ck_alert_triage_linkage",
+        ),
+        CK(
+            "(status='declared' AND severity IS NOT NULL) OR status <> 'declared'",
+            name="ck_alert_triage_declare_severity",
+        ),
+    )
+    alert_id = mapped_column(String(64), primary_key=True)
+    status = required(String(16))
+    incident_id = mapped_column(String(64), nullable=True)
+    expected_version = required(Integer)
+    reason = mapped_column(String(1000), nullable=True)
+    severity = mapped_column(String(8), nullable=True)
+    actor = required(String(64))
+    decided_at = required(DateTime(timezone=True))
