@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import text
+
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import Principal
 from sre_agent.incident.runtime import IncidentRuntime
@@ -32,9 +34,20 @@ from sre_agent.triage.store import TriageRepository
 
 WORKFLOW_TYPE = "incident_workflow"
 WORKFLOW_ID = "incident-response"
-ACTIONS = {"open_triage": "alert.triage", "triage_dismiss": "alert.dismiss"}
-STATES = {"open_triage": "open", "triage_dismiss": "dismissed"}
+ACTIONS = {
+    "open_triage": "alert.triage",
+    "triage_dismiss": "alert.dismiss",
+    "triage_link": "alert.associate",
+    "triage_declare": "incident.declare",
+}
+STATES = {
+    "open_triage": "open",
+    "triage_dismiss": "dismissed",
+    "triage_link": "linked",
+    "triage_declare": "declared",
+}
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
+ELIGIBLE = {"active", "investigating", "mitigating", "verifying"}
 ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
 
 
@@ -64,10 +77,6 @@ def _digest(value: str) -> str:
     return hashlib.sha256(f"sre-triage-v1\0{value}".encode()).hexdigest()
 
 
-def _command_id(digest: str, step: str) -> str:
-    return f"cmd-{digest[:12]}-{step}"
-
-
 class TriageService:
     def __init__(self, database: Database, workflow: IncidentWorkflow) -> None:
         self._database = database
@@ -86,11 +95,11 @@ class TriageService:
         alert_id: str,
         expected_version: int,
         reason: Any,
+        severity: Any,
+        impact: Any,
+        target: Any,
         key: str,
     ) -> None:
-        # Slice boundary: link and declaration execute in C2a-3.
-        if operation in ("triage_link", "triage_declare"):
-            raise TriageError(422, "operation_not_supported")
         if (
             operation not in ACTIONS
             or not re.fullmatch(ID_PATTERN, alert_id)
@@ -102,6 +111,11 @@ class TriageService:
             raise TriageError(422, "invalid_reason")
         if reason is not None and not 1 <= len(reason) <= 1000:
             raise TriageError(422, "invalid_reason")
+        if operation == "triage_link" and (target is None or not re.fullmatch(ID_PATTERN, target)):
+            raise TriageError(422, "invalid_target")
+        # Slice boundary: declaration executes in C2a-4. Rejected here as 422.
+        if operation == "triage_declare":
+            raise TriageError(422, "operation_not_supported")
 
     async def execute(
         self,
@@ -111,20 +125,37 @@ class TriageService:
         operation: str,
         expected_version: int,
         reason: str | None = None,
+        severity: str | None = None,
+        impact: str | None = None,
+        target_incident_id: str | None = None,
         idempotency_key: str,
     ) -> TriageResult:
-        self._check(operation, alert_id, expected_version, reason, idempotency_key)
+        self._check(
+            operation,
+            alert_id,
+            expected_version,
+            reason,
+            severity,
+            impact,
+            target_incident_id,
+            idempotency_key,
+        )
         payload = {
             "alert_id": alert_id,
             "operation": operation,
             "expected_version": expected_version,
             "reason": reason,
+            "severity": severity,
+            "impact": impact,
+            "target_incident_id": target_incident_id,
         }
         scope = f"triage:{alert_id}"
         digest = _digest(idempotency_key)
         created = 201 if operation == "triage_declare" else 200
         async with self._database.transaction() as session:
             await self._authorize(session, principal, ACTIONS[operation])
+            if operation == "triage_link":
+                await self._authorize(session, principal, "run.read")
             idem = IdempotencyRepository(session)
             try:
                 binding = await idem.claim_or_replay(
@@ -150,13 +181,23 @@ class TriageService:
                 current is not None and current["expected_version"] != expected_version
             ):
                 raise TriageError(409, "stale_version")
+            incident_id = await self._transition(
+                session,
+                operation,
+                alert_id,
+                digest,
+                principal,
+                severity,
+                impact,
+                target_incident_id,
+            )
             persisted = await repository.write(
                 alert_id=alert_id,
                 expected_version=None if current is None else expected_version,
                 status=STATES[operation],
-                incident_id=None,
+                incident_id=incident_id,
                 reason=reason,
-                severity=None,
+                severity=severity,
                 actor=principal.principal_id,
                 decided_at=datetime.now(UTC),
             )
@@ -173,3 +214,38 @@ class TriageService:
             }
             await idem.set_response_payload(scope=scope, key_digest=digest, response_payload=result)
             return TriageResult(replayed=False, http_status=created, **result)
+
+    async def _transition(
+        self,
+        session: Any,
+        operation: str,
+        alert_id: str,
+        digest: str,
+        principal: Principal,
+        severity: str | None,
+        impact: str | None,
+        target_incident_id: str | None,
+    ) -> str | None:
+        if operation == "triage_link":
+            assert target_incident_id is not None
+            row = (
+                (
+                    await session.execute(
+                        text(
+                            "SELECT state->>'state' AS state FROM incident.incidents"
+                            " WHERE incident_id=:incident_id"
+                        ),
+                        {"incident_id": target_incident_id},
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                raise TriageError(404, "incident_not_found")
+            if row["state"] not in ELIGIBLE:
+                raise TriageError(409, "destination_ineligible")
+            return target_incident_id
+        if operation != "triage_declare":
+            return None
+        return None
