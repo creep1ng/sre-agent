@@ -1,7 +1,9 @@
 """PostgreSQL evidence for the idempotent governed MCP demo bootstrap."""
 
+import json
 import os
 from datetime import UTC, datetime
+from typing import Any
 
 import psycopg
 import pytest
@@ -9,6 +11,11 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import select
 
+from sre_agent.gateway import mcp
+from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.responses import PostgresAuditStore
+from sre_agent.governance.authorization import AuthorizationDecisionEngine
+from sre_agent.governance.dto import Principal, PrincipalContext
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.models import (
     GrantRow,
@@ -16,6 +23,7 @@ from sre_agent.persistence.models import (
     MCPToolRow,
     ResourceRow,
 )
+from sre_agent.persistence.repositories import GrantRepository, OwnerResourceFactReader
 from sre_agent.persistence.seeds import MCP_DEMO_GRANTS, bootstrap_mcp_demo
 
 DATABASE_URL = os.environ.get(
@@ -123,3 +131,123 @@ async def test_bootstrap_repairs_missing_and_stale_catalog_projection() -> None:
     assert server_projection.owner_id == "mcp-platform"
     assert repaired_projection is not None
     assert repaired_projection.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_governed_discovery_uses_real_owner_and_direct_grants_per_principal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database = Database(DATABASE_URL)
+    async with database.transaction() as session:
+        await bootstrap_mcp_demo(session)
+        session.add_all(
+            [
+                GrantRow(
+                    grant_id=f"issue29-restricted-{resource_type}",
+                    principal_id="restricted-harness",
+                    action=action,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                    effect="allow",
+                    status="active",
+                    created_at=SEED_TIME,
+                )
+                for action, resource_type, resource_id in (
+                    ("mcp.discovery", "mcp_server", "grafana-mcp"),
+                    ("mcp.invoke", "mcp_tool", "query_prometheus"),
+                )
+            ]
+        )
+
+    async def authorize(
+        sessions: Any,
+        authorization: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+    ) -> Any:
+        principal_id = {
+            "Bearer full": "demo-human",
+            "Bearer partial": "restricted-harness",
+        }[authorization]
+        principal = Principal(
+            principal_id=principal_id,
+            kind="human" if principal_id == "demo-human" else "agent",
+            display_name=principal_id,
+            status="active",
+            created_at=SEED_TIME,
+            updated_at=SEED_TIME,
+        )
+        context = PrincipalContext(
+            principal=principal,
+            credential_id="issue29-test-credential",
+            authenticated_at=SEED_TIME,
+        )
+        async with sessions() as session:
+            decision = await AuthorizationDecisionEngine(
+                OwnerResourceFactReader(session), GrantRepository(session)
+            ).evaluate(principal, action, resource_type, resource_id)
+        return context, decision
+
+    class NoUpstream:
+        calls = 0
+
+        async def call_tool(self, *_args: Any) -> Any:
+            self.calls += 1
+            raise AssertionError("discovery must not call upstream")
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", authorize)
+    upstream = NoUpstream()
+    audit = PostgresAuditStore(database.sessions)
+    service = mcp.MCPGatewayService(
+        database.sessions, upstream, audit=audit, projector=AuditProjector(b"issue29-test-key")
+    )
+    full = await service.discovery("Bearer full")
+    partial = await service.discovery("Bearer partial")
+    async with database.transaction() as session:
+        grant = await session.get(GrantRow, "issue29-restricted-mcp_tool")
+        assert grant is not None
+        grant.status = "revoked"
+    empty = await service.discovery("Bearer partial")
+    await database.dispose()
+
+    assert [response.status_code for response in (full, partial, empty)] == [200, 200, 200]
+    assert [
+        [tool["tool_id"] for tool in json.loads(response.body)["tools"]]
+        for response in (full, partial, empty)
+    ] == [
+        ["query_prometheus", "query_elasticsearch"],
+        ["query_prometheus"],
+        [],
+    ]
+    assert "query_elasticsearch" not in partial.body.decode()
+    assert upstream.calls == 0
+    with psycopg.connect(DATABASE_URL) as connection:
+        persisted = connection.execute(
+            "SELECT correlation->>'request_id', response_status, "
+            "identity->'principal_ref'->>'digest', "
+            "resource->'resource_ref'->>'digest', "
+            "policy_decision->>'decision', content_state, "
+            "COALESCE(jsonb_typeof(redacted_content), 'null') = 'null' "
+            "FROM audit_events WHERE operation = 'mcp.discovery'"
+        ).fetchall()
+    assert {row[0] for row in persisted} == {
+        json.loads(response.body)["request_id"] for response in (full, partial, empty)
+    }
+    assert all(
+        status == 200
+        and len(principal_digest) == 64
+        and len(resource_digest) == 64
+        and decision == "allow"
+        and content_state == "absent"
+        and no_content
+        for (
+            _,
+            status,
+            principal_digest,
+            resource_digest,
+            decision,
+            content_state,
+            no_content,
+        ) in persisted
+    )
