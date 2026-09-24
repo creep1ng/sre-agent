@@ -8,6 +8,12 @@ visible to the whole team.
 This guide is the common team baseline for issue #183. It does not contain credentials, private
 model settings, or a harness-specific configuration.
 
+## User and scope
+
+Users are independent freelancers maintaining several services. Out of scope: an SRE on-call
+team, production hardening, and complex edge-case validation. This is an academic project;
+optimize for clear, repeatable behavior over operational coverage.
+
 ## Quick path
 
 1. Start from an issue with a bounded problem, owner, estimate, dependencies, and verifiable
