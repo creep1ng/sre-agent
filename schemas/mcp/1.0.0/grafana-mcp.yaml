@@ -16,6 +16,18 @@ actions:
     name: "mcp.invoke"
     resource_type: "mcp_tool"
 
+# The server grant permits the discovery request; it does not disclose every
+# tool. A tool is visible only with its own active direct invocation grant.
+discovery_visibility:
+  server_gate: { action: "mcp.discovery", resource_type: "mcp_server" }
+  tool_filter: { action: "mcp.invoke", resource_type: "mcp_tool" }
+  allowed_empty: { status: 200, tools: [] }
+  denied_server: { status: 403, error_code: "resource_unavailable" }
+
+discovery_request:
+  query_parameters: []
+  unknown_query: { status: 422, error_code: "contract_validation_failed" }
+
 tools:
   - tool_id: "query_prometheus"
     server_id: "grafana-mcp"
