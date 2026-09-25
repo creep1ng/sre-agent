@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
+from sre_agent.bok.owner import seed_bok_demo
 from sre_agent.governance.dto import MCPServer, MCPTool, ModelAlias
 from sre_agent.mcp.owner import MCP_CONTRACT_VERSION, MCP_SERVER_ID, MCP_TOOL_IDS, MCPRegistry
 from sre_agent.persistence.api_keys import hash_api_key, is_api_key, verify_api_key
@@ -708,6 +709,7 @@ async def _run() -> None:
     actions.add_argument("--check-routing", action="store_true")
     actions.add_argument("--reconcile-routing", metavar="EXPECTED_SHA256")
     actions.add_argument("--seed-mcp", action="store_true")
+    actions.add_argument("--seed-bok", action="store_true")
     arguments = parser.parse_args()
     dsn = environ.get("DATABASE_URL")
     if not dsn:
@@ -717,6 +719,11 @@ async def _run() -> None:
         if arguments.seed_mcp:
             created = await seed_mcp_demo(database)
             print("mcp seed created" if created else "mcp seed converged")
+            return
+        if arguments.seed_bok:
+            async with database.transaction() as session:
+                created = await seed_bok_demo(session)
+            print("bok seed created" if created else "bok seed converged")
             return
         if arguments.check_routing:
             drift = await routing_drift(database, RoutingSettings.from_environment())
