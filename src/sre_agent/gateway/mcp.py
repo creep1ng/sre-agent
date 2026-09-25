@@ -221,7 +221,7 @@ class MCPGatewayService:
         self.projector = projector
         self.owner_repository_factory = owner_repository_factory
 
-    async def discovery(self, authorization: str | None) -> JSONResponse:
+    async def discovery(self, authorization: str | None, query: str = "") -> JSONResponse:
         request_id = str(uuid4())
         started = monotonic()
         try:
@@ -239,15 +239,74 @@ class MCPGatewayService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if evaluation.decision.decision != "allow":
-            return self._unavailable(request_id)
-        server, tools = await self._active_contract()
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._unavailable(request_id),
+                operation="mcp.discovery",
+                stage="authorization",
+                context=context,
+                evaluation=evaluation,
+            )
+        if query:
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._error(request_id, 422, "contract_validation_failed", False),
+                operation="mcp.discovery",
+                stage="response",
+                context=context,
+                evaluation=evaluation,
+                reason="contract_validation_failed",
+            )
+        visible_ids: list[str] = []
+        for tool_id in MCP_TOOL_IDS:
+            try:
+                tool_context, tool_evaluation = await authorize_governed_access(
+                    self.sessions, authorization, "mcp.invoke", "mcp_tool", tool_id
+                )
+            except AuthenticationFailed:
+                return JSONResponse(
+                    {
+                        "error": {
+                            "code": "authentication_failed",
+                            "message": "Authentication failed.",
+                        },
+                        "request_id": request_id,
+                        "retryable": False,
+                    },
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if tool_context.principal.principal_id != context.principal.principal_id:
+                return await self._audited(
+                    UUID(request_id),
+                    started,
+                    self._unavailable(request_id),
+                    operation="mcp.discovery",
+                    stage="response",
+                    context=context,
+                    evaluation=evaluation,
+                )
+            if tool_evaluation.decision.decision == "allow":
+                visible_ids.append(tool_id)
+        server, tools = await self._active_contract(visible_ids=visible_ids)
         if server is None or tools is None:
-            return self._unavailable(request_id)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._unavailable(request_id),
+                operation="mcp.discovery",
+                stage="response",
+                context=context,
+                evaluation=evaluation,
+            )
         return await self._audited(
             UUID(request_id),
             started,
             JSONResponse(
                 {
+                    "request_id": request_id,
                     "contract_version": MCP_CONTRACT_VERSION,
                     "server": {
                         "resource_type": "mcp_server",
@@ -374,7 +433,7 @@ class MCPGatewayService:
             )
 
     async def _active_contract(
-        self, tool_id: str | None = None
+        self, tool_id: str | None = None, *, visible_ids: list[str] | None = None
     ) -> tuple[MCPServer | None, list[MCPTool] | None]:
         try:
             async with self.sessions() as session:
@@ -401,7 +460,7 @@ class MCPGatewayService:
                         return server, None
                     return server, [tool]
                 tools: list[MCPTool] = []
-                for tool_id in MCP_TOOL_IDS:
+                for tool_id in visible_ids if visible_ids is not None else MCP_TOOL_IDS:
                     tool = await owner.get_tool(tool_id)
                     if (
                         tool is None
@@ -412,6 +471,8 @@ class MCPGatewayService:
                         or tool.tool_id != tool_id
                         or tool.upstream_name != tool.tool_id
                     ):
+                        if visible_ids is not None:
+                            continue
                         return server, None
                     tools.append(tool)
                 return server, tools
@@ -594,7 +655,7 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
         request: Request,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
     ) -> JSONResponse:
-        return await service.discovery(request.headers.get("authorization"))
+        return await service.discovery(request.headers.get("authorization"), request.url.query)
 
     @router.post(
         "/v1/mcp/tools/{tool_id}",

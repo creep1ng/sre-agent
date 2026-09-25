@@ -187,8 +187,122 @@ async def test_granted_discovery_returns_exactly_two_active_tools_without_upstre
     assert [tool["tool_id"] for tool in body["tools"]] == list(MCP_TOOL_IDS)
     assert len(body["tools"]) == 2
     assert "endpoint" not in body["server"]
-    assert scopes == [(AUTHORIZATION, "mcp.discovery", "mcp_server", MCP_SERVER_ID)]
+    assert scopes == [
+        (AUTHORIZATION, "mcp.discovery", "mcp_server", MCP_SERVER_ID),
+        *[(AUTHORIZATION, "mcp.invoke", "mcp_tool", tool_id) for tool_id in MCP_TOOL_IDS],
+    ]
     assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_discovery_filters_tools_by_each_principals_direct_invoke_grants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    scopes: list[tuple[str, str, str]] = []
+    grants = {
+        "Bearer full": set(MCP_TOOL_IDS),
+        "Bearer partial": {"query_prometheus"},
+        "Bearer empty": set(),
+    }
+
+    async def authorize(
+        _sessions: Any,
+        authorization: str | None,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+    ) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        assert authorization in grants
+        scopes.append((authorization, action, resource_id))
+        principal = _context().principal.model_copy(update={"principal_id": authorization[7:]})
+        context = _context().model_copy(update={"principal": principal})
+        allowed = resource_type == "mcp_server" or resource_id in grants[authorization]
+        return context, _decision(allowed)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", authorize)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner), client, owner_repository_factory=lambda session: session
+    )
+    responses = {credential: await service.discovery(credential) for credential in grants}
+
+    assert {key: response.status_code for key, response in responses.items()} == {
+        credential: 200 for credential in grants
+    }
+    assert {
+        key: [tool["tool_id"] for tool in json.loads(response.body)["tools"]]
+        for key, response in responses.items()
+    } == {
+        "Bearer full": list(MCP_TOOL_IDS),
+        "Bearer partial": ["query_prometheus"],
+        "Bearer empty": [],
+    }
+    assert "query_elasticsearch" not in responses["Bearer partial"].body.decode()
+    assert "query_prometheus" not in responses["Bearer empty"].body.decode()
+    assert scopes == [
+        (credential, action, resource_id)
+        for credential in grants
+        for action, resource_id in [
+            ("mcp.discovery", MCP_SERVER_ID),
+            *(("mcp.invoke", tool_id) for tool_id in MCP_TOOL_IDS),
+        ]
+    ]
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_denied_discovery_is_audited_without_owner_or_upstream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    audit = RecordingAudit()
+
+    async def deny(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
+    )
+    response = await service.discovery(AUTHORIZATION)
+
+    assert response.status_code == 403
+    assert owner.reads == []
+    assert client.calls == []
+    assert len(audit.events) == 1
+    event = audit.events[0].model_dump(mode="json")
+    assert event["operation"] == "mcp.discovery"
+    assert event["action"] == "read_metadata"
+    assert event["outcome"] == "denied"
+    assert event["policy_decision"]["decision"] == "deny"
+    assert event["correlation"]["request_id"] == json.loads(response.body)["request_id"]
+    assert event["content_state"] == "absent"
+
+
+@pytest.mark.asyncio
+async def test_denied_discovery_fails_closed_when_audit_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def deny(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        return _context(), _decision(False)
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", deny)
+    service = mcp.MCPGatewayService(
+        MemorySessions(MemoryOwner()),
+        RecordingClient(),
+        audit=FailingAudit(),
+        projector=AuditProjector(b"mcp-audit-key"),
+    )
+    response = await service.discovery(AUTHORIZATION)
+
+    assert response.status_code == 503
+    assert json.loads(response.body)["error"]["code"] == "audit_unavailable"
 
 
 @pytest.mark.asyncio
@@ -240,19 +354,59 @@ async def test_unknown_or_inactive_owner_is_not_enumerated_upstream(
 ) -> None:
     owner = MemoryOwner(server=_server("inactive"))
     client = RecordingClient()
+    audit = RecordingAudit()
 
     async def allow(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
         return _context(), _decision()
 
     monkeypatch.setattr(mcp, "authorize_governed_access", allow)
     service = mcp.MCPGatewayService(
-        MemorySessions(owner), client, owner_repository_factory=lambda session: session
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
     )
     response = await service.discovery(AUTHORIZATION)
 
     assert response.status_code == 403
     assert owner.reads == [("server", MCP_SERVER_ID)]
     assert client.calls == []
+    assert len(audit.events) == 1
+    assert audit.events[0].identity is not None
+
+
+@pytest.mark.asyncio
+async def test_discovery_principal_switch_fails_closed_and_is_audited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    client = RecordingClient()
+    audit = RecordingAudit()
+
+    async def changed_principal(
+        _sessions: Any, _authorization: str | None, action: str, *_scope: Any
+    ) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        context = _context()
+        if action == "mcp.invoke":
+            principal = context.principal.model_copy(update={"principal_id": "other-principal"})
+            context = context.model_copy(update={"principal": principal})
+        return context, _decision()
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", changed_principal)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
+    )
+    response = await service.discovery(AUTHORIZATION)
+
+    assert response.status_code == 403
+    assert owner.reads == []
+    assert client.calls == []
+    assert len(audit.events) == 1
 
 
 @pytest.mark.asyncio
@@ -575,8 +729,39 @@ async def test_http_granted_discovery_returns_exactly_two_tools(
     assert [tool["tool_id"] for tool in body["tools"]] == list(MCP_TOOL_IDS)
     assert len(body["tools"]) == 2
     assert "endpoint" not in body["server"]
-    assert scopes == [(AUTHORIZATION, "mcp.discovery", "mcp_server", MCP_SERVER_ID)]
+    assert scopes == [
+        (AUTHORIZATION, "mcp.discovery", "mcp_server", MCP_SERVER_ID),
+        *[(AUTHORIZATION, "mcp.invoke", "mcp_tool", tool_id) for tool_id in MCP_TOOL_IDS],
+    ]
     assert client_stub.calls == []
+
+
+@pytest.mark.asyncio
+async def test_http_discovery_rejects_unknown_query_with_published_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = MemoryOwner()
+    audit = RecordingAudit()
+    service, client_stub = _service(
+        monkeypatch, owner, audit=audit, projector=AuditProjector(b"mcp-audit-key")
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_route_app(service)), base_url="http://test"
+    ) as client:
+        response = await client.get(
+            "/v1/mcp/discovery?include_hidden=true",
+            headers={"Authorization": AUTHORIZATION},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "contract_validation_failed"
+    assert owner.reads == []
+    assert client_stub.calls == []
+    assert len(audit.events) == 1
+    event = audit.events[0].model_dump(mode="json")
+    assert event["identity"] is not None
+    assert event["policy_decision"]["decision"] == "allow"
+    assert event["correlation"]["request_id"] == response.json()["request_id"]
 
 
 @pytest.mark.asyncio
