@@ -1,4 +1,4 @@
-"""Architecture and runtime evidence for the four current governed operations."""
+"""Architecture and runtime evidence for current governed operations."""
 
 import asyncio
 import os
@@ -168,6 +168,11 @@ EXPECTED_SCOPES = {
         "action": "admin.read",
         "resource_type": "administrative_control",
         "resource_id": "catalog",
+    },
+    ("GET", "/v1/usage/consumption"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "usage",
     },
 }
 
