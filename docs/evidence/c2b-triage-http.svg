@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="400" viewBox="0 0 1040 400">
+  <rect width="1040" height="400" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #23 C2b triage HTTP (commands)</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q tests/test_triage_http.py</text>
+  <text x="28" y="136" fill="#f9fafb" font-family="monospace" font-size="20">7 passed (real HTTP gateway + real PostgreSQL)</text>
+  <text x="28" y="186" fill="#f9fafb" font-family="monospace" font-size="20">open/dismiss/link 200; declare 201 + replay;</text>
+  <text x="28" y="226" fill="#f9fafb" font-family="monospace" font-size="20">401/403/404/409/400/422/503 envelopes exact.</text>
+  <text x="28" y="276" fill="#f9fafb" font-family="monospace" font-size="20">Triage service regression: 21 passed.</text>
+  <text x="28" y="316" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #23 C2b; no secrets shown.</text>
+</svg>
