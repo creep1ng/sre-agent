@@ -169,6 +169,11 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "catalog",
     },
+    ("GET", "/v1/skills/{skill_id}/{version}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
 }
 
 
@@ -339,10 +344,11 @@ def test_future_consumer_guidance_is_documentation_only() -> None:
 
     assert "Future LLM, MCP, skill, and knowledge consumers" in guidance
     assert "authorize_governed_access" in guidance
-    assert "MCP, skill, and knowledge runtimes remain future-only" in guidance
-    assert "adds no endpoint, grant model, provisioning path" in " ".join(guidance.split())
-    assert not {
-        path
-        for path in _application().openapi()["paths"]
-        if any(term in path.lower() for term in ("mcp", "skill", "knowledge"))
+    assert "MCP, Skill, and knowledge execution runtimes remain future-only" in guidance
+    assert (
+        "administrative read path returns a persisted exact Skill version under the catalog grant"
+        in " ".join(guidance.split())
+    )
+    assert {path for path in _application().openapi()["paths"] if "skill" in path.lower()} == {
+        "/v1/skills/{skill_id}/{version}"
     }

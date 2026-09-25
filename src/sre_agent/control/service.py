@@ -34,9 +34,10 @@ from sre_agent.governance.dto import (
     Resource,
     ResourceCatalogEntry,
     SkillManifest,
+    SkillVersionRecord,
 )
 from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, StaleWriteError  # fmt: skip
+from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionRepository, StaleWriteError  # fmt: skip
 
 IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ERRORS: dict[int, tuple[str, str]] = {
@@ -2658,6 +2659,81 @@ class ControlService:  # noqa: E305
             decision=evaluation.decision,
         )
 
+    async def get_skill_version(
+        self, skill_id: str, version: str, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "catalog.read", "admin.read"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if (
+            re.fullmatch(r"[a-z][a-z0-9-]{2,62}[a-z0-9]", skill_id) is None
+            or re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version) is None
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        scope = CONTROL_SCOPES[("GET", "/v1/skills/{skill_id}/{version}")]
+        async with self.sessions() as session:
+            evaluation = await self._authorize(session, context.principal, scope)
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session:
+            record = await SkillVersionRepository(session).get(skill_id, version)
+        if record is None:
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_not_found",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload=record.model_dump(mode="json"),
+            error_code="grant_matched",
+            context=context,
+            resource_ref=("administrative_control", "catalog"),
+            decision=evaluation.decision,
+        )
+
 
 def control_router(service: ControlService) -> APIRouter:
     """Typed administrative control-plane router with Issue #184 catalog reads/writes."""
@@ -3489,6 +3565,48 @@ def control_router(service: ControlService) -> APIRouter:
     ) -> Response:
         result = await service.get_catalog_resource(
             resource_type, id, authorization_from(credentials, request)
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/skills/{skill_id}/{version}",
+        response_model=SkillVersionRecord,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "catalog",
+            }
+        },
+    )
+    async def get_skill_version(
+        skill_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$"}),
+        ],
+        version: Annotated[
+            str,
+            WithJsonSchema(
+                {
+                    "type": "string",
+                    "pattern": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
+                }
+            ),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.get_skill_version(
+            skill_id, version, authorization_from(credentials, request)
         )
         response.status_code = result.status_code
         return result
