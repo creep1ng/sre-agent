@@ -3,7 +3,7 @@
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
 ResourceType = Literal[
@@ -216,6 +216,51 @@ class ResourceCatalogList(StrictDTO):
     items: Annotated[list[ResourceCatalogEntry], Field(max_length=100)]
     limit: Annotated[int, Field(ge=1, le=100)]
     truncated: bool
+
+
+class SkillDependency(StrictDTO):
+    """A pinned Skill dependency; paths and runtime configuration are not representable."""
+
+    skill_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
+    version: Annotated[
+        str,
+        Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
+    ]
+
+
+class SkillManifest(StrictDTO):
+    """Bounded, instruction-only content for one immutable Skill version."""
+
+    display_name: Annotated[str, Field(min_length=1, max_length=200)]
+    description: Annotated[str, Field(min_length=1, max_length=500)]
+    instructions: Annotated[str, Field(min_length=1, max_length=16_384)]
+    dependencies: Annotated[list[SkillDependency], Field(max_length=16)]
+
+    @field_validator("instructions")
+    @classmethod
+    def instructions_fit_utf8_bound(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 16_384:
+            raise ValueError("instructions exceed the UTF-8 byte limit")
+        return value
+
+
+class SkillVersionRecord(StrictDTO):
+    skill_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
+    version: Annotated[
+        str,
+        Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
+    ]
+    owner_id: Identifier
+    resource_id: CatalogId
+    manifest: SkillManifest
+    content_sha256: AuditRefValue
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def resource_identity_is_versioned(self) -> "SkillVersionRecord":
+        if self.resource_id != f"{self.skill_id}@{self.version}":
+            raise ValueError("Skill resource identity must match its immutable version")
+        return self
 
 
 class PolicyDecision(StrictDTO):
