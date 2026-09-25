@@ -41,8 +41,9 @@ Future LLM, MCP, skill, and knowledge consumers MUST enter through a declared go
 3. Use an exact existing grant; do not infer roles from principal names or client input.
 4. Record the terminal audit event before releasing an allowed result, and keep denied effects at zero.
 
-MCP, skill, and knowledge runtimes remain future-only until their runtime boundaries exist. This rule adds no
-endpoint, grant model, provisioning path, schema, seed, migration, or lifecycle behavior.
+MCP, Skill, and knowledge execution runtimes remain future-only until their runtime boundaries exist. The
+administrative read path returns a persisted exact Skill version under the catalog grant, but does not
+execute it.
 
 ## Release metadata
 

@@ -382,6 +382,7 @@ def test_router_exposes_all_control_routes() -> None:
         "/v1/model-aliases/{alias_id}/status",
         "/v1/catalog/resources",
         "/v1/catalog/resources/{resource_type}/{id}",
+        "/v1/skills/{skill_id}/{version}",
     }
 
     async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response, httpx.Response]:

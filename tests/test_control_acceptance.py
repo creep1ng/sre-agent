@@ -20,6 +20,7 @@ from sqlalchemy.exc import StatementError
 from sre_agent.application import create_application
 from sre_agent.control.service import RotationIssuanceFailure
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
+from sre_agent.governance.dto import SkillManifest
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import (
     AuditRepository,
@@ -27,6 +28,7 @@ from sre_agent.persistence.repositories import (
     GrantRepository,
     PrincipalRepository,
     ResourceRepository,
+    SkillVersionRepository,
 )
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
@@ -142,6 +144,43 @@ def audit_row(request_id: str) -> tuple[object, ...]:
         ).fetchone()
     assert row is not None
     return row
+
+
+def test_skill_version_read_is_limited_to_catalog_admin(
+    client: TestClient,
+) -> None:
+    async def publish() -> None:
+        database = Database(DATABASE_URL)
+        try:
+            async with database.sessions() as session:
+                await SkillVersionRepository(session).publish(
+                    skill_id="readable-skill",
+                    version="1.0.0",
+                    owner_id="skill-owner",
+                    manifest=SkillManifest(
+                        display_name="Readable Skill",
+                        description="A persisted test instruction.",
+                        instructions="Use the runbook and verify the outcome.",
+                        dependencies=[],
+                    ),
+                    content_sha256="a" * 64,
+                )
+                await session.commit()
+        finally:
+            await database.dispose()
+
+    asyncio.run(publish())
+
+    response = client.get("/v1/skills/readable-skill/1.0.0", headers=headers())
+
+    assert response.status_code == 200
+    assert response.json()["skill_id"] == "readable-skill"
+    assert response.json()["version"] == "1.0.0"
+    assert response.json()["manifest"]["instructions"] == (
+        "Use the runbook and verify the outcome."
+    )
+    denied = client.get("/v1/skills/readable-skill/1.0.0", headers=headers(RESTRICTED_KEY))
+    assert denied.status_code == 403
 
 
 def credential_count(principal_id: str) -> int:
