@@ -190,6 +190,20 @@ export function createAdministrativeApiClient({
         headers: mutationHeaders(idempotencyKey),
       });
     },
+    listAuditEvents({ principal_id, decision, model_alias_id, request_id, incident_id,
+      run_id, task_id, trace_id, from, to, limit = 100 } = {}) {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries({ principal_id, decision, model_alias_id,
+        request_id, incident_id, run_id, task_id, trace_id, from, to, limit })) {
+        if (value !== undefined && value !== null && value !== "") params.set(key, String(value));
+      }
+      if (!params.has("limit")) params.set("limit", "100");
+      const query = params.toString();
+      return request(`/v1/audit-events${query ? `?${query}` : ""}`);
+    },
+    getAuditEvent(eventId) {
+      return request(`/v1/audit-events/${encodeURIComponent(eventId)}`);
+    },
     getIncident(incidentId) {
       return request(`/v1/incidents/${encodeURIComponent(incidentId)}`);
     },
