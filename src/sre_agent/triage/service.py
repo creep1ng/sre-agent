@@ -16,13 +16,32 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import Principal
-from sre_agent.incident.runtime import IncidentRuntime
+from sre_agent.incident.persistence import (
+    IncidentIdempotencyConflictError,
+    IncidentStaleWriteError,
+)
+from sre_agent.incident.runtime import (
+    ActorReference,
+    IncidentCommand,
+    IncidentRuntime,
+    InvalidTransitionError,
+    PreconditionFailedError,
+)
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
+from sre_agent.persistence.incidents import (
+    PostgresDecisionRepository,
+    PostgresEventRepository,
+    PostgresIncidentRepository,
+    PostgresIncidentUnitOfWork,
+    PostgresRunRepository,
+    PostgresSnapshotRepository,
+    PostgresTextContextRepository,
+)
 from sre_agent.persistence.repositories import (
     GrantRepository,
     IdempotencyConflictError,
@@ -34,6 +53,7 @@ from sre_agent.triage.store import TriageRepository
 
 WORKFLOW_TYPE = "incident_workflow"
 WORKFLOW_ID = "incident-response"
+SEVERITIES = ("sev1", "sev2", "sev3", "sev4")
 ACTIONS = {
     "open_triage": "alert.triage",
     "triage_dismiss": "alert.dismiss",
@@ -58,6 +78,32 @@ class TriageError(Exception):
         self.code = code
 
 
+class _SessionUnits(PostgresIncidentUnitOfWork):
+    """Run incident transitions inside the triage transaction.
+
+    Every repository statement and the commit protocol are inherited from
+    the chain-A unit of work; only the session lifecycle differs (the outer
+    triage transaction owns begin/commit/close), so the triage write and
+    the incident creation commit atomically or roll back together.
+    """
+
+    def __init__(self, session: Any) -> None:
+        self._session = session
+        self._transaction = None
+        self.incidents = PostgresIncidentRepository(session)
+        self.runs = PostgresRunRepository(session)
+        self.events = PostgresEventRepository(session)
+        self.snapshots = PostgresSnapshotRepository(session)
+        self.decisions = PostgresDecisionRepository(session)
+        self.text_context = PostgresTextContextRepository(session)
+
+    async def __aenter__(self) -> PostgresIncidentUnitOfWork:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        return None
+
+
 @dataclass(frozen=True, slots=True)
 class TriageResult:
     status: str
@@ -80,6 +126,7 @@ def _digest(value: str) -> str:
 class TriageService:
     def __init__(self, database: Database, workflow: IncidentWorkflow) -> None:
         self._database = database
+        self._workflow = workflow
         self._units = lambda: PostgresIncidentUnitOfWork(database)
         self._runtime = IncidentRuntime(workflow, self._units)
 
@@ -113,9 +160,14 @@ class TriageService:
             raise TriageError(422, "invalid_reason")
         if operation == "triage_link" and (target is None or not re.fullmatch(ID_PATTERN, target)):
             raise TriageError(422, "invalid_target")
-        # Slice boundary: declaration executes in C2a-4. Rejected here as 422.
+        # Declaration mirrors the closed command schema: severity is the
+        # operator-confirmed sev1..sev4; impact is unresolved under issue #23
+        # (no command/state field carries it) so any supplied value is 422.
         if operation == "triage_declare":
-            raise TriageError(422, "operation_not_supported")
+            if severity not in SEVERITIES:
+                raise TriageError(422, "invalid_severity")
+            if impact is not None:
+                raise TriageError(422, "invalid_impact")
 
     async def execute(
         self,
@@ -248,4 +300,60 @@ class TriageService:
             return target_incident_id
         if operation != "triage_declare":
             return None
-        return None
+        assert severity is not None
+        now = datetime.now(UTC)
+        incident_id = f"inc-{digest[:32]}"
+        run_id = f"run-{digest[:32]}"
+        units = _SessionUnits(session)
+        incident_state = {
+            "workflow_id": self._workflow.workflow_id,
+            "workflow_version": self._workflow.version,
+            "state": "triage",
+            "severity": None,
+            "impact": None,
+            "alert": {},
+            "hypotheses": [],
+            "evidence": [],
+            "mitigation_strategy": None,
+            "postmortem": None,
+        }
+        run_state = {
+            "workflow_version": self._workflow.version,
+            "current_state": "triage",
+            "status": "running",
+            "pending_command": None,
+        }
+        try:
+            await units.incidents.add(incident_id, incident_state, now=now)
+            await units.runs.add(run_id, incident_id, run_state, now=now)
+        except IntegrityError as error:
+            # Same key-derived identifiers already committed: the triage
+            # outcome is gone, so the closed answer is a key conflict.
+            raise TriageError(409, "idempotency_conflict") from error
+        runtime = IncidentRuntime(
+            self._workflow,
+            lambda: units,
+            clock=lambda: now,
+            id_factory=lambda prefix: f"{prefix}-{digest[:24]}",
+        )
+        command = IncidentCommand(
+            command_id=f"cmd-{digest[:32]}",
+            incident_id=incident_id,
+            run_id=run_id,
+            transition_id="triage_declare",
+            actor="human",
+            actor_reference=ActorReference(
+                principal_id=principal.principal_id,
+                display_name=principal.display_name,
+            ),
+            inputs={"severity": severity},
+        )
+        try:
+            await runtime.execute(command)
+        except (InvalidTransitionError, PreconditionFailedError) as error:
+            raise TriageError(422, "invalid_transition") from error
+        except IncidentStaleWriteError as error:
+            raise TriageError(409, "stale_version") from error
+        except IncidentIdempotencyConflictError as error:
+            raise TriageError(409, "idempotency_conflict") from error
+        return incident_id
