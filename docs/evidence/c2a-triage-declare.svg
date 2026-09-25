@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="400" viewBox="0 0 1040 400">
+  <rect width="1040" height="400" rx="10" fill="#111827"/>
+  <text x="28" y="46" fill="#93c5fd" font-family="monospace" font-size="22">sre-agent · issue #23 C2a declare (triage_declare)</text>
+  <text x="28" y="96" fill="#d1fae5" font-family="monospace" font-size="20">$ pytest -q tests/test_triage_declare.py</text>
+  <text x="28" y="136" fill="#f9fafb" font-family="monospace" font-size="20">10 passed (real PostgreSQL, real incident runtime)</text>
+  <text x="28" y="186" fill="#f9fafb" font-family="monospace" font-size="20">201 + exactly one incident; replay same result;</text>
+  <text x="28" y="226" fill="#f9fafb" font-family="monospace" font-size="20">sev1-4 ok; 422/409/403; race yields single incident.</text>
+  <text x="28" y="276" fill="#f9fafb" font-family="monospace" font-size="20">Triage regression (commands/link/contract): 12 passed.</text>
+  <text x="28" y="316" fill="#9ca3af" font-family="sans-serif" font-size="16">Rendered verification capture for issue #23 C2a declare; no secrets shown.</text>
+</svg>
