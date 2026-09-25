@@ -24,6 +24,14 @@ const detailContent = document.getElementById("detail-content");
 const detailErrorBox = document.getElementById("detail-error");
 const detailErrorTitle = document.getElementById("detail-error-title");
 const detailCloseButton = document.getElementById("detail-close-button");
+const detailEditButton = document.getElementById("detail-edit-button");
+const assignmentForm = document.getElementById("assignment-form");
+const editConcreteModel = document.getElementById("edit-concrete-model");
+const editRouter = document.getElementById("edit-router");
+const editInferenceProvider = document.getElementById("edit-inference-provider");
+const assignmentSaveButton = document.getElementById("assignment-save-button");
+const assignmentCancelButton = document.getElementById("assignment-cancel-button");
+const assignmentRefreshButton = document.getElementById("assignment-refresh-button");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
@@ -31,6 +39,11 @@ let currentItems = [];
 let sessionGeneration = 0;
 let detailReadVersion = 0;
 let activeDetailId = null;
+let activeDetailItem = null;
+let pendingExpectedUpdatedAt = null;
+let editMode = false;
+let saveInFlight = false;
+const CONCRETE_MODEL_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const announce = (message) => {
@@ -41,8 +54,10 @@ function describeError(error) {
   if (error?.kind === "network") return "API unavailable";
   if (error?.kind === "authentication") return "Authentication required";
   if (error?.kind === "authorization") return "Access unavailable";
+  if (error?.kind === "conflict" || error?.code === "status_conflict")
+    return "Alias changed; refresh and try again";
   if (error?.kind === "validation" || error?.code === "validation_error")
-    return "Invalid request";
+    return "Invalid assignment";
   if (error?.kind === "not_found") return "Alias unavailable";
   return "Request failed";
 }
@@ -119,12 +134,47 @@ function showDetailError(error) {
   announce(message);
 }
 
+function exitEditMode() {
+  editMode = false;
+  pendingExpectedUpdatedAt = activeDetailItem ? text(activeDetailItem.updated_at) || null : null;
+  assignmentForm.hidden = true;
+  editConcreteModel.removeAttribute("aria-invalid");
+  editRouter.removeAttribute("aria-invalid");
+  editInferenceProvider.removeAttribute("aria-invalid");
+  assignmentRefreshButton.hidden = true;
+  if (activeDetailItem) detailEditButton.hidden = false;
+}
+
+function enterEditMode() {
+  if (!activeDetailItem) return;
+  editMode = true;
+  pendingExpectedUpdatedAt = text(activeDetailItem.updated_at) || null;
+  editConcreteModel.value = text(activeDetailItem.concrete_model);
+  editRouter.value = text(activeDetailItem.router);
+  editInferenceProvider.value = text(activeDetailItem.inference_provider);
+  editConcreteModel.removeAttribute("aria-invalid");
+  editRouter.removeAttribute("aria-invalid");
+  editInferenceProvider.removeAttribute("aria-invalid");
+  hideDetailError();
+  assignmentRefreshButton.hidden = true;
+  assignmentForm.hidden = false;
+  detailEditButton.hidden = true;
+  editConcreteModel.focus();
+}
+
 function closeDetailState() {
   activeDetailId = null;
+  activeDetailItem = null;
+  pendingExpectedUpdatedAt = null;
+  editMode = false;
+  saveInFlight = false;
   detailSection.hidden = true;
   detailLoading.hidden = true;
   detailContent.hidden = true;
   detailContent.replaceChildren();
+  assignmentForm.hidden = true;
+  detailEditButton.hidden = true;
+  assignmentRefreshButton.hidden = true;
   hideDetailError();
   detailSubtitle.textContent = "No alias selected.";
 }
@@ -160,11 +210,81 @@ function renderDetail(item) {
   detailContent.hidden = false;
 }
 
+function applyAuthoritativeDetail(item) {
+  activeDetailItem = item;
+  pendingExpectedUpdatedAt = text(item.updated_at) || null;
+  renderDetail(item);
+  detailEditButton.hidden = false;
+  if (editMode) {
+    editConcreteModel.value = text(item.concrete_model);
+    editRouter.value = text(item.router);
+    editInferenceProvider.value = text(item.inference_provider);
+  } else {
+    assignmentForm.hidden = true;
+  }
+  const aliasId = text(item.model_alias_id) || text(item.alias);
+  const index = currentItems.findIndex(
+    (entry) => (text(entry.model_alias_id) || text(entry.alias)) === aliasId,
+  );
+  if (index >= 0) {
+    currentItems[index] = item;
+    renderRows();
+  }
+}
+
+function buildAssignmentBody() {
+  const concreteModel = editConcreteModel.value.trim();
+  const router = editRouter.value.trim();
+  const inferenceProvider = editInferenceProvider.value.trim();
+  editConcreteModel.setAttribute("aria-invalid", String(concreteModel === ""));
+  editRouter.setAttribute("aria-invalid", String(router === ""));
+  editInferenceProvider.setAttribute("aria-invalid", String(inferenceProvider === ""));
+  if (concreteModel === "" || router === "" || inferenceProvider === "") return null;
+  if (router !== "openrouter") {
+    editRouter.setAttribute("aria-invalid", "true");
+    return null;
+  }
+  if (!CONCRETE_MODEL_PATTERN.test(concreteModel)) {
+    editConcreteModel.setAttribute("aria-invalid", "true");
+    return null;
+  }
+  if (typeof pendingExpectedUpdatedAt !== "string" || pendingExpectedUpdatedAt === "") return null;
+  return {
+    concrete_model: concreteModel,
+    router,
+    inference_provider: inferenceProvider,
+    expected_updated_at: pendingExpectedUpdatedAt,
+  };
+}
+
+async function refreshDetail(aliasId, generation, readVersion) {
+  try {
+    const item = await controlApi.getModelAlias(aliasId);
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    applyAuthoritativeDetail(item);
+    detailLoading.hidden = true;
+    detailSubtitle.textContent = `${text(item.alias) || aliasId} · authoritative detail.`;
+  } catch (error) {
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    detailLoading.hidden = true;
+    detailContent.hidden = true;
+    detailContent.replaceChildren();
+    detailSubtitle.textContent = "Detail unavailable.";
+    showDetailError(error);
+  }
+}
+
 async function openDetail(aliasId) {
   const generation = sessionGeneration;
   const readVersion = detailReadVersion + 1;
   detailReadVersion = readVersion;
   activeDetailId = aliasId;
+  activeDetailItem = null;
+  pendingExpectedUpdatedAt = null;
+  editMode = false;
+  assignmentForm.hidden = true;
+  detailEditButton.hidden = true;
+  assignmentRefreshButton.hidden = true;
   hideDetailError();
   detailSection.hidden = false;
   detailContent.hidden = true;
@@ -174,7 +294,7 @@ async function openDetail(aliasId) {
   try {
     const item = await controlApi.getModelAlias(aliasId);
     if (generation !== sessionGeneration || readVersion !== detailReadVersion) return false;
-    renderDetail(item);
+    applyAuthoritativeDetail(item);
     detailLoading.hidden = true;
     detailSubtitle.textContent = `${text(item.alias) || aliasId} · authoritative detail.`;
     announce(`Detail loaded for ${aliasId}.`);
@@ -285,6 +405,56 @@ rowsBody.addEventListener("click", (event) => {
 
 detailCloseButton.addEventListener("click", () => {
   closeDetail();
+});
+
+detailEditButton.addEventListener("click", () => {
+  enterEditMode();
+});
+
+assignmentCancelButton.addEventListener("click", () => {
+  exitEditMode();
+  hideDetailError();
+});
+
+assignmentRefreshButton.addEventListener("click", () => {
+  const aliasId = activeDetailId;
+  if (!aliasId) return;
+  hideDetailError();
+  assignmentRefreshButton.hidden = true;
+  refreshDetail(aliasId, sessionGeneration, detailReadVersion);
+});
+
+assignmentForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (saveInFlight || !activeDetailId) return;
+  hideDetailError();
+  const body = buildAssignmentBody();
+  if (!body) {
+    showDetailError({ kind: "validation", code: "validation_error" });
+    return;
+  }
+  const generation = sessionGeneration;
+  const readVersion = detailReadVersion;
+  const aliasId = activeDetailId;
+  saveInFlight = true;
+  assignmentSaveButton.disabled = true;
+  try {
+    const updated = await controlApi.replaceModelAliasAssignment(aliasId, body);
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    exitEditMode();
+    applyAuthoritativeDetail(updated);
+    detailSubtitle.textContent = `${text(updated.alias) || aliasId} · authoritative detail.`;
+    announce(`Assignment updated for ${aliasId}.`);
+  } catch (error) {
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    showDetailError(error);
+    if (error?.kind === "conflict" || error?.code === "status_conflict") {
+      assignmentRefreshButton.hidden = false;
+    }
+  } finally {
+    saveInFlight = false;
+    assignmentSaveButton.disabled = false;
+  }
 });
 
 page.dataset.state = "idle";
