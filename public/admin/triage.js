@@ -55,10 +55,10 @@ function describeError(error) {
     return ["Not found", "Unknown alert or target incident. Nothing was changed."];
   if (error?.kind === "conflict")
     return ["Conflict", "The version is stale or the command key was reused. Refresh state."];
-  if (error?.kind === "api" && error?.code === "validation_error")
+  if (error?.kind === "api" && error?.status === 422)
     return ["Invalid request", error?.message ?? "The command payload was rejected."];
   if (error?.kind === "api" && error?.code === "audit_unavailable")
-    return ["Service unavailable", "The request was not completed. Retry."];
+    return ["Service unavailable", error?.message ?? "The request was not completed. Retry."];
   if (error?.kind === "api")
     return ["Request failed", error?.message ?? "Unexpected error. Nothing was changed."];
   return ["Request failed", error?.message ?? "Unexpected error."];
