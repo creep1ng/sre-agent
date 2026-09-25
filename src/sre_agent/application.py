@@ -12,6 +12,7 @@ from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.openrouter import OpenRouterProvider
 from sre_agent.gateway.providers import LLMProvider
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.audit_reads import AuditReadsService, audit_reads_router
 from sre_agent.gateway.mcp import (
     GrafanaMCPClient,
     MCPGatewayService,
@@ -90,6 +91,11 @@ def create_application(
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))
+        )
+        application.include_router(
+            audit_reads_router(
+                AuditReadsService(database.sessions, runtime_settings.audit_hmac_key.encode())
+            )
         )
     if provider is not None and runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
