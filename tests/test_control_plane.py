@@ -152,6 +152,9 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("POST", "/v1/catalog/resources"),
         ("GET", "/v1/catalog/resources"),
         ("GET", "/v1/catalog/resources/{type}/{id}"),
+        ("POST", "/v1/skills/versions"),
+        ("GET", "/v1/skills/{skill_id}/{version}"),
+        ("PUT", "/v1/skills/{skill_id}/{version}/status"),
     }
     assert len({*CONTROL_SCOPES.values()}) == 10
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
@@ -200,6 +203,11 @@ def test_control_operations_match_scopes() -> None:
     assert CONTROL_OPERATIONS[("POST", "/v1/catalog/resources")][0] == "catalog.create"
     assert CONTROL_OPERATIONS[("GET", "/v1/catalog/resources")][0] == "catalog.list"
     assert CONTROL_OPERATIONS[("GET", "/v1/catalog/resources/{type}/{id}")][0] == "catalog.read"
+    assert CONTROL_OPERATIONS[("POST", "/v1/skills/versions")][0] == "catalog.create"
+    assert CONTROL_OPERATIONS[("GET", "/v1/skills/{skill_id}/{version}")][0] == "catalog.read"
+    assert CONTROL_OPERATIONS[("PUT", "/v1/skills/{skill_id}/{version}/status")][0] == (
+        "catalog.status.replace"
+    )
 
 
 def test_control_projector_rejects_llm_routing_evidence() -> None:

@@ -15,7 +15,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, model_validator
 from pydantic.json_schema import WithJsonSchema
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,7 @@ from sre_agent.governance.dto import (
     PrincipalContext,
     Resource,
     ResourceCatalogEntry,
+    SkillManifest,
 )
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, StaleWriteError  # fmt: skip
@@ -165,6 +166,24 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("GET", "/v1/catalog/resources/{type}/{id}"): (
         "catalog.read",
         "admin.read",
+        "administrative_control",
+        "catalog",
+    ),
+    ("POST", "/v1/skills/versions"): (
+        "catalog.create",
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
+    ("GET", "/v1/skills/{skill_id}/{version}"): (
+        "catalog.read",
+        "admin.read",
+        "administrative_control",
+        "catalog",
+    ),
+    ("PUT", "/v1/skills/{skill_id}/{version}/status"): (
+        "catalog.status.replace",
+        "admin.write",
         "administrative_control",
         "catalog",
     ),
@@ -362,6 +381,36 @@ class CatalogCreate(BaseModel):
     ]
     status: Literal["registered", "draft", "published", "indexing", "active", "inactive", "revoked"]
     discoverability: CatalogDiscoverabilityCreate
+
+
+class SkillPublishRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    skill_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
+    version: Annotated[
+        str,
+        Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
+    ]
+    owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    manifest: SkillManifest
+
+    @model_validator(mode="after")
+    def publication_fits_json_bound(self) -> "SkillPublishRequest":
+        content = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        if len(content.encode("utf-8")) > 32_768:
+            raise ValueError("Skill publication exceeds the encoded byte limit")
+        return self
+
+
+class SkillStatusRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    status: Literal["active", "inactive"]
+
+
+class SkillStatusResponse(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    resource_type: Literal["skill"]
+    resource_id: str
+    status: Literal["active", "inactive"]
 
 
 class CatalogListResponse(BaseModel):
