@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Alert triage commands for midnight.agent." />
+    <title>Triage · midnight.agent</title>
+    <link rel="icon" href="/public/favicon.svg" />
+    <link rel="stylesheet" href="/styles/design-system.css" />
+    <link rel="stylesheet" href="/styles/principals.css" />
+  </head>
+  <body>
+    <a class="ma-skip-link" href="#triage-result">Skip to triage result</a>
+    <header class="principals__topbar">
+      <a class="principals__brand" href="/" aria-label="midnight.agent — home">
+        <img class="principals__mark" src="/public/midnight-agent-mark.svg" alt="" width="28" height="28" />
+        <span class="ma-display">midnight.agent</span>
+      </a>
+      <span class="principals__context">Control plane / Triage</span>
+    </header>
+    <main id="triage-page" class="principals" data-state="idle">
+      <header class="principals__heading">
+        <div>
+          <p class="ma-eyebrow">Operations</p>
+          <h1 class="principals__title">Alert triage</h1>
+          <p class="principals__subtitle">Dismiss alerts, link eligible incidents, or declare new ones through the real triage API.</p>
+        </div>
+      </header>
+      <section class="ma-panel principals__session" aria-labelledby="session-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="session-title" class="ma-panel__title">API session</h2>
+          <p class="ma-panel__description">Bearer credential is kept in memory only and cleared on reload.</p>
+        </div></div>
+        <div class="ma-panel__body"><form id="session-form" class="principals__form" autocomplete="off">
+          <div class="ma-field"><label class="ma-field__label" for="api-key">API key</label>
+          <input class="ma-input ma-mono" id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sre_…" /></div>
+          <div class="ma-button-row">
+            <button id="connect-button" class="ma-button ma-button--primary" type="submit">Connect</button>
+            <button id="disconnect-button" class="ma-button ma-button--secondary" type="button">Clear session</button>
+          </div>
+        </form></div>
+      </section>
+      <section class="ma-panel" aria-labelledby="command-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="command-title" class="ma-panel__title">Triage command</h2>
+          <p id="triage-state" class="ma-panel__description" aria-live="polite">Connect to begin.</p>
+        </div></div>
+        <div class="ma-panel__body"><form id="command-form" class="principals__form" autocomplete="off">
+          <div class="ma-field"><label class="ma-field__label" for="alert-id">Alert ID</label>
+          <input class="ma-input ma-mono" id="alert-id" name="alert_id" type="text" autocomplete="off" spellcheck="false" required /></div>
+          <div class="ma-field"><label class="ma-field__label" for="expected-version">Expected version</label>
+          <input class="ma-input ma-mono" id="expected-version" name="expected_version" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" required /></div>
+          <div class="ma-field"><label class="ma-field__label" for="command-operation">Operation</label>
+          <select class="ma-select" id="command-operation" name="operation" required>
+            <option value="open_triage" selected>open_triage</option>
+            <option value="triage_dismiss">triage_dismiss</option>
+            <option value="triage_link">triage_link</option>
+            <option value="triage_declare">triage_declare</option>
+          </select></div>
+          <div class="ma-field"><label class="ma-field__label" for="command-reason">Reason</label>
+          <input class="ma-input" id="command-reason" name="reason" type="text" autocomplete="off" maxlength="1000" placeholder="Required except for open_triage" /></div>
+          <div class="ma-field"><label class="ma-field__label" for="command-target">Target incident ID (link only)</label>
+          <input class="ma-input ma-mono" id="command-target" name="target_incident_id" type="text" autocomplete="off" spellcheck="false" /></div>
+          <div class="ma-field"><label class="ma-field__label" for="command-severity">Severity (declare only)</label>
+          <select class="ma-select" id="command-severity" name="severity">
+            <option value="" selected>Select severity…</option>
+            <option value="sev1">sev1</option>
+            <option value="sev2">sev2</option>
+            <option value="sev3">sev3</option>
+            <option value="sev4">sev4</option>
+          </select></div>
+          <div class="ma-button-row">
+            <button id="submit-button" class="ma-button ma-button--primary" type="submit">Send command</button>
+          </div>
+        </form></div>
+      </section>
+      <div id="page-error" class="ma-alert" data-tone="critical" hidden><div>
+        <p id="page-error-title" class="ma-alert__title">Request failed</p>
+        <p id="page-error-detail" class="ma-alert__detail"></p>
+      </div></div>
+      <section id="triage-result" class="ma-panel" aria-labelledby="result-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="result-title" class="ma-panel__title">Result</h2>
+          <p id="result-summary" class="ma-panel__description" aria-live="polite">No command sent yet.</p>
+        </div></div>
+        <div class="ma-panel__body"><div class="principals__detail"><dl class="principals__facts">
+          <dt>Operation</dt><dd class="ma-mono" id="result-operation">—</dd>
+          <dt>Status</dt><dd class="ma-mono" id="result-status">—</dd>
+          <dt>Incident</dt><dd class="ma-mono" id="result-incident">—</dd>
+          <dt>Version</dt><dd class="ma-mono" id="result-version">—</dd>
+          <dt>Actor</dt><dd class="ma-mono" id="result-actor">—</dd>
+          <dt>Decided</dt><dd class="ma-mono" id="result-decided">—</dd>
+        </dl></div></div>
+      </section>
+      <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
+    </main>
+    <script type="module" src="/public/admin/triage.js"></script>
+  </body>
+</html>
