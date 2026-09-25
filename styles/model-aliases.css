@@ -31,3 +31,9 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.ma-assignment-form {
+  display: grid;
+  gap: var(--ma-space-4);
+  margin-top: var(--ma-space-4);
+}

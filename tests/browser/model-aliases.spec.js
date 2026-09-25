@@ -1,6 +1,73 @@
 import { expect, test } from "@playwright/test";
 
 const connected = process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY === "1";
+const ALIAS = "triage-agent";
+const ALT_ASSIGNMENT = { concrete_model: "openai/gpt-5", router: "openrouter", inference_provider: "openai" };
+
+async function seamGet(page, key, id) {
+  return page.evaluate(
+    async ({ key, id }) => {
+      const { ApiClientError, createAdministrativeApiClient, createMemoryCredentialStore } =
+        await import("/public/api/client.js");
+      const store = createMemoryCredentialStore();
+      store.set(key);
+      try {
+        return {
+          ok: true,
+          item: await createAdministrativeApiClient({ credentialStore: store }).getModelAlias(id),
+        };
+      } catch (error) {
+        if (!(error instanceof ApiClientError)) throw error;
+        return { ok: false, kind: error.kind, status: error.status, code: error.code };
+      }
+    },
+    { key, id },
+  );
+}
+
+async function seamPut(page, key, id, body) {
+  return page.evaluate(
+    async ({ key, id, body }) => {
+      const { ApiClientError, createAdministrativeApiClient, createMemoryCredentialStore } =
+        await import("/public/api/client.js");
+      const store = createMemoryCredentialStore();
+      store.set(key);
+      try {
+        return {
+          ok: true,
+          item: await createAdministrativeApiClient({ credentialStore: store }).replaceModelAliasAssignment(
+            id,
+            body,
+          ),
+        };
+      } catch (error) {
+        if (!(error instanceof ApiClientError)) throw error;
+        return { ok: false, kind: error.kind, status: error.status, code: error.code };
+      }
+    },
+    { key, id, body },
+  );
+}
+
+async function openAssignmentEdit(page, id) {
+  await page.click(`[data-detail-open='${id}']`);
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText(id);
+  await expect(page.locator("#detail-edit-button")).toBeVisible();
+  await page.click("#detail-edit-button");
+  await expect(page.locator("#assignment-form")).toBeVisible();
+}
+
+async function restoreAssignment(page, key, id, original) {
+  const fresh = await seamGet(page, key, id);
+  expect(fresh.ok).toBe(true);
+  const restored = await seamPut(page, key, id, {
+    concrete_model: original.concrete_model,
+    router: original.router,
+    inference_provider: original.inference_provider,
+    expected_updated_at: fresh.item.updated_at,
+  });
+  expect(restored.ok).toBe(true);
+}
 
 function apiKey(name) {
   const value = process.env[name];
@@ -287,3 +354,110 @@ test("keeps credentials out of web storage and the URL", async ({ page }) => {
   expect(leak.body).not.toContain(adminKey);
   expect(/\bsre_[A-Za-z0-9_-]{24,128}\b/.test(leak.body)).toBe(false);
 });
+
+async function openTriageDetail(page) {
+  await expect(page.locator(`[data-alias-row='${ALIAS}']`)).toHaveCount(1, { timeout: 20_000 });
+  await openAssignmentEdit(page, ALIAS);
+}
+
+async function fillAssignment(page, assignment) {
+  await page.fill("#edit-concrete-model", assignment.concrete_model);
+  await page.fill("#edit-router", assignment.router);
+  await page.fill("#edit-inference-provider", assignment.inference_provider);
+}
+
+test("admin opens assignment edit for triage-agent", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const probe = await seamGet(page, adminKey, ALIAS);
+  expect(probe.ok).toBe(true);
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-alias-row='${ALIAS}']`)).toHaveCount(1, { timeout: 20_000 });
+  await openAssignmentEdit(page, ALIAS);
+  await expect(page.locator("#edit-concrete-model")).toHaveValue(probe.item.concrete_model);
+  await expect(page.locator("#edit-router")).toHaveValue(probe.item.router);
+  await expect(page.locator("#edit-inference-provider")).toHaveValue(probe.item.inference_provider);
+});
+
+test("reassigns triage-agent and persists the authoritative assignment", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const before = (await seamGet(page, adminKey, ALIAS)).item;
+  try {
+    await connect(page, adminKey);
+    await expect(page.locator(`[data-alias-row='${ALIAS}']`)).toHaveCount(1, { timeout: 20_000 });
+    await openAssignmentEdit(page, ALIAS);
+    let putBody = null;
+    await page.route(`**/api/v1/model-aliases/${ALIAS}/assignment`, async (route) => {
+      if (route.request().method() === "PUT") putBody = route.request().postDataJSON();
+      await route.continue();
+    });
+    await fillAssignment(page, ALT_ASSIGNMENT);
+    await page.click("#assignment-save-button");
+    // Valid PUT persists: authoritative 200, closed body, token matches V1.
+    await expect(page.locator("#live-region")).toContainText(`Assignment updated for ${ALIAS}.`, {
+      timeout: 20_000,
+    });
+    expect(Object.keys(putBody ?? {}).sort()).toEqual([
+      "concrete_model",
+      "expected_updated_at",
+      "inference_provider",
+      "router",
+    ]);
+    expect(putBody.expected_updated_at).toBe(before.updated_at);
+    await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText(
+      ALT_ASSIGNMENT.concrete_model,
+    );
+    await expect(page.locator("[data-detail-field='updated_at']")).not.toHaveText(before.updated_at);
+    const rowText = (await page.locator(`[data-alias-row='${ALIAS}']`).textContent()) ?? "";
+    expect(rowText).toContain(ALT_ASSIGNMENT.concrete_model);
+    // alias stays: logical identity unchanged by assignment mutation.
+    await expect(page.locator("[data-detail-field='alias']")).toHaveText(ALIAS);
+    await expect(page.locator("[data-detail-field='model_alias_id']")).toHaveText(ALIAS);
+    // reload confirms persistence.
+    await page.reload();
+    await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "idle");
+    await connect(page, adminKey);
+    await expect(page.locator(`[data-alias-row='${ALIAS}']`)).toHaveCount(1, { timeout: 20_000 });
+    await page.click(`[data-detail-open='${ALIAS}']`);
+    await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText(
+      ALT_ASSIGNMENT.concrete_model,
+    );
+    await expect(page.locator("[data-detail-field='alias']")).toHaveText(ALIAS);
+    await page.unroute(`**/api/v1/model-aliases/${ALIAS}/assignment`);
+  } finally {
+    await restoreAssignment(page, adminKey, ALIAS, before);
+    await page.unrouteAll({ behavior: "wait" }).catch(() => {});
+  }
+});
+
+for (const field of ["concrete_model", "router", "inference_provider"]) {
+  test(`does not submit when ${field} is missing`, async ({ page }) => {
+    test.skip(!connected, "requires the connected control-plane API");
+    const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+    const before = (await seamGet(page, adminKey, ALIAS)).item;
+    await connect(page, adminKey);
+    await openTriageDetail(page);
+    let puts = 0;
+    const predicate = (url) => url.pathname === `/api/v1/model-aliases/${ALIAS}/assignment`;
+    await page.route(predicate, async (route) => {
+      if (route.request().method() === "PUT") puts += 1;
+      await route.continue();
+    });
+    const filled = { ...before, concrete_model: before.concrete_model, router: before.router, inference_provider: before.inference_provider };
+    filled[field] = "";
+    await page.fill("#edit-concrete-model", filled.concrete_model);
+    await page.fill("#edit-router", filled.router);
+    await page.fill("#edit-inference-provider", filled.inference_provider);
+    await page.click("#assignment-save-button");
+    await expect(page.locator("#detail-error-title")).toHaveText("Invalid assignment", {
+      timeout: 20_000,
+    });
+    await expect(page.locator("#assignment-form")).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(puts).toBe(0);
+    const after = await seamGet(page, adminKey, ALIAS);
+    expect(after.item.updated_at).toBe(before.updated_at);
+    await page.unroute(predicate);
+  });
+}
