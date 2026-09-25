@@ -21,6 +21,8 @@ from sre_agent.governance.dto import (
     PrincipalContext,
     Resource,
     ResourceCatalogEntry,
+    SkillManifest,
+    SkillVersionRecord,
 )
 from sre_agent.persistence.api_keys import (
     api_key_prefix,
@@ -38,6 +40,7 @@ from sre_agent.persistence.models import (
     MCPToolRow,
     PrincipalRow,
     ResourceRow,
+    SkillVersionRow,
 )
 from sre_agent.persistence.projections import (
     project_audit_event,
@@ -789,6 +792,80 @@ class CatalogRepository:
         row.visibility = resource.visibility
         row.description = resource.description
         row.tags = list(resource.tags)
+
+
+class SkillVersionConflictError(RuntimeError):
+    """An immutable Skill identity is already bound to another publication."""
+
+
+class SkillVersionRepository:
+    """Persist immutable Skill bodies alongside their governed catalog projection."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def publish(
+        self,
+        *,
+        skill_id: str,
+        version: str,
+        owner_id: str,
+        manifest: SkillManifest,
+        content_sha256: str,
+        now: datetime | None = None,
+    ) -> SkillVersionRecord:
+        resource_id = f"{skill_id}@{version}"
+        existing = await self._session.get(SkillVersionRow, (skill_id, version))
+        if existing is not None:
+            if existing.owner_id != owner_id or existing.content_sha256 != content_sha256:
+                raise SkillVersionConflictError(resource_id)
+            return self._project(existing)
+
+        created_at = now or datetime.now(UTC)
+        row = SkillVersionRow(
+            skill_id=skill_id,
+            version=version,
+            resource_type="skill",
+            resource_id=resource_id,
+            owner_id=owner_id,
+            manifest=manifest.model_dump(mode="json"),
+            content_sha256=content_sha256,
+            created_at=created_at,
+        )
+        await CatalogRepository(self._session).create(
+            resource_type="skill",
+            resource_id=resource_id,
+            owner_id=owner_id,
+            source="skill",
+            source_ref=resource_id,
+            status="published",
+            display_name=manifest.display_name,
+            visibility="private",
+            description=manifest.description,
+            tags=[],
+            now=created_at,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return self._project(row)
+
+    async def get(self, skill_id: str, version: str) -> SkillVersionRecord | None:
+        row = await self._session.get(SkillVersionRow, (skill_id, version))
+        return self._project(row) if row is not None else None
+
+    @staticmethod
+    def _project(row: SkillVersionRow) -> SkillVersionRecord:
+        return SkillVersionRecord.model_validate(
+            {
+                "skill_id": row.skill_id,
+                "version": row.version,
+                "owner_id": row.owner_id,
+                "resource_id": row.resource_id,
+                "manifest": row.manifest,
+                "content_sha256": row.content_sha256,
+                "created_at": row.created_at,
+            }
+        )
 
 
 class GrantRepository:

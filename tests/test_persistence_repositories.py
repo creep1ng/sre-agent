@@ -10,15 +10,18 @@ from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
 from sre_agent.governance.authorization import ResourceAuthorizationFact
-from sre_agent.governance.dto import AuditEvent, Consumption, PricingContext
+from sre_agent.governance.dto import AuditEvent, Consumption, PricingContext, SkillManifest
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.projections import project_audit_event
 from sre_agent.persistence.repositories import (
     AuditRepository,
+    CatalogRepository,
     CredentialRepository,
     GrantRepository,
     PrincipalRepository,
     ResourceRepository,
+    SkillVersionConflictError,
+    SkillVersionRepository,
 )
 
 DATABASE_URL = os.environ.get(
@@ -31,7 +34,7 @@ def repository_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
             "mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
@@ -160,6 +163,55 @@ async def test_lookup_round_trips_are_secret_and_routing_safe() -> None:
         assert "scrypt$do-not-project" not in serialized
         assert "router" not in serialized
         assert "inference_provider" not in serialized
+    await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_skill_version_repository_persists_immutable_owner_backed_version() -> None:
+    database = Database(DATABASE_URL)
+    manifest = SkillManifest(
+        display_name="Incident triage",
+        description="A concise incident triage guide.",
+        instructions="Assess impact before proposing recovery.",
+        dependencies=[],
+    )
+    repository = None
+    async with database.transaction() as session:
+        repository = SkillVersionRepository(session)
+        published = await repository.publish(
+            skill_id="incident-triage-demo",
+            version="1.0.0",
+            owner_id="demo-human",
+            manifest=manifest,
+            content_sha256="a" * 64,
+        )
+        replay = await repository.publish(
+            skill_id="incident-triage-demo",
+            version="1.0.0",
+            owner_id="demo-human",
+            manifest=manifest,
+            content_sha256="a" * 64,
+        )
+        stored = await repository.get("incident-triage-demo", "1.0.0")
+
+        assert published == replay == stored
+        assert stored is not None
+        assert stored.resource_id == "incident-triage-demo@1.0.0"
+        assert stored.manifest == manifest
+        assert stored.owner_id == "demo-human"
+        with pytest.raises(SkillVersionConflictError):
+            await repository.publish(
+                skill_id="incident-triage-demo",
+                version="1.0.0",
+                owner_id="demo-human",
+                manifest=manifest.model_copy(update={"instructions": "Changed content."}),
+                content_sha256="b" * 64,
+            )
+
+        resource = await CatalogRepository(session).get("skill", stored.resource_id)
+        assert resource is not None
+        assert resource.owner_id == "demo-human"
+        assert resource.status == "published"
     await database.dispose()
 
 

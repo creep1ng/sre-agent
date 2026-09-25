@@ -48,7 +48,7 @@ def governed_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
             "mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
