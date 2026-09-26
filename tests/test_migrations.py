@@ -415,3 +415,42 @@ def test_consumption_is_append_only_with_exact_decimal_json() -> None:
             connection.execute(
                 "UPDATE audit_events SET consumption='{}'::jsonb WHERE event_id=%s", (event_id,)
             )
+
+
+def test_skill_resolution_audit_operation_and_denied_404_are_persistable() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              response_status, retryable, latency_ms, correlation, resource, redaction,
+              content_state, authoritative_acceptance, ordinary_result, exporter_result)
+            VALUES ('00000000-0000-4000-8000-000000000016', now(), 'skills.resolve',
+              'invoke', 'authorization', 'success', 'grant_matched', 200, false, 0,
+              '{\"request_id\":\"successful-skill-read\"}'::jsonb,
+              '{\"resource_type\":\"skill\"}'::jsonb, '{}', 'absent',
+              'accepted', 'released', 'not_attempted')"""
+        )
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              authorization_denial_cause, response_status, retryable, latency_ms,
+              correlation, resource, redaction, content_state, authoritative_acceptance,
+              ordinary_result, exporter_result)
+            VALUES ('00000000-0000-4000-8000-000000000017', now(), 'skills.resolve',
+              'invoke', 'authorization', 'denied', 'no_matching_grant', 'resource_missing',
+              404, false, 0, '{\"request_id\":\"unavailable-skill-read\"}'::jsonb,
+              '{\"resource_type\":\"skill\"}'::jsonb, '{}', 'absent', 'accepted',
+              'suppressed', 'not_attempted')"""
+        )
+        rows = connection.execute(
+            "SELECT operation, response_status, authorization_denial_cause "
+            "FROM audit_events WHERE event_id IN (%s, %s) ORDER BY event_id",
+            (
+                "00000000-0000-4000-8000-000000000016",
+                "00000000-0000-4000-8000-000000000017",
+            ),
+        ).fetchall()
+    assert rows == [
+        ("skills.resolve", 200, None),
+        ("skills.resolve", 404, "resource_missing"),
+    ]
