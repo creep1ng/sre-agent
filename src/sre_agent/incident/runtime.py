@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
+from sre_agent import _core
 from sre_agent.incident.persistence import (
     DecisionDraft,
     EventDraft,
@@ -164,14 +164,14 @@ class IncidentRuntime:
                 transition = self._workflow.transition(command.transition_id)
             except InvalidWorkflowError as error:
                 raise InvalidTransitionError(str(error)) from error
-            self._validate(command, transition, incident.state)
+            selected_outcome = self._validate(command, transition, incident.state)
             now = self._clock()
             incident_state, run_state = self._reduce(
-                command, transition, incident.state, run.state, now
+                command, transition, incident.state, run.state, now, selected_outcome
             )
             decision = DecisionDraft(
                 decision_id=self._id_factory("dec"),
-                document=self._decision_document(command, transition, now),
+                document=self._decision_document(command, transition, now, selected_outcome),
                 decided_at=now,
                 run_id=command.run_id,
                 turn_id=command.turn_id,
@@ -275,33 +275,31 @@ class IncidentRuntime:
         command: IncidentCommand,
         transition: Transition,
         state: Mapping[str, Any],
-    ) -> None:
-        if state.get("state") != transition.source:
+    ) -> object | None:
+        verdict, selected_outcome = _core.admit_incident_transition(state, command, transition)
+        if verdict == "source_mismatch":
             raise InvalidTransitionError(
                 f"transition '{transition.transition_id}' requires state '{transition.source}'"
             )
-        if command.actor not in transition.actors:
+        if verdict == "actor_forbidden":
             raise InvalidTransitionError(
                 f"actor '{command.actor}' cannot execute '{transition.transition_id}'"
             )
-        if command.actor == "human" and command.actor_reference is None:
+        if verdict == "human_reference_missing":
             raise PreconditionFailedError("human commands require an actor reference")
-        if command.actor_reference is not None and (
-            command.actor_reference.reference_version != "1.0.0"
-            or re.fullmatch(r"[a-z][a-z0-9_-]{2,63}", command.actor_reference.principal_id) is None
-        ):
+        if verdict == "actor_reference_invalid":
             raise PreconditionFailedError("actor reference is invalid")
-        if transition.requires_approval and (command.actor != "human" or not command.approval):
+        if verdict == "approval_required":
             raise ApprovalRequiredError(transition.transition_id)
-        if transition.outcomes:
-            if command.outcome is None and len(transition.outcomes) == 1:
-                pass
-            elif command.outcome not in transition.outcomes:
-                raise PreconditionFailedError(
-                    f"transition '{transition.transition_id}' requires outcome "
-                    f"{list(transition.outcomes)}"
-                )
+        if verdict == "outcome_required":
+            raise PreconditionFailedError(
+                f"transition '{transition.transition_id}' requires outcome "
+                f"{list(transition.outcomes)}"
+            )
+        if verdict != "accepted":
+            raise IncidentRuntimeError(f"unknown native admission verdict '{verdict}'")
         self._validate_named_preconditions(command, transition, state)
+        return selected_outcome
 
     def _validate_named_preconditions(
         self,
@@ -356,6 +354,7 @@ class IncidentRuntime:
         old_incident: Mapping[str, Any],
         old_run: Mapping[str, Any],
         now: datetime,
+        selected_outcome: object | None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         inputs = dict(command.inputs or {})
         incident = dict(old_incident)
@@ -391,12 +390,14 @@ class IncidentRuntime:
             }.get(transition.transition_id, "triaged")
             incident["alert"] = alert
         if transition.transition_id in {"apply_mitigation", "reject_mitigation"}:
+            if not isinstance(selected_outcome, str):
+                raise IncidentRuntimeError("native admission omitted mitigation outcome")
             strategy = dict(incident["mitigation_strategy"])
             strategy["approval_status"] = {
                 "approve": "approved",
                 "reject": "rejected",
                 "request_changes": "changes_requested",
-            }[command.outcome or transition.outcomes[0]]
+            }[selected_outcome]
             incident["mitigation_strategy"] = strategy
         self._validate_result(transition, incident)
 
@@ -425,16 +426,19 @@ class IncidentRuntime:
             raise PreconditionFailedError("closed incidents require a postmortem")
 
     def _decision_document(
-        self, command: IncidentCommand, transition: Transition, now: datetime
+        self,
+        command: IncidentCommand,
+        transition: Transition,
+        now: datetime,
+        selected_outcome: object | None,
     ) -> dict[str, Any]:
-        outcome = command.outcome or (transition.outcomes[0] if transition.outcomes else None)
         actor_reference = asdict(command.actor_reference) if command.actor_reference else None
         return {
             "workflow_id": self._workflow.workflow_id,
             "workflow_version": self._workflow.version,
             "transition_id": transition.transition_id,
             "decision_point": transition.decision_point,
-            "outcome": outcome,
+            "outcome": selected_outcome,
             "actor": command.actor,
             "actor_reference": actor_reference,
             "approval": (

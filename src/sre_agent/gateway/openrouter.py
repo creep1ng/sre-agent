@@ -4,13 +4,13 @@ import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from re import fullmatch
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 import httpx
 from pydantic import ValidationError
 
+from sre_agent import _core
 from sre_agent.gateway.providers import (
     ProviderFailure,
     ProviderFailureKind,
@@ -70,25 +70,18 @@ class OpenRouterProvider:
             raise _failure("invalid_response", response)
 
         body = _json_body(response)
-        if not isinstance(body, Mapping):
-            raise ProviderFailure("invalid_response", consumption=_empty_consumption("unavailable"))
-        if (
-            not _generation_id(body.get("id"))
-            or body.get("model") != request.model
-            or body.get("error") is not None
-            or body.get("incomplete_details") is not None
-        ):
-            raise ProviderFailure("invalid_response", consumption=_failure_consumption(body))
-        try:
-            selected_model = _selected_model(body.get("openrouter_metadata"), request)
-        except ProviderFailure as failure:
+        stage, detail = _core.inspect_provider_response(body, request.model, request.provider)
+        if stage == "reject":
             raise ProviderFailure(
-                failure.kind,
-                retry_after=failure.retry_after,
-                consumption=_failure_consumption(body),
+                cast(ProviderFailureKind, detail),
+                consumption=(
+                    _failure_consumption(body)
+                    if isinstance(body, Mapping)
+                    else _empty_consumption("unavailable")
+                ),
             ) from None
-        if selected_model != request.model and not await self._catalog_confirms_selected_model(
-            selected_model, request
+        if stage == "catalog_required" and not await self._catalog_confirms_selected_model(
+            cast(str, detail), request
         ):
             raise ProviderFailure("evidence_invalid", consumption=_failure_consumption(body))
         try:
@@ -133,100 +126,14 @@ class OpenRouterProvider:
             body = response.json() if response.is_success else None
         except (ValueError, httpx.HTTPError):
             return False
-        return _catalog_match(body, selected_model, request)
-
-
-def _selected_model(metadata: Any, request: ProviderRequest) -> str:
-    if not isinstance(metadata, Mapping):
-        raise ProviderFailure("evidence_invalid")
-    endpoints = metadata.get("endpoints")
-    available = endpoints.get("available") if isinstance(endpoints, Mapping) else None
-    selected = (
-        [item for item in available if isinstance(item, Mapping) and item.get("selected") is True]
-        if isinstance(available, list)
-        else []
-    )
-    evidence = selected[0] if len(selected) == 1 else {}
-    attempts = metadata.get("attempts")
-    valid_attempts = attempts is None or (
-        isinstance(attempts, list)
-        and len(attempts) == 1
-        and _matches_provider(attempts[0], request)
-        and attempts[0].get("model") == evidence.get("model")
-        and attempts[0].get("status") == 200
-    )
-    if not (
-        metadata.get("requested") == request.model
-        and metadata.get("strategy") == "direct"
-        and metadata.get("attempt") == 1
-        and _matches_provider(evidence, request)
-        and valid_attempts
-    ):
-        raise ProviderFailure("evidence_invalid")
-    model = evidence.get("model") if isinstance(evidence, Mapping) else None
-    if not isinstance(model, str):
-        raise ProviderFailure("evidence_invalid")
-    return model
-
-
-def _matches_provider(evidence: Any, request: ProviderRequest) -> bool:
-    return (
-        isinstance(evidence, Mapping)
-        and isinstance(evidence.get("provider"), str)
-        and evidence["provider"].casefold() == request.provider.casefold()
-    )
-
-
-def _catalog_match(body: Any, selected_model: str, request: ProviderRequest) -> bool:
-    data = body.get("data") if isinstance(body, Mapping) else None
-    endpoints = data.get("endpoints") if isinstance(data, Mapping) else None
-    if (
-        not isinstance(data, Mapping)
-        or data.get("id") != request.model
-        or not isinstance(endpoints, list)
-    ):
-        return False
-    candidates = []
-    for endpoint in endpoints:
-        if not isinstance(endpoint, Mapping):
-            continue
-        provider_name = endpoint.get("provider_name")
-        tag = endpoint.get("tag")
-        if not isinstance(provider_name, str) or not isinstance(tag, str):
-            continue
-        if (
-            endpoint.get("model_id") == request.model
-            and provider_name.casefold() == request.provider.casefold()
-            and (tag == request.provider or tag.startswith(f"{request.provider}/"))
-            and endpoint.get("name") == f"{provider_name} | {selected_model}"
-        ):
-            candidates.append(endpoint)
-    return len(candidates) == 1
+        return _core.confirm_provider_catalog(body, selected_model, request.model, request.provider)
 
 
 def _completed_output_text(body: Mapping[str, Any]) -> str:
-    if body.get("status") != "completed" or not isinstance(body.get("output"), list):
+    text = _core.completed_openrouter_output_text(body)
+    if text is None:
         raise ProviderFailure("invalid_response")
-    text: list[str] = []
-    for item in body["output"]:
-        if not (
-            isinstance(item, Mapping)
-            and item.get("type") == "message"
-            and item.get("role") == "assistant"
-            and item.get("status") == "completed"
-            and isinstance(item.get("content"), list)
-        ):
-            continue
-        for content in item["content"]:
-            if (
-                isinstance(content, Mapping)
-                and content.get("type") == "output_text"
-                and isinstance(content.get("text"), str)
-            ):
-                text.append(content["text"])
-    if not text:
-        raise ProviderFailure("invalid_response")
-    return "\n".join(text)
+    return text
 
 
 def _json_body(response: httpx.Response) -> Any:
@@ -267,82 +174,66 @@ def _failure(
 
 
 def _failure_consumption(body: Mapping[str, Any]) -> Consumption:
-    consumption = _consumption(body)
-    return (
-        _empty_consumption("unavailable") if consumption.availability == "absent" else consumption
-    )
+    return _consumption(body, failure_context=True)
 
 
-def _consumption(body: Mapping[str, Any]) -> Consumption:
+def _consumption(body: Mapping[str, Any], *, failure_context: bool = False) -> Consumption:
     usage = body.get("usage")
+    missing = (None, False, False)
     if usage is None:
-        return _empty_consumption("absent")
-    if not isinstance(usage, Mapping):
-        return _empty_consumption("unavailable")
-
-    input_tokens, input_invalid, input_present = _token_value(
-        usage, "input_tokens", "prompt_tokens"
-    )
-    output_tokens, output_invalid, output_present = _token_value(
-        usage, "output_tokens", "completion_tokens"
-    )
-    total_tokens, total_invalid, total_present = _token_value(usage, "total_tokens")
-    billed_usd, cost_invalid, cost_present = _decimal_value(usage, "cost")
-    invalid = input_invalid or output_invalid or total_invalid or cost_invalid
-    if (
-        input_tokens is not None
-        and output_tokens is not None
-        and total_tokens is not None
-        and total_tokens != input_tokens + output_tokens
-    ):
-        total_tokens, invalid = None, True
-
-    pricing_context: PricingContext | None = None
-    if billed_usd is not None:
-        observed_at = _observed_at(body.get("created_at"))
-        if observed_at is None:
-            billed_usd, cost_invalid = None, True
-        else:
-            observed = observed_at.isoformat().replace("+00:00", "Z")
-            pricing_context = PricingContext(
-                observed_at=observed_at,
-                price_version=f"openrouter:{observed}",
-            )
-
-    has_values = any(
-        value is not None for value in (input_tokens, output_tokens, total_tokens, billed_usd)
-    )
-    known_evidence = any((input_present, output_present, total_present, cost_present))
-    availability: ConsumptionAvailability
-    if not has_values:
-        availability = "unavailable" if invalid or known_evidence or bool(usage) else "absent"
+        state: Literal["missing", "invalid", "mapping"] = "missing"
+        nonempty = False
+        input_fact = output_fact = total_fact = cost_fact = missing
+    elif not isinstance(usage, Mapping):
+        state = "invalid"
+        nonempty = False
+        input_fact = output_fact = total_fact = cost_fact = missing
     else:
-        currency: Literal["USD"] | None = "USD" if billed_usd is not None else None
-        precision: Literal["exact"] | None = "exact" if billed_usd is not None else None
-        complete = all(
-            value is not None
-            for value in (
-                input_tokens,
-                output_tokens,
-                total_tokens,
-                billed_usd,
-                currency,
-                precision,
-                pricing_context,
-            )
+        state = "mapping"
+        nonempty = bool(usage)
+        input_fact = _token_value(usage, "input_tokens", "prompt_tokens")
+        output_fact = _token_value(usage, "output_tokens", "completion_tokens")
+        total_fact = _token_value(usage, "total_tokens")
+        cost_fact = _decimal_value(usage, "cost")
+
+    observed_at = _observed_at(body.get("created_at")) if cost_fact[0] is not None else None
+    availability, input_value, output_value, total_value, billed_usd, billing_context = (
+        _core.project_openrouter_consumption(
+            state,
+            nonempty,
+            _token_fact(input_fact),
+            _token_fact(output_fact),
+            _token_fact(total_fact),
+            cost_fact,
+            observed_at is not None,
+            failure_context,
         )
-        availability = "complete" if complete and not invalid else "partial"
-        return _build_consumption(
-            availability,
-            input_tokens,
-            output_tokens,
-            total_tokens,
-            billed_usd,
-            currency,
-            precision,
-            pricing_context,
+    )
+    pricing_context: PricingContext | None = None
+    if billing_context:
+        assert observed_at is not None
+        observed = observed_at.isoformat().replace("+00:00", "Z")
+        pricing_context = PricingContext(
+            observed_at=observed_at,
+            price_version=f"openrouter:{observed}",
         )
-    return _empty_consumption(availability)
+    currency: Literal["USD"] | None = "USD" if billing_context else None
+    precision: Literal["exact"] | None = "exact" if billing_context else None
+    return _build_consumption(
+        cast(ConsumptionAvailability, availability),
+        int(input_value) if input_value is not None else None,
+        int(output_value) if output_value is not None else None,
+        int(total_value) if total_value is not None else None,
+        billed_usd,
+        currency,
+        precision,
+        pricing_context,
+    )
+
+
+def _token_fact(fact: tuple[int | None, bool, bool]) -> tuple[str | None, bool, bool]:
+    value, invalid, present = fact
+    return (str(value) if value is not None else None, invalid, present)
 
 
 def _build_consumption(
@@ -426,10 +317,6 @@ def _observed_at(value: Any) -> datetime | None:
             return None
         return parsed if parsed.tzinfo is not None else None
     return None
-
-
-def _generation_id(value: Any) -> bool:
-    return isinstance(value, str) and fullmatch(r"gen-[A-Za-z0-9_-]{8,128}", value) is not None
 
 
 def _error_envelope(response: httpx.Response) -> bool:

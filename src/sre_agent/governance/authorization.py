@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 
+from sre_agent import _core
 from sre_agent.governance.dto import Grant, PolicyDecision, Principal, ResourceType
 
 
@@ -56,7 +57,7 @@ class AuthorizationEvaluation:
 
 
 class AuthorizationDecisionEngine:
-    """Evaluate authorization facts in the sole deterministic precedence order."""
+    """Gather staged facts and translate the Rust policy result."""
 
     def __init__(self, resources: ResourceFactReader, grants: GrantFactReader) -> None:
         self._resources = resources
@@ -69,54 +70,45 @@ class AuthorizationDecisionEngine:
         resource_type: ResourceType,
         resource_id: str,
     ) -> AuthorizationEvaluation:
-        if principal.status != "active":
-            return self._deny(AuthorizationDenialCause.PRINCIPAL_INACTIVE)
+        # Reading is staged to preserve the existing I/O boundary; Rust still
+        # evaluates every supplied fact and is the only decision authority.
+        resource = None
+        grant = None
+        if principal.status == "active":
+            resource = await self._resources.authorization_view(resource_type, resource_id)
+            if (
+                resource is not None
+                and (resource.resource_type, resource.resource_id) == (resource_type, resource_id)
+                and resource.status == "active"
+            ):
+                grant = await self._grants.find_active(
+                    principal.principal_id, action, resource_type, resource_id
+                )
 
-        resource = await self._resources.authorization_view(resource_type, resource_id)
-        if resource is None or (resource.resource_type, resource.resource_id) != (
+        allowed, reason_code, policy_id, cause = _core.evaluate_authorization(
+            principal.status,
+            principal.principal_id,
+            action,
             resource_type,
             resource_id,
-        ):
-            return self._deny(AuthorizationDenialCause.RESOURCE_MISSING)
-        if resource.status != "active":
-            return self._deny(AuthorizationDenialCause.RESOURCE_INACTIVE)
-
-        grant = await self._grants.find_active(
-            principal.principal_id, action, resource_type, resource_id
+            (resource.resource_type, resource.resource_id, resource.status) if resource else None,
+            (
+                grant.grant_id,
+                grant.principal_id,
+                grant.action,
+                grant.resource.resource_type,
+                grant.resource.resource_id,
+                grant.effect,
+                grant.status,
+            )
+            if grant
+            else None,
         )
-        if grant is None or not self._is_exact_active_grant(
-            grant, principal.principal_id, action, resource_type, resource_id
-        ):
-            return self._deny(AuthorizationDenialCause.GRANT_NOT_APPLICABLE)
         return AuthorizationEvaluation(
             decision=PolicyDecision(
-                decision="allow", reason_code="grant_matched", policy_id=grant.grant_id
+                decision="allow" if allowed else "deny",
+                reason_code=reason_code,
+                policy_id=policy_id,
             ),
-            denial_cause=None,
-        )
-
-    @staticmethod
-    def _is_exact_active_grant(
-        grant: Grant,
-        principal_id: str,
-        action: str,
-        resource_type: ResourceType,
-        resource_id: str,
-    ) -> bool:
-        return (
-            grant.principal_id == principal_id
-            and grant.action == action
-            and grant.resource.resource_type == resource_type
-            and grant.resource.resource_id == resource_id
-            and grant.effect == "allow"
-            and grant.status == "active"
-        )
-
-    @staticmethod
-    def _deny(cause: AuthorizationDenialCause) -> AuthorizationEvaluation:
-        return AuthorizationEvaluation(
-            decision=PolicyDecision(
-                decision="deny", reason_code="no_matching_grant", policy_id=None
-            ),
-            denial_cause=cause,
+            denial_cause=AuthorizationDenialCause(cause) if cause else None,
         )

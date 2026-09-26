@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
+from sre_agent import _core
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
@@ -267,10 +268,7 @@ class ResponsesService:  # noqa: E305
                                       assignment=assignment, identifiers=identifiers,
                                       consumption=consumption)
         except ProviderFailure as failure:
-            status, reason, code = {"timeout": (504, "upstream_failed", "upstream_timeout"),
-                                    "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
-                                    "evidence_invalid": (502, "upstream_invalid", "provider_evidence_invalid")}.get(
-                                        failure.kind, (502, "upstream_invalid", "upstream_invalid_response"))
+            status, reason, code = _core.map_provider_failure(failure.kind)
             return await self._finish(request_id, started, status, "upstream", context=context,
                                       alias=request.model, decision=decision, assignment=assignment,
                                       reason=reason, retryable=status in {503, 504}, identifiers=identifiers,

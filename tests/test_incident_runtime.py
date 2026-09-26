@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -276,6 +277,69 @@ async def test_human_approval_is_attributed_and_repeating_command_is_idempotent(
     assert len(store.events) == len(store.decisions) == 1
     approval = store.decisions[0].document["approval"]
     assert approval["actor_reference"]["principal_id"] == "operator_one"
+
+
+@pytest.mark.asyncio
+async def test_single_outcome_is_selected_once_for_reducer_and_decision(workflow) -> None:
+    store = MemoryStore("mitigating", mitigation_strategy={"verification_check": "errors < 1%"})
+    await runtime(workflow, store).execute(command("apply_mitigation", approval=True))
+
+    assert store.incident.state["mitigation_strategy"]["approval_status"] == "approved"
+    assert store.decisions[0].document["outcome"] == "approve"
+
+
+def test_admission_verdicts_keep_existing_error_classes_and_messages(workflow) -> None:
+    engine = runtime(workflow, MemoryStore("mitigating"))
+    transition = workflow.transition("apply_mitigation")
+    state = {"state": "mitigating", "mitigation_strategy": {"verification_check": "ok"}}
+    with pytest.raises(InvalidTransitionError, match="requires state 'mitigating'"):
+        engine._validate(command("apply_mitigation"), transition, {"state": "active"})
+    with pytest.raises(InvalidTransitionError, match="actor 'agent' cannot execute"):
+        engine._validate(command("apply_mitigation", actor="agent"), transition, state)
+    with pytest.raises(PreconditionFailedError, match="human commands require an actor reference"):
+        engine._validate(command("apply_mitigation", actor_reference=None), transition, state)
+    with pytest.raises(PreconditionFailedError, match="actor reference is invalid"):
+        engine._validate(
+            command("apply_mitigation", actor_reference=ActorReference("BAD")), transition, state
+        )
+    with pytest.raises(ApprovalRequiredError, match="apply_mitigation"):
+        engine._validate(command("apply_mitigation"), transition, state)
+    with pytest.raises(PreconditionFailedError, match="requires outcome"):
+        engine._validate(
+            command("apply_mitigation", outcome="reject", approval=True), transition, state
+        )
+
+
+@pytest.mark.parametrize(
+    ("changes", "error", "message"),
+    [
+        ({"actor": 7}, InvalidTransitionError, "actor '7' cannot execute 'apply_mitigation'"),
+        (
+            {"actor_reference": ActorReference("operator_one", reference_version=7)},
+            PreconditionFailedError,
+            "actor reference is invalid",
+        ),
+        ({"outcome": 7}, PreconditionFailedError, "requires outcome ['approve']"),
+    ],
+)
+def test_malformed_admission_facts_preserve_error_contract(
+    workflow, changes: dict[str, object], error: type[Exception], message: str
+) -> None:
+    engine = runtime(workflow, MemoryStore("mitigating"))
+    malformed = replace(command("apply_mitigation", approval=True), **changes)
+    transition = workflow.transition("apply_mitigation")
+    with pytest.raises(error, match=re.escape(message)):
+        engine._validate(malformed, transition, {"state": "mitigating"})
+
+
+@pytest.mark.asyncio
+async def test_unconstrained_outcome_preserves_existing_decision_value(workflow) -> None:
+    store = MemoryStore()
+    malformed = replace(
+        command("start_investigation", actor="agent", actor_reference=None), outcome=7
+    )
+    await runtime(workflow, store).execute(malformed)
+    assert store.decisions[0].document["outcome"] == 7
 
 
 @pytest.mark.asyncio

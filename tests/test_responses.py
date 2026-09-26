@@ -9,6 +9,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 
+from sre_agent import _core
 from sre_agent.application import create_application
 from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
 from sre_agent.governance.dto import Consumption, PricingContext
@@ -500,6 +501,56 @@ def test_provider_failures_are_normalized_without_fallback(
     event = latest_events()[0]
     assert response.status_code == status and response.json()["error"]["code"] == code
     assert len(provider.requests) == 1 and event[0] == "upstream"
+    assert event[7]["consumption"] == empty_consumption("unavailable")
+
+
+def test_unknown_provider_failure_uses_native_mapping_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    native_mapping = _core.map_provider_failure
+
+    def recording_mapping(kind: str) -> tuple[int, str, str]:
+        calls.append(kind)
+        return native_mapping(kind)
+
+    monkeypatch.setattr(_core, "map_provider_failure", recording_mapping)
+    response = post(RecordingProvider("future_failure"), "incident-harness")
+    event = latest_events()[0]
+
+    assert calls == ["future_failure"]
+    assert response.status_code == 502
+    assert response.json()["error"] == {
+        "code": "upstream_invalid_response",
+        "message": "Provider response was invalid.",
+    }
+    assert response.json()["retryable"] is False
+    assert event[0:2] == ("upstream", 502)
+    assert event[7]["reason_code"] == "upstream_invalid"
+
+
+@pytest.mark.parametrize("kind", [7, None, b"timeout"])
+def test_malformed_provider_failure_kind_is_safely_audited(kind: object) -> None:
+    class MalformedKindProvider(RecordingProvider):
+        async def create(self, request: ProviderRequest) -> ProviderResult:
+            self.requests.append(request)
+            raise ProviderFailure(kind)  # type: ignore[arg-type]
+
+    provider = MalformedKindProvider()
+    response = post(provider, "incident-harness")
+    events = events_for_request(response.json()["request_id"])
+
+    assert len(provider.requests) == 1
+    assert len(events) == 1
+    event = events[0]
+    assert response.status_code == 502
+    assert response.json()["error"] == {
+        "code": "upstream_invalid_response",
+        "message": "Provider response was invalid.",
+    }
+    assert response.json()["retryable"] is False
+    assert event[0:2] == ("upstream", 502)
+    assert event[7]["reason_code"] == "upstream_invalid"
     assert event[7]["consumption"] == empty_consumption("unavailable")
 
 

@@ -445,42 +445,28 @@ class ControlService:  # noqa: E305
         authorization_denial_cause: Any = None,
         audit_session: AsyncSession | None = None,
     ) -> JSONResponse:
-        # Terminal audit events must satisfy the control AuditEvent validator:
-        # stage=authorization carries identity+resource+decision (no alias);
-        # any other stage carries no subject evidence. reason_code mirrors the
-        # public error_code so 403 deny evidence stays consistent.
-        audit_stage = stage if stage == "authorization" else "audit"
-        audit_context = context if audit_stage == "authorization" else None
-        audit_resource = resource_ref if audit_stage == "authorization" else None
-        audit_decision = decision if audit_stage == "authorization" else None
-        audit_cause = (
-            authorization_denial_cause
-            if audit_stage == "authorization" and status in {403, 404}
-            else None
-        )
-        audit_reason = {
-            "validation_error": "contract_validation_failed",
-            "invalid_idempotency_key": "contract_validation_failed",
-            "idempotency_conflict": "status_conflict",
-            "credential_inactive": "contract_validation_failed",
-            "rotation_failed": "upstream_failed",
-            "credential_issuance_failed": "upstream_failed",
-            "resource_unavailable": "no_matching_grant",
-        }.get(error_code, error_code)
         try:
+            projection = self.projector.control_plan(
+                status,
+                stage,
+                error_code,
+                True,
+                False,
+                context,
+                resource_ref,
+                decision,
+                authorization_denial_cause,
+            )
+            response_retryable = projection["retryable"]
             event = self.projector.control_event(
                 request_id,
                 status,
                 max(0, int((monotonic() - started) * 1000)),
-                audit_stage,
+                stage,
                 operation=operation,
                 action=action,
-                reason=audit_reason,
-                retryable=status in {500, 503, 504},
-                context=audit_context,
-                resource_ref=audit_resource,
-                decision=audit_decision,
-                authorization_denial_cause=audit_cause,
+                context=context,
+                _projection=projection,
             )
             if audit_session is None:
                 await self.audit.append(event)
@@ -488,6 +474,9 @@ class ControlService:  # noqa: E305
                 await self.audit.append_in_transaction(event, audit_session)
         except Exception:
             error_code, status, payload = "audit_unavailable", 503, None
+            # The native plan or audit sink may itself be unavailable. Never
+            # invoke a failed planner again while forming the fail-closed 503.
+            response_retryable = True
         if payload is not None and status != 204:
             return JSONResponse(payload, status_code=status)
         if status == 204:
@@ -499,7 +488,7 @@ class ControlService:  # noqa: E305
             {
                 "error": {"code": code, "message": message},
                 "request_id": str(request_id),
-                "retryable": status in {500, 503, 504},
+                "retryable": response_retryable,
             },
             status,
         )

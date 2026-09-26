@@ -4,6 +4,7 @@ from typing import Literal
 
 import pytest
 
+from sre_agent import _core
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationDenialCause,
@@ -18,6 +19,8 @@ RESOURCE_TYPES: tuple[ResourceType, ...] = (
     "mcp_tool",
     "skill",
     "bok_collection",
+    "administrative_control",
+    "incident_workflow",
 )
 
 
@@ -186,3 +189,24 @@ async def test_authorization_fact_lookups_receive_the_exact_request_identity() -
     assert result.decision.decision == "allow"
     assert resources.requests == [("skill", "resource-id")]
     assert grants.requests == [(subject.principal_id, "invoke", "skill", "resource-id")]
+
+
+@pytest.mark.asyncio
+async def test_authorization_calls_the_native_policy_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    subject = principal()
+    resources = ResourceFacts(ResourceAuthorizationFact("skill", "resource-id", "active"))
+    grants = GrantFacts(grant(subject, "skill", "resource-id"))
+    original = _core.evaluate_authorization
+    calls: list[tuple[object, ...]] = []
+
+    def counting_policy(*facts: object) -> tuple[bool, str, str | None, str | None]:
+        calls.append(facts)
+        return original(*facts)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(_core, "evaluate_authorization", counting_policy)
+    result = await AuthorizationDecisionEngine(resources, grants).evaluate(
+        subject, "invoke", "skill", "resource-id"
+    )
+
+    assert result.decision.decision == "allow"
+    assert len(calls) == 1

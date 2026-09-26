@@ -1,6 +1,8 @@
 # Digest verified against Docker Hub on 2026-09-08. Keep the tag for
 # recognition and the digest for repeatable builds.
-FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS base
+FROM rust:1.98.1-slim-bookworm@sha256:ff521445a372125ed4f76e1453a1f8098f2d05332d1601d30db1c1f62757e730 AS rust-toolchain
+
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea AS python-base
 
 ARG SRE_AGENT_APPLICATION_VERSION=""
 ARG SRE_AGENT_CONTRACT_VERSION=""
@@ -15,7 +17,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SRE_AGENT_BUILD_REVISION=${SRE_AGENT_BUILD_REVISION}
 
 WORKDIR /app
+
+FROM python-base AS base
+
+ENV CARGO_HOME=/usr/local/cargo \
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH="/usr/local/cargo/bin:${PATH}"
+COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
+COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y build-essential \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock ./
+COPY rust ./rust
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY src ./src
@@ -49,12 +63,12 @@ COPY .dockerignore compose.yaml README.md .importlinter playwright.config.js pla
 USER 65532:65532
 CMD ["sh", "-c", "python scripts/assert_test_database_isolated.py && shellcheck docker/harness-entrypoint.sh scripts/worktree-compose && ruff check --no-cache . && ruff format --check --no-cache . && uv lock --check --no-cache && lint-imports --no-cache && mypy --cache-dir=/tmp/mypy src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py src/sre_agent/governance/dto.py src/sre_agent/governance/authorization.py && pytest && alembic check"]
 
-FROM base AS runtime
+FROM python-base AS runtime
 
 COPY --from=runtime-dependencies /app/.venv /app/.venv
 COPY alembic.ini ./
 COPY migrations ./migrations
-COPY src ./src
+COPY --from=runtime-dependencies /app/src ./src
 COPY agent/workflows ./agent/workflows
 
 USER 65532:65532
