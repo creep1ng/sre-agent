@@ -179,6 +179,11 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "catalog",
     },
+    ("GET", "/v1/skills/{skill_id}/{version}/resolve"): {
+        "action": "invoke",
+        "resource_type": "skill",
+        "resource_id": "path.skill_id@path.version",
+    },
     ("PUT", "/v1/skills/{skill_id}/{version}/status"): {
         "action": "admin.write",
         "resource_type": "administrative_control",
@@ -203,7 +208,9 @@ def test_current_governed_operations_have_one_declared_contract() -> None:
         scheme = document["components"]["securitySchemes"][next(iter(schemes[0]))]
         assert scheme["type"] == "http" and scheme["scheme"] == "bearer"
         assert operation["x-governed-scope"] == expected_scope
-        assert {"401", "403"} <= set(operation["responses"])
+        assert "401" in operation["responses"]
+        expected_denial = "404" if path.endswith("/resolve") else "403"
+        assert expected_denial in operation["responses"]
 
 
 def _record_principal_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
@@ -359,7 +366,7 @@ def test_future_consumer_guidance_is_documentation_only() -> None:
 
     assert "Future LLM, MCP, skill, and knowledge consumers" in guidance
     assert "authorize_governed_access" in guidance
-    assert "MCP, Skill, and knowledge execution runtimes remain future-only" in guidance
+    assert "MCP and knowledge execution runtimes remain future-only" in guidance
     assert (
         "administrative read path returns a persisted exact Skill version under the catalog grant"
         in " ".join(guidance.split())
@@ -367,5 +374,6 @@ def test_future_consumer_guidance_is_documentation_only() -> None:
     assert {path for path in _application().openapi()["paths"] if "skill" in path.lower()} == {
         "/v1/skills/versions",
         "/v1/skills/{skill_id}/{version}",
+        "/v1/skills/{skill_id}/{version}/resolve",
         "/v1/skills/{skill_id}/{version}/status",
     }
