@@ -13,8 +13,10 @@ from typing import Any
 from sre_agent.incident.persistence import (
     DecisionDraft,
     EventDraft,
+    IncidentRecord,
     IncidentStaleWriteError,
     IncidentUnitOfWork,
+    RunRecord,
     SnapshotDraft,
     TransitionResult,
 )
@@ -70,6 +72,38 @@ class IncidentCommand:
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class RunStart:
+    """Request to open a run for an objective, or to resume one that exists.
+
+    The hash covers what the caller asked for, never the identifier the runtime
+    mints, so retrying one idempotency key converges on the first run instead of
+    opening a second one.
+    """
+
+    command_id: str
+    incident_id: str
+    objective: str
+    actor: str
+    actor_reference: ActorReference | None = None
+    resume_from_run_id: str | None = None
+
+    def payload_sha256(self) -> str:
+        payload = asdict(self)
+        payload.pop("command_id")
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+
+OBJECTIVE_TRANSITIONS = {
+    "triage": "open_triage",
+    "investigate": "start_investigation",
+    "mitigate": "propose_mitigation",
+    "postmortem": "start_postmortem",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,63 +192,116 @@ class IncidentRuntime:
             run = await work.runs.get(command.run_id)
             if run is None or run.incident_id != command.incident_id:
                 raise RunNotFoundError(command.run_id)
-            self._assert_supported_state(incident.state, run.state)
+            return await self._apply(work, command, payload_hash, incident, run)
 
-            try:
-                transition = self._workflow.transition(command.transition_id)
-            except InvalidWorkflowError as error:
-                raise InvalidTransitionError(str(error)) from error
-            self._validate(command, transition, incident.state)
+    async def start_run(self, request: RunStart) -> TransitionResult:
+        """Open a run for the requested objective and execute its first transition.
+
+        The run aggregate and that transition commit together, so a run never
+        exists without the snapshot its replay needs.
+        """
+
+        transition_id = OBJECTIVE_TRANSITIONS.get(request.objective)
+        if transition_id is None:
+            raise InvalidTransitionError(f"objective '{request.objective}' has no transition")
+        payload_hash = request.payload_sha256()
+        async with self._unit_of_work() as work:
+            await work.lock_command(request.incident_id, request.command_id)
+            replayed = await work.get_transition(
+                request.incident_id, request.command_id, payload_hash
+            )
+            if replayed is not None:
+                return replayed
+
+            incident = await work.incidents.get(request.incident_id)
+            if incident is None:
+                raise IncidentNotFoundError(request.incident_id)
             now = self._clock()
-            incident_state, run_state = self._reduce(
-                command, transition, incident.state, run.state, now
-            )
-            decision = DecisionDraft(
-                decision_id=self._id_factory("dec"),
-                document=self._decision_document(command, transition, now),
-                decided_at=now,
-                run_id=command.run_id,
-                turn_id=command.turn_id,
-            )
-            event = EventDraft(
-                event_id=self._id_factory("evt"),
-                kind="state_change",
-                payload={
-                    "workflow_id": self._workflow.workflow_id,
+            run = await work.runs.add(
+                self._id_factory("run"),
+                request.incident_id,
+                {
                     "workflow_version": self._workflow.version,
-                    "transition_id": transition.transition_id,
-                    "from": transition.source,
-                    "to": transition.target,
-                    "incident_state": incident_state,
-                    "run_state": run_state,
-                    "decision_id": decision.decision_id,
+                    "current_state": incident.state.get("state"),
+                    "status": "running",
                 },
-                occurred_at=now,
-                turn_id=command.turn_id,
+                now=now,
             )
-            next_version = run.version + 1
-            latest_snapshot = await work.snapshots.latest(command.run_id)
-            snapshot = None
-            if latest_snapshot is None or next_version % self._snapshot_interval == 0:
-                snapshot = SnapshotDraft(
-                    snapshot_id=self._id_factory("snap"),
-                    incident_state=incident_state,
-                    run_state=run_state,
-                    created_at=now,
-                )
-            return await work.persist_transition(
-                command_id=command.command_id,
-                payload_sha256=payload_hash,
-                incident_id=command.incident_id,
-                run_id=command.run_id,
-                expected_incident_version=incident.version,
-                expected_run_version=run.version,
+            command = IncidentCommand(
+                command_id=request.command_id,
+                incident_id=request.incident_id,
+                run_id=run.run_id,
+                transition_id=transition_id,
+                actor=request.actor,
+                actor_reference=request.actor_reference,
+            )
+            return await self._apply(work, command, payload_hash, incident, run)
+
+    async def _apply(
+        self,
+        work: IncidentUnitOfWork,
+        command: IncidentCommand,
+        payload_hash: str,
+        incident: IncidentRecord,
+        run: RunRecord,
+    ) -> TransitionResult:
+        self._assert_supported_state(incident.state, run.state)
+
+        try:
+            transition = self._workflow.transition(command.transition_id)
+        except InvalidWorkflowError as error:
+            raise InvalidTransitionError(str(error)) from error
+        self._validate(command, transition, incident.state)
+        now = self._clock()
+        incident_state, run_state = self._reduce(
+            command, transition, incident.state, run.state, now
+        )
+        decision = DecisionDraft(
+            decision_id=self._id_factory("dec"),
+            document=self._decision_document(command, transition, now),
+            decided_at=now,
+            run_id=command.run_id,
+            turn_id=command.turn_id,
+        )
+        event = EventDraft(
+            event_id=self._id_factory("evt"),
+            kind="state_change",
+            payload={
+                "workflow_id": self._workflow.workflow_id,
+                "workflow_version": self._workflow.version,
+                "transition_id": transition.transition_id,
+                "from": transition.source,
+                "to": transition.target,
+                "incident_state": incident_state,
+                "run_state": run_state,
+                "decision_id": decision.decision_id,
+            },
+            occurred_at=now,
+            turn_id=command.turn_id,
+        )
+        next_version = run.version + 1
+        latest_snapshot = await work.snapshots.latest(command.run_id)
+        snapshot = None
+        if latest_snapshot is None or next_version % self._snapshot_interval == 0:
+            snapshot = SnapshotDraft(
+                snapshot_id=self._id_factory("snap"),
                 incident_state=incident_state,
                 run_state=run_state,
-                decision=decision,
-                events=(event,),
-                snapshot=snapshot,
+                created_at=now,
             )
+        return await work.persist_transition(
+            command_id=command.command_id,
+            payload_sha256=payload_hash,
+            incident_id=command.incident_id,
+            run_id=command.run_id,
+            expected_incident_version=incident.version,
+            expected_run_version=run.version,
+            incident_state=incident_state,
+            run_state=run_state,
+            decision=decision,
+            events=(event,),
+            snapshot=snapshot,
+        )
 
     async def reconstruct(self, incident_id: str, run_id: str) -> IncidentView:
         async with self._unit_of_work() as work:
