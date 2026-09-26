@@ -1,12 +1,71 @@
+import os
+
+import psycopg
+import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
-from sre_agent.gateway.health import REQUIRED_SCHEMA_VERSION
+from sre_agent.gateway.health import postgres_readiness_probe
 from sre_agent.settings import Settings
 
+DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
+)
 
-def test_readiness_requires_incident_workflow_catalog_migration() -> None:
-    assert REQUIRED_SCHEMA_VERSION == "20260924_14"
+
+@pytest.fixture(scope="module")
+def migrated_database() -> None:
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute(
+            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
+        )
+        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "head")
+
+
+@pytest.mark.usefixtures("migrated_database")
+def test_readiness_accepts_database_at_current_migration_head() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        version = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+    assert version == "20260926_15"
+
+    client = TestClient(
+        create_application(
+            Settings(DATABASE_URL), readiness_probe=postgres_readiness_probe(DATABASE_URL)
+        )
+    )
+
+    response = client.get("/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "dependency": "postgresql"}
+
+
+@pytest.mark.usefixtures("migrated_database")
+def test_readiness_rejects_previous_database_migration_head() -> None:
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("UPDATE alembic_version SET version_num = '20260924_14'")
+
+    try:
+        client = TestClient(
+            create_application(
+                Settings(DATABASE_URL), readiness_probe=postgres_readiness_probe(DATABASE_URL)
+            )
+        )
+
+        response = client.get("/health/ready")
+
+        assert response.status_code == 503
+        assert response.json() == {"status": "unavailable", "dependency": "postgresql"}
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+            connection.execute("UPDATE alembic_version SET version_num = '20260926_15'")
 
 
 def test_liveness_does_not_call_readiness_dependency() -> None:
