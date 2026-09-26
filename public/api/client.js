@@ -181,6 +181,12 @@ export function createAdministrativeApiClient({
         body,
       });
     },
+    replaceModelAliasStatus(modelAliasId, body) {
+      return request(`/v1/model-aliases/${encodeURIComponent(modelAliasId)}/status`, {
+        method: "PUT",
+        body,
+      });
+    },
     replacePrincipalStatus(principalId, body) {
       return request(`/v1/principals/${encodeURIComponent(principalId)}/status`, {
         method: "PUT",
