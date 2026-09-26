@@ -602,6 +602,7 @@ class AuditEvent(StrictDTO):
         "catalog.create",
         "catalog.list",
         "catalog.read",
+        "catalog.status.replace",
     ]
     action: Literal[
         "authenticate",

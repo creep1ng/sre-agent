@@ -43,7 +43,10 @@ Future LLM, MCP, skill, and knowledge consumers MUST enter through a declared go
 
 MCP, Skill, and knowledge execution runtimes remain future-only until their runtime boundaries exist. The
 administrative read path returns a persisted exact Skill version under the catalog grant, but does not
-execute it.
+execute it. Administrators can activate or deactivate one exact version with an optimistic
+`expected_updated_at` check. Deactivation makes that version's administrative read return 404;
+activation restores it immediately. This lifecycle state does not select a latest version, resolve
+dependencies, or provide a runtime cache guarantee.
 
 ## Release metadata
 

@@ -853,6 +853,38 @@ class SkillVersionRepository:
         row = await self._session.get(SkillVersionRow, (skill_id, version))
         return self._project(row) if row is not None else None
 
+    async def replace_status(
+        self,
+        skill_id: str,
+        version: str,
+        status: str,
+        *,
+        expected_updated_at: datetime,
+        now: datetime | None = None,
+    ) -> tuple[ResourceCatalogEntry, datetime] | None:
+        resource_id = f"{skill_id}@{version}"
+        if await self.get(skill_id, version) is None:
+            return None
+        statement = (
+            update(ResourceRow)
+            .where(
+                ResourceRow.resource_type == "skill",
+                ResourceRow.resource_id == resource_id,
+                ResourceRow.updated_at == expected_updated_at,
+                ResourceRow.status != status,
+            )
+            .values(status=status, updated_at=now or datetime.now(UTC))
+            .returning(ResourceRow)
+        )
+        row = (await self._session.execute(statement)).scalar_one_or_none()
+        if row is None:
+            row = await self._session.get(ResourceRow, ("skill", resource_id))
+            if row is None:
+                return None
+            if row.updated_at != expected_updated_at:
+                raise StaleWriteError(resource_id)
+        return project_catalog_entry(row), row.updated_at
+
     @staticmethod
     def _project(row: SkillVersionRow) -> SkillVersionRecord:
         return SkillVersionRecord.model_validate(
