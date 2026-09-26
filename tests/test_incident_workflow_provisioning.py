@@ -1,4 +1,4 @@
-"""Issue #189 A2: run.read provisioning through the governed API."""
+"""Governed provisioning of the incident workflow run grants (issues #189 and #330)."""
 
 import asyncio
 import os
@@ -96,7 +96,7 @@ def provisioned_database() -> None:
     asyncio.run(database.dispose())
 
 
-async def _decision() -> str:
+async def _decision(action: str = "run.read") -> str:
     database = Database(DATABASE_URL)
     try:
         async with database.transaction() as session:
@@ -104,7 +104,7 @@ async def _decision() -> str:
                 ResourceRepository(session), GrantRepository(session)
             )
             evaluation = await engine.evaluate(
-                SUBJECT, "run.read", "incident_workflow", "incident-response"
+                SUBJECT, action, "incident_workflow", "incident-response"
             )
             if evaluation.decision.decision == "allow":
                 return "allow"
@@ -145,3 +145,17 @@ async def test_governed_provision_opens_and_revoke_closes(monkeypatch, capsys) -
     monkeypatch.setenv("AUDIT_KEY_HEX", "00" * 32)
     assert await _run(revoke=False) == 1
     assert '"run_read_active": false' in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_run_start_is_granted_and_revoked_apart_from_run_read() -> None:
+    """Least privilege only means something if the two grants move separately.
+
+    The previous test leaves run.read revoked and the workflow resource in place,
+    so starting runs must still be allowed here: revoking the reader cannot take
+    the starter with it, and neither can be inferred from the other.
+    """
+
+    assert await _decision("run.read") == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    assert await _decision("run.start") == "allow"
+    assert await _decision("run.command") == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
