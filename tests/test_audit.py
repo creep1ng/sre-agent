@@ -65,3 +65,41 @@ def test_audit_projector_carries_the_exact_cause_only_for_authorization_denies()
         "decision": "deny",
         "reason_code": "no_matching_grant",
     }
+
+
+def test_skill_resolution_audit_is_request_correlated_and_metadata_only() -> None:
+    occurred_at = datetime(2026, 9, 26, tzinfo=UTC)
+    context = PrincipalContext(
+        principal=Principal(
+            principal_id="incident-harness",
+            kind="agent",
+            display_name="Incident harness",
+            status="active",
+            created_at=occurred_at,
+            updated_at=occurred_at,
+        ),
+        credential_id="credential-harness",
+        authenticated_at=occurred_at,
+    )
+    request_id = uuid4()
+
+    event = AuditProjector(b"test-audit-key-not-for-production").control_event(
+        request_id=request_id,
+        status=200,
+        latency_ms=1,
+        stage="authorization",
+        operation="skills.resolve",
+        action="invoke",
+        context=context,
+        resource_ref=("skill", "incident-triage-demo@1.0.0"),
+        decision=PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="grant-1"),
+    )
+    serialized = event.model_dump(mode="json")
+
+    assert event.operation == "skills.resolve"
+    assert event.correlation.request_id == request_id
+    assert event.resource is not None and event.resource.resource_type == "skill"
+    assert event.content_state == "absent" and event.redacted_content is None
+    assert event.model_alias_ref is None and event.routing is None
+    assert "incident-triage-demo@1.0.0" not in str(serialized)
+    assert "instructions" not in serialized

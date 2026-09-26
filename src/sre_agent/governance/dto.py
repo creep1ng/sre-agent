@@ -603,6 +603,7 @@ class AuditEvent(StrictDTO):
         "catalog.list",
         "catalog.read",
         "catalog.status.replace",
+        "skills.resolve",
     ]
     action: Literal[
         "authenticate",
@@ -655,23 +656,28 @@ class AuditEvent(StrictDTO):
             raise ValueError("this audit stage cannot carry subject evidence")
         if self.outcome == "denied" and self.consumption is not None:
             raise ValueError("denied audit events cannot carry provider consumption")
-        is_control = isinstance(
+        is_non_llm = isinstance(
             self.resource, ResourceEvidence
-        ) and self.resource.resource_type in {"administrative_control", "mcp_server", "mcp_tool"}
+        ) and self.resource.resource_type in {
+            "administrative_control",
+            "mcp_server",
+            "mcp_tool",
+            "skill",
+        }
         if (
             self.stage in {"authorization", "routing", "upstream", "response"}
-            and not is_control
+            and not is_non_llm
             and any(value is None for value in subject[:3])
         ):
             raise ValueError("this audit stage requires identity and resource evidence")
         if (
             self.stage in {"authorization", "routing", "upstream", "response"}
-            and is_control
+            and is_non_llm
             and (self.identity is None or self.resource is None)
         ):
-            raise ValueError("control audit stage requires identity and resource evidence")
-        if is_control and (self.model_alias_ref is not None or self.routing is not None):
-            raise ValueError("control audit evidence cannot carry LLM routing evidence")
+            raise ValueError("non-LLM audit stage requires identity and resource evidence")
+        if is_non_llm and (self.model_alias_ref is not None or self.routing is not None):
+            raise ValueError("non-LLM audit evidence cannot carry LLM routing evidence")
         expected_redaction = {"absent": "none", "redacted": "success", "redaction_failed": "failed"}
         actual_redaction = (
             self.redaction.source_class if self.content_state == "absent" else self.redaction.result
