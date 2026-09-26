@@ -3,6 +3,11 @@ import { expect, test } from "@playwright/test";
 const connected = process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY === "1";
 const ALIAS = "triage-agent";
 const ALT_ASSIGNMENT = { concrete_model: "openai/gpt-5", router: "openrouter", inference_provider: "openai" };
+const OTHER_ASSIGNMENT = {
+  concrete_model: "anthropic/claude-sonnet-4",
+  router: "openrouter",
+  inference_provider: "anthropic",
+};
 
 async function seamGet(page, key, id) {
   return page.evaluate(
@@ -44,6 +49,24 @@ async function seamPut(page, key, id, body) {
         if (!(error instanceof ApiClientError)) throw error;
         return { ok: false, kind: error.kind, status: error.status, code: error.code };
       }
+    },
+    { key, id, body },
+  );
+}
+
+async function seamRawPut(page, key, id, body) {
+  return page.evaluate(
+    async ({ key, id, body }) => {
+      const res = await fetch(`/api/v1/model-aliases/${encodeURIComponent(id)}/assignment`, {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(body),
+      });
+      return { status: res.status, payload: await res.json().catch(() => null) };
     },
     { key, id, body },
   );
@@ -461,3 +484,139 @@ for (const field of ["concrete_model", "router", "inference_provider"]) {
     await page.unroute(predicate);
   });
 }
+
+test("real extra field is rejected with 422 and no mutation", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const before = (await seamGet(page, adminKey, ALIAS)).item;
+  const extra = await seamRawPut(page, adminKey, ALIAS, {
+    ...ALT_ASSIGNMENT,
+    expected_updated_at: before.updated_at,
+    unexpected: "must-not-persist",
+  });
+  expect(extra.status).toBe(422);
+  expect(extra.payload?.error?.code).toBe("validation_error");
+  const after = await seamGet(page, adminKey, ALIAS);
+  expect(after.item.updated_at).toBe(before.updated_at);
+  expect(after.item.concrete_model).toBe(before.concrete_model);
+});
+
+test("stale expected_updated_at returns a real 409", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const v1 = (await seamGet(page, adminKey, ALIAS)).item;
+  try {
+    const bumped = await seamPut(page, adminKey, ALIAS, {
+      ...OTHER_ASSIGNMENT,
+      expected_updated_at: v1.updated_at,
+    });
+    expect(bumped.ok).toBe(true);
+    const stale = await seamPut(page, adminKey, ALIAS, {
+      ...ALT_ASSIGNMENT,
+      expected_updated_at: v1.updated_at,
+    });
+    expect(stale.ok).toBe(false);
+    expect(stale.kind).toBe("conflict");
+    expect(stale.code).toBe("status_conflict");
+    expect(stale.status).toBe(409);
+  } finally {
+    await restoreAssignment(page, adminKey, ALIAS, v1);
+  }
+});
+
+test("409 does not silently overwrite the authoritative state", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const v1 = (await seamGet(page, adminKey, ALIAS)).item;
+  try {
+    await connect(page, adminKey);
+    await expect(page.locator(`[data-alias-row='${ALIAS}']`)).toHaveCount(1, { timeout: 20_000 });
+    await openAssignmentEdit(page, ALIAS);
+    const bumped = await seamPut(page, adminKey, ALIAS, {
+      ...OTHER_ASSIGNMENT,
+      expected_updated_at: v1.updated_at,
+    });
+    expect(bumped.ok).toBe(true);
+    await page.fill("#edit-concrete-model", ALT_ASSIGNMENT.concrete_model);
+    await page.fill("#edit-inference-provider", ALT_ASSIGNMENT.inference_provider);
+    await page.click("#assignment-save-button");
+    await expect(page.locator("#detail-error-title")).toHaveText(
+      "Alias changed; refresh and try again",
+      { timeout: 20_000 },
+    );
+    await expect(page.locator("#live-region")).not.toContainText("Assignment updated");
+    await expect(page.locator("#assignment-refresh-button")).toBeVisible();
+  } finally {
+    await restoreAssignment(page, adminKey, ALIAS, v1);
+  }
+});
+
+test("refresh after 409 shows authoritative state", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const v1 = (await seamGet(page, adminKey, ALIAS)).item;
+  try {
+    await connect(page, adminKey);
+    await expect(page.locator(`[data-alias-row='${ALIAS}']`)).toHaveCount(1, { timeout: 20_000 });
+    await openAssignmentEdit(page, ALIAS);
+    const bumped = await seamPut(page, adminKey, ALIAS, {
+      ...OTHER_ASSIGNMENT,
+      expected_updated_at: v1.updated_at,
+    });
+    expect(bumped.ok).toBe(true);
+    await page.fill("#edit-concrete-model", ALT_ASSIGNMENT.concrete_model);
+    await page.click("#assignment-save-button");
+    await expect(page.locator("#detail-error-title")).toHaveText(
+      "Alias changed; refresh and try again",
+      { timeout: 20_000 },
+    );
+    await page.click("#assignment-refresh-button");
+    await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText(
+      OTHER_ASSIGNMENT.concrete_model,
+      { timeout: 20_000 },
+    );
+    await expect(page.locator("[data-detail-field='updated_at']")).toHaveText(
+      bumped.item.updated_at,
+    );
+  } finally {
+    await restoreAssignment(page, adminKey, ALIAS, v1);
+  }
+});
+
+test("restricted principal cannot mutate the assignment", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const restrictedKey = apiKey("RESTRICTED_HARNESS_API_KEY");
+  const before = (await seamGet(page, adminKey, ALIAS)).item;
+  const attempt = await seamPut(page, restrictedKey, ALIAS, {
+    ...ALT_ASSIGNMENT,
+    expected_updated_at: before.updated_at,
+  });
+  expect(attempt.ok).toBe(false);
+  expect(attempt.status).toBe(403);
+  const after = await seamGet(page, adminKey, ALIAS);
+  expect(after.item.updated_at).toBe(before.updated_at);
+  expect(after.item.concrete_model).toBe(before.concrete_model);
+});
+
+test("no secrets or storage leakage after mutation", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  const original = (await seamGet(page, adminKey, ALIAS)).item;
+  try {
+    await connect(page, adminKey);
+    await expect(page.locator(`[data-alias-row='${ALIAS}']`)).toHaveCount(1, { timeout: 20_000 });
+    await openAssignmentEdit(page, ALIAS);
+    await page.fill("#edit-concrete-model", ALT_ASSIGNMENT.concrete_model);
+    await page.click("#assignment-save-button");
+    await expect(page.locator("#live-region")).toContainText("Assignment updated", {
+      timeout: 20_000,
+    });
+    const detailText = (await page.locator("#alias-detail").textContent()) ?? "";
+    expect(detailText).not.toContain(adminKey);
+    expect(/\bsre_[A-Za-z0-9_-]{24,128}\b/.test(detailText)).toBe(false);
+    expect(await storageContents(page)).toEqual({ local: {}, session: {} });
+  } finally {
+    await restoreAssignment(page, adminKey, ALIAS, original);
+  }
+});
