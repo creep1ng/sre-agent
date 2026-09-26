@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Annotated, Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Query, Request, Security
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -70,9 +73,12 @@ class UsageReadProjection:
 
     MAX_ROWS = 1000
 
-    def __init__(self, sessions: async_sessionmaker, audit_hmac_key: bytes) -> None:
+    def __init__(
+        self, sessions: async_sessionmaker, audit_hmac_key: bytes, audit_store: Any | None = None
+    ) -> None:
         self._sessions = sessions
         self._audit = AuditProjector(audit_hmac_key)
+        self._audit_store = audit_store
 
     async def read(
         self,
@@ -288,7 +294,94 @@ class UsageReadProjection:
 
 def usage_router(projection: UsageReadProjection) -> APIRouter:
     """Expose the usage projection only behind the governed administrator scope."""
-    router = APIRouter()
+
+    async def finish(
+        request: Request,
+        *,
+        status: int,
+        stage: str,
+        code: str | None = None,
+        message: str | None = None,
+        payload: dict[str, Any] | UsageReadResponse | None = None,
+        context: Any = None,
+        decision: Any = None,
+        resource_ref: tuple[str, str] | None = None,
+    ) -> JSONResponse | UsageReadResponse:
+        request_id = UUID(str(getattr(request.state, "usage_request_id", None) or UUID(int=0)))
+        started = getattr(request.state, "usage_started", monotonic())
+        reason = {
+            "validation_error": "contract_validation_failed",
+            "usage_scope_too_large": "contract_validation_failed",
+            "storage_unavailable": "upstream_unavailable",
+            "authentication_failed": "authentication_failed",
+            "resource_unavailable": "no_matching_grant",
+        }.get(code, code)
+        if projection._audit_store is None:
+            audit_failed = True
+        else:
+            try:
+                event = projection._audit.control_event(
+                    request_id,
+                    status,
+                    max(0, int((monotonic() - started) * 1000)),
+                    stage,
+                    operation="usage.read",
+                    action="admin.read",
+                    reason=reason,
+                    retryable=status in {500, 503, 504},
+                    context=context,
+                    resource_ref=resource_ref,
+                    decision=decision,
+                )
+                await projection._audit_store.append(event)
+                audit_failed = False
+            except Exception:
+                audit_failed = True
+        if audit_failed:
+            return JSONResponse(
+                {
+                    "error": {"code": "audit_unavailable", "message": "Audit unavailable."},
+                    "request_id": str(request_id),
+                    "retryable": True,
+                },
+                status_code=503,
+            )
+        if isinstance(payload, UsageReadResponse):
+            return payload
+        if payload is not None:
+            return JSONResponse(payload, status_code=status)
+        public_code = code or "storage_unavailable"
+        public_message = message or "Usage storage is temporarily unavailable."
+        return JSONResponse(
+            {
+                "error": {"code": public_code, "message": public_message},
+                "request_id": str(request_id),
+                "retryable": status in {500, 503, 504},
+            },
+            status_code=status,
+        )
+
+    class UsageReadRoute(APIRoute):
+        def get_route_handler(self):
+            route_handler = super().get_route_handler()
+
+            async def validation_audited_handler(request: Request):
+                request.state.usage_request_id = uuid4()
+                request.state.usage_started = monotonic()
+                try:
+                    return await route_handler(request)
+                except RequestValidationError:
+                    return await finish(
+                        request,
+                        status=422,
+                        stage="validation",
+                        code="validation_error",
+                        message="Exactly one bounded usage selector is required.",
+                    )
+
+            return validation_audited_handler
+
+    router = APIRouter(route_class=UsageReadRoute)
     selector_names = {"request_id", "incident_id", "month"}
     known_unbounded = {
         "from",
@@ -301,16 +394,6 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         "output",
         "api_key",
     }
-
-    def error(status: int, code: str, message: str) -> JSONResponse:
-        return JSONResponse(
-            status_code=status,
-            content={
-                "error": {"code": code, "message": message},
-                "request_id": str(UUID(int=0)),
-                "retryable": status == 503,
-            },
-        )
 
     @router.get(
         "/v1/usage/consumption",
@@ -347,6 +430,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         month: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_usage_bearer)] = None,
     ) -> UsageReadResponse | JSONResponse:
+        request.state.usage_request_id = uuid4()
         supplied = list(request.query_params.multi_items())
         supplied_names = [name for name, _ in supplied]
         if (
@@ -354,7 +438,13 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             or any(name in known_unbounded for name in supplied_names)
             or len(supplied) != 1
         ):
-            return error(422, "validation_error", "Exactly one bounded usage selector is required.")
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="Exactly one bounded usage selector is required.",
+            )
 
         filters: dict[str, Any] = {
             "request_id": request_id,
@@ -363,7 +453,13 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         }
         filters = {name: value for name, value in filters.items() if value is not None}
         if len(filters) != 1:
-            return error(422, "validation_error", "Exactly one bounded usage selector is required.")
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="Exactly one bounded usage selector is required.",
+            )
 
         try:
             _context, evaluation = await authorize_governed_access(
@@ -374,21 +470,70 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 "usage",
             )
         except AuthenticationFailed:
-            return error(401, "authentication_failed", "Authentication failed.")
+            return await finish(
+                request,
+                status=401,
+                stage="authentication",
+                code="authentication_failed",
+                message="Authentication failed.",
+            )
         except Exception:
-            return error(503, "storage_unavailable", "Usage storage is temporarily unavailable.")
+            return await finish(request, status=503, stage="audit", code="storage_unavailable")
 
         if evaluation.decision.decision == "deny":
-            return error(403, "resource_unavailable", "Administrative read is not authorized.")
+            return await finish(
+                request,
+                status=403,
+                stage="authorization",
+                code="resource_unavailable",
+                message="Administrative read is not authorized.",
+                context=_context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
 
         try:
             result = await projection.read(**filters)
         except UsageReadLimitExceeded:
-            return error(413, "usage_scope_too_large", "The usage scope exceeds the read limit.")
+            return await finish(
+                request,
+                status=413,
+                stage="validation",
+                code="usage_scope_too_large",
+                message="The usage scope exceeds the read limit.",
+                context=_context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
         except ValueError:
-            return error(422, "validation_error", "The usage selector is invalid.")
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="The usage selector is invalid.",
+                context=_context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
         except Exception:
-            return error(503, "storage_unavailable", "Usage storage is temporarily unavailable.")
-        return result
+            return await finish(
+                request,
+                status=503,
+                stage="audit",
+                code="storage_unavailable",
+                context=_context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
+        return await finish(
+            request,
+            status=200,
+            stage="authorization",
+            payload=UsageReadResponse.model_validate(result),
+            context=_context,
+            decision=evaluation.decision,
+            resource_ref=("administrative_control", "usage"),
+        )
 
     return router

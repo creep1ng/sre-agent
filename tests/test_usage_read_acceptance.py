@@ -105,6 +105,244 @@ def auth(key: str = ADMIN_KEY) -> dict[str, str]:
     return {"Authorization": f"Bearer {key}"}
 
 
+def persisted_usage_audit_rows() -> list[dict[str, object]]:
+    with psycopg.connect(DATABASE_URL) as connection:
+        rows = connection.execute(
+            """SELECT operation, action, stage, outcome, reason_code, response_status,
+                      retryable, correlation, identity, resource, policy_decision, consumption,
+                      untrusted_input
+               FROM audit_events WHERE operation='usage.read' ORDER BY occurred_at"""
+        ).fetchall()
+    names = (
+        "operation",
+        "action",
+        "stage",
+        "outcome",
+        "reason_code",
+        "response_status",
+        "retryable",
+        "correlation",
+        "identity",
+        "resource",
+        "policy_decision",
+        "consumption",
+        "untrusted_input",
+    )
+    return [dict(zip(names, row, strict=True)) for row in rows]
+
+
+def assert_no_usage_authorization_context(event: dict[str, object]) -> None:
+    assert event["identity"] is None
+    assert event["resource"] is None
+    assert event["policy_decision"] is None
+
+
+def test_usage_audit_allowed_read_commits_metadata_before_response(client, monkeypatch) -> None:
+    from sre_agent.gateway.responses import PostgresAuditStore
+
+    append = PostgresAuditStore.append
+    observed_committed_event: list[bool] = []
+
+    async def append_and_observe(self, event):
+        assert event.operation == "usage.read"
+        assert event.action == "admin.read"
+        assert event.response_status == 200
+        await append(self, event)
+        observed_committed_event.append(len(persisted_usage_audit_rows()) == 1)
+
+    monkeypatch.setattr(PostgresAuditStore, "append", append_and_observe)
+    response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+
+    assert response.status_code == 200
+    assert observed_committed_event == [True]
+    rows = persisted_usage_audit_rows()
+    assert len(rows) == 1
+    event = rows[0]
+    assert (event["stage"], event["outcome"], event["response_status"]) == (
+        "authorization",
+        "success",
+        200,
+    )
+    assert event["reason_code"] is None
+    assert str(UUID(event["correlation"]["request_id"])) == event["correlation"]["request_id"]
+    assert event["identity"]["credential_ref"]["algorithm"] == "hmac-sha-256"
+    assert event["resource"]["resource_type"] == "administrative_control"
+    assert all(event[field] is None for field in ("consumption", "untrusted_input"))
+    assert event["correlation"]["request_id"]
+    assert all(
+        event["correlation"][field] is None
+        for field in ("trace_ref", "incident_ref", "run_ref", "task_ref")
+    )
+    assert "month" not in str(event).lower()
+    assert ADMIN_KEY not in str(event)
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected_status", "expected_stage", "expected_outcome"),
+    [
+        ({}, 401, "authentication", "error"),
+        (auth(READ_ONLY_KEY), 403, "authorization", "denied"),
+    ],
+)
+def test_usage_audit_authentication_and_authorization_outcomes(
+    client, headers, expected_status, expected_stage, expected_outcome
+) -> None:
+    response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=headers)
+
+    assert response.status_code == expected_status
+    assert "request_count" not in response.text
+    rows = persisted_usage_audit_rows()
+    assert len(rows) == 1
+    assert (rows[0]["stage"], rows[0]["outcome"], rows[0]["response_status"]) == (
+        expected_stage,
+        expected_outcome,
+        expected_status,
+    )
+    assert rows[0]["reason_code"] == (
+        "authentication_failed" if expected_status == 401 else "no_matching_grant"
+    )
+    if expected_stage == "authentication":
+        assert_no_usage_authorization_context(rows[0])
+    assert rows[0]["consumption"] is None
+    assert ADMIN_KEY not in str(rows[0])
+    assert READ_ONLY_KEY not in str(rows[0])
+
+
+def test_usage_audit_selector_validation_and_projection_failures(client, monkeypatch) -> None:
+    from sre_agent.gateway.usage import UsageReadLimitExceeded, UsageReadProjection
+
+    invalid = client.get(
+        "/v1/usage/consumption",
+        params={"month": "2026-09", "incident_id": "private-id"},
+        headers=auth(),
+    )
+    assert invalid.status_code == 422
+    assert len(persisted_usage_audit_rows()) == 1
+    first_validation_event = persisted_usage_audit_rows()[0]
+    assert first_validation_event["stage"] == "validation"
+    assert first_validation_event["reason_code"] == "contract_validation_failed"
+    assert_no_usage_authorization_context(first_validation_event)
+    assert "private-id" not in str(first_validation_event)
+
+    invalid_typed_selector = client.get(
+        "/v1/usage/consumption", params={"request_id": "not-a-uuid"}, headers=auth()
+    )
+    assert invalid_typed_selector.status_code == 422
+    rows = persisted_usage_audit_rows()
+    assert [row["stage"] for row in rows] == ["validation", "validation"]
+    assert [row["reason_code"] for row in rows] == [
+        "contract_validation_failed",
+        "contract_validation_failed",
+    ]
+    assert_no_usage_authorization_context(rows[1])
+    assert "not-a-uuid" not in str(rows)
+
+    async def overflow(*args, **kwargs):
+        raise UsageReadLimitExceeded("too many rows")
+
+    monkeypatch.setattr(UsageReadProjection, "read", overflow)
+    response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+    assert response.status_code == 413
+    rows = persisted_usage_audit_rows()
+    assert [row["response_status"] for row in rows] == [422, 422, 413]
+    overflow_event = rows[2]
+    assert overflow_event["stage"] == "validation"
+    assert overflow_event["reason_code"] == "contract_validation_failed"
+    assert overflow_event["policy_decision"]["decision"] == "allow"
+    assert overflow_event["policy_decision"]["grant_ref"]["algorithm"] == "hmac-sha-256"
+    assert overflow_event["identity"]["principal_ref"]["algorithm"] == "hmac-sha-256"
+    assert overflow_event["identity"]["credential_ref"]["algorithm"] == "hmac-sha-256"
+    assert overflow_event["resource"]["resource_type"] == "administrative_control"
+    assert overflow_event["resource"]["resource_ref"]["algorithm"] == "hmac-sha-256"
+    assert not {"request_id", "incident_id", "month"} & overflow_event.keys()
+    assert all(
+        overflow_event["correlation"][field] is None
+        for field in ("trace_ref", "incident_ref", "run_ref", "task_ref")
+    )
+    assert all(overflow_event[field] is None for field in ("consumption", "untrusted_input"))
+
+    async def invalid_selector(*args, **kwargs):
+        raise ValueError("projection rejected selector")
+
+    monkeypatch.setattr(UsageReadProjection, "read", invalid_selector)
+    response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+    assert response.status_code == 422
+    rows = persisted_usage_audit_rows()
+    assert [row["response_status"] for row in rows] == [422, 422, 413, 422]
+    validation_event = rows[3]
+    assert validation_event["stage"] == "validation"
+    assert validation_event["reason_code"] == "contract_validation_failed"
+    assert validation_event["policy_decision"]["decision"] == "allow"
+    assert validation_event["policy_decision"]["grant_ref"]["algorithm"] == "hmac-sha-256"
+    assert validation_event["identity"]["principal_ref"]["algorithm"] == "hmac-sha-256"
+    assert validation_event["identity"]["credential_ref"]["algorithm"] == "hmac-sha-256"
+    assert validation_event["resource"]["resource_type"] == "administrative_control"
+    assert validation_event["resource"]["resource_ref"]["algorithm"] == "hmac-sha-256"
+    assert not {"request_id", "incident_id", "month"} & validation_event.keys()
+    assert all(
+        validation_event["correlation"][field] is None
+        for field in ("trace_ref", "incident_ref", "run_ref", "task_ref")
+    )
+    assert all(validation_event[field] is None for field in ("consumption", "untrusted_input"))
+
+    async def storage_failure(*args, **kwargs):
+        raise RuntimeError("simulated usage storage failure")
+
+    monkeypatch.setattr(UsageReadProjection, "read", storage_failure)
+    response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+    assert response.status_code == 503
+    rows = persisted_usage_audit_rows()
+    assert [row["response_status"] for row in rows] == [422, 422, 413, 422, 503]
+    storage_event = rows[4]
+    assert storage_event["stage"] == "audit"
+    assert storage_event["reason_code"] == "upstream_unavailable"
+    assert storage_event["policy_decision"]["decision"] == "allow"
+    assert storage_event["identity"]["principal_ref"]["algorithm"] == "hmac-sha-256"
+    assert storage_event["identity"]["credential_ref"]["algorithm"] == "hmac-sha-256"
+    assert storage_event["resource"]["resource_type"] == "administrative_control"
+    assert storage_event["resource"]["resource_ref"]["algorithm"] == "hmac-sha-256"
+    assert not {"request_id", "incident_id", "month"} & storage_event.keys()
+    assert all(
+        storage_event["correlation"][field] is None
+        for field in ("trace_ref", "incident_ref", "run_ref", "task_ref")
+    )
+    assert all(storage_event[field] is None for field in ("consumption", "untrusted_input"))
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    ["success", "denied", "validation", "storage"],
+)
+def test_usage_audit_failure_suppresses_intended_response(client, monkeypatch, outcome) -> None:
+    from sre_agent.gateway.responses import PostgresAuditStore
+    from sre_agent.gateway.usage import UsageReadProjection
+
+    async def unavailable(self, event):
+        raise RuntimeError("audit database details must not escape")
+
+    monkeypatch.setattr(PostgresAuditStore, "append", unavailable)
+    if outcome == "denied":
+        headers, params = auth(READ_ONLY_KEY), {"month": "2026-09"}
+    elif outcome == "validation":
+        headers, params = auth(), {"month": "2026-09", "incident_id": "private-id"}
+    else:
+        headers, params = auth(), {"month": "2026-09"}
+    if outcome == "storage":
+
+        async def storage_failure(*args, **kwargs):
+            raise RuntimeError("simulated usage storage failure")
+
+        monkeypatch.setattr(UsageReadProjection, "read", storage_failure)
+
+    response = client.get("/v1/usage/consumption", params=params, headers=headers)
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    assert response.json()["retryable"] is True
+    assert "database details" not in response.text
+    assert persisted_usage_audit_rows() == []
+
+
 class ControlledAcceptanceProvider:
     """Deterministic provider stub for exercising the real responses HTTP route."""
 

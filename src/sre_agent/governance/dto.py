@@ -538,6 +538,7 @@ class AuditEvent(StrictDTO):
         "responses.create",
         "mcp.discovery",
         "mcp.invoke",
+        "usage.read",
         "principals.create",
         "principals.get",
         "principals.list",
@@ -603,8 +604,22 @@ class AuditEvent(StrictDTO):
 
     @model_validator(mode="after")
     def validate_contract_relationships(self) -> "AuditEvent":
-        no_subject = self.stage in {"validation", "audit"}
         subject = (self.identity, self.resource, self.model_alias_ref, self.policy_decision)
+        usage_failure_context = (
+            self.operation == "usage.read"
+            and (
+                (self.stage == "validation" and self.response_status in {413, 422})
+                or (self.stage == "audit" and self.response_status >= 500)
+            )
+            and isinstance(self.policy_decision, AllowDecisionEvidence)
+            and self.policy_decision.decision == "allow"
+            and self.identity is not None
+            and isinstance(self.resource, ResourceEvidence)
+            and self.resource.resource_type == "administrative_control"
+            and self.model_alias_ref is None
+            and self.routing is None
+        )
+        no_subject = self.stage in {"validation", "audit"} and not usage_failure_context
         if no_subject and any(value is not None for value in (*subject, self.routing)):
             raise ValueError("this audit stage cannot carry subject evidence")
         if self.outcome == "denied" and self.consumption is not None:

@@ -91,7 +91,9 @@ def create_application(
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
         application.include_router(
             usage_router(
-                UsageReadProjection(database.sessions, runtime_settings.audit_hmac_key.encode())
+                UsageReadProjection(
+                    database.sessions, runtime_settings.audit_hmac_key.encode(), store
+                )
             )
         )
         application.include_router(
