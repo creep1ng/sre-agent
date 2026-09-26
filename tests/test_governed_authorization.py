@@ -169,6 +169,11 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "catalog",
     },
+    ("POST", "/v1/skills/versions"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
     ("GET", "/v1/skills/{skill_id}/{version}"): {
         "action": "admin.read",
         "resource_type": "administrative_control",
@@ -350,5 +355,6 @@ def test_future_consumer_guidance_is_documentation_only() -> None:
         in " ".join(guidance.split())
     )
     assert {path for path in _application().openapi()["paths"] if "skill" in path.lower()} == {
-        "/v1/skills/{skill_id}/{version}"
+        "/v1/skills/versions",
+        "/v1/skills/{skill_id}/{version}",
     }
