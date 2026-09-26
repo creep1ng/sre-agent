@@ -599,6 +599,119 @@ test("restricted principal cannot mutate the assignment", async ({ page }) => {
   expect(after.item.concrete_model).toBe(before.concrete_model);
 });
 
+async function createEphemeralAlias(page, key) {
+  // Raw fetch on purpose: creation stays a test-only seam, never a production client helper.
+  return page.evaluate(
+    async ({ key, id, idempotencyKey }) => {
+      const res = await fetch("/api/v1/model-aliases", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+          "Idempotency-Key": idempotencyKey,
+        },
+        body: JSON.stringify({
+          model_alias_id: id,
+          alias: id,
+          concrete_model: "openai/gpt-4o-mini",
+          router: "openrouter",
+          inference_provider: "openai",
+        }),
+      });
+      return { status: res.status, payload: await res.json().catch(() => null) };
+    },
+    {
+      key,
+      id: `ca3-${Date.now().toString(36)}-${Math.floor(Math.random() * 46656).toString(36).padStart(3, "0")}`.slice(0, 60).toLowerCase(),
+      idempotencyKey: `ca3-alias-create-${Date.now().toString(36)}-${Math.floor(Math.random() * 46656).toString(36).padStart(3, "0")}`,
+    },
+  );
+}
+
+async function snapshotHarnessPrincipal(page, key) {
+  return page.evaluate(async ({ key }) => {
+    const { createAdministrativeApiClient, createMemoryCredentialStore } =
+      await import("/public/api/client.js");
+    const store = createMemoryCredentialStore();
+    store.set(key);
+    const client = createAdministrativeApiClient({ credentialStore: store });
+    return {
+      principal: await client.getPrincipal("incident-harness"),
+      credentials: await client.listCredentials("incident-harness"),
+    };
+  }, { key });
+}
+
+async function seamList(page, key) {
+  return page.evaluate(async ({ key }) => {
+    const { createAdministrativeApiClient, createMemoryCredentialStore } =
+      await import("/public/api/client.js");
+    const store = createMemoryCredentialStore();
+    store.set(key);
+    return createAdministrativeApiClient({ credentialStore: store }).listModelAliases();
+  }, { key });
+}
+
+test("deactivates an ephemeral alias one-way without changing principals or credentials", async ({
+  page,
+}) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  // (A) Ephemeral fixture via real POST. It stays retired/inactive: distinct
+  // IDs per run, no restore attempt, one-way lifecycle.
+  const created = await createEphemeralAlias(page, adminKey);
+  expect(created.status).toBe(201);
+  expect(created.payload?.status).toBe("active");
+  const aliasId = created.payload.model_alias_id;
+  expect(created.payload.alias).toBe(aliasId);
+  const v1 = created.payload.updated_at;
+  // (B) Principal + credentials snapshots before the lifecycle mutation.
+  const principalBefore = await snapshotHarnessPrincipal(page, adminKey);
+  // (C) Drive the real UI: details, Deactivate only, closed status PUT observed live.
+  await connect(page, adminKey);
+  await expect(page.locator(`[data-alias-row='${aliasId}']`)).toHaveCount(1, { timeout: 20_000 });
+  await page.click(`[data-detail-open='${aliasId}']`);
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText(aliasId, { timeout: 20_000 });
+  await expect(page.locator("[data-detail-field='status']")).toHaveText("active");
+  await expect(page.locator("[data-detail-field='updated_at']")).toHaveText(v1);
+  await expect(page.locator("#detail-deactivate-button")).toBeVisible();
+  await expect(page.getByRole("button", { name: /reactivate/i })).toHaveCount(0);
+  await expect(page.locator("#model-aliases-page")).not.toContainText("Reactivate");
+  let putBody = null;
+  await page.route(`**/api/v1/model-aliases/${aliasId}/status`, async (route) => {
+    if (route.request().method() === "PUT") putBody = route.request().postDataJSON();
+    await route.continue();
+  });
+  await page.click("#detail-deactivate-button");
+  await expect(page.locator("#deactivate-dialog")).toBeVisible();
+  await expect(page.locator("#deactivate-title")).toContainText(aliasId);
+  await expect(page.locator("#deactivate-dialog")).toContainText(
+    "cannot be reactivated from this control-plane flow",
+  );
+  await page.click("#deactivate-submit");
+  // (D) Authoritative success closes the flow and removes the row.
+  await expect(page.locator("#live-region")).toContainText(`Alias ${aliasId} deactivated.`, {
+    timeout: 20_000,
+  });
+  expect(Object.keys(putBody ?? {}).sort()).toEqual(["expected_updated_at", "status"]);
+  expect(putBody.status).toBe("inactive");
+  expect(putBody.expected_updated_at).toBe(v1);
+  await expect(page.locator("#alias-detail")).toHaveAttribute("hidden", "");
+  await expect(page.locator(`[data-alias-row='${aliasId}']`)).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByRole("button", { name: /reactivate/i })).toHaveCount(0);
+  await page.unrouteAll({ behavior: "wait" }).catch(() => {});
+  // (E) Retired alias: safe 404 on read, absent from list, no inactive->active.
+  const gone = await seamGet(page, adminKey, aliasId);
+  expect(gone.ok).toBe(false);
+  expect(gone.status).toBe(404);
+  expect(gone.code).toBe("resource_not_found");
+  const listed = await seamList(page, adminKey);
+  expect(listed.items.some((item) => (item.model_alias_id ?? item.alias) === aliasId)).toBe(false);
+  // (F) Principals and credentials are deep-equal to the pre-mutation snapshots.
+  expect(await snapshotHarnessPrincipal(page, adminKey)).toEqual(principalBefore);
+});
+
 test("no secrets or storage leakage after mutation", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");

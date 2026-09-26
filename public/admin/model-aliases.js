@@ -25,6 +25,15 @@ const detailErrorBox = document.getElementById("detail-error");
 const detailErrorTitle = document.getElementById("detail-error-title");
 const detailCloseButton = document.getElementById("detail-close-button");
 const detailEditButton = document.getElementById("detail-edit-button");
+const detailDeactivateButton = document.getElementById("detail-deactivate-button");
+const deactivateDialog = document.getElementById("deactivate-dialog");
+const deactivateForm = document.getElementById("deactivate-form");
+const deactivateTitle = document.getElementById("deactivate-title");
+const deactivateDetail = document.getElementById("deactivate-detail");
+const deactivateSubmit = document.getElementById("deactivate-submit");
+const deactivateCancel = document.getElementById("deactivate-cancel");
+const deactivateErrorBox = document.getElementById("deactivate-error");
+const deactivateErrorTitle = document.getElementById("deactivate-error-title");
 const assignmentForm = document.getElementById("assignment-form");
 const editConcreteModel = document.getElementById("edit-concrete-model");
 const editRouter = document.getElementById("edit-router");
@@ -43,6 +52,8 @@ let activeDetailItem = null;
 let pendingExpectedUpdatedAt = null;
 let editMode = false;
 let saveInFlight = false;
+let statusInFlight = false;
+let pendingDeactivate = null;
 const CONCRETE_MODEL_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/;
 
 const text = (value) => (typeof value === "string" ? value : "");
@@ -134,6 +145,48 @@ function showDetailError(error) {
   announce(message);
 }
 
+function hideDeactivateError() {
+  deactivateErrorBox.hidden = true;
+  deactivateErrorTitle.textContent = "";
+}
+
+function showDeactivateError(error) {
+  const message = describeError(error);
+  deactivateErrorTitle.textContent = message;
+  deactivateErrorBox.hidden = false;
+  announce(message);
+}
+
+function syncDeactivateButton() {
+  const visible =
+    !!activeDetailItem &&
+    activeDetailItem.status === "active" &&
+    !editMode &&
+    !statusInFlight &&
+    !saveInFlight;
+  detailDeactivateButton.hidden = !visible;
+}
+
+function openDeactivateDialog() {
+  if (!activeDetailItem || activeDetailItem.status !== "active") return;
+  if (editMode || statusInFlight || saveInFlight) return;
+  const aliasId = text(activeDetailItem.model_alias_id) || text(activeDetailItem.alias);
+  if (!aliasId || typeof activeDetailItem.updated_at !== "string") return;
+  hideDeactivateError();
+  pendingDeactivate = { modelAliasId: aliasId, expected_updated_at: activeDetailItem.updated_at };
+  deactivateTitle.textContent = `Deactivate ${aliasId}?`;
+  deactivateDetail.textContent = `Alias ${aliasId} is active.`;
+  if (!statusInFlight) {
+    deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+  if (!deactivateDialog.open) {
+    if (typeof deactivateDialog.showModal === "function") deactivateDialog.showModal();
+    else deactivateDialog.setAttribute("open", "");
+  }
+  deactivateSubmit.focus();
+}
+
 function exitEditMode() {
   editMode = false;
   pendingExpectedUpdatedAt = activeDetailItem ? text(activeDetailItem.updated_at) || null : null;
@@ -143,6 +196,7 @@ function exitEditMode() {
   editInferenceProvider.removeAttribute("aria-invalid");
   assignmentRefreshButton.hidden = true;
   if (activeDetailItem) detailEditButton.hidden = false;
+  syncDeactivateButton();
 }
 
 function enterEditMode() {
@@ -159,6 +213,7 @@ function enterEditMode() {
   assignmentRefreshButton.hidden = true;
   assignmentForm.hidden = false;
   detailEditButton.hidden = true;
+  syncDeactivateButton();
   editConcreteModel.focus();
 }
 
@@ -175,6 +230,7 @@ function closeDetailState() {
   assignmentForm.hidden = true;
   detailEditButton.hidden = true;
   assignmentRefreshButton.hidden = true;
+  syncDeactivateButton();
   hideDetailError();
   detailSubtitle.textContent = "No alias selected.";
 }
@@ -215,6 +271,7 @@ function applyAuthoritativeDetail(item) {
   pendingExpectedUpdatedAt = text(item.updated_at) || null;
   renderDetail(item);
   detailEditButton.hidden = false;
+  syncDeactivateButton();
   if (editMode) {
     editConcreteModel.value = text(item.concrete_model);
     editRouter.value = text(item.router);
@@ -282,6 +339,7 @@ async function openDetail(aliasId) {
   activeDetailItem = null;
   pendingExpectedUpdatedAt = null;
   editMode = false;
+  syncDeactivateButton();
   assignmentForm.hidden = true;
   detailEditButton.hidden = true;
   assignmentRefreshButton.hidden = true;
@@ -380,6 +438,13 @@ disconnectButton.addEventListener("click", () => {
   detailReadVersion += 1;
   activeDetailId = null;
   closeDetailState();
+  if (deactivateDialog?.open) deactivateDialog.close();
+  hideDeactivateError();
+  if (!statusInFlight) {
+    pendingDeactivate = null;
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
   credentialStore.clear();
   currentItems = [];
   renderRows();
@@ -411,6 +476,96 @@ detailEditButton.addEventListener("click", () => {
   enterEditMode();
 });
 
+detailDeactivateButton.addEventListener("click", () => {
+  openDeactivateDialog();
+});
+
+deactivateDialog.addEventListener("cancel", (event) => {
+  if (statusInFlight) event.preventDefault();
+});
+
+deactivateCancel.addEventListener("click", () => {
+  if (statusInFlight) return;
+  deactivateDialog.close();
+});
+
+deactivateForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (statusInFlight) return;
+  if (deactivateSubmit.disabled) return;
+  if (!pendingDeactivate) return;
+  hideDeactivateError();
+  // expected_updated_at captured at dialog open from authoritative detail; no second PUT.
+  const generation = sessionGeneration;
+  const { modelAliasId, expected_updated_at } = pendingDeactivate;
+  statusInFlight = true;
+  syncDeactivateButton();
+  deactivateSubmit.disabled = true;
+  if (deactivateCancel) deactivateCancel.disabled = true;
+  try {
+    await controlApi.replaceModelAliasStatus(modelAliasId, {
+      status: "inactive",
+      expected_updated_at,
+    });
+    if (generation !== sessionGeneration) return;
+    // The retired alias is no longer resolvable: invalidate pending detail
+    // reads, drop the stale detail, close the dialog, and refresh the
+    // authoritative list. There is no reactivation from this flow.
+    detailReadVersion += 1;
+    pendingDeactivate = null;
+    if (deactivateDialog?.open) deactivateDialog.close();
+    hideDeactivateError();
+    closeDetailState();
+    await loadAliases();
+    if (page.dataset.state !== "ready" && page.dataset.state !== "empty") return;
+    announce(`Alias ${modelAliasId} deactivated.`);
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    const isConflict = error?.kind === "conflict" || error?.code === "status_conflict";
+    const isGone = error?.kind === "not_found";
+    if (isGone) {
+      detailReadVersion += 1;
+      pendingDeactivate = null;
+      if (deactivateDialog?.open) deactivateDialog.close();
+      hideDeactivateError();
+      closeDetailState();
+      await loadAliases();
+      if (page.dataset.state !== "ready" && page.dataset.state !== "empty") return;
+      announce(`Alias ${modelAliasId} is now inactive.`);
+      return;
+    }
+    showDeactivateError(error);
+    if (isConflict) {
+      try {
+        const fresh = await controlApi.getModelAlias(modelAliasId);
+        if (generation !== sessionGeneration) return;
+        if (fresh?.status === "active" && typeof fresh?.updated_at === "string") {
+          pendingDeactivate = { modelAliasId, expected_updated_at: fresh.updated_at };
+          applyAuthoritativeDetail(fresh);
+          detailSubtitle.textContent = `${text(fresh.alias) || modelAliasId} · authoritative detail.`;
+        } else {
+          detailReadVersion += 1;
+          pendingDeactivate = null;
+          if (deactivateDialog?.open) deactivateDialog.close();
+          hideDeactivateError();
+          closeDetailState();
+          await loadAliases();
+          if (page.dataset.state !== "ready" && page.dataset.state !== "empty") return;
+          announce(`Alias ${modelAliasId} is now inactive.`);
+        }
+      } catch (refreshError) {
+        if (generation !== sessionGeneration) return;
+        showDeactivateError(refreshError);
+      }
+    }
+  } finally {
+    statusInFlight = false;
+    syncDeactivateButton();
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+});
+
 assignmentCancelButton.addEventListener("click", () => {
   exitEditMode();
   hideDetailError();
@@ -437,6 +592,7 @@ assignmentForm.addEventListener("submit", async (event) => {
   const readVersion = detailReadVersion;
   const aliasId = activeDetailId;
   saveInFlight = true;
+  syncDeactivateButton();
   assignmentSaveButton.disabled = true;
   try {
     const updated = await controlApi.replaceModelAliasAssignment(aliasId, body);
@@ -453,6 +609,7 @@ assignmentForm.addEventListener("submit", async (event) => {
     }
   } finally {
     saveInFlight = false;
+    syncDeactivateButton();
     assignmentSaveButton.disabled = false;
   }
 });
