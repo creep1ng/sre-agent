@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Revisión humana de mitigación: acciones disponibles según el workflow."
+    />
+    <title>Revisión de mitigación · midnight.agent</title>
+    <script src="/public/api/runtime-config.js"></script>
+    <link rel="icon" href="/public/favicon.svg" />
+    <link rel="stylesheet" href="/styles/design-system.css" />
+    <link rel="stylesheet" href="/styles/incident-alerts.css" />
+    <link rel="stylesheet" href="/styles/incident-war-room.css" />
+  </head>
+  <body>
+    <a class="ma-skip-link" href="#review">Saltar a la revisión</a>
+    <main id="review" class="war-room" data-state="loading">
+      <header class="war-room__heading">
+        <div>
+          <p class="ma-eyebrow">Operaciones</p>
+          <h1 class="war-room__title">Revisión de mitigación</h1>
+          <p class="ma-subtle">
+            Acciones humanas disponibles según el workflow activo. Esta vista no
+            ejecuta mitigaciones ni cierra incidentes.
+          </p>
+        </div>
+        <div class="war-room__actions">
+          <button id="refresh-button" class="ma-button ma-button--secondary" type="button" hidden>
+            Actualizar
+          </button>
+          <button id="forget-credential" class="ma-button ma-button--ghost" type="button" hidden>
+            Olvidar credencial
+          </button>
+        </div>
+      </header>
+      <div id="loading-state" class="alert-loading" aria-live="polite" hidden>
+        <span class="alert-loading__dot" aria-hidden="true"></span>
+        <span>Cargando revisión…</span>
+      </div>
+      <section id="credential-section" class="ma-panel war-room__credentials" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Credencial de lectura</h2></div>
+        <form id="credential-form" class="ma-panel__body war-room__form">
+          <label class="ma-field" for="credential-input">
+            <span class="ma-field__label">API key (Bearer)</span>
+            <input id="credential-input" class="ma-input" type="password" autocomplete="off" spellcheck="false" required />
+          </label>
+          <p id="credential-error" class="ma-field__error" hidden></p>
+          <button class="ma-button ma-button--primary" type="submit">Consultar revisión</button>
+        </form>
+      </section>
+      <div id="error-missing-id" class="ma-alert" data-tone="warning" hidden>
+        <p class="ma-alert__title">Falta incident_id o run_id</p>
+        <p class="ma-alert__detail">Abre con <code>?incident_id=…&amp;run_id=…</code>.</p>
+      </div>
+      <div id="error-401" class="ma-alert" data-tone="warning" hidden>
+        <p class="ma-alert__title">Autenticación requerida</p>
+      </div>
+      <div id="error-403" class="ma-alert" data-tone="critical" hidden>
+        <p class="ma-alert__title">Sin acceso a la revisión</p>
+      </div>
+      <div id="error-404" class="ma-alert" data-tone="warning" hidden>
+        <p class="ma-alert__title">Incidente o run no encontrado</p>
+      </div>
+      <div id="error-503" class="ma-alert" data-tone="critical" hidden>
+        <p class="ma-alert__title">Backend no disponible</p>
+      </div>
+      <section id="context-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Contexto autoritativo</h2></div>
+        <dl class="ma-panel__body war-room__facts">
+          <div><dt>Incidente</dt><dd id="fact-incident"></dd></div>
+          <div><dt>Run</dt><dd id="fact-run"></dd></div>
+          <div><dt>Estado</dt><dd id="fact-state"></dd></div>
+          <div><dt>Workflow</dt><dd id="fact-workflow"></dd></div>
+        </dl>
+      </section>
+      <section id="actions-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Acciones disponibles</h2></div>
+        <div class="ma-panel__body">
+          <ul id="actions-list" class="war-room__events"></ul>
+          <p id="actions-empty" class="ma-muted" hidden>Este estado no admite revisión de mitigación.</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/public/incident-ui/review.js"></script>
+  </body>
+</html>
