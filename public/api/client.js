@@ -226,5 +226,15 @@ export function createAdministrativeApiClient({
         `/v1/incidents/${encodeURIComponent(incidentId)}/snapshot${query ? `?${query}` : ""}`,
       );
     },
+    sendRunCommand(incidentId, runId, body, idempotencyKey) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/commands`,
+        {
+          method: "POST",
+          body,
+          headers: mutationHeaders(idempotencyKey),
+        },
+      );
+    },
   });
 }

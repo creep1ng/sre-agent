@@ -56,3 +56,13 @@ def test_review_surface_stays_within_slice_scope() -> None:
 def test_review_reads_through_the_shared_seam() -> None:
     assert "getIncident(" in JAVASCRIPT
     assert "Idempotency-Key" in CLIENT
+
+
+def test_review_submit_uses_the_contractual_command_seam() -> None:
+    assert "sendRunCommand" in CLIENT
+    assert "sendRunCommand" in JAVASCRIPT
+    assert "randomUUID" in JAVASCRIPT
+    assert '"409"' in JAVASCRIPT
+    for key in ("command: action.command", 'actor: "human"', '"run.approve"', '"run.command"'):
+        assert key in JAVASCRIPT, key
+    assert "applied" not in JAVASCRIPT
