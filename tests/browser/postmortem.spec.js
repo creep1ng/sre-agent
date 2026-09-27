@@ -72,3 +72,76 @@ test("shows the forbidden state without content", async ({ page }) => {
   await expect(page.locator("#context-section")).toBeHidden();
   await expect(page.locator("#artifact-section")).toBeHidden();
 });
+
+function detailTwoRuns() {
+  const detail = detailPayload();
+  detail.runs.push(
+    { run_id: "run_demo0002", version: 1, status: "running", current_state: "triage", updated_at: "2026-08-24T14:21:00Z" },
+  );
+  return detail;
+}
+
+function timelineFor(prefix) {
+  return {
+    events: [
+      { event_id: "evt_x1", kind: "state_change", sequence: 0, state: "investigating", summary: `${prefix} record one.`, actor: { type: "system", reference: null }, turn_id: null, task_id: null, request_id: null, occurred_at: "2026-08-24T14:12:00Z" },
+    ],
+    next_cursor: "seq:0",
+    has_more: false,
+  };
+}
+
+async function openProvenance(page, { hostile = false } = {}) {
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/timeline")) {
+      const runId = url.searchParams.get("run_id") ?? "run_demo0002";
+      const payload = timelineFor(runId === "run_demo0001" ? "Alpha" : "Beta");
+      if (hostile) payload.events[0].summary = '<img src="x" onerror="window.__pwned=1"> Fiscaliza.';
+      return route.fulfill({ json: payload });
+    }
+    return route.fulfill({ json: detailTwoRuns() });
+  });
+  await page.goto(`/public/incident-ui/postmortem.html?incident_id=${INCIDENT}`);
+  await page.locator("#credential-input").fill("sre_demo_token_demo_0001");
+  await page.locator("#credential-form button[type=submit]").click();
+}
+
+test("keeps run provenance without mixing runs", async ({ page }) => {
+  await openProvenance(page);
+
+  await expect(page.locator("#run-select option")).toHaveCount(2);
+  await expect(page.locator("#provenance-list")).toContainText("run run_demo0002");
+  await page.locator("#run-select").selectOption("run_demo0001");
+  await expect(page.locator("#provenance-list")).toContainText("Alpha record one.");
+  const body = (await page.locator("#provenance-list").textContent()) ?? "";
+  expect(body).not.toContain("Beta record");
+  expect(body).not.toMatch(/applied|aplicada|ejecutada/i);
+});
+
+test("hides restricted content and escapes untrusted records", async ({ page }) => {
+  await openProvenance(page, { hostile: true });
+
+  await expect(page.locator("#provenance-list")).toContainText("Fiscaliza.");
+  await expect(page.locator("#provenance-list img")).toHaveCount(0);
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  const body = (await page.locator("#postmortem").textContent()) ?? "";
+  expect(body).not.toContain("MARKER-RESTRICTED");
+});
+
+test("keeps review session-only without persistence or close", async ({ page }) => {
+  await openProvenance(page);
+  await expect(page.locator("#review-section")).toBeVisible();
+
+  await page.locator("#review-note").fill("Sesión local.");
+  await page.locator("#review-form button[type=submit]").click();
+  await expect(page.locator("#review-saved")).toBeVisible();
+  await page.reload();
+  await expect(page.locator("#credential-section")).toBeVisible();
+  await expect(page.locator("#close-incident")).toHaveCount(0);
+  expect(await page.evaluate(() => window.localStorage.length)).toBe(0);
+  const labels = await page.locator("button").allTextContents();
+  for (const label of labels) {
+    expect(label).not.toMatch(/close|cierre/i);
+  }
+});
