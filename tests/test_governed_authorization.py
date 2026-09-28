@@ -105,6 +105,11 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "consumption_limits",
     },
+    ("PUT", "/v1/consumption-limits"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "consumption_limits",
+    },
     ("POST", "/v1/responses"): {
         "action": "invoke",
         "resource_type": "llm_model",

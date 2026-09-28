@@ -6,6 +6,11 @@ CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
         "administrative_control",
         "consumption_limits",
     ),
+    ("PUT", "/v1/consumption-limits"): (
+        "admin.write",
+        "administrative_control",
+        "consumption_limits",
+    ),
     ("POST", "/v1/principals"): (
         "admin.write",
         "administrative_control",

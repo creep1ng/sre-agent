@@ -54,6 +54,12 @@ ERROR_MESSAGES = {
     "credential_issuance_failed": "Credential issuance could not be completed.",
 }
 CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    ("PUT", "/v1/consumption-limits"): (
+        "consumption_limits.replace",
+        "admin.write",
+        "administrative_control",
+        "consumption_limits",
+    ),
     ("GET", "/v1/consumption-limits"): (
         "consumption_limits.get",
         "admin.read",

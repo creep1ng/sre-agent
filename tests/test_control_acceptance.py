@@ -222,6 +222,113 @@ def test_consumption_policy_readback_supports_bigint_incident_limits(
     assert response.json()["incident_token_limit"] == 2_147_483_648
 
 
+def test_consumption_policy_put_is_guarded_idempotent_versioned_and_persists(
+    client: TestClient,
+) -> None:
+    path = "/v1/consumption-limits"
+    payload = {
+        "expected_version": 0,
+        "incident_token_limit": 9_223_372_036_854_775_807,
+        "monthly_usd_limit": "0.000000000001",
+    }
+    key = "consumption-policy-write-0001"
+
+    unauthenticated = client.put(path, json=payload)
+    assert unauthenticated.status_code == 401, unauthenticated.text
+    assert client.put(path, json=payload, headers=headers(RESTRICTED_KEY)).status_code == 403
+    assert client.put(path, json=payload, headers=headers()).status_code == 400
+
+    updated = client.put(path, json=payload, headers=headers(idempotency_key=key))
+    assert updated.status_code == 200
+    assert updated.json()["version"] == 1
+    assert updated.json()["incident_token_limit"] == 9_223_372_036_854_775_807
+    assert updated.json()["monthly_usd_limit"] == "0.000000000001"
+
+    replay = client.put(path, json=payload, headers=headers(idempotency_key=key))
+    assert replay.status_code == 200
+    assert replay.json() == updated.json()
+
+    conflict = client.put(
+        path,
+        json={**payload, "monthly_usd_limit": "1"},
+        headers=headers(idempotency_key=key),
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "idempotency_conflict"
+
+    stale = client.put(
+        path,
+        json={**payload, "monthly_usd_limit": "1"},
+        headers=headers(idempotency_key="consumption-policy-write-0002"),
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "status_conflict"
+
+    zero = client.put(
+        path,
+        json={"expected_version": 1, "incident_token_limit": 0, "monthly_usd_limit": "0"},
+        headers=headers(idempotency_key="consumption-policy-write-0003"),
+    )
+    assert zero.status_code == 200
+    assert zero.json()["incident_token_limit"] == 0
+    assert zero.json()["monthly_usd_limit"] == "0"
+
+    unset = client.put(
+        path,
+        json={"expected_version": 2, "incident_token_limit": None, "monthly_usd_limit": None},
+        headers=headers(idempotency_key="consumption-policy-write-0004"),
+    )
+    assert unset.status_code == 200
+    assert unset.json()["version"] == 3
+    assert unset.json()["incident_token_limit"] is None
+    assert unset.json()["monthly_usd_limit"] is None
+    assert client.get(path, headers=headers()).json() == unset.json()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"expected_version": 0, "incident_token_limit": -1, "monthly_usd_limit": None},
+        {
+            "expected_version": 0,
+            "incident_token_limit": 9_223_372_036_854_775_808,
+            "monthly_usd_limit": None,
+        },
+        {"expected_version": 0, "incident_token_limit": None, "monthly_usd_limit": 1},
+        {"expected_version": 0, "incident_token_limit": None, "monthly_usd_limit": "-1"},
+        {
+            "expected_version": 0,
+            "incident_token_limit": None,
+            "monthly_usd_limit": "1.0000000000001",
+        },
+        {
+            "expected_version": 0,
+            "incident_token_limit": None,
+            "monthly_usd_limit": "100000000000000000000",
+        },
+        {"incident_token_limit": None, "monthly_usd_limit": None},
+        {
+            "expected_version": 0,
+            "incident_token_limit": None,
+            "monthly_usd_limit": None,
+            "unexpected": True,
+        },
+    ],
+)
+def test_consumption_policy_put_rejects_invalid_payloads_without_mutation(
+    client: TestClient, payload: dict[str, object]
+) -> None:
+    before = client.get("/v1/consumption-limits", headers=headers()).json()
+    response = client.put(
+        "/v1/consumption-limits",
+        json=payload,
+        headers=headers(idempotency_key="consumption-policy-invalid-0001"),
+    )
+    assert response.status_code == 422
+    policy = client.get("/v1/consumption-limits", headers=headers()).json()
+    assert policy == before
+
+
 def test_all_eight_routes_with_replays_expiry_and_revocation(
     client: TestClient, canonical: dict[str, Draft202012Validator]
 ) -> None:

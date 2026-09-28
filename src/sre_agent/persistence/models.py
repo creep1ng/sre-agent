@@ -197,11 +197,11 @@ class GrantRow(Base):
 
 
 class IdempotencyRecordRow(Base):
-    """Scoped POST binding: replay on same hash, conflict on different hash."""
+    """Scoped request binding: replay on same hash, conflict on different hash."""
 
     __tablename__ = "idempotency_records"
     __table_args__ = (
-        CK("method = 'POST'", name="ck_idempotency_method"),
+        CK("method IN ('POST','PUT')", name="ck_idempotency_method"),
         CK(
             "binding IN ('at_least_24h','principal_lifetime')",
             name="ck_idempotency_binding",
