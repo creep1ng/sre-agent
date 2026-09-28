@@ -20,6 +20,10 @@ from sre_agent.gateway.mcp import (
     mcp_router,
 )
 from sre_agent.control.service import ControlService, control_router
+from sre_agent.control.consumption_limits import (
+    ConsumptionLimitPolicyService,
+    consumption_limits_router,
+)
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.incident.workflow import load_incident_workflow
@@ -95,6 +99,9 @@ def create_application(
                     database.sessions, runtime_settings.audit_hmac_key.encode(), store
                 )
             )
+        )
+        application.include_router(
+            consumption_limits_router(ConsumptionLimitPolicyService(database.sessions))
         )
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))

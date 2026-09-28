@@ -1,6 +1,6 @@
 from functools import partial
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy import CheckConstraint as CK
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, mapped_column
@@ -219,6 +219,29 @@ class IdempotencyRecordRow(Base):
     created_at = required(DateTime(timezone=True))
     expires_at = mapped_column(DateTime(timezone=True), nullable=True)
     transition_count = required(Integer)
+
+
+class ConsumptionLimitPolicyRow(Base):
+    """Versioned singleton policy for incident and workspace consumption limits."""
+
+    __tablename__ = "consumption_limit_policies"
+    __table_args__ = (
+        CK("policy_id = 1", name="ck_consumption_policy_singleton"),
+        CK("version >= 0", name="ck_consumption_policy_version"),
+        CK(
+            "incident_token_limit IS NULL OR incident_token_limit >= 0",
+            name="ck_consumption_policy_incident_limit",
+        ),
+        CK(
+            "monthly_usd_limit IS NULL OR monthly_usd_limit >= 0",
+            name="ck_consumption_policy_monthly_limit",
+        ),
+    )
+    policy_id = mapped_column(Integer, primary_key=True)
+    version = required(BigInteger)
+    incident_token_limit = mapped_column(BigInteger, nullable=True)
+    monthly_usd_limit = mapped_column(Numeric(32, 12), nullable=True)
+    updated_at = required(DateTime(timezone=True))
 
 
 class AuditEventRow(Base):
