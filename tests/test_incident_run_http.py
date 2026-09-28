@@ -23,6 +23,8 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
+from sre_agent.incident.runtime import ActorReference, IncidentCommand, IncidentRuntime
+from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
@@ -38,8 +40,11 @@ DATABASE_URL = os.environ.get(
 )
 INCIDENT_ID = "inc-a3-http-start"
 OTHER_INCIDENT_ID = "inc-a3-http-neighbour"
-# The boundary must accept exactly what transition_commits.command_id can hold.
-LONGEST_KEY = "k" * 128
+KEY_INCIDENTS = {8: "inc-a3-http-key-008", 128: "inc-a3-http-key-128", 200: "inc-a3-http-key-200"}
+CURSOR_INCIDENT_ID = "inc-a3-http-cursor"
+# The range the contract admits, end to end: the store holds the longest key it
+# allows, so the boundary has no reason to narrow it.
+CONTRACT_MAX_KEY = "k" * 200
 NOW = datetime(2026, 9, 26, 12, 0, tzinfo=UTC)
 BEARERS: dict[str, str] = {}
 OPENED: dict[str, str] = {}
@@ -74,6 +79,7 @@ def _base_state() -> dict[str, Any]:
 def authorized_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
@@ -130,6 +136,9 @@ def authorized_database() -> None:
         async with PostgresIncidentUnitOfWork(database) as work:
             await work.incidents.add(INCIDENT_ID, _base_state(), now=NOW)
             await work.incidents.add(OTHER_INCIDENT_ID, _base_state(), now=NOW)
+            for identifier in KEY_INCIDENTS.values():
+                await work.incidents.add(identifier, _base_state(), now=NOW)
+            await work.incidents.add(CURSOR_INCIDENT_ID, _base_state(), now=NOW)
         BEARERS["demo"] = f"Bearer {demo.key}"
         BEARERS["bystander"] = f"Bearer {bystander.key}"
 
@@ -186,9 +195,25 @@ def test_a_credential_without_run_start_is_403_and_opens_nothing() -> None:
     assert _run_ids() == []
 
 
-def test_a_key_the_store_cannot_hold_is_refused_at_the_boundary() -> None:
-    """A key longer than the commit column is rejected, never half-committed."""
-    assert _start("x" * 129).status_code == 422
+def test_a_request_the_contract_does_not_admit_is_refused_before_anything_else() -> None:
+    """Including an objective whose type the lookup cannot even hash."""
+    assert _start("x" * 201).status_code == 422
+    assert (
+        _start(
+            "key-objective-list", body={"workflow_version": "1.0.0", "objective": []}
+        ).status_code
+        == 422
+    )
+    assert (
+        _start(
+            "key-objective-dict", body={"workflow_version": "1.0.0", "objective": {}}
+        ).status_code
+        == 422
+    )
+    assert (
+        _start("key-objective-int", body={"workflow_version": "1.0.0", "objective": 7}).status_code
+        == 422
+    )
     assert _start("short").status_code == 422
     assert _start(None).status_code == 422
     assert _start("key-unknown-objective", body=_body("dance")).status_code == 422
@@ -197,7 +222,7 @@ def test_a_key_the_store_cannot_hold_is_refused_at_the_boundary() -> None:
 
 
 def test_retrying_one_key_returns_the_first_run_instead_of_opening_another() -> None:
-    created = _start(LONGEST_KEY)
+    created = _start(CONTRACT_MAX_KEY)
     assert created.status_code == 201
     opened = created.json()
     assert opened["incident_id"] == INCIDENT_ID
@@ -205,14 +230,14 @@ def test_retrying_one_key_returns_the_first_run_instead_of_opening_another() -> 
     assert opened["cursor"] == "seq:0"
     OPENED["run_id"] = opened["run_id"]
 
-    replayed = _start(LONGEST_KEY)
+    replayed = _start(CONTRACT_MAX_KEY)
     assert replayed.status_code == 200
     assert replayed.json()["run_id"] == opened["run_id"]
     assert _run_ids() == [opened["run_id"]]
 
 
 def test_one_key_reused_for_a_different_request_conflicts() -> None:
-    conflict = _start(LONGEST_KEY, body=_body("investigate"))
+    conflict = _start(CONTRACT_MAX_KEY, body=_body("investigate"))
     assert conflict.status_code == 409
     assert conflict.json()["error"]["code"] == "run_conflict"
     assert _run_ids() == [OPENED["run_id"]]
@@ -238,3 +263,71 @@ def test_resuming_never_reaches_a_run_of_another_incident() -> None:
     missing = _start("key-resume-0003", body=_body(resume_from_run_id="run_missing00001"))
     assert missing.status_code == 404
     assert _run_ids() == [OPENED["run_id"], neighbour.json()["run_id"]]
+
+
+def test_every_key_length_the_contract_admits_opens_a_run() -> None:
+    """8 and 200 are the contract's edges; 128 was the store's old ceiling."""
+    for length, identifier in KEY_INCIDENTS.items():
+        key = f"k{length:03d}" + "x" * (length - 4)
+        assert len(key) == length
+        response = _start(key, incident=identifier)
+        assert response.status_code == 201, length
+    assert _start("x" * 7, incident=KEY_INCIDENTS[8]).status_code == 422
+    assert _start("x" * 201, incident=KEY_INCIDENTS[200]).status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        stored = connection.execute(
+            "SELECT length(command_id) FROM incident.transition_commits "
+            "WHERE incident_id LIKE 'inc-a3-http-key-%' ORDER BY 1"
+        ).fetchall()
+    assert [row[0] for row in stored] == [8, 128, 200]
+
+
+def test_resuming_reports_a_cursor_for_the_state_it_returns() -> None:
+    """Snapshots lag behind the run, so the cursor cannot come from the snapshot.
+
+    Between two snapshots the run record already reflects events the last
+    snapshot does not cover. A consumer continuing from a stale cursor would
+    re-apply what the state it just read already shows.
+    """
+
+    opened = _start("key-cursor-000001", incident=CURSOR_INCIDENT_ID)
+    assert opened.status_code == 201
+    run_id = opened.json()["run_id"]
+    assert opened.json()["cursor"] == "seq:0"
+
+    async def _advance() -> tuple[int, int]:
+        database = Database(DATABASE_URL)
+        workflow = load_incident_workflow(
+            REPOSITORY_ROOT / "agent/workflows/incident-response.yaml"
+        )
+        runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
+        await runtime.execute(
+            IncidentCommand(
+                command_id="cursor-second-transition",
+                incident_id=CURSOR_INCIDENT_ID,
+                run_id=run_id,
+                transition_id="triage_declare",
+                actor="human",
+                actor_reference=ActorReference(principal_id="demo-human"),
+                outcome="declare",
+                inputs={"severity": "sev2"},
+            )
+        )
+        async with PostgresIncidentUnitOfWork(database) as work:
+            events = await work.events.list_after(run_id, sequence=-1, limit=50)
+            snapshot = await work.snapshots.latest(run_id)
+        await database.dispose()
+        assert snapshot is not None
+        return max(event.sequence for event in events), snapshot.event_sequence
+
+    last_event, covered_by_snapshot = asyncio.run(_advance())
+    assert last_event > covered_by_snapshot, "the second transition must not take a new snapshot"
+
+    resumed = _start(
+        "key-cursor-000002",
+        body=_body(resume_from_run_id=run_id),
+        incident=CURSOR_INCIDENT_ID,
+    )
+    assert resumed.status_code == 200
+    assert resumed.json()["current_state"] == "active"
+    assert resumed.json()["cursor"] == f"seq:{last_event}"

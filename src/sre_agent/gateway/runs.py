@@ -55,12 +55,11 @@ from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
 
 START_ACTION = "run.start"
-# The contract admits 8..200 characters, but the authoritative store keys
-# transition_commits on varchar(128). A longer key would be accepted here and
-# then fail at commit time, turning a valid request into a 503; rejecting it at
-# the boundary keeps the refusal visible and the store honest until the column
-# is widened.
-IDEMPOTENCY_KEY_PATTERN = r"^\S{8,128}$"
+# The range the contract admits. The store follows it: migration 20260928_14
+# widens transition_commits.command_id to varchar(200), so the boundary no
+# longer refuses a key the contract allows, nor accepts one the store cannot
+# hold.
+IDEMPOTENCY_KEY_PATTERN = r"^\S{8,200}$"
 START_REQUEST_FIELDS = frozenset({"workflow_version", "objective", "resume_from_run_id"})
 
 ERRORS = {
@@ -150,7 +149,8 @@ class RunStartService:
             return True
         if body.get("workflow_version") != self.workflow.version:
             return True
-        if body.get("objective") not in OBJECTIVE_TRANSITIONS:
+        objective = body.get("objective")
+        if not isinstance(objective, str) or objective not in OBJECTIVE_TRANSITIONS:
             return True
         resume = body.get("resume_from_run_id")
         return resume is not None and re.fullmatch(RUN_ID_PATTERN, str(resume)) is None
@@ -232,9 +232,17 @@ class RunStartService:
                 if run is None or run.incident_id != incident_id:
                     return self._error(request_id, 404, RUN_NOT_FOUND)
                 snapshot = await work.snapshots.latest(run_id)
+                # The state comes from the run record, which reflects every
+                # committed transition; snapshots are taken periodically, so the
+                # last one can lag behind it. Reading the events after the
+                # snapshot gives a cursor for the state actually returned, and a
+                # consumer that continues from it never re-applies what it can
+                # already see.
+                covered = snapshot.event_sequence if snapshot is not None else -1
+                later = await work.events.list_after(run_id, sequence=covered)
+                sequence = later[-1].sequence if later else covered
         except Exception:
             return self._error(request_id, 503)
-        sequence = snapshot.event_sequence if snapshot is not None else -1
         try:
             payload = project_run_state(run, self.workflow, event_sequence=sequence)
         except UnsupportedWorkflowDataError:
