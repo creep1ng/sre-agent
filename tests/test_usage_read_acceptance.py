@@ -108,9 +108,9 @@ def auth(key: str = ADMIN_KEY) -> dict[str, str]:
 def persisted_usage_audit_rows() -> list[dict[str, object]]:
     with psycopg.connect(DATABASE_URL) as connection:
         rows = connection.execute(
-            """SELECT operation, action, stage, outcome, reason_code, response_status,
-                      retryable, correlation, identity, resource, policy_decision, consumption,
-                      untrusted_input
+            """SELECT operation, action, stage, outcome, reason_code,
+                      authorization_denial_cause, response_status, retryable, correlation,
+                      identity, resource, policy_decision, consumption, untrusted_input
                FROM audit_events WHERE operation='usage.read' ORDER BY occurred_at"""
         ).fetchall()
     names = (
@@ -119,6 +119,7 @@ def persisted_usage_audit_rows() -> list[dict[str, object]]:
         "stage",
         "outcome",
         "reason_code",
+        "authorization_denial_cause",
         "response_status",
         "retryable",
         "correlation",
@@ -190,6 +191,8 @@ def test_usage_audit_authentication_and_authorization_outcomes(
     response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=headers)
 
     assert response.status_code == expected_status
+    if expected_status == 401:
+        assert response.headers["www-authenticate"] == "Bearer"
     assert "request_count" not in response.text
     rows = persisted_usage_audit_rows()
     assert len(rows) == 1
@@ -200,6 +203,9 @@ def test_usage_audit_authentication_and_authorization_outcomes(
     )
     assert rows[0]["reason_code"] == (
         "authentication_failed" if expected_status == 401 else "no_matching_grant"
+    )
+    assert rows[0]["authorization_denial_cause"] == (
+        "grant_not_applicable" if expected_status == 403 else None
     )
     if expected_stage == "authentication":
         assert_no_usage_authorization_context(rows[0])

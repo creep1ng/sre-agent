@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.governance.dto import AuthorizationDenialCause
 from sre_agent.persistence.models import AuditEventRow
 
 
@@ -305,6 +306,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         payload: dict[str, Any] | UsageReadResponse | None = None,
         context: Any = None,
         decision: Any = None,
+        authorization_denial_cause: AuthorizationDenialCause | None = None,
         resource_ref: tuple[str, str] | None = None,
     ) -> JSONResponse | UsageReadResponse:
         request_id = UUID(str(getattr(request.state, "usage_request_id", None) or UUID(int=0)))
@@ -332,6 +334,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                     context=context,
                     resource_ref=resource_ref,
                     decision=decision,
+                    authorization_denial_cause=authorization_denial_cause,
                 )
                 await projection._audit_store.append(event)
                 audit_failed = False
@@ -359,6 +362,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 "retryable": status in {500, 503, 504},
             },
             status_code=status,
+            headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
         )
 
     class UsageReadRoute(APIRoute):
@@ -489,6 +493,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 message="Administrative read is not authorized.",
                 context=_context,
                 decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
                 resource_ref=("administrative_control", "usage"),
             )
 
