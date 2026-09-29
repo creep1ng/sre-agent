@@ -17,6 +17,7 @@ IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
 RUN_ID_PATTERN = r"^run_[a-z0-9]{8,32}$"
 CURSOR_PATTERN = r"^seq:(-?\d+)$"
 SEVERITIES = frozenset({"sev1", "sev2", "sev3", "sev4"})
+RUN_STATUSES = frozenset({"running", "awaiting_human", "completed", "terminated"})
 
 TRANSITION_SUMMARIES = {
     "open_triage": "Triage opened.",
@@ -193,6 +194,35 @@ def project_run_summary(run: RunRecord) -> dict[str, Any]:
         "version": run.version,
         "status": status if isinstance(status, str) else None,
         "current_state": current_state if isinstance(current_state, str) else None,
+        "updated_at": utc_iso(run.updated_at),
+    }
+
+
+def project_run_state(
+    run: RunRecord, workflow: IncidentWorkflow, *, event_sequence: int
+) -> dict[str, Any]:
+    """Project the observable run state of the runs contract (issue #145).
+
+    The cursor is the position of the last event this state already reflects, so
+    a consumer that polls from it never skips an event.
+    """
+
+    state = run.state if isinstance(run.state, dict) else {}
+    status, current_state = state.get("status"), state.get("current_state")
+    if status not in RUN_STATUSES:
+        raise UnsupportedWorkflowDataError("stored run carries an unknown status")
+    if current_state not in workflow.states:
+        raise UnsupportedWorkflowDataError("stored run names an unknown state")
+    pending, terminated = state.get("pending_command"), state.get("terminated_reason")
+    return {
+        "run_id": run.run_id,
+        "incident_id": run.incident_id,
+        "workflow_version": workflow.version,
+        "status": status,
+        "current_state": current_state,
+        "pending_command": pending if isinstance(pending, str) else None,
+        "cursor": encode_cursor(event_sequence),
+        "terminated_reason": terminated if isinstance(terminated, str) else None,
         "updated_at": utc_iso(run.updated_at),
     }
 
