@@ -1,0 +1,86 @@
+[
+  {
+    "pr": 411,
+    "url": "https://github.com/creep1ng/sre-agent/pull/411#issuecomment-5883680214",
+    "id": 5883680214,
+    "kind": "pending_parent_merge_update"
+  },
+  {
+    "pr": 416,
+    "url": "https://github.com/creep1ng/sre-agent/pull/416#issuecomment-5883680547",
+    "id": 5883680547,
+    "kind": "pending_parent_merge_update"
+  },
+  {
+    "pr": 418,
+    "url": "https://github.com/creep1ng/sre-agent/pull/418#issuecomment-5883680865",
+    "id": 5883680865,
+    "kind": "pending_parent_merge_update"
+  },
+  {
+    "pr": 378,
+    "url": "https://github.com/creep1ng/sre-agent/pull/378#issuecomment-5883681143",
+    "id": 5883681143,
+    "kind": "pending_parent_merge_update"
+  },
+  {
+    "pr": 379,
+    "url": "https://github.com/creep1ng/sre-agent/pull/379#issuecomment-5883681441",
+    "id": 5883681441,
+    "kind": "pending_parent_merge_update"
+  },
+  {
+    "pr": 385,
+    "url": "https://github.com/creep1ng/sre-agent/pull/385#issuecomment-5883681770",
+    "id": 5883681770,
+    "kind": "pending_parent_merge_update"
+  },
+  {
+    "pr": 386,
+    "url": "https://github.com/creep1ng/sre-agent/pull/386#issuecomment-5883682144",
+    "id": 5883682144,
+    "kind": "pending_parent_merge_update"
+  },
+  {
+    "pr": 396,
+    "url": "https://github.com/creep1ng/sre-agent/pull/396#issuecomment-5883757103",
+    "id": 5883757103,
+    "kind": "merged_verified"
+  },
+  {
+    "pr": 414,
+    "url": "https://github.com/creep1ng/sre-agent/pull/414#issuecomment-5883757395",
+    "id": 5883757395,
+    "kind": "merged_verified"
+  },
+  {
+    "pr": 415,
+    "url": "https://github.com/creep1ng/sre-agent/pull/415#issuecomment-5883757707",
+    "id": 5883757707,
+    "kind": "merged_verified"
+  },
+  {
+    "pr": 417,
+    "url": "https://github.com/creep1ng/sre-agent/pull/417#issuecomment-5883758014",
+    "id": 5883758014,
+    "kind": "merged_verified"
+  },
+  {
+    "pr": 412,
+    "url": "https://github.com/creep1ng/sre-agent/pull/412#issuecomment-5883758315",
+    "id": 5883758315,
+    "kind": "merged_verified"
+  },
+  {
+    "pr": 371,
+    "url": "https://github.com/creep1ng/sre-agent/pull/371#issuecomment-5883758564",
+    "id": 5883758564,
+    "kind": "merged_verified"
+  },
+  {
+    "pr": 372,
+    "url": "https://github.com/creep1ng/sre-agent/pull/372#issuecomment-5883758810",
+    "id": 5883758810,
+    "kind": "merged_verified"
+  }
+]

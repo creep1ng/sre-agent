@@ -1,0 +1,73 @@
+[
+  {
+    "pr": 396,
+    "head": "c29de01db9820df26a41cde8012db642c633df86",
+    "previous_main": "4b0c8740a042a8654979dd43481c7ad4f9992ea1",
+    "merge_commit": "e0f2f3e8fabff57bcfcea7ae95ce810f0b9d45f4",
+    "expected_tree": "20bffa30bd4779ceb17e8f83a3f1838ebf393bc7",
+    "merged_at": "2026-09-29T04:25:50.721096+00:00",
+    "actual_tree": "20bffa30bd4779ceb17e8f83a3f1838ebf393bc7",
+    "tree_matches": true
+  },
+  {
+    "pr": 414,
+    "head": "141b177d4a47f8da1279571893643f6e2fb7349a",
+    "previous_main": "e0f2f3e8fabff57bcfcea7ae95ce810f0b9d45f4",
+    "merge_commit": "5b7c9994c2d8253c9fc906a791e86924d5e828ac",
+    "expected_tree": "d471ea09d7866acd1009872698f99d95163cac6b",
+    "merged_at": "2026-09-29T04:25:59.761455+00:00",
+    "actual_tree": "d471ea09d7866acd1009872698f99d95163cac6b",
+    "tree_matches": true
+  },
+  {
+    "pr": 415,
+    "head": "d21bdda93ec8a49670387a185195027786a7e0a8",
+    "previous_main": "5b7c9994c2d8253c9fc906a791e86924d5e828ac",
+    "merge_commit": "c5f6c1532569ea8b14b27b1d50800d260833f852",
+    "expected_tree": "16b492d096cf6c9a906fee70c32e8cd0a1088f5d",
+    "merged_at": "2026-09-29T04:26:09.112107+00:00",
+    "actual_tree": "16b492d096cf6c9a906fee70c32e8cd0a1088f5d",
+    "tree_matches": true
+  },
+  {
+    "pr": 417,
+    "head": "0d0b876ad3f38506728da9ee00ed4d18a50ffe4c",
+    "previous_main": "c5f6c1532569ea8b14b27b1d50800d260833f852",
+    "merge_commit": "618ce227d7ee2d1a274cdf0c7951ce8751d6e760",
+    "expected_tree": "c188e3e455e7907347d4335200b26cdf37684200",
+    "merged_at": "2026-09-29T04:27:23.318469+00:00",
+    "actual_tree": "c188e3e455e7907347d4335200b26cdf37684200",
+    "tree_matches": true
+  },
+  {
+    "pr": 412,
+    "head": "fe63f0c1f7d0bb90a46136a57f8c65256fba86ea",
+    "previous_main": "618ce227d7ee2d1a274cdf0c7951ce8751d6e760",
+    "merge_commit": "9d7aaf1743e970542b79d1af82682431d557b422",
+    "expected_tree": "0a4616a430806e4a6d5cbeaf93fa3d0f4b6df9da",
+    "merged_at": "2026-09-29T04:27:32.461752+00:00",
+    "actual_tree": "0a4616a430806e4a6d5cbeaf93fa3d0f4b6df9da",
+    "tree_matches": true
+  },
+  {
+    "pr": 371,
+    "head": "d957c1b0375788e7283ae20e530767ca64f207d1",
+    "previous_main": "9d7aaf1743e970542b79d1af82682431d557b422",
+    "merge_commit": "e81c66b8c3132b32bb3be090fc93dcc15863c49b",
+    "expected_tree": "56cdd5b7f487e21158fc58ebb09855af3cc36f2d",
+    "merged_at": "2026-09-29T04:27:41.413141+00:00",
+    "actual_tree": "56cdd5b7f487e21158fc58ebb09855af3cc36f2d",
+    "tree_matches": true
+  },
+  {
+    "pr": 372,
+    "head": "c8fd8968d2596b57013ec73c3c6fcaae5a9c1aec",
+    "previous_main": "e81c66b8c3132b32bb3be090fc93dcc15863c49b",
+    "merge_commit": "5b6109bd2c8100455136cf12ce91c52830833c7f",
+    "expected_tree": "5ee5fd41bfa4c8fb588b147641a04f72d03f9df1",
+    "merged_at": "2026-09-29T04:29:29.316487+00:00",
+    "method": "native async default; stack position1 only; bypass_rules=false",
+    "actual_tree": "5ee5fd41bfa4c8fb588b147641a04f72d03f9df1",
+    "tree_matches": true
+  }
+]
