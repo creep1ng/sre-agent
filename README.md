@@ -1,6 +1,6 @@
 # Pull-request acceptance audit — 2026-09-29 UTC
 
-**Result: 7 merged; 28 left open with actionable reviews.** Every one of the 35 initial ready PRs has a posted report. Final-main hosted CI is being monitored; no post-merge green claim is made yet.
+**Result: 7 merged; 28 left open with actionable reviews.** Every one of the 35 initial ready PRs has a posted report. **Final-main hosted CI passed all eight jobs**, including contracts and production-browser. [Run](https://github.com/creep1ng/sre-agent/actions/runs/36521826587) · [Exact-SHA hosted report](results/hosted-ci.md).
 
 Initial scope: **35 open, non-draft PRs** in `creep1ng/sre-agent`. Six drafts were excluded: #365, #366, #367, #368, #382, #420. The inventory was captured before any audit merge.
 
@@ -59,7 +59,7 @@ The actual screenshots and sanitized logs are next to each report. Source worktr
 
 Seven scoped candidates merged in verified order: #396, #414, #415, #417, #412, #371, #372. Every actual merge tree and parent pair matches the independently tested sequence. #390 remains open for unsafe authored documentation. [Integration report](integration/integration-report.md) · [Verified merge commits/trees](results/merges.json) · [All 35 posted reviews](results/reviews.json) · [Docker reproduction](integration/REPRODUCE.md).
 
-Observed final-seven proof: **1220 Python passed /1 optional provider skip; 27 focused UI browser passed; 31 full static browser passed /58 connected-only skips; all 15 Python/static/type/migration commands passed.** The optional unchanged historical contract suite was bounded after 49 passing tests; its remainder is incomplete, not PASS. Deliberately offline showcase failures reproduce on starting main; normal-network static browsers pass. Parent Ruff spot-check passed independently. Final dispositions and merge SHAs are recorded above; post-merge CI will be reported separately.
+Observed final-seven proof: **1220 Python passed /1 optional provider skip; 27 focused UI browser passed; 31 full static browser passed /58 connected-only skips; all 15 Python/static/type/migration commands passed.** The optional unchanged historical contract suite was bounded after 49 passing tests; its remainder is incomplete, not PASS. Deliberately offline showcase failures reproduce on starting main; normal-network static browsers pass. Parent Ruff spot-check passed independently. Final dispositions and merge SHAs are recorded above. Separately, final-main hosted CI passed all eight jobs; its contract job completed successfully. One failure-only diagnostic step was skipped, and hosted test-level skip counts were not established. [Hosted details](results/hosted-ci.md).
 
 Live main at initial integration: `4b0c8740a042a8654979dd43481c7ad4f9992ea1`. GitHub’s PR-reported base can lag the actual main ref; prospective-tree verification does not rely on that cached base.
 
@@ -76,3 +76,13 @@ Merged slices do **not** close #189, #25, #330, #40, #41 or #43. Their outstandi
 ## Publication verification
 
 [Independent readback](results/final-audit.md) verified all 35 exact review IDs and 203 evidence links, with all 28 pending heads unchanged and no newly ready PR outside the original scope. Review states: 7 approvals, 15 change requests, 13 comments (including self-authored PRs that cannot receive a change-request review from the same account). [Outcome comments](results/outcome-comments.json) record actual merges and updated blocked-child dependencies. [Issue readback](results/issues-open.json) confirms all six partially delivered issues remain open.
+
+
+## Suggested repair order
+
+1. Fix deterministic integrity defects first: duplicate declaration in #389 and non-atomic mutation/audit in #402. Their failing HTTP/SQL probes are published.
+2. Resolve #373/#378/#387 integration conflicts, preserving the reviewed behaviors, then retest every affected stack at its new exact heads. Do not inherit approval from a green child or a newly merged parent.
+3. Address remaining validation/contracts, UI races, test isolation and safe demonstration documentation using each PR's expected/actual cases. #370's Grafana cause remains unattributed; do not call it an established PR regression.
+4. Request review of the corrected candidates with new Docker evidence. Do not close partially delivered issues based only on these seven merges.
+
+Audit-owned containers and temporary OTel cloud resources were cleaned up. Existing user files and shared resources were preserved. The six drafts were not reviewed. The reports preserve all failed/skipped/partial evidence alongside successful runs.

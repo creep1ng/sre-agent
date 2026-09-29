@@ -1,0 +1,770 @@
+{
+  "repository": "creep1ng/sre-agent",
+  "head_sha": "5b6109bd2c8100455136cf12ce91c52830833c7f",
+  "expected_tree": "5ee5fd41bfa4c8fb588b147641a04f72d03f9df1",
+  "monitor_started_at": "2026-09-29T04:30:54.116052+00:00",
+  "checked_at": "2026-09-29T04:52:22.938148+00:00",
+  "status": "passed",
+  "mutation_performed": false,
+  "history": [
+    {
+      "checked_at": "2026-09-29T04:30:55.876773+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:31:57.049587+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:32:58.274795+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:33:59.434923+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:35:00.633697+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:36:01.875070+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:37:03.086073+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:38:04.362830+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:39:05.603963+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "pending",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 0
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:40:06.793304+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 0,
+          "jobs_total": 1
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:41:08.127789+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 2,
+          "jobs_total": 5
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:42:09.410966+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 3,
+          "jobs_total": 5
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:43:10.828567+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 4,
+          "jobs_total": 5
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:44:12.162738+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 4,
+          "jobs_total": 5
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:45:13.482796+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 4,
+          "jobs_total": 5
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:46:14.826595+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 4,
+          "jobs_total": 5
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:47:16.128395+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 4,
+          "jobs_total": 5
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:48:17.372419+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 5,
+          "jobs_total": 6
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:49:18.804561+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 6,
+          "jobs_total": 7
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:50:20.125630+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 6,
+          "jobs_total": 7
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:51:21.468479+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "in_progress",
+          "conclusion": null,
+          "jobs_completed": 6,
+          "jobs_total": 7
+        }
+      ]
+    },
+    {
+      "checked_at": "2026-09-29T04:52:22.938148+00:00",
+      "runs": [
+        {
+          "id": 36521826587,
+          "status": "completed",
+          "conclusion": "success",
+          "jobs_completed": 8,
+          "jobs_total": 8
+        }
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "id": 36521826587,
+      "name": "CI",
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "5b6109bd2c8100455136cf12ce91c52830833c7f",
+      "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587",
+      "created_at": "2026-09-29T04:29:06Z",
+      "updated_at": "2026-09-29T04:52:06Z",
+      "run_attempt": 1,
+      "jobs": [
+        {
+          "id": 109258606003,
+          "name": "configuration-lock",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109258606003",
+          "started_at": "2026-09-29T04:39:51Z",
+          "completed_at": "2026-09-29T04:40:08Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Build the locked runtime candidate",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 6,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 7,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 109258676710,
+          "name": "checks-image",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109258676710",
+          "started_at": "2026-09-29T04:40:11Z",
+          "completed_at": "2026-09-29T04:40:49Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Build the locked checks image",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run formatting, architecture, typing and declarative checks",
+              "number": 4,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 8,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 9,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 109258836787,
+          "name": "unit",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109258836787",
+          "started_at": "2026-09-29T04:40:51Z",
+          "completed_at": "2026-09-29T04:42:39Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Create local-only Compose inputs",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run the locked Python checks container",
+              "number": 4,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Remove disposable check services",
+              "number": 5,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 10,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 11,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 109258836839,
+          "name": "static-web",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109258836839",
+          "started_at": "2026-09-29T04:40:51Z",
+          "completed_at": "2026-09-29T04:41:53Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run npm ci",
+              "number": 4,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run npx playwright install --with-deps chromium",
+              "number": 5,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run node --check scripts/showcase.js",
+              "number": 6,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run test -f index.html && test -f styles/design-system.css",
+              "number": 7,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run static showcase browser smoke",
+              "number": 8,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020",
+              "number": 15,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 16,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 17,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 109258836878,
+          "name": "contracts",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109258836878",
+          "started_at": "2026-09-29T04:40:51Z",
+          "completed_at": "2026-09-29T04:48:04Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Create local-only Compose inputs",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run locked contract tooling in its container",
+              "number": 4,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Remove disposable contract services",
+              "number": 5,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 10,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 11,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 109260497393,
+          "name": "compose-smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109260497393",
+          "started_at": "2026-09-29T04:48:06Z",
+          "completed_at": "2026-09-29T04:49:12Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Create ephemeral seed inputs",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Start the real candidate stack",
+              "number": 4,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify API, web, and contract harness",
+              "number": 5,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Collect sanitised service state",
+              "number": 6,
+              "status": "completed",
+              "conclusion": "skipped"
+            },
+            {
+              "name": "Remove the scoped stack",
+              "number": 7,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 14,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 15,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 109260753612,
+          "name": "production-browser",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109260753612",
+          "started_at": "2026-09-29T04:49:14Z",
+          "completed_at": "2026-09-29T04:51:56Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Create ephemeral browser inputs",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Build and wait for production images only",
+              "number": 4,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Run browser journeys against candidate images",
+              "number": 5,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Verify a bad proxy fails the browser journey",
+              "number": 6,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Record candidate image identities",
+              "number": 7,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Retain sanitised image identities",
+              "number": 8,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Remove the scoped browser stack",
+              "number": 9,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Post Run actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
+              "number": 18,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 19,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        },
+        {
+          "id": 109261377274,
+          "name": "Quality gate",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/creep1ng/sre-agent/actions/runs/36521826587/job/109261377274",
+          "started_at": "2026-09-29T04:52:00Z",
+          "completed_at": "2026-09-29T04:52:06Z",
+          "steps": [
+            {
+              "name": "Set up job",
+              "number": 1,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Create sanitised CI summary",
+              "number": 2,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Retain sanitised CI summary",
+              "number": 3,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Require every mandatory job to succeed",
+              "number": 4,
+              "status": "completed",
+              "conclusion": "success"
+            },
+            {
+              "name": "Complete job",
+              "number": 5,
+              "status": "completed",
+              "conclusion": "success"
+            }
+          ]
+        }
+      ],
+      "all_jobs_captured": true
+    }
+  ],
+  "public_artifacts": [
+    "hosted-ci.json",
+    "hosted-ci.md"
+  ],
+  "actual_tree": "5ee5fd41bfa4c8fb588b147641a04f72d03f9df1",
+  "tree_matches": true,
+  "failure_log_inspection": {
+    "applicability": "not_applicable",
+    "reason": "No failed job exists for the selected final-SHA run."
+  },
+  "test_level_skip_visibility": {
+    "status": "not_established_from_hosted_logs",
+    "reason": "Read-only log retrieval for the completed unit/static-web jobs before workflow completion returned exit1; not retried. No raw logs retained. Job and step conclusions are fully captured, but no hosted test-level counts are inferred from local results."
+  },
+  "skipped_jobs": [],
+  "skipped_steps": [
+    {
+      "job": "compose-smoke",
+      "step": "Collect sanitised service state",
+      "reason": "Failure-only diagnostics condition was false after successful compose-smoke."
+    }
+  ],
+  "skill_resolution": "paths-injected",
+  "cleanup": "Read-only monitor exited normally. No containers or other services were created; no source/GitHub mutations, action retries or reruns performed."
+}
