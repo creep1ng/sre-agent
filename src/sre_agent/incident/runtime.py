@@ -534,5 +534,8 @@ class IncidentRuntime:
                 else None
             ),
             "reason": f"accepted named transition {transition.source} -> {transition.target}",
+            # What the human said when they decided. An audit that can name who
+            # approved a mitigation but not why still cannot explain the choice.
+            "comment": (command.inputs or {}).get("comment"),
             "decided_at": now.isoformat(),
         }
