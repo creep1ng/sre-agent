@@ -191,12 +191,7 @@ def test_consumption_policy_read_is_protected_and_defaults_to_unset(
     client: TestClient,
 ) -> None:
     assert client.get("/v1/consumption-limits").status_code == 401
-    assert (
-        client.get(
-            "/v1/consumption-limits", headers=headers(RESTRICTED_KEY)
-        ).status_code
-        == 403
-    )
+    assert client.get("/v1/consumption-limits", headers=headers(RESTRICTED_KEY)).status_code == 403
 
     response = client.get("/v1/consumption-limits", headers=headers())
     assert response.status_code == 200

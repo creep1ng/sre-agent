@@ -40,9 +40,7 @@ class ConsumptionLimitPolicyService:
         self.sessions = sessions
 
     async def get_policy(self, authorization: str | None) -> Response:
-        action, resource_type, resource_id = CONTROL_SCOPES[
-            ("GET", "/v1/consumption-limits")
-        ]
+        action, resource_type, resource_id = CONTROL_SCOPES[("GET", "/v1/consumption-limits")]
         try:
             _, evaluation = await authorize_governed_access(
                 self.sessions, authorization, action, resource_type, resource_id
@@ -96,9 +94,7 @@ def consumption_limits_router(service: ConsumptionLimitPolicyService) -> APIRout
     async def get_consumption_limits(
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
     ) -> Response:
-        authorization = (
-            f"{credentials.scheme} {credentials.credentials}" if credentials else None
-        )
+        authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
         return await service.get_policy(authorization)
 
     return router
