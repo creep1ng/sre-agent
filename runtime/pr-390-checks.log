@@ -1,0 +1,4 @@
+HEAD 710dbd0da6bf8e2c20b1cddfcb2e69b466a49e71
+COMMAND pytest -q -p no:cacheprovider tests/test_openrouter_live.py
+s                                                                        [100%]
+1 skipped in 1.00s

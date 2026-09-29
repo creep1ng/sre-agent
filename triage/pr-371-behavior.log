@@ -1,0 +1,4 @@
+Candidate: d957c1b0375788e7283ae20e530767ca64f207d1
+before {"/v1/incidents/inc-a3-authorized": {"incident_id": "inc-a3-authorized", "state": "investigating", "version": 3}, "/v1/incidents/inc-a3-authorized/snapshot": {"incident_id": "inc-a3-authorized", "run_id": "run_a3httpdemo01", "snapshot_id": "snap_4e3ab48fcb5358ca", "version": 1}, "/v1/incidents/inc-a3-authorized/timeline": {}}
+after {"/v1/incidents/inc-a3-authorized": {"incident_id": "inc-a3-authorized", "state": "investigating", "version": 3}, "/v1/incidents/inc-a3-authorized/snapshot": {"incident_id": "inc-a3-authorized", "run_id": "run_a3httpdemo01", "snapshot_id": "snap_4e3ab48fcb5358ca", "version": 1}, "/v1/incidents/inc-a3-authorized/timeline": {}}
+Restart assertions {"anonymous": 401, "forbidden": 403, "grants_after": 3, "grants_before": 3, "identical": true}

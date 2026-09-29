@@ -1,0 +1,31 @@
+{
+  "docker": "29.8.1",
+  "compose": "5.5.1",
+  "host_browser": "Chromium 153.0.8010.52 Arch Linux",
+  "images": [
+    {
+      "local_tag": "sre-agent-pr409-stack-rs9jtc-python-checks:latest",
+      "id": "sha256:e9d909738233806dc27166113a1599ed0c6667e5b44fa83688eef38dc84a83a8",
+      "repo_digests": [
+        "sre-agent-pr409-stack-rs9jtc-python-checks@sha256:e9d909738233806dc27166113a1599ed0c6667e5b44fa83688eef38dc84a83a8"
+      ],
+      "source_mount": "/repo read-only; PYTHONPATH=/repo/src"
+    },
+    {
+      "local_tag": "issue331-e2e-evidence:local",
+      "id": "sha256:abba619978eef39a9a21080cbcc1b4225d4e6d179f17df388e914f4b2c7e4967",
+      "repo_digests": [
+        "issue331-e2e-evidence@sha256:abba619978eef39a9a21080cbcc1b4225d4e6d179f17df388e914f4b2c7e4967"
+      ],
+      "source_mount": "/repo read-only; PYTHONPATH=/repo/src"
+    },
+    {
+      "local_tag": "postgres:17.4-alpine",
+      "id": "sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5",
+      "repo_digests": [
+        "postgres@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5"
+      ],
+      "source_mount": "/repo read-only; PYTHONPATH=/repo/src"
+    }
+  ]
+}

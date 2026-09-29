@@ -1,0 +1,6 @@
+HEAD=c41aeaebe90e7d91d23892076b1b85c06db5c465
+IMAGE=sre-agent-pr409-stack-rs9jtc-python-checks:latest
+TESTS=tests/test_health.py tests/test_migrations.py
+DATABASE=isolated ephemeral container, network none
+...................                                                      [100%]
+19 passed in 4.09s

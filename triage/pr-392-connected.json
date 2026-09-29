@@ -1,0 +1,44 @@
+{
+  "candidate": "ca389f5cf520d236682d630bed080e4e41172688",
+  "evidence": "Real browser against candidate API and isolated PostgreSQL; synthetic persisted data; no route mocks",
+  "observed": [
+    {
+      "path": "/api/v1/alerts/al-browser-review-1790653805888/triage/commands",
+      "status": 200,
+      "request": {
+        "operation": "triage_link",
+        "expected_version": 1,
+        "reason": "Controlled browser review",
+        "target_incident_id": "inc-http-target"
+      },
+      "body": {
+        "alert_id": "al-browser-review-1790653805888",
+        "status": "linked",
+        "incident_id": "inc-http-target",
+        "expected_version": 1,
+        "actor": "op-human",
+        "decided_at": "2026-09-29T03:50:06.004348+00:00"
+      }
+    },
+    {
+      "path": "/api/v1/alerts/al-browser-review-1790653805888/triage/commands",
+      "status": 422,
+      "request": {
+        "operation": "triage_declare",
+        "expected_version": 1,
+        "reason": "Controlled browser review",
+        "target_incident_id": "inc-http-target",
+        "severity": "sev2"
+      },
+      "body": {
+        "error": {
+          "code": "validation_error",
+          "message": "Closed payload or reason rule violated."
+        },
+        "request_id": "90473578-c3e8-42dd-b8b3-416b6d2ac16c",
+        "retryable": false
+      }
+    }
+  ],
+  "visible": "Invalid request\n\nClosed payload or reason rule violated."
+}

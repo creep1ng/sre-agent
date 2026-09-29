@@ -1,0 +1,27 @@
+grafana failed http://127.0.0.1:18491/grafana/public/build/841-react19.96d3bdb7faf562ee0bf4.js net::ERR_ABORTED
+grafana failed http://127.0.0.1:18491/grafana/public/build/1591-react19.c8d5e532991b209273a0.js net::ERR_ABORTED
+grafana failed http://127.0.0.1:18491/grafana/public/build/8804-react19.d4bb3557f07af2a4656b.js net::ERR_ABORTED
+grafana failed http://127.0.0.1:18491/grafana/public/build/app-react19.8295740ccb339c5e432d.js net::ERR_ABORTED
+grafana title= Grafana body= If you're seeing this Grafana has failed to load its application files
+This could be caused by your reverse proxy settings.
+If you host grafana under a subpath make sure your grafana.ini root_url setting includes subpath. If not using a reverse proxy
+jaeger title= Jaeger UI body= Jaeger
+Search
+Compare
+System Architecture
+Monitor
+About Jaeger
+Search
+Upload
+Service (17)
+-
+Span Name (0)
+all
+Attributes 
+Lookback
+Last 1 hour
+Max Duration
+Min Duration
+Limit Results
+Reset
+Find Traces

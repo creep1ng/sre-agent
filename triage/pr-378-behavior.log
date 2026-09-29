@@ -1,0 +1,6 @@
+Candidate: 2f70d7375690c2aa695dabd446ac30420df9f15f
+/v1/audit-events?decision=allow&limit=1 status= 200 response= {"contains_content": false, "items": [{"decision": "allow", "event_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301", "latency_ms": 104, "response_status": 200}], "limit": 1, "truncated": true}
+/v1/audit-events/3f2504e0-4f89-11d3-9a0c-0305e82c3301 status= 200 response= {"event_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301", "latency_ms": 104, "outcome": "success", "response_status": 200}
+/v1/audit-events?decision=deny status= 200 response= {"contains_content": false, "items": [{"decision": "deny", "event_id": "b0000000-0000-0000-0000-000000000066", "latency_ms": 102, "response_status": 403}], "limit": 100, "truncated": false}
+/v1/audit-events?decision=allow&content=x status= 422 response= {"error": {"code": "validation_error", "message": "Request validation failed."}, "request_id": "38884a23-824a-4ced-8430-0d558af93e1a", "retryable": false}
+/v1/audit-events?decision=allow status= 403 response= {"error": {"code": "resource_unavailable", "message": "Resource unavailable."}, "request_id": "d904dd5d-cb1a-4e06-ae42-d2e3a3955abc", "retryable": false}

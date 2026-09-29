@@ -1,0 +1,196 @@
+
+Running 6 tests using 1 worker
+
+[1/6] tests/browser/postmortem.spec.js:40:5 › renders the minimum sections with explicit unknowns
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/client.js HTTP/1.1" 200 -
+[2/6] tests/browser/postmortem.spec.js:55:5 › reloads the same fixture and never closes
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[3/6] tests/browser/postmortem.spec.js:68:5 › shows the forbidden state without content
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:22] "GET /public/api/client.js HTTP/1.1" 200 -
+[4/6] tests/browser/postmortem.spec.js:110:5 › keeps run provenance without mixing runs
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/components.css HTTP/1.1" 200 -
+
+[5/6] tests/browser/postmortem.spec.js:122:5 › hides restricted content and escapes untrusted records
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /palette.css HTTP/1.1" 200 -
+
+[6/6] tests/browser/postmortem.spec.js:132:5 › keeps review session-only without persistence or close
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:23] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:25] "GET /public/api/client.js HTTP/1.1" 200 -
+  6 passed (3.7s)

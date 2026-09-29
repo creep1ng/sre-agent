@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><title>PR 388 observed evidence</title><style>
+body{font:16px system-ui,sans-serif;margin:40px;color:#182333;background:#f8fafc}h1{margin-bottom:12px}code{font-size:13px}section{background:white;border:1px solid #cbd5e1;border-radius:5px;margin:12px 0;padding:12px}pre{white-space:pre-wrap;font:15px monospace;margin:0}.note{background:#e4edf8;padding:14px}
+</style></head><body><h1>PR #388: observed FastAPI / PostgreSQL evidence</h1>
+<p><b>Exact head:</b> <code>3f7fae89089d9861ee3a17be465dd63be7f41881</code><br><b>Focused checks:</b> 9 passed in 5.37s</p>
+<p class="note">Actual captured results; not an illustrative mockup. Controlled local integration: real PostgreSQL and in-process FastAPI TestClient. Synthetic data. No external-service proof or human approval is claimed. Fault injection / counters are explicitly labeled below.</p><section><pre>{
+  &quot;scenario&quot;: &quot;repository immutable replay&quot;,
+  &quot;same_record&quot;: true
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;SQL persisted immutable version&quot;,
+  &quot;rows&quot;: [
+    [
+      &quot;audit-review-root&quot;,
+      &quot;1.0.0&quot;,
+      &quot;demo-human&quot;
+    ]
+  ]
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;administrative GET authorized&quot;,
+  &quot;http&quot;: 200,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;has_manifest&quot;: true
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;administrative GET restricted&quot;,
+  &quot;http&quot;: 403,
+  &quot;version&quot;: null,
+  &quot;has_manifest&quot;: false
+}</pre></section></body></html>

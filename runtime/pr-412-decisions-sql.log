@@ -1,0 +1,9 @@
+   incident_id   |    transition     |     outcome     |    approved_by    |                    comment                     
+-----------------+-------------------+-----------------+-------------------+------------------------------------------------
+ inc-b1-approved | apply_mitigation  | approve         | incident-operator | Blast radius reviewed with the payments owner.
+ inc-b1-changes  | reject_mitigation | request_changes |                   | 
+ inc-b1-rejected | reject_mitigation | reject          |                   | 
+ inc-b1-retry    | apply_mitigation  | approve         | incident-operator | 
+ inc-b1-triage   | triage_declare    | declare         |                   | 
+(5 rows)
+

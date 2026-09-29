@@ -1,0 +1,6 @@
+HEAD=6d94a92cdbc92f85ceb265df0bc2b5b2d553d12f
+IMAGE=sre-agent-pr409-stack-rs9jtc-python-checks:latest
+TESTS=tests/test_skill_resolution.py tests/test_governed_authorization.py
+DATABASE=isolated ephemeral container, network none
+.......                                                                  [100%]
+7 passed in 5.93s

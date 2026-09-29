@@ -1,0 +1,4 @@
+HEAD fe63f0c1f7d0bb90a46136a57f8c65256fba86ea
+COMMAND pytest -q -p no:cacheprovider tests/test_incident_human_commands.py tests/test_incident_runtime.py
+....................                                                     [100%]
+20 passed in 2.90s

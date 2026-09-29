@@ -1,0 +1,33 @@
+OK every service is available and image digests match the lock.
+OK declared host ports only, on their interface; Grafana MCP requires its token.
+load-generator 
+frontend-proxy 127.0.0.1:8090->8090/tcp, 10000/tcp
+frontend 
+checkout 
+recommendation 
+product-catalog 
+flagd-ui 
+payment 
+shipping 
+quote 
+image-provider 8080/tcp
+ad 
+email 
+cart 
+currency 
+otel-collector 4317-4318/tcp, 55679/tcp
+grafana-mcp 8000/tcp
+astronomy-db 5432/tcp
+jaeger 4317-4318/tcp, 5778-5779/tcp, 9411/tcp, 13132-13133/tcp, 14250/tcp, 14268/tcp, 16686/tcp
+prometheus 127.0.0.1:9090->9090/tcp
+grafana 3000/tcp
+flagd 
+telemetry-docs 8080/tcp
+opensearch 9200/tcp, 9300/tcp, 9600/tcp, 9650/tcp
+valkey-cart 6379/tcp
+opamp-server 4320-4321/tcp
+/ HTTP 200
+/grafana/ HTTP 200
+/jaeger/ui/ HTTP 200
+prometheus HTTP 200
+

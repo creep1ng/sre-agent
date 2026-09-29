@@ -1,0 +1,4 @@
+Candidate: c8fd8968d2596b57013ec73c3c6fcaae5a9c1aec
+bounded allow {"has_more": true, "items": [{"decision": "allow", "event_id": "00000000-0000-0000-0000-000000000004", "time": "2026-09-20 04:00:00+00:00"}, {"decision": "allow", "event_id": "00000000-0000-0000-0000-000000000003", "time": "2026-09-20 03:00:00+00:00"}]}
+deny {"has_more": false, "items": [{"decision": "deny", "event_id": "00000000-0000-0000-0000-000000000002", "time": "2026-09-20 02:00:00+00:00"}]}
+missing trace {"has_more": false, "items": []}

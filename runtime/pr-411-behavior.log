@@ -1,0 +1,7 @@
+{"objective_type": "list", "expected": 422, "actual": 500}
+{"objective_type": "dict", "expected": 422, "actual": 500}
+{"idempotency_key_length": 128, "actual": 201}
+{"idempotency_key_length": 129, "actual": 422}
+{"idempotency_key_length": 200, "actual": 422}
+{"persisted_current_state": "active", "latest_event_sequence": 1}
+{"resume_status": 200, "body": {"run_id": "run_785db952bdc5e615", "incident_id": "inc-a3-http-start", "workflow_version": "1.0.0", "status": "running", "current_state": "active", "pending_command": null, "cursor": "seq:0", "terminated_reason": null, "updated_at": "2026-09-29T03:44:53.501254Z"}}

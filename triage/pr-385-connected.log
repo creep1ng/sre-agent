@@ -1,0 +1,10 @@
+ Container triage-recipe-check-browser-run-8d2286edd2fb Creating 
+ Container triage-recipe-check-browser-run-8d2286edd2fb Created 
+{
+  "candidate": "1fcccfa75bed07e2dfbe325ccd0583070e5fd2ad",
+  "statuses": [
+    200,
+    200
+  ],
+  "visible": "Event\nb0000000-0000-0000-0000-000000000069\nOccurred\n2026-09-20T05:00:00Z\nOperation\nresponses.create\nOutcome\nsuccess\nResponse status\n200\nLatency (ms)\n105\nActor kind\nhuman\nActor status\nactive\nActor reference\na8e2662f216f83a450352cb9a46b174d19c64296424b3dea59abe4f919e9cd1d\nResource type\nllm_model\nResource reference\ne85a9f5b8fce94885852c273feca14c88256e363e25046b5172f2be0959ebe40\nModel alias reference\nbb61aee1348972056f53f70d1b9a50c5309dfc69145b5c0bb33dd3bff602a530\nPolicy decision\nallow\nContent state\nabsent"
+}

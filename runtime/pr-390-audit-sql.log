@@ -1,0 +1,14 @@
+     stage      | outcome | response_status |              request_id              | correlation_algorithm | incident_correlated | run_correlated | task_correlated | principal_kind | consumption |  billed_usd  
+----------------+---------+-----------------+--------------------------------------+-----------------------+---------------------+----------------+-----------------+----------------+-------------+--------------
+ response       | success |             200 | 621e8b8c-1732-45cd-adbf-f4db06efe43b | hmac-sha-256          | t                   | t              | t               | agent          | complete    | 0.0000156375
+ response       | success |             200 | 71fbb193-ed49-4f54-81cd-d913497c84d6 | hmac-sha-256          | t                   | t              | t               | agent          | complete    | 0.0000276375
+ authorization  | denied  |             403 | 216204ab-1cab-4911-9ad5-2535d080bb3a | hmac-sha-256          | t                   | t              | t               | agent          |             | 
+ response       | success |             200 | 97caeda4-1f40-4604-bdd0-1b210fea52f4 | hmac-sha-256          | t                   | t              | t               | agent          | complete    | 0.0000400125
+ authentication | error   |             401 | 47cfdd3d-b368-4964-bd21-7504615e2017 | hmac-sha-256          | t                   | t              | t               |                |             | 
+(5 rows)
+
+ distinct_incident_refs | distinct_run_refs | distinct_task_refs 
+------------------------+-------------------+--------------------
+                      1 |                 1 |                  1
+(1 row)
+

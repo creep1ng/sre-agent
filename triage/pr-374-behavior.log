@@ -1,0 +1,5 @@
+Candidate: f27a3a8325395cbc1777b42ce7651ec27bcc7073
+Open {"actor": "op-human", "decided_at": "2026-09-29T03:47:32.577489+00:00", "expected_version": 1, "http_status": 200, "incident_id": null, "replayed": false, "status": "open"}
+Dismiss {"actor": "op-human", "decided_at": "2026-09-29T03:47:32.589417+00:00", "expected_version": 2, "http_status": 200, "incident_id": null, "replayed": false, "status": "dismissed"}
+Replay {"actor": "op-human", "decided_at": "2026-09-29T03:47:32.589417+00:00", "expected_version": 2, "http_status": 200, "incident_id": null, "replayed": true, "status": "dismissed"}
+Unauthorized replay {"code": "not_authorized", "status": 403}

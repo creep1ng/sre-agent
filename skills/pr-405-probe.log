@@ -1,0 +1,4 @@
+{"scenario": "publication and replay", "http": [201, 201], "identical": true}
+{"scenario": "success response contract", "http": 200, "public_keys": ["skill", "request_id", "retryable"], "declared_model_valid": false, "request_id": "2d9f7e58-4259-4c97-ae48-4a933369cee5"}
+{"scenario": "invalid resolution path", "http": 422, "request_id_in_body": null, "audit_rows": 0}
+{"scenario": "missing bearer credential", "http": 401, "www_authenticate": null}

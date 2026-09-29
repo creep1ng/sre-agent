@@ -1,0 +1,4 @@
+HEAD d21bdda93ec8a49670387a185195027786a7e0a8
+COMMAND pytest -q -p no:cacheprovider tests/test_incident_review_ui.py
+...                                                                      [100%]
+3 passed in 0.09s

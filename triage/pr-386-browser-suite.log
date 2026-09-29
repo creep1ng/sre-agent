@@ -1,0 +1,90 @@
+
+Running 4 tests using 1 worker
+
+[1/4] tests/browser/audit-events.spec.js:41:5 › renders a list with only contract parameters and reports empty results
+
+
+
+
+
+
+
+
+
+
+
+[2/4] tests/browser/audit-events.spec.js:67:5 › renders authentication, authorization, validation and outage failures distinctly
+
+
+
+
+
+
+[3/4] tests/browser/audit-events.spec.js:80:5 › opens metadata-only detail and reports a missing event as not found
+
+
+
+
+
+
+
+
+
+
+[4/4] tests/browser/audit-events.spec.js:111:5 › lists through the connected API with contract parameters
+
+
+
+
+
+
+
+
+
+  1 skipped
+  3 passed (3.2s)
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /public/admin/audit-events.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /public/admin/audit-events.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:22] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /public/admin/audit-events.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /public/admin/audit-events.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:23] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /public/admin/audit-events.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /public/admin/audit-events.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:24] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /public/admin/audit-events.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /public/admin/audit-events.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /public/admin/audit-events.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:25] "GET /public/api/client.js HTTP/1.1" 200 -

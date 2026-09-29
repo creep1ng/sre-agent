@@ -1,0 +1,16 @@
+Before provision: deny:resource_missing
+First: {"catalog_status": 201, "grant_status": 201, "run_read_active": true, "start_grant_status": 201, "run_start_active": true, "command_grant_status": 201, "run_command_active": true, "approve_grant_status": 201, "run_approve_active": true}
+Replay: {"catalog_status": 201, "grant_status": 201, "run_read_active": true, "start_grant_status": 201, "run_start_active": true, "command_grant_status": 201, "run_command_active": true, "approve_grant_status": 201, "run_approve_active": true}
+Revoke read status: 204
+Human run.read deny:grant_not_applicable
+Harness run.read deny:grant_not_applicable
+Human run.start allow
+Harness run.start deny:grant_not_applicable
+Human run.command allow
+Harness run.command deny:grant_not_applicable
+Human run.approve allow
+Harness run.approve deny:grant_not_applicable
+SQL: ('demo-human', 'run.approve', 'incident_workflow', 'incident-response', 'allow', 'active')
+SQL: ('demo-human', 'run.command', 'incident_workflow', 'incident-response', 'allow', 'active')
+SQL: ('demo-human', 'run.read', 'incident_workflow', 'incident-response', 'allow', 'revoked')
+SQL: ('demo-human', 'run.start', 'incident_workflow', 'incident-response', 'allow', 'active')

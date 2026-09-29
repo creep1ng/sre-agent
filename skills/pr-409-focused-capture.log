@@ -1,0 +1,5 @@
+HEAD=c0d48c5c31d518d198a5ccdcd61b25f8990b06ac
+TESTS=tests/test_skill_publication.py tests/test_skill_activation.py tests/test_skill_resolution.py tests/test_skill_lifecycle_proof.py tests/test_skill_demo.py
+CAPTURE=Sanitized HTTP metadata only
+.....                                                                    [100%]
+5 passed in 5.84s

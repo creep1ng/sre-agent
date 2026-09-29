@@ -1,0 +1,26 @@
+81d1f51c1c939cded4010e34caf8ff5ac9670ebf
+100644 dd45857a25c46b57d2433ec4a2eb580296f19ab6 1	src/sre_agent/gateway/health.py
+100644 5588d8f733a31a091805ff5bd400a4b1f71377d1 2	src/sre_agent/gateway/health.py
+100644 abb509bcc4de230f8081460d42c05e44ba09f24c 3	src/sre_agent/gateway/health.py
+100644 a182ea6bbbacea639f155e554a4a71b98fdc6ff7 1	tests/test_demo_seeds.py
+100644 6f83dc23dd602db1b26b15eacbdff54221cd29dc 2	tests/test_demo_seeds.py
+100644 a5cee3c94fc34e1ba85fab6222799d3d06951cda 3	tests/test_demo_seeds.py
+100644 accd19daa7aec2e3e38b6d48319df53c10733511 1	tests/test_health.py
+100644 1870713a747f73e29d218197b9a05d60c4587bcd 2	tests/test_health.py
+100644 1e22977672a145b87c8fce94096e7f640610b742 3	tests/test_health.py
+100644 888328c98465c52d09d9e9cb774c8b8b05511dea 1	tests/test_incident_persistence.py
+100644 08c0c34cc573288a85c6c74ee6a6140f811efc1e 2	tests/test_incident_persistence.py
+100644 9dc0af35ec443162eb18a822c0a3f7e8e04afdc5 3	tests/test_incident_persistence.py
+
+Auto-merging src/sre_agent/gateway/health.py
+CONFLICT (content): Merge conflict in src/sre_agent/gateway/health.py
+Auto-merging src/sre_agent/governance/dto.py
+Auto-merging src/sre_agent/persistence/models.py
+Auto-merging tests/test_demo_seeds.py
+CONFLICT (content): Merge conflict in tests/test_demo_seeds.py
+Auto-merging tests/test_governed_authorization.py
+Auto-merging tests/test_health.py
+CONFLICT (content): Merge conflict in tests/test_health.py
+Auto-merging tests/test_incident_persistence.py
+CONFLICT (content): Merge conflict in tests/test_incident_persistence.py
+Auto-merging tests/test_responses.py

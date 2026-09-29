@@ -1,0 +1,5 @@
+HEAD=86857537b2dff25874e93794ec5c89cd98238933
+TESTS=tests/test_skill_lifecycle_proof.py
+CAPTURE=Sanitized HTTP metadata only
+.                                                                        [100%]
+1 passed in 2.19s

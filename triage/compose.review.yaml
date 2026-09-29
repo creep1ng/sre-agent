@@ -1,0 +1,64 @@
+# Standalone reviewer evidence harness. Use a NEW project name per reviewer.
+services:
+  db:
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
+    environment:
+      POSTGRES_DB: python_checks
+      POSTGRES_USER: audit
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U audit -d python_checks]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+  checks:
+    image: ${REVIEW_CHECKS_IMAGE:-sre-review-checks:local}
+    build:
+      context: ${REVIEW_SOURCE_DIR:?Set an absolute candidate checkout directory}
+      dockerfile: docker/api.Dockerfile
+      target: checks
+    user: '0:0'
+    working_dir: /repo
+    environment: &environment
+      PYTHONPATH: /repo/src:/repo/tests:/evidence
+      PYTEST_ADDOPTS: -p no:cacheprovider
+      TEST_DATABASE_URL: postgresql://audit@db:5432/python_checks
+      DATABASE_URL: postgresql://audit@db:5432/python_checks
+      CANDIDATE_SHA: ${CANDIDATE_SHA:?Set the exact checked-out candidate SHA}
+    volumes: &volumes
+      - ${REVIEW_SOURCE_DIR}:/repo:ro
+      - .:/evidence
+    depends_on:
+      db: {condition: service_healthy}
+  web:
+    image: ${REVIEW_CHECKS_IMAGE:-sre-review-checks:local}
+    user: '0:0'
+    working_dir: /repo
+    environment: *environment
+    volumes: *volumes
+    command: [python, "/evidence/serve-${REVIEW_SURFACE:-triage}.py"]
+    depends_on:
+      db: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/health/live')"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+  browser:
+    image: ${REVIEW_BROWSER_IMAGE:-sre-review-browser:local}
+    build:
+      context: ${REVIEW_SOURCE_DIR}
+      dockerfile: docker/e2e.Dockerfile
+    user: '0:0'
+    working_dir: /repo
+    ipc: host
+    environment:
+      NODE_PATH: /e2e/node_modules
+      AUDIT_BASE_URL: http://web:8100
+      CANDIDATE_SHA: ${CANDIDATE_SHA}
+      AUDIT_PR: ${AUDIT_PR:-393}
+      AUDIT_BROWSER_SPEC: ${AUDIT_BROWSER_SPEC:-triage.spec.js}
+    volumes:
+      - ${REVIEW_SOURCE_DIR}:/repo:ro
+      - .:/out

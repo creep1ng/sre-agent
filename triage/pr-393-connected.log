@@ -1,0 +1,8 @@
+{
+  "candidate": "87cafc234de61ed3481a383af90ed9a22b08d5dc",
+  "statuses": [
+    200,
+    422
+  ],
+  "visible": "Invalid request\n\nClosed payload or reason rule violated."
+}

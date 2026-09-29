@@ -1,0 +1,8 @@
+aa29c08971f7a69575b2d544af1dd4195395ad20
+OK every service is available and image digests match the lock.
+OK declared host ports only, on their interface; Grafana MCP requires its token.
+grafana 1.11% 151MiB / 175MiB
+frontend-proxy 0.86% 22.2MiB / 90MiB
+/grafana/public/build/841-react19.96d3bdb7faf562ee0bf4.js HTTP 200
+/grafana/public/build/app-react19.8295740ccb339c5e432d.js HTTP 200
+

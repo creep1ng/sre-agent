@@ -1,0 +1,34 @@
+{
+  "pr": 388,
+  "head": "3f7fae89089d9861ee3a17be465dd63be7f41881",
+  "evidence_kind": "controlled integration",
+  "environment": "FastAPI TestClient + real PostgreSQL 17.4 in isolated network-none Docker container",
+  "observations": [
+    {
+      "scenario": "repository immutable replay",
+      "same_record": true
+    },
+    {
+      "scenario": "SQL persisted immutable version",
+      "rows": [
+        [
+          "audit-review-root",
+          "1.0.0",
+          "demo-human"
+        ]
+      ]
+    },
+    {
+      "scenario": "administrative GET authorized",
+      "http": 200,
+      "version": "1.0.0",
+      "has_manifest": true
+    },
+    {
+      "scenario": "administrative GET restricted",
+      "http": 403,
+      "version": null,
+      "has_manifest": false
+    }
+  ]
+}

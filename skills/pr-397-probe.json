@@ -1,0 +1,23 @@
+{
+  "pr": 397,
+  "head": "add6400f2383fea30f0c0cb9c19c49d29323f710",
+  "evidence_kind": "controlled integration",
+  "environment": "FastAPI TestClient + real PostgreSQL 17.4 in isolated network-none Docker container",
+  "observations": [
+    {
+      "scenario": "publication and replay",
+      "http": [
+        201,
+        201
+      ],
+      "identical": true
+    },
+    {
+      "scenario": "overlong version",
+      "version_length": 37,
+      "expected_http": 422,
+      "actual_http": 500,
+      "rows": 0
+    }
+  ]
+}

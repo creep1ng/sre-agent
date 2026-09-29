@@ -1,0 +1,2 @@
+{"scenario": "repository immutable replay", "same_record": true}
+{"scenario": "SQL persisted immutable version", "rows": [["audit-review-root", "1.0.0", "demo-human"]]}

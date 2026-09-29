@@ -1,0 +1,2 @@
+{"scenario": "publication and replay", "http": [201, 201], "identical": true}
+{"scenario": "readiness at migration head", "http": 200, "database_revision": "20260926_15"}

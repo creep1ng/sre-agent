@@ -1,0 +1,221 @@
+
+Running 10 tests using 1 worker
+
+[1/10] tests/browser/triage.spec.js:59:5 › sends open_triage without reason and syncs state
+
+
+
+
+
+
+
+
+
+
+[2/10] tests/browser/triage.spec.js:78:5 › sends dismiss and link with exact bodies
+
+
+
+
+
+
+
+
+[3/10] tests/browser/triage.spec.js:102:5 › sends declare with severity and shows the created incident
+
+
+
+
+
+
+
+
+
+
+
+[4/10] tests/browser/triage.spec.js:127:5 › renders a missing severity as an invalid request
+
+
+
+
+
+
+
+
+[5/10] tests/browser/triage.spec.js:136:5 › renders authentication, authorization, conflict and outage failures distinctly
+
+
+
+
+
+
+
+
+
+[6/10] tests/browser/triage.spec.js:158:5 › surfaces network failure as offline without false state
+
+
+
+
+
+
+
+
+
+
+[7/10] tests/browser/triage.spec.js:168:5 › ignores a double submit while a command is in flight
+
+
+
+
+
+
+
+
+[8/10] tests/browser/triage.spec.js:184:5 › exposes no impact, actor or timestamp inputs
+
+
+
+
+
+
+
+
+
+
+
+[9/10] tests/browser/triage.spec.js:192:5 › renders a real 401 as authentication required
+
+
+
+
+
+
+
+
+
+
+
+[10/10] tests/browser/triage.spec.js:203:5 › renders a real 403 for an identity without triage grants
+
+
+
+
+
+
+
+
+
+
+  2 skipped
+  8 passed (10.0s)
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:11] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:13] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:15] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:16] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:17] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:18] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:19] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/admin/triage.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/admin/triage.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:48:20] "GET /public/api/client.js HTTP/1.1" 200 -

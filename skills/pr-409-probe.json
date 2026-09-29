@@ -1,0 +1,83 @@
+{
+  "pr": 409,
+  "head": "c0d48c5c31d518d198a5ccdcd61b25f8990b06ac",
+  "evidence_kind": "controlled integration",
+  "environment": "FastAPI TestClient + real PostgreSQL 17.4 in isolated network-none Docker container",
+  "observations": [
+    {
+      "scenario": "publication and replay",
+      "http": [
+        201,
+        201
+      ],
+      "identical": true
+    },
+    {
+      "scenario": "overlong version",
+      "version_length": 37,
+      "expected_http": 422,
+      "actual_http": 500,
+      "rows": 0
+    },
+    {
+      "scenario": "unpublished exact-version lifecycle",
+      "expected_http": 404,
+      "actual_http": 500
+    },
+    {
+      "scenario": "lifecycle audit outage",
+      "injection": "PostgresAuditStore.append raises; real SQL mutation remains unchanged",
+      "http": 503,
+      "expected_persisted_status": "published",
+      "actual_persisted_status": "inactive",
+      "terminal_audit_rows": 0
+    },
+    {
+      "scenario": "retry after failed audit",
+      "actual_http": 409,
+      "expected": "successful retry or no previous mutation"
+    },
+    {
+      "scenario": "non-LLM consumption exclusion",
+      "expected": "rejected",
+      "dto": "accepted",
+      "sql": [
+        [
+          "skills.resolve",
+          "1"
+        ]
+      ]
+    },
+    {
+      "scenario": "success response contract",
+      "http": 200,
+      "public_keys": [
+        "skill",
+        "dependencies",
+        "request_id",
+        "retryable"
+      ],
+      "declared_model_valid": false,
+      "request_id": "9e36d2f8-af21-4fc6-8c9f-ba6cc4cff643"
+    },
+    {
+      "scenario": "invalid resolution path",
+      "http": 422,
+      "request_id_in_body": null,
+      "audit_rows": 0
+    },
+    {
+      "scenario": "missing bearer credential",
+      "http": 401,
+      "www_authenticate": null
+    },
+    {
+      "scenario": "maximum direct dependencies",
+      "dependencies": 16,
+      "http": 200,
+      "real_scrypt_verifications": 17,
+      "elapsed_seconds": 0.722,
+      "instrumentation": "count wrapper forwards every real key verification; no authentication bypass"
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+{"scenario": "repository immutable replay", "same_record": true}
+{"scenario": "SQL persisted immutable version", "rows": [["audit-review-root", "1.0.0", "demo-human"]]}
+{"scenario": "administrative GET authorized", "http": 200, "version": "1.0.0", "has_manifest": true}
+{"scenario": "administrative GET restricted", "http": 403, "version": null, "has_manifest": false}

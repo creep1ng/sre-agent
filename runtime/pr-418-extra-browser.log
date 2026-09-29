@@ -1,0 +1,64 @@
+
+Running 1 test using 1 worker
+
+[1/1] ../out/extra-ui.spec.js:9:1 › postmortem stale response must not replace selected run
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /public/incident-ui/postmortem.html?incident_id=inc-audit HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:53:06] "GET /public/api/client.js HTTP/1.1" 200 -
+
+
+../out/extra-ui.spec.js:9:1 › postmortem stale response must not replace selected run
+RUN selector= run_demo0002 provenance= run_demo0001 safe recordrun run_demo0001 · seq 0 · registro, no ejecucion confirmada
+
+  1) ../out/extra-ui.spec.js:9:1 › postmortem stale response must not replace selected run ─────────
+
+    Error: expect(locator).not.toContainText(expected) failed
+
+    Locator: locator('#provenance-list')
+    Expected substring: not "run_demo0001"
+    Received string: "run_demo0001 safe recordrun run_demo0001 · seq 0 · registro, no ejecucion confirmada"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "not toContainText" locator('#provenance-list') with timeout 5000ms
+      - waiting for locator('#provenance-list')
+        14 × locator resolved to <ol id="provenance-list" class="war-room__events">…</ol>
+           - unexpected value "run_demo0001 safe recordrun run_demo0001 · seq 0 · registro, no ejecucion confirmada"
+
+
+      10 |  let release;let seen;const blocked=new Promise(r=>{release=r});const started=new Promise(r=>{seen=r});let delay=false;
+      11 |  await page.route('**/api/v1/incidents/**',async route=>{const u=new URL(route.request().url());if(!u.pathname.endsWith('/timeline'))return route.fulfill({json:detail});const id=u.searchParams.get('run_id');if(delay&&id==='run_demo0001'){seen();await blocked;}return route.fulfill({json:{events:[{sequence:0,summary:id+' safe record'}],has_more:false,next_cursor:'seq:0'}});});
+    > 12 |  await auth(page,'/public/incident-ui/postmortem.html?incident_id=inc-audit');await expect(page.locator('#provenance-list')).toContainText('run_demo0002');delay=true;await page.locator('#run-select').selectOption('run_demo0001');await started;await page.locator('#run-select').selectOption('run_demo0002');await expect(page.locator('#provenance-list')).toContainText('run_demo0002');release();await page.waitForTimeout(300);console.log('RUN selector=',await page.locator('#run-select').inputValue(),'provenance=',await page.locator('#provenance-list').innerText());await page.locator('#provenance-section').scrollIntoViewIfNeeded();await page.screenshot({path:'/out/pr-418-race.png'});await expect(page.locator('#provenance-list')).not.toContainText('run_demo0001');
+         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 ^
+      13 | });
+      14 |
+        at /out/extra-ui.spec.js:12:737
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/extra-results/extra-ui-postmortem-stale--3eaa6-st-not-replace-selected-run/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/extra-results/extra-ui-postmortem-stale--3eaa6-st-not-replace-selected-run/error-context.md
+
+
+  1 failed
+    ../out/extra-ui.spec.js:9:1 › postmortem stale response must not replace selected run ──────────

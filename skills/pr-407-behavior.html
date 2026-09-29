@@ -1,0 +1,95 @@
+<!doctype html><html><head><meta charset="utf-8"><title>PR 407 observed evidence</title><style>
+body{font:16px system-ui,sans-serif;margin:40px;color:#182333;background:#f8fafc}h1{margin-bottom:12px}code{font-size:13px}section{background:white;border:1px solid #cbd5e1;border-radius:5px;margin:12px 0;padding:12px}pre{white-space:pre-wrap;font:15px monospace;margin:0}.note{background:#e4edf8;padding:14px}
+</style></head><body><h1>PR #407: observed FastAPI / PostgreSQL evidence</h1>
+<p><b>Exact head:</b> <code>86857537b2dff25874e93794ec5c89cd98238933</code><br><b>Focused checks:</b> 1 passed in 2.19s</p>
+<p class="note">Actual captured results; not an illustrative mockup. Controlled local integration: real PostgreSQL and in-process FastAPI TestClient. Synthetic data. No external-service proof or human approval is claimed. Fault injection / counters are explicitly labeled below.</p><section><pre>{
+  &quot;method&quot;: &quot;POST&quot;,
+  &quot;path&quot;: &quot;/v1/skills/versions&quot;,
+  &quot;http&quot;: 201,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;skill_id&quot;: &quot;lifecycle-proof-skill&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;POST&quot;,
+  &quot;path&quot;: &quot;/v1/skills/versions&quot;,
+  &quot;http&quot;: 201,
+  &quot;version&quot;: &quot;2.0.0&quot;,
+  &quot;skill_id&quot;: &quot;lifecycle-proof-skill&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;PUT&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/status&quot;,
+  &quot;http&quot;: 200,
+  &quot;status&quot;: &quot;active&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;PUT&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/2.0.0/status&quot;,
+  &quot;http&quot;: 200,
+  &quot;status&quot;: &quot;active&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/resolve&quot;,
+  &quot;http&quot;: 200,
+  &quot;request_id&quot;: &quot;89dedbc2-6c68-454a-9c00-8e869ba1c8a3&quot;,
+  &quot;retryable&quot;: false,
+  &quot;resolved_version&quot;: &quot;1.0.0&quot;,
+  &quot;dependency_count&quot;: 0
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/2.0.0/resolve&quot;,
+  &quot;http&quot;: 200,
+  &quot;request_id&quot;: &quot;8a9feba4-c324-405f-9b20-a5d41278e08e&quot;,
+  &quot;retryable&quot;: false,
+  &quot;resolved_version&quot;: &quot;2.0.0&quot;,
+  &quot;dependency_count&quot;: 0
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/resolve&quot;,
+  &quot;http&quot;: 200,
+  &quot;request_id&quot;: &quot;f54cb06a-06cf-4982-97e2-7b09c874fc0b&quot;,
+  &quot;retryable&quot;: false,
+  &quot;resolved_version&quot;: &quot;1.0.0&quot;,
+  &quot;dependency_count&quot;: 0
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;PUT&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/status&quot;,
+  &quot;http&quot;: 200,
+  &quot;status&quot;: &quot;inactive&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/resolve&quot;,
+  &quot;http&quot;: 404,
+  &quot;request_id&quot;: &quot;104f0f67-1158-4782-aea2-078664f8e154&quot;,
+  &quot;retryable&quot;: false,
+  &quot;error_code&quot;: &quot;resource_not_found&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;PUT&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/status&quot;,
+  &quot;http&quot;: 200,
+  &quot;status&quot;: &quot;active&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/resolve&quot;,
+  &quot;http&quot;: 200,
+  &quot;request_id&quot;: &quot;bcf8bc75-09eb-490f-8d7e-18140fde251b&quot;,
+  &quot;retryable&quot;: false,
+  &quot;resolved_version&quot;: &quot;1.0.0&quot;,
+  &quot;dependency_count&quot;: 0
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;DELETE&quot;,
+  &quot;path&quot;: &quot;/v1/grants/grant-incident-harness-1-0-0&quot;,
+  &quot;http&quot;: 204
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/1.0.0/resolve&quot;,
+  &quot;http&quot;: 404,
+  &quot;request_id&quot;: &quot;70e24dae-111c-412e-a807-1218e90a2743&quot;,
+  &quot;retryable&quot;: false,
+  &quot;error_code&quot;: &quot;resource_not_found&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/lifecycle-proof-skill/2.0.0/resolve&quot;,
+  &quot;http&quot;: 200,
+  &quot;request_id&quot;: &quot;bbe9f2a4-a867-48a2-b5b3-2dca38483715&quot;,
+  &quot;retryable&quot;: false,
+  &quot;resolved_version&quot;: &quot;2.0.0&quot;,
+  &quot;dependency_count&quot;: 0
+}</pre></section></body></html>

@@ -1,0 +1,191 @@
+
+Running 7 tests using 1 worker
+
+[1/7] tests/browser/review.spec.js:51:5 › offers only the mitigating review actions for workflow 1.0.0
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/components.css HTTP/1.1" 200 -
+
+[2/7] tests/browser/review.spec.js:69:5 › hides review actions for other states and versions
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/base.css HTTP/1.1" 200 -
+
+[3/7] tests/browser/review.spec.js:112:5 › records approval without claiming execution
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:14] "GET /palette.css HTTP/1.1" 200 -
+[4/7] tests/browser/review.spec.js:127:5 › rejects and requests changes with contractual bodies
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[5/7] tests/browser/review.spec.js:139:5 › sends a single request while a submit is in flight
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/components.css HTTP/1.1" 200 -
+
+[6/7] tests/browser/review.spec.js:158:5 › recovers from a 409 conflict keeping the written reason
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /palette.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:16] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[7/7] tests/browser/review.spec.js:172:5 › exposes no close controls and no editable authority
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:42:17] "GET /public/api/client.js HTTP/1.1" 200 -
+  7 passed (4.7s)

@@ -1,0 +1,379 @@
+{
+  "candidate": "9c6653439b477791bf3fd16f162bb8d36b861c27",
+  "evidence": "Real browser against candidate API and isolated PostgreSQL; synthetic persisted data; no route mocks",
+  "observed": [
+    {
+      "path": "/api/v1/audit-events",
+      "status": 200,
+      "request": null,
+      "body": {
+        "items": [
+          {
+            "event_id": "b0000000-0000-0000-0000-000000000069",
+            "occurred_at": "2026-09-20T05:00:00Z",
+            "operation": "responses.create",
+            "action": "invoke",
+            "stage": "authorization",
+            "outcome": "success",
+            "reason_code": "grant_matched",
+            "authorization_denial_cause": null,
+            "response_status": 200,
+            "retryable": false,
+            "latency_ms": 105,
+            "correlation": {
+              "request_id": "c0000000-0000-0000-0000-000000000033"
+            },
+            "identity": {
+              "principal_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "a8e2662f216f83a450352cb9a46b174d19c64296424b3dea59abe4f919e9cd1d"
+              },
+              "principal_kind": "human",
+              "principal_status": "active",
+              "credential_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "cdee88f41551f2dbc6aae67827a60419fe8a72b7f7b5b2eff77ff90a596d8871"
+              },
+              "authenticated_at": "2026-09-20T00:00:00Z"
+            },
+            "resource": {
+              "resource_type": "llm_model",
+              "resource_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "e85a9f5b8fce94885852c273feca14c88256e363e25046b5172f2be0959ebe40"
+              }
+            },
+            "model_alias_ref": {
+              "algorithm": "hmac-sha-256",
+              "key_version": 1,
+              "digest": "bb61aee1348972056f53f70d1b9a50c5309dfc69145b5c0bb33dd3bff602a530"
+            },
+            "policy_decision": {
+              "decision": "allow",
+              "reason_code": "grant_matched",
+              "grant_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "b45e0bfa3d5ea20ca2c4d11cd949c07ca2ecd11c517bd2574f44a6d98aa0cedf"
+              }
+            },
+            "routing": {
+              "model_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "6bab7247aec79ad7cafb69232df9dc4f39c038df7dd3c0167ef7b7f7177bedfc"
+              },
+              "router": "openrouter",
+              "provider_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "a5c848a6361b1238b18b200b81ec2c3ae9606b644515770d5b2646bddce9671e"
+              }
+            },
+            "consumption": null,
+            "redaction": {
+              "policy_version": "redaction-1.0.0",
+              "result": "success",
+              "source_class": "none",
+              "categories": [],
+              "match_count": 0,
+              "sink_eligible": false
+            },
+            "content_state": "absent",
+            "authoritative_acceptance": "accepted",
+            "ordinary_result": "released",
+            "exporter_result": "not_attempted"
+          },
+          {
+            "event_id": "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+            "occurred_at": "2026-09-20T04:00:00Z",
+            "operation": "responses.create",
+            "action": "invoke",
+            "stage": "authorization",
+            "outcome": "success",
+            "reason_code": "grant_matched",
+            "authorization_denial_cause": null,
+            "response_status": 200,
+            "retryable": false,
+            "latency_ms": 104,
+            "correlation": {
+              "request_id": "c0000000-0000-0000-0000-000000000033"
+            },
+            "identity": {
+              "principal_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "a8e2662f216f83a450352cb9a46b174d19c64296424b3dea59abe4f919e9cd1d"
+              },
+              "principal_kind": "human",
+              "principal_status": "active",
+              "credential_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "cdee88f41551f2dbc6aae67827a60419fe8a72b7f7b5b2eff77ff90a596d8871"
+              },
+              "authenticated_at": "2026-09-20T00:00:00Z"
+            },
+            "resource": {
+              "resource_type": "llm_model",
+              "resource_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "e85a9f5b8fce94885852c273feca14c88256e363e25046b5172f2be0959ebe40"
+              }
+            },
+            "model_alias_ref": {
+              "algorithm": "hmac-sha-256",
+              "key_version": 1,
+              "digest": "bb61aee1348972056f53f70d1b9a50c5309dfc69145b5c0bb33dd3bff602a530"
+            },
+            "policy_decision": {
+              "decision": "allow",
+              "reason_code": "grant_matched",
+              "grant_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "b45e0bfa3d5ea20ca2c4d11cd949c07ca2ecd11c517bd2574f44a6d98aa0cedf"
+              }
+            },
+            "consumption": null,
+            "redaction": {
+              "policy_version": "redaction-1.0.0",
+              "result": "success",
+              "source_class": "none",
+              "categories": [],
+              "match_count": 0,
+              "sink_eligible": false
+            },
+            "content_state": "absent",
+            "authoritative_acceptance": "accepted",
+            "ordinary_result": "released",
+            "exporter_result": "not_attempted"
+          },
+          {
+            "event_id": "b0000000-0000-0000-0000-000000000067",
+            "occurred_at": "2026-09-20T03:00:00Z",
+            "operation": "responses.create",
+            "action": "invoke",
+            "stage": "authorization",
+            "outcome": "success",
+            "reason_code": "grant_matched",
+            "authorization_denial_cause": null,
+            "response_status": 200,
+            "retryable": false,
+            "latency_ms": 103,
+            "correlation": {
+              "request_id": "c0000000-0000-0000-0000-000000000034"
+            },
+            "identity": {
+              "principal_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "a8e2662f216f83a450352cb9a46b174d19c64296424b3dea59abe4f919e9cd1d"
+              },
+              "principal_kind": "human",
+              "principal_status": "active",
+              "credential_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "cdee88f41551f2dbc6aae67827a60419fe8a72b7f7b5b2eff77ff90a596d8871"
+              },
+              "authenticated_at": "2026-09-20T00:00:00Z"
+            },
+            "resource": {
+              "resource_type": "llm_model",
+              "resource_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "e85a9f5b8fce94885852c273feca14c88256e363e25046b5172f2be0959ebe40"
+              }
+            },
+            "model_alias_ref": {
+              "algorithm": "hmac-sha-256",
+              "key_version": 1,
+              "digest": "bb61aee1348972056f53f70d1b9a50c5309dfc69145b5c0bb33dd3bff602a530"
+            },
+            "policy_decision": {
+              "decision": "allow",
+              "reason_code": "grant_matched",
+              "grant_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "b45e0bfa3d5ea20ca2c4d11cd949c07ca2ecd11c517bd2574f44a6d98aa0cedf"
+              }
+            },
+            "consumption": null,
+            "redaction": {
+              "policy_version": "redaction-1.0.0",
+              "result": "success",
+              "source_class": "none",
+              "categories": [],
+              "match_count": 0,
+              "sink_eligible": false
+            },
+            "content_state": "absent",
+            "authoritative_acceptance": "accepted",
+            "ordinary_result": "released",
+            "exporter_result": "not_attempted"
+          },
+          {
+            "event_id": "b0000000-0000-0000-0000-000000000065",
+            "occurred_at": "2026-09-20T01:00:00Z",
+            "operation": "responses.create",
+            "action": "invoke",
+            "stage": "authorization",
+            "outcome": "success",
+            "reason_code": "grant_matched",
+            "authorization_denial_cause": null,
+            "response_status": 200,
+            "retryable": false,
+            "latency_ms": 101,
+            "correlation": {
+              "request_id": "c0000000-0000-0000-0000-000000000033"
+            },
+            "identity": {
+              "principal_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "a8e2662f216f83a450352cb9a46b174d19c64296424b3dea59abe4f919e9cd1d"
+              },
+              "principal_kind": "human",
+              "principal_status": "active",
+              "credential_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "cdee88f41551f2dbc6aae67827a60419fe8a72b7f7b5b2eff77ff90a596d8871"
+              },
+              "authenticated_at": "2026-09-20T00:00:00Z"
+            },
+            "resource": {
+              "resource_type": "llm_model",
+              "resource_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "e85a9f5b8fce94885852c273feca14c88256e363e25046b5172f2be0959ebe40"
+              }
+            },
+            "model_alias_ref": {
+              "algorithm": "hmac-sha-256",
+              "key_version": 1,
+              "digest": "bb61aee1348972056f53f70d1b9a50c5309dfc69145b5c0bb33dd3bff602a530"
+            },
+            "policy_decision": {
+              "decision": "allow",
+              "reason_code": "grant_matched",
+              "grant_ref": {
+                "algorithm": "hmac-sha-256",
+                "key_version": 1,
+                "digest": "b45e0bfa3d5ea20ca2c4d11cd949c07ca2ecd11c517bd2574f44a6d98aa0cedf"
+              }
+            },
+            "consumption": null,
+            "redaction": {
+              "policy_version": "redaction-1.0.0",
+              "result": "success",
+              "source_class": "none",
+              "categories": [],
+              "match_count": 0,
+              "sink_eligible": false
+            },
+            "content_state": "absent",
+            "authoritative_acceptance": "accepted",
+            "ordinary_result": "released",
+            "exporter_result": "not_attempted"
+          }
+        ],
+        "limit": 100,
+        "truncated": false
+      }
+    },
+    {
+      "path": "/api/v1/audit-events/b0000000-0000-0000-0000-000000000069",
+      "status": 200,
+      "request": null,
+      "body": {
+        "event_id": "b0000000-0000-0000-0000-000000000069",
+        "occurred_at": "2026-09-20T05:00:00Z",
+        "operation": "responses.create",
+        "action": "invoke",
+        "stage": "authorization",
+        "outcome": "success",
+        "reason_code": "grant_matched",
+        "authorization_denial_cause": null,
+        "response_status": 200,
+        "retryable": false,
+        "latency_ms": 105,
+        "correlation": {
+          "request_id": "c0000000-0000-0000-0000-000000000033"
+        },
+        "identity": {
+          "principal_ref": {
+            "algorithm": "hmac-sha-256",
+            "key_version": 1,
+            "digest": "a8e2662f216f83a450352cb9a46b174d19c64296424b3dea59abe4f919e9cd1d"
+          },
+          "principal_kind": "human",
+          "principal_status": "active",
+          "credential_ref": {
+            "algorithm": "hmac-sha-256",
+            "key_version": 1,
+            "digest": "cdee88f41551f2dbc6aae67827a60419fe8a72b7f7b5b2eff77ff90a596d8871"
+          },
+          "authenticated_at": "2026-09-20T00:00:00Z"
+        },
+        "resource": {
+          "resource_type": "llm_model",
+          "resource_ref": {
+            "algorithm": "hmac-sha-256",
+            "key_version": 1,
+            "digest": "e85a9f5b8fce94885852c273feca14c88256e363e25046b5172f2be0959ebe40"
+          }
+        },
+        "model_alias_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bb61aee1348972056f53f70d1b9a50c5309dfc69145b5c0bb33dd3bff602a530"
+        },
+        "policy_decision": {
+          "decision": "allow",
+          "reason_code": "grant_matched",
+          "grant_ref": {
+            "algorithm": "hmac-sha-256",
+            "key_version": 1,
+            "digest": "b45e0bfa3d5ea20ca2c4d11cd949c07ca2ecd11c517bd2574f44a6d98aa0cedf"
+          }
+        },
+        "routing": {
+          "model_ref": {
+            "algorithm": "hmac-sha-256",
+            "key_version": 1,
+            "digest": "6bab7247aec79ad7cafb69232df9dc4f39c038df7dd3c0167ef7b7f7177bedfc"
+          },
+          "router": "openrouter",
+          "provider_ref": {
+            "algorithm": "hmac-sha-256",
+            "key_version": 1,
+            "digest": "a5c848a6361b1238b18b200b81ec2c3ae9606b644515770d5b2646bddce9671e"
+          }
+        },
+        "consumption": null,
+        "redaction": {
+          "policy_version": "redaction-1.0.0",
+          "result": "success",
+          "source_class": "none",
+          "categories": [],
+          "match_count": 0,
+          "sink_eligible": false
+        },
+        "content_state": "absent",
+        "authoritative_acceptance": "accepted",
+        "ordinary_result": "released",
+        "exporter_result": "not_attempted"
+      }
+    }
+  ],
+  "visible": "Event\nb0000000-0000-0000-0000-000000000069\nOccurred\n2026-09-20T05:00:00Z\nOperation\nresponses.create\nOutcome\nsuccess\nResponse status\n200\nLatency (ms)\n105\nActor kind\nhuman\nActor status\nactive\nActor reference\na8e2662f216f83a450352cb9a46b174d19c64296424b3dea59abe4f919e9cd1d\nResource type\nllm_model\nResource reference\ne85a9f5b8fce94885852c273feca14c88256e363e25046b5172f2be0959ebe40\nModel alias reference\nbb61aee1348972056f53f70d1b9a50c5309dfc69145b5c0bb33dd3bff602a530\nPolicy decision\nallow\nContent state\nabsent"
+}

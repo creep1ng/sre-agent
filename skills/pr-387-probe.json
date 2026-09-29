@@ -1,0 +1,22 @@
+{
+  "pr": 387,
+  "head": "71068cd6e78d6c3bd3bd8c85baa8452e5934fe5b",
+  "evidence_kind": "controlled integration",
+  "environment": "FastAPI TestClient + real PostgreSQL 17.4 in isolated network-none Docker container",
+  "observations": [
+    {
+      "scenario": "repository immutable replay",
+      "same_record": true
+    },
+    {
+      "scenario": "SQL persisted immutable version",
+      "rows": [
+        [
+          "audit-review-root",
+          "1.0.0",
+          "demo-human"
+        ]
+      ]
+    }
+  ]
+}

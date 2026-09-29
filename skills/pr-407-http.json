@@ -1,0 +1,113 @@
+{
+  "pr": 407,
+  "head": "86857537b2dff25874e93794ec5c89cd98238933",
+  "exitstatus": 0,
+  "evidence_kind": "controlled integration",
+  "capture": "TestClient observation of real requests and PostgreSQL integration; no external service",
+  "observations": [
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "lifecycle-proof-skill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "2.0.0",
+      "skill_id": "lifecycle-proof-skill"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/2.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 200,
+      "request_id": "89dedbc2-6c68-454a-9c00-8e869ba1c8a3",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/2.0.0/resolve",
+      "http": 200,
+      "request_id": "8a9feba4-c324-405f-9b20-a5d41278e08e",
+      "retryable": false,
+      "resolved_version": "2.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 200,
+      "request_id": "f54cb06a-06cf-4982-97e2-7b09c874fc0b",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/status",
+      "http": 200,
+      "status": "inactive"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 404,
+      "request_id": "104f0f67-1158-4782-aea2-078664f8e154",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 200,
+      "request_id": "bcf8bc75-09eb-490f-8d7e-18140fde251b",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/grants/grant-incident-harness-1-0-0",
+      "http": 204
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 404,
+      "request_id": "70e24dae-111c-412e-a807-1218e90a2743",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/2.0.0/resolve",
+      "http": 200,
+      "request_id": "bbe9f2a4-a867-48a2-b5b3-2dca38483715",
+      "retryable": false,
+      "resolved_version": "2.0.0",
+      "dependency_count": 0
+    }
+  ]
+}

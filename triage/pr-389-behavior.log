@@ -1,0 +1,4 @@
+Candidate 333f2917f66f1d6104aec6080d4c1a97ac5a1aa9
+First declaration: {"status": "declared", "incident_id": "inc-ef02b4c5e69174822d9231124f4e8f1f", "expected_version": 1, "actor": "op-human", "decided_at": "2026-09-29T03:41:35.035193+00:00", "replayed": false, "http_status": 201}
+Second declaration (same alert/version, fresh key): {"status": "declared", "incident_id": "inc-35ab7c1ff117f098a569c85282d058cc", "expected_version": 2, "actor": "op-human", "decided_at": "2026-09-29T03:41:35.050862+00:00", "replayed": false, "http_status": 201}
+Incident count: 2

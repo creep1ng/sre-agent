@@ -1,0 +1,4 @@
+HEAD 3f3e810a9abc1b88b8adea6efbb1e1f7eee6c5fe
+COMMAND pytest -q -p no:cacheprovider tests/test_incident_postmortem_ui.py
+...                                                                      [100%]
+3 passed in 0.02s

@@ -1,0 +1,446 @@
+{
+  "pr": 409,
+  "head": "c0d48c5c31d518d198a5ccdcd61b25f8990b06ac",
+  "exitstatus": 0,
+  "evidence_kind": "controlled integration",
+  "capture": "TestClient observation of real requests and PostgreSQL integration; no external service",
+  "observations": [
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 403,
+      "request_id": "24def667-03a8-4e5d-8802-699ae266ed00",
+      "retryable": false,
+      "error_code": "resource_unavailable"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "incident-triage-demo"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "incident-triage-demo"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 409,
+      "request_id": "8ee92bcd-f393-4271-907f-9826e547724e",
+      "retryable": false,
+      "error_code": "status_conflict"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 422,
+      "request_id": "c2d04ff8-5157-449d-9b82-c477b470c38a",
+      "retryable": false,
+      "error_code": "validation_error"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 422,
+      "request_id": "f9780d84-26a0-4ce3-868f-b50869ea3138",
+      "retryable": false,
+      "error_code": "validation_error"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 422,
+      "request_id": "3058d14e-1448-47d1-a3ad-5a9c46d32f09",
+      "retryable": false,
+      "error_code": "validation_error"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/incident-triage-demo/1.0.0",
+      "http": 200,
+      "version": "1.0.0",
+      "skill_id": "incident-triage-demo"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "activation-demo"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/activation-demo/1.0.0/status",
+      "http": 403,
+      "request_id": "426ebef3-46b3-41b1-98c9-f9c7a9ec8c05",
+      "retryable": false,
+      "error_code": "resource_unavailable"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/activation-demo/1.0.0",
+      "http": 200,
+      "version": "1.0.0",
+      "skill_id": "activation-demo"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/activation-demo/1.0.0/status",
+      "http": 200,
+      "status": "inactive"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/activation-demo/1.0.0",
+      "http": 404,
+      "request_id": "a71217cd-bb4b-4102-bc68-064eb6cf061f",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/activation-demo/1.0.0/status",
+      "http": 200,
+      "status": "inactive"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/activation-demo/1.0.0/status",
+      "http": 409,
+      "request_id": "1e45b8c6-f503-4b30-b2c7-ba869510b35d",
+      "retryable": false,
+      "error_code": "status_conflict"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/activation-demo/1.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/activation-demo/1.0.0",
+      "http": 200,
+      "version": "1.0.0",
+      "skill_id": "activation-demo"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "authorized-root-skill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "inactive-root-skill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "direct-dependency-skill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "dependency-bearing-root"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "ungranted-dependency"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "ungranted-dependency-root"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "nested-dependency-skill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "nested-dependency-root"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/authorized-root-skill/1.0.0/resolve",
+      "http": 200,
+      "request_id": "787007ca-d91a-4adb-b4b9-d23c2e4a4478",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/authorized-root-skill/1.0.0/resolve",
+      "http": 404,
+      "request_id": "5132b103-8c1c-4df2-b044-420cd534356b",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/absent-root-skill/1.0.0/resolve",
+      "http": 404,
+      "request_id": "05edfbc0-b93c-4b9c-bc96-c73a42a4cd95",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/dependency-bearing-root/1.0.0/resolve",
+      "http": 200,
+      "request_id": "789d1c50-db32-4564-8c5e-7a2406513303",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 1
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/ungranted-dependency-root/1.0.0/resolve",
+      "http": 404,
+      "request_id": "fa7463e4-40d1-4af3-a5ef-96a41a0dfbce",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/nested-dependency-root/1.0.0/resolve",
+      "http": 404,
+      "request_id": "d4a0447c-453c-48c9-882c-46b82b7583d6",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/inactive-root-skill/1.0.0/resolve",
+      "http": 404,
+      "request_id": "9714775c-16d9-4677-8ca7-c32067adc884",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/dependency-bearing-root/1.0.0/resolve",
+      "http": 404,
+      "request_id": "63663102-98d3-49e8-9662-51b0d5c4aec2",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/dependency-bearing-root/1.0.0/resolve",
+      "http": 200,
+      "request_id": "e5358ffd-6d6a-46d9-8c6f-9623a302c2c6",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 1
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "lifecycle-proof-skill"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "2.0.0",
+      "skill_id": "lifecycle-proof-skill"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/2.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 200,
+      "request_id": "af3b9925-fad5-453b-97e8-278a087d7a8a",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/2.0.0/resolve",
+      "http": 200,
+      "request_id": "94b4e2c0-e593-4bad-95f1-07c0c791cbb4",
+      "retryable": false,
+      "resolved_version": "2.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 200,
+      "request_id": "2bccea5c-d1b0-401c-bc45-30549563310e",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/status",
+      "http": 200,
+      "status": "inactive"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 404,
+      "request_id": "4adc0497-6303-4b2a-a457-a403600d0fc5",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 200,
+      "request_id": "ad2ad5d9-8ccd-49e0-8dbe-a6861407d0a9",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "DELETE",
+      "path": "/v1/grants/grant-incident-harness-1-0-0",
+      "http": 204
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/1.0.0/resolve",
+      "http": 404,
+      "request_id": "7245fdce-dd6c-4677-b6ec-aa4d8364efda",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/lifecycle-proof-skill/2.0.0/resolve",
+      "http": 200,
+      "request_id": "938f1aa8-7a2a-4abd-b727-cba3aaf7cc69",
+      "retryable": false,
+      "resolved_version": "2.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "incident-triage"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/skills/versions",
+      "http": 201,
+      "version": "1.0.0",
+      "skill_id": "postmortem-writer"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/incident-triage/1.0.0",
+      "http": 200,
+      "version": "1.0.0",
+      "skill_id": "incident-triage"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/incident-triage/1.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/postmortem-writer/1.0.0",
+      "http": 200,
+      "version": "1.0.0",
+      "skill_id": "postmortem-writer"
+    },
+    {
+      "method": "PUT",
+      "path": "/v1/skills/postmortem-writer/1.0.0/status",
+      "http": 200,
+      "status": "active"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/grants",
+      "http": 201,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/postmortem-writer/1.0.0/resolve",
+      "http": 404,
+      "request_id": "ebd4e611-e071-410e-b7ba-7f4e296944f1",
+      "retryable": false,
+      "error_code": "resource_not_found"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/grants",
+      "http": 201,
+      "status": "active"
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/incident-triage/1.0.0/resolve",
+      "http": 200,
+      "request_id": "c2ef5e26-e571-4bb4-b468-0d42544902e4",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 0
+    },
+    {
+      "method": "GET",
+      "path": "/v1/skills/postmortem-writer/1.0.0/resolve",
+      "http": 200,
+      "request_id": "433ca40e-5d7a-4964-a078-6f4d8cfde58d",
+      "retryable": false,
+      "resolved_version": "1.0.0",
+      "dependency_count": 1
+    }
+  ]
+}

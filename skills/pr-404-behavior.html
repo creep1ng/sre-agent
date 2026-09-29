@@ -1,0 +1,26 @@
+<!doctype html><html><head><meta charset="utf-8"><title>PR 404 observed evidence</title><style>
+body{font:16px system-ui,sans-serif;margin:40px;color:#182333;background:#f8fafc}h1{margin-bottom:12px}code{font-size:13px}section{background:white;border:1px solid #cbd5e1;border-radius:5px;margin:12px 0;padding:12px}pre{white-space:pre-wrap;font:15px monospace;margin:0}.note{background:#e4edf8;padding:14px}
+</style></head><body><h1>PR #404: observed FastAPI / PostgreSQL evidence</h1>
+<p><b>Exact head:</b> <code>523f80cdf2a99f5fefea5a288e20c7bb04ea3fb2</code><br><b>Focused checks:</b> 26 passed in 4.44s</p>
+<p class="note">Actual captured results; not an illustrative mockup. Controlled local integration: real PostgreSQL and in-process FastAPI TestClient. Synthetic data. No external-service proof or human approval is claimed. Fault injection / counters are explicitly labeled below.</p><section><pre>{
+  &quot;scenario&quot;: &quot;publication and replay&quot;,
+  &quot;http&quot;: [
+    201,
+    201
+  ],
+  &quot;identical&quot;: true
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;readiness at migration head&quot;,
+  &quot;http&quot;: 200,
+  &quot;database_revision&quot;: &quot;20260926_16&quot;
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;non-LLM consumption exclusion&quot;,
+  &quot;expected&quot;: &quot;rejected&quot;,
+  &quot;dto&quot;: &quot;accepted&quot;,
+  &quot;sql&quot;: [
+    [
+      &quot;skills.resolve&quot;,
+      &quot;1&quot;
+    ]
+  ]
+}</pre></section></body></html>

@@ -1,0 +1,3 @@
+Candidate: 29cf254ce432ee4d174f0130f825f9c5afa56eee
+inc-review-open {"actor": "op-human", "decided_at": "2026-09-29T03:47:36.707030+00:00", "expected_version": 1, "http_status": 200, "incident_id": "inc-review-open", "replayed": false, "status": "linked"}
+inc-review-closed {"code": "destination_ineligible", "status": 409}

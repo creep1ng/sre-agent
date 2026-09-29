@@ -1,0 +1,6 @@
+HEAD=add6400f2383fea30f0c0cb9c19c49d29323f710
+IMAGE=sre-agent-pr409-stack-rs9jtc-python-checks:latest
+TESTS=tests/test_skill_publication.py
+DATABASE=isolated ephemeral container, network none
+.                                                                        [100%]
+1 passed in 4.17s

@@ -1,0 +1,115 @@
+<!doctype html><html><head><meta charset="utf-8"><title>PR 409 observed evidence</title><style>
+body{font:16px system-ui,sans-serif;margin:40px;color:#182333;background:#f8fafc}h1{margin-bottom:12px}code{font-size:13px}section{background:white;border:1px solid #cbd5e1;border-radius:5px;margin:12px 0;padding:12px}pre{white-space:pre-wrap;font:15px monospace;margin:0}.note{background:#e4edf8;padding:14px}
+</style></head><body><h1>PR #409: observed FastAPI / PostgreSQL evidence</h1>
+<p><b>Exact head:</b> <code>c0d48c5c31d518d198a5ccdcd61b25f8990b06ac</code><br><b>Focused checks:</b> 5 passed in 5.84s</p>
+<p class="note">Actual captured results; not an illustrative mockup. Controlled local integration: real PostgreSQL and in-process FastAPI TestClient. Synthetic data. No external-service proof or human approval is claimed. Fault injection / counters are explicitly labeled below.</p><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/incident-triage/1.0.0&quot;,
+  &quot;http&quot;: 200,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;skill_id&quot;: &quot;incident-triage&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;PUT&quot;,
+  &quot;path&quot;: &quot;/v1/skills/incident-triage/1.0.0/status&quot;,
+  &quot;http&quot;: 200,
+  &quot;status&quot;: &quot;active&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/postmortem-writer/1.0.0&quot;,
+  &quot;http&quot;: 200,
+  &quot;version&quot;: &quot;1.0.0&quot;,
+  &quot;skill_id&quot;: &quot;postmortem-writer&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;PUT&quot;,
+  &quot;path&quot;: &quot;/v1/skills/postmortem-writer/1.0.0/status&quot;,
+  &quot;http&quot;: 200,
+  &quot;status&quot;: &quot;active&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/postmortem-writer/1.0.0/resolve&quot;,
+  &quot;http&quot;: 404,
+  &quot;request_id&quot;: &quot;ebd4e611-e071-410e-b7ba-7f4e296944f1&quot;,
+  &quot;retryable&quot;: false,
+  &quot;error_code&quot;: &quot;resource_not_found&quot;
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/incident-triage/1.0.0/resolve&quot;,
+  &quot;http&quot;: 200,
+  &quot;request_id&quot;: &quot;c2ef5e26-e571-4bb4-b468-0d42544902e4&quot;,
+  &quot;retryable&quot;: false,
+  &quot;resolved_version&quot;: &quot;1.0.0&quot;,
+  &quot;dependency_count&quot;: 0
+}</pre></section><section><pre>{
+  &quot;method&quot;: &quot;GET&quot;,
+  &quot;path&quot;: &quot;/v1/skills/postmortem-writer/1.0.0/resolve&quot;,
+  &quot;http&quot;: 200,
+  &quot;request_id&quot;: &quot;433ca40e-5d7a-4964-a078-6f4d8cfde58d&quot;,
+  &quot;retryable&quot;: false,
+  &quot;resolved_version&quot;: &quot;1.0.0&quot;,
+  &quot;dependency_count&quot;: 1
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;publication and replay&quot;,
+  &quot;http&quot;: [
+    201,
+    201
+  ],
+  &quot;identical&quot;: true
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;overlong version&quot;,
+  &quot;version_length&quot;: 37,
+  &quot;expected_http&quot;: 422,
+  &quot;actual_http&quot;: 500,
+  &quot;rows&quot;: 0
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;unpublished exact-version lifecycle&quot;,
+  &quot;expected_http&quot;: 404,
+  &quot;actual_http&quot;: 500
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;lifecycle audit outage&quot;,
+  &quot;injection&quot;: &quot;PostgresAuditStore.append raises; real SQL mutation remains unchanged&quot;,
+  &quot;http&quot;: 503,
+  &quot;expected_persisted_status&quot;: &quot;published&quot;,
+  &quot;actual_persisted_status&quot;: &quot;inactive&quot;,
+  &quot;terminal_audit_rows&quot;: 0
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;retry after failed audit&quot;,
+  &quot;actual_http&quot;: 409,
+  &quot;expected&quot;: &quot;successful retry or no previous mutation&quot;
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;non-LLM consumption exclusion&quot;,
+  &quot;expected&quot;: &quot;rejected&quot;,
+  &quot;dto&quot;: &quot;accepted&quot;,
+  &quot;sql&quot;: [
+    [
+      &quot;skills.resolve&quot;,
+      &quot;1&quot;
+    ]
+  ]
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;success response contract&quot;,
+  &quot;http&quot;: 200,
+  &quot;public_keys&quot;: [
+    &quot;skill&quot;,
+    &quot;dependencies&quot;,
+    &quot;request_id&quot;,
+    &quot;retryable&quot;
+  ],
+  &quot;declared_model_valid&quot;: false,
+  &quot;request_id&quot;: &quot;9e36d2f8-af21-4fc6-8c9f-ba6cc4cff643&quot;
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;invalid resolution path&quot;,
+  &quot;http&quot;: 422,
+  &quot;request_id_in_body&quot;: null,
+  &quot;audit_rows&quot;: 0
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;missing bearer credential&quot;,
+  &quot;http&quot;: 401,
+  &quot;www_authenticate&quot;: null
+}</pre></section><section><pre>{
+  &quot;scenario&quot;: &quot;maximum direct dependencies&quot;,
+  &quot;dependencies&quot;: 16,
+  &quot;http&quot;: 200,
+  &quot;real_scrypt_verifications&quot;: 17,
+  &quot;elapsed_seconds&quot;: 0.722,
+  &quot;instrumentation&quot;: &quot;count wrapper forwards every real key verification; no authentication bypass&quot;
+}</pre></section></body></html>

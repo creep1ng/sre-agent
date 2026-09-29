@@ -1,0 +1,4 @@
+HEAD cfe1c22aa46df35080fdaecda4c78e209f9daabd
+COMMAND pytest -q -p no:cacheprovider tests/test_incident_workflow_provisioning.py
+...                                                                      [100%]
+3 passed in 3.90s

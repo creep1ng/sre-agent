@@ -1,0 +1,21 @@
+{
+  "pr": 403,
+  "head": "c41aeaebe90e7d91d23892076b1b85c06db5c465",
+  "evidence_kind": "controlled integration",
+  "environment": "FastAPI TestClient + real PostgreSQL 17.4 in isolated network-none Docker container",
+  "observations": [
+    {
+      "scenario": "publication and replay",
+      "http": [
+        201,
+        201
+      ],
+      "identical": true
+    },
+    {
+      "scenario": "readiness at migration head",
+      "http": 200,
+      "database_revision": "20260926_15"
+    }
+  ]
+}

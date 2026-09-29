@@ -1,0 +1,6 @@
+{"operation": "start + retry", "same_run": true, "first_replayed": false, "retry_replayed": true, "run_version": 1, "state": "investigating"}
+changed payload: IncidentIdempotencyConflictError
+invalid state: InvalidTransitionError
+{"fresh_runtime_reconstruction": "investigating", "run_version": 1}
+SQL persisted: ('inc-audit-atomic', 1, 1, 1)
+SQL persisted: ('inc-audit-rollback', 0, 0, 0)

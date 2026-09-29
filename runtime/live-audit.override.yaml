@@ -1,0 +1,11 @@
+# Audit-only disposable Compose override, never a repository configuration change.
+services:
+  db:
+    ports: !reset []
+  api:
+    ports: !reset []
+  live-smoke:
+    environment:
+      INVESTIGATOR_AUDIT_URL: http://api:8000
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?required for ephemeral local credential scenario}
+      RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?required for negative scenario}

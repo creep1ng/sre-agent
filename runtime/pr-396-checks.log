@@ -1,0 +1,5 @@
+HEAD c29de01db9820df26a41cde8012db642c633df86
+COMMAND pytest -q -p no:cacheprovider tests/test_incident_runtime.py tests/test_incident_persistence.py tests/test_incident_run_start.py && mypy --cache-dir=/tmp/mypy src/sre_agent/incident/runtime.py
+...............................                                          [100%]
+31 passed in 5.90s
+Success: no issues found in 1 source file

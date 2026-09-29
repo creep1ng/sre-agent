@@ -1,0 +1,4 @@
+s                                                                        [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_openrouter_live.py:14: set RUN_OPENROUTER_LIVE_SMOKE=1 to enable one live provider request
+1 skipped in 0.26s

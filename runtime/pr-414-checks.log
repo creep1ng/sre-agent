@@ -1,0 +1,4 @@
+HEAD 141b177d4a47f8da1279571893643f6e2fb7349a
+COMMAND pytest -q -p no:cacheprovider tests/test_incident_timeline_runs.py tests/test_incident_war_room_ui.py
+............                                                             [100%]
+12 passed in 2.07s

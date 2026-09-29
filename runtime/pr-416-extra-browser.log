@@ -1,0 +1,65 @@
+
+Running 1 test using 1 worker
+
+[1/1] ../out/extra-ui.spec.js:4:1 › review conflict recovery retains reason when retrying action
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:57] "GET /public/incident-ui/review.html?incident_id=inc-audit&run_id=run_demo0001 HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:57] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:57] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:57] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:57] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:57] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:57] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:58] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:58] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:58] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:58] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 03:52:58] "GET /public/api/client.js HTTP/1.1" 200 -
+
+../out/extra-ui.spec.js:4:1 › review conflict recovery retains reason when retrying action
+RECOVERY reason after reopening: ""
+
+  1) ../out/extra-ui.spec.js:4:1 › review conflict recovery retains reason when retrying action ────
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  locator('#decision-comment')
+    Expected: "Audited reason must survive recovery"
+    Received: ""
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveValue" locator('#decision-comment') with timeout 5000ms
+      - waiting for locator('#decision-comment')
+        14 × locator resolved to <textarea rows="3" class="ma-input" maxlength="2000" id="decision-comment"></textarea>
+           - unexpected value ""
+
+
+       5 |  await page.route('**/api/v1/incidents/**',route=>route.request().method()==='POST'?route.fulfill({status:409,json:{error:{code:'run_conflict'}}}):route.fulfill({json:detail}));
+       6 |  await auth(page,'/public/incident-ui/review.html?incident_id=inc-audit&run_id=run_demo0001');
+    >  7 |  await page.locator('[data-command=approve_mitigation]').click();await page.locator('#decision-comment').fill('Audited reason must survive recovery');await page.locator('#decision-submit').click();await expect(page.locator('#error-409')).toBeVisible();await page.locator('#refresh-button').click();await expect(page.locator('#actions-section')).toBeVisible();await page.locator('[data-command=approve_mitigation]').click();console.log('RECOVERY reason after reopening:',JSON.stringify(await page.locator('#decision-comment').inputValue()));await page.locator('#decision-comment').scrollIntoViewIfNeeded();await page.screenshot({path:'/out/pr-416-recovery.png'});await expect(page.locator('#decision-comment')).toHaveValue('Audited reason must survive recovery');
+         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       ^
+       8 | });
+       9 | test('postmortem stale response must not replace selected run',async({page})=>{
+      10 |  let release;let seen;const blocked=new Promise(r=>{release=r});const started=new Promise(r=>{seen=r});let delay=false;
+        at /out/extra-ui.spec.js:7:711
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/extra-results/extra-ui-review-conflict-r-7b5ee-reason-when-retrying-action/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/extra-results/extra-ui-review-conflict-r-7b5ee-reason-when-retrying-action/error-context.md
+
+
+  1 failed
+    ../out/extra-ui.spec.js:4:1 › review conflict recovery retains reason when retrying action ─────

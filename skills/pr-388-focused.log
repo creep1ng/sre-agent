@@ -1,0 +1,6 @@
+HEAD=3f7fae89089d9861ee3a17be465dd63be7f41881
+IMAGE=sre-agent-pr409-stack-rs9jtc-python-checks:latest
+TESTS=tests/test_control_acceptance.py::test_skill_version_read_is_limited_to_catalog_admin tests/test_demo_seeds.py
+DATABASE=isolated ephemeral container, network none
+.........                                                                [100%]
+9 passed in 5.37s
