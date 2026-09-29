@@ -1,0 +1,15 @@
+{
+  "proof_kind": "controlled real-PostgreSQL internal-service integration",
+  "start_retry_replayed": true,
+  "human_command_retry_replayed": true,
+  "run_count": 1,
+  "event_count": 2,
+  "decision_comment_preserved": true,
+  "nonapproval_has_no_approval": true,
+  "trusted_actor_preserved": true,
+  "projected_cursor": "seq:1",
+  "final_state": "active",
+  "new_database_handle_reconstruction_equal": true,
+  "live_provider_used": false,
+  "http_authorization_proven": false
+}

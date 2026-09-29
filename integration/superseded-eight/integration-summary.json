@@ -1,0 +1,161 @@
+{
+  "starting_main": "4b0c8740a042a8654979dd43481c7ad4f9992ea1",
+  "checked_at": "2026-09-29T03:57:45.549553+00:00",
+  "order": [
+    390,
+    396,
+    414,
+    415,
+    417,
+    412,
+    371,
+    372
+  ],
+  "steps": [
+    {
+      "pr": 390,
+      "head": "710dbd0da6bf8e2c20b1cddfcb2e69b466a49e71",
+      "starting_commit": "4b0c8740a042a8654979dd43481c7ad4f9992ea1",
+      "github_cached_base": "e9ae683a8159feee0964b98b88cf147b407881e8",
+      "merge_tree_exit": 0,
+      "tree": "135aea35a1f3778441b940a258aad37cfe3a4146",
+      "synthetic_commit": "dbdde7cd963200b62b7644c573ef7d7c19966180",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-390-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_openrouter_live.py",
+        "exit_code": 0,
+        "log": "pr-390-python.log"
+      }
+    },
+    {
+      "pr": 396,
+      "head": "c29de01db9820df26a41cde8012db642c633df86",
+      "starting_commit": "dbdde7cd963200b62b7644c573ef7d7c19966180",
+      "github_cached_base": "828a21aaf382e33117c73decee9732f87222d02a",
+      "merge_tree_exit": 0,
+      "tree": "6f77b8800d0d07ff58a94880b2ebdd024a6686bb",
+      "synthetic_commit": "18f5b00f54c625e1cf86b359c8bcedd61ae7ad2b",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-396-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_runtime.py tests/test_incident_persistence.py tests/test_incident_run_start.py",
+        "exit_code": 0,
+        "log": "pr-396-python.log"
+      }
+    },
+    {
+      "pr": 414,
+      "head": "141b177d4a47f8da1279571893643f6e2fb7349a",
+      "starting_commit": "18f5b00f54c625e1cf86b359c8bcedd61ae7ad2b",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "merge_tree_exit": 0,
+      "tree": "5bc33a4fdf2dba647cdd31f09ad712e2ee0289d8",
+      "synthetic_commit": "4bd09ad10a696423e762ac1f59e31b4be22169c2",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-414-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_timeline_runs.py tests/test_incident_war_room_ui.py",
+        "exit_code": 0,
+        "log": "pr-414-python.log"
+      },
+      "browser": {
+        "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/pr-414-browser.config.cjs",
+        "exit_code": 0,
+        "log": "pr-414-browser.log"
+      }
+    },
+    {
+      "pr": 415,
+      "head": "d21bdda93ec8a49670387a185195027786a7e0a8",
+      "starting_commit": "4bd09ad10a696423e762ac1f59e31b4be22169c2",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "merge_tree_exit": 0,
+      "tree": "c947b40f2f7023324afc86aea58d4546dd48af05",
+      "synthetic_commit": "7ffeb772f7b51d0a3bac57c55b75264c2271f195",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-415-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_review_ui.py",
+        "exit_code": 0,
+        "log": "pr-415-python.log"
+      },
+      "browser": {
+        "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/pr-415-browser.config.cjs",
+        "exit_code": 0,
+        "log": "pr-415-browser.log"
+      }
+    },
+    {
+      "pr": 417,
+      "head": "0d0b876ad3f38506728da9ee00ed4d18a50ffe4c",
+      "starting_commit": "7ffeb772f7b51d0a3bac57c55b75264c2271f195",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "merge_tree_exit": 0,
+      "tree": "c76d8843f6f58d574c89f94a74c7519edc1b8664",
+      "synthetic_commit": "57d82f98010d2277fa7a21d8386b4d131f3bc259",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-417-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_postmortem_ui.py",
+        "exit_code": 0,
+        "log": "pr-417-python.log"
+      },
+      "browser": {
+        "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/pr-417-browser.config.cjs",
+        "exit_code": 0,
+        "log": "pr-417-browser.log"
+      }
+    },
+    {
+      "pr": 412,
+      "head": "fe63f0c1f7d0bb90a46136a57f8c65256fba86ea",
+      "starting_commit": "57d82f98010d2277fa7a21d8386b4d131f3bc259",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "merge_tree_exit": 0,
+      "tree": "cb3f093fa5c1027f7aa24fda89c8098fb5832c1c",
+      "synthetic_commit": "ada1431022a3c92beaffd3cd1a26c7c2db4cdd4e",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-412-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_human_commands.py tests/test_incident_runtime.py",
+        "exit_code": 0,
+        "log": "pr-412-python.log"
+      }
+    },
+    {
+      "pr": 371,
+      "head": "d957c1b0375788e7283ae20e530767ca64f207d1",
+      "starting_commit": "ada1431022a3c92beaffd3cd1a26c7c2db4cdd4e",
+      "github_cached_base": "828a21aaf382e33117c73decee9732f87222d02a",
+      "merge_tree_exit": 0,
+      "tree": "f08ecccda2420e7a6bfb472c89953c55f3afa125",
+      "synthetic_commit": "ddf3cfb111bbc52071cfbcee0a5707e0dc8587b2",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-371-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_restart_reads.py",
+        "exit_code": 0,
+        "log": "pr-371-python.log"
+      }
+    },
+    {
+      "pr": 372,
+      "head": "c8fd8968d2596b57013ec73c3c6fcaae5a9c1aec",
+      "starting_commit": "ddf3cfb111bbc52071cfbcee0a5707e0dc8587b2",
+      "github_cached_base": "828a21aaf382e33117c73decee9732f87222d02a",
+      "merge_tree_exit": 0,
+      "tree": "3069601c4ddeb9c4dde9e0d49bdeaced25071769",
+      "synthetic_commit": "8b3152cdcf50d514910584d878d4a504493f81fd",
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-372-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_audit_filtered_query.py",
+        "exit_code": 0,
+        "log": "pr-372-python.log"
+      }
+    }
+  ],
+  "source_changes": false,
+  "remote_changes": false,
+  "status": "superseded_parent_excludes_390",
+  "final_tree": "3069601c4ddeb9c4dde9e0d49bdeaced25071769",
+  "final_synthetic_commit": "8b3152cdcf50d514910584d878d4a504493f81fd",
+  "final_python": {
+    "docker_command": "docker run --rm --network container:prospective-integration-final-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py final",
+    "exit_code": 0,
+    "log": "final-python.log"
+  },
+  "final_browser": {
+    "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/final-browser.config.cjs",
+    "exit_code": 1,
+    "log": "final-browser.log"
+  },
+  "checks_completed_at": "2026-09-29T04:06:44.125758+00:00",
+  "superseded_reason": "PR390 introduces unsafe authored teardown documentation and host-only demonstration commands; parent excludes it despite runtime success.",
+  "history_retention_note": "Original PR414 boundary screenshot directory was cleared by the next Playwright run before archival completed. Original logs, all tree records, and final-eight full-page UI screenshots remain preserved. unpublished-seven-pr414-early-captures belongs to the seven-step rerun and is excluded from publication."
+}

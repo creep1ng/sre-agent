@@ -1,0 +1,133 @@
+
+Running 2 tests using 1 worker
+
+[1/2] tests/browser/showcase.spec.js:41:5 › loads the catalog and changes theme through the existing control
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /index.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /public/midnight-agent-logo-light.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /public/midnight-agent-logo-dark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /styles/showcase.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:28] "GET /scripts/showcase.js HTTP/1.1" 200 -
+
+  1) tests/browser/showcase.spec.js:41:5 › loads the catalog and changes theme through the existing control 
+
+    Error: unexpected browser errors
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 6
+
+    - Array []
+    + Array [
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    + ]
+
+      35 |
+      36 | test.afterEach(async ({ page }) => {
+    > 37 |   expect(browserErrors.get(page).consoleErrors, "unexpected browser errors").toEqual([]);
+         |                                                                              ^
+      38 |   expect(assetFailures.get(page), "essential browser assets").toEqual([]);
+      39 | });
+      40 |
+        at /repo/tests/browser/showcase.spec.js:37:78
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/base-offline-screenshots/showcase-loads-the-catalog-403f4-hrough-the-existing-control/test-finished-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/base-offline-screenshots/showcase-loads-the-catalog-403f4-hrough-the-existing-control/error-context.md
+
+
+[2/2] tests/browser/showcase.spec.js:52:5 › has no scoped automatically detectable WCAG A or AA violations
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /index.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /public/midnight-agent-logo-dark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /public/midnight-agent-logo-light.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /styles/showcase.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /scripts/showcase.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /fonts.css HTTP/1.1" 404 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /tokens.css HTTP/1.1" 404 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /components.css HTTP/1.1" 404 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:07:29] "GET /base.css HTTP/1.1" 404 -
+
+  2) tests/browser/showcase.spec.js:52:5 › has no scoped automatically detectable WCAG A or AA violations 
+
+    Error: unexpected browser errors
+
+    expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 6
+
+    - Array []
+    + Array [
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    +   "Failed to load resource: net::ERR_INTERNET_DISCONNECTED",
+    + ]
+
+      35 |
+      36 | test.afterEach(async ({ page }) => {
+    > 37 |   expect(browserErrors.get(page).consoleErrors, "unexpected browser errors").toEqual([]);
+         |                                                                              ^
+      38 |   expect(assetFailures.get(page), "essential browser assets").toEqual([]);
+      39 | });
+      40 |
+        at /repo/tests/browser/showcase.spec.js:37:78
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../out/base-offline-screenshots/showcase-has-no-scoped-aut-757e2-ble-WCAG-A-or-AA-violations/test-finished-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../out/base-offline-screenshots/showcase-has-no-scoped-aut-757e2-ble-WCAG-A-or-AA-violations/error-context.md
+
+
+  2 failed
+    tests/browser/showcase.spec.js:41:5 › loads the catalog and changes theme through the existing control 
+    tests/browser/showcase.spec.js:52:5 › has no scoped automatically detectable WCAG A or AA violations 

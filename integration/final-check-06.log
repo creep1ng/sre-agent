@@ -1,0 +1,25 @@
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 75 files, 252 dependencies.
+------------------------------------
+
+Incident core does not use concrete adapters KEPT
+Governance does not use concrete adapters KEPT
+Persistence does not use delivery or composition KEPT
+Incident runtime and ports avoid framework dependencies KEPT
+Investigator reaches the gateway over HTTP only and cannot write state KEPT
+
+Contracts: 5 kept, 0 broken.

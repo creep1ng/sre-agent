@@ -21,7 +21,7 @@ This branch contains **evidence only**, not application changes. Reports separat
 | [#387](https://github.com/creep1ng/sre-agent/pull/387) | Blocked: conflict with current main. | [Report](skills/pr-387.md) · [Docker reproduction](skills/REPRODUCE.md) |
 | [#388](https://github.com/creep1ng/sre-agent/pull/388) | Blocked by #387. | [Report](skills/pr-388.md) · [Docker reproduction](skills/REPRODUCE.md) |
 | [#389](https://github.com/creep1ng/sre-agent/pull/389) | Changes: same alert can declare two incidents. | [Report](triage/pr-389.md) · [Docker reproduction](triage/REPRODUCE.md) |
-| [#390](https://github.com/creep1ng/sre-agent/pull/390) | Live provider proof passes; final integration pending. | [Report](runtime/pr-390.md) · [Docker reproduction](runtime/REPRODUCE.md) |
+| [#390](https://github.com/creep1ng/sre-agent/pull/390) | Changes: live proof passes, but authored guide recommends destructive teardown and host-only demonstration. | [Report](runtime/pr-390.md) · [Docker reproduction](runtime/REPRODUCE.md) |
 | [#391](https://github.com/creep1ng/sre-agent/pull/391) | Changes: invalid types persist or return503; duplicate declaration inherited. | [Report](triage/pr-391.md) · [Docker reproduction](triage/REPRODUCE.md) |
 | [#392](https://github.com/creep1ng/sre-agent/pull/392) | Changes: stale fields leak across UI operations. | [Report](triage/pr-392.md) · [Docker reproduction](triage/REPRODUCE.md) |
 | [#393](https://github.com/creep1ng/sre-agent/pull/393) | Changes: inherited operation-switch failure remains. | [Report](triage/pr-393.md) · [Docker reproduction](triage/REPRODUCE.md) |
@@ -55,6 +55,8 @@ The actual screenshots and sanitized logs are next to each report. Source worktr
 
 ## Integration status
 
-Eight scoped candidates are undergoing final actual-main sequential integration verification: #390, #396, #414, #415, #417, #412, #371, #372. No merge is claimed by this initial publication. The final disposition and actual merge SHAs will be recorded here and in the PR conversations.
+Seven scoped candidates passed final actual-main sequential integration verification: #396, #414, #415, #417, #412, #371, #372. #390 is excluded for unsafe authored documentation. No merge is claimed at this publication stage. [Integration report](integration/integration-report.md) · [Exact source trees and checks](integration/integration-summary.json) · [Docker reproduction](integration/REPRODUCE.md).
+
+Observed final-seven proof: **1220 Python passed /1 optional provider skip; 27 focused UI browser passed; 31 full static browser passed /58 connected-only skips; all 15 Python/static/type/migration commands passed.** The optional unchanged historical contract suite was bounded after 49 passing tests; its remainder is incomplete, not PASS. Deliberately offline showcase failures reproduce on starting main; normal-network static browsers pass. Parent Ruff spot-check passed independently. The final disposition and actual merge SHAs will be recorded here and in the PR conversations.
 
 Live main at initial integration: `4b0c8740a042a8654979dd43481c7ad4f9992ea1`. GitHub’s PR-reported base can lag the actual main ref; prospective-tree verification does not rely on that cached base.

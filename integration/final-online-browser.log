@@ -1,0 +1,2283 @@
+
+Running 89 tests using 1 worker
+
+[1/89] tests/browser/model-aliases.spec.js:130:5 › lists real model aliases through the same-origin proxy
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:23] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /public/api/client.js HTTP/1.1" 200 -
+[2/89] tests/browser/model-aliases.spec.js:141:5 › renders a real 401 as authentication required
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:24] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[3/89] tests/browser/model-aliases.spec.js:149:5 › renders a real 403 as access unavailable
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:25] "GET /public/api/client.js HTTP/1.1" 200 -
+[4/89] tests/browser/model-aliases.spec.js:157:5 › surfaces network failure without false data
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[5/89] tests/browser/model-aliases.spec.js:166:5 › clears stale rows when a loaded list is followed by a 401
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:26] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[6/89] tests/browser/model-aliases.spec.js:183:5 › clears stale rows when a loaded list is followed by a 403
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:27] "GET /public/api/client.js HTTP/1.1" 200 -
+[7/89] tests/browser/model-aliases.spec.js:199:5 › clears stale rows when a loaded list is followed by a network failure
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:28] "GET /public/api/client.js HTTP/1.1" 200 -
+[8/89] tests/browser/model-aliases.spec.js:213:5 › opens real detail for triage-agent
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[9/89] tests/browser/model-aliases.spec.js:228:5 › detail fields match the selected list alias
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:29] "GET /public/api/client.js HTTP/1.1" 200 -
+[10/89] tests/browser/model-aliases.spec.js:238:5 › selecting B after A renders B authoritatively
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:30] "GET /public/api/client.js HTTP/1.1" 200 -
+[11/89] tests/browser/model-aliases.spec.js:249:5 › a stale A response cannot overwrite a newer B
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/api/client.js HTTP/1.1" 200 -
+[12/89] tests/browser/model-aliases.spec.js:299:5 › safe 404 shows Alias unavailable without stale metadata
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:31] "GET /public/api/client.js HTTP/1.1" 200 -
+[13/89] tests/browser/model-aliases.spec.js:315:5 › late detail response cannot repopulate after Clear session
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:32] "GET /public/api/client.js HTTP/1.1" 200 -
+[14/89] tests/browser/model-aliases.spec.js:338:5 › detail does not expose credentials or secrets
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[15/89] tests/browser/model-aliases.spec.js:353:5 › clears the session and removes alias rows
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:33] "GET /public/api/client.js HTTP/1.1" 200 -
+[16/89] tests/browser/model-aliases.spec.js:365:5 › keeps credentials out of web storage and the URL
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:34] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[17/89] tests/browser/model-aliases.spec.js:392:5 › admin opens assignment edit for triage-agent
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/api/client.js HTTP/1.1" 200 -
+[18/89] tests/browser/model-aliases.spec.js:405:5 › reassigns triage-agent and persists the authoritative assignment
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /palette.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:35] "GET /styles/components.css HTTP/1.1" 200 -
+[19/89] tests/browser/model-aliases.spec.js:458:7 › does not submit when concrete_model is missing
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:36] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[20/89] tests/browser/model-aliases.spec.js:458:7 › does not submit when router is missing
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[21/89] tests/browser/model-aliases.spec.js:458:7 › does not submit when inference_provider is missing
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:37] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /public/api/client.js HTTP/1.1" 200 -
+[22/89] tests/browser/model-aliases.spec.js:488:5 › real extra field is rejected with 422 and no mutation
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:38] "GET /public/api/client.js HTTP/1.1" 200 -
+[23/89] tests/browser/model-aliases.spec.js:504:5 › stale expected_updated_at returns a real 409
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:39] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[24/89] tests/browser/model-aliases.spec.js:527:5 › 409 does not silently overwrite the authoritative state
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[25/89] tests/browser/model-aliases.spec.js:554:5 › refresh after 409 shows authoritative state
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:40] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[26/89] tests/browser/model-aliases.spec.js:586:5 › restricted principal cannot mutate the assignment
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:41] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[27/89] tests/browser/model-aliases.spec.js:656:5 › deactivates an ephemeral alias one-way without changing principals or credentials
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[28/89] tests/browser/model-aliases.spec.js:715:5 › no secrets or storage leakage after mutation
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/admin/model-aliases.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/model-aliases.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/admin/model-aliases.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:42] "GET /public/api/client.js HTTP/1.1" 200 -
+[29/89] tests/browser/postmortem.spec.js:40:5 › renders the minimum sections with explicit unknowns
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:43] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[30/89] tests/browser/postmortem.spec.js:55:5 › reloads the same fixture and never closes
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:44] "GET /styles/components.css HTTP/1.1" 200 -
+[31/89] tests/browser/postmortem.spec.js:68:5 › shows the forbidden state without content
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /public/incident-ui/postmortem.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /public/incident-ui/postmortem.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /public/api/client.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/components.css HTTP/1.1" 200 -
+[32/89] tests/browser/principals-create.spec.js:34:5 › creates a real agent principal and keeps it after reload
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:45] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[33/89] tests/browser/principals-create.spec.js:49:5 › disables submit while creating and rejects a conflicting retry token
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:46] "GET /public/api/client.js HTTP/1.1" 200 -
+[34/89] tests/browser/principals-create.spec.js:82:5 › keeps form data on invalid input and proves a real 422
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:47] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[35/89] tests/browser/principals-create.spec.js:114:5 › blocks create for invalid and restricted credentials without data
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/api/client.js HTTP/1.1" 200 -
+[36/89] tests/browser/principals-create.spec.js:134:5 › surfaces an aborted create as recoverable without false success
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:48] "GET /styles/components.css HTTP/1.1" 200 -
+
+[37/89] tests/browser/principals-create.spec.js:152:5 › ignores a stale create response after the session is cleared
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:49] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[38/89] tests/browser/principals-create.spec.js:175:5 › successful create does not announce success when authoritative refresh fails
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[39/89] tests/browser/principals-create.spec.js:196:5 › keeps create locked across Escape/Cancel while POST is in flight
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:50] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[40/89] tests/browser/principals-credentials.spec.js:67:5 › issues a credential, reveals the secret once, and lists metadata only
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:51] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[41/89] tests/browser/principals-credentials.spec.js:94:5 › stable replay never reveals the secret again
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/api/client.js HTTP/1.1" 200 -
+[42/89] tests/browser/principals-credentials.spec.js:117:5 › surfaces real idempotency conflict without false success
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:52] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[43/89] tests/browser/principals-credentials.spec.js:131:5 › distinguishes administrative 401 and 403 without partial credential data
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:53] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[44/89] tests/browser/principals-credentials.spec.js:153:5 › keeps one logical issuance across network retry and clears late secrets
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[45/89] tests/browser/principals-credentials.spec.js:207:5 › keeps newer credential metadata when an older list read resolves late
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:54] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[46/89] tests/browser/principals-credentials.spec.js:258:5 › reloads credentials for expanded principals after principals refresh
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:55] "GET /public/api/client.js HTTP/1.1" 200 -
+[47/89] tests/browser/principals-credentials.spec.js:322:5 › shows distinct list errors for invalid and restricted sessions
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[48/89] tests/browser/principals-status.spec.js:50:5 › deactivates a real active principal and persists after reload
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:56] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[49/89] tests/browser/principals-status.spec.js:83:5 › rejects stale expected_updated_at with a real 409 and refreshes authoritative state
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:57] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[50/89] tests/browser/principals-status.spec.js:122:5 › blocks deactivate for invalid/restricted credentials without false mutation
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:58] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[51/89] tests/browser/principals-status.spec.js:196:5 › surfaces failed status update without false success
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:12:59] "GET /public/api/client.js HTTP/1.1" 200 -
+[52/89] tests/browser/principals-status.spec.js:215:5 › clears the session before a held status response arrives
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /palette.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:00] "GET /public/api/client.js HTTP/1.1" 200 -
+[53/89] tests/browser/principals-status.spec.js:255:5 › drops a stale detail read that resolves after a confirmed deactivation
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/api/client.js HTTP/1.1" 200 -
+[54/89] tests/browser/principals-status.spec.js:291:5 › locks retry when the refresh after a real 409 fails
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/admin/principals.html HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:01] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[55/89] tests/browser/principals-status.spec.js:341:5 › closes deactivate without retry when the refresh after 409 finds inactive
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:02] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[56/89] tests/browser/principals.spec.js:38:5 › lists real principals through the same-origin proxy
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/tokens.css HTTP/1.1" 200 -
+[57/89] tests/browser/principals.spec.js:49:5 › expands a principal row to an inline detail
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:03] "GET /public/api/client.js HTTP/1.1" 200 -
+[58/89] tests/browser/principals.spec.js:65:5 › rejects an invalid non-empty credential with a real 401
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:04] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[59/89] tests/browser/principals.spec.js:77:5 › hides the list for a restricted identity without partial data
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/api/client.js HTTP/1.1" 200 -
+[60/89] tests/browser/principals.spec.js:85:5 › shows a hidden principal as not found without leaking data
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:05] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[61/89] tests/browser/principals.spec.js:110:5 › ignores a stale list response after the session is cleared
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /styles/principals.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:06] "GET /public/api/client.js HTTP/1.1" 200 -
+[62/89] tests/browser/principals.spec.js:126:5 › ignores a stale detail response after the session is cleared
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/principals.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/admin/principals.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/api/client.js HTTP/1.1" 200 -
+[63/89] tests/browser/principals.spec.js:146:5 › surfaces an unreachable API as a recoverable offline state
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/admin/principals.html HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/principals.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/admin/principals.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:07] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[64/89] tests/browser/review.spec.js:46:5 › offers only the mitigating review actions for workflow 1.0.0
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:08] "GET /public/api/client.js HTTP/1.1" 200 -
+[65/89] tests/browser/review.spec.js:61:5 › hides review actions for other states and versions
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /public/api/client.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:09] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/components.css HTTP/1.1" 200 -
+
+[66/89] tests/browser/review.spec.js:72:5 › submits nothing and exposes no close controls
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/incident-ui/review.html?incident_id=inc-demo&run_id=run_demo0001 HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/incident-ui/review.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:10] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[67/89] tests/browser/showcase.spec.js:41:5 › loads the catalog and changes theme through the existing control
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /index.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /public/midnight-agent-logo-dark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /styles/showcase.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /public/midnight-agent-logo-light.svg HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:11] "GET /scripts/showcase.js HTTP/1.1" 200 -
+
+[68/89] tests/browser/showcase.spec.js:52:5 › has no scoped automatically detectable WCAG A or AA violations
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /index.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /styles/showcase.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /public/midnight-agent-logo-light.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /public/midnight-agent-logo-dark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:12] "GET /scripts/showcase.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] "GET /fonts.css HTTP/1.1" 404 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] "GET /components.css HTTP/1.1" 404 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] "GET /tokens.css HTTP/1.1" 404 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] code 404, message File not found
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:13] "GET /base.css HTTP/1.1" 404 -
+
+[69/89] tests/browser/war-room.spec.js:148:5 › renders the persisted summary, version and first timeline page
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:14] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[70/89] tests/browser/war-room.spec.js:159:5 › loads the second page without duplicating events
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:15] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[71/89] tests/browser/war-room.spec.js:169:5 › refresh reconciles to the new backend version
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:16] "GET /public/api/client.js HTTP/1.1" 200 -
+[72/89] tests/browser/war-room.spec.js:185:5 › shows the empty timeline state without errors
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:17] "GET /styles/components.css HTTP/1.1" 200 -
+
+[73/89] tests/browser/war-room.spec.js:193:5 › missing incident_id explains without fetching
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /public/incident-ui/war-room.html HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:18] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[74/89] tests/browser/war-room.spec.js:205:5 › distinguishes 401, 403, 404 and 503 states
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /palette.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:19] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:20] "GET /public/api/client.js HTTP/1.1" 200 -
+[75/89] tests/browser/war-room.spec.js:222:5 › exposes no lifecycle or harness controls
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:21] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[76/89] tests/browser/war-room.spec.js:233:5 › two sessions render the same mocked version (shared persistence converges on the backend)
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /public/api/client.js HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:22] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/api/client.js HTTP/1.1" 200 -
+[77/89] tests/browser/war-room.spec.js:254:5 › pins the selected run across pages when a new run appears
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:23] "GET /public/api/client.js HTTP/1.1" 200 -
+[78/89] tests/browser/war-room.spec.js:287:5 › denied loadMore clears protected content without partials
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:25] "GET /public/api/client.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[79/89] tests/browser/war-room.spec.js:320:5 › recovers the view after a 503 during loadMore
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:26] "GET /public/api/client.js HTTP/1.1" 200 -
+[80/89] tests/browser/war-room.spec.js:345:5 › drops a stale delayed response after forgetting the credential
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:27] "GET /public/api/client.js HTTP/1.1" 200 -
+[81/89] tests/browser/war-room.spec.js:365:5 › a newer session paginates while the old request is still pending
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:29] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[82/89] tests/browser/war-room.spec.js:393:5 › shows an explicit no-snapshot state instead of failing
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/base.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/api/client.js HTTP/1.1" 200 -
+[83/89] tests/browser/war-room.spec.js:401:5 › shows a recoverable 503 state when the network fails
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:30] "GET /styles/components.css HTTP/1.1" 200 -
+
+[84/89] tests/browser/war-room.spec.js:410:5 › refresh re-derives the latest run when a new run appears
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:31] "GET /public/api/client.js HTTP/1.1" 200 -
+
+[85/89] tests/browser/war-room.spec.js:440:5 › renders approvals as responsible persons
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /palette.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:32] "GET /public/api/client.js HTTP/1.1" 200 -
+[86/89] tests/browser/war-room.spec.js:500:5 › lists incident runs and switches the timeline to the chosen run
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /styles/components.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /public/api/client.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:33] "GET /styles/base.css HTTP/1.1" 200 -
+[87/89] tests/browser/war-room.spec.js:522:5 › keeps the explicit run across pagination and reload
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /styles/design-system.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /styles/fonts.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /styles/tokens.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /styles/base.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /styles/components.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:34] "GET /public/api/client.js HTTP/1.1" 200 -
+[88/89] tests/browser/war-room.spec.js:549:5 › escapes untrusted summaries and hides out-of-projection fields
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /palette.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /public/api/client.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:35] "GET /styles/base.css HTTP/1.1" 200 -
+[89/89] tests/browser/war-room.spec.js:575:5 › exposes no slice-40b controls on the read-only timeline
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /public/incident-ui/war-room.html?incident_id=inc-demo HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /styles/design-system.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /styles/incident-war-room.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /styles/incident-alerts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /public/api/runtime-config.js HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /public/incident-ui/war-room.js HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /public/midnight-agent-mark.svg HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /styles/fonts.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /styles/tokens.css HTTP/1.1" 200 -
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /styles/components.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /palette.css HTTP/1.1" 200 -
+
+
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /styles/base.css HTTP/1.1" 200 -
+[WebServer] 127.0.0.1 - - [29/Sep/2026 04:13:36] "GET /public/api/client.js HTTP/1.1" 200 -
+
+  58 skipped
+  31 passed (1.2m)

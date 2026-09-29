@@ -63,3 +63,47 @@ docker compose --env-file "$LOCAL_CONFIG" -f compose.yaml -f "$EVIDENCE_DIR/live
 ```
 
 This rebuild-based teammate path is supplied for reproducibility, not claimed as the exact audit command: the audit used its cached image with a read-only source bind and independently created isolated database. The provider-call budget is three. Stop only the dedicated project afterward; no global volume teardown.
+
+## Local pinned demo #370: setup and browser diagnostic
+
+**This is a new, statically reviewed teammate recipe, not an additional executed result.** The recorded audit used an isolated cloud guest and a local tunnel; those resources are terminated. This recipe needs neither AWS access nor the private launcher. It exercises the same exact candidate and pinned demo on a fresh local Linux host. It does **not** promise reproduction of the environment-dependent Grafana 503.
+
+### Prerequisites and boundary
+
+- Use Git to prepare a **standalone clean checkout** at `aa29c08971f7a69575b2d544af1dd4195395ad20` and make it the working directory. Do not use a shared worktree or shared Docker daemon. The container mounts this checkout at the identical absolute host path because its Docker client creates host-side bind mounts. Only ignored `otel-demo/` and `.demo-state/` receive generated demo state; tracked candidate inputs are not edited.
+- Read this candidate's [demo operations](https://github.com/creep1ng/sre-agent/blob/aa29c08971f7a69575b2d544af1dd4195395ad20/docs/demo-env.md), [manifest](https://github.com/creep1ng/sre-agent/blob/aa29c08971f7a69575b2d544af1dd4195395ad20/demo/manifest.yaml), and [image lock](https://github.com/creep1ng/sre-agent/blob/aa29c08971f7a69575b2d544af1dd4195395ad20/demo/digests.lock). Upstream is OpenTelemetry Demo `3.0.0`, commit `1755859a9de82c2e5e225be68abc401a5ebf2b4f`; do not substitute a current demo release.
+- Dedicated host: Docker Engine and Compose **2.24.4+** (`!override` support), at least 4 CPUs, 4 GB free RAM and 15 GB free disk, loopback ports 8090/9090 free. Budget up to 30 minutes for first image pulls/startup; no provider calls. The operator refuses any existing containers other than its labelled runner, all existing volumes, and non-default networks. Fixed upstream container/network names make a fresh daemon important even with the unique `audit-runtime370-demo` Compose project.
+- Set `EVIDENCE_DIR` to this published `runtime` directory and `DEMO_OUTPUT` to a new absolute output directory using safe local shell configuration. No real gateway/provider credentials are needed. The generated MCP token stays in ignored `.demo-state/grafana-mcp.env` with mode 0600; never publish it or expanded Compose configuration.
+- Mounting the Docker socket grants daemon control: use **only the dedicated disposable local host**. Do not point these commands at a remote/shared daemon. The operator selects only its named project and requires its local ownership marker for cleanup.
+
+### Build tools and start the pinned environment
+
+All Python/Node/Git dependency work below happens inside containers. The operator inherits the candidate's pinned Python base and locked dependencies. Docker CLI/Compose tooling is version-tagged `docker:27.5.1-cli`, **not claimed as an immutable audit-image digest**; the browser image uses the checked-in pinned Playwright base/npm lock. The adapter pulls every demo image by the candidate lock's digest, tags that exact content locally, then invokes the unchanged candidate operation with only the project name adjusted in memory.
+
+```sh
+docker build --target checks -t audit-runtime370-checks -f docker/api.Dockerfile .
+docker build --build-arg CHECKS_IMAGE=audit-runtime370-checks -t audit-runtime370-ops -f "$EVIDENCE_DIR/demo-ops.Dockerfile" "$EVIDENCE_DIR"
+docker build -t audit-runtime370-browser -f docker/e2e.Dockerfile .
+docker run --rm --user 0 --label audit.runtime370.runner=true -e AUDIT_DEDICATED_DAEMON=yes -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:$PWD" -v "$EVIDENCE_DIR:/evidence:ro" -w "$PWD" audit-runtime370-ops timeout 1800s python /evidence/demo-audit.py up
+docker run --rm --user 0 --label audit.runtime370.runner=true -e AUDIT_DEDICATED_DAEMON=yes -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:$PWD" -v "$EVIDENCE_DIR:/evidence:ro" -w "$PWD" audit-runtime370-ops timeout 180s python /evidence/demo-audit.py verify
+```
+
+Expected: all services available, exact image digests accepted, MCP token required; only `127.0.0.1:8090` and `127.0.0.1:9090` published. Envoy 10000 may appear as an exposed container port but must have no host mapping. Digest mismatch or any other verification failure is a failed result: do not update the lock or relax the port policy to make it pass. Interrupted startup may leave this attempt's resources; use the scoped cleanup below.
+
+### Capture the real browser and Grafana assets
+
+Linux host networking lets Chromium reach the **host loopback** bindings without republishing ports. The probe loads storefront, Grafana and Jaeger; captures actual screenshots; logs failed HTTP/JS requests using paths only; then requests at most three Grafana JS assets sequentially for comparison. It submits no credentials and does not inject API mocks. Expected: all three applications visibly load without the Grafana boot-error screen. Inspect the screenshots; this small diagnostic is not a complete application acceptance suite.
+
+```sh
+docker run --rm --network host --ipc=host --user 0 -v "$EVIDENCE_DIR:/evidence:ro" -v "$DEMO_OUTPUT:/out" audit-runtime370-browser sh -c 'timeout 180s node /evidence/demo-browser.cjs > /out/reproduction-370-browser.log 2>&1; result=$?; cat /out/reproduction-370-browser.log; exit "$result"'
+```
+
+New output is `reproduction-370-browser.log` and `reproduction-370/{store,grafana,jaeger}.png` in `DEMO_OUTPUT`; archived audit screenshots are not overwritten. The original audit observed storefront/Jaeger loading, Grafana HTML 200 with concurrent JS 503, and sequential guest asset 200. The cause remains **UNATTRIBUTED**; a successful local rerun is new evidence, not proof that the original failure was fabricated or candidate-caused. Preserve actual outcomes even when they differ.
+
+### Cleanup only this attempt
+
+Run this even after failed verification or a failed browser diagnostic. The ownership marker prevents an unowned teardown; the candidate's `down` removes only `audit-runtime370-demo` containers/networks, **without removing volumes**. No global `down -v`, volume deletion or prune is used. Retained volumes/state belong only to this disposable host; retire that host through its owner's normal process rather than deleting arbitrary resources.
+
+```sh
+docker run --rm --user 0 --label audit.runtime370.runner=true -e AUDIT_DEDICATED_DAEMON=yes -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:$PWD" -v "$EVIDENCE_DIR:/evidence:ro" -w "$PWD" audit-runtime370-ops timeout 180s python /evidence/demo-audit.py down
+```

@@ -1,0 +1,561 @@
+{
+  "starting_main": "4b0c8740a042a8654979dd43481c7ad4f9992ea1",
+  "checked_at": "2026-09-29T04:10:55.865869+00:00",
+  "order": [
+    396,
+    414,
+    415,
+    417,
+    412,
+    371,
+    372
+  ],
+  "excluded_prs": [
+    {
+      "pr": 390,
+      "head": "710dbd0da6bf8e2c20b1cddfcb2e69b466a49e71",
+      "reason": "PR390 introduces unsafe authored teardown documentation and host-only demonstration commands; parent excludes it despite runtime success."
+    }
+  ],
+  "steps": [
+    {
+      "pr": 396,
+      "head": "c29de01db9820df26a41cde8012db642c633df86",
+      "github_cached_base": "828a21aaf382e33117c73decee9732f87222d02a",
+      "starting_commit": "4b0c8740a042a8654979dd43481c7ad4f9992ea1",
+      "merge_tree_exit": 0,
+      "tree": "20bffa30bd4779ceb17e8f83a3f1838ebf393bc7",
+      "synthetic_commit": "e577a33648910f506e35e6b75183fa9ee2f46799",
+      "incremental_changed_lines": 376,
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-396-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_runtime.py tests/test_incident_persistence.py tests/test_incident_run_start.py",
+        "exit_code": 0,
+        "log": "pr-396-python.log",
+        "passed": 31
+      },
+      "scope": "Service-only atomic run start; no new HTTP route or credential authorization.",
+      "recommendation": "No candidate-caused integration blocker found within this partial slice; parent governs evidence, human review and merge.",
+      "candidate_blocking_reasons": [],
+      "checked_files": [
+        "src/sre_agent/incident/projections.py",
+        "src/sre_agent/incident/runtime.py",
+        "tests/test_incident_run_start.py"
+      ]
+    },
+    {
+      "pr": 414,
+      "head": "141b177d4a47f8da1279571893643f6e2fb7349a",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "starting_commit": "e577a33648910f506e35e6b75183fa9ee2f46799",
+      "merge_tree_exit": 0,
+      "tree": "d471ea09d7866acd1009872698f99d95163cac6b",
+      "synthetic_commit": "b51b88a2f74f82825e2a7fdb507a2a094275b52a",
+      "incremental_changed_lines": 346,
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-414-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_timeline_runs.py tests/test_incident_war_room_ui.py",
+        "exit_code": 0,
+        "log": "pr-414-python.log",
+        "passed": 12
+      },
+      "browser": {
+        "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/pr-414-browser.config.cjs",
+        "exit_code": 0,
+        "log": "pr-414-browser.log"
+      },
+      "scope": "Read-only run selector, run-scoped cursor and reload behavior.",
+      "recommendation": "No candidate-caused integration blocker found within this partial slice; parent governs evidence, human review and merge.",
+      "candidate_blocking_reasons": [],
+      "checked_files": [
+        "public/incident-ui/war-room.html",
+        "public/incident-ui/war-room.js",
+        "tests/browser/war-room.spec.js",
+        "tests/test_incident_timeline_runs.py",
+        "tests/test_incident_war_room_ui.py"
+      ]
+    },
+    {
+      "pr": 415,
+      "head": "d21bdda93ec8a49670387a185195027786a7e0a8",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "starting_commit": "b51b88a2f74f82825e2a7fdb507a2a094275b52a",
+      "merge_tree_exit": 0,
+      "tree": "16b492d096cf6c9a906fee70c32e8cd0a1088f5d",
+      "synthetic_commit": "9d33da0a7e1cfc0dd0aee6c7f2b14b513653bb22",
+      "incremental_changed_lines": 398,
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-415-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_review_ui.py",
+        "exit_code": 0,
+        "log": "pr-415-python.log",
+        "passed": 3
+      },
+      "browser": {
+        "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/pr-415-browser.config.cjs",
+        "exit_code": 0,
+        "log": "pr-415-browser.log"
+      },
+      "scope": "Read-only workflow1.0.0 review actions; no command submission.",
+      "recommendation": "No candidate-caused integration blocker found within this partial slice; parent governs evidence, human review and merge.",
+      "candidate_blocking_reasons": [],
+      "checked_files": [
+        "public/incident-ui/review.html",
+        "public/incident-ui/review.js",
+        "tests/browser/review.spec.js",
+        "tests/test_incident_review_ui.py"
+      ]
+    },
+    {
+      "pr": 417,
+      "head": "0d0b876ad3f38506728da9ee00ed4d18a50ffe4c",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "starting_commit": "9d33da0a7e1cfc0dd0aee6c7f2b14b513653bb22",
+      "merge_tree_exit": 0,
+      "tree": "c188e3e455e7907347d4335200b26cdf37684200",
+      "synthetic_commit": "7aecd7e299e42efad488febf8c7842ecd12e5222",
+      "incremental_changed_lines": 339,
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-417-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_postmortem_ui.py",
+        "exit_code": 0,
+        "log": "pr-417-python.log",
+        "passed": 2
+      },
+      "browser": {
+        "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/pr-417-browser.config.cjs",
+        "exit_code": 0,
+        "log": "pr-417-browser.log"
+      },
+      "scope": "Explicit fixture-only minimum postmortem presentation; no durable generation/versioning/closure.",
+      "recommendation": "No candidate-caused integration blocker found within this partial slice; parent governs evidence, human review and merge.",
+      "candidate_blocking_reasons": [],
+      "checked_files": [
+        "public/incident-ui/postmortem.html",
+        "public/incident-ui/postmortem.js",
+        "tests/browser/postmortem.spec.js",
+        "tests/test_incident_postmortem_ui.py"
+      ]
+    },
+    {
+      "pr": 412,
+      "head": "fe63f0c1f7d0bb90a46136a57f8c65256fba86ea",
+      "github_cached_base": "bdbc4855e13f7c998e3781ea3d9fe13e05b30c75",
+      "starting_commit": "7aecd7e299e42efad488febf8c7842ecd12e5222",
+      "merge_tree_exit": 0,
+      "tree": "0a4616a430806e4a6d5cbeaf93fa3d0f4b6df9da",
+      "synthetic_commit": "0aa5b39661b5458605cc5b53e051fdf9655a67e2",
+      "incremental_changed_lines": 397,
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-412-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_human_commands.py tests/test_incident_runtime.py",
+        "exit_code": 0,
+        "log": "pr-412-python.log",
+        "passed": 20
+      },
+      "scope": "Trusted internal human-command translator; no HTTP/credential authority.",
+      "recommendation": "No candidate-caused integration blocker found within this partial slice; parent governs evidence, human review and merge.",
+      "candidate_blocking_reasons": [],
+      "checked_files": [
+        "docker/api.Dockerfile",
+        "pyproject.toml",
+        "src/sre_agent/incident/commands.py",
+        "src/sre_agent/incident/runtime.py",
+        "tests/test_incident_human_commands.py"
+      ]
+    },
+    {
+      "pr": 371,
+      "head": "d957c1b0375788e7283ae20e530767ca64f207d1",
+      "github_cached_base": "828a21aaf382e33117c73decee9732f87222d02a",
+      "starting_commit": "0aa5b39661b5458605cc5b53e051fdf9655a67e2",
+      "merge_tree_exit": 0,
+      "tree": "56cdd5b7f487e21158fc58ebb09855af3cc36f2d",
+      "synthetic_commit": "452c2e072e438219871a59a6196f53dd6172f16f",
+      "incremental_changed_lines": 122,
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-371-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_incident_restart_reads.py",
+        "exit_code": 0,
+        "log": "pr-371-python.log",
+        "passed": 1
+      },
+      "scope": "Test-only packaged restart/read proof; not the whole incident-read story.",
+      "recommendation": "No candidate-caused integration blocker found within this partial slice; parent governs evidence, human review and merge.",
+      "candidate_blocking_reasons": [],
+      "checked_files": [
+        "tests/test_incident_restart_reads.py"
+      ]
+    },
+    {
+      "pr": 372,
+      "head": "c8fd8968d2596b57013ec73c3c6fcaae5a9c1aec",
+      "github_cached_base": "828a21aaf382e33117c73decee9732f87222d02a",
+      "starting_commit": "452c2e072e438219871a59a6196f53dd6172f16f",
+      "merge_tree_exit": 0,
+      "tree": "5ee5fd41bfa4c8fb588b147641a04f72d03f9df1",
+      "synthetic_commit": "b364498c3c67e654c6f8cd86fa5fd7219243e124",
+      "incremental_changed_lines": 253,
+      "focused": {
+        "docker_command": "docker run --rm --network container:prospective-integration-pr-372-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py focused tests/test_audit_filtered_query.py",
+        "exit_code": 0,
+        "log": "pr-372-python.log",
+        "passed": 4
+      },
+      "scope": "Bounded SQL audit filters/order/limit/has_more; no HTTP/UI or cursor implementation.",
+      "recommendation": "No candidate-caused integration blocker found within this partial slice; parent governs evidence, human review and merge.",
+      "candidate_blocking_reasons": [],
+      "checked_files": [
+        "src/sre_agent/persistence/repositories.py",
+        "tests/test_audit_filtered_query.py"
+      ]
+    }
+  ],
+  "source_changes": false,
+  "remote_changes": false,
+  "status": "local_seven_integration_verified_with_explicit_proof_limits",
+  "superseded_evidence": "superseded-eight/integration-summary.json",
+  "final_synthetic_commit": "b364498c3c67e654c6f8cd86fa5fd7219243e124",
+  "final_tree": "5ee5fd41bfa4c8fb588b147641a04f72d03f9df1",
+  "final_python": {
+    "docker_command": "docker run --rm --network container:prospective-integration-final-20260929 --user 1000:1000 -e PYTHONPATH=/repo/src -e TEST_DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DATABASE_URL=postgresql://python_checks@127.0.0.1:5432/python_checks -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo -e UV_CACHE_DIR=/tmp/uv -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo sre-agent-pr409-stack-rs9jtc-python-checks:latest python /out/inside-checks.py final",
+    "exit_code": 0,
+    "log": "final-python.log"
+  },
+  "final_browser": {
+    "docker_command": "docker run --rm --network none --ipc=host --user 0 -e NODE_PATH=/e2e/node_modules -v '$SOURCE:/repo:ro' -v '$EVIDENCE:/out' -w /repo issue331-e2e-evidence:local /e2e/node_modules/.bin/playwright test --config=/out/final-browser.config.cjs",
+    "exit_code": 1,
+    "log": "final-browser.log"
+  },
+  "checks_completed_at": "2026-09-29T04:13:56.007351+00:00",
+  "skill_resolution": "paths-injected",
+  "final_check_commands": [
+    {
+      "command": [
+        "python",
+        "scripts/assert_test_database_isolated.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.09,
+      "log": "final-check-01.log"
+    },
+    {
+      "command": [
+        "shellcheck",
+        "docker/harness-entrypoint.sh",
+        "scripts/worktree-compose"
+      ],
+      "exit_code": 0,
+      "seconds": 0.02,
+      "log": "final-check-02.log"
+    },
+    {
+      "command": [
+        "ruff",
+        "check",
+        "--no-cache",
+        "."
+      ],
+      "exit_code": 0,
+      "seconds": 0.03,
+      "log": "final-check-03.log"
+    },
+    {
+      "command": [
+        "ruff",
+        "format",
+        "--check",
+        "--no-cache",
+        "."
+      ],
+      "exit_code": 0,
+      "seconds": 0.04,
+      "log": "final-check-04.log"
+    },
+    {
+      "command": [
+        "uv",
+        "lock",
+        "--check",
+        "--no-cache",
+        "--offline"
+      ],
+      "exit_code": 0,
+      "seconds": 0.66,
+      "log": "final-check-05.log"
+    },
+    {
+      "command": [
+        "lint-imports",
+        "--no-cache"
+      ],
+      "exit_code": 0,
+      "seconds": 0.58,
+      "log": "final-check-06.log"
+    },
+    {
+      "command": [
+        "mypy",
+        "--cache-dir=/tmp/mypy",
+        "src/sre_agent/incident/commands.py",
+        "src/sre_agent/incident/persistence.py",
+        "src/sre_agent/incident/runtime.py",
+        "src/sre_agent/governance/dto.py",
+        "src/sre_agent/governance/authorization.py",
+        "src/sre_agent/investigator"
+      ],
+      "exit_code": 0,
+      "seconds": 4.49,
+      "log": "final-check-07.log"
+    },
+    {
+      "command": [
+        "python",
+        "scripts/validate_incident_contracts.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.94,
+      "log": "final-check-08.log"
+    },
+    {
+      "command": [
+        "python",
+        "scripts/validate_incident_authorization.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.24,
+      "log": "final-check-09.log"
+    },
+    {
+      "command": [
+        "python",
+        "scripts/validate_run_api.py"
+      ],
+      "exit_code": 0,
+      "seconds": 1.24,
+      "log": "final-check-10.log"
+    },
+    {
+      "command": [
+        "python",
+        "scripts/validate_incident_queries.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.9,
+      "log": "final-check-11.log"
+    },
+    {
+      "command": [
+        "python",
+        "scripts/validate_ci_hardening.py"
+      ],
+      "exit_code": 0,
+      "seconds": 0.21,
+      "log": "final-check-12.log"
+    },
+    {
+      "command": [
+        "pytest",
+        "-q",
+        "-rs",
+        "-p",
+        "no:cacheprovider"
+      ],
+      "exit_code": 0,
+      "seconds": 69.65,
+      "log": "final-check-13.log"
+    },
+    {
+      "command": [
+        "alembic",
+        "upgrade",
+        "head"
+      ],
+      "exit_code": 0,
+      "seconds": 3.16,
+      "log": "final-check-14.log"
+    },
+    {
+      "command": [
+        "alembic",
+        "check"
+      ],
+      "exit_code": 0,
+      "seconds": 2.96,
+      "log": "final-check-15.log"
+    }
+  ],
+  "full_python_result": {
+    "passed": 1220,
+    "skipped": 1,
+    "skip_reason": "Inherited live OpenRouter smoke disabled; no provider/secret used by this worker.",
+    "log": "final-check-13.log"
+  },
+  "final_ui_browser": {
+    "passed": 27,
+    "exit_code": 0,
+    "log": "final-ui-browser.log",
+    "config": "final-ui-browser.config.cjs",
+    "proof_kind": "actual Chromium rendering with intercepted synthetic API fixtures; no connected API"
+  },
+  "final_static_browser_normal_network": {
+    "passed": 31,
+    "skipped": 58,
+    "exit_code": 0,
+    "log": "final-online-browser.log",
+    "config": "final-online-browser.config.cjs",
+    "network": "bridge: public Google/jsDelivr assets only, no provider/API credentials",
+    "skip_reason": "Connected control-plane suites require configured live API; API seam and production proxy excluded by static configuration."
+  },
+  "offline_browser_control": {
+    "passed": 29,
+    "failed": 2,
+    "skipped": 58,
+    "log": "final-browser.log",
+    "baseline_log": "superseded-eight/base-offline-browser.log",
+    "cause": "Deliberate --network none blocks pre-existing external font assets and fails showcase console assertions; identical two tests fail on actual starting main. Normal-network rerun passes.",
+    "candidate_caused": false
+  },
+  "static_js_result": {
+    "exit_code": 0,
+    "log": "final-seven-static-web.log",
+    "command": "docker run --rm --network none -v \"$SOURCE:/repo:ro\" -w /repo sre-integration-browser:local sh -c 'node --check scripts/showcase.js && node --check public/incident-ui/war-room.js && node --check public/incident-ui/review.js && node --check public/incident-ui/postmortem.js && test -f index.html && test -f styles/design-system.css'"
+  },
+  "combined_runtime_probe": {
+    "exit_code": 0,
+    "log": "combined-runtime-probe.log",
+    "script": "combined-runtime-probe.py",
+    "observed": {
+      "proof_kind": "controlled real-PostgreSQL internal-service integration",
+      "start_retry_replayed": true,
+      "human_command_retry_replayed": true,
+      "run_count": 1,
+      "event_count": 2,
+      "decision_comment_preserved": true,
+      "nonapproval_has_no_approval": true,
+      "trusted_actor_preserved": true,
+      "projected_cursor": "seq:1",
+      "final_state": "active",
+      "new_database_handle_reconstruction_equal": true,
+      "live_provider_used": false,
+      "http_authorization_proven": false
+    }
+  },
+  "contracts": {
+    "status": "bounded_incomplete",
+    "log": "superseded-eight/final-contracts.log",
+    "input_parity_log": "contracts-input-parity.log",
+    "provenance": "New image built from superseded eight-step snapshot. All schemas/scripts/harness Docker inputs identical to seven-step tree; no source mutations. Full contract run started once, not falsely claimed rerun.",
+    "exit_code": 137,
+    "observed_tests_passed": 49,
+    "reason": "Additional unchanged-input historical contract corpus intentionally stopped after approximately12minutes; no failure observed in49completed tests. Remaining unit tests and subsequent npm validate/validate:releases/lint:openapi were not completed; no PASS claimed."
+  },
+  "fresh_refs": {
+    "checked_at": "2026-09-29T04:13:53.587540+00:00",
+    "main": "4b0c8740a042a8654979dd43481c7ad4f9992ea1",
+    "heads": {
+      "396": "c29de01db9820df26a41cde8012db642c633df86",
+      "414": "141b177d4a47f8da1279571893643f6e2fb7349a",
+      "415": "d21bdda93ec8a49670387a185195027786a7e0a8",
+      "417": "0d0b876ad3f38506728da9ee00ed4d18a50ffe4c",
+      "412": "fe63f0c1f7d0bb90a46136a57f8c65256fba86ea",
+      "371": "d957c1b0375788e7283ae20e530767ca64f207d1",
+      "372": "c8fd8968d2596b57013ec73c3c6fcaae5a9c1aec"
+    }
+  },
+  "proof_limits": [
+    "Not a newly built final runtime/checks application image: exact source mounted /repo with cached locked Python and browser tools.",
+    "Browser tooling Node24.20.0 differs from hosted static CI Node22.14; Playwright1.63.0 matches lock.",
+    "No independent provider rerun, production nginx/OTel topology, production browser authorization or hosted CI claim.",
+    "No source fixes, branch updates, pushes, PR mutations, merges, RDD or fabricated human approval.",
+    "Parent must publish corrected real evidence for371/372 and explicitly reassess historical CHANGES_REQUESTED; do not silently dismiss it.",
+    "All included items are partial slices; keep their full issues open.",
+    "Conditional parent decision only: compare each real merge tree and refresh main/head identity."
+  ],
+  "image_provenance": {
+    "python": {
+      "tag": "sre-agent-pr409-stack-rs9jtc-python-checks:latest",
+      "id": "sha256:e9d909738233806dc27166113a1599ed0c6667e5b44fa83688eef38dc84a83a8",
+      "origin": "pre-existing cached tools",
+      "uv_lock_sha256": "783c78b44e4ab07091d0ee1d44a693b77f1ec0fdc94f9aa3c0e212cd34dc878b"
+    },
+    "browser": {
+      "tag": "issue331-e2e-evidence:local",
+      "id": "sha256:abba619978eef39a9a21080cbcc1b4225d4e6d179f17df388e914f4b2c7e4967",
+      "origin": "pre-existing cached tools"
+    },
+    "contracts": {
+      "tag": "sre-audit-integration-contracts:20260929",
+      "id": "sha256:431e5127a2ba90a4289f350a2828f785796b7d06ec7395febd1b41b5d1ef1c3f",
+      "origin": "new Dockerfile build"
+    }
+  },
+  "evidence_refreshed_at": "2026-09-29T04:17:54.801767+00:00",
+  "public_artifacts": [
+    "REPRODUCE.md",
+    "combined-runtime-probe.log",
+    "combined-runtime-probe.py",
+    "contracts-input-parity.log",
+    "final-browser.config.cjs",
+    "final-browser.log",
+    "final-check-01.log",
+    "final-check-02.log",
+    "final-check-03.log",
+    "final-check-04.log",
+    "final-check-05.log",
+    "final-check-06.log",
+    "final-check-07.log",
+    "final-check-08.log",
+    "final-check-09.log",
+    "final-check-10.log",
+    "final-check-11.log",
+    "final-check-12.log",
+    "final-check-13.log",
+    "final-check-14.log",
+    "final-check-15.log",
+    "final-checks.json",
+    "final-online-browser.config.cjs",
+    "final-online-browser.log",
+    "final-python.log",
+    "final-seven-static-web.log",
+    "final-ui-browser.config.cjs",
+    "final-ui-browser.log",
+    "fresh-ref-verification.json",
+    "inside-checks.py",
+    "integration-report.md",
+    "integration-summary.json",
+    "pr-371-merge-tree.log",
+    "pr-371-python.log",
+    "pr-372-merge-tree.log",
+    "pr-372-python.log",
+    "pr-396-merge-tree.log",
+    "pr-396-python.log",
+    "pr-412-merge-tree.log",
+    "pr-412-python.log",
+    "pr-414-browser.config.cjs",
+    "pr-414-browser.log",
+    "pr-414-final-ui.png",
+    "pr-414-merge-tree.log",
+    "pr-414-python.log",
+    "pr-415-browser.config.cjs",
+    "pr-415-browser.log",
+    "pr-415-final-ui.png",
+    "pr-415-merge-tree.log",
+    "pr-415-python.log",
+    "pr-417-browser.config.cjs",
+    "pr-417-browser.log",
+    "pr-417-final-ui.png",
+    "pr-417-merge-tree.log",
+    "pr-417-python.log",
+    "reconstruct.py",
+    "superseded-eight/base-offline-browser.log",
+    "superseded-eight/final-check-13.log",
+    "superseded-eight/final-checks.json",
+    "superseded-eight/final-contracts.log",
+    "superseded-eight/final-online-browser.log",
+    "superseded-eight/final-ui-browser.log",
+    "superseded-eight/integration-summary.json"
+  ],
+  "excluded_from_publication": [
+    "raw PR/issue metadata",
+    "workstation orchestration scripts",
+    "build/install logs",
+    "base-source snapshots",
+    "browser output directories/profiles/error-context artifacts except selected inspected PNGs",
+    "unpublished-seven-pr414-early-captures"
+  ]
+}
