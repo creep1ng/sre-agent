@@ -12,8 +12,13 @@ Operator usage (inside the checks container):
         python scripts/provision_incident_workflow.py --revoke
 
 `--revoke` closes the read grant only: it is the reversible step A2 needs to
-show deny by default, and the starter is left untouched on purpose so revoking
-one never implies the other.
+show deny by default, and the other grants are left untouched on purpose so
+revoking one never implies the others.
+
+The two command grants are separate because the contract separates them:
+approving a mitigation is not the same authority as asking for changes. Both go
+to the demo operator; neither goes to the harness, which is how the platform
+keeps an agent from approving its own proposal.
 
 The PO-approved constants below are the single source for the workflow
 resource and the demo-human grants; A3/A4 and issue #330 reuse them. Grant
@@ -55,9 +60,25 @@ START_GRANT_BODY = {
     "resource": {"resource_type": "incident_workflow", "resource_id": "incident-response"},
     "effect": "allow",
 }
+COMMAND_GRANT_BODY = {
+    "grant_id": "grant-demo-human-run-command-incident-response",
+    "principal_id": "demo-human",
+    "action": "run.command",
+    "resource": {"resource_type": "incident_workflow", "resource_id": "incident-response"},
+    "effect": "allow",
+}
+APPROVE_GRANT_BODY = {
+    "grant_id": "grant-demo-human-run-approve-incident-response",
+    "principal_id": "demo-human",
+    "action": "run.approve",
+    "resource": {"resource_type": "incident_workflow", "resource_id": "incident-response"},
+    "effect": "allow",
+}
 CATALOG_IDEMPOTENCY_KEY = "incident-workflow-provision-catalog-v1"
 GRANT_IDEMPOTENCY_KEY = "incident-workflow-provision-grant-v1"
 START_GRANT_IDEMPOTENCY_KEY = "incident-workflow-provision-start-grant-v1"
+COMMAND_GRANT_IDEMPOTENCY_KEY = "incident-workflow-provision-command-grant-v1"
+APPROVE_GRANT_IDEMPOTENCY_KEY = "incident-workflow-provision-approve-grant-v1"
 
 
 @dataclass
@@ -67,6 +88,10 @@ class ProvisionResult:
     run_read_active: bool
     start_grant_status: int = 0
     run_start_active: bool = False
+    command_grant_status: int = 0
+    run_command_active: bool = False
+    approve_grant_status: int = 0
+    run_approve_active: bool = False
 
 
 def build_service(database, audit_key: bytes):
@@ -102,12 +127,18 @@ async def provision(service, bearer: str) -> ProvisionResult:
     catalog = await service.create_catalog_resource(CATALOG_BODY, bearer, CATALOG_IDEMPOTENCY_KEY)
     grant = await service.create_grant(GRANT_BODY, bearer, GRANT_IDEMPOTENCY_KEY)
     start = await service.create_grant(START_GRANT_BODY, bearer, START_GRANT_IDEMPOTENCY_KEY)
+    sender = await service.create_grant(COMMAND_GRANT_BODY, bearer, COMMAND_GRANT_IDEMPOTENCY_KEY)
+    approver = await service.create_grant(APPROVE_GRANT_BODY, bearer, APPROVE_GRANT_IDEMPOTENCY_KEY)
     return ProvisionResult(
         catalog.status_code,
         grant.status_code,
         await _granted(service, GRANT_BODY),
         start.status_code,
         await _granted(service, START_GRANT_BODY),
+        sender.status_code,
+        await _granted(service, COMMAND_GRANT_BODY),
+        approver.status_code,
+        await _granted(service, APPROVE_GRANT_BODY),
     )
 
 
@@ -150,15 +181,27 @@ async def _run(*, revoke: bool) -> int:
                     "run_read_active": result.run_read_active,
                     "start_grant_status": result.start_grant_status,
                     "run_start_active": result.run_start_active,
+                    "command_grant_status": result.command_grant_status,
+                    "run_command_active": result.run_command_active,
+                    "approve_grant_status": result.approve_grant_status,
+                    "run_approve_active": result.run_approve_active,
                 }
             )
         )
-        expected = (201, 201, 201) == (
+        expected = (201, 201, 201, 201, 201) == (
             result.catalog_status,
             result.grant_status,
             result.start_grant_status,
+            result.command_grant_status,
+            result.approve_grant_status,
         )
-        return 0 if expected and result.run_read_active and result.run_start_active else 1
+        active = (
+            result.run_read_active
+            and result.run_start_active
+            and result.run_command_active
+            and result.run_approve_active
+        )
+        return 0 if expected and active else 1
     finally:
         await database.dispose()
 
