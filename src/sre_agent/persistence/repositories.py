@@ -917,6 +917,71 @@ class AuditRepository:
         )
         return [project_audit_event(row) for row in rows]
 
+    async def query_filtered(
+        self,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        request_id: str | None = None,
+        decision: str | None = None,
+        principal_digest: str | None = None,
+        model_alias_digest: str | None = None,
+        incident_digest: str | None = None,
+        run_digest: str | None = None,
+        task_digest: str | None = None,
+        trace_digest: str | None = None,
+        limit: int = 100,
+    ) -> tuple[list[AuditEvent], bool]:
+        """Filter audit rows in storage for the published 2.3.0 list surface.
+
+        Digest filters match opaque HMAC references computed by the caller;
+        the repository never sees keys. Window is ``start <= occurred_at`` and
+        ``occurred_at < end``. Fixed ordering (occurred_at DESC, event_id
+        DESC); no cursor exists on this surface. Returns ``(items, has_more)``.
+        """
+        if not 1 <= limit <= self.MAX_READ_LIMIT:
+            raise ValueError(f"limit must be between 1 and {self.MAX_READ_LIMIT}")
+        statement = select(AuditEventRow)
+        if start is not None:
+            statement = statement.where(AuditEventRow.occurred_at >= start)
+        if end is not None:
+            statement = statement.where(AuditEventRow.occurred_at < end)
+        if request_id is not None:
+            statement = statement.where(
+                AuditEventRow.correlation["request_id"].as_string() == request_id
+            )
+        if decision is not None:
+            statement = statement.where(
+                AuditEventRow.policy_decision["decision"].as_string() == decision
+            )
+        if principal_digest is not None:
+            statement = statement.where(
+                AuditEventRow.identity["principal_ref"]["digest"].as_string() == principal_digest
+            )
+        if model_alias_digest is not None:
+            statement = statement.where(
+                AuditEventRow.model_alias_ref["digest"].as_string() == model_alias_digest
+            )
+        ref_filters = (
+            ("incident_ref", incident_digest),
+            ("run_ref", run_digest),
+            ("task_ref", task_digest),
+            ("trace_ref", trace_digest),
+        )
+        for key, digest in ref_filters:
+            if digest is not None:
+                statement = statement.where(
+                    AuditEventRow.correlation[key]["digest"].as_string() == digest
+                )
+        rows = (
+            await self._session.scalars(
+                statement.order_by(
+                    AuditEventRow.occurred_at.desc(), AuditEventRow.event_id.desc()
+                ).limit(limit + 1)
+            )
+        ).all()
+        return [project_audit_event(row) for row in rows[:limit]], len(rows) > limit
+
 
 class MCPOwnerRepository:
     """Authoritative MCP server/tool lifecycle over dedicated owner tables."""
