@@ -34,6 +34,8 @@ ReasonCode = Literal[
     "upstream_failed",
     "upstream_invalid",
     "upstream_unavailable",
+    "index_unavailable",
+    "storage_unavailable",
 ]
 AuthorizationDenialCause = Literal[
     "principal_inactive",
@@ -583,6 +585,8 @@ class AuditEvent(StrictDTO):
         "responses.create",
         "mcp.discovery",
         "mcp.invoke",
+        "bok.search",
+        "bok.read",
         "usage.read",
         "principals.create",
         "principals.get",
@@ -672,7 +676,12 @@ class AuditEvent(StrictDTO):
             raise ValueError("denied audit events cannot carry provider consumption")
         is_control = isinstance(
             self.resource, ResourceEvidence
-        ) and self.resource.resource_type in {"administrative_control", "mcp_server", "mcp_tool"}
+        ) and self.resource.resource_type in {
+            "administrative_control",
+            "mcp_server",
+            "mcp_tool",
+            "bok_collection",
+        }
         if (
             self.stage in {"authorization", "routing", "upstream", "response"}
             and not is_control

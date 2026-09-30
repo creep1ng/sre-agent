@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from datetime import UTC, datetime
 from time import monotonic
@@ -14,7 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -23,20 +24,44 @@ from sre_agent.gateway.authentication import AuthenticationFailed, authorize_gov
 from sre_agent.governance.dto import AuthorizationDenialCause
 from sre_agent.persistence.models import AuditEventRow
 
+SUPPORTED_MONTH_PATTERN = (
+    r"^(?:(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|"
+    r"[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-8])-"
+    r"(?:0[1-9]|1[0-2])|9999-(?:0[1-9]|1[01]))$"
+)
+
 
 class UsageReadLimitExceeded(RuntimeError):
     """The selected persisted evidence exceeds the explicit projection bound."""
 
 
 class UsageReadCost(BaseModel):
+    # FastAPI omits const: None when serializing OpenAPI; type: null survives.
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "if": {"properties": {"amount": {"type": "null"}}},
+            "then": {"properties": {"currency": {"type": "null"}, "precision": {"type": "null"}}},
+            "else": {"properties": {"currency": {"const": "USD"}, "precision": {"const": "exact"}}},
+        },
+    )
     amount: Annotated[str | None, Field(pattern=r"^(0|[1-9]\d*)(\.\d+)?$")]
     currency: Literal["USD"] | None
     nature: Literal["billed"]
     precision: Literal["exact"] | None
     price_versions: list[str]
 
+    @model_validator(mode="after")
+    def validate_metadata(self) -> UsageReadCost:
+        expected = (None, None) if self.amount is None else ("USD", "exact")
+        if (self.currency, self.precision) != expected:
+            raise ValueError("cost metadata must match the billed amount availability")
+        return self
+
 
 class UsageReadTotals(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     input_tokens: Annotated[int | None, Field(ge=0)]
     output_tokens: Annotated[int | None, Field(ge=0)]
     total_tokens: Annotated[int | None, Field(ge=0)]
@@ -44,24 +69,103 @@ class UsageReadTotals(BaseModel):
 
 
 class UsageReadCoverage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "oneOf": [
+                {
+                    "properties": {
+                        "status": {"const": "complete"},
+                        "incomplete": {"const": 0},
+                        "unknown": {"const": 0},
+                    }
+                },
+                {
+                    "properties": {
+                        "status": {"const": "unknown"},
+                        "known": {"const": 0},
+                        "incomplete": {"const": 0},
+                        "unknown": {"type": "integer", "minimum": 1},
+                    }
+                },
+                {
+                    "properties": {"status": {"const": "partial"}},
+                    "anyOf": [
+                        {"properties": {"incomplete": {"type": "integer", "minimum": 1}}},
+                        {
+                            "properties": {
+                                "known": {"type": "integer", "minimum": 1},
+                                "unknown": {"type": "integer", "minimum": 1},
+                            }
+                        },
+                    ],
+                },
+            ]
+        },
+    )
     status: Literal["complete", "partial", "unknown"]
     known: Annotated[int, Field(ge=0)]
     incomplete: Annotated[int, Field(ge=0)]
     unknown: Annotated[int, Field(ge=0)]
 
+    @model_validator(mode="after")
+    def validate_status(self) -> UsageReadCoverage:
+        if self.incomplete or (self.known and self.unknown):
+            expected = "partial"
+        else:
+            expected = "unknown" if self.unknown else "complete"
+        if self.status != expected:
+            raise ValueError("coverage status must match the request evidence counts")
+        return self
+
 
 class UsageReadMonth(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     month: Annotated[str, Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
     request_count: Annotated[int, Field(ge=0)]
 
 
+class RequestIdUsageFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: UUID
+
+
+class IncidentUsageFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    incident_id: Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class MonthUsageFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    month: Annotated[str, Field(pattern=SUPPORTED_MONTH_PATTERN)]
+
+
+UsageReadFilter = Annotated[
+    RequestIdUsageFilter | IncidentUsageFilter | MonthUsageFilter,
+    Field(union_mode="left_to_right"),
+]
+
+
 class UsageReadResponse(BaseModel):
-    filter: dict[str, str]
+    model_config = ConfigDict(extra="forbid")
+
+    filter: UsageReadFilter
     request_count: Annotated[int, Field(ge=0)]
     incident_runs: Annotated[int, Field(ge=0)]
     months: list[UsageReadMonth]
     totals: UsageReadTotals
     coverage: UsageReadCoverage
+
+    @model_validator(mode="after")
+    def validate_request_count(self) -> UsageReadResponse:
+        coverage = self.coverage
+        if coverage.known + coverage.incomplete + coverage.unknown != self.request_count:
+            raise ValueError("coverage counts must sum to request_count")
+        return self
 
 
 # The dependency is module-scoped so FastAPI can resolve its postponed annotation
@@ -116,6 +220,7 @@ class UsageReadProjection:
             .where(AuditEventRow.operation == "responses.create")
         )
 
+        incident_ref = None
         if request_id is not None:
             statement = statement.where(
                 AuditEventRow.correlation["request_id"].astext == str(request_id)
@@ -123,7 +228,9 @@ class UsageReadProjection:
             selected_filter: dict[str, str] = {"request_id": str(request_id)}
         elif incident_id is not None:
             incident_ref = self._audit.reference("incident_id", incident_id).model_dump(mode="json")
-            statement = statement.where(
+            # Select requests first: conflicting attribution must remain visible.
+            incident_requests = select(request_ids).where(
+                AuditEventRow.operation == "responses.create",
                 AuditEventRow.correlation["incident_ref"]["digest"].astext
                 == incident_ref["digest"],
                 AuditEventRow.correlation["incident_ref"]["key_version"].as_integer()
@@ -131,6 +238,7 @@ class UsageReadProjection:
                 AuditEventRow.correlation["incident_ref"]["algorithm"].astext
                 == incident_ref["algorithm"],
             )
+            statement = statement.where(request_ids.in_(incident_requests))
             selected_filter = {"incident_id": incident_id}
         else:
             month_start, month_end = self._month_range(month or "")
@@ -148,7 +256,7 @@ class UsageReadProjection:
         if len(rows) > self.MAX_ROWS:
             raise UsageReadLimitExceeded("usage scope exceeds the evidence row limit")
 
-        return self._aggregate(rows, selected_filter)
+        return self._aggregate(rows, selected_filter, incident_ref)
 
     @staticmethod
     def _month_range(month: str) -> tuple[datetime, datetime]:
@@ -168,7 +276,10 @@ class UsageReadProjection:
 
     @classmethod
     def _aggregate(
-        cls, rows: list[dict[str, Any]], selected_filter: dict[str, str]
+        cls,
+        rows: list[dict[str, Any]],
+        selected_filter: dict[str, str],
+        selected_incident_ref: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         requests: dict[str, list[dict[str, Any]]] = defaultdict(list)
         runs: set[tuple[str, int, str]] = set()
@@ -177,7 +288,10 @@ class UsageReadProjection:
         for row in rows:
             request_key = str(row["request_id"])
             requests[request_key].append(row)
-            if row["run_ref"] is not None:
+            # Foreign related rows are consistency evidence, not selected runs.
+            if row["run_ref"] is not None and (
+                selected_incident_ref is None or row["incident_ref"] == selected_incident_ref
+            ):
                 run_ref = row["run_ref"]
                 runs.add((run_ref["algorithm"], run_ref["key_version"], run_ref["digest"]))
             month_key = row["canonical_at"].astimezone(UTC).strftime("%Y-%m")
@@ -193,7 +307,8 @@ class UsageReadProjection:
                 else "null"
                 for row in evidence
             }
-            if len(consumption_values) != 1:
+            incident_refs = {json.dumps(row["incident_ref"], sort_keys=True) for row in evidence}
+            if len(consumption_values) != 1 or len(incident_refs) != 1:
                 unknown += 1
                 continue
             consumption = evidence[0]["consumption"]
@@ -431,7 +546,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             UUID | None, Query(description="Effective response request UUID.")
         ] = None,
         incident_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
-        month: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
+        month: Annotated[str | None, Query(pattern=SUPPORTED_MONTH_PATTERN)] = None,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_usage_bearer)] = None,
     ) -> UsageReadResponse | JSONResponse:
         request.state.usage_request_id = uuid4()
@@ -463,6 +578,14 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 stage="validation",
                 code="validation_error",
                 message="Exactly one bounded usage selector is required.",
+            )
+        if month is not None and re.fullmatch(SUPPORTED_MONTH_PATTERN, month) is None:
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="The usage selector is invalid.",
             )
 
         try:

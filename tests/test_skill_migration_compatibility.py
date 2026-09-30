@@ -43,7 +43,7 @@ def snapshot():
     ("legacy", "operation", "previous"),
     [
         ("20260926_14", "usage.read", "20260922_12"),
-        ("20260926_15", "catalog.status.replace", "20260924_14"),
+        ("20260926_15", "catalog.status.replace", "20260930_20"),
     ],
 )
 @pytest.mark.parametrize("fault", [None, "failure", "unvalidated"])
@@ -89,9 +89,10 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
             command.downgrade(config, previous)
         assert snapshot() == before
     if legacy == "20260926_14":
-        with pytest.raises(IntegrityError, match="ck_audit_events_operation"):
-            command.upgrade(config, "20260926_15")
-        assert snapshot() == before
+        command.upgrade(config, "20260926_15")
+        upgraded = snapshot()
+        assert upgraded["rows"] == before["rows"]
+        assert "'usage.read'" in upgraded["constraint"][0]
 
     def inject_failure(connection, clause, multiparams, params, options):
         if isinstance(clause, AddConstraint):
@@ -116,19 +117,10 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
     assert after["rows"] == before["rows"]
     assert after["grants"] == before["grants"]
     assert after["heads"] == [("20260930_18",)]
-    if operation == "usage.read":
-        command.downgrade(config, "20260930_17")
-        preserved = snapshot()
-        assert preserved["rows"] == after["rows"]
-        definition, _validated = preserved["constraint"]
-        assert "'usage.read'" in definition
-        assert "'catalog.status.replace'" not in definition
-        command.upgrade(config, "head")
-        assert snapshot()["rows"] == after["rows"]
-    else:
-        with pytest.raises(RuntimeError, match="cannot downgrade integration"):
-            command.downgrade(config, "20260930_17")
-        assert snapshot() == after
+    # Populated parent evidence always blocks a lossy downgrade past its own revision.
+    with pytest.raises(RuntimeError, match="cannot downgrade"):
+        command.downgrade(config, "20260930_20")
+    assert snapshot() == after
     definition, validated = after["constraint"]
     assert validated is True
     assert "'usage.read'" in definition and "'catalog.status.replace'" in definition
