@@ -72,6 +72,15 @@ def _digest(bundle: dict[str, Any]) -> str:
     return sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def _bundle_is_ready(bundle: dict[str, Any]) -> bool:
+    documents = bundle["documents"]
+    return bool(
+        documents
+        and all(document["chunks"] for document in documents)
+        and all(chunk["content"].strip() for document in documents for chunk in document["chunks"])
+    )
+
+
 async def _persisted_children_match(session: AsyncSession, bundle: dict[str, Any]) -> bool:
     collection_id = bundle["collection_id"]
     version = bundle["version"]
@@ -153,8 +162,7 @@ async def ingest_bundle(session: AsyncSession, bundle: dict[str, Any]) -> bool:
         return False
 
     documents = bundle["documents"]
-    chunks = [chunk for document in documents for chunk in document["chunks"]]
-    ready = bool(documents and chunks and all(chunk["content"].strip() for chunk in chunks))
+    ready = _bundle_is_ready(bundle)
     now = func.now()
     session.add(
         BoKCollectionVersionRow(
@@ -197,22 +205,25 @@ async def ingest_bundle(session: AsyncSession, bundle: dict[str, Any]) -> bool:
     return True
 
 
-async def activate_version(session: AsyncSession, collection_id: str, version: str) -> None:
-    """Activate only a ready owner version; catalog status is not consulted."""
+async def activate_version(
+    session: AsyncSession,
+    collection_id: str,
+    version: str,
+    *,
+    expected_bundle: dict[str, Any],
+) -> None:
+    """Activate only the matching complete persisted bundle; catalog status is not authority."""
+    if expected_bundle["collection_id"] != collection_id or expected_bundle["version"] != version:
+        raise BoKVersionCollision("collection_version_collision")
     row = await session.get(BoKCollectionVersionRow, (collection_id, version))
     if row is None or row.status not in {"ready", "active"}:
         raise ValueError("bok_version_not_ready")
-    chunk_count = await session.scalar(
-        select(func.count())
-        .select_from(BoKSectionChunkRow)
-        .where(
-            BoKSectionChunkRow.collection_id == collection_id,
-            BoKSectionChunkRow.version == version,
-            func.length(func.trim(BoKSectionChunkRow.content)) > 0,
-        )
-    )
-    if not chunk_count:
+    if not _bundle_is_ready(expected_bundle):
         raise ValueError("bok_version_not_ready")
+    if row.manifest_sha256 != _digest(expected_bundle):
+        raise BoKVersionCollision("collection_version_collision")
+    if not await _persisted_children_match(session, expected_bundle):
+        raise BoKVersionCollision("collection_version_collision")
     row.status = "active"
     row.updated_at = func.now()
     resource = await session.get(ResourceRow, ("bok_collection", f"{collection_id}@{version}"))
@@ -227,7 +238,7 @@ async def seed_bok_demo(session: AsyncSession) -> bool:
     for bundle in DEMO_BUNDLES:
         collection_id, version = bundle["collection_id"], bundle["version"]
         created = await ingest_bundle(session, bundle) or created
-        await activate_version(session, collection_id, version)
+        await activate_version(session, collection_id, version, expected_bundle=bundle)
         resource_id = f"{collection_id}@{version}"
         resource = await session.get(ResourceRow, ("bok_collection", resource_id))
         expected = {

@@ -20,6 +20,7 @@ from sre_agent.bok.owner import (
     seed_bok_demo,
 )
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.models import ResourceRow
 
 DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
@@ -225,10 +226,11 @@ async def test_activation_requires_ready_owner_version_and_seed_converges() -> N
     try:
         async with database.transaction() as session:
             assert await seed_bok_demo(session) is True
-            await ingest_bundle(session, bundle(collection_id="empty", content=""))
+            empty_bundle = bundle(collection_id="empty", content="")
+            await ingest_bundle(session, empty_bundle)
         with pytest.raises(ValueError, match="not_ready"):
             async with database.transaction() as session:
-                await activate_version(session, "empty", "1.0.0")
+                await activate_version(session, "empty", "1.0.0", expected_bundle=empty_bundle)
         async with database.transaction() as session:
             assert await seed_bok_demo(session) is False
             rows = await session.execute(
@@ -241,5 +243,253 @@ async def test_activation_requires_ready_owner_version_and_seed_converges() -> N
                 ("demo-incident-response", "1.0.0", "active"),
                 ("demo-platform-operations", "1.0.0", "active"),
             ]
+    finally:
+        await database.dispose()
+
+
+def two_chunk_bundle(collection_id: str):
+    value = bundle(collection_id=collection_id)
+    value["documents"] = [
+        {
+            "document_id": "doc-z",
+            "title": "Z document",
+            "source_ref": "synthetic://manual/doc-z",
+            "chunks": [
+                {"section_id": "z-last", "chunk_index": 1, "content": "zeta second"},
+                {"section_id": "z-first", "chunk_index": 0, "content": "zeta first"},
+            ],
+        }
+    ]
+    return value
+
+
+def partial_document_bundle(collection_id: str, *, blank_chunk: bool = False):
+    value = two_chunk_bundle(collection_id)
+    value["documents"].append(
+        {
+            "document_id": "doc-empty",
+            "title": "Empty document",
+            "source_ref": "synthetic://manual/doc-empty",
+            "chunks": [],
+        }
+    )
+    if blank_chunk:
+        value["documents"][0]["chunks"][0]["content"] = "   "
+    return value
+
+
+def unordered_complete_bundle(collection_id: str):
+    value = two_chunk_bundle(collection_id)
+    value["documents"].append(
+        {
+            "document_id": "doc-a",
+            "title": "A document",
+            "source_ref": "synthetic://manual/doc-a",
+            "chunks": [
+                {"section_id": "a-last", "chunk_index": 1, "content": "alpha second"},
+                {"section_id": "a-first", "chunk_index": 0, "content": "alpha first"},
+            ],
+        }
+    )
+    return value
+
+
+async def insert_inactive_catalog_projection(session, collection_id: str, version: str) -> None:
+    resource_id = f"{collection_id}@{version}"
+    session.add(
+        ResourceRow(
+            resource_type="bok_collection",
+            resource_id=resource_id,
+            status="inactive",
+            owner_id="bok-platform",
+            source="bok",
+            source_ref=resource_id,
+            display_name="Inactive test projection",
+            visibility="private",
+            description="Synthetic activation integrity test.",
+            tags=["test"],
+        )
+    )
+    await session.flush()
+
+
+@pytest.mark.parametrize("blank_chunk", [False, True], ids=["partial-document", "blank-chunk"])
+@pytest.mark.asyncio
+async def test_incomplete_document_children_never_become_ready(blank_chunk: bool) -> None:
+    collection_id = f"readiness-gap-{blank_chunk}"
+    source = partial_document_bundle(collection_id, blank_chunk=blank_chunk)
+    database = Database(DATABASE_URL)
+    try:
+        async with database.transaction() as session:
+            assert await ingest_bundle(session, source) is True
+        async with database.sessions() as session:
+            persisted = (
+                await session.execute(
+                    text(
+                        "SELECT status FROM bok_collection_versions "
+                        "WHERE collection_id=:collection_id AND version='1.0.0'"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            ).scalar_one()
+        assert persisted == "indexing"
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.parametrize("drift", ["delete", "change"], ids=["missing-chunk", "changed-chunk"])
+@pytest.mark.asyncio
+async def test_activation_rejects_persisted_chunk_drift_without_lifecycle_changes(
+    drift: str,
+) -> None:
+    collection_id = f"activation-drift-{drift}"
+    source = two_chunk_bundle(collection_id)
+    database = Database(DATABASE_URL)
+    try:
+        async with database.transaction() as session:
+            assert await ingest_bundle(session, source) is True
+            await insert_inactive_catalog_projection(session, collection_id, "1.0.0")
+        async with database.transaction() as session:
+            if drift == "delete":
+                result = await session.execute(
+                    text(
+                        "DELETE FROM bok_section_chunks WHERE collection_id=:collection_id "
+                        "AND version='1.0.0' AND document_id='doc-z' "
+                        "AND section_id='z-last' AND chunk_index=1"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            else:
+                result = await session.execute(
+                    text(
+                        "UPDATE bok_section_chunks SET content='changed nonblank content' "
+                        "WHERE collection_id=:collection_id AND version='1.0.0' "
+                        "AND document_id='doc-z' AND section_id='z-last' AND chunk_index=1"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            assert result.rowcount == 1
+
+        rejected = False
+        try:
+            async with database.transaction() as session:
+                await activate_version(session, collection_id, "1.0.0", expected_bundle=source)
+        except BoKVersionCollision:
+            rejected = True
+        assert rejected, "activation must reject missing or changed persisted children"
+
+        async with database.sessions() as session:
+            owner_status, catalog_status = (
+                await session.execute(
+                    text(
+                        "SELECT v.status, r.status FROM bok_collection_versions AS v "
+                        "JOIN resources AS r ON r.resource_type='bok_collection' "
+                        "AND r.resource_id=:resource_id "
+                        "WHERE v.collection_id=:collection_id AND v.version='1.0.0'"
+                    ),
+                    {
+                        "collection_id": collection_id,
+                        "resource_id": f"{collection_id}@1.0.0",
+                    },
+                )
+            ).one()
+            chunks = (
+                await session.execute(
+                    text(
+                        "SELECT section_id, content FROM bok_section_chunks "
+                        "WHERE collection_id=:collection_id ORDER BY section_id"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            ).all()
+        assert owner_status == "ready"
+        assert catalog_status == "inactive"
+        if drift == "delete":
+            assert len(chunks) == 1
+        else:
+            assert ("z-last", "changed nonblank content") in chunks
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_activation_accepts_valid_arbitrary_document_and_chunk_order() -> None:
+    collection_id = "activation-unordered-valid"
+    source = unordered_complete_bundle(collection_id)
+    database = Database(DATABASE_URL)
+    try:
+        async with database.transaction() as session:
+            assert await ingest_bundle(session, source) is True
+        async with database.transaction() as session:
+            await activate_version(session, collection_id, "1.0.0", expected_bundle=source)
+        async with database.sessions() as session:
+            status = (
+                await session.execute(
+                    text(
+                        "SELECT status FROM bok_collection_versions "
+                        "WHERE collection_id=:collection_id AND version='1.0.0'"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            ).scalar_one()
+        assert status == "active"
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.parametrize("mismatch", ["target", "manifest"], ids=["wrong-target", "wrong-digest"])
+@pytest.mark.asyncio
+async def test_activation_rejects_bundle_target_or_manifest_mismatch(mismatch: str) -> None:
+    collection_id = f"activation-mismatch-{mismatch}"
+    source = two_chunk_bundle(collection_id)
+    database = Database(DATABASE_URL)
+    try:
+        async with database.transaction() as session:
+            assert await ingest_bundle(session, source) is True
+            await insert_inactive_catalog_projection(session, collection_id, "1.0.0")
+        if mismatch == "manifest":
+            async with database.transaction() as session:
+                result = await session.execute(
+                    text(
+                        "UPDATE bok_collection_versions SET manifest_sha256=:digest "
+                        "WHERE collection_id=:collection_id AND version='1.0.0'"
+                    ),
+                    {"collection_id": collection_id, "digest": "0" * 64},
+                )
+                assert result.rowcount == 1
+
+        rejected = False
+        try:
+            async with database.transaction() as session:
+                target_id = f"{collection_id}-wrong" if mismatch == "target" else collection_id
+                await activate_version(
+                    session,
+                    target_id,
+                    "1.0.0",
+                    expected_bundle=source,
+                )
+        except BoKVersionCollision:
+            rejected = True
+        assert rejected, "activation must verify target identifiers and stored manifest digest"
+
+        async with database.sessions() as session:
+            owner_status, catalog_status, manifest = (
+                await session.execute(
+                    text(
+                        "SELECT v.status, r.status, v.manifest_sha256 "
+                        "FROM bok_collection_versions AS v JOIN resources AS r "
+                        "ON r.resource_type='bok_collection' AND r.resource_id=:resource_id "
+                        "WHERE v.collection_id=:collection_id AND v.version='1.0.0'"
+                    ),
+                    {
+                        "collection_id": collection_id,
+                        "resource_id": f"{collection_id}@1.0.0",
+                    },
+                )
+            ).one()
+        assert owner_status == "ready"
+        assert catalog_status == "inactive"
+        if mismatch == "manifest":
+            assert manifest == "0" * 64
     finally:
         await database.dispose()
