@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 
-// Discovery-only public gateway probe. No tool invocation or upstream connection.
+// Public gateway smoke-query probe. All tool calls go through the API gateway.
 import { pathToFileURL } from "node:url";
 
 const EXPECTED_SERVER = "grafana-mcp";
 const EXPECTED_TOOLS = ["query_elasticsearch", "query_prometheus"];
 const GATEWAY_RESPONSE_TIMEOUT_MS = 35_000;
+const METRIC_QUERY = {
+  datasource_uid: "webstore-metrics", expr: "up", query_type: "instant", end_time: "now",
+};
+const LOG_QUERY = {
+  datasource_uid: "webstore-logs", index: "otel-logs-*", query: "resource.service.name:checkout",
+  start_time: "now-5m", end_time: "now", limit: 1,
+};
 
 function validGatewayUrl(value) {
   try {
@@ -19,13 +26,14 @@ function validGatewayUrl(value) {
   }
 }
 
-export async function fetchJson({ url, token }) {
-  const response = await fetch(url, {
-    method: "GET",
-    headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-    redirect: "error",
-    signal: AbortSignal.timeout(GATEWAY_RESPONSE_TIMEOUT_MS),
-  });
+export async function fetchJson({ method = "GET", url, token, body }) {
+  const headers = { Accept: "application/json", Authorization: `Bearer ${token}` };
+  const options = { method, headers, redirect: "error", signal: AbortSignal.timeout(GATEWAY_RESPONSE_TIMEOUT_MS) };
+  if (body !== undefined) {
+    headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(body);
+  }
+  const response = await fetch(url, options);
   let payload = {};
   try {
     payload = await response.json();
@@ -33,6 +41,34 @@ export async function fetchJson({ url, token }) {
     // A non-JSON response is represented only by its HTTP status.
   }
   return { status: response.status, body: payload };
+}
+
+function normalizedErrorKind(status, body) {
+  if (status === 504 && body?.error?.code === "upstream_timeout") return "upstream_timeout";
+  if (status === 503 && body?.error?.code === "upstream_unavailable") return "upstream_unavailable";
+  return null;
+}
+
+function summarizeMetric(status, body) {
+  const results = Array.isArray(body?.result) ? body.result : [];
+  const warnings = Array.isArray(body?.warnings) ? body.warnings : [];
+  const resultType = body?.result_type === "vector" ? "vector" : null;
+  return { ok: status === 200 && resultType === "vector" && results.length > 0,
+    failure: status === 200 ? "metric_signal_missing" : "metric_query_failed",
+    source: METRIC_QUERY.datasource_uid, window: "instant@now", http_status: status,
+    error_kind: normalizedErrorKind(status, body), result_type: resultType,
+    result_count: results.length, warning_count: warnings.length };
+}
+
+function summarizeLogs(status, body) {
+  const documents = Array.isArray(body?.documents) ? body.documents : [];
+  const warnings = Array.isArray(body?.warnings) ? body.warnings : [];
+  const total = Number.isSafeInteger(body?.total) && body.total >= 0 ? body.total : null;
+  return { ok: status === 200 && total !== null && total > 0 && documents.length > 0,
+    failure: status === 200 ? "log_signal_missing" : "log_query_failed",
+    source: LOG_QUERY.datasource_uid, window: `${LOG_QUERY.start_time}..${LOG_QUERY.end_time}`,
+    http_status: status, error_kind: normalizedErrorKind(status, body), result_count: total,
+    returned_count: documents.length, warning_count: warnings.length };
 }
 
 function safeRequestId(value) {
@@ -59,11 +95,13 @@ function summarizeDiscovery(status, body) {
 
 function failureResult(code) {
   return {
-    schema: "sre-agent.mcp45-discovery/v1",
-    phase: "gateway-discovery",
+    schema: "sre-agent.mcp45-query-smoke/v1",
+    phase: "gateway-query-smoke",
     status: "fail",
     failures: [code],
     discovery: { server: null, tools: [] },
+    metric: null,
+    logs: null,
     restricted_discovery: null,
   };
 }
@@ -72,16 +110,20 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
   const origin = validGatewayUrl(gatewayUrl);
   if (!origin || !humanToken || !restrictedToken) return failureResult("probe_configuration_missing");
 
-  const discover = async (token) => {
+  const call = async (method, path, token, body) => {
     try {
-      return await fetchJson({ url: `${origin}/v1/mcp/discovery`, token });
+      return await fetchJson({ method, url: `${origin}${path}`, token, body });
     } catch {
       return { status: 0, body: {} };
     }
   };
-  const allowed = await discover(humanToken);
+  const allowed = await call("GET", "/v1/mcp/discovery", humanToken);
   const discovery = summarizeDiscovery(allowed.status, allowed.body);
-  const restricted = await discover(restrictedToken);
+  const metricResponse = await call("POST", "/v1/mcp/tools/query_prometheus", humanToken, METRIC_QUERY);
+  const metric = summarizeMetric(metricResponse.status, metricResponse.body);
+  const logResponse = await call("POST", "/v1/mcp/tools/query_elasticsearch", humanToken, LOG_QUERY);
+  const logs = summarizeLogs(logResponse.status, logResponse.body);
+  const restricted = await call("GET", "/v1/mcp/discovery", restrictedToken);
   const body = restricted.body && typeof restricted.body === "object" ? restricted.body : {};
   const restrictedDiscovery = {
     http_status: restricted.status,
@@ -92,15 +134,23 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
   };
   const failures = [];
   if (!discovery.ok) failures.push("discovery_mismatch");
+  if (!metric.ok) failures.push(metric.failure);
+  if (!logs.ok) failures.push(logs.failure);
   if (restrictedDiscovery.http_status !== 403 || restrictedDiscovery.error_code !== "resource_unavailable" ||
       !restrictedDiscovery.request_id || restrictedDiscovery.retryable !== false || !restrictedDiscovery.enumeration_absent) {
     failures.push("restricted_discovery_not_denied");
   }
   return {
     ...failureResult(null),
-    status: failures.length ? "fail" : "pass",
-    failures,
+    status: failures.length ? "fail" : "pending",
+    failures: failures.length ? failures : ["upstream_witness_pending"],
     discovery: { server: discovery.server, tools: discovery.tools },
+    metric: { source: metric.source, window: metric.window, http_status: metric.http_status,
+      error_kind: metric.error_kind, result_type: metric.result_type, result_count: metric.result_count,
+      warning_count: metric.warning_count },
+    logs: { source: logs.source, window: logs.window, http_status: logs.http_status,
+      error_kind: logs.error_kind, result_count: logs.result_count, returned_count: logs.returned_count,
+      warning_count: logs.warning_count },
     restricted_discovery: restrictedDiscovery,
   };
 }
@@ -114,7 +164,7 @@ async function main() {
         restrictedToken: process.env.RESTRICTED_HARNESS_API_KEY,
       });
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exitCode = result.status === "pass" ? 0 : 1;
+  process.exitCode = result.status === "pending" ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

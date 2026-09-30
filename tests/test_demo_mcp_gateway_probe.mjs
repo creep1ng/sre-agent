@@ -48,42 +48,94 @@ function report(result) {
   return JSON.parse(result.stdout);
 }
 
-test("discovery CLI validates allowed and server-restricted HTTP responses without invocation", async (t) => {
+test("gateway smoke CLI validates queries and server-restricted discovery", async (t) => {
   const calls = [];
+  const requests = [];
+  let metricReply = { status: 200, body: { result_type: "vector", result: [{ value: [1, "1"] }], warnings: [] } };
+  let logReply = { status: 200, body: { total: 1, documents: [{ marker: PRIVATE_MARKER }], warnings: [] } };
   let allowed = { server: { server_id: "grafana-mcp", endpoint: PRIVATE_MARKER },
     tools: [{ tool_id: "query_prometheus" }, { tool_id: "query_elasticsearch" }] };
   let denied = { error: { code: "resource_unavailable", message: PRIVATE_MARKER },
     request_id: REQUEST_ID, retryable: false };
   const server = createServer((request, response) => {
     calls.push(`${request.method} ${request.url}`);
-    assert.equal(request.method, "GET");
-    assert.equal(request.url, "/v1/mcp/discovery");
-    const restricted = request.headers.authorization === `Bearer ${RESTRICTED_TOKEN}`;
-    assert.equal(request.headers.authorization, `Bearer ${restricted ? RESTRICTED_TOKEN : HUMAN_TOKEN}`);
-    response.writeHead(restricted ? 403 : 200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify(restricted ? denied : allowed));
+    let rawBody = "";
+    request.on("data", (chunk) => { rawBody += chunk; });
+    request.on("end", () => {
+      const restricted = request.headers.authorization === `Bearer ${RESTRICTED_TOKEN}`;
+      assert.equal(request.headers.authorization, `Bearer ${restricted ? RESTRICTED_TOKEN : HUMAN_TOKEN}`);
+      const body = rawBody ? JSON.parse(rawBody) : null;
+      requests.push({ method: request.method, path: request.url, body });
+      if (request.method === "POST") {
+        assert.equal(request.headers["content-type"], "application/json");
+        const metric = request.url.endsWith("query_prometheus");
+        assert.ok(metric || request.url.endsWith("query_elasticsearch"));
+        const reply = metric ? metricReply : logReply;
+        response.writeHead(reply.status, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(reply.body));
+        return;
+      }
+      assert.equal(request.method, "GET");
+      assert.equal(request.url, "/v1/mcp/discovery");
+      response.writeHead(restricted ? 403 : 200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(restricted ? denied : allowed));
+    });
   });
   const url = await listen(server);
   try {
     const success = await runCli(url);
     assert.equal(success.status, 0, success.stderr);
     const observed = report(success);
-    assert.equal(observed.phase, "gateway-discovery");
-    assert.equal(observed.status, "pass");
-    assert.deepEqual(observed.failures, []);
+    assert.equal(observed.phase, "gateway-query-smoke");
+    assert.equal(observed.status, "pending", "query success is not live upstream-witness acceptance");
+    assert.deepEqual(observed.failures, ["upstream_witness_pending"]);
     assert.deepEqual(observed.discovery, { server: "grafana-mcp", tools: ["query_elasticsearch", "query_prometheus"] });
+    assert.deepEqual(observed.metric, { source: "webstore-metrics", window: "instant@now", http_status: 200,
+      error_kind: null, result_type: "vector", result_count: 1, warning_count: 0 });
+    assert.deepEqual(observed.logs, { source: "webstore-logs", window: "now-5m..now", http_status: 200,
+      error_kind: null, result_count: 1, returned_count: 1, warning_count: 0 });
     assert.deepEqual(observed.restricted_discovery, {
       http_status: 403, error_code: "resource_unavailable", request_id: REQUEST_ID,
       retryable: false, enumeration_absent: true,
     });
-    assert.deepEqual(calls, ["GET /v1/mcp/discovery", "GET /v1/mcp/discovery"]);
-    t.diagnostic(`Controlled discovery report: ${JSON.stringify(observed)}`);
+    assert.deepEqual(calls, ["GET /v1/mcp/discovery", "POST /v1/mcp/tools/query_prometheus",
+      "POST /v1/mcp/tools/query_elasticsearch", "GET /v1/mcp/discovery"]);
+    assert.deepEqual(requests.filter(({ method }) => method === "POST").map(({ body }) => body), [
+      { datasource_uid: "webstore-metrics", expr: "up", query_type: "instant", end_time: "now" },
+      { datasource_uid: "webstore-logs", index: "otel-logs-*", query: "resource.service.name:checkout",
+        start_time: "now-5m", end_time: "now", limit: 1 },
+    ]);
 
+    metricReply = { status: 200, body: { result_type: "vector", result: [], warnings: [] } };
+    const emptyMetric = await runCli(url);
+    assert.equal(emptyMetric.status, 1);
+    const emptyMetricReport = report(emptyMetric);
+    assert.ok(emptyMetricReport.failures.includes("metric_signal_missing"));
+    assert.equal(emptyMetricReport.metric.result_count, 0);
+    metricReply = { status: 504, body: { error: { code: "upstream_timeout", message: PRIVATE_MARKER } } };
+    const timeoutMetric = await runCli(url);
+    assert.equal(timeoutMetric.status, 1);
+    const timeoutMetricReport = report(timeoutMetric);
+    assert.ok(timeoutMetricReport.failures.includes("metric_query_failed"));
+    assert.equal(timeoutMetricReport.metric.error_kind, "upstream_timeout");
+    assert.equal(timeoutMetricReport.metric.http_status, 504);
+    metricReply = { status: 200, body: { result_type: "vector", result: [{ value: [1, "1"] }], warnings: [] } };
+    logReply = { status: 200, body: { total: 0, documents: [], warnings: [] } };
+    const emptyLogs = await runCli(url);
+    assert.equal(emptyLogs.status, 1);
+    const emptyLogsReport = report(emptyLogs);
+    assert.ok(emptyLogsReport.failures.includes("log_signal_missing"));
+    assert.equal(emptyLogsReport.logs.result_count, 0);
+    t.diagnostic(`Controlled gateway query report: ${JSON.stringify(observed)}`);
+
+    logReply = { status: 200, body: { total: 1, documents: [{ marker: PRIVATE_MARKER }], warnings: [] } };
     const beforeRootSlash = calls.length;
     const rootSlash = await runCli(`${url}/`);
     assert.equal(rootSlash.status, 0, rootSlash.stderr);
-    assert.equal(report(rootSlash).status, "pass");
-    assert.deepEqual(calls.slice(beforeRootSlash), ["GET /v1/mcp/discovery", "GET /v1/mcp/discovery"]);
+    assert.equal(report(rootSlash).status, "pending", "a controlled query has no independent upstream witness");
+    assert.deepEqual(calls.slice(beforeRootSlash), ["GET /v1/mcp/discovery",
+      "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
+      "GET /v1/mcp/discovery"]);
 
     for (const invalid of [null, { server: { server_id: PRIVATE_MARKER }, tools: [] },
       { ...allowed, tools: [...allowed.tools, { tool_id: PRIVATE_MARKER }] },
@@ -126,7 +178,7 @@ test("discovery CLI validates allowed and server-restricted HTTP responses witho
   }
 });
 
-test("discovery CLI rejects redirects and bounds malformed or unavailable responses", async (t) => {
+test("gateway smoke CLI rejects redirects and bounds malformed or unavailable responses", async (t) => {
   let alternateCalls = 0;
   const alternate = createServer((_request, response) => {
     alternateCalls += 1;
@@ -149,8 +201,8 @@ test("discovery CLI rejects redirects and bounds malformed or unavailable respon
       assert.equal(report(result).status, "fail");
       assert.equal(alternateCalls, 0, "redirects must not create alternate routes");
     }
-    assert.equal(gatewayCalls, 6, "each scenario attempts only its two discovery requests");
-    t.diagnostic(`Controlled alternate-server calls: ${alternateCalls}; discovery requests: ${gatewayCalls}`);
+    assert.equal(gatewayCalls, 12, "each scenario attempts only its four fixed gateway requests");
+    t.diagnostic(`Controlled alternate-server calls: ${alternateCalls}; gateway requests: ${gatewayCalls}`);
   } finally {
     await close(gateway);
     await close(alternate);

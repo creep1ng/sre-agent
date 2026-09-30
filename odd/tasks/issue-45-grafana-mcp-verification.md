@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Current delivery stage: reject unsupported gateway URL paths (P3 correction).** This discovery-based candidate preserves the P3 probe while rejecting non-root paths rather than silently truncating them; CA1–CA8 remain open.
+**Current delivery stage: P4 controlled metric/log smoke queries atop the P3 gateway-origin correction.** The combined candidate preserves discovery, rejects non-root URL paths, and exercises only fixed gateway queries with controlled fixtures; CA1–CA8 remain open.
 
 ## Objective
 
@@ -18,21 +18,21 @@ The integrated demo can query Grafana MCP directly, while the gateway has govern
 - Never treat a healthy service check as proof of a failure signal.
 - Do not claim total isolation if Grafana Admin, proxy, host-port, or other bypass remains reachable.
 - Keep real-container evidence distinct from simulated transport tests.
-- Current handoff authorizes bounded issue #45 local repair/tests and parent-owned GitHub operations only in `creep1ng/sre-agent`. This writer may not commit, publish, or restack. No cloud, SSH, paid-provider probe, deployment, merge, or issue closure is authorized.
+- Current handoff authorizes bounded issue #45 local repair/tests and parent-owned GitHub operations only in `creep1ng/sre-agent`. The only commit operation authorized for this transition is the parent's exact `git add` of five P4 paths followed by `GIT_EDITOR=true git rebase --continue` in this worktree. No push/publication, cloud, SSH, paid-provider probe, deployment, merge, or issue closure is authorized.
 - Parent refreshed live GitHub Project #8: issue #45 remains Todo, Sprint 4, with CA1–CA8 in scope. PR #425 has an open gateway-root-path review finding; no human acceptance is claimed.
 - Follow the revised `AGENTS.md`: this is an academic tool for independent freelancers, not production SRE hardening. Prefer one repeatable E2E test over isolated or change-detector tests, and use only real evidence or exact reproduction instructions.
 
 ## Authorized Scope
 
-- Reject configured non-root gateway URL paths in `scripts/demo_mcp_gateway_probe.mjs`, with root/root-slash HTTP/CLI coverage and a concise evidence report.
-- Preserve P3 discovery behavior, malformed-entry/redirect/privacy coverage and 35-second budget. No P4/P5 source, producer/runtime, Compose/Dockerfile, dependency, live-service or credential changes.
-- Parent owns commits, publication, branch propagation and human-review requests; this writer works only in exclusive `codex/issue-45-gateway-root-path`.
+- Preserve the P3 origin/path correction and P4 metric/Lucene-log smoke queries in `scripts/demo_mcp_gateway_probe.mjs`, with current HTTP/CLI tests, runbook and evidence.
+- Preserve malformed-entry/redirect/privacy coverage and 35-second budget. No P5 source, producer/runtime, Compose/Dockerfile, dependency, live-service or credential changes.
+- Parent owns commits, publication, branch propagation and human-review requests; this restacked candidate combines `codex/issue-45-gateway-root-path` and `codex/issue-45-03-queries` only.
 
 ## TDD
 
 - Mode: strict
 - Source: issue-specific handoff §4 / OPERATING-RULES §4, which enables strict TDD for issue #45 implementation; repository `AGENTS.md` separately prefers E2E, prohibits writing unit tests after code, and requires failure modes first for isolated work.
-- Runner for the current URL correction: pinned Node 22.14 cached harness with controlled loopback HTTP/CLI tests in a networkless container; exact `docker run --pull never --network none` reproduction is recorded in the URL correction report. No host package manager, DB/API/demo or live credential is needed. Historical P4 and preview-helper runner notes remain in dated checkpoints below.
+- Runner for the combined P3/P4 candidate: pinned Node 22.14 cached harness with controlled loopback HTTP/CLI tests in a networkless container; exact `docker run --pull never --network none` reproduction is recorded in the P4 report. No host package manager, DB/API/demo or live credential is needed. Historical root-only and preview-helper notes remain in dated checkpoints below.
 
 ## Tasks
 
@@ -211,13 +211,13 @@ Final label-only correction names tests/output as gateway smoke queries rather t
 
 ## Priority gateway-root review correction
 
-Current candidate `codex/issue-45-gateway-root-path`, base PR #425 `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10`. Earlier P4 checkpoints describe local recovery commit `4c9697411e25d954d03d1afaaef7622d54422cad` (326 changed lines), not code installed in this discovery-based correction. P5 planning was started separately but no P5 source work is authorized until this routing finding is addressed. Fresh live Projects: issue #45 OPEN / #8 Todo; new unresolved [review](https://github.com/creep1ng/sre-agent/pull/425#discussion_r4140855307).
+At the original gateway-root correction checkpoint, candidate `codex/issue-45-gateway-root-path` was based on PR #425 `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10`. Earlier P4 checkpoints describe local recovery commit `4c9697411e25d954d03d1afaaef7622d54422cad` (326 changed lines), not code installed in that discovery-based correction. P5 planning was started separately but no P5 source work is authorized until this routing finding is addressed. Fresh live Projects: issue #45 OPEN / #8 Todo; new unresolved [review](https://github.com/creep1ng/sre-agent/pull/425#discussion_r4140855307).
 
-The configured gateway is documented as an origin; non-root paths currently pass validation then are silently discarded by url.origin. Reject unsupported non-root paths rather than silently changing the configured route. Preserve root URLs, discovery behavior, malformed-entry fix and 35-second/no-redirect budget. No producer/cloud/runtime changes. This is a small cohesive corrective unit; keep all task history, full diff<=400 and real evidence requirements. At that checkpoint parent owned later bottom-up propagation into local P4/P5 and publication; no restack had occurred.
+The configured gateway is documented as an origin; non-root paths currently pass validation then are silently discarded by url.origin. Reject unsupported non-root paths rather than silently changing the configured route. Preserve root URLs, discovery behavior, malformed-entry fix and 35-second/no-redirect budget. No producer/cloud/runtime changes. This is a small cohesive corrective unit; keep all task history, full diff<=400 and real evidence requirements. At that checkpoint, parent owned later bottom-up propagation into local P4/P5 and publication; no restack had occurred.
 
 - [x] **MCP45-URL-R1 — Observe configured-path HTTP/CLI RED**: permanent CLI test first; cached networkless runner observed the non-root base path incorrectly returned status 0 instead of rejecting configuration.
 - [x] **MCP45-URL-R2 — Reject unsupported gateway paths**: `validGatewayUrl` now accepts only root pathname; root and `/` both make the normal two discovery GETs, while `/mcp-gateway` and `/mcp-gateway/` fail before any HTTP. GREEN 2/2, syntax and diff checks passed.
-- [ ] **MCP45-URL-R3 — Bind correction proof and propagate**: concise report/current hashes prepared; genuine screenshot, independent review, hosted CI and parent-owned publication remain pending.
+- [ ] **MCP45-URL-R3 — Bind correction proof and propagate**: concise [root-correction report](../../docs/evidence/issue-45-gateway-root/report.md)/current hashes prepared; genuine screenshot, independent review, hosted CI and parent-owned publication remain pending.
 
 URL correction test evidence is in `/tmp/issue45-gateway-root-evidence/url-red.log` and `url-green.log`; no screenshot was attempted in this slice. The controlled fix does not close CA1–CA8.
 
@@ -231,3 +231,8 @@ Parent local root correction `f23e9a01f01b0ef85c3a7a43a134e413af0a87dc` is now t
 ## Root correction publication checkpoint
 
 Current source is the discovery-based root correction; P4 restack `265c9dafe3182c01522db99369b70735467468f9` above describes a separate local child, not installed P4 code here. Real parent-controlled screenshot is now attached in [the correction report](../../docs/evidence/issue-45-gateway-root/report.md), SHA-256 `56bc41f324877a53ab9dc1ecc1bb3a4fb7a279003550f0d314c3969115133587`. Host sandboxed Chromium rendered actual Docker output and assertions; source/test hashes are unchanged from independently verified `f23e9a01`. This does not resolve PR424's containerized Markdown-preview finding. Public binding, current hosted CI and human review remain pending; URL-R3 stays unchecked. Public425 is draft at unchanged9eb3 and its own source remains unfixed.
+
+
+## P4 restack onto published PR #430 parent (2026-09-30)
+
+The root correction was published as ready PR #430 at head `73cd29e58288329a7b2b0fd9eaa816ecace26438`, based on PR #425 at `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10`; its 140 additions and 11 deletions are within the documented limit. The P4 branch is being restacked onto that published head, preserving the root correction history and the complete P4 query history above. PR #430 hosted CI run `36678518934` is still running; governance/reconciliation and GitGuardian checks passed, and requested review is not acceptance. P4 remains local; publication and its screenshot are parent-owned. The P4 four-request query behavior and the restored successful log fixture before root-slash validation must remain intact. CA1–CA8 remain open; real service evidence and human acceptance remain pending.

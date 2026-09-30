@@ -1,6 +1,6 @@
 # Issue 45: operator prerequisites and evidence boundaries
 
-**The prerequisites stage delivers documentation; the P3 section below adds discovery only, not live acceptance.**
+**P3 delivers discovery; P4 adds controlled metric/log smoke-query behavior, not live acceptance.**
 It helps independent freelancers prepare a safe environment before verifying
 Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 
@@ -12,13 +12,13 @@ Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 3. Distinguish a healthy service, a controlled test and a real failure signal.
 4. Follow the staged recovery checklist in the [issue tracker](../odd/tasks/issue-45-grafana-mcp-verification.md).
    Full-probe/cycle commands recorded there remain historical or planned;
-   only the P3 discovery command below is delivered here.
+   P3/P4 commands below cover only discovery and controlled smoke queries.
 
 ## Current contract and prerequisites
 
 | Item | Verified reference or required condition |
 |---|---|
-| Base | `5b6109bd2c8100455136cf12ce91c52830833c7f` |
+| Base | `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10` |
 | Gateway contract | [MCP 1.0.0](../schemas/mcp/1.0.0/) |
 | OpenTelemetry demo | Tag `3.0.0`, commit `1755859a9de82c2e5e225be68abc401a5ebf2b4f` |
 | Grafana MCP | `grafana/mcp-grafana:1.3.0`; exact image pins in [digests.lock](../demo/digests.lock) |
@@ -49,7 +49,7 @@ API, not the harness. Keep that boundary unchanged.
 
 | CA | Required real evidence | Current gap / safe interpretation |
 |---|---|---|
-| CA1 | Prometheus metric and OpenSearch log through the gateway, with source/window | Planned smoke and capture CLIs are not delivered by this PR |
+| CA1 | Prometheus metric and OpenSearch log through the gateway, with source/window | Controlled HTTP/CLI smoke queries cover fixed requests and safe summaries; no live Grafana/MCP response or CA1 acceptance is claimed |
 | CA2 | Known-ID denial without prior discovery and zero upstream calls | A 403 or zero audit events cannot prove zero `tools/call` invocations; a trusted correlated upstream counter is required |
 | CA3 | Discovery contains only authorized tools | Delivered server denial differs from partial-tool filtering; the latter depends on unmerged #29 / PR #365 |
 | CA4 | Actual harness name/IP/port/proxy boundaries and no secret delivery | Missing targets or an unvalidated absent port binding remain unverified |
@@ -60,12 +60,13 @@ API, not the harness. Keep that boundary unchanged.
 
 ## Executable stage boundaries
 
-- Discovery CLI (P3 delivered) → planned metric/log queries → known-ID-first denial →
+- Discovery CLI (P3) → fixed metric/log smoke queries (P4) → known-ID-first denial →
   offline upstream-counter reconciliation.
 - Harness boundary targets, including connect-only proxy/admin probes.
 - Metric capture → log signal capture → offline two-cycle verification.
 
-The discovery-only file is `scripts/demo_mcp_gateway_probe.mjs`. Signal capture
+The gateway probe is `scripts/demo_mcp_gateway_probe.mjs`; it does not directly
+connect to Grafana MCP. Signal capture
 in `scripts/demo_signal_cycles.mjs` and boundary updates to `scripts/demo_mcp_probe.mjs`
 remain planned, with their matching E2E tests. No future-stage command is prescribed here.
 Each stage must retain behavior, tests, operator documentation and its own proof.
@@ -110,7 +111,8 @@ non-retryable 403 with a safe UUID were observed; exit 1 means failure. Redirect
 are rejected; each request keeps a 35-second budget. Reports allowlist fields,
 not raw response text. This does not prove CA2 or partial-tool CA3 filtering.
 
-Run the controlled HTTP/CLI scenarios, without live credentials:
+Run the P3 discovery cases using the historical command below; P4's current
+networkless command appears in its section:
 
 ```sh
 docker compose --project-directory "$PWD" --env-file .env --env-file .env.worktree \
@@ -119,6 +121,33 @@ docker compose --project-directory "$PWD" --env-file .env --env-file .env.worktr
 ```
 
 Use the existing harness image or an independently authorized harness build;
-this stage reused the cached image without building. See the current
-[controlled evidence](evidence/issue-45-pr02/report.md). Metric/log queries,
-known-ID invocation, upstream counters and cycle verification remain planned.
+this stage reused the cached image without building. See the P3
+[controlled evidence](evidence/issue-45-pr02/report.md). Known-ID invocation,
+upstream counters and cycle verification remain pending.
+
+## P4: controlled metric/log smoke queries
+
+After P3 discovery, the probe issues exactly two fixed POSTs through the public
+gateway: `query_prometheus` for `up` from `webstore-metrics` at `now`, and
+`query_elasticsearch` for the Lucene filter `resource.service.name:checkout`
+from `webstore-logs` over `now-5m..now` with limit 1. Redirects are rejected;
+each request retains its 35-second timeout. Output includes only source, window,
+HTTP status, normalized error kind, result/warning counts and metric result type.
+Raw operational responses are not reported. A successful controlled report is
+`pending` because it has no independent upstream witness; it is not CA1 evidence.
+
+The controlled fixture test can be repeated without network access or secrets
+using the already-cached pinned harness image:
+
+```sh
+docker run --pull never --network none --rm \
+  --tmpfs /workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0755 \
+  -v "$PWD/tests:/source/tests:ro" -v "$PWD/scripts:/source/scripts:ro" \
+  -v "$PWD/schemas:/source/schemas:ro" \
+  sha256:060b50ea88cf38bb3c2b6b0bb5920f2460091056381db72d802424c5f1df697d \
+  node --test /source/tests/test_demo_mcp_gateway_probe.mjs
+```
+
+See the [P4 controlled evidence report](evidence/issue-45-pr03/report.md).
+Live Grafana/MCP behavior, provider credentials, an independent counter, full
+redaction, network isolation and all CA1–CA8 remain unverified.
