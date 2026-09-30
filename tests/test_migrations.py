@@ -18,7 +18,8 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "audit_events, grants, credentials, resources, "
             "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -48,6 +49,9 @@ def test_repeated_head_has_expected_domain_tables() -> None:
     assert {row[0] for row in rows} == {
         "alembic_version",
         "audit_events",
+        "bok_collection_versions",
+        "bok_documents",
+        "bok_section_chunks",
         "credentials",
         "grants",
         "idempotency_records",
@@ -56,6 +60,50 @@ def test_repeated_head_has_expected_domain_tables() -> None:
         "principals",
         "resources",
     }
+
+
+def test_bok_owner_foreign_keys_preserve_exact_version_provenance() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        definitions = {
+            table: {
+                row[0]
+                for row in connection.execute(
+                    "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+                    "WHERE conrelid=%s::regclass AND contype='f'",
+                    (table,),
+                )
+            }
+            for table in ("bok_documents", "bok_section_chunks")
+        }
+    assert (
+        "FOREIGN KEY (collection_id, version) REFERENCES "
+        "bok_collection_versions(collection_id, version) ON DELETE CASCADE"
+        in definitions["bok_documents"]
+    )
+    assert (
+        "FOREIGN KEY (collection_id, version, document_id) REFERENCES "
+        "bok_documents(collection_id, version, document_id) ON DELETE CASCADE"
+        in definitions["bok_section_chunks"]
+    )
+
+
+def test_bok_fts_index_and_metadata_audit_contract_are_migrated() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        index_definition = connection.execute(
+            "SELECT indexdef FROM pg_indexes WHERE indexname='ix_bok_section_chunks_english_fts'"
+        ).fetchone()[0]
+        operation_constraint = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+        reason_constraint = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_reason_code'"
+        ).fetchone()[0]
+    assert "USING gin (to_tsvector('english'::regconfig, content))" in index_definition
+    assert "'bok.search'" in operation_constraint and "'bok.read'" in operation_constraint
+    assert "'index_unavailable'" in reason_constraint
+    assert "'storage_unavailable'" in reason_constraint
 
 
 def test_mcp_tool_foreign_key_points_to_owner_server() -> None:
@@ -414,3 +462,41 @@ def test_consumption_is_append_only_with_exact_decimal_json() -> None:
             connection.execute(
                 "UPDATE audit_events SET consumption='{}'::jsonb WHERE event_id=%s", (event_id,)
             )
+
+
+def test_bok_upgrade_and_downgrade_preserve_existing_usage_audit() -> None:
+    """A populated foundation can adopt and roll back retrieval without losing usage evidence."""
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    event_id = "00000000-0000-4000-8000-000000000099"
+    command.downgrade(config, "20260929_15")
+    try:
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                """INSERT INTO audit_events (
+                  event_id, occurred_at, operation, action, stage, outcome, reason_code,
+                  response_status, retryable, latency_ms, correlation, redaction, content_state,
+                  authoritative_acceptance, ordinary_result, exporter_result)
+                VALUES (%s, now(), 'usage.read', 'admin.read', 'authentication', 'error',
+                  'authentication_failed', 401, false, 1, '{}', '{}', 'absent',
+                  'accepted', 'released', 'not_attempted')""",
+                (event_id,),
+            )
+            original = connection.execute(
+                "SELECT to_jsonb(audit_events) FROM audit_events WHERE event_id=%s", (event_id,)
+            ).fetchone()
+        for target in ("head", "20260929_15", "head"):
+            if target == "head":
+                command.upgrade(config, target)
+            else:
+                command.downgrade(config, target)
+            with psycopg.connect(DATABASE_URL) as connection:
+                assert (
+                    connection.execute(
+                        "SELECT to_jsonb(audit_events) FROM audit_events WHERE event_id=%s",
+                        (event_id,),
+                    ).fetchone()
+                    == original
+                )
+    finally:
+        command.upgrade(config, "head")
