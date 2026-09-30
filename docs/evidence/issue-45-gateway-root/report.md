@@ -35,7 +35,7 @@ docker run --pull never --network none --rm \
 - **GREEN after source change:** 2/2 passed. `${url}` and `${url}/` each perform
   exactly two discovery GETs. `${url}/mcp-gateway` and `${url}/mcp-gateway/`
   fail as `probe_configuration_missing` before any request. Existing malformed
-  discovery, restricted non-enumeration, token/privacy, redirect and timeout
+  discovery, restricted non-enumeration, token/privacy and redirect
   coverage remains green; alternate-server requests remain zero.
 - Minimal source change requires `url.pathname === "/"` before returning
   `url.origin`; query/hash and embedded credentials remain rejected.
@@ -64,3 +64,10 @@ Source/test bytes remain those independently tested at local commit `f23e9a01f01
 the later metadata/media commit does not change executable behavior. Human review
 and candidate-bound hosted CI remain pending. Revert this corrective unit to
 restore its parent; unsupported gateway path prefixes are intentionally rejected.
+
+## Review evidence correction
+
+The suite does not exercise the 35-second AbortSignal expiration. Its child-process
+kill guard and upstream-unavailable fixture are not timeout-budget evidence; the
+unsupported timeout-coverage wording above was removed. Source budget remains
+35 seconds, but real budget-expiration proof is pending.
