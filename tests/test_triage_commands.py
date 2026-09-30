@@ -180,6 +180,25 @@ async def test_invalid_commands_fail_closed(kwargs: dict, code: str, status: int
 
 
 @pytest.mark.asyncio
+async def test_malformed_fields_fail_closed() -> None:
+    assert SERVICE is not None
+    good = {"alert_id": "al-t", "operation": "open_triage", "expected_version": 1}
+    key = {"idempotency_key": "k-types-12345678"}
+    bad = [
+        ({"alert_id": ["x"]}, "invalid_command", 400),
+        ({"operation": ["open_triage"]}, "invalid_command", 400),
+        ({"expected_version": "1"}, "invalid_command", 400),
+        ({"expected_version": True}, "invalid_command", 400),
+        ({"operation": "triage_dismiss", "reason": ["r"]}, "invalid_reason", 422),
+        ({"alert_id": "al-fresh", "expected_version": 2}, "stale_version", 409),
+    ]
+    for override, code, status in bad:
+        with pytest.raises(TriageError) as error:
+            await SERVICE.execute(_principal("op-human"), **(good | key | override))
+        assert (error.value.code, error.value.http_status) == (code, status)
+
+
+@pytest.mark.asyncio
 async def test_forbidden_leaves_no_trace() -> None:
     assert SERVICE is not None
     with psycopg.connect(DATABASE_URL) as connection:

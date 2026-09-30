@@ -92,12 +92,17 @@ class TriageService:
         if operation in ("triage_link", "triage_declare"):
             raise TriageError(422, "operation_not_supported")
         if (
-            operation not in ACTIONS
+            not isinstance(operation, str)
+            or operation not in ACTIONS
+            or not isinstance(alert_id, str)
             or not re.fullmatch(ID_PATTERN, alert_id)
-            or not isinstance(expected_version, int)
+            or type(expected_version) is not int
+            or not isinstance(key, str)
             or not re.fullmatch(KEY_PATTERN, key)
         ):
             raise TriageError(400, "invalid_command")
+        if reason is not None and not isinstance(reason, str):
+            raise TriageError(422, "invalid_reason")
         if (operation == "open_triage") == (reason is not None):
             raise TriageError(422, "invalid_reason")
         if reason is not None and not 1 <= len(reason) <= 1000:
