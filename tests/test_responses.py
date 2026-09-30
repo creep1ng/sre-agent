@@ -537,3 +537,116 @@ def test_audit_commit_failure_suppresses_success_and_denial(principal: str) -> N
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "audit_unavailable"
     assert len(provider.requests) == (1 if principal == "incident-harness" else 0)
+
+
+def test_assignment_change_is_hot_resolved_by_same_gateway_without_consumer_change() -> None:
+    """CA6 runtime proof: the running gateway hot-resolves a changed alias assignment.
+
+    Controlled integration evidence (RecordingProvider is a controlled integration
+    adapter, not a live provider): one application, one TestClient, and one provider
+    serve two consumer invocations with an unchanged consumer body while the persisted
+    triage-agent assignment changes in between. This proves the running gateway
+    resolves the current persisted ModelAlias assignment for each request without
+    restart. It does not claim live availability of a second OpenRouter/provider
+    destination and does not verify #24.
+    """
+    admin_headers = {"Authorization": f"Bearer {ENV['ADMIN_HUMAN_API_KEY']}"}
+    consumer_headers = {"Authorization": f"Bearer {KEYS['incident-harness']}"}
+    request_body_before = {"model": "triage-agent", "input": "sensitive incident prompt"}
+    request_body_after = dict(request_body_before)
+    assert request_body_before == BODY
+    assert request_body_after == BODY
+
+    provider = RecordingProvider()
+    settings = Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY)
+    application = create_application(settings, llm_provider=provider)
+    provider.application = application
+    with TestClient(application) as client:
+        triage_response = client.get("/v1/model-aliases/triage-agent", headers=admin_headers)
+        assert triage_response.status_code == 200
+        assignment_a = triage_response.json()
+        remediation_response = client.get(
+            "/v1/model-aliases/remediation-agent", headers=admin_headers
+        )
+        assert remediation_response.status_code == 200
+        assignment_b = remediation_response.json()
+        assert assignment_a["concrete_model"] != assignment_b["concrete_model"]
+        providers_differ = assignment_a["inference_provider"] != assignment_b["inference_provider"]
+        try:
+            first = client.post("/v1/responses", headers=consumer_headers, json=request_body_before)
+            assert first.status_code == 200
+            first_payload = first.json()
+            assert first_payload["metadata"]["requested_model_alias"] == "triage-agent"
+            assert first_payload["model"] == assignment_a["concrete_model"]
+            assert first_payload["metadata"]["router"] == assignment_a["router"]
+            assert (
+                first_payload["metadata"]["inference_provider"]
+                == assignment_a["inference_provider"]
+            )
+            assert len(provider.requests) == 1
+            assert provider.requests[0].model == assignment_a["concrete_model"]
+            assert provider.requests[0].provider == assignment_a["inference_provider"]
+
+            changed_response = client.put(
+                "/v1/model-aliases/triage-agent/assignment",
+                headers=admin_headers,
+                json={
+                    "concrete_model": assignment_b["concrete_model"],
+                    "router": assignment_b["router"],
+                    "inference_provider": assignment_b["inference_provider"],
+                    "expected_updated_at": assignment_a["updated_at"],
+                },
+            )
+            assert changed_response.status_code == 200
+            changed = changed_response.json()
+            assert changed["concrete_model"] == assignment_b["concrete_model"]
+            assert changed["router"] == assignment_b["router"]
+            assert changed["inference_provider"] == assignment_b["inference_provider"]
+            assert changed["updated_at"] != assignment_a["updated_at"]
+
+            second = client.post("/v1/responses", headers=consumer_headers, json=request_body_after)
+            assert second.status_code == 200
+            second_payload = second.json()
+            assert second_payload["metadata"]["requested_model_alias"] == "triage-agent"
+            assert second_payload["model"] == assignment_b["concrete_model"]
+            assert second_payload["metadata"]["router"] == assignment_b["router"]
+            assert (
+                second_payload["metadata"]["inference_provider"]
+                == assignment_b["inference_provider"]
+            )
+            assert len(provider.requests) == 2
+            assert provider.requests[1].model == assignment_b["concrete_model"]
+            assert provider.requests[1].provider == assignment_b["inference_provider"]
+            assert provider.requests[0].model != provider.requests[1].model
+            assert request_body_before == request_body_after == BODY
+
+            first_events = events_for_request(first_payload["request_id"])
+            second_events = events_for_request(second_payload["request_id"])
+            assert len(first_events) == 1
+            assert len(second_events) == 1
+            routing_a = first_events[0][4]
+            routing_b = second_events[0][4]
+            assert routing_a is not None
+            assert routing_b is not None
+            assert routing_a["router"] == "openrouter"
+            assert routing_b["router"] == "openrouter"
+            assert routing_a["model_ref"] != routing_b["model_ref"]
+            if providers_differ:
+                assert routing_a["provider_ref"] != routing_b["provider_ref"]
+        finally:
+            fresh_response = client.get("/v1/model-aliases/triage-agent", headers=admin_headers)
+            assert fresh_response.status_code == 200
+            fresh = fresh_response.json()
+            restored_response = client.put(
+                "/v1/model-aliases/triage-agent/assignment",
+                headers=admin_headers,
+                json={
+                    "concrete_model": assignment_a["concrete_model"],
+                    "router": assignment_a["router"],
+                    "inference_provider": assignment_a["inference_provider"],
+                    "expected_updated_at": fresh["updated_at"],
+                },
+            )
+            assert restored_response.status_code == 200
+        assert provider.application is application
+        assert len(provider.requests) == 2

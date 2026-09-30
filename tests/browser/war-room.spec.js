@@ -454,3 +454,136 @@ test("renders approvals as responsible persons", async ({ page }) => {
   await expect(page.locator("#approvals-list")).toContainText("Aprobado");
   await expect(page.locator("#approvals-empty")).toBeHidden();
 });
+
+// HU-OPS-05 slice #40a: explicit run selection over the existing timeline.
+function detailWithRuns(...runIds) {
+  const detail = detailPayload();
+  detail.runs = runIds.map((runId, index) => ({
+    run_id: runId,
+    version: 4,
+    status: "running",
+    current_state: index === 0 ? "investigating" : "triage",
+    updated_at: "2026-08-24T14:20:00Z",
+  }));
+  return detail;
+}
+
+function runPage(prefix, sequences, cursor, hasMore) {
+  return {
+    events: sequences.map((sequence) =>
+      eventPayload(sequence, `${prefix} event ${sequence}.`),
+    ),
+    next_cursor: cursor,
+    has_more: hasMore,
+  };
+}
+
+async function mockRuns(page, { detail, runPages, snapshot }) {
+  const seen = [];
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/snapshot")) {
+      return route.fulfill({ json: snapshot ?? snapshotPayload() });
+    }
+    if (url.pathname.endsWith("/timeline")) {
+      const runId = url.searchParams.get("run_id");
+      seen.push(`run=${runId}|after=${url.searchParams.get("after")}`);
+      const pages = runPages[runId] ?? runPages.__default;
+      const pageBody = url.searchParams.get("after") ? pages[1] : pages[0];
+      return route.fulfill({ json: pageBody });
+    }
+    return route.fulfill({ json: detail });
+  });
+  return seen;
+}
+
+test("lists incident runs and switches the timeline to the chosen run", async ({ page }) => {
+  const detail = detailWithRuns("run_demo0001", "run_demo0002");
+  const runPages = {
+    run_demo0001: [runPage("Alpha", [0, 1], "seq:1", false)],
+    run_demo0002: [runPage("Beta", [0, 1], "seq:1", false)],
+    __default: [runPage("Alpha", [0, 1], "seq:1", false)],
+  };
+  const seen = await mockRuns(page, { detail, runPages });
+  await openWarRoom(page);
+
+  await expect(page.locator("#run-select option")).toHaveCount(2);
+  await expect(page.locator("#run-select")).toHaveValue("run_demo0002");
+  await expect(page.locator(".war-room__event").first()).toContainText("Beta event 0.");
+
+  await page.locator("#run-select").selectOption("run_demo0001");
+  await expect(page.locator(".war-room__event").first()).toContainText("Alpha event 0.");
+  await expect(page.locator("#run-current")).toContainText("run_demo0001");
+  expect(seen.some((entry) => entry.startsWith("run=run_demo0001"))).toBe(true);
+  const body = (await page.locator("#timeline-list").textContent()) ?? "";
+  expect(body).not.toContain("Beta event");
+});
+
+test("keeps the explicit run across pagination and reload", async ({ page }) => {
+  const detail = detailWithRuns("run_demo0001", "run_demo0002");
+  const runPages = {
+    run_demo0001: [runPage("Alpha", [0, 1], "seq:1", true), runPage("Alpha", [2], "seq:2", false)],
+    run_demo0002: [runPage("Beta", [0], "seq:0", false)],
+    __default: [runPage("Alpha", [0, 1], "seq:1", true)],
+  };
+  const seen = await mockRuns(page, { detail, runPages });
+  await openWarRoom(page);
+
+  await page.locator("#run-select").selectOption("run_demo0001");
+  await expect(page.locator(".war-room__event").first()).toContainText("Alpha event 0.");
+  await page.locator("#load-more").click();
+  await expect(page.locator(".war-room__event")).toHaveCount(3);
+  expect(
+    seen.some((entry) => entry.includes("run=run_demo0001") && entry.includes("after=seq:1")),
+  ).toBe(true);
+
+  await page.unroute("**/api/v1/incidents/**");
+  const grown = detailWithRuns("run_demo0001", "run_demo0002", "run_demo0003");
+  await mockRuns(page, { detail: grown, runPages });
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#run-select option")).toHaveCount(3);
+  await expect(page.locator("#run-select")).toHaveValue("run_demo0001");
+  await expect(page.locator(".war-room__event").first()).toContainText("Alpha event 0.");
+});
+
+test("escapes untrusted summaries and hides out-of-projection fields", async ({ page }) => {
+  const hostile = {
+    ...eventPayload(0, '<img src="x" onerror="window.__pwned=1"> Fiscaliza.'),
+    arguments: { cmd: "MARKER-ARGS" },
+    raw_output: "MARKER-RAW",
+    prompt: "MARKER-PROMPT",
+  };
+  await mockRuns(page, {
+    detail: detailWithRuns("run_demo0001"),
+    runPages: {
+      run_demo0001: [{ events: [hostile], next_cursor: "seq:0", has_more: false }],
+      __default: [{ events: [hostile], next_cursor: "seq:0", has_more: false }],
+    },
+  });
+  await openWarRoom(page);
+
+  await expect(page.locator(".war-room__event img")).toHaveCount(0);
+  await expect(page.locator(".war-room__event")).toContainText("Fiscaliza.");
+  expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  const body = (await page.locator("#timeline-list").textContent()) ?? "";
+  for (const marker of ["MARKER-ARGS", "MARKER-RAW", "MARKER-PROMPT"]) {
+    expect(body).not.toContain(marker);
+  }
+  await expect(page.locator(".war-room__event")).toContainText("estado investigating");
+});
+
+test("exposes no slice-40b controls on the read-only timeline", async ({ page }) => {
+  await mockRuns(page, {
+    detail: detailWithRuns("run_demo0001"),
+    runPages: { run_demo0001: [pageOne, pageTwo], __default: [pageOne, pageTwo] },
+  });
+  await openWarRoom(page);
+
+  for (const selector of ["#postmortem", "#mitigation", "#run-command", "#transition"]) {
+    await expect(page.locator(selector)).toHaveCount(0);
+  }
+  const labels = await page.locator("button").allTextContents();
+  for (const label of labels) {
+    expect(label).not.toMatch(/postmortem|mitigat|command|transition|start|close/i);
+  }
+});

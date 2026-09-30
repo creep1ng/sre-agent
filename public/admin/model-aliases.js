@@ -17,11 +17,44 @@ const countLine = document.getElementById("alias-count");
 const rowsBody = document.getElementById("alias-rows");
 const refreshButton = document.getElementById("refresh-button");
 const disconnectButton = document.getElementById("disconnect-button");
+const detailSection = document.getElementById("alias-detail");
+const detailSubtitle = document.getElementById("alias-detail-subtitle");
+const detailLoading = document.getElementById("detail-loading");
+const detailContent = document.getElementById("detail-content");
+const detailErrorBox = document.getElementById("detail-error");
+const detailErrorTitle = document.getElementById("detail-error-title");
+const detailCloseButton = document.getElementById("detail-close-button");
+const detailEditButton = document.getElementById("detail-edit-button");
+const detailDeactivateButton = document.getElementById("detail-deactivate-button");
+const deactivateDialog = document.getElementById("deactivate-dialog");
+const deactivateForm = document.getElementById("deactivate-form");
+const deactivateTitle = document.getElementById("deactivate-title");
+const deactivateDetail = document.getElementById("deactivate-detail");
+const deactivateSubmit = document.getElementById("deactivate-submit");
+const deactivateCancel = document.getElementById("deactivate-cancel");
+const deactivateErrorBox = document.getElementById("deactivate-error");
+const deactivateErrorTitle = document.getElementById("deactivate-error-title");
+const assignmentForm = document.getElementById("assignment-form");
+const editConcreteModel = document.getElementById("edit-concrete-model");
+const editRouter = document.getElementById("edit-router");
+const editInferenceProvider = document.getElementById("edit-inference-provider");
+const assignmentSaveButton = document.getElementById("assignment-save-button");
+const assignmentCancelButton = document.getElementById("assignment-cancel-button");
+const assignmentRefreshButton = document.getElementById("assignment-refresh-button");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 let currentItems = [];
 let sessionGeneration = 0;
+let detailReadVersion = 0;
+let activeDetailId = null;
+let activeDetailItem = null;
+let pendingExpectedUpdatedAt = null;
+let editMode = false;
+let saveInFlight = false;
+let statusInFlight = false;
+let pendingDeactivate = null;
+const CONCRETE_MODEL_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const announce = (message) => {
@@ -32,8 +65,11 @@ function describeError(error) {
   if (error?.kind === "network") return "API unavailable";
   if (error?.kind === "authentication") return "Authentication required";
   if (error?.kind === "authorization") return "Access unavailable";
+  if (error?.kind === "conflict" || error?.code === "status_conflict")
+    return "Alias changed; refresh and try again";
   if (error?.kind === "validation" || error?.code === "validation_error")
-    return "Invalid request";
+    return "Invalid assignment";
+  if (error?.kind === "not_found") return "Alias unavailable";
   return "Request failed";
 }
 
@@ -79,8 +115,256 @@ function renderRows() {
       monoCell(text(item.inference_provider)),
       statusCell(item.status),
       monoCell(text(item.updated_at)),
+      detailCell(aliasId),
     );
     rowsBody.append(row);
+  }
+}
+
+function detailCell(aliasId) {
+  const cell = document.createElement("td");
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "ma-button ma-button--secondary ma-button--small";
+  action.dataset.detailOpen = aliasId;
+  action.textContent = "Details";
+  action.setAttribute("aria-label", `Open details for ${aliasId}`);
+  cell.append(action);
+  return cell;
+}
+
+function hideDetailError() {
+  detailErrorBox.hidden = true;
+  detailErrorTitle.textContent = "";
+}
+
+function showDetailError(error) {
+  const message = describeError(error);
+  detailErrorTitle.textContent = message;
+  detailErrorBox.hidden = false;
+  announce(message);
+}
+
+function hideDeactivateError() {
+  deactivateErrorBox.hidden = true;
+  deactivateErrorTitle.textContent = "";
+}
+
+function showDeactivateError(error) {
+  const message = describeError(error);
+  deactivateErrorTitle.textContent = message;
+  deactivateErrorBox.hidden = false;
+  announce(message);
+}
+
+function syncDeactivateButton() {
+  const visible =
+    !!activeDetailItem &&
+    activeDetailItem.status === "active" &&
+    !editMode &&
+    !statusInFlight &&
+    !saveInFlight;
+  detailDeactivateButton.hidden = !visible;
+}
+
+function openDeactivateDialog() {
+  if (!activeDetailItem || activeDetailItem.status !== "active") return;
+  if (editMode || statusInFlight || saveInFlight) return;
+  const aliasId = text(activeDetailItem.model_alias_id) || text(activeDetailItem.alias);
+  if (!aliasId || typeof activeDetailItem.updated_at !== "string") return;
+  hideDeactivateError();
+  pendingDeactivate = { modelAliasId: aliasId, expected_updated_at: activeDetailItem.updated_at };
+  deactivateTitle.textContent = `Deactivate ${aliasId}?`;
+  deactivateDetail.textContent = `Alias ${aliasId} is active.`;
+  if (!statusInFlight) {
+    deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+  if (!deactivateDialog.open) {
+    if (typeof deactivateDialog.showModal === "function") deactivateDialog.showModal();
+    else deactivateDialog.setAttribute("open", "");
+  }
+  deactivateSubmit.focus();
+}
+
+function exitEditMode() {
+  editMode = false;
+  pendingExpectedUpdatedAt = activeDetailItem ? text(activeDetailItem.updated_at) || null : null;
+  assignmentForm.hidden = true;
+  editConcreteModel.removeAttribute("aria-invalid");
+  editRouter.removeAttribute("aria-invalid");
+  editInferenceProvider.removeAttribute("aria-invalid");
+  assignmentRefreshButton.hidden = true;
+  if (activeDetailItem) detailEditButton.hidden = false;
+  syncDeactivateButton();
+}
+
+function enterEditMode() {
+  if (!activeDetailItem) return;
+  editMode = true;
+  pendingExpectedUpdatedAt = text(activeDetailItem.updated_at) || null;
+  editConcreteModel.value = text(activeDetailItem.concrete_model);
+  editRouter.value = text(activeDetailItem.router);
+  editInferenceProvider.value = text(activeDetailItem.inference_provider);
+  editConcreteModel.removeAttribute("aria-invalid");
+  editRouter.removeAttribute("aria-invalid");
+  editInferenceProvider.removeAttribute("aria-invalid");
+  hideDetailError();
+  assignmentRefreshButton.hidden = true;
+  assignmentForm.hidden = false;
+  detailEditButton.hidden = true;
+  syncDeactivateButton();
+  editConcreteModel.focus();
+}
+
+function closeDetailState() {
+  activeDetailId = null;
+  activeDetailItem = null;
+  pendingExpectedUpdatedAt = null;
+  editMode = false;
+  saveInFlight = false;
+  detailSection.hidden = true;
+  detailLoading.hidden = true;
+  detailContent.hidden = true;
+  detailContent.replaceChildren();
+  assignmentForm.hidden = true;
+  detailEditButton.hidden = true;
+  assignmentRefreshButton.hidden = true;
+  syncDeactivateButton();
+  hideDetailError();
+  detailSubtitle.textContent = "No alias selected.";
+}
+
+function closeDetail() {
+  detailReadVersion += 1;
+  closeDetailState();
+}
+
+function detailFields(item) {
+  return [
+    ["model_alias_id", item.model_alias_id],
+    ["alias", item.alias],
+    ["concrete_model", item.concrete_model],
+    ["router", item.router],
+    ["inference_provider", item.inference_provider],
+    ["status", item.status],
+    ["updated_at", item.updated_at],
+  ];
+}
+
+function renderDetail(item) {
+  detailContent.replaceChildren();
+  for (const [name, value] of detailFields(item)) {
+    const term = document.createElement("dt");
+    term.textContent = name;
+    const def = document.createElement("dd");
+    def.className = "ma-mono";
+    def.dataset.detailField = name;
+    def.textContent = text(value) || "—";
+    detailContent.append(term, def);
+  }
+  detailContent.hidden = false;
+}
+
+function applyAuthoritativeDetail(item) {
+  activeDetailItem = item;
+  pendingExpectedUpdatedAt = text(item.updated_at) || null;
+  renderDetail(item);
+  detailEditButton.hidden = false;
+  syncDeactivateButton();
+  if (editMode) {
+    editConcreteModel.value = text(item.concrete_model);
+    editRouter.value = text(item.router);
+    editInferenceProvider.value = text(item.inference_provider);
+  } else {
+    assignmentForm.hidden = true;
+  }
+  const aliasId = text(item.model_alias_id) || text(item.alias);
+  const index = currentItems.findIndex(
+    (entry) => (text(entry.model_alias_id) || text(entry.alias)) === aliasId,
+  );
+  if (index >= 0) {
+    currentItems[index] = item;
+    renderRows();
+  }
+}
+
+function buildAssignmentBody() {
+  const concreteModel = editConcreteModel.value.trim();
+  const router = editRouter.value.trim();
+  const inferenceProvider = editInferenceProvider.value.trim();
+  editConcreteModel.setAttribute("aria-invalid", String(concreteModel === ""));
+  editRouter.setAttribute("aria-invalid", String(router === ""));
+  editInferenceProvider.setAttribute("aria-invalid", String(inferenceProvider === ""));
+  if (concreteModel === "" || router === "" || inferenceProvider === "") return null;
+  if (router !== "openrouter") {
+    editRouter.setAttribute("aria-invalid", "true");
+    return null;
+  }
+  if (!CONCRETE_MODEL_PATTERN.test(concreteModel)) {
+    editConcreteModel.setAttribute("aria-invalid", "true");
+    return null;
+  }
+  if (typeof pendingExpectedUpdatedAt !== "string" || pendingExpectedUpdatedAt === "") return null;
+  return {
+    concrete_model: concreteModel,
+    router,
+    inference_provider: inferenceProvider,
+    expected_updated_at: pendingExpectedUpdatedAt,
+  };
+}
+
+async function refreshDetail(aliasId, generation, readVersion) {
+  try {
+    const item = await controlApi.getModelAlias(aliasId);
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    applyAuthoritativeDetail(item);
+    detailLoading.hidden = true;
+    detailSubtitle.textContent = `${text(item.alias) || aliasId} · authoritative detail.`;
+  } catch (error) {
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    detailLoading.hidden = true;
+    detailContent.hidden = true;
+    detailContent.replaceChildren();
+    detailSubtitle.textContent = "Detail unavailable.";
+    showDetailError(error);
+  }
+}
+
+async function openDetail(aliasId) {
+  const generation = sessionGeneration;
+  const readVersion = detailReadVersion + 1;
+  detailReadVersion = readVersion;
+  activeDetailId = aliasId;
+  activeDetailItem = null;
+  pendingExpectedUpdatedAt = null;
+  editMode = false;
+  syncDeactivateButton();
+  assignmentForm.hidden = true;
+  detailEditButton.hidden = true;
+  assignmentRefreshButton.hidden = true;
+  hideDetailError();
+  detailSection.hidden = false;
+  detailContent.hidden = true;
+  detailContent.replaceChildren();
+  detailLoading.hidden = false;
+  detailSubtitle.textContent = `Loading ${aliasId}…`;
+  try {
+    const item = await controlApi.getModelAlias(aliasId);
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return false;
+    applyAuthoritativeDetail(item);
+    detailLoading.hidden = true;
+    detailSubtitle.textContent = `${text(item.alias) || aliasId} · authoritative detail.`;
+    announce(`Detail loaded for ${aliasId}.`);
+    return true;
+  } catch (error) {
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return false;
+    detailLoading.hidden = true;
+    detailContent.hidden = true;
+    detailContent.replaceChildren();
+    detailSubtitle.textContent = "Detail unavailable.";
+    showDetailError(error);
+    return false;
   }
 }
 
@@ -117,6 +401,8 @@ async function loadAliases() {
     if (generation !== sessionGeneration) return false;
     currentItems = [];
     renderRows();
+    activeDetailId = null;
+    closeDetailState();
     loadingState.hidden = true;
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     listEmpty.hidden = false;
@@ -149,6 +435,16 @@ sessionForm.addEventListener("submit", (event) => {
 
 disconnectButton.addEventListener("click", () => {
   sessionGeneration += 1;
+  detailReadVersion += 1;
+  activeDetailId = null;
+  closeDetailState();
+  if (deactivateDialog?.open) deactivateDialog.close();
+  hideDeactivateError();
+  if (!statusInFlight) {
+    pendingDeactivate = null;
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
   credentialStore.clear();
   currentItems = [];
   renderRows();
@@ -164,6 +460,158 @@ disconnectButton.addEventListener("click", () => {
 
 refreshButton.addEventListener("click", () => {
   loadAliases();
+});
+
+rowsBody.addEventListener("click", (event) => {
+  const action = event.target.closest("[data-detail-open]");
+  if (!action) return;
+  openDetail(action.dataset.detailOpen);
+});
+
+detailCloseButton.addEventListener("click", () => {
+  closeDetail();
+});
+
+detailEditButton.addEventListener("click", () => {
+  enterEditMode();
+});
+
+detailDeactivateButton.addEventListener("click", () => {
+  openDeactivateDialog();
+});
+
+deactivateDialog.addEventListener("cancel", (event) => {
+  if (statusInFlight) event.preventDefault();
+});
+
+deactivateCancel.addEventListener("click", () => {
+  if (statusInFlight) return;
+  deactivateDialog.close();
+});
+
+deactivateForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (statusInFlight) return;
+  if (deactivateSubmit.disabled) return;
+  if (!pendingDeactivate) return;
+  hideDeactivateError();
+  // expected_updated_at captured at dialog open from authoritative detail; no second PUT.
+  const generation = sessionGeneration;
+  const { modelAliasId, expected_updated_at } = pendingDeactivate;
+  statusInFlight = true;
+  syncDeactivateButton();
+  deactivateSubmit.disabled = true;
+  if (deactivateCancel) deactivateCancel.disabled = true;
+  try {
+    await controlApi.replaceModelAliasStatus(modelAliasId, {
+      status: "inactive",
+      expected_updated_at,
+    });
+    if (generation !== sessionGeneration) return;
+    // The retired alias is no longer resolvable: invalidate pending detail
+    // reads, drop the stale detail, close the dialog, and refresh the
+    // authoritative list. There is no reactivation from this flow.
+    detailReadVersion += 1;
+    pendingDeactivate = null;
+    if (deactivateDialog?.open) deactivateDialog.close();
+    hideDeactivateError();
+    closeDetailState();
+    await loadAliases();
+    if (page.dataset.state !== "ready" && page.dataset.state !== "empty") return;
+    announce(`Alias ${modelAliasId} deactivated.`);
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    const isConflict = error?.kind === "conflict" || error?.code === "status_conflict";
+    const isGone = error?.kind === "not_found";
+    if (isGone) {
+      detailReadVersion += 1;
+      pendingDeactivate = null;
+      if (deactivateDialog?.open) deactivateDialog.close();
+      hideDeactivateError();
+      closeDetailState();
+      await loadAliases();
+      if (page.dataset.state !== "ready" && page.dataset.state !== "empty") return;
+      announce(`Alias ${modelAliasId} is now inactive.`);
+      return;
+    }
+    showDeactivateError(error);
+    if (isConflict) {
+      try {
+        const fresh = await controlApi.getModelAlias(modelAliasId);
+        if (generation !== sessionGeneration) return;
+        if (fresh?.status === "active" && typeof fresh?.updated_at === "string") {
+          pendingDeactivate = { modelAliasId, expected_updated_at: fresh.updated_at };
+          applyAuthoritativeDetail(fresh);
+          detailSubtitle.textContent = `${text(fresh.alias) || modelAliasId} · authoritative detail.`;
+        } else {
+          detailReadVersion += 1;
+          pendingDeactivate = null;
+          if (deactivateDialog?.open) deactivateDialog.close();
+          hideDeactivateError();
+          closeDetailState();
+          await loadAliases();
+          if (page.dataset.state !== "ready" && page.dataset.state !== "empty") return;
+          announce(`Alias ${modelAliasId} is now inactive.`);
+        }
+      } catch (refreshError) {
+        if (generation !== sessionGeneration) return;
+        showDeactivateError(refreshError);
+      }
+    }
+  } finally {
+    statusInFlight = false;
+    syncDeactivateButton();
+    if (deactivateSubmit) deactivateSubmit.disabled = false;
+    if (deactivateCancel) deactivateCancel.disabled = false;
+  }
+});
+
+assignmentCancelButton.addEventListener("click", () => {
+  exitEditMode();
+  hideDetailError();
+});
+
+assignmentRefreshButton.addEventListener("click", () => {
+  const aliasId = activeDetailId;
+  if (!aliasId) return;
+  hideDetailError();
+  assignmentRefreshButton.hidden = true;
+  refreshDetail(aliasId, sessionGeneration, detailReadVersion);
+});
+
+assignmentForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (saveInFlight || !activeDetailId) return;
+  hideDetailError();
+  const body = buildAssignmentBody();
+  if (!body) {
+    showDetailError({ kind: "validation", code: "validation_error" });
+    return;
+  }
+  const generation = sessionGeneration;
+  const readVersion = detailReadVersion;
+  const aliasId = activeDetailId;
+  saveInFlight = true;
+  syncDeactivateButton();
+  assignmentSaveButton.disabled = true;
+  try {
+    const updated = await controlApi.replaceModelAliasAssignment(aliasId, body);
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    exitEditMode();
+    applyAuthoritativeDetail(updated);
+    detailSubtitle.textContent = `${text(updated.alias) || aliasId} · authoritative detail.`;
+    announce(`Assignment updated for ${aliasId}.`);
+  } catch (error) {
+    if (generation !== sessionGeneration || readVersion !== detailReadVersion) return;
+    showDetailError(error);
+    if (error?.kind === "conflict" || error?.code === "status_conflict") {
+      assignmentRefreshButton.hidden = false;
+    }
+  } finally {
+    saveInFlight = false;
+    syncDeactivateButton();
+    assignmentSaveButton.disabled = false;
+  }
 });
 
 page.dataset.state = "idle";
