@@ -75,3 +75,7 @@ Current local candidate is based on P4 `c840ed76f8e16f123e1d33127ff7798e5de49597
 - Both source and test passed `node --check` in the same cached networkless image; `git diff --check` passed against the current P4 base.
 
 The original exact-duplicate RED is the observed test-first proof; the case-insensitive case is additional post-fix validation, not a claimed RED. P5 remains a controlled fixture only: this correction does not prove upstream zero, close CA2, resolve the review, or complete P5-C. Parent owns final independent verification, fresh screenshot, report/task mirror, commit, publication and CI.
+
+## Parent correction committed proof
+
+Parent independently reran exact commit `db7eef3cbfdd2090519145a73b5437e8069fd45c`: cached networkless Docker syntax and HTTP/CLI E2E passed 2/2, with source/test hashes unchanged from the correction section above. [Fresh actual correction PNG](known-id-corrected.png), 1600×3400, 193979 bytes, SHA-256 `3fc38417cc40fb56c410bfc13768f09ffa457076be3acfe4b7b989f97d288063`, shows actual duplicate/case-variant rejection diagnostics, five-request order, distinct pending report and zero alternate calls. Existing sandboxed host Chromium 153.0.8010.52 rendered local CSP/no-external-assets HTML; parent visually inspected/sanitized it. D-Bus connection diagnostics were nonfatal (capture exit 0). No live service, upstream-zero or PR424 containerized-preview proof. Earlier screenshots remain historical; current hosted CI/publication and human acceptance are pending.

@@ -295,3 +295,7 @@ Reconciled the complete P6 tracker history into this parent document; P6 code/re
 - [ ] **MCP45-P5-ID-R3 — Refresh correction delivery proof**: parent independent exact-current Docker checks, source/test hashes, genuine fresh screenshot and report, <=400 current-base delta, full lossless mirror, owned fast-forward publication/current CI and review reply. Keep P5-C open until observed; no automatic resolution/acceptance.
 
 Next step: parent owns R3 independent verification, fresh screenshot, report/task mirror, commit/publication/current CI, and later P6 restack. This local candidate is not committed or published. Exact runner is the existing cached Node22.14 networkless Docker lane in the P5 report; no build/pull, credentials, API/database or demo start. CA1–CA8, CA2 proof and human acceptance remain open.
+
+## P5 correction parent committed evidence checkpoint
+
+Exact `db7eef3cbfdd2090519145a73b5437e8069fd45c` independently passed cached Docker syntax/HTTP-CLI 2/2 with source `9af21e534a7d60abf3a0ecf3bb3b2ec60d7fb93064ee27fc770224d2db5baa01` and test `7346b55130ffec319789576a3e49265fda7a7e0d53725e3c71efc648138127c9` unchanged. Real [fresh correction PNG](../../docs/evidence/issue-45-pr04/known-id-corrected.png), SHA-256 `3fc38417cc40fb56c410bfc13768f09ffa457076be3acfe4b7b989f97d288063`, was visually inspected. R3/P5-C remain pending publication/current hosted CI/human request; P6 remains frozen local child. No real CA closed.
