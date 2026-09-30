@@ -259,3 +259,7 @@ Authorized scope: restricted known-ID Prometheus POST must be the first request,
 P5 local evidence: `/tmp/issue45-p5-evidence/red.log` records pre-source RED (0/2) on Node 22.14.0; `/tmp/issue45-p5-evidence/green.log` records current controlled GREEN (2/2). Source/test SHA-256 are recorded in `docs/evidence/issue-45-pr04/report.md`. The controlled success remains `pending` with `upstream_delta: null`; no zero-call or CA2 claim is made. Parent owns screenshot, task mirror, independent verification, commit, publication and hosted P5 CI. P4 hosted CI run `36680206014` passed all eight jobs per parent checkpoint; human acceptance and CA1–CA8 remain open.
 
 Next step: parent completes P5-C evidence/publication readiness. New scope forecast is not a measured final diff; measure the complete PR against `c840ed76f8e16f123e1d33127ff7798e5de49597`, including parent-owned PNG, and preserve all task history without cosmetic trimming.
+
+## P5 parent committed proof checkpoint
+
+Parent committed source/tests/docs as `638942a4aa6278ae4c32bb61e72d214aaffe5e28`, then exact cached networkless Docker syntax/E2E passed2/2 with unchanged report hashes. [Actual P5 PNG](../../docs/evidence/issue-45-pr04/known-id.png), SHA-256 `ff510c21f80a58a4e57db727d3bf58d3c9144d2e1a7092d7b947b00280b21edb`, binds observed denied-summary and first-request assertions. P5-C remains open for current publication/hosted CI; real CA1–CA8 and human acceptance remain pending.

@@ -51,3 +51,16 @@ offline reconciliation, or close CA2 or any other CA1–CA8 criterion. P5
 screenshot, final commit binding, parent independent verification, hosted P5
 CI, and human acceptance are parent-owned or pending. P4's hosted CI run
 `36680206014` passed all eight jobs per the parent checkpoint; it is not P5 CI.
+
+## Parent committed proof and actual screenshot
+
+Parent independently reran committed `638942a4aa6278ae4c32bb61e72d214aaffe5e28`:
+both JavaScript syntax checks and2/2 HTTP/CLI tests passed with unchanged hashes.
+[Actual controlled PNG](known-id.png),1600×3400,205437bytes, SHA-256
+`ff510c21f80a58a4e57db727d3bf58d3c9144d2e1a7092d7b947b00280b21edb`,
+shows observed safe denial/query output and exercised first-request assertions.
+Existing sandboxed HOSTChromium153.0.8010.52 rendered offline HTML with CSP,
+no external assets and a private profile. Parent visually inspected/sanitized it;
+this is not a live UI, actual upstream-zero witness or PR424 preview proof.
+Earlier no-PNG/uncommitted notes are capture-time history. Hosted CI and human
+acceptance remain pending; subsequent media/report-only edits preserve hashes.
