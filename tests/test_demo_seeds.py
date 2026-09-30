@@ -33,7 +33,7 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, alembic_version CASCADE"
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -214,7 +214,7 @@ async def test_seed_converges_after_real_09_to_10_upgrade(monkeypatch: pytest.Mo
         admin_grants = connection.execute(
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
-    assert version == "20260918_11"
+    assert version == "20260921_13"
     assert admin_resources == 2
     assert admin_grants == 4
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:

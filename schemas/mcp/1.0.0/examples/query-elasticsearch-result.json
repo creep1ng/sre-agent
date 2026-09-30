@@ -1,0 +1,5 @@
+{
+  "total": 1,
+  "documents": [{ "_source": { "body": "[PlaceOrder]", "traceId": "trace-example" } }],
+  "warnings": []
+}

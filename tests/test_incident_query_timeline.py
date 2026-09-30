@@ -191,7 +191,7 @@ def _postgres_schema():
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records CASCADE"
+            "principals, idempotency_records, mcp_tools, mcp_servers CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")

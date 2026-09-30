@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:mcp-query-prometheus-result:1.0.0",
+  "title": "Governed Grafana MCP query_prometheus result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["result_type", "result", "warnings"],
+  "properties": {
+    "result_type": { "enum": ["matrix", "vector", "scalar", "string"] },
+    "result": { "type": "array", "maxItems": 1000, "items": { "type": "object" } },
+    "warnings": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "type": "string", "maxLength": 500 }
+    }
+  }
+}

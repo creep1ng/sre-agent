@@ -167,3 +167,44 @@ class AuditProjector:
             ordinary_result="suppressed" if reason == "audit_unavailable" else "released",
             exporter_result="not_attempted",
         )
+
+    def mcp_event(
+        self,
+        request_id: UUID,
+        status: int,
+        latency_ms: int,
+        stage: str,
+        *,
+        operation: str,
+        context: PrincipalContext | None = None,
+        resource_ref: tuple[str, str] | None = None,
+        decision: PolicyDecision | None = None,
+        reason: str | None = None,
+        retryable: bool = False,
+    ) -> AuditEvent:
+        """Project an MCP metadata-only event without arguments or results."""
+        # The public MCP vocabulary is intentionally narrower than the historic
+        # audit reason vocabulary; preserve the public outcome while keeping the
+        # persisted audit contract closed.
+        audit_reason = {
+            "upstream_timeout": "upstream_failed",
+            "upstream_unavailable": "upstream_unavailable",
+            "resource_unavailable": "resource_not_found",
+        }.get(reason or "", reason)
+        if stage in {"validation", "audit"}:
+            context = None
+            resource_ref = None
+            decision = None
+        return self.control_event(
+            request_id,
+            status,
+            latency_ms,
+            stage,
+            operation=operation,
+            action="read_metadata" if operation == "mcp.discovery" else "invoke",
+            reason=audit_reason,
+            retryable=retryable,
+            context=context,
+            resource_ref=resource_ref if stage != "authentication" else None,
+            decision=decision,
+        )

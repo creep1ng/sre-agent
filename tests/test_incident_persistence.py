@@ -36,7 +36,7 @@ def incident_database() -> None:
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records CASCADE"
+            "principals, idempotency_records, mcp_tools, mcp_servers CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -700,7 +700,7 @@ def test_incident_migration_downgrade_and_recovery_are_reproducible() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         assert (
             connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-            == "20260918_11"
+            == "20260921_13"
         )
         assert (
             connection.execute("SELECT to_regclass('incident.run_events') IS NOT NULL").fetchone()[

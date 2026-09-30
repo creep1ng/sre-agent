@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:mcp-query-prometheus-input:1.0.0",
+  "title": "Governed Grafana MCP query_prometheus input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["datasource_uid", "expr", "query_type", "end_time"],
+  "properties": {
+    "datasource_uid": { "const": "webstore-metrics" },
+    "expr": { "type": "string", "minLength": 1, "maxLength": 4096 },
+    "query_type": { "const": "instant" },
+    "end_time": {
+      "type": "string",
+      "pattern": "^(now|now-[1-9][0-9]*[smhd])$"
+    }
+  }
+}

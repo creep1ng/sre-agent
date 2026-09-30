@@ -1,0 +1,16 @@
+{
+  "target": "urn:sre-agent:contract:grafana-mcp:1.0.0",
+  "rule": "scenario",
+  "status": "negative",
+  "version": "1.0.0",
+  "scenario_id": "discovery-denied",
+  "data": {
+    "operation": "mcp.discovery",
+    "expected": {
+      "status": 403,
+      "error_code": "resource_unavailable",
+      "upstream_calls": 0,
+      "enumerates": false
+    }
+  }
+}
