@@ -332,3 +332,32 @@ def test_invalid_resolution_paths_return_correlated_audited_422(
             (request_id,),
         ).fetchone()
     assert audit == ("skills.resolve", 422, "error", "contract_validation_failed")
+def test_persistence_failure_returns_retryable_503_with_audit(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sre_agent.persistence import repositories as _repositories
+
+    publish(client, "retryable-root-skill", "PRIVATE_RETRYABLE_331")
+    activate(client, "retryable-root-skill", "active")
+    grant_invoke("retryable-root-skill")
+
+    async def _raise_get(self, skill_id: str, version: str):  # noqa: ANN001, ANN202
+        raise RuntimeError("injected persistence failure")
+
+    monkeypatch.setattr(_repositories.SkillVersionRepository, "get", _raise_get)
+    request_id = "30000000-0000-4000-8000-000000000009"
+    response = client.get(
+        "/v1/skills/retryable-root-skill/1.0.0/resolve",
+        headers={**headers(INCIDENT_KEY), "X-Request-ID": request_id},
+    )
+    assert response.status_code == 503, response.text
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    assert response.json()["request_id"] == request_id
+    assert response.json()["retryable"] is True
+    with psycopg.connect(DATABASE_URL) as connection:
+        audit = connection.execute(
+            "SELECT response_status, outcome, reason_code FROM audit_events "
+            "WHERE correlation->>'request_id' = %s",
+            (request_id,),
+        ).fetchone()
+    assert audit == (503, "error", "audit_unavailable")

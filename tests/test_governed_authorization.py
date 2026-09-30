@@ -189,6 +189,11 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "catalog",
     },
+    ("GET", "/v1/skills/{skill_id}/{version}/status"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
     ("GET", "/v1/usage/consumption"): {
         "action": "admin.read",
         "resource_type": "administrative_control",
