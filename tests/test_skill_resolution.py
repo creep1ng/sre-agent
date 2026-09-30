@@ -296,3 +296,13 @@ def test_direct_dependencies_reuse_verified_context_and_fail_closed_atomically(
     assert "PRIVATE_NESTED_ROOT_331" not in nested.text
     assert "PRIVATE_NESTED_331" not in nested.text
     assert "PRIVATE_TRANSITIVE_331" not in nested.text
+
+
+def test_resolution_openapi_declares_custom_validation_envelope(client: TestClient) -> None:
+    responses = client.get("/openapi.json").json()["paths"][
+        "/v1/skills/{skill_id}/{version}/resolve"
+    ]["get"]["responses"]
+    assert "422" in responses and "503" in responses
+    challenge = responses["401"]["headers"]["WWW-Authenticate"]
+    assert challenge["schema"] == {"type": "string"}
+    assert challenge["example"] == "Bearer"
