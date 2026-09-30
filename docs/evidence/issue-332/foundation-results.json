@@ -1,7 +1,7 @@
 {
-  "source_sha": "1b70672629d0c65b393fc6d31022f6a04207b615",
+  "source_sha": "9fb91f725e5c292346b930e3dae787cc05fe1a71",
   "mode": "foundation",
-  "captured_at_utc": "2026-09-30T02:44:51.954533+00:00",
+  "captured_at_utc": "2026-09-30T05:41:27.401157+00:00",
   "evidence_kind": "controlled integration",
   "surface": "Runtime FastAPI over TCP plus real disposable PostgreSQL",
   "observations": [
@@ -17,6 +17,42 @@
     {
       "scenario": "empty_activation",
       "outcome": "bok_version_not_ready"
+    },
+    {
+      "scenario": "replay_drift_chunk_content_update",
+      "operation": "committed chunk content UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_chunk_delete",
+      "operation": "committed chunk DELETE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_title_update",
+      "operation": "committed document title UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_hash_update",
+      "operation": "committed document content_sha256 UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
     },
     {
       "scenario": "persisted_demo_rows",

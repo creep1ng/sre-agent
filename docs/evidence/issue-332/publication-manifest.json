@@ -1,121 +1,162 @@
 {
-  "proposed_repository_directory": "docs/evidence/issue-332",
-  "publication_status": "prepared locally; parent must publish and bind actual evidence commit",
-  "scan": "no personal paths, known safe-config secrets or serialized API keys detected; all three PNGs visually inspected",
+  "publication_status": "Private R6 allowlist complete; parent must bind/publish evidence-only commit and read back HTTPS paths before posting bodies.",
+  "expected_repository_directory": "docs/evidence/issue-332",
+  "source_heads": {
+    "foundation": "9fb91f725e5c292346b930e3dae787cc05fe1a71",
+    "retrieval": "34ce143d37ca2ee80c6adc4a6ee6d2d6c3c67c7d"
+  },
+  "delivery_boundary": {
+    "prs": "DRAFT",
+    "reviewer_requested": "papiarcacamilo",
+    "human_approval": false,
+    "issue_332": "open",
+    "merge_or_close": false
+  },
+  "scan": {
+    "synthetic_data_only": true,
+    "probe_asserted_in_memory_api_keys_absent_from_json": true,
+    "captures_visually_reviewed": true,
+    "raw_configs_or_private_logs_included": false,
+    "chromium_background_networking_disabled_dns_blocked": true
+  },
+  "excluded_private_only": [
+    "PREPARATION-ONLY.md",
+    "*.draft.md",
+    "review-thread-response.draft.md",
+    "*.chromium.log",
+    "chromium-profile-*",
+    "historical/"
+  ],
   "files": [
     {
+      "path": "compose-proof-network.yml",
+      "bytes": 79,
+      "sha256": "ead2cca2bcc4785f113c5ba1faaad1964f26260af520a19fd577ef086d76dddc",
+      "purpose": "allowlisted current R6 evidence asset"
+    },
+    {
       "path": "foundation-capture.html",
-      "bytes": 2995,
-      "sha256": "6519025dcf88278c6055a8777682948713eacfe1862ec94283c3ff30c072c1e0",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 4571,
+      "sha256": "58108b95e67f88a2adaf43c8608c2e8ab6d2cbc97740ffcd27da6d23ccc5a214",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "foundation-checks.txt",
-      "bytes": 438,
-      "sha256": "388a478f55c0f24cf9a0cef95a85ba766e6cc57b3e9d33f0d915765db27a8e66",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 353,
+      "sha256": "f5986d16894886e7884a52e7ecf81b7830be07dcda479cf09abf15620ded4df8",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "foundation-probe.txt",
-      "bytes": 156,
-      "sha256": "4e97685cd532362ec3abb1caf91d85b060e6c25dbb050bed5c0a44deab378106",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 638,
+      "sha256": "b76861689619b73a4e51a6f9593b967762836ced78bae7c61899787405139cbd",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "foundation-report.md",
-      "bytes": 5048,
-      "sha256": "63e4ee7088f47df65f621fd9479ab8bcf76b94fab84473c87bf6fb98a261b947",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 5110,
+      "sha256": "01d823672e8aca88dd0a25694bcf2f286cdff0ae3897e56e2b3794352c142512",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "foundation-results.json",
-      "bytes": 2319,
-      "sha256": "bdb6105c5eae09750992319446272f33d66c57cd8343ae2a75d56592bd055096",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 3567,
+      "sha256": "452cd1aa5c8012db35dae38b9047a7c1177735fdf3b4b033bda85080e5978f34",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "foundation.png",
-      "bytes": 118822,
-      "sha256": "d834cce67ec939cc695a7369cc88ca35b42850936d9f6bc356e48e00e2fe3161",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 189915,
+      "sha256": "f198c0552e19d52afc9271f854fd52d89159dcd1c92c778a9d5cf4e4e9ca5c6f",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "producer-probe.py",
-      "bytes": 12299,
-      "sha256": "24cafb4b9152be7df50506ed9bbb3079e2c1886ccdeab0b8988491281701ae58",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 19406,
+      "sha256": "275f0d1d001578ddcfb6a0bf289d312ea1c6fac147ab3a1998447b77a4ddaf1d",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "provenance.json",
-      "bytes": 1357,
-      "sha256": "8e6ac98d9a05d183b0787c276bf4d4f6b054f2b680370f25ea21b7eb14cacae6",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 7085,
+      "sha256": "b72ac6a53718a210ad3e53a22358c7ce7cbd4720d57bbf3950bfdcd4d045d5fb",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "render-captures.py",
-      "bytes": 4089,
-      "sha256": "a4c48a3cf6732589deb8595508b93bc8c1dd01ee9ed37b02d1133ce42d2fe74e",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 4507,
+      "sha256": "8cd16ddcf3c74b72c537c536deedb720e6b68a299cc8c05514b9423e8616b93a",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "reproduction.md",
-      "bytes": 5683,
-      "sha256": "dad3f26e5f6777e9fa70711d2cb364c24b37e8ae4600ab263d9d14e7debbebb6",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 7358,
+      "sha256": "b161efd49988b92814239743ce7e6910cf5eff3ed5a0e00338eceb7d0669af5a",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval-audit-capture.html",
-      "bytes": 4333,
-      "sha256": "3c451beae9af23596eaf9e37e224e0685feaa25dc3d80238132373292267879a",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 4422,
+      "sha256": "ccdad580f9e0e7539baa7d6247203e7780b96069681d5d18f1496f908e046185",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval-audit.png",
-      "bytes": 164759,
-      "sha256": "558691c8b959c613d49b88456948ca8738d28a5cec628c92476b7560e26d314a",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 168923,
+      "sha256": "0a338142b82555c18fc58cd2a3f9323a31b3aaf7529b4bba02b49468347fa69c",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval-capture.html",
-      "bytes": 4975,
-      "sha256": "dfa9275da0b6846eac9b8483a75c3ceff71a9cbd846ea5f43732ea1c49bfd9bc",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 6564,
+      "sha256": "d0bd7a52b9818d34cf04232c8104a7d3a710543dfbb2b41b469cec262d07bc1b",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval-checks.txt",
-      "bytes": 445,
-      "sha256": "5fc5214b1d44a1da6202d50da66a133feee70c9c22235908e1c00a7885b927c9",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 502,
+      "sha256": "202529a220891fd5e31a8d5ba3057bdc5c571544f61bf08262dc3bbdedaf768e",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval-probe.txt",
-      "bytes": 156,
-      "sha256": "f9333ddf622662586038d5adfb06ce7625d3b1e69e5cc7a8e6e3f9efd1ec832a",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 715,
+      "sha256": "75eb9ef012f1639c8372aa5d344ec069e241d67fb0fcb4b6889ae9d9892c56ca",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval-report.md",
-      "bytes": 10140,
-      "sha256": "0b035206022fd236c4158463213f5c6f54350662ff0191baabb3b4d23bd72140",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 7479,
+      "sha256": "4eb4b82cb2a34c6189a244eb08810b896052f14707647fa65a833c8387429d40",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval-results.json",
-      "bytes": 18684,
-      "sha256": "e892da861dc86f0366dbeeea6de4d126e647ca5849c1e93d46ae4544c2b2e382",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 19932,
+      "sha256": "d87415c196d787bbb1b5bc8f0df2566e26a6f3889a943839af56d0bca79d012f",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "retrieval.png",
-      "bytes": 176390,
-      "sha256": "dd87eb4e1eab293777cf8fe9c115ae4749357c2a3cd1b1db40e092aea2e5420a",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 231107,
+      "sha256": "4aad36538780776d4df409ef095389408a353584d97edeb46b977bba85fef9b3",
+      "purpose": "allowlisted current R6 evidence asset"
     },
     {
       "path": "review-ledger.md",
-      "bytes": 6352,
-      "sha256": "ccb0ca98006db72e19e6fa3073d049808e0a4308e0f69a6c438a3a493af464de",
-      "purpose": "allowlisted evidence asset"
+      "bytes": 9175,
+      "sha256": "c54bb671a783ca52c3065d005f81efa0942ff5f503ff7554b696b917cdb7694f",
+      "purpose": "allowlisted current R6 evidence asset"
+    },
+    {
+      "path": "parent-r6-spotcheck.txt",
+      "bytes": 291,
+      "sha256": "5837fa4b4cf21f06e5c3d80c7a45a9bac43e4fa166b3e2dae70f4227f4559db1",
+      "purpose": "allowlisted current R6 evidence asset"
     }
-  ]
+  ],
+  "historical_reference": {
+    "commit": "7adfcaad8d2af313bd58983dd4bdd6df390e4426",
+    "handling": "immutable prior published assets are linked directly; no historical copies are included"
+  }
 }

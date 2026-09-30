@@ -10,6 +10,7 @@ import os
 import sys
 import time
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 
 import httpx
@@ -84,7 +85,145 @@ async def bootstrap():
         await database.dispose()
 
 
+async def replay_integrity_probe():
+    """Prove owner replay rejects four committed child-row drift cases, then restore."""
+    database = Database(dsn)
+    owner_bundle = copy.deepcopy(DEMO_BUNDLES[0])
+    collection_id = owner_bundle["collection_id"]
+    version = owner_bundle["version"]
+    document = owner_bundle["documents"][0]
+    document_id = document["document_id"]
+    chunk = document["chunks"][0]
+    section_id = chunk["section_id"]
+    chunk_index = chunk["chunk_index"]
+    original_content = chunk["content"]
+    original_title = document["title"]
+    original_content_hash = sha256(
+        "\n".join(item["content"] for item in document["chunks"]).encode("utf-8")
+    ).hexdigest()
+    scope = (collection_id, version, document_id, section_id, chunk_index)
+    cases = [
+        (
+            "replay_drift_chunk_content_update",
+            "UPDATE bok_section_chunks SET content=%s WHERE collection_id=%s AND version=%s AND document_id=%s AND section_id=%s AND chunk_index=%s",
+            ("R6 synthetic child mutation", *scope),
+            "SELECT content FROM bok_section_chunks WHERE collection_id=%s AND version=%s AND document_id=%s AND section_id=%s AND chunk_index=%s",
+            scope,
+            "R6 synthetic child mutation",
+            "UPDATE bok_section_chunks SET content=%s WHERE collection_id=%s AND version=%s AND document_id=%s AND section_id=%s AND chunk_index=%s",
+            (original_content, *scope),
+            original_content,
+            "committed chunk content UPDATE",
+        ),
+        (
+            "replay_drift_chunk_delete",
+            "DELETE FROM bok_section_chunks WHERE collection_id=%s AND version=%s AND document_id=%s AND section_id=%s AND chunk_index=%s",
+            scope,
+            "SELECT count(*) FROM bok_section_chunks WHERE collection_id=%s AND version=%s AND document_id=%s AND section_id=%s AND chunk_index=%s",
+            scope,
+            0,
+            "INSERT INTO bok_section_chunks (collection_id,version,document_id,section_id,chunk_index,content) VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (collection_id,version,document_id,section_id,chunk_index) DO UPDATE SET content=EXCLUDED.content",
+            (*scope, original_content),
+            1,
+            "committed chunk DELETE",
+        ),
+        (
+            "replay_drift_document_title_update",
+            "UPDATE bok_documents SET title=%s WHERE collection_id=%s AND version=%s AND document_id=%s",
+            ("R6 synthetic title mutation", collection_id, version, document_id),
+            "SELECT title FROM bok_documents WHERE collection_id=%s AND version=%s AND document_id=%s",
+            (collection_id, version, document_id),
+            "R6 synthetic title mutation",
+            "UPDATE bok_documents SET title=%s WHERE collection_id=%s AND version=%s AND document_id=%s",
+            (original_title, collection_id, version, document_id),
+            original_title,
+            "committed document title UPDATE",
+        ),
+        (
+            "replay_drift_document_hash_update",
+            "UPDATE bok_documents SET content_sha256=%s WHERE collection_id=%s AND version=%s AND document_id=%s",
+            ("0" * 64, collection_id, version, document_id),
+            "SELECT content_sha256 FROM bok_documents WHERE collection_id=%s AND version=%s AND document_id=%s",
+            (collection_id, version, document_id),
+            "0" * 64,
+            "UPDATE bok_documents SET content_sha256=%s WHERE collection_id=%s AND version=%s AND document_id=%s",
+            (original_content_hash, collection_id, version, document_id),
+            original_content_hash,
+            "committed document content_sha256 UPDATE",
+        ),
+    ]
+    try:
+        for (
+            scenario,
+            mutation_sql,
+            mutation_params,
+            observed_sql,
+            observed_params,
+            drift_value,
+            restore_sql,
+            restore_params,
+            original_value,
+            operation,
+        ) in cases:
+            manifest_before = None
+            drift_survived_replay = False
+            try:
+                with psycopg.connect(dsn, autocommit=True) as connection:
+                    manifest_before = connection.execute(
+                        "SELECT manifest_sha256 FROM bok_collection_versions WHERE collection_id=%s AND version=%s",
+                        (collection_id, version),
+                    ).fetchone()[0]
+                    changed = connection.execute(mutation_sql, mutation_params)
+                    assert changed.rowcount == 1, scenario
+                    manifest_after = connection.execute(
+                        "SELECT manifest_sha256 FROM bok_collection_versions WHERE collection_id=%s AND version=%s",
+                        (collection_id, version),
+                    ).fetchone()[0]
+                    assert manifest_after == manifest_before, scenario
+
+                try:
+                    async with database.transaction() as session:
+                        await ingest_bundle(session, owner_bundle)
+                except BoKVersionCollision as error:
+                    assert str(error) == "collection_version_collision", scenario
+                else:
+                    raise AssertionError(f"{scenario}: exact replay accepted persisted child drift")
+
+                with psycopg.connect(dsn, autocommit=True) as connection:
+                    persisted_drift = connection.execute(observed_sql, observed_params).fetchone()[0]
+                    manifest_after_replay = connection.execute(
+                        "SELECT manifest_sha256 FROM bok_collection_versions WHERE collection_id=%s AND version=%s",
+                        (collection_id, version),
+                    ).fetchone()[0]
+                assert persisted_drift == drift_value, scenario
+                assert manifest_after_replay == manifest_before, scenario
+                drift_survived_replay = True
+            finally:
+                with psycopg.connect(dsn, autocommit=True) as connection:
+                    restored = connection.execute(restore_sql, restore_params)
+                    assert restored.rowcount == 1, f"{scenario}: failed to restore synthetic row"
+
+            with psycopg.connect(dsn, autocommit=True) as connection:
+                restored_value = connection.execute(observed_sql, observed_params).fetchone()[0]
+            assert restored_value == original_value, scenario
+            async with database.transaction() as session:
+                replay_created = await ingest_bundle(session, owner_bundle)
+            assert replay_created is False, scenario
+            record(
+                scenario,
+                operation=operation,
+                parent_manifest_unchanged=True,
+                replay_outcome="BoKVersionCollision",
+                child_drift_survived_replay=drift_survived_replay,
+                restored=True,
+                intact_replay_created=replay_created,
+            )
+    finally:
+        await database.dispose()
+
+
 asyncio.run(bootstrap())
+asyncio.run(replay_integrity_probe())
 with psycopg.connect(dsn, autocommit=True) as connection:
     query = """SELECT v.collection_id, v.version, v.status,
         (SELECT count(*) FROM bok_documents d WHERE d.collection_id=v.collection_id AND d.version=v.version),

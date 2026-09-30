@@ -1,0 +1,1 @@
+Parent-owned current-M exact-head spotcheck on 34ce143d37ca2ee80c6adc4a6ee6d2d6c3c67c7d: tests/test_bok_persistence.py and tests/test_bok_http.py; 27 passed in 6.60s, exit 0. Parent scoped `down` exit 0; project ps and owned network list empty. No raw logs or configuration values included.

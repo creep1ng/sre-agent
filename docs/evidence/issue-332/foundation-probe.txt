@@ -1,7 +1,5 @@
-{
-  "mode": "foundation",
-  "source_sha": "1b70672629d0c65b393fc6d31022f6a04207b615",
-  "scenarios": 8,
-  "outcome": "all assertions passed",
-  "exit": 0
-}
+Current frozen F source 9fb91f725e5c292346b930e3dae787cc05fe1a71.
+Guarded disposable DB/migration exit 0. Producer probe exit 0: 12 observed scenarios, all assertions passed.
+Four committed owner-row drift mutations: manifest unchanged; exact replay raised BoKVersionCollision; drift survived replay; synthetic row restored in finally; subsequent intact replay returned false.
+API foreground stopped with intentional Ctrl-C (exit 130) after successful probe. Scoped compose down exit 0; project containers/network absent. No volume/global cleanup (-v omitted).
+Hosted exact-head CI 36673827658: all 8 required jobs SUCCESS; watch exit 0.

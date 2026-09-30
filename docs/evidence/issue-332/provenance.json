@@ -1,28 +1,183 @@
 {
-  "foundation": {
-    "source_sha": "1b70672629d0c65b393fc6d31022f6a04207b615",
-    "base_sha": "5b6109bd2c8100455136cf12ce91c52830833c7f",
-    "runtime_image": "sha256:5a0c4893411bb6a31bd5efe73ed12c32552b36f5213e83076625ba4766462df0",
-    "checks_image": "sha256:e114368c4667f4b87c91a974229849f0fb5aff299f429271cbd30c6e6273e21e",
-    "head": "20260929_15",
-    "ci_run": "36660022792"
-  },
-  "retrieval": {
-    "source_sha": "c37c3403c374350be676a56e9989132fdc200c8d",
-    "base_sha": "1b70672629d0c65b393fc6d31022f6a04207b615",
-    "runtime_image": "sha256:4f33ab086d14da15df18098adc53ed2cb59398f0573954c1b0c0111d327cea38",
-    "checks_image": "sha256:4aa6186e275b6cb7d0345edbf97dc73d7e5575f39101d3be2813f49cf2cc89e6",
-    "head": "20260929_16",
-    "ci_run": "36660634684"
+  "status": "Private R6 current-source evidence prepared; evidence-only commit and public URL binding remain parent-owned/pending.",
+  "source_units": {
+    "foundation": {
+      "source_sha": "9fb91f725e5c292346b930e3dae787cc05fe1a71",
+      "tree": "5560166ed8e0f3ba0b3d90693f3077e54b9d7485",
+      "base_sha": "5b6109bd2c8100455136cf12ce91c52830833c7f",
+      "additions": 738,
+      "deletions": 25,
+      "paths": 29,
+      "schema_head": "20260929_15",
+      "owner_py_sha256": "56d60886b1dfd7ee5957b67e727b993b700708fd8dae7e757b36c47d478b6b00",
+      "persistence_test_sha256": "6ba8380901bf750c461187c4cf5fcaea7fb336a750d2f94f89b06d9d46653e6f",
+      "independent_full_suite": {
+        "result": "1227 passed, 1 intentional live-provider skip",
+        "exit": 0,
+        "source": "parent-confirmed independent verifier"
+      },
+      "producer": {
+        "json": "foundation-results.json",
+        "observations": 12,
+        "exit": 0,
+        "isolation_guard_and_migration_exit": 0,
+        "scenario_names": [
+          "immutable_seed_replay",
+          "same_version_collision",
+          "empty_activation",
+          "replay_drift_chunk_content_update",
+          "replay_drift_chunk_delete",
+          "replay_drift_document_title_update",
+          "replay_drift_document_hash_update",
+          "persisted_demo_rows",
+          "collision_preserves_original",
+          "schema_head",
+          "runtime_readiness",
+          "retrieval_not_part_of_foundation"
+        ],
+        "api_foreground_interrupted_by_operator": true,
+        "api_exit": 130,
+        "cleanup_down_exit": 0
+      },
+      "hosted_ci": {
+        "run": "36673827658",
+        "url": "https://github.com/creep1ng/sre-agent/actions/runs/36673827658",
+        "state": "SUCCESS",
+        "required_jobs": "8/8",
+        "watch_exit": 0
+      },
+      "images": {
+        "api": "sha256:29e3ebaa79496c3ba35e8dfc3cc3951e6e522c99ff8460d394f28ce80ed5add8",
+        "python_checks": "sha256:07a801296c34c978d14caa5dbfd1488bfd27bcc181b7213cd91a6b23c30c4105"
+      },
+      "capture": {
+        "path": "foundation.png",
+        "width": 1600,
+        "height": 2400,
+        "sha256": "f198c0552e19d52afc9271f854fd52d89159dcd1c92c778a9d5cf4e4e9ca5c6f",
+        "bytes": 189915,
+        "visual_review": "completed"
+      }
+    },
+    "retrieval": {
+      "source_sha": "34ce143d37ca2ee80c6adc4a6ee6d2d6c3c67c7d",
+      "tree": "5255f6b27fc5eb2b8a77284c0d2b463ba191a537",
+      "base_sha": "9fb91f725e5c292346b930e3dae787cc05fe1a71",
+      "additions": 1448,
+      "deletions": 8,
+      "paths": 13,
+      "schema_head": "20260929_16",
+      "owner_py_sha256": "56d60886b1dfd7ee5957b67e727b993b700708fd8dae7e757b36c47d478b6b00",
+      "persistence_test_sha256": "6ba8380901bf750c461187c4cf5fcaea7fb336a750d2f94f89b06d9d46653e6f",
+      "independent_focused_suite": {
+        "result": "91 passed",
+        "exit": 0,
+        "source": "parent-confirmed independent verifier"
+      },
+      "independent_full_suite": {
+        "result": "1250 passed, 1 intentional live-provider skip",
+        "exit": 0,
+        "source": "parent-confirmed independent verifier"
+      },
+      "parent_spotcheck": {
+        "command_tests": [
+          "tests/test_bok_persistence.py",
+          "tests/test_bok_http.py"
+        ],
+        "result": "27 passed in 6.60s",
+        "exit": 0,
+        "cleanup_down_exit": 0
+      },
+      "producer": {
+        "json": "retrieval-results.json",
+        "observations": 34,
+        "http_outcomes": 22,
+        "persisted_audit_rows": 20,
+        "exit": 0,
+        "isolation_guard_and_migration_exit": 0,
+        "four_replay_integrity_cases_are_separate_owner_sql_observations": true,
+        "api_foreground_interrupted_by_operator": true,
+        "api_exit": 130,
+        "cleanup_down_exit": 0
+      },
+      "hosted_ci": {
+        "run": "36673681362",
+        "url": "https://github.com/creep1ng/sre-agent/actions/runs/36673681362",
+        "state": "SUCCESS",
+        "required_jobs": "8/8",
+        "watch_exit": 0
+      },
+      "images": {
+        "api": "sha256:72ab869a14e2114842d616e5b6094c148cd61ac9ce3e15515f45d039e53fd4ae",
+        "python_checks": "sha256:9df31fdea359faa96c17362936d97943cc234596c925e19621ffd87de75c7bc0"
+      },
+      "captures": [
+        {
+          "path": "retrieval.png",
+          "width": 1600,
+          "height": 2400,
+          "sha256": "4aad36538780776d4df409ef095389408a353584d97edeb46b977bba85fef9b3",
+          "bytes": 231107,
+          "visual_review": "completed"
+        },
+        {
+          "path": "retrieval-audit.png",
+          "width": 1600,
+          "height": 1400,
+          "sha256": "0a338142b82555c18fc58cd2a3f9323a31b3aaf7529b4bba02b49468347fa69c",
+          "bytes": 168923,
+          "visual_review": "completed"
+        }
+      ]
+    }
   },
   "shared": {
-    "python": "3.12.14",
+    "python_in_container": "3.12.14",
+    "docker_client": "29.8.1",
     "docker_server": "29.8.1",
-    "compose": "5.5.1",
-    "runtime_user": "65532:65532",
+    "docker_compose": "5.5.1",
+    "chromium": "153.0.8010.52",
     "postgres_image": "postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5",
     "uv_lock_sha256": "783c78b44e4ab07091d0ee1d44a693b77f1ec0fdc94f9aa3c0e212cd34dc878b",
-    "browser": "Chromium headless; fresh profiles; background networking disabled; DNS blocked",
-    "runtime_cleanup": "Both owned API foreground handles exited0; both named tmpfs projects removed without volumes/global cleanup."
+    "compose_yaml_sha256": "490c97c9abc2c987a3befd201ed89fc429c574d6253c7568956e2efca49ed199",
+    "public_proof_overlay": {
+      "path": "compose-proof-network.yml",
+      "subnet": "10.254.239.0/28",
+      "sha256": "ead2cca2bcc4785f113c5ba1faaad1964f26260af520a19fd577ef086d76dddc",
+      "bytes": 79,
+      "byte_equal_to_parent_private_overlay": true
+    },
+    "chromium_capture": {
+      "browser": "Chromium headless",
+      "flags": "--headless --disable-gpu --disable-crash-reporter --disable-breakpad --no-first-run --disable-background-networking --disable-component-update --disable-sync --no-default-browser-check --disable-extensions --host-resolver-rules=MAP * ~NOTFOUND",
+      "fresh_profile_each_capture": true,
+      "input": "local file: HTML rendered from successful current-source producer JSON",
+      "network_enabled": false
+    },
+    "cleanup": {
+      "projects": [
+        "issue332-foundation-r6",
+        "issue332-retrieval-r6"
+      ],
+      "containers_remaining": false,
+      "networks_remaining": false,
+      "cleanup": "scoped docker compose down without -v; project-named postgres_data volume metadata left untouched",
+      "global_prune_or_daemon_change": false
+    },
+    "r5_red": {
+      "four_committed_drift_scenarios_failed_before_fix": "4 failed, 70 passed",
+      "meaning": "actual PostgreSQL RED; not current R6 producer result"
+    },
+    "historical_evidence_commit": "7adfcaad8d2af313bd58983dd4bdd6df390e4426 (historical assets only; excluded from current manifest)",
+    "delivery_boundary": {
+      "prs": "DRAFT",
+      "reviewer_requested": "papiarcacamilo",
+      "approval": false,
+      "pr382_thread": "unresolved/not-outdated",
+      "issue_332": "open",
+      "evidence_commit": "pending parent publication/readback",
+      "human_acceptance": "pending",
+      "merge_claim": false
+    }
   }
 }

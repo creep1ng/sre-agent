@@ -1,7 +1,7 @@
 {
-  "source_sha": "c37c3403c374350be676a56e9989132fdc200c8d",
+  "source_sha": "34ce143d37ca2ee80c6adc4a6ee6d2d6c3c67c7d",
   "mode": "retrieval",
-  "captured_at_utc": "2026-09-30T02:50:50.642193+00:00",
+  "captured_at_utc": "2026-09-30T05:43:22.634845+00:00",
   "evidence_kind": "controlled integration",
   "surface": "Runtime FastAPI over TCP plus real disposable PostgreSQL",
   "observations": [
@@ -17,6 +17,42 @@
     {
       "scenario": "empty_activation",
       "outcome": "bok_version_not_ready"
+    },
+    {
+      "scenario": "replay_drift_chunk_content_update",
+      "operation": "committed chunk content UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_chunk_delete",
+      "operation": "committed chunk DELETE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_title_update",
+      "operation": "committed document title UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_hash_update",
+      "operation": "committed document content_sha256 UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
     },
     {
       "scenario": "persisted_demo_rows",
@@ -151,7 +187,7 @@
           "code": "resource_unavailable",
           "message": "Resource unavailable."
         },
-        "request_id": "52aad810-5a7c-450f-94a3-122729badc11",
+        "request_id": "c4812e45-8ebd-4675-8a05-890d984b4be2",
         "retryable": false
       }
     },
@@ -165,7 +201,7 @@
           "code": "resource_unavailable",
           "message": "Resource unavailable."
         },
-        "request_id": "e265b1e8-799d-49d3-a788-e2e7283426c9",
+        "request_id": "06be24d0-b177-4587-bf35-0f048ef7133f",
         "retryable": false
       }
     },
@@ -216,7 +252,7 @@
           "code": "resource_unavailable",
           "message": "Resource unavailable."
         },
-        "request_id": "35fa0f36-5a52-4b05-b4f5-9227d15ace2f",
+        "request_id": "56ae540a-5483-42f4-941b-0ae6b6872f4c",
         "retryable": false
       }
     },
@@ -230,7 +266,7 @@
           "code": "resource_unavailable",
           "message": "Resource unavailable."
         },
-        "request_id": "4cc2c236-9e5c-4d74-8f6d-eb43f16cb1de",
+        "request_id": "276ff3a6-2c54-4d4c-8d41-837c95516b49",
         "retryable": false
       }
     },
@@ -244,7 +280,7 @@
           "code": "authentication_failed",
           "message": "Authentication failed."
         },
-        "request_id": "68332315-3ce3-4b2d-ab0a-5d67f1e30d1d",
+        "request_id": "8919f749-38dd-4928-bb67-eec7dd958e82",
         "retryable": false
       }
     },
@@ -267,7 +303,7 @@
           "code": "resource_not_found",
           "message": "Resource not found."
         },
-        "request_id": "5d64aa07-b828-4f92-a1fe-d57dc39eff18",
+        "request_id": "a5d3c3d9-8950-4d17-863d-b065c51f65cc",
         "retryable": false
       }
     },
@@ -281,7 +317,7 @@
           "code": "index_unavailable",
           "message": "Index unavailable."
         },
-        "request_id": "8e1549ef-4ea6-447f-960a-57c102aefc72",
+        "request_id": "f3e04f9b-dcd8-4bef-8f84-df9c5ea963a7",
         "retryable": true
       }
     },
@@ -295,7 +331,7 @@
           "code": "resource_unavailable",
           "message": "Resource unavailable."
         },
-        "request_id": "2d701eb8-81b5-47a2-9fea-69bd90db07f4",
+        "request_id": "6c8349fc-ca7b-4406-8e1c-4d4783da5b51",
         "retryable": false
       }
     },
@@ -330,7 +366,7 @@
           "code": "resource_unavailable",
           "message": "Resource unavailable."
         },
-        "request_id": "7e30dec4-edaa-442d-b18e-f2126d6b6db7",
+        "request_id": "4202ae13-5bf3-4ec5-93de-a93f15cc6e23",
         "retryable": false
       }
     },
@@ -365,7 +401,7 @@
           "code": "index_unavailable",
           "message": "Index unavailable."
         },
-        "request_id": "1d9b7c80-7744-4272-b315-9b398b38d1fc",
+        "request_id": "7e3254e9-2fef-4607-ae9a-048790bab01f",
         "retryable": true
       }
     },
@@ -400,7 +436,7 @@
           "code": "resource_unavailable",
           "message": "Resource unavailable."
         },
-        "request_id": "19e549a5-b27c-4b17-b94d-88f32b014b47",
+        "request_id": "1552dfa7-c51e-41b4-8bbf-e1c72702ece0",
         "retryable": false
       }
     },
@@ -414,7 +450,7 @@
           "code": "storage_unavailable",
           "message": "Storage unavailable."
         },
-        "request_id": "a30a11ed-61e1-4b4c-863b-9648e4f87475",
+        "request_id": "c9f90bd1-c15b-4ddb-8b40-a6c31307a1f8",
         "retryable": true
       }
     },
@@ -428,7 +464,7 @@
           "code": "storage_unavailable",
           "message": "Storage unavailable."
         },
-        "request_id": "c3ecb5a1-5282-45b8-9436-ec979a9077cd",
+        "request_id": "c2d481fc-0a5b-491d-a538-e25a1929dfa5",
         "retryable": true
       }
     },

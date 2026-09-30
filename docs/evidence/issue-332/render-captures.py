@@ -16,6 +16,8 @@ for mode in ("foundation", "retrieval"):
             "demo-incident-response_allowed", "demo-platform-operations_allowed",
             "demo-platform-operations_other_identity", "authorized_no_match",
             "owner_unready", "bok_section_chunks_storage_failure",
+            "replay_drift_chunk_content_update", "replay_drift_chunk_delete",
+            "replay_drift_document_title_update", "replay_drift_document_hash_update",
         }]
     else:
         selected = observations
@@ -28,11 +30,11 @@ for mode in ("foundation", "retrieval"):
     text += f'<header><h1>Issue #332 · {mode.title()} · Actual producer / storage results</h1><p>Frozen source <code>{data["source_sha"]}</code></p><p>{data["captured_at_utc"]} · {len(observations)} observed scenarios · all assertions passed</p><p>Recorded FastAPI TCP + PostgreSQL output, rendered for review. Not a live product UI.</p></header>'
     text += '<main>' + ''.join(cards) + '</main>'
     text += '<footer>Synthetic corpus only. No credentials or request headers are displayed. Full JSON and portable probe accompany this capture. '
-    text += 'Foundation does not expose retrieval endpoints.' if mode == 'foundation' else 'Independent per-collection SQL-read instrumentation is separately verified by the real-DB TestClient suite, not measured by this network probe.'
+    text += 'Foundation does not expose retrieval endpoints. Four replay-integrity cases are separate owner SQL observations, not HTTP.' if mode == 'foundation' else 'Independent per-collection SQL-read instrumentation is separately verified by the real-DB TestClient suite, not measured by this network probe. Four replay-integrity cases are separate owner SQL observations, not HTTP or audit rows.'
     text += '</footer></html>'
     (root / f'{mode}-capture.html').write_text(text)
     if mode == 'retrieval':
         audit = next(x for x in observations if x['scenario'] == 'persisted_metadata_only_audit')
         audit_table = '<table><tr><td>Operation</td><td>Status</td><td>Decision</td><td>Identity</td><td>Content</td></tr>' + ''.join('<tr>' + ''.join('<td>' + html.escape(str(row[key])) + '</td>' for key in ('operation', 'status', 'decision', 'identity_present', 'content_state')) + '</tr>' for row in audit['rows']) + '</table>'
         body = '<header><h1>Issue #332 · Network transitions and persisted audit</h1><p>Frozen source <code>' + data['source_sha'] + '</code></p><p>Actual recorded TCP statuses and sanitized PostgreSQL audit projection</p></header><main><section><h2>Observed HTTP outcomes</h2><table>' + matrix + '</table></section><section><h2>Persisted audit metadata</h2><pre>' + html.escape('Query / fragment / credential scan: ' + audit['query_fragment_credential_scan']) + '</pre>' + audit_table + '</section></main>'
-        (root/'retrieval-audit-capture.html').write_text(text[:text.index('<header>')] + body + '<footer>Grant/catalog/owner changes committed before the next request. Query, fragments and credentials absent from persisted audit. Not hosted CI or human acceptance.</footer></html>')
+        (root/'retrieval-audit-capture.html').write_text(text[:text.index('<header>')] + body + '<footer>Grant/catalog/owner changes committed before the next request. Query, fragments and credentials absent from persisted audit. Four replay-integrity cases are separate owner SQL observations, not HTTP or audit rows. Not hosted CI or human acceptance.</footer></html>')

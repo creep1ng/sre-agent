@@ -1,7 +1,5 @@
-{
-  "mode": "retrieval",
-  "source_sha": "c37c3403c374350be676a56e9989132fdc200c8d",
-  "scenarios": 30,
-  "outcome": "all assertions passed",
-  "exit": 0
-}
+Current frozen M source 34ce143d37ca2ee80c6adc4a6ee6d2d6c3c67c7d.
+Guarded disposable DB/migration exit 0. Producer probe exit 0: 34 observed scenarios, all assertions passed; 22 HTTP outcomes, 20 persisted audit rows.
+Four committed owner-row drift mutations: manifest unchanged; exact replay raised BoKVersionCollision; drift survived replay; synthetic row restored in finally; subsequent intact replay returned false. These are not HTTP or audit rows.
+API foreground stopped with intentional Ctrl-C (exit 130) after successful probe. Scoped compose down exit 0; project containers/network absent. No volume/global cleanup (-v omitted).
+Hosted exact-head CI 36673681362: all 8 required jobs SUCCESS; watch exit 0.
