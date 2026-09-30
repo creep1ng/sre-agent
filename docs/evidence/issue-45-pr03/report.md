@@ -113,3 +113,15 @@ This remains controlled integration only: no live gateway/MCP result, screenshot
 real counter, or CA1–CA8 acceptance is claimed. PR #430's latest hosted CI was
 pending at this checkpoint; P4 screenshot, publication, and review remain
 parent-owned.
+
+## Parent current evidence attachment
+
+Parent independently ran committed `fac4831c6b52785682c00188c2a173b316bab1f2`:
+2/2 passed, exact source/test hashes above unchanged. [Real screenshot](queries.png)
+shows actual Docker output and exercised query assertions; PNG1600×3400,
+188463bytes, SHA-256 `ff6bc808650b42bca8d239a4c41612df6a71fffd347513b6e32d9857498b6448`.
+Existing sandbox-enabled host Chromium153.0.8010.52 captured offline HTML with
+CSP/no external assets and a private profile; parent visually inspected and
+sanitized it. This is controlled fixture evidence, not live-service UI or proof
+of the separate containerized Markdown-preview requirement. Earlier no-PNG notes
+are historical; candidate-bound hosted CI and human acceptance remain pending.
