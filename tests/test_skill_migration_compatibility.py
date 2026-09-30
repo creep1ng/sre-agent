@@ -77,9 +77,19 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
             (operation,),
         )
     before = snapshot()
-    with pytest.raises(RuntimeError, match="cannot downgrade"):
+    if legacy == "20260930_18" and operation == "usage.read":
         command.downgrade(config, previous)
-    assert snapshot() == before
+        preserved = snapshot()
+        assert preserved["rows"] == before["rows"]
+        definition, _validated = preserved["constraint"]
+        assert "'usage.read'" in definition
+        assert "'catalog.status.replace'" not in definition
+        command.upgrade(config, legacy)
+        assert snapshot()["rows"] == before["rows"]
+    else:
+        with pytest.raises(RuntimeError, match="cannot downgrade"):
+            command.downgrade(config, previous)
+        assert snapshot() == before
     if legacy == "20260926_14":
         with pytest.raises(IntegrityError, match="ck_audit_events_operation"):
             command.upgrade(config, "20260926_15")
@@ -108,9 +118,20 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
     assert after["rows"] == before["rows"]
     assert after["grants"] == before["grants"]
     assert after["heads"] == [("20260930_19",)]
-    with pytest.raises(RuntimeError, match="cannot downgrade integration"):
+    if operation == "usage.read":
         command.downgrade(config, "20260930_17")
-    assert snapshot() == after
+        preserved = snapshot()
+        assert preserved["rows"] == after["rows"]
+        definition, _validated = preserved["constraint"]
+        assert "'usage.read'" in definition
+        assert "'catalog.status.replace'" not in definition
+        assert "'skills.resolve'" not in definition
+        command.upgrade(config, "head")
+        assert snapshot()["rows"] == after["rows"]
+    else:
+        with pytest.raises(RuntimeError, match="cannot downgrade integration"):
+            command.downgrade(config, "20260930_17")
+        assert snapshot() == after
     definition, validated = after["constraint"]
     assert validated is True
     assert "'usage.read'" in definition and "'catalog.status.replace'" in definition
