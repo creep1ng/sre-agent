@@ -34,8 +34,11 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_10_test CASCADE")
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_12_test CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
-            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
+            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
+            "principals, idempotency_records, "
+            "alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")

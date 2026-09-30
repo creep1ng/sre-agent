@@ -34,6 +34,8 @@ ReasonCode = Literal[
     "upstream_failed",
     "upstream_invalid",
     "upstream_unavailable",
+    "index_unavailable",
+    "storage_unavailable",
 ]
 AuthorizationDenialCause = Literal[
     "principal_inactive",
@@ -583,6 +585,8 @@ class AuditEvent(StrictDTO):
         "responses.create",
         "mcp.discovery",
         "mcp.invoke",
+        "bok.search",
+        "bok.read",
         "usage.read",
         "principals.create",
         "principals.get",
@@ -678,6 +682,7 @@ class AuditEvent(StrictDTO):
             "mcp_server",
             "mcp_tool",
             "skill",
+            "bok_collection",
         }
         if (
             self.stage in {"authorization", "routing", "upstream", "response"}
