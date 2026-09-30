@@ -21,6 +21,7 @@ NOW = datetime(2026, 8, 24, 12, tzinfo=UTC)
 def persistence_database() -> Database:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, audit_events, grants, "
             "credentials, resources, "

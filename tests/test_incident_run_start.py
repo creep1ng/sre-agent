@@ -39,6 +39,7 @@ def run_start_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, audit_events, grants, credentials, "
             "resources, "
