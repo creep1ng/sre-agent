@@ -4,6 +4,8 @@ Failure modes the usage read must prevent:
 - a related audit event counts the same effective request twice;
 - a UTC month includes the next month's first instant or omits its last;
 - incident aggregation crosses incident boundaries or counts one run twice;
+- filtering hides conflicting incident attribution, even with identical consumption;
+- related foreign evidence bypasses the inspected-row limit;
 - absent/unavailable consumption is reported as zero or complete coverage;
 - distinct price versions are merged, or decimal USD is rounded;
 - authorization failure reveals counts or touches persisted usage;
@@ -18,6 +20,7 @@ No provider body, prompt, or credential is used as usage source data.
 """
 
 import asyncio
+import json
 import os
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -315,6 +318,37 @@ def test_usage_audit_selector_validation_and_projection_failures(client, monkeyp
     assert all(storage_event[field] is None for field in ("consumption", "untrusted_input"))
 
 
+@pytest.mark.parametrize("month", ["0000-01", "9999-12"])
+def test_unrepresentable_month_is_rejected_before_authorization(client, monkeypatch, month) -> None:
+    from sre_agent.gateway import usage
+
+    authorization_calls = []
+
+    async def forbidden_authorization(*args, **kwargs):
+        authorization_calls.append(True)
+        raise AssertionError("unrepresentable month must fail before authorization")
+
+    monkeypatch.setattr(usage, "authorize_governed_access", forbidden_authorization)
+    response = client.get("/v1/usage/consumption", params={"month": month}, headers=auth())
+
+    assert response.status_code == 422
+    assert authorization_calls == []
+    [event] = persisted_usage_audit_rows()
+    assert event["stage"] == "validation"
+    assert event["outcome"] == "error"
+    assert event["reason_code"] == "contract_validation_failed"
+    assert event["response_status"] == 422
+    assert_no_usage_authorization_context(event)
+
+
+@pytest.mark.parametrize("month", ["0001-01", "9999-11", "2026-09"])
+def test_supported_month_boundaries_remain_readable(client, month) -> None:
+    response = client.get("/v1/usage/consumption", params={"month": month}, headers=auth())
+
+    assert response.status_code == 200, response.text
+    assert response.json()["filter"] == {"month": month}
+
+
 @pytest.mark.parametrize(
     "outcome",
     ["success", "denied", "validation", "storage"],
@@ -408,6 +442,7 @@ def append_event(
     price_version: str = "openrouter:2026-09-10T14:00:00Z",
     status: int = 200,
     stage: str = "response",
+    copies: int = 1,
 ) -> None:
     consumption = None
     if availability is not None:
@@ -476,7 +511,9 @@ def append_event(
     async def persist() -> None:
         database = Database(DATABASE_URL)
         try:
-            await PostgresAuditStore(database.sessions).append(event)
+            store = PostgresAuditStore(database.sessions)
+            for _ in range(copies):
+                await store.append(event.model_copy(update={"event_id": uuid4()}))
         finally:
             await database.dispose()
 
@@ -812,6 +849,88 @@ def test_incident_read_deduplicates_runs_and_excludes_other_incidents(client) ->
     assert body["totals"]["total_tokens"] == 36
 
 
+@pytest.mark.parametrize("second_amount", ["0.0012300", "0.0080000"])
+def test_cross_incident_attribution_is_unknown_even_with_matching_consumption(
+    client, second_amount, tmp_path
+) -> None:
+    request_id = str(uuid4())
+    instant = datetime(2026, 9, 12, tzinfo=UTC)
+    for incident, run, amount in (
+        ("incident-a", "run-a1", "0.0012300"),
+        ("incident-a", "run-a2", "0.0012300"),
+        ("incident-b", "run-b", second_amount),
+    ):
+        append_event(
+            request_id=request_id,
+            at=instant,
+            incident_id=incident,
+            run_id=run,
+            amount=amount,
+        )
+    append_event(
+        request_id=str(uuid4()),
+        at=instant,
+        incident_id="unrelated-incident",
+        run_id="unrelated-run",
+    )
+
+    for selector, expected_runs in (
+        ({"incident_id": "incident-a"}, 2),
+        ({"incident_id": "incident-b"}, 1),
+        ({"request_id": request_id}, 3),
+    ):
+        response = client.get("/v1/usage/consumption", params=selector, headers=auth())
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["filter"] == selector
+        assert body["request_count"] == 1
+        assert body["incident_runs"] == expected_runs
+        assert body["months"] == [{"month": "2026-09", "request_count": 1}]
+        assert body["coverage"] == {"status": "unknown", "known": 0, "incomplete": 0, "unknown": 1}
+        assert body["totals"]["total_tokens"] is None
+        assert body["totals"]["cost"]["amount"] is None
+        capture = tmp_path / f"{next(iter(selector.values()))}.json"
+        capture.write_text(json.dumps(body, indent=2) + "\n")
+
+    monthly = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+    assert monthly.status_code == 200, monthly.text
+    assert monthly.json()["request_count"] == 2
+    assert monthly.json()["coverage"] == {
+        "status": "partial",
+        "known": 1,
+        "incomplete": 0,
+        "unknown": 1,
+    }
+    assert monthly.json()["totals"]["cost"]["amount"] is None
+
+
+def test_cross_incident_related_evidence_counts_toward_actual_row_limit(client) -> None:
+    request_id = str(uuid4())
+    instant = datetime(2026, 9, 12, tzinfo=UTC)
+    append_event(request_id=request_id, at=instant, incident_id="incident-a", run_id="run-a")
+    append_event(
+        request_id=request_id,
+        at=instant,
+        incident_id="incident-b",
+        run_id="run-b",
+        copies=999,
+    )
+    at_limit = client.get(
+        "/v1/usage/consumption", params={"incident_id": "incident-a"}, headers=auth()
+    )
+    assert at_limit.status_code == 200, at_limit.text
+    assert at_limit.json()["request_count"] == 1
+    assert at_limit.json()["incident_runs"] == 1
+
+    append_event(request_id=request_id, at=instant, incident_id="incident-b", run_id="run-b")
+    overflow = client.get(
+        "/v1/usage/consumption", params={"incident_id": "incident-a"}, headers=auth()
+    )
+    assert overflow.status_code == 413, overflow.text
+    assert overflow.json()["error"]["code"] == "usage_scope_too_large"
+    assert "request_count" not in overflow.text
+
+
 @pytest.mark.parametrize("availability", ["absent", "unavailable"])
 def test_uncertain_consumption_is_not_reported_as_zero_or_complete(
     client, availability: str
@@ -987,6 +1106,35 @@ def test_storage_failure_is_not_an_empty_success(client, monkeypatch) -> None:
     assert response.json()["error"]["code"] == "storage_unavailable"
 
 
+def test_preauthorization_storage_failure_commits_context_free_usage_event(
+    client, monkeypatch
+) -> None:
+    from sre_agent.gateway import usage
+
+    async def credential_storage_unavailable(*args, **kwargs):
+        raise RuntimeError("credential storage unavailable")
+
+    monkeypatch.setattr(usage, "authorize_governed_access", credential_storage_unavailable)
+    response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "storage_unavailable"
+    [event] = persisted_usage_audit_rows()
+    assert (event["action"], event["stage"], event["outcome"]) == (
+        "admin.read",
+        "audit",
+        "error",
+    )
+    assert (event["reason_code"], event["response_status"], event["retryable"]) == (
+        "upstream_unavailable",
+        503,
+        True,
+    )
+    assert_no_usage_authorization_context(event)
+    assert event["authorization_denial_cause"] is None
+    assert event["consumption"] is None
+
+
 def test_valid_empty_month_has_explicit_empty_coverage(client) -> None:
     response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
 
@@ -1073,7 +1221,12 @@ def test_generated_http_contract_describes_validated_selectors_and_response(clie
     assert any(variant.get("minLength") == 1 for variant in incident_constraints)
     assert any(variant.get("maxLength") == 128 for variant in incident_constraints)
     assert any(
-        variant.get("pattern") == r"^\d{4}-(0[1-9]|1[0-2])$"
+        variant.get("pattern")
+        == (
+            r"^(?:(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|"
+            r"[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-8])-"
+            r"(?:0[1-9]|1[0-2])|9999-(?:0[1-9]|1[01]))$"
+        )
         for variant in schema_variants(parameters["month"]["schema"])
     )
 
