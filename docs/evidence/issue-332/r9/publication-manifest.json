@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "evidence_cycle": "R9 current-source proof",
+  "evidence_commit": "pending parent publication and API-byte readback",
+  "old_publication_preserved": "R6/f72f evidence snapshot remains immutable and historical",
+  "source_heads": {
+    "foundation": "ea74a6e8970ff6b3cbf7ebef885fc97c5816da89",
+    "retrieval": "c2f064f76e42e3257a21a261fe16b035d888fc7e",
+    "base_main": "5b6109bd2c8100455136cf12ce91c52830833c7f"
+  },
+  "files": [
+    {
+      "path": "compose-proof-network.yml",
+      "bytes": 79,
+      "sha256": "ead2cca2bcc4785f113c5ba1faaad1964f26260af520a19fd577ef086d76dddc"
+    },
+    {
+      "path": "producer-probe.py",
+      "bytes": 27993,
+      "sha256": "3be841f0fa106ac81699aa83e5daac6b53c941e414101c4cc2c65a6bd6b10e30"
+    },
+    {
+      "path": "render-captures.py",
+      "bytes": 5967,
+      "sha256": "84a9bde1da430760cb422cd75495f48e3d01a914fc7798df97112e2dd76e23ef"
+    },
+    {
+      "path": "foundation-report.md",
+      "bytes": 2967,
+      "sha256": "c0bd278113210add022f74edf4f2b5705e58cdee0dba48c797b83aa8121c9815"
+    },
+    {
+      "path": "retrieval-report.md",
+      "bytes": 7392,
+      "sha256": "4ff03c9643b907222efadd42ac6a126afef27d771137415774b0629c44c8af31"
+    },
+    {
+      "path": "reproduction.md",
+      "bytes": 8388,
+      "sha256": "159db899ead5941a3b30d77a3e0af327e1c6efd306a240dd94141f7c45aa947a"
+    },
+    {
+      "path": "review-ledger.md",
+      "bytes": 5250,
+      "sha256": "ecb99ca108de88f4e71aa5daf2f27ef79e7e436a98b968de6f54a585f971a8f8"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 7131,
+      "sha256": "ec9fa541d5c1ca51676a81d7e3f4840399093ffd3e20076431b40cd37e519a59"
+    },
+    {
+      "path": "r8-denial-cause.json",
+      "bytes": 1854,
+      "sha256": "e3c8ca6e42031b6d23486dd0583f549a273029cae9f5edfa8e005401795ad15f"
+    },
+    {
+      "path": "results/foundation-results.json",
+      "bytes": 4493,
+      "sha256": "e4152f105dd82c4e183899bd4453440fe48221a4ff7b0c3cbe24484c7e1f92b7"
+    },
+    {
+      "path": "results/retrieval-results.json",
+      "bytes": 20858,
+      "sha256": "0316db1d8da03e17246e78b305a177e3219eb60d398d90efc60f2ef5ea70bdb6"
+    },
+    {
+      "path": "foundation.png",
+      "bytes": 223619,
+      "sha256": "37dac0c19e2f5ea2ecd2d1c5ca06ecd74fe94f5c3179ee406ea9008a604e7e9e"
+    },
+    {
+      "path": "retrieval.png",
+      "bytes": 283649,
+      "sha256": "d0f99112b08c86bebea661e7f91d6d54ac4c7e171e271c61ae5e659ca0332820"
+    },
+    {
+      "path": "retrieval-audit.png",
+      "bytes": 227543,
+      "sha256": "419153f9231e340a519a4cefb6d1257b2b568a0ca6cbb74bccbaf540bb63d703"
+    }
+  ],
+  "excluded_private_or_regenerable": [
+    "private-logs/**",
+    "*.draft.md",
+    "*.html"
+  ],
+  "manifest_note": "publication-manifest.json is part of the public bundle; its own hash is intentionally omitted from the allowlisted file list",
+  "allowlist_only": true,
+  "human_acceptance": "pending; CI and controlled evidence are not human approval"
+}

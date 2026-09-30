@@ -1,0 +1,143 @@
+{
+  "source_sha": "ea74a6e8970ff6b3cbf7ebef885fc97c5816da89",
+  "mode": "foundation",
+  "captured_at_utc": "2026-09-30T12:13:54.195268+00:00",
+  "evidence_kind": "controlled integration",
+  "surface": "Runtime FastAPI over TCP plus real disposable PostgreSQL",
+  "observations": [
+    {
+      "scenario": "immutable_seed_replay",
+      "first_created": true,
+      "replay_created": false
+    },
+    {
+      "scenario": "same_version_collision",
+      "outcome": "rejected; original persisted bytes retained"
+    },
+    {
+      "scenario": "empty_activation",
+      "outcome": "bok_version_not_ready"
+    },
+    {
+      "scenario": "activation_partial_document",
+      "outcome": "bok_version_not_ready",
+      "status_before": "indexing",
+      "status_after": "indexing"
+    },
+    {
+      "scenario": "activation_changed_chunk",
+      "outcome": "collection_version_collision",
+      "status_before": "ready",
+      "status_after_rejection": "ready",
+      "drift_survived_rejection": true,
+      "restored_in_finally": true,
+      "status_after_restored_activation": "active"
+    },
+    {
+      "scenario": "activation_deleted_chunk",
+      "outcome": "collection_version_collision",
+      "status_before": "ready",
+      "status_after_rejection": "ready",
+      "drift_survived_rejection": true,
+      "restored_in_finally": true,
+      "status_after_restored_activation": "active"
+    },
+    {
+      "scenario": "activation_arbitrary_document_chunk_order",
+      "outcome": "accepted",
+      "persisted_status": "active"
+    },
+    {
+      "scenario": "replay_drift_chunk_content_update",
+      "operation": "committed chunk content UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_chunk_delete",
+      "operation": "committed chunk DELETE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_title_update",
+      "operation": "committed document title UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_hash_update",
+      "operation": "committed document content_sha256 UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "persisted_demo_rows",
+      "sql": "SELECT v.collection_id, v.version, v.status,\n        (SELECT count(*) FROM bok_documents d WHERE d.collection_id=v.collection_id AND d.version=v.version),\n        (SELECT count(*) FROM bok_section_chunks c WHERE c.collection_id=v.collection_id AND c.version=v.version)\n        FROM bok_collection_versions v WHERE v.collection_id LIKE 'demo-%' ORDER BY v.collection_id",
+      "columns": [
+        "collection_id",
+        "version",
+        "status",
+        "documents",
+        "chunks"
+      ],
+      "rows": [
+        [
+          "demo-incident-response",
+          "1.0.0",
+          "active",
+          1,
+          1
+        ],
+        [
+          "demo-platform-operations",
+          "1.0.0",
+          "active",
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "scenario": "collision_preserves_original",
+      "unchanged": true
+    },
+    {
+      "scenario": "schema_head",
+      "revision": "20260929_15"
+    },
+    {
+      "scenario": "runtime_readiness",
+      "method": "GET",
+      "path": "/health/ready",
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "dependency": "postgresql"
+      }
+    },
+    {
+      "scenario": "retrieval_not_part_of_foundation",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/search",
+      "status": 404,
+      "body": {
+        "detail": "Not Found"
+      }
+    }
+  ],
+  "outcome": "all assertions passed",
+  "storage_observer_scope": "Network probe reads persisted owner/audit SQL. Zero-content-read counts are independently covered by source TestClient SQL observer tests; not measured by this network process."
+}
