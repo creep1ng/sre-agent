@@ -1,73 +1,18 @@
 """Real HTTP and PostgreSQL evidence for immutable Skill publication."""
 
-import asyncio
 import json
-import os
 
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
-
-from sre_agent.application import create_application
-from sre_agent.persistence.database import Database
-from sre_agent.persistence.seeds import SeedSettings, seed
-from sre_agent.settings import Settings
-
-DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
+from test_control_acceptance import (
+    ADMIN_KEY,
+    DATABASE_URL,
+    RESTRICTED_KEY,
+    client,  # noqa: F401 — pytest registers the imported fixture
+    headers,
+    migrated_acceptance_database,  # noqa: F401 — module-scoped autouse fixture
 )
-ADMIN_KEY = "sre_admn_0123456789abcdefghijklmnop"
-RESTRICTED_KEY = "sre_rest_0123456789abcdefghijklmnop"
-AUDIT_KEY = "issue331-skill-publication-audit-key"
-SEED_ENV = {
-    "ADMIN_HUMAN_API_KEY": ADMIN_KEY,
-    "DEMO_HUMAN_API_KEY": "sre_demo_0123456789abcdefghijklmnop",
-    "INCIDENT_HARNESS_API_KEY": "sre_inci_0123456789abcdefghijklmnop",
-    "RESTRICTED_HARNESS_API_KEY": RESTRICTED_KEY,
-    "TRIAGE_AGENT_MODEL": "openai/gpt-4o-mini",
-    "TRIAGE_AGENT_PROVIDER": "openai",
-    "REMEDIATION_AGENT_MODEL": "anthropic/claude-3.5-haiku",
-    "REMEDIATION_AGENT_PROVIDER": "anthropic",
-}
-
-
-@pytest.fixture(scope="module", autouse=True)
-def migrated_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
-            "mcp_tools, mcp_servers, principals, idempotency_records, alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
-
-    async def bootstrap() -> None:
-        database = Database(DATABASE_URL)
-        try:
-            assert await seed(database, SeedSettings.from_environment(SEED_ENV))
-        finally:
-            await database.dispose()
-
-    asyncio.run(bootstrap())
-
-
-@pytest.fixture
-def client() -> TestClient:
-    app = create_application(Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY))
-    with TestClient(app, raise_server_exceptions=False) as test_client:
-        yield test_client
-
-
-def headers(key: str = ADMIN_KEY, idempotency_key: str = "publish-skill-331-key") -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {key}",
-        "Idempotency-Key": idempotency_key,
-    }
 
 
 def skill_body() -> dict[str, object]:
@@ -87,7 +32,9 @@ def skill_body() -> dict[str, object]:
     }
 
 
-def test_skill_publication_is_closed_idempotent_and_persisted(client: TestClient) -> None:
+def test_skill_publication_is_closed_idempotent_and_persisted(
+    client: TestClient,  # noqa: F811 — pytest fixture binding
+) -> None:
     body = skill_body()
 
     denied = client.post(
@@ -183,3 +130,46 @@ def test_skill_publication_is_closed_idempotent_and_persisted(client: TestClient
     assert invalid_count == 0
     assert audit_content is not None
     assert "Assess impact" not in json.dumps(audit_content)
+
+
+@pytest.mark.parametrize("target", ["version", "dependency", "path"])
+def test_version_storage_bound_rejects_before_persistence_with_audit(
+    client: TestClient,  # noqa: F811 — pytest fixture binding
+    target: str,
+) -> None:
+    version = "1" * 28 + ".0.0"
+    body = skill_body()
+    body.update(skill_id=f"bounded-{target}", version=version)
+    body["manifest"]["dependencies"] = [{"skill_id": "bounded-dependency", "version": version}]
+    created = client.post(
+        "/v1/skills/versions",
+        json=body,
+        headers=headers(idempotency_key=f"bounded-{target}-accept"),
+    )
+    assert created.status_code == 201
+    path = f"/v1/skills/bounded-{target}/{version}"
+    assert client.get(path, headers=headers()).status_code == 200
+    if target == "path":
+        rejected = client.get(f"/v1/skills/bounded-{target}/1{version}", headers=headers())
+    else:
+        body["skill_id"] = f"rejected-{target}"
+        if target == "version":
+            body["version"] = "1" + version
+        else:
+            body["manifest"]["dependencies"][0]["version"] = "1" + version
+        rejected = client.post(
+            "/v1/skills/versions",
+            json=body,
+            headers=headers(idempotency_key=f"bounded-{target}-reject"),
+        )
+    assert rejected.status_code == 422, rejected.text
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM skill_versions WHERE skill_id IN (%s,%s)",
+            (f"bounded-{target}", f"rejected-{target}"),
+        ).fetchone() == (1,)
+        assert connection.execute(
+            "SELECT response_status, reason_code FROM audit_events "
+            "WHERE correlation->>'request_id'=%s",
+            (rejected.json()["request_id"],),
+        ).fetchone() == (422, "contract_validation_failed")

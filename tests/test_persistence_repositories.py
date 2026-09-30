@@ -6,8 +6,10 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from pydantic import ValidationError
 from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
+from test_audit import NON_LLM_TYPES, non_llm_consumption_event
 
 from sre_agent.governance.authorization import ResourceAuthorizationFact
 from sre_agent.governance.dto import AuditEvent, Consumption, PricingContext, SkillManifest
@@ -175,6 +177,13 @@ async def test_skill_version_repository_persists_immutable_owner_backed_version(
         instructions="Assess impact before proposing recovery.",
         dependencies=[],
     )
+    with pytest.raises(ValidationError):
+        SkillManifest.model_validate(
+            {
+                **manifest.model_dump(),
+                "dependencies": [{"skill_id": "long-version", "version": "1" * 29 + ".0.0"}],
+            }
+        )
     repository = None
     async with database.transaction() as session:
         repository = SkillVersionRepository(session)
@@ -213,6 +222,18 @@ async def test_skill_version_repository_persists_immutable_owner_backed_version(
         assert resource.owner_id == "demo-human"
         assert resource.status == "published"
     await database.dispose()
+    with psycopg.connect(DATABASE_URL) as connection:
+        for statement in (
+            "UPDATE skill_versions SET version='2.0.0'",
+            "DELETE FROM skill_versions",
+        ):
+            with pytest.raises(psycopg.errors.RaiseException, match="immutable"):
+                with connection.transaction():
+                    connection.execute(statement)
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="immutable Skill versions exist"):
+        command.downgrade(config, "20260922_12")
 
 
 @pytest.mark.asyncio
@@ -413,3 +434,30 @@ def test_audit_projection_keeps_only_dto_fields() -> None:
     dumped = projected.model_dump(mode="json")
     assert "prompt" not in dumped and "request_body" not in dumped
     assert dumped["latency_ms"] == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("resource_type", NON_LLM_TYPES)
+async def test_repository_rejects_non_llm_consumption_before_persistence(
+    resource_type: str,
+) -> None:
+    invalid = non_llm_consumption_event(resource_type)
+    database = Database(DATABASE_URL)
+    try:
+        async with database.transaction() as session:
+            with pytest.raises(ValueError, match="non-LLM"):
+                await AuditRepository(session).append(invalid)
+        with psycopg.connect(DATABASE_URL) as connection:
+            assert connection.execute(
+                "SELECT count(*) FROM audit_events WHERE event_id=%s",
+                (str(invalid.event_id),),
+            ).fetchone() == (0,)
+        async with database.transaction() as session:
+            await AuditRepository(session).append(invalid.model_copy(update={"consumption": None}))
+        with psycopg.connect(DATABASE_URL) as connection:
+            assert connection.execute(
+                "SELECT consumption FROM audit_events WHERE event_id=%s",
+                (str(invalid.event_id),),
+            ).fetchone() == (None,)
+    finally:
+        await database.dispose()

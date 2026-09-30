@@ -51,6 +51,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 plugins = ["pydantic.mypy"]
 strict = true
 files = [
+  "src/sre_agent/incident/commands.py",
   "src/sre_agent/incident/persistence.py",
   "src/sre_agent/incident/runtime.py",
   "src/sre_agent/governance/dto.py",
