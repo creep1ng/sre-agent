@@ -506,7 +506,7 @@ def test_consumption_sql_audit_evidence_blocks_lossy_downgrade() -> None:
         command.downgrade(config, "20260926_14")
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260929_17",
+            "20260929_18",
         )
         assert connection.execute("SELECT count(*) FROM consumption_limit_policies").fetchone() == (
             1,
@@ -538,5 +538,5 @@ def test_consumption_put_binding_persists_and_blocks_lossy_downgrade() -> None:
             "FROM idempotency_records WHERE principal_id='policy-schema-admin'"
         ).fetchone() == ("PUT", 1, "1")
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260929_17",
+            "20260929_18",
         )

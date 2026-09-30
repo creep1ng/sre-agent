@@ -337,7 +337,8 @@ class AuditEventRow(Base):
             "reason_code IS NULL OR reason_code IN ('audit_unavailable','authentication_failed',"
             "'contract_validation_failed','grant_matched','no_matching_grant','redaction_failed',"
             "'redaction_uncertain','routing_unavailable','upstream_failed','upstream_invalid',"
-            "'upstream_unavailable','resource_not_found','status_conflict')",
+            "'upstream_unavailable','resource_not_found','status_conflict','incident_limit_exceeded',"
+            "'monthly_limit_exceeded','consumption_bounds_unavailable','policy_unavailable')",
             name="ck_audit_events_reason_code",
         ),
         CK(

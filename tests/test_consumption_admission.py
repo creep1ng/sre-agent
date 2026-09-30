@@ -32,7 +32,7 @@ def priced(**changes: object) -> EndpointMetadata:
             provider="OpenAI",
             max_prompt_tokens=10,
             max_completion_tokens=100,
-            valid_until=NOW.replace(hour=13),
+            valid_until=datetime(2027, 6, 1, tzinfo=UTC),
             prompt_price=Decimal("0"),
             completion_price=Decimal("0.1"),
             request_price=Decimal("0.2"),
@@ -46,7 +46,7 @@ def snapshot(*endpoints: EndpointMetadata) -> EndpointCatalogSnapshot:
         model="openai/gpt-4o-mini",
         endpoints=endpoints,
         observed_at=NOW,
-        valid_until=NOW.replace(hour=13),
+        valid_until=datetime(2027, 6, 1, tzinfo=UTC),
     )
 
 
