@@ -189,6 +189,20 @@ export function createAdministrativeApiClient({
         headers: mutationHeaders(idempotencyKey),
       });
     },
+    readUsageConsumption({ requestId, incidentId, month } = {}) {
+      const hasRequest = requestId !== undefined && requestId !== null && requestId !== "";
+      const hasIncident =
+        incidentId !== undefined && incidentId !== null && incidentId !== "";
+      const hasMonth = month !== undefined && month !== null && month !== "";
+      if (Number(hasRequest) + Number(hasIncident) + Number(hasMonth) !== 1) {
+        throw new TypeError("Exactly one of requestId, incidentId or month is required.");
+      }
+      const params = new URLSearchParams();
+      if (hasRequest) params.set("request_id", requestId);
+      else if (hasIncident) params.set("incident_id", incidentId);
+      else params.set("month", month);
+      return request(`/v1/usage/consumption?${params.toString()}`);
+    },
     revokeGrant(grantId) {
       return request(`/v1/grants/${encodeURIComponent(grantId)}`, {
         method: "DELETE",
