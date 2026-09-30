@@ -304,7 +304,7 @@ class IdempotencyConflictError(RuntimeError):
 
 
 class IdempotencyRepository:
-    """Scoped POST bindings: same hash replays, other hash conflicts."""
+    """Scoped request bindings: same hash replays, other hash conflicts."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session

@@ -197,11 +197,11 @@ class GrantRow(Base):
 
 
 class IdempotencyRecordRow(Base):
-    """Scoped POST binding: replay on same hash, conflict on different hash."""
+    """Scoped request binding: replay on same hash, conflict on different hash."""
 
     __tablename__ = "idempotency_records"
     __table_args__ = (
-        CK("method = 'POST'", name="ck_idempotency_method"),
+        CK("method IN ('POST','PUT')", name="ck_idempotency_method"),
         CK(
             "binding IN ('at_least_24h','principal_lifetime')",
             name="ck_idempotency_binding",
@@ -256,7 +256,8 @@ class AuditEventRow(Base):
             "'grants.create','grants.list','grants.revoke',"
             "'aliases.create','aliases.list','aliases.get',"
             "'aliases.assignment.replace','aliases.status.replace',"
-            "'catalog.create','catalog.list','catalog.read','consumption_limits.get')",
+            "'catalog.create','catalog.list','catalog.read','consumption_limits.get',"
+            "'consumption_limits.replace')",
             name="ck_audit_events_operation",
         ),
         CK(
