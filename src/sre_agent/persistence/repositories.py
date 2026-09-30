@@ -836,6 +836,8 @@ class SkillVersionRepository:
         if catalog_row is not None:
             if catalog_row.owner_id != owner_id:
                 raise SkillVersionConflictError(resource_id)
+            if catalog_row.status not in ("draft", "published"):
+                raise SkillVersionConflictError(resource_id)
             catalog_row.source = "skill"
             catalog_row.source_ref = resource_id
             catalog_row.status = "published"
