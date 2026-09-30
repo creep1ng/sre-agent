@@ -48,8 +48,9 @@ def governed_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
-            "mcp_tools, mcp_servers, "
+            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -99,6 +100,20 @@ def _governed_operations(document: dict[str, Any]) -> set[tuple[str, str]]:
 
 
 EXPECTED_SCOPES = {
+    ("POST", "/v1/bok/collections/{collection_id}/versions/{version}/search"): {
+        "action": "bok.search",
+        "resource_type": "bok_collection",
+        "resource_id": "path.collection_id@version",
+    },
+    (
+        "GET",
+        "/v1/bok/collections/{collection_id}/versions/{version}/chunks/"
+        "{document_id}/{section_id}/{chunk_index}",
+    ): {
+        "action": "bok.read",
+        "resource_type": "bok_collection",
+        "resource_id": "path.collection_id@version",
+    },
     ("POST", "/v1/responses"): {
         "action": "invoke",
         "resource_type": "llm_model",
