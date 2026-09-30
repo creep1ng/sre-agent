@@ -1,69 +1,23 @@
 """Real HTTP and PostgreSQL evidence for exact-version Skill lifecycle."""
 
-import asyncio
-import os
-
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
-
-from sre_agent.application import create_application
-from sre_agent.persistence.database import Database
-from sre_agent.persistence.seeds import SeedSettings, seed
-from sre_agent.settings import Settings
-
-DATABASE_URL = os.environ.get(
-    "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
+from test_control_acceptance import (
+    ADMIN_KEY,
+    DATABASE_URL,
+    RESTRICTED_KEY,
+    client,  # noqa: F401 — pytest registers the imported fixture
+    headers,
+    migrated_acceptance_database,  # noqa: F401 — module-scoped autouse fixture
 )
-ADMIN_KEY = "sre_admn_0123456789abcdefghijklmnop"
-RESTRICTED_KEY = "sre_rest_0123456789abcdefghijklmnop"
-AUDIT_KEY = "issue331-skill-activation-audit-key"
-SEED_ENV = {
-    "ADMIN_HUMAN_API_KEY": ADMIN_KEY,
-    "DEMO_HUMAN_API_KEY": "sre_demo_0123456789abcdefghijklmnop",
-    "INCIDENT_HARNESS_API_KEY": "sre_inci_0123456789abcdefghijklmnop",
-    "RESTRICTED_HARNESS_API_KEY": RESTRICTED_KEY,
-    "TRIAGE_AGENT_MODEL": "openai/gpt-4o-mini",
-    "TRIAGE_AGENT_PROVIDER": "openai",
-    "REMEDIATION_AGENT_MODEL": "anthropic/claude-3.5-haiku",
-    "REMEDIATION_AGENT_PROVIDER": "anthropic",
-}
+from test_skill_publication import skill_body
 
-
-@pytest.fixture(scope="module", autouse=True)
-def migrated_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
-            "mcp_tools, mcp_servers, principals, idempotency_records, alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
-
-    async def bootstrap() -> None:
-        database = Database(DATABASE_URL)
-        try:
-            assert await seed(database, SeedSettings.from_environment(SEED_ENV))
-        finally:
-            await database.dispose()
-
-    asyncio.run(bootstrap())
-
-
-@pytest.fixture
-def client() -> TestClient:
-    app = create_application(Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY))
-    with TestClient(app, raise_server_exceptions=False) as test_client:
-        yield test_client
+from sre_agent.persistence.repositories import AuditRepository
 
 
 def test_skill_activation_is_exact_authorized_persisted_and_idempotent(
-    client: TestClient,
+    client: TestClient,  # noqa: F811 — pytest fixture binding
 ) -> None:
     published = client.post(
         "/v1/skills/versions",
@@ -144,3 +98,71 @@ def test_skill_activation_is_exact_authorized_persisted_and_idempotent(
             "AND resource_id='activation-demo@1.0.0'"
         ).fetchone()
     assert status == ("active",)
+
+
+def test_status_audit_failure_rolls_back_and_allows_clean_retry(
+    client: TestClient,  # noqa: F811 — pytest fixture binding
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = skill_body() | {"skill_id": "atomic-status"}
+    published = client.post(
+        "/v1/skills/versions", json=body, headers=headers(idempotency_key="atomic-status-create")
+    )
+    assert published.status_code == 201
+    path = "/v1/skills/atomic-status/1.0.0/status"
+    update = {"status": "inactive", "expected_updated_at": published.json()["created_at"]}
+
+    def persisted_status():
+        with psycopg.connect(DATABASE_URL) as connection:
+            return connection.execute(
+                "SELECT status, updated_at FROM resources "
+                "WHERE resource_type='skill' AND resource_id='atomic-status@1.0.0'"
+            ).fetchone()
+
+    before = persisted_status()
+    original = AuditRepository.append
+
+    async def fail_after_append(repository, event):
+        await original(repository, event)
+        if event.operation == "catalog.status.replace":
+            raise RuntimeError("synthetic terminal audit failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(AuditRepository, "append", fail_after_append)
+        failed = client.put(path, json=update, headers=headers())
+    assert failed.status_code == 503
+    assert persisted_status() == before
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM audit_events WHERE correlation->>'request_id'=%s",
+            (failed.json()["request_id"],),
+        ).fetchone() == (0,)
+    retried = client.put(path, json=update, headers=headers())
+    assert retried.status_code == 200
+    assert persisted_status()[0] == "inactive"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT response_status FROM audit_events "
+            "WHERE operation='catalog.status.replace' AND occurred_at > %s",
+            (published.json()["created_at"],),
+        ).fetchall() == [(200,)]
+
+
+@pytest.mark.parametrize(("version", "status"), [("1.0.0", 404), ("1" * 29 + ".0.0", 422)])
+def test_status_missing_or_oversized_version_is_audited(
+    client: TestClient,  # noqa: F811 — pytest fixture binding
+    version: str,
+    status: int,
+) -> None:
+    result = client.put(
+        f"/v1/skills/missing-status/{version}/status",
+        headers=headers(),
+        json={"status": "inactive", "expected_updated_at": "2026-09-01T00:00:00Z"},
+    )
+    assert result.status_code == status, result.text
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT response_status, operation FROM audit_events "
+            "WHERE correlation->>'request_id'=%s",
+            (result.json()["request_id"],),
+        ).fetchone() == (status, "catalog.status.replace")

@@ -389,7 +389,7 @@ class SkillPublishRequest(BaseModel):
     skill_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
     version: Annotated[
         str,
-        Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
+        Field(max_length=32, pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
     ]
     owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
     manifest: SkillManifest
@@ -2831,6 +2831,7 @@ class ControlService:  # noqa: E305
         if (
             re.fullmatch(r"[a-z][a-z0-9-]{2,62}[a-z0-9]", skill_id) is None
             or re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version) is None
+            or len(version) > 32
         ):
             return await self._finish(
                 request_id,
@@ -2906,6 +2907,7 @@ class ControlService:  # noqa: E305
             )
         if (
             re.fullmatch(r"[a-z][a-z0-9-]{2,62}[a-z0-9]", skill_id) is None
+            or len(version) > 32
             or re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version) is None
         ):
             return await self._finish(
@@ -2948,12 +2950,38 @@ class ControlService:  # noqa: E305
             )
         try:
             async with self.sessions() as session, session.begin():
-                entry, updated_at = await SkillVersionRepository(session).replace_status(
+                changed = await SkillVersionRepository(session).replace_status(
                     skill_id,
                     version,
                     body.status,
                     expected_updated_at=body.expected_updated_at,
                 )
+                payload = None
+                if changed is not None:
+                    entry, updated_at = changed
+                    payload = SkillStatusResponse(
+                        resource_type="skill",
+                        resource_id=entry.resource_id,
+                        status=entry.status,
+                        updated_at=updated_at,
+                    ).model_dump(mode="json")
+                result = await self._finish(
+                    request_id,
+                    started,
+                    404 if changed is None else 200,
+                    "authorization",
+                    operation,
+                    action,
+                    payload=payload,
+                    error_code="resource_not_found" if changed is None else "grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "catalog"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+                if result.status_code == 503:
+                    await session.rollback()
+                return result
         except StaleWriteError:
             return await self._finish(
                 request_id,
@@ -2967,37 +2995,6 @@ class ControlService:  # noqa: E305
                 resource_ref=("administrative_control", "catalog"),
                 decision=evaluation.decision,
             )
-        if entry is None:
-            return await self._finish(
-                request_id,
-                started,
-                404,
-                "authorization",
-                operation,
-                action,
-                error_code="resource_not_found",
-                context=context,
-                resource_ref=("administrative_control", "catalog"),
-                decision=evaluation.decision,
-            )
-        return await self._finish(
-            request_id,
-            started,
-            200,
-            "authorization",
-            operation,
-            action,
-            payload=SkillStatusResponse(
-                resource_type="skill",
-                resource_id=entry.resource_id,
-                status=entry.status,
-                updated_at=updated_at,
-            ).model_dump(mode="json"),
-            error_code="grant_matched",
-            context=context,
-            resource_ref=("administrative_control", "catalog"),
-            decision=evaluation.decision,
-        )
 
 
 def control_router(service: ControlService) -> APIRouter:
@@ -3915,6 +3912,7 @@ def control_router(service: ControlService) -> APIRouter:
                 {
                     "type": "string",
                     "pattern": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
+                    "maxLength": 32,
                 }
             ),
         ],
@@ -3963,6 +3961,7 @@ def control_router(service: ControlService) -> APIRouter:
             WithJsonSchema(
                 {
                     "type": "string",
+                    "maxLength": 32,
                     "pattern": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
                 }
             ),

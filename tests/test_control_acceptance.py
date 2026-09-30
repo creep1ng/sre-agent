@@ -149,13 +149,15 @@ def audit_row(request_id: str) -> tuple[object, ...]:
 def test_skill_version_read_is_limited_to_catalog_admin(
     client: TestClient,
 ) -> None:
+    version = "1" * 28 + ".0.0"
+
     async def publish() -> None:
         database = Database(DATABASE_URL)
         try:
             async with database.sessions() as session:
                 await SkillVersionRepository(session).publish(
                     skill_id="readable-skill",
-                    version="1.0.0",
+                    version=version,
                     owner_id="skill-owner",
                     manifest=SkillManifest(
                         display_name="Readable Skill",
@@ -171,16 +173,25 @@ def test_skill_version_read_is_limited_to_catalog_admin(
 
     asyncio.run(publish())
 
-    response = client.get("/v1/skills/readable-skill/1.0.0", headers=headers())
+    response = client.get(f"/v1/skills/readable-skill/{version}", headers=headers())
 
     assert response.status_code == 200
     assert response.json()["skill_id"] == "readable-skill"
-    assert response.json()["version"] == "1.0.0"
+    assert response.json()["version"] == version
     assert response.json()["manifest"]["instructions"] == (
         "Use the runbook and verify the outcome."
     )
-    denied = client.get("/v1/skills/readable-skill/1.0.0", headers=headers(RESTRICTED_KEY))
+    denied = client.get(f"/v1/skills/readable-skill/{version}", headers=headers(RESTRICTED_KEY))
     assert denied.status_code == 403
+
+    invalid = client.get(f"/v1/skills/readable-skill/1{version}", headers=headers())
+    assert invalid.status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT response_status, reason_code FROM audit_events "
+            "WHERE correlation->>'request_id'=%s",
+            (invalid.json()["request_id"],),
+        ).fetchone() == (422, "contract_validation_failed")
 
 
 def credential_count(principal_id: str) -> int:
