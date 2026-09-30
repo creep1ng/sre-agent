@@ -335,6 +335,8 @@ def test_invalid_resolution_paths_return_correlated_audited_422(
             (request_id,),
         ).fetchone()
     assert audit == ("skills.resolve", 422, "error", "contract_validation_failed")
+
+
 def test_persistence_failure_returns_retryable_503_with_audit(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
