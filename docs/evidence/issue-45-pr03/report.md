@@ -91,3 +91,25 @@ redirect, safe-summary and no-leak cases pass with the root-path correction.
 Parent's candidate commit/publication, screenshot, hosted CI and human review
 remain pending; the original base/hash/checkpoint above describe the earlier
 P4-only candidate and are retained as history.
+
+
+## Final local restack after PR #430 report correction
+
+Current P4 base: `bb384f08ed65b6429b2d5d4175c035a541f4686e`, the report-only
+follow-up to published PR #430 head `73cd29e58288329a7b2b0fd9eaa816ecace26438`.
+The earlier `f23e9a01`/source/test block above records the prior local checkpoint;
+no source or test bytes changed during either restack. Current source/test
+SHA-256 remain
+`e75fcf678255cd031d05b98691ffc82f12aeeb646e0939546ae969bfb8bfca36` /
+`73f08fe9a43d480ca61674b1bc8deed096490c85d8926a1bf9d6df8197c922e9`.
+
+The exact cached Node 22.14.0 command above passed 2/2 after the final rebase.
+Observed fixture output remained `status=pending` due to the absent upstream
+witness; there were 12 expected gateway requests and 0 alternate-server calls.
+Both changed JavaScript files passed `node --check`, and the final parent-relative
+`git diff --check` passed. The 504 fixture tests bounded upstream-timeout error
+normalization, not actual expiration of the 35-second client request budget.
+This remains controlled integration only: no live gateway/MCP result, screenshot,
+real counter, or CA1–CA8 acceptance is claimed. PR #430's latest hosted CI was
+pending at this checkpoint; P4 screenshot, publication, and review remain
+parent-owned.
