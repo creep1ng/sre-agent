@@ -1,4 +1,5 @@
-"""Static regression tests for the incident war room surface (HU-OPS-03, #36).
+"""Static regression tests for the incident war room surface (HU-OPS-03, #36;
+timeline run selector slice HU-OPS-05 #40a).
 
 The war room is read-only: it navigates by incident_id, renders the
 authoritative detail/timeline/snapshot through the browser API seam and never
@@ -53,9 +54,23 @@ def test_war_room_applies_no_transitions_or_lifecycle_controls() -> None:
         "lifecycle",
         "midnight:triage-requested",
         'localStorage.setItem("incident',
+        "postmortem",
+        "sendRunCommand",
+        "EventSource",
+        "WebSocket",
     ):
         assert forbidden not in JAVASCRIPT
         assert forbidden not in HTML
+
+
+def test_war_room_selects_an_explicit_run_without_merging_timelines() -> None:
+    assert 'id="run-select"' in HTML
+    assert 'id="run-current"' in HTML
+    assert "selectedRunId" in JAVASCRIPT
+    assert "resolveRunId" in JAVASCRIPT
+    assert "estado ${" in JAVASCRIPT
+    lowered = JAVASCRIPT.lower()
+    assert "cross" not in lowered
 
 
 def test_war_room_uses_design_system_tokens() -> None:

@@ -6,6 +6,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 
+from sre_agent.gateway.health import postgres_readiness_probe
 from sre_agent.persistence.database import Database
 
 DATABASE_URL = os.environ.get(
@@ -36,8 +37,32 @@ def migrated_database() -> None:
               'accepted', 'released', 'not_attempted')"""
         )
         connection.commit()
+    command.upgrade(config, "20260926_14")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events
+            SELECT (jsonb_populate_record(NULL::audit_events, to_jsonb(audit_events) ||
+              '{"event_id":"00000000-0000-4000-8000-000000000098",
+                "operation":"usage.read","action":"admin.read"}'::jsonb)).*
+            FROM audit_events"""
+        )
+        before = connection.execute(
+            "SELECT to_jsonb(audit_events) FROM audit_events ORDER BY event_id"
+        ).fetchall()
     command.upgrade(config, "head")
     command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT to_jsonb(audit_events) FROM audit_events ORDER BY event_id"
+            ).fetchall()
+            == before
+        )
+
+
+@pytest.mark.asyncio
+async def test_integrated_head_is_ready_after_populated_repeated_upgrade() -> None:
+    await postgres_readiness_probe(DATABASE_URL)()
 
 
 def test_repeated_head_has_expected_domain_tables() -> None:
@@ -288,7 +313,7 @@ def test_database_trigger_rejects_audit_updates_and_deletes() -> None:
         for statement in ("UPDATE audit_events SET retryable=true", "DELETE FROM audit_events"):
             with pytest.raises(psycopg.errors.RaiseException), connection.transaction():
                 connection.execute(statement)
-        assert connection.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 2
+        assert connection.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 3
 
 
 def test_404_denial_evidence_prevents_fail_open_downgrade() -> None:

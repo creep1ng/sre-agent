@@ -25,6 +25,7 @@ const eventKindTones = Object.freeze({
 const state = {
   incidentId: null,
   runId: null,
+  selectedRunId: null,
   cursor: null,
   hasMore: false,
   eventCount: 0,
@@ -66,6 +67,8 @@ function cacheNodes() {
     "approvals-list",
     "timeline-section",
     "timeline-count",
+    "run-select",
+    "run-current",
     "timeline-list",
     "timeline-empty",
     "load-more",
@@ -237,8 +240,9 @@ function renderEvents(events, { append } = {}) {
     summary.textContent = event.summary ?? "Evento registrado.";
     const meta = document.createElement("span");
     meta.className = "war-room__event-meta";
+    const eventState = typeof event.state === "string" && event.state ? event.state : "—";
     meta.textContent =
-      `${actorLabel(event.actor)} · ${formatTimestamp(event.occurred_at)} · seq ${event.sequence}`;
+      `${actorLabel(event.actor)} · ${formatTimestamp(event.occurred_at)} · seq ${event.sequence} · estado ${eventState}`;
     item.append(badge, summary, meta);
     nodes["timeline-list"].append(item);
     state.eventCount += 1;
@@ -248,6 +252,41 @@ function renderEvents(events, { append } = {}) {
   nodes["timeline-count"].textContent =
     state.eventCount === 1 ? "1 evento" : `${state.eventCount} eventos`;
   nodes["timeline-section"].hidden = false;
+}
+
+function runLabel(run) {
+  const status = typeof run.status === "string" && run.status ? run.status : "—";
+  const current =
+    typeof run.current_state === "string" && run.current_state ? run.current_state : "—";
+  return `${run.run_id} · ${status} · ${current}`;
+}
+
+function resolveRunId(detail) {
+  const runs = Array.isArray(detail.runs) ? detail.runs : [];
+  const ids = runs.map((run) => run.run_id);
+  if (state.selectedRunId !== null && ids.includes(state.selectedRunId)) {
+    return state.selectedRunId;
+  }
+  return latestRunId(detail);
+}
+
+function renderRunPicker(detail, activeRunId) {
+  const runs = Array.isArray(detail.runs) ? detail.runs : [];
+  const select = nodes["run-select"];
+  select.replaceChildren();
+  runs.forEach((run) => {
+    if (!run || typeof run.run_id !== "string") return;
+    const option = document.createElement("option");
+    option.value = run.run_id;
+    option.textContent = runLabel(run);
+    select.append(option);
+  });
+  if (activeRunId !== null) {
+    select.value = activeRunId;
+    nodes["run-current"].textContent = `Timeline del run ${activeRunId}.`;
+  } else {
+    nodes["run-current"].textContent = "";
+  }
 }
 
 async function fetchTimeline({ runId, after } = {}) {
@@ -260,18 +299,21 @@ async function fetchTimeline({ runId, after } = {}) {
 
 async function loadAll() {
   const generation = newGeneration();
+  const keptSelection = state.selectedRunId;
   clearSessionData();
+  state.selectedRunId = keptSelection;
   hideAll();
   nodes["loading-state"].hidden = false;
   nodes["war-room"].dataset.state = "loading";
 
   try {
     const detail = await client.getIncident(state.incidentId);
-    // El run queda fijado desde el detalle: el cursor seq:N solo tiene
-    // sentido dentro de un mismo run. Actualizar re-deriva el último run y
-    // reinicia la paginación.
+    // El run activo es una referencia autoritativa: la elección explícita se
+    // conserva entre recargas mientras siga existiendo; sin elección se sigue
+    // el último run y el cursor seq:N nunca mezcla runs.
     if (generation !== state.generation) return;
-    const runId = latestRunId(detail);
+    const runId = resolveRunId(detail);
+    renderRunPicker(detail, runId);
     let timeline;
     try {
       timeline = await fetchTimeline({ runId });
@@ -340,6 +382,13 @@ async function loadMore() {
   }
 }
 
+function selectRun(event) {
+  const runId = event.target.value;
+  if (!runId || runId === state.runId) return;
+  state.selectedRunId = runId;
+  loadAll();
+}
+
 function submitCredential(event) {
   event.preventDefault();
   const value = nodes["credential-input"].value;
@@ -369,6 +418,7 @@ document.addEventListener("DOMContentLoaded", () => {
   syncThemeSwitch();
   nodes["theme-toggle"].addEventListener("click", toggleTheme);
   nodes["refresh-button"].addEventListener("click", loadAll);
+  nodes["run-select"].addEventListener("change", selectRun);
   nodes["load-more"].addEventListener("click", loadMore);
   nodes["forget-credential"].addEventListener("click", forgetCredential);
   nodes["credential-form"].addEventListener("submit", submitCredential);
