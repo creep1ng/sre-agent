@@ -4,20 +4,53 @@ import asyncio
 import json
 import os
 from datetime import UTC, datetime
+from decimal import Decimal
 
 import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
-from test_consumption_admission import StaticCatalog, priced, snapshot
 
 from sre_agent.application import create_application
+from sre_agent.gateway.endpoint_catalog import EndpointCatalogSnapshot, EndpointMetadata
 from sre_agent.gateway.providers import ProviderRequest, ProviderResult
 from sre_agent.governance.dto import Consumption, PricingContext
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
+
+
+class StaticCatalog:
+    """Live-clock catalog double: the gateway stamps its own admission time."""
+
+    def __init__(self, current: EndpointCatalogSnapshot) -> None:
+        self._current = current
+
+    async def fetch(self, _model: str) -> EndpointCatalogSnapshot:
+        return self._current
+
+
+def live_snapshot() -> EndpointCatalogSnapshot:
+    now = datetime.now(UTC)
+    return EndpointCatalogSnapshot(
+        model="openai/gpt-4o-mini",
+        endpoints=(
+            EndpointMetadata(
+                model="openai/gpt-4o-mini",
+                provider="OpenAI",
+                max_prompt_tokens=10,
+                max_completion_tokens=100,
+                valid_until=now.replace(year=now.year + 1),
+                prompt_price=Decimal("0"),
+                completion_price=Decimal("0.1"),
+                request_price=Decimal("0.2"),
+            ),
+        ),
+        observed_at=now,
+        valid_until=now.replace(year=now.year + 1),
+    )
+
 
 DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
@@ -115,7 +148,7 @@ def post(database: Database, provider: RecordingProvider, key: str) -> object:
     application = create_application(
         settings,
         llm_provider=provider,
-        endpoint_catalog=StaticCatalog(snapshot(priced())),
+        endpoint_catalog=StaticCatalog(live_snapshot()),
     )
     return application, {"Authorization": f"Bearer {key}"}
 

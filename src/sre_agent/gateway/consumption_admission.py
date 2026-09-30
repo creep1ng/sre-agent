@@ -78,7 +78,15 @@ class ConsumptionAdmissionService:
             fetch = catalog.fetch  # type: ignore[attr-defined]
             try:
                 snapshot = await fetch(model)
-                endpoint = snapshot.select(provider, now=now)
+                # The catalog is fetched after the admission clock is read, so a
+                # live snapshot is observed slightly later than `now`. Judge
+                # freshness at the later of the two; an expired `valid_until`
+                # still fails closed inside select().
+                observed_at = snapshot.observed_at
+                if not isinstance(observed_at, datetime):
+                    raise TypeError("snapshot observation must be a datetime")
+                check_at = observed_at if observed_at > now else now
+                endpoint = snapshot.select(provider, now=check_at)
             except (EndpointCatalogUnavailable, AttributeError, TypeError, ValueError):
                 return AdmissionResult(
                     False,
@@ -113,7 +121,7 @@ class ConsumptionAdmissionService:
                     provider=provider,
                     incident_tokens_remaining=incident_remaining,
                     monthly_usd_remaining=monthly_remaining,
-                    now=now,
+                    now=check_at,
                 )
             except AffordabilityDenied:
                 return AdmissionResult(

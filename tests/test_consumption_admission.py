@@ -4,7 +4,7 @@ import asyncio
 import os
 import threading
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import psycopg
@@ -117,7 +117,6 @@ def admit(database: Database, catalog: object | None = None, **kwargs: object) -
 def _clean_state(admission_database: Database) -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DELETE FROM consumption_reservations")
-        connection.execute("DELETE FROM audit_events")
         connection.execute("DELETE FROM consumption_limit_policies")
     yield
 
@@ -250,3 +249,49 @@ def test_legacy_audit_usage_counts_toward_monthly(admission_database: Database) 
         )
     result = admit(admission_database, incident_id=None, model="m", provider="OpenAI")
     assert not result.allowed and result.denial_reason == "monthly_limit_exceeded"
+
+
+def test_snapshot_observed_after_the_admission_clock_is_still_current(
+    admission_database: Database,
+) -> None:
+    """A live catalog fetch observes after the request clock; that is not staleness."""
+    asyncio.run(seed_policy(admission_database, incident=1000, monthly=None))
+    fetched_at = NOW + timedelta(seconds=1)
+    late = EndpointCatalogSnapshot(
+        model="openai/gpt-4o-mini",
+        endpoints=(priced(),),
+        observed_at=fetched_at,
+        valid_until=fetched_at + timedelta(hours=1),
+    )
+
+    async def run() -> object:
+        return await ConsumptionAdmissionService(admission_database.sessions).admit(
+            incident_id=None,
+            model="m",
+            provider="OpenAI",
+            catalog=StaticCatalog(late),
+            now=NOW,
+        )
+
+    result = asyncio.run(run())
+    assert result.allowed, result.denial_reason
+    assert result.max_output_tokens == 100
+
+    stale = EndpointCatalogSnapshot(
+        model="openai/gpt-4o-mini",
+        endpoints=(priced(),),
+        observed_at=NOW - timedelta(hours=2),
+        valid_until=NOW - timedelta(hours=1),
+    )
+
+    async def stale_run() -> object:
+        return await ConsumptionAdmissionService(admission_database.sessions).admit(
+            incident_id=None,
+            model="m",
+            provider="OpenAI",
+            catalog=StaticCatalog(stale),
+            now=NOW,
+        )
+
+    denied = asyncio.run(stale_run())
+    assert not denied.allowed and denied.denial_reason == "consumption_bounds_unavailable"
