@@ -102,6 +102,7 @@ function failureResult(code) {
     discovery: { server: null, tools: [] },
     metric: null,
     logs: null,
+    denied: null,
     restricted_discovery: null,
   };
 }
@@ -116,6 +117,14 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
     } catch {
       return { status: 0, body: {} };
     }
+  };
+  const invocation = await call("POST", "/v1/mcp/tools/query_prometheus", restrictedToken, METRIC_QUERY);
+  const invocationBody = invocation.body && typeof invocation.body === "object" ? invocation.body : {};
+  const restrictedInvocation = {
+    http_status: invocation.status,
+    error_code: invocationBody.error?.code === "resource_unavailable" ? "resource_unavailable" : null,
+    request_id: safeRequestId(invocationBody.request_id),
+    upstream_delta: null,
   };
   const allowed = await call("GET", "/v1/mcp/discovery", humanToken);
   const discovery = summarizeDiscovery(allowed.status, allowed.body);
@@ -136,6 +145,8 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
   if (!discovery.ok) failures.push("discovery_mismatch");
   if (!metric.ok) failures.push(metric.failure);
   if (!logs.ok) failures.push(logs.failure);
+  if (restrictedInvocation.http_status !== 403 || restrictedInvocation.error_code !== "resource_unavailable" ||
+      !restrictedInvocation.request_id) failures.push("restricted_invocation_not_denied");
   if (restrictedDiscovery.http_status !== 403 || restrictedDiscovery.error_code !== "resource_unavailable" ||
       !restrictedDiscovery.request_id || restrictedDiscovery.retryable !== false || !restrictedDiscovery.enumeration_absent) {
     failures.push("restricted_discovery_not_denied");
@@ -151,6 +162,7 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
     logs: { source: logs.source, window: logs.window, http_status: logs.http_status,
       error_kind: logs.error_kind, result_count: logs.result_count, returned_count: logs.returned_count,
       warning_count: logs.warning_count },
+    denied: restrictedInvocation,
     restricted_discovery: restrictedDiscovery,
   };
 }

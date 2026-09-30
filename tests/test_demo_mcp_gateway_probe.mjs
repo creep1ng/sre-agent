@@ -8,7 +8,8 @@ const SCRIPT = fileURLToPath(new URL("../scripts/demo_mcp_gateway_probe.mjs", im
 const HUMAN_TOKEN = "fixture-allowed-token";
 const RESTRICTED_TOKEN = "fixture-restricted-token";
 const PRIVATE_MARKER = "fixture-private-body";
-const REQUEST_ID = "10000000-0000-4000-8000-000000000006";
+const DENIAL_REQUEST_ID = "10000000-0000-4000-8000-000000000006";
+const DISCOVERY_REQUEST_ID = "10000000-0000-4000-8000-000000000007";
 
 async function listen(server) {
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
@@ -56,7 +57,9 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
   let allowed = { server: { server_id: "grafana-mcp", endpoint: PRIVATE_MARKER },
     tools: [{ tool_id: "query_prometheus" }, { tool_id: "query_elasticsearch" }] };
   let denied = { error: { code: "resource_unavailable", message: PRIVATE_MARKER },
-    request_id: REQUEST_ID, retryable: false };
+    request_id: DISCOVERY_REQUEST_ID, retryable: false };
+  let invocationDenied = { error: { code: "resource_unavailable", message: PRIVATE_MARKER },
+    request_id: DENIAL_REQUEST_ID };
   const server = createServer((request, response) => {
     calls.push(`${request.method} ${request.url}`);
     let rawBody = "";
@@ -65,7 +68,15 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       const restricted = request.headers.authorization === `Bearer ${RESTRICTED_TOKEN}`;
       assert.equal(request.headers.authorization, `Bearer ${restricted ? RESTRICTED_TOKEN : HUMAN_TOKEN}`);
       const body = rawBody ? JSON.parse(rawBody) : null;
-      requests.push({ method: request.method, path: request.url, body });
+      requests.push({ method: request.method, path: request.url, body, restricted });
+      if (request.method === "POST" && restricted) {
+        assert.equal(request.url, "/v1/mcp/tools/query_prometheus");
+        assert.deepEqual(body, { datasource_uid: "webstore-metrics", expr: "up",
+          query_type: "instant", end_time: "now" });
+        response.writeHead(invocationDenied.status ?? 403, { "Content-Type": "application/json" });
+        response.end(JSON.stringify(invocationDenied.body ?? invocationDenied));
+        return;
+      }
       if (request.method === "POST") {
         assert.equal(request.headers["content-type"], "application/json");
         const metric = request.url.endsWith("query_prometheus");
@@ -94,13 +105,24 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       error_kind: null, result_type: "vector", result_count: 1, warning_count: 0 });
     assert.deepEqual(observed.logs, { source: "webstore-logs", window: "now-5m..now", http_status: 200,
       error_kind: null, result_count: 1, returned_count: 1, warning_count: 0 });
+    assert.deepEqual(observed.denied, {
+      http_status: 403, error_code: "resource_unavailable", request_id: DENIAL_REQUEST_ID,
+      upstream_delta: null,
+    });
     assert.deepEqual(observed.restricted_discovery, {
-      http_status: 403, error_code: "resource_unavailable", request_id: REQUEST_ID,
+      http_status: 403, error_code: "resource_unavailable", request_id: DISCOVERY_REQUEST_ID,
       retryable: false, enumeration_absent: true,
     });
-    assert.deepEqual(calls, ["GET /v1/mcp/discovery", "POST /v1/mcp/tools/query_prometheus",
-      "POST /v1/mcp/tools/query_elasticsearch", "GET /v1/mcp/discovery"]);
-    assert.deepEqual(requests.filter(({ method }) => method === "POST").map(({ body }) => body), [
+    assert.deepEqual(requests.map(({ method, path }) => `${method} ${path}`), [
+      "POST /v1/mcp/tools/query_prometheus", "GET /v1/mcp/discovery",
+      "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
+      "GET /v1/mcp/discovery",
+    ]);
+    assert.equal(requests[0].body.expr, "up", "restricted request reuses the fixed metric payload");
+    assert.deepEqual(calls, ["POST /v1/mcp/tools/query_prometheus", "GET /v1/mcp/discovery",
+      "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
+      "GET /v1/mcp/discovery"]);
+    assert.deepEqual(requests.filter(({ method, restricted }) => method === "POST" && !restricted).map(({ body }) => body), [
       { datasource_uid: "webstore-metrics", expr: "up", query_type: "instant", end_time: "now" },
       { datasource_uid: "webstore-logs", index: "otel-logs-*", query: "resource.service.name:checkout",
         start_time: "now-5m", end_time: "now", limit: 1 },
@@ -133,9 +155,9 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
     const rootSlash = await runCli(`${url}/`);
     assert.equal(rootSlash.status, 0, rootSlash.stderr);
     assert.equal(report(rootSlash).status, "pending", "a controlled query has no independent upstream witness");
-    assert.deepEqual(calls.slice(beforeRootSlash), ["GET /v1/mcp/discovery",
-      "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
-      "GET /v1/mcp/discovery"]);
+    assert.deepEqual(calls.slice(beforeRootSlash), ["POST /v1/mcp/tools/query_prometheus",
+      "GET /v1/mcp/discovery", "POST /v1/mcp/tools/query_prometheus",
+      "POST /v1/mcp/tools/query_elasticsearch", "GET /v1/mcp/discovery"]);
 
     for (const invalid of [null, { server: { server_id: PRIVATE_MARKER }, tools: [] },
       { ...allowed, tools: [...allowed.tools, { tool_id: PRIVATE_MARKER }] },
@@ -158,6 +180,19 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       assert.equal(result.status, 1);
       assert.ok(report(result).failures.includes("restricted_discovery_not_denied"));
       denied = previous;
+    }
+    for (const invalid of [
+      { status: 200, body: invocationDenied },
+      { status: 403, body: { ...invocationDenied, error: { code: "not_authorized" } } },
+      { status: 403, body: { ...invocationDenied, request_id: undefined } },
+      { status: 403, body: { ...invocationDenied, request_id: PRIVATE_MARKER } },
+    ]) {
+      const previous = invocationDenied;
+      invocationDenied = invalid;
+      const result = await runCli(url);
+      assert.equal(result.status, 1);
+      assert.ok(report(result).failures.includes("restricted_invocation_not_denied"));
+      invocationDenied = previous;
     }
     const count = calls.length;
     for (const invalidUrl of [`${url}/mcp-gateway`, `${url}/mcp-gateway/`, `${url}?token=${PRIVATE_MARKER}`,
@@ -201,7 +236,7 @@ test("gateway smoke CLI rejects redirects and bounds malformed or unavailable re
       assert.equal(report(result).status, "fail");
       assert.equal(alternateCalls, 0, "redirects must not create alternate routes");
     }
-    assert.equal(gatewayCalls, 12, "each scenario attempts only its four fixed gateway requests");
+    assert.equal(gatewayCalls, 15, "each scenario attempts only its five fixed gateway requests");
     t.diagnostic(`Controlled alternate-server calls: ${alternateCalls}; gateway requests: ${gatewayCalls}`);
   } finally {
     await close(gateway);

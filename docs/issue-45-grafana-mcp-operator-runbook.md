@@ -1,6 +1,6 @@
 # Issue 45: operator prerequisites and evidence boundaries
 
-**P3 delivers discovery; P4 adds controlled metric/log smoke-query behavior, not live acceptance.**
+**P5 adds a controlled restricted known-ID denial before discovery; P3/P4 behavior is preserved, not live acceptance.**
 It helps independent freelancers prepare a safe environment before verifying
 Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 
@@ -12,7 +12,8 @@ Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 3. Distinguish a healthy service, a controlled test and a real failure signal.
 4. Follow the staged recovery checklist in the [issue tracker](../odd/tasks/issue-45-grafana-mcp-verification.md).
    Full-probe/cycle commands recorded there remain historical or planned;
-   P3/P4 commands below cover only discovery and controlled smoke queries.
+   P3/P4 commands below describe their historical stages, and the current P5
+   section covers controlled known-ID denial followed by the unchanged P4 flow.
 
 ## Current contract and prerequisites
 
@@ -60,8 +61,9 @@ API, not the harness. Keep that boundary unchanged.
 
 ## Executable stage boundaries
 
-- Discovery CLI (P3) → fixed metric/log smoke queries (P4) → known-ID-first denial →
-  offline upstream-counter reconciliation.
+- P3 discovery → P4 fixed metric/log smoke queries → P5 known-ID-first denial
+  before all discovery. Any offline upstream-counter reconciliation is a later,
+  separate stage and is not implemented by this probe.
 - Harness boundary targets, including connect-only proxy/admin probes.
 - Metric capture → log signal capture → offline two-cycle verification.
 
@@ -87,12 +89,13 @@ Its publication, hosted CI and human review remain parent-owned. See
 
 ## Rollback and next step
 
-P3 adds only the discovery CLI, matching tests and documentation/evidence; no
-producer, configuration, migration or dependency changes. Revert those additions
-and documentation updates together, preserving PR #424 and recovery sources.
-The next unit is governed metric/log queries with matching controlled checks.
-Reassess its actual diff against its current base;
-retained source-line estimates do not justify an exception.
+P5 adds only a restricted invocation to the CLI, matching controlled E2E
+assertions, and stage documentation; no producer, runtime, configuration,
+migration or dependency changes. Roll back the P5 source, test, and P5-specific
+documentation together while preserving P3/P4 history and evidence. The later
+upstream-counter witness and real CA1–CA8 evidence remain separate work.
+Reassess each actual diff against its current base; retained source-line
+estimates do not justify an exception.
 
 ## P3: discovery-only CLI
 
@@ -151,3 +154,26 @@ docker run --pull never --network none --rm \
 See the [P4 controlled evidence report](evidence/issue-45-pr03/report.md).
 Live Grafana/MCP behavior, provider credentials, an independent counter, full
 redaction, network isolation and all CA1–CA8 remain unverified.
+
+## P5: controlled known-ID-first denial
+
+The current probe first sends one restricted-role `POST` to the public
+`/v1/mcp/tools/query_prometheus` route, using the same fixed `webstore-metrics`
+`up` payload as the allowed metric query. This request occurs before any
+discovery. It then performs the unchanged P4 sequence: allowed discovery,
+allowed Prometheus POST, allowed Elasticsearch/Lucene POST, and restricted
+discovery. The complete controlled request order is asserted by the E2E test.
+
+The report uses the `denied` summary key and exposes only HTTP status, the
+allowlisted `resource_unavailable` code, a validated safe UUID, and
+`upstream_delta: null`. The later restricted-discovery request keeps a distinct
+UUID. Invalid status, code, or UUID fails closed; response bodies and
+credentials are not summarized. A successful controlled fixture remains
+`pending` because it supplies no trusted upstream-call witness. In particular,
+the 403 and null delta do not prove zero upstream invocations or satisfy CA2.
+No P6 witness/reconciliation option is present in this stage.
+
+Repeat the controlled test with the cached pinned image and the P4 networkless
+Docker command above. This exercises loopback fixtures only; it is not live
+gateway, Grafana/MCP, upstream-counter, or CA1–CA8 acceptance evidence. No
+provider credential, stack, build, pull, or network is needed.

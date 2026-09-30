@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Current delivery stage: P4 controlled metric/log smoke queries atop the P3 gateway-origin correction.** The combined candidate preserves discovery, rejects non-root URL paths, and exercises only fixed gateway queries with controlled fixtures; CA1–CA8 remain open.
+**Current delivery stage: P5 restricted known-ID denial before discovery, atop P4 controlled metric/log smoke queries.** The combined candidate preserves root-only gateway validation and P4 query behavior; controlled denial still has no upstream-call witness, and CA1–CA8 remain open.
 
 ## Objective
 
@@ -245,3 +245,17 @@ Parent published the report-only correction as PR #430 head `bb384f08ed65b6429b2
 ## P4 current evidence attachment
 
 Parent exact committed `fac4831` Docker rerun passed2/2 with unchanged hashes. Genuine [P4 PNG](../../docs/evidence/issue-45-pr03/queries.png), SHA-256 `ff6bc808650b42bca8d239a4c41612df6a71fffd347513b6e32d9857498b6448`, now records observed queries, safe summaries and actual assertions. P4-C remains unchecked pending publication/hosted CI; requested human review and real CA1–CA8 remain open.
+
+## Current P5 known-ID denial stage (2026-09-30)
+
+Fresh owned branch `codex/issue-45-04-known-id-denial`, base published P4 `c840ed76f8e16f123e1d33127ff7798e5de49597` / PR431. Old P5 planning at `4c969741` remains untouched in its separate dirty worktree. Latest live Projects: issue45 OPEN, Project8 midnight.agent Todo. Parent430 bb384 current CI36679193203 passed all8 jobs; human review and parent425 source integration remain pending.
+
+Authorized scope: restricted known-ID Prometheus POST must be the first request, before all discovery; retain P4 fixed query/discovery behavior, root-only validation, malformed-entry/privacy/redirect checks. Report only bounded status/code/safe UUID and upstream_delta:null. Controlled success stays pending; no P6 witness option, actual upstream-zero assertion, CA2 closure, producer/runtime/cloud changes. Strict test-first ON comes from the issue handoff/OPERATING-RULES, not a repository toggle. Runner is the cached Node22.14 networkless Docker HTTP/CLI test documented in P4; no build/pull, secrets, API/DB/demo or host package manager.
+
+- [x] **MCP45-P5-A — Observe known-ID-first denial RED**: permanent HTTP/CLI test first; assert restricted POST is request one, exact public route/payload, safe denial UUID distinct from discovery UUID, null upstream_delta and pending success. Cover wrong status/code/missing or invalid UUID fail-closed without output leakage; cached networkless Docker run observed 0/2 before source implementation.
+- [x] **MCP45-P5-B — Implement bounded denial summary**: prepend restricted POST to unchanged four-request P4 sequence and allowlist denial output; never convert 403 or fixture counts into upstream-counter proof. Preserve existing public boundaries and 35-second/no-redirect budget; exact cached networkless Docker suite passed 2/2.
+- [ ] **MCP45-P5-C — Verify and bind evidence**: exact current Docker GREEN, syntax/diff/privacy, source/test hashes, report and actual screenshot; full task mirror and publication/hosted CI parent-owned. Keep real CA1–CA8 and human acceptance pending. Measure actual per-base additions+deletions <=400; no history/test/format trimming.
+
+P5 local evidence: `/tmp/issue45-p5-evidence/red.log` records pre-source RED (0/2) on Node 22.14.0; `/tmp/issue45-p5-evidence/green.log` records current controlled GREEN (2/2). Source/test SHA-256 are recorded in `docs/evidence/issue-45-pr04/report.md`. The controlled success remains `pending` with `upstream_delta: null`; no zero-call or CA2 claim is made. Parent owns screenshot, task mirror, independent verification, commit, publication and hosted P5 CI. P4 hosted CI run `36680206014` passed all eight jobs per parent checkpoint; human acceptance and CA1–CA8 remain open.
+
+Next step: parent completes P5-C evidence/publication readiness. New scope forecast is not a measured final diff; measure the complete PR against `c840ed76f8e16f123e1d33127ff7798e5de49597`, including parent-owned PNG, and preserve all task history without cosmetic trimming.
