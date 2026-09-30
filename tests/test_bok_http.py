@@ -818,10 +818,11 @@ def test_persisted_bok_audit_blocks_lossy_downgrade(client):
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     # BoK evidence still blocks its own lossy downgrade; when the Skills slice also
     # holds immutable versions its guard fires first on the shared chain.
-    with pytest.raises(
-        RuntimeError,
-        match="cannot downgrade while BoK audit evidence exists|cannot downgrade while immutable Skill versions exist",
-    ):
+    guard = (
+        "cannot downgrade while BoK audit evidence exists"
+        "|cannot downgrade while immutable Skill versions exist"
+    )
+    with pytest.raises(RuntimeError, match=guard):
         command.downgrade(config, "20260929_15")
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
