@@ -15,7 +15,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, model_validator
 from pydantic.json_schema import WithJsonSchema
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,9 +33,11 @@ from sre_agent.governance.dto import (
     PrincipalContext,
     Resource,
     ResourceCatalogEntry,
+    SkillManifest,
+    SkillVersionRecord,
 )
 from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, StaleWriteError  # fmt: skip
+from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
 
 IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ERRORS: dict[int, tuple[str, str]] = {
@@ -165,6 +167,24 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("GET", "/v1/catalog/resources/{type}/{id}"): (
         "catalog.read",
         "admin.read",
+        "administrative_control",
+        "catalog",
+    ),
+    ("POST", "/v1/skills/versions"): (
+        "catalog.create",
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
+    ("GET", "/v1/skills/{skill_id}/{version}"): (
+        "catalog.read",
+        "admin.read",
+        "administrative_control",
+        "catalog",
+    ),
+    ("PUT", "/v1/skills/{skill_id}/{version}/status"): (
+        "catalog.status.replace",
+        "admin.write",
         "administrative_control",
         "catalog",
     ),
@@ -362,6 +382,36 @@ class CatalogCreate(BaseModel):
     ]
     status: Literal["registered", "draft", "published", "indexing", "active", "inactive", "revoked"]
     discoverability: CatalogDiscoverabilityCreate
+
+
+class SkillPublishRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    skill_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
+    version: Annotated[
+        str,
+        Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
+    ]
+    owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    manifest: SkillManifest
+
+    @model_validator(mode="after")
+    def publication_fits_json_bound(self) -> "SkillPublishRequest":
+        content = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        if len(content.encode("utf-8")) > 32_768:
+            raise ValueError("Skill publication exceeds the encoded byte limit")
+        return self
+
+
+class SkillStatusRequest(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    status: Literal["active", "inactive"]
+
+
+class SkillStatusResponse(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    resource_type: Literal["skill"]
+    resource_id: str
+    status: Literal["active", "inactive"]
 
 
 class CatalogListResponse(BaseModel):
@@ -2412,6 +2462,243 @@ class ControlService:  # noqa: E305
                 decision=evaluation.decision,
             )
 
+    async def publish_skill_version(
+        self, raw: Any, authorization: str | None, idempotency_key: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "catalog.create", "admin.write"
+        scope = ("POST", "/v1/skills/versions")
+        if self._invalid_key(idempotency_key):
+            return await self._finish(
+                request_id,
+                started,
+                400,
+                "validation",
+                operation,
+                action,
+                error_code="invalid_idempotency_key",
+            )
+        try:
+            body = SkillPublishRequest.model_validate(raw)
+        except ValidationError:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[scope]
+            )
+        except AuthenticationFailed:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+
+        canonical_path = "/v1/skills/versions"
+        binding_scope = f"{context.principal.principal_id}|POST|{canonical_path}"
+        request_payload = body.model_dump(mode="json")
+        payload_hash = _payload_sha256(request_payload)
+        resource_id = f"{body.skill_id}@{body.version}"
+        try:
+            async with self.sessions() as session, session.begin():
+                binding = await IdempotencyRepository(session).claim_or_replay(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=payload_hash,
+                    principal_id=context.principal.principal_id,
+                    method="POST",
+                    canonical_path=canonical_path,
+                    binding="at_least_24h",
+                    outcome=IdempotencyOutcome(
+                        response_status=201,
+                        resource_id=resource_id,
+                        replayed=False,
+                    ),
+                )
+                if binding.replayed:
+                    record = SkillVersionRecord.model_validate(binding.outcome.response_payload)
+                else:
+                    record = await SkillVersionRepository(session).publish(
+                        skill_id=body.skill_id,
+                        version=body.version,
+                        owner_id=body.owner_id,
+                        manifest=body.manifest,
+                        content_sha256=payload_hash,
+                    )
+                    await IdempotencyRepository(session).set_response_payload(
+                        scope=binding_scope,
+                        key_digest=_key_digest(idempotency_key or ""),
+                        response_payload=record.model_dump(mode="json"),
+                    )
+                payload = record.model_dump(mode="json")
+                result = await self._finish(
+                    request_id,
+                    started,
+                    201,
+                    "authorization",
+                    operation,
+                    action,
+                    payload=payload,
+                    error_code="grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "catalog"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+                if result.status_code == 503:
+                    await session.rollback()
+                    return result
+                return result
+        except IdempotencyConflictError:
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="idempotency_conflict",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+            )
+        except SkillVersionConflictError:
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="status_conflict",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+            )
+        except IntegrityError:
+            return await self._finish(
+                request_id,
+                started,
+                409,
+                "authorization",
+                operation,
+                action,
+                error_code="status_conflict",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+            )
+
+    async def get_skill_version(
+        self, skill_id: str, version: str, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "catalog.read", "admin.read"
+        if (
+            re.fullmatch(r"[a-z][a-z0-9-]{2,62}[a-z0-9]", skill_id) is None
+            or re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version)
+            is None
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions,
+                authorization,
+                *CONTROL_SCOPES[("GET", "/v1/skills/{skill_id}/{version}")],
+            )
+        except AuthenticationFailed:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session:
+            record = await SkillVersionRepository(session).get(skill_id, version)
+        if record is None:
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_not_found",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+            )
+        result = await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload=record.model_dump(mode="json"),
+            error_code="grant_matched",
+            context=context,
+            resource_ref=("administrative_control", "catalog"),
+            decision=evaluation.decision,
+        )
+        if result.status_code == 503:
+            return result
+        return Response(
+            content=_canonical_payload(record.model_dump(mode="json")),
+            status_code=200,
+            media_type="application/json",
+        )
+
     async def list_catalog_resources(
         self,
         authorization: str | None,
@@ -2522,6 +2809,108 @@ class ControlService:  # noqa: E305
             resource_ref=("administrative_control", "catalog"),
             decision=evaluation.decision,
         )
+
+    async def replace_skill_status(
+        self, skill_id: str, version: str, raw: Any, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "catalog.status.replace", "admin.write"
+        scope = ("PUT", "/v1/skills/{skill_id}/{version}/status")
+        if (
+            re.fullmatch(r"[a-z][a-z0-9-]{2,62}[a-z0-9]", skill_id) is None
+            or re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version)
+            is None
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            body = SkillStatusRequest.model_validate_json(_canonical_payload(raw))
+        except (TypeError, ValidationError):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[scope]
+            )
+        except AuthenticationFailed:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session, session.begin():
+            changed = await SkillVersionRepository(session).replace_status(
+                skill_id, version, body.status
+            )
+            if changed:
+                payload = SkillStatusResponse(
+                    resource_type="skill",
+                    resource_id=f"{skill_id}@{version}",
+                    status=body.status,
+                ).model_dump(mode="json")
+                result = await self._finish(
+                    request_id,
+                    started,
+                    200,
+                    "authorization",
+                    operation,
+                    action,
+                    payload=payload,
+                    error_code="grant_matched",
+                    context=context,
+                    resource_ref=("administrative_control", "catalog"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            else:
+                result = await self._finish(
+                    request_id,
+                    started,
+                    404,
+                    "authorization",
+                    operation,
+                    action,
+                    error_code="resource_not_found",
+                    context=context,
+                    resource_ref=("administrative_control", "catalog"),
+                    decision=evaluation.decision,
+                    audit_session=session,
+                )
+            if result.status_code == 503:
+                await session.rollback()
+            return result
 
     async def get_catalog_resource(
         self, resource_type: str, resource_id: str, authorization: str | None
@@ -3440,6 +3829,142 @@ def control_router(service: ControlService) -> APIRouter:
     ) -> Response:
         result = await service.get_catalog_resource(
             resource_type, id, authorization_from(credentials, request)
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.post(
+        "/v1/skills/versions",
+        status_code=201,
+        response_model=SkillVersionRecord,
+        responses={
+            400: {"model": ErrorEnvelope},
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {
+                        "type": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                        "pattern": IDEMPOTENCY_KEY_PATTERN,
+                    },
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {"schema": SkillPublishRequest.model_json_schema()}
+                },
+            },
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "catalog",
+            },
+        },
+    )
+    async def publish_skill_version(
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.publish_skill_version(
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/skills/{skill_id}/{version}",
+        response_model=SkillVersionRecord,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "catalog",
+            }
+        },
+    )
+    async def get_skill_version(
+        skill_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$"}),
+        ],
+        version: Annotated[
+            str,
+            WithJsonSchema(
+                {
+                    "type": "string",
+                    "pattern": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
+                }
+            ),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.get_skill_version(
+            skill_id, version, authorization_from(credentials, request)
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.put(
+        "/v1/skills/{skill_id}/{version}/status",
+        response_model=SkillStatusResponse,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "catalog",
+            }
+        },
+    )
+    async def replace_skill_status(
+        skill_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$"}),
+        ],
+        version: Annotated[
+            str,
+            WithJsonSchema(
+                {
+                    "type": "string",
+                    "pattern": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
+                }
+            ),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.replace_skill_status(
+            skill_id, version, await raw_json(request), authorization_from(credentials, request)
         )
         response.status_code = result.status_code
         return result

@@ -34,15 +34,24 @@ The schema releases remain the contract authority. Runtime models must not repla
 
 ## Governed extension rule
 
-Future LLM, MCP, skill, and knowledge consumers MUST enter through a declared governed operation:
+Future LLM, MCP, and knowledge consumers MUST enter through a declared governed operation:
 
 1. Declare Bearer security and the server-owned `(action, resource_type, resource_id)` scope.
 2. Call `authorize_governed_access` after operation validation and before lookup, routing, or adapter execution.
 3. Use an exact existing grant; do not infer roles from principal names or client input.
 4. Record the terminal audit event before releasing an allowed result, and keep denied effects at zero.
 
-MCP, skill, and knowledge runtimes remain future-only until their runtime boundaries exist. This rule adds no
-endpoint, grant model, provisioning path, schema, seed, migration, or lifecycle behavior.
+The Skill gateway resolves an exact persisted instruction version and its directly declared
+dependencies. Every version requires its own direct `invoke` grant; resolution does not traverse
+transitively and returns no partial manifest when a dependency is unavailable. An administrator
+activates or deactivates one exact version through the existing catalog authority; versions have
+independent lifecycle status, so more than one version may be active at once. Each resolution
+rechecks the active resource state and direct grants, and the gateway does not cache Skill content.
+Resume means requesting the same pinned `skill_id@version` URL again; it never substitutes a
+newer version. Status changes and grant revocation therefore affect the next request. Resolver
+audit records carry request correlation and hashed metadata references only, never instructions or
+dependency payloads. MCP and knowledge runtimes remain future-only until their runtime boundaries
+exist. No Skill script execution, marketplace, or latest-version alias is introduced.
 
 ## Release metadata
 

@@ -48,7 +48,7 @@ def governed_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
             "mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
@@ -169,6 +169,26 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "catalog",
     },
+    ("POST", "/v1/skills/versions"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/skills/{skill_id}/{version}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("PUT", "/v1/skills/{skill_id}/{version}/status"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/skills/{skill_id}/{version}/resolve"): {
+        "action": "invoke",
+        "resource_type": "skill",
+        "resource_id": "path.skill_id@path.version",
+    },
 }
 
 
@@ -183,7 +203,8 @@ def test_current_governed_operations_have_one_declared_contract() -> None:
         scheme = document["components"]["securitySchemes"][next(iter(schemes[0]))]
         assert scheme["type"] == "http" and scheme["scheme"] == "bearer"
         assert operation["x-governed-scope"] == expected_scope
-        assert {"401", "403"} <= set(operation["responses"])
+        denied_status = "404" if path.endswith("/resolve") else "403"
+        assert {"401", denied_status} <= set(operation["responses"])
 
 
 def _record_principal_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
@@ -337,12 +358,11 @@ def test_principal_validation_precedes_shared_authorization(
 def test_future_consumer_guidance_is_documentation_only() -> None:
     guidance = Path("docs/architecture.md").read_text()
 
-    assert "Future LLM, MCP, skill, and knowledge consumers" in guidance
+    assert "Future LLM, MCP, and knowledge consumers" in guidance
     assert "authorize_governed_access" in guidance
-    assert "MCP, skill, and knowledge runtimes remain future-only" in guidance
-    assert "adds no endpoint, grant model, provisioning path" in " ".join(guidance.split())
+    assert "MCP and knowledge runtimes remain future-only" in " ".join(guidance.split())
+    paths = _application().openapi()["paths"]
+    assert "/v1/skills/{skill_id}/{version}/resolve" in paths
     assert not {
-        path
-        for path in _application().openapi()["paths"]
-        if any(term in path.lower() for term in ("mcp", "skill", "knowledge"))
+        path for path in paths if any(term in path.lower() for term in ("mcp", "knowledge"))
     }

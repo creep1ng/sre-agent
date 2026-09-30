@@ -152,6 +152,9 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("POST", "/v1/catalog/resources"),
         ("GET", "/v1/catalog/resources"),
         ("GET", "/v1/catalog/resources/{type}/{id}"),
+        ("POST", "/v1/skills/versions"),
+        ("GET", "/v1/skills/{skill_id}/{version}"),
+        ("PUT", "/v1/skills/{skill_id}/{version}/status"),
     }
     assert len({*CONTROL_SCOPES.values()}) == 10
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
@@ -374,6 +377,9 @@ def test_router_exposes_all_control_routes() -> None:
         "/v1/model-aliases/{alias_id}/status",
         "/v1/catalog/resources",
         "/v1/catalog/resources/{resource_type}/{id}",
+        "/v1/skills/versions",
+        "/v1/skills/{skill_id}/{version}",
+        "/v1/skills/{skill_id}/{version}/status",
     }
 
     async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response, httpx.Response]:

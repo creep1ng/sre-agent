@@ -20,6 +20,7 @@ from sre_agent.gateway.mcp import (
 )
 from sre_agent.control.service import ControlService, control_router
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
+from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
@@ -77,6 +78,14 @@ def create_application(
     application.state.session_provider = database.sessions
     application.state.database = database
     application.state.llm_provider = provider
+    store = audit_store
+    projector = None
+    if runtime_settings.audit_hmac_key:
+        store = audit_store or PostgresAuditStore(database.sessions)
+        projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+    application.include_router(
+        skill_resolution_router(SkillResolutionService(database.sessions, store, projector))
+    )
     workflow = load_incident_workflow(INCIDENT_WORKFLOW_PATH)
     application.include_router(
         incident_router(
@@ -85,15 +94,14 @@ def create_application(
             )
         )
     )
-    if runtime_settings.audit_hmac_key:
-        store = audit_store or PostgresAuditStore(database.sessions)
-        projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+    if projector is not None:
+        assert store is not None
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))
         )
-    if provider is not None and runtime_settings.audit_hmac_key:
-        store = audit_store or PostgresAuditStore(database.sessions)
-        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()))  # noqa: E501  # fmt: skip
+    if provider is not None and projector is not None:
+        assert store is not None
+        service = ResponsesService(database.sessions, provider, store, projector)
         application.include_router(responses_router(service))
     configured_mcp_client = mcp_client
     if configured_mcp_client is None and runtime_settings.grafana_mcp_endpoint:
@@ -105,16 +113,15 @@ def create_application(
             runtime_settings.grafana_mcp_endpoint,
             runtime_settings.grafana_mcp_token,
         )
-    if configured_mcp_client is not None and runtime_settings.audit_hmac_key:
-        mcp_store = audit_store or PostgresAuditStore(database.sessions)
-        mcp_projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+    if configured_mcp_client is not None and projector is not None:
+        assert store is not None
         application.include_router(
             mcp_router(
                 MCPGatewayService(
                     database.sessions,
                     configured_mcp_client,
-                    audit=mcp_store,
-                    projector=mcp_projector,
+                    audit=store,
+                    projector=projector,
                 )
             )
         )

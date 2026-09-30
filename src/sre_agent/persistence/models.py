@@ -173,6 +173,37 @@ class MCPToolRow(Base):
     updated_at = required(DateTime(timezone=True))
 
 
+class SkillVersionRow(Base):
+    """Owner-authoritative immutable instruction content for one Skill version."""
+
+    __tablename__ = "skill_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["resource_type", "resource_id"],
+            ["resources.resource_type", "resources.resource_id"],
+        ),
+        CK("resource_type = 'skill'", name="ck_skill_versions_resource_type"),
+        CK("resource_id = skill_id || '@' || version", name="ck_skill_versions_resource_id"),
+        CK(
+            "skill_id ~ '^[a-z][a-z0-9-]{2,62}[a-z0-9]$'",
+            name="ck_skill_versions_skill_id",
+        ),
+        CK(
+            "version ~ '^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$'",
+            name="ck_skill_versions_version",
+        ),
+        CK("content_sha256 ~ '^[0-9a-f]{64}$'", name="ck_skill_versions_hash"),
+    )
+    skill_id = mapped_column(String(64), primary_key=True)
+    version = mapped_column(String(32), primary_key=True)
+    resource_type = required(String(32))
+    resource_id = required(String(200))
+    owner_id = required(String(64))
+    manifest = required(JSONB)
+    content_sha256 = required(String(64))
+    created_at = required(DateTime(timezone=True), server_default=func.now())
+
+
 class GrantRow(Base):
     __tablename__ = "grants"
     __table_args__ = (
@@ -232,7 +263,8 @@ class AuditEventRow(Base):
             "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
             "'grants.create','grants.list','grants.revoke',"
             "'aliases.create','aliases.list','aliases.get',"
-            "'aliases.assignment.replace','aliases.status.replace')",
+            "'aliases.assignment.replace','aliases.status.replace','catalog.status.replace',"
+            "'skills.resolve')",
             name="ck_audit_events_operation",
         ),
         CK(
@@ -259,7 +291,9 @@ class AuditEventRow(Base):
             "AND stage='authorization' AND outcome='denied' "
             "AND reason_code='no_matching_grant' AND (response_status=403 OR "
             "(response_status=404 AND action='admin.read' AND "
-            "COALESCE(resource ->> 'resource_type'='administrative_control',false)))",
+            "COALESCE(resource ->> 'resource_type'='administrative_control',false)) OR "
+            "(response_status=404 AND action='invoke' AND "
+            "COALESCE(resource ->> 'resource_type'='skill',false)))",
             name="ck_audit_events_authorization_denial_cause",
         ),
         CK("response_status BETWEEN 100 AND 599", name="ck_audit_events_response"),
