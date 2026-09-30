@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 // Probe only supplied service-name and direct-IP health targets; full boundary proof remains pending.
+import { realpathSync } from "node:fs";
 import { isIP } from "node:net";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const HEALTH_PATH = "/healthz";
 const REQUEST_TIMEOUT_MS = 1_500;
@@ -81,4 +82,4 @@ async function main() {
   process.exitCode = status === "fail" ? 1 : 2;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) await main();

@@ -2,18 +2,20 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
+import { mkdtemp, symlink, rm } from "node:fs/promises";
 import { once } from "node:events";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT = resolve(fileURLToPath(new URL("../scripts/demo_mcp_probe.mjs", import.meta.url)));
 const PRIVATE_MARKER = "service-ip-private-response-marker";
 const BASE_ENV = { PATH: process.env.PATH };
 
-function runCli(overrides = {}) {
+function runCli(overrides = {}, script = SCRIPT) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(process.execPath, [SCRIPT], {
+    const child = spawn(process.execPath, [script], {
       env: { ...BASE_ENV, ...overrides },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -29,6 +31,23 @@ function runCli(overrides = {}) {
     });
   });
 }
+
+test("CLI invocation through a symlink still emits a bounded report", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "issue45-cli-link-"));
+  const link = join(directory, "probe.mjs");
+  try {
+    await symlink(SCRIPT, link);
+    const result = await runCli({}, link);
+    assert.equal(result.status, 2);
+    const output = report(result);
+    assert.equal(output.status, "unverified");
+    assert.deepEqual(output.failures, ["target_inventory_missing"]);
+    assert.deepEqual(output.targets, []);
+    t.diagnostic(`Symlink CLI invocation emitted status=${output.status}; exit=${result.status}; no target contacted`);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 function report(result) {
   assert.equal(result.stderr, "");
