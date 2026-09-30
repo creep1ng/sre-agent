@@ -168,6 +168,43 @@ export function createAdministrativeApiClient({
     listPrincipals({ limit = 100 } = {}) {
       return request(`/v1/principals?limit=${encodeURIComponent(limit)}`);
     },
+    listGrants({ principalId, resourceId, limit = 100 } = {}) {
+      const hasPrincipal =
+        principalId !== undefined && principalId !== null && principalId !== "";
+      const hasResource =
+        resourceId !== undefined && resourceId !== null && resourceId !== "";
+      if (hasPrincipal === hasResource) {
+        throw new TypeError("Exactly one of principalId or resourceId is required.");
+      }
+      const params = new URLSearchParams();
+      if (hasPrincipal) params.set("principal_id", principalId);
+      else params.set("resource_id", resourceId);
+      params.set("limit", String(limit));
+      return request(`/v1/grants?${params.toString()}`);
+    },
+    createGrant(body, idempotencyKey) {
+      return request("/v1/grants", {
+        method: "POST",
+        body,
+        headers: mutationHeaders(idempotencyKey),
+      });
+    },
+    revokeGrant(grantId) {
+      return request(`/v1/grants/${encodeURIComponent(grantId)}`, {
+        method: "DELETE",
+      });
+    },
+    listCatalogResources(
+      { resourceType, ownerId, status, visibility, limit = 100 } = {},
+    ) {
+      const params = new URLSearchParams();
+      if (resourceType) params.set("resource_type", resourceType);
+      if (ownerId) params.set("owner_id", ownerId);
+      if (status) params.set("status", status);
+      if (visibility) params.set("visibility", visibility);
+      params.set("limit", String(limit));
+      return request(`/v1/catalog/resources?${params.toString()}`);
+    },
     listModelAliases({ limit = 100 } = {}) {
       const query = limit === undefined ? "" : `?limit=${encodeURIComponent(String(limit))}`;
       return request(`/v1/model-aliases${query}`);
