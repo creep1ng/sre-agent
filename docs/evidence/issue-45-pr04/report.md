@@ -64,3 +64,14 @@ no external assets and a private profile. Parent visually inspected/sanitized it
 this is not a live UI, actual upstream-zero witness or PR424 preview proof.
 Earlier no-PNG/uncommitted notes are capture-time history. Hosted CI and human
 acceptance remain pending; subsequent media/report-only edits preserve hashes.
+
+## P5 duplicate-ID correction candidate (2026-09-30)
+
+Current local candidate is based on P4 `c840ed76f8e16f123e1d33127ff7798e5de49597`; it is not committed or published. Source SHA-256: `9af21e534a7d60abf3a0ecf3bb3b2ec60d7fb93064ee27fc770224d2db5baa01`. Test SHA-256: `7346b55130ffec319789576a3e49265fda7a7e0d53725e3c71efc648138127c9`.
+
+- Test-first RED against the original P5 source observed the exact duplicate numeric UUID accepted: expected CLI exit 1, received 0. This RED did not test case variants. Capture: `/tmp/issue45-p5-id-repair-evidence/red.log`.
+- Minimal source guard now rejects equal validated UUIDs case-insensitively as `restricted_request_ids_not_distinct`; no route, request ordering, payload, or pending/witness semantics changed.
+- Current exact cached Node 22.14.0 networkless Docker E2E passed 2/2. The permanent cases verify both an exact duplicate and a genuine alphabetic case variant (`abcdef12-3456-4abc-8def-1234567890ab` vs `ABCDEF12-3456-4ABC-8DEF-1234567890AB`). Each emits a bounded diagnostic with fail status, fixed failure code, the unchanged five-route sequence, and `upstream_delta: null`. Capture: `/tmp/issue45-p5-id-repair-evidence/final-green.log`.
+- Both source and test passed `node --check` in the same cached networkless image; `git diff --check` passed against the current P4 base.
+
+The original exact-duplicate RED is the observed test-first proof; the case-insensitive case is additional post-fix validation, not a claimed RED. P5 remains a controlled fixture only: this correction does not prove upstream zero, close CA2, resolve the review, or complete P5-C. Parent owns final independent verification, fresh screenshot, report/task mirror, commit, publication and CI.

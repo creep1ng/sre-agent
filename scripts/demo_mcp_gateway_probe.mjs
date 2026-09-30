@@ -151,6 +151,10 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
       !restrictedDiscovery.request_id || restrictedDiscovery.retryable !== false || !restrictedDiscovery.enumeration_absent) {
     failures.push("restricted_discovery_not_denied");
   }
+  if (restrictedInvocation.request_id && restrictedDiscovery.request_id &&
+      restrictedInvocation.request_id.toLowerCase() === restrictedDiscovery.request_id.toLowerCase()) {
+    failures.push("restricted_request_ids_not_distinct");
+  }
   return {
     ...failureResult(null),
     status: failures.length ? "fail" : "pending",

@@ -128,6 +128,39 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
         start_time: "now-5m", end_time: "now", limit: 1 },
     ]);
 
+    const fiveRequestSequence = ["POST /v1/mcp/tools/query_prometheus", "GET /v1/mcp/discovery",
+      "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
+      "GET /v1/mcp/discovery"];
+    const duplicateIdCases = [
+      { label: "exact duplicate", invocationId: DENIAL_REQUEST_ID, discoveryId: DENIAL_REQUEST_ID },
+      { label: "case-insensitive duplicate", invocationId: "abcdef12-3456-4abc-8def-1234567890ab",
+        discoveryId: "ABCDEF12-3456-4ABC-8DEF-1234567890AB" },
+    ];
+    for (const duplicateCase of duplicateIdCases) {
+      const before = calls.length;
+      const previousDenied = denied;
+      const previousInvocationDenied = invocationDenied;
+      invocationDenied = { ...invocationDenied, request_id: duplicateCase.invocationId };
+      denied = { ...denied, request_id: duplicateCase.discoveryId };
+      const duplicate = await runCli(url);
+      const duplicateReport = report(duplicate);
+      assert.equal(duplicate.status, 1);
+      assert.equal(duplicateReport.status, "fail");
+      assert.ok(duplicateReport.failures.includes("restricted_request_ids_not_distinct"));
+      assert.equal(duplicateReport.denied.request_id, duplicateCase.invocationId);
+      assert.equal(duplicateReport.restricted_discovery.request_id, duplicateCase.discoveryId);
+      assert.equal(duplicateReport.denied.upstream_delta, null);
+      assert.deepEqual(calls.slice(before), fiveRequestSequence);
+      t.diagnostic(`Duplicate-ID rejection (${duplicateCase.label}): ${JSON.stringify({
+        status: duplicateReport.status, failures: duplicateReport.failures,
+        denied_request_id: duplicateReport.denied.request_id,
+        discovery_request_id: duplicateReport.restricted_discovery.request_id,
+        upstream_delta: duplicateReport.denied.upstream_delta, calls: calls.slice(before),
+      })}`);
+      denied = previousDenied;
+      invocationDenied = previousInvocationDenied;
+    }
+
     metricReply = { status: 200, body: { result_type: "vector", result: [], warnings: [] } };
     const emptyMetric = await runCli(url);
     assert.equal(emptyMetric.status, 1);

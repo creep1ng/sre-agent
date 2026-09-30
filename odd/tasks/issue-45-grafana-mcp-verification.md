@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Current delivery stage: P5 restricted known-ID denial before discovery, atop P4 controlled metric/log smoke queries.** The combined candidate preserves root-only gateway validation and P4 query behavior; controlled denial still has no upstream-call witness, and CA1–CA8 remain open.
+**Current delivery stage: P5 duplicate request-ID review correction in draft PR #432.** Preserve known-ID-first denial and P4 queries; reject repeated valid denial/discovery UUIDs. P6 is a separate frozen local child, not installed here. CA1–CA8 and human acceptance remain open.
 
 ## Objective
 
@@ -18,21 +18,21 @@ The integrated demo can query Grafana MCP directly, while the gateway has govern
 - Never treat a healthy service check as proof of a failure signal.
 - Do not claim total isolation if Grafana Admin, proxy, host-port, or other bypass remains reachable.
 - Keep real-container evidence distinct from simulated transport tests.
-- Current handoff authorizes bounded issue #45 local repair/tests and parent-owned GitHub operations only in `creep1ng/sre-agent`. The only commit operation authorized for this transition is the parent's exact `git add` of five P4 paths followed by `GIT_EDITOR=true git rebase --continue` in this worktree. No push/publication, cloud, SSH, paid-provider probe, deployment, merge, or issue closure is authorized.
+- Current handoff authorizes bounded issue #45 local repair/tests and parent-owned commits, owned-branch publication and PR evidence in `creep1ng/sre-agent`. This stage corrects PR #432 only; hold P6 publication until the corrected parent is independently verified. No cloud, SSH, paid-provider probe, deployment, merge, or issue closure.
 - Parent refreshed live GitHub Project #8: issue #45 remains Todo, Sprint 4, with CA1–CA8 in scope. PR #425 has an open gateway-root-path review finding; no human acceptance is claimed.
 - Follow the revised `AGENTS.md`: this is an academic tool for independent freelancers, not production SRE hardening. Prefer one repeatable E2E test over isolated or change-detector tests, and use only real evidence or exact reproduction instructions.
 
 ## Authorized Scope
 
-- Preserve the P3 origin/path correction and P4 metric/Lucene-log smoke queries in `scripts/demo_mcp_gateway_probe.mjs`, with current HTTP/CLI tests, runbook and evidence.
-- Preserve malformed-entry/redirect/privacy coverage and 35-second budget. No P5 source, producer/runtime, Compose/Dockerfile, dependency, live-service or credential changes.
-- Parent owns commits, publication, branch propagation and human-review requests; this restacked candidate combines `codex/issue-45-gateway-root-path` and `codex/issue-45-03-queries` only.
+- Preserve root-only routing, P4 metric/Lucene queries and P5 known-ID-first denial; add a permanent HTTP/CLI negative case for duplicate valid request IDs before a minimal source guard.
+- Preserve malformed-entry/redirect/privacy coverage and 35-second budget. Only the P5 probe, its behavior test, report and full task/evidence may change. No P6 source, producer/runtime, Compose/Dockerfile, dependency, live-service or credential changes.
+- Sole Luna high writer owns the bounded P5 source/test repair; parent owns independent checks, commits, screenshots, publication, branch propagation and human-review requests. Preserve frozen P6 local anchor `6f6f9569419aaa8eb261bf32dbefcc6b0948b2c6` until later restack.
 
 ## TDD
 
 - Mode: strict
 - Source: issue-specific handoff §4 / OPERATING-RULES §4, which enables strict TDD for issue #45 implementation; repository `AGENTS.md` separately prefers E2E, prohibits writing unit tests after code, and requires failure modes first for isolated work.
-- Runner for the combined P3/P4 candidate: pinned Node 22.14 cached harness with controlled loopback HTTP/CLI tests in a networkless container; exact `docker run --pull never --network none` reproduction is recorded in the P4 report. No host package manager, DB/API/demo or live credential is needed. Historical root-only and preview-helper notes remain in dated checkpoints below.
+- Runner for this P5 correction: pinned Node 22.14 cached harness with controlled loopback HTTP/CLI tests in a networkless container; exact `docker run --pull never --network none` reproduction is recorded in the P5 report. No host package manager, DB/API/demo or live credential is needed. Historical root-only and preview-helper notes remain in dated checkpoints below.
 
 ## Tasks
 
@@ -254,7 +254,7 @@ Authorized scope: restricted known-ID Prometheus POST must be the first request,
 
 - [x] **MCP45-P5-A — Observe known-ID-first denial RED**: permanent HTTP/CLI test first; assert restricted POST is request one, exact public route/payload, safe denial UUID distinct from discovery UUID, null upstream_delta and pending success. Cover wrong status/code/missing or invalid UUID fail-closed without output leakage; cached networkless Docker run observed 0/2 before source implementation.
 - [x] **MCP45-P5-B — Implement bounded denial summary**: prepend restricted POST to unchanged four-request P4 sequence and allowlist denial output; never convert 403 or fixture counts into upstream-counter proof. Preserve existing public boundaries and 35-second/no-redirect budget; exact cached networkless Docker suite passed 2/2.
-- [ ] **MCP45-P5-C — Verify and bind evidence**: exact current Docker GREEN, syntax/diff/privacy, source/test hashes, report and actual screenshot; full task mirror and publication/hosted CI parent-owned. Keep real CA1–CA8 and human acceptance pending. Measure actual per-base additions+deletions <=400; no history/test/format trimming.
+- [ ] **MCP45-P5-C — Verify and bind evidence**: exact committed source/test hashes passed cached Docker 2/2 and Node syntax checks; the actual P5 PNG, full task mirror, PR #432 publication, and hosted CI passed at that checkpoint. Reopened after review finding 4141925985: the published P5 source accepts equal valid denial/discovery UUIDs and can still report pending. Parent moved PR #432 to draft; P5 source correction remains pending. CA1–CA8 and human acceptance remain open.
 
 P5 local evidence: `/tmp/issue45-p5-evidence/red.log` records pre-source RED (0/2) on Node 22.14.0; `/tmp/issue45-p5-evidence/green.log` records current controlled GREEN (2/2). Source/test SHA-256 are recorded in `docs/evidence/issue-45-pr04/report.md`. The controlled success remains `pending` with `upstream_delta: null`; no zero-call or CA2 claim is made. Parent owns screenshot, task mirror, independent verification, commit, publication and hosted P5 CI. P4 hosted CI run `36680206014` passed all eight jobs per parent checkpoint; human acceptance and CA1–CA8 remain open.
 
@@ -263,3 +263,35 @@ Next step: parent completes P5-C evidence/publication readiness. New scope forec
 ## P5 parent committed proof checkpoint
 
 Parent committed source/tests/docs as `638942a4aa6278ae4c32bb61e72d214aaffe5e28`, then exact cached networkless Docker syntax/E2E passed2/2 with unchanged report hashes. [Actual P5 PNG](../../docs/evidence/issue-45-pr04/known-id.png), SHA-256 `ff510c21f80a58a4e57db727d3bf58d3c9144d2e1a7092d7b947b00280b21edb`, binds observed denied-summary and first-request assertions. P5-C remains open for current publication/hosted CI; real CA1–CA8 and human acceptance remain pending.
+
+Latest P5 checkpoint: PR #432 was published at `0022a2a7373bba3309a0c82caf2e0e6ab7b9fe97`; hosted CI run `36683005655` completed with all eight jobs passing. Governance, reconciliation and GitGuardian checks passed; the current body and full task mirror were read back. P5-C controlled-delivery proof is complete; no human acceptance or CA1–CA8 closure is claimed.
+
+Review correction: finding [4141925985](https://github.com/creep1ng/sre-agent/pull/432#discussion_r4141925985) shows the P5 producer-side CLI does not reject a repeated valid UUID; its report can remain pending. PR #432 is now draft. P6's offline validator independently rejects duplicate IDs, but does not repair or replace that P5 check. P5-C is reopened until the parent-owned source correction is verified.
+
+Parent checkpoint: P5 was published as PR #432 at `0022a2a7373bba3309a0c82caf2e0e6ab7b9fe97`; hosted CI run `36683005655` completed with all eight jobs passing, and governance, reconciliation and GitGuardian checks passed. Current PR body and full task mirror were read back. This completes P5 controlled delivery evidence only; human acceptance and real CA1–CA8 remain pending.
+
+## Current P6 offline witness stage (2026-09-30)
+
+Fresh owned branch `codex/issue-45-05-witness`, base P5 PR432 `0022a2a7373bba3309a0c82caf2e0e6ab7b9fe97`. P5 current hosted CI36683005655 is still running at this checkpoint; P5 fixture proof and published source-bound PNG are not real CA2 evidence. Old worktrees and full task history remain unchanged.
+
+Scope: offline `--reconcile <report> --witness <file>` dispatch before any live probe. Validate actual P5 query-smoke schema/phase and complete safe pending report, normalize allowlisted fields, correlate a separately operator-validated upstream-counter UUID with the known-ID denial, require nonnegative safe-integer monotonic counters and zero delta to pass. Reject generic audit/event witnesses, including known audit_events_total relabeled upstream-counter. Metadata validation cannot independently establish the source's true semantics; real operator/counter provenance and CA2 stay pending. No network, actual counter capture, producer/runtime/cloud changes or P7 behavior.
+
+- [x] **MCP45-P6-A — Observe offline CLI RED**: permanent E2E first for matching zero witness, invalid report/schema/phase/explicit extra failures, generic/relabelled audit source, mismatched UUID, malformed/reversed/unsafe/nonzero counters and bounded malformed/missing/oversized files/arguments. Observed RED 1/2 before source edits; assert zero gateway calls and no marker leakage.
+- [x] **MCP45-P6-B — Implement safe P5 report/witness adapter**: adapted bounded recovery validators to current schema/phase, preserving denied/restricted-discovery IDs, positive query counts/source/windows and null error fields. Normalizes only validated safe fields; rejects the known generic `audit_events_total` source even if mislabeled; no audit-event-to-upstream promotion or forged pending failure suppression. Exact cached Docker GREEN 2/2.
+- [ ] **MCP45-P6-C — Verify and bind offline evidence**: exact cached Node22.14 networkless Docker GREEN, syntax/diff/privacy/hashes, report and genuine screenshot; parent owns mirror/publication/hosted CI and human request. Strict test-first ON is from the issue handoff, not AGENTS. Measure full per-base <=400 additions+deletions without history/test/comment/format trimming; forecast320–390 is not a final diff.
+
+P6 local proof: `/tmp/issue45-p6-evidence/red.log` records the pre-source RED; `/tmp/issue45-p6-evidence/green.log` records the exact cached Node 22.14 networkless Docker GREEN (2/2). Current source/test SHA-256 and offline-only limitations are recorded in `docs/evidence/issue-45-pr05/report.md`. The controlled fixture witness is synthetic and does not close CA2.
+
+Next step: parent completes P6-C screenshot, independent verification, full mirror, publication and hosted CI. Keep all CA1–CA8 and human acceptance open. Preserve all historical checkpoints above.
+
+## Priority P5 duplicate-ID correction (2026-09-30)
+
+Current exclusive branch `codex/issue-45-04-known-id-denial`, HEAD `0022a2a7373bba3309a0c82caf2e0e6ab7b9fe97`, base P4 `c840ed76f8e16f123e1d33127ff7798e5de49597`. Live Project #8 refreshed: issue #45 Todo / Sprint 4. PR #432 is draft; review [4141925985](https://github.com/creep1ng/sre-agent/pull/432#discussion_r4141925985) is source-confirmed and unresolved. Previous green CI does not cover repeated IDs.
+
+Reconciled the complete P6 tracker history into this parent document; P6 code/report remain only in its separate clean local child `6f6f9569419aaa8eb261bf32dbefcc6b0948b2c6`, not in this candidate. P6 publication is held. Historical dated scope and checkpoints above are preserved, not current authorization or proof.
+
+- [x] **MCP45-P5-ID-R1 — Observe duplicate UUID RED**: permanent actual HTTP/CLI fixture uses the same valid UUID for denial and discovery; assert exit 1, sanitized fail report, unchanged five-request order and null upstream delta. Exact numeric duplicate RED observed against the original P5 source (expected exit 1, got 0). This RED did not test case variants; a genuine alphabetic case-variant was added as post-fix validation.
+- [x] **MCP45-P5-ID-R2 — Enforce distinct IDs**: minimal validated-ID comparison rejects equal validated UUIDs case-insensitively as `restricted_request_ids_not_distinct`, without changing routes, query payloads, privacy fields or claiming actual upstream zero. Exact cached networkless Docker GREEN 2/2 and both Node syntax checks passed. Captures: `/tmp/issue45-p5-id-repair-evidence/red.log` and `/tmp/issue45-p5-id-repair-evidence/final-green.log`.
+- [ ] **MCP45-P5-ID-R3 — Refresh correction delivery proof**: parent independent exact-current Docker checks, source/test hashes, genuine fresh screenshot and report, <=400 current-base delta, full lossless mirror, owned fast-forward publication/current CI and review reply. Keep P5-C open until observed; no automatic resolution/acceptance.
+
+Next step: parent owns R3 independent verification, fresh screenshot, report/task mirror, commit/publication/current CI, and later P6 restack. This local candidate is not committed or published. Exact runner is the existing cached Node22.14 networkless Docker lane in the P5 report; no build/pull, credentials, API/database or demo start. CA1–CA8, CA2 proof and human acceptance remain open.
