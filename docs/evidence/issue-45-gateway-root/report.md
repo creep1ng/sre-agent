@@ -40,7 +40,7 @@ docker run --pull never --network none --rm \
 - Minimal source change requires `url.pathname === "/"` before returning
   `url.origin`; query/hash and embedded credentials remain rejected.
 
-Source SHA-256: `3ff73bd2dcd297cb6951fa18aa61b92c765305ddeb339c6a14a13d66a6799fa4`  
+Source SHA-256: `3ff73bd2dcd297cb6951fa18aa61b92c765305ddeb339c6a14a13d66a6799fa4`
 Test SHA-256: `ff8bf3e4fe02ee31c1e7d1df471a1431d7507a42240637dc899bbd2a8f6b447e`
 
 `node --check` for source and test plus `git diff --check` passed. Private TAP
