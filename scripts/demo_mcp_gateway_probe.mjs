@@ -11,7 +11,7 @@ function validGatewayUrl(value) {
   try {
     const url = new URL(value);
     return (url.protocol === "http:" || url.protocol === "https:") &&
-      !url.username && !url.password && !url.search && !url.hash
+      !url.username && !url.password && !url.search && !url.hash && url.pathname === "/"
       ? url.origin
       : null;
   } catch {

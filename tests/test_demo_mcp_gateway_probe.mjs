@@ -102,7 +102,7 @@ test("discovery CLI validates allowed and server-restricted HTTP responses witho
       denied = previous;
     }
     const count = calls.length;
-    for (const invalidUrl of [`${url}?token=${PRIVATE_MARKER}`, `http://user:pass@127.0.0.1`, "file:///tmp/invalid"]) {
+    for (const invalidUrl of [`${url}?token=${PRIVATE_MARKER}`, `${url}/unexpected-path`, `http://user:pass@127.0.0.1`, "file:///tmp/invalid"]) {
       const result = await runCli(invalidUrl);
       assert.equal(result.status, 1);
       assert.deepEqual(report(result).failures, ["probe_configuration_missing"]);
