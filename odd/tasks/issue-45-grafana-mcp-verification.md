@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Current delivery stage: draft PR #434 head `7cf7a6b3303c1f928f1b2d78bc46ebde24c4f0e1`, stacked onto ready P5 PR #432 `9cdf424573b35216702787af6e45be4172757b9b`.** The published head remains unfixed; the owned local candidate has a test-first bounded-read correction and current runbook wording, with independent verification/publication pending. P5 controlled checks are verified. CA1–CA8 and human acceptance remain open.
+**Current delivery stage: P6 bounded offline reconciliation and P6-only rollback are implemented and independently verified at tested commit `15eec333cfdb6e0ab5a7e926f5f4b7d7c8fa33ae`, on P5 base `9cdf424573b35216702787af6e45be4172757b9b`.** PR #434 awaits exact-current hosted CI and human review. Its published candidate SHA is recorded in the PR body, not self-referenced here. Dated checkpoints below describe historical states, not current acceptance. CA1–CA8 and human acceptance remain open.
 
 ## Objective
 
