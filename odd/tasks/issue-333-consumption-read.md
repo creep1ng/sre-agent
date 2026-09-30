@@ -66,7 +66,7 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
   describe distinct requests and sum to request_count; status reflects counts.
   Use semantic validation for arithmetic, not a false JSON Schema claim.
   Checks: conformance negatives/positives plus runtime acceptance.
-- [ ] **U333-8 — Publish and activate an additive contract.**
+- [x] **U333-8 — Publish and activate an additive contract.**
   Publish a self-contained next release containing the delivered usage route
   and usage.read audit operation; activate it without editing 2.4.0.
   Publication-size exception approved; coordinate the next additive version.
@@ -119,8 +119,9 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
   accept four contradictory cost/coverage payloads; seven valid examples pass.
   ASGI OpenAPI still advertises 2.4.0 with a usage route absent from that snapshot.
   Existing immutable 2.4.0 validates: 199 artifacts / 16 checks, hashes unchanged.
-- Current implementation branch is `fix/issue-333-contract-invariants`, based on
-  the owned PR #421 head. Publication follows only after invariant verification.
+- At the U333-7 checkpoint, implementation was on
+  `fix/issue-333-contract-invariants`, based on the owned PR #421 head;
+  publication followed after invariant verification.
 
 - U333-7 RED: runtime 16 failed / 10 passed; after fixing composed-filter closure,
   schema/semantic checks had 16 failed / 11 passed. Focused schema GREEN: 27 passed.
@@ -130,10 +131,45 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
 - Runtime identity is restored; reconcile the full Engram mirror before commit.
   Future delegated agents use the current user-selected GPT-6 Luna high profile.
 
+- U333-8: `fix/issue-333-contract-publication` adds the self-contained immutable
+  2.5.0 snapshot without editing 2.4.0; usage route/audit operation, typed
+  response schemas, positive conformance fixture, consumer obligation, generated
+  projections, evidence, compatibility record and manifest are present. The
+  existing generator reports 202 artifacts / 17 checks. Strict RED first observed
+  an old active version and absent 2.5.0 manifest; OpenAPI parity found FastAPI's
+  nullable optional-query schema and inherited bearer security shape. Canonical
+  2.5.0 now matches the runtime's selectors and security. Configured full Python
+  runner: 1,250 passed / 1 skipped; lint/format, architecture, typing, repository
+  contract checks and Alembic check passed. Tooling: 124 tests passed; all 11
+  releases validate; canonical control-plane and responses OpenAPI lint passed.
+  Exhaustive immutable-release validation confirms 2.4.0 unchanged. Local evidence
+  only; hosted CI, screenshot/review artifact and human acceptance remain U333-10.
+- U333-10 local evidence preparation: added `docs/evidence/issue-333-contract-publication.md`,
+  guarded capture helper, actual sanitized OpenAPI/producer/read/SQL JSON, and
+  native Chromium screenshot of the actual usage HTTP response. Capture was a
+  controlled integration with the existing provider stub and isolated
+  `python-checks-db`; Chromium emitted a background GCM `DEPRECATED_ENDPOINT`
+  diagnostic. Helper Ruff lint/format passed; report records the full local
+  runner results, hashes, all eight historical thread dispositions, CA1–CA7,
+  and prior-run CI links. U333-10 remains unchecked: current hosted CI and human
+  acceptance/publication of the reconciled report are pending the parent.
+
 ## Next step
 
 Independent U333-7 verification passed: 74 Python, 123 tooling, ten releases;
 2,168 file hashes/modes unchanged. Parent focused spot check: 27 passed.
-Bind the tested SHA, then publish and coordinate U333-8 under its approved
-exception. Remote reads were rejected before execution twice; explicit current
-GitHub repository/session authorization is pending. Preserve recovery roots.
+U333-7 is committed and published as PR #428 at
+8965cb1978f9363a807279b6ec1b60c76d739e42, based on PR #421; 394 changed lines.
+User explicitly authorized current GitHub reads/publication through gh.
+Live Project 8 remains Todo / Sprint 4; main and related open PRs have no
+competing 2.5.0 publication claim. U333-8 is complete locally on
+`fix/issue-333-contract-publication`, based on PR #428. Preserve immutable 2.4.0
+and exclude unimplemented #334 reservations/enforcement; compatibility with its
+future settlement remains that issue's coordination dependency. Continue with
+U333-10: publish sanitized evidence and reconcile touched PRs; hosted CI and
+human acceptance are not claimed by U333-8. Preserve recovery roots.
+
+Independent final publication verification passed: 1,250 Python / 124 tooling,
+11 releases, guarded fresh HTTP/SQL capture, and zero file hash/mode drift.
+Parent OpenAPI parity spot check passed. Publish this verified candidate next;
+hosted CI, current PR reconciliation and human review remain pending.

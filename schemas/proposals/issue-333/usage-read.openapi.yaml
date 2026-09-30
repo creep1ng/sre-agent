@@ -1,10 +1,11 @@
 openapi: 3.1.0
 info:
   title: SRE Agent Usage Read API
-  version: 2.5.0-draft.1
+  version: 2.5.0
   description: >-
-    Additive proposal for the administrator-only persisted consumption projection.
-    It does not change the published 2.4.0 contract.
+    Published additive usage-read surface for the administrator-only persisted
+    consumption projection. The canonical immutable release is 2.5.0; published
+    2.4.0 remains unchanged.
 servers:
   - url: /
 security:
@@ -39,23 +40,29 @@ paths:
           required: false
           description: Return the aggregate for one effective request.
           schema:
-            type: string
-            format: uuid
+            anyOf:
+              - type: string
+                format: uuid
+              - type: 'null'
         - name: incident_id
           in: query
           required: false
           description: Return only the identified incident's distinct runs and requests.
           schema:
-            type: string
-            minLength: 1
-            maxLength: 128
+            anyOf:
+              - type: string
+                minLength: 1
+                maxLength: 128
+              - type: 'null'
         - name: month
           in: query
           required: false
           description: UTC calendar month in YYYY-MM form.
           schema:
-            type: string
-            pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+            anyOf:
+              - type: string
+                pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+              - type: 'null'
       x-forbidden-query-parameters:
         - from
         - to
@@ -90,7 +97,7 @@ components:
       scheme: bearer
   schemas:
     UsageRead:
-      $id: urn:sre-agent:schema:usage-read:2.5.0-draft.1
+      $id: urn:sre-agent:schema:usage-read:2.5.0
       type: object
       additionalProperties: false
       required: [filter, request_count, incident_runs, months, totals, coverage]

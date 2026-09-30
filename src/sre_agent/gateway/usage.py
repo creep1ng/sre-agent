@@ -31,11 +31,12 @@ class UsageReadLimitExceeded(RuntimeError):
 class UsageReadCost(BaseModel):
     # FastAPI omits const: None when serializing OpenAPI; type: null survives.
     model_config = ConfigDict(
+        extra="forbid",
         json_schema_extra={
             "if": {"properties": {"amount": {"type": "null"}}},
             "then": {"properties": {"currency": {"type": "null"}, "precision": {"type": "null"}}},
             "else": {"properties": {"currency": {"const": "USD"}, "precision": {"const": "exact"}}},
-        }
+        },
     )
     amount: Annotated[str | None, Field(pattern=r"^(0|[1-9]\d*)(\.\d+)?$")]
     currency: Literal["USD"] | None
@@ -52,6 +53,8 @@ class UsageReadCost(BaseModel):
 
 
 class UsageReadTotals(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     input_tokens: Annotated[int | None, Field(ge=0)]
     output_tokens: Annotated[int | None, Field(ge=0)]
     total_tokens: Annotated[int | None, Field(ge=0)]
@@ -60,6 +63,7 @@ class UsageReadTotals(BaseModel):
 
 class UsageReadCoverage(BaseModel):
     model_config = ConfigDict(
+        extra="forbid",
         json_schema_extra={
             "oneOf": [
                 {
@@ -90,7 +94,7 @@ class UsageReadCoverage(BaseModel):
                     ],
                 },
             ]
-        }
+        },
     )
     status: Literal["complete", "partial", "unknown"]
     known: Annotated[int, Field(ge=0)]
@@ -109,12 +113,40 @@ class UsageReadCoverage(BaseModel):
 
 
 class UsageReadMonth(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     month: Annotated[str, Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
     request_count: Annotated[int, Field(ge=0)]
 
 
+class RequestIdUsageFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: UUID
+
+
+class IncidentUsageFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    incident_id: Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class MonthUsageFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    month: Annotated[str, Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
+
+
+UsageReadFilter = Annotated[
+    RequestIdUsageFilter | IncidentUsageFilter | MonthUsageFilter,
+    Field(union_mode="left_to_right"),
+]
+
+
 class UsageReadResponse(BaseModel):
-    filter: dict[str, str]
+    model_config = ConfigDict(extra="forbid")
+
+    filter: UsageReadFilter
     request_count: Annotated[int, Field(ge=0)]
     incident_runs: Annotated[int, Field(ge=0)]
     months: list[UsageReadMonth]
