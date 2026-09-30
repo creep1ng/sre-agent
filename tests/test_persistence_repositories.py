@@ -213,6 +213,18 @@ async def test_skill_version_repository_persists_immutable_owner_backed_version(
         assert resource.owner_id == "demo-human"
         assert resource.status == "published"
     await database.dispose()
+    with psycopg.connect(DATABASE_URL) as connection:
+        for statement in (
+            "UPDATE skill_versions SET version='2.0.0'",
+            "DELETE FROM skill_versions",
+        ):
+            with pytest.raises(psycopg.errors.RaiseException, match="immutable"):
+                with connection.transaction():
+                    connection.execute(statement)
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="immutable Skill versions exist"):
+        command.downgrade(config, "20260922_12")
 
 
 @pytest.mark.asyncio

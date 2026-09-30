@@ -216,6 +216,13 @@
           </div>
         </div>
         <div class="ma-panel__body">
+          <div class="war-room__run-picker">
+            <label class="ma-field" for="run-select">
+              <span class="ma-field__label">Run del incidente</span>
+              <select id="run-select" class="ma-input"></select>
+            </label>
+            <p id="run-current" class="ma-muted" aria-live="polite"></p>
+          </div>
           <ol id="timeline-list" class="war-room__events"></ol>
           <div id="timeline-empty" class="war-room__empty" hidden>
             <h3>Sin eventos todavía</h3>
