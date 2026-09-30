@@ -1,7 +1,8 @@
 """Grant-governed access to exact-version instruction-only Skills."""
 
+import re
 from time import monotonic
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Path, Request, Security
@@ -11,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
-from sre_agent.gateway.responses import AuditStore
+from sre_agent.gateway.responses import AuditStore, ErrorEnvelope
 from sre_agent.governance.dto import SkillVersionRecord
 from sre_agent.persistence.repositories import SkillVersionRepository
 
@@ -27,7 +28,7 @@ class SkillResolutionResponse(BaseModel):
 
     skill: SkillVersionRecord
     request_id: UUID
-    retryable: bool
+    retryable: Literal[False]
 
 
 class SkillResolutionService:
@@ -38,6 +39,22 @@ class SkillResolutionService:
         self, skill_id: str, version: str, authorization: str | None, request_id: UUID
     ) -> JSONResponse:
         started = monotonic()
+        if (
+            re.fullmatch(_SKILL_ID_PATTERN, skill_id) is None
+            or re.fullmatch(_VERSION_PATTERN, version) is None
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                {
+                    "error": {
+                        "code": "contract_validation_failed",
+                        "message": "Request validation failed.",
+                    }
+                },
+                error_code="contract_validation_failed",
+            )
         resource_id = f"{skill_id}@{version}"
         try:
             context, evaluation = await authorize_governed_access(
@@ -51,6 +68,19 @@ class SkillResolutionService:
                 {"error": {"code": "authentication_failed", "message": "Authentication failed."}},
                 error_code="authentication_failed",
             )
+        except Exception:
+            return await self._finish(
+                request_id,
+                started,
+                503,
+                {
+                    "error": {
+                        "code": "audit_unavailable",
+                        "message": "Audit unavailable.",
+                    }
+                },
+                error_code="audit_unavailable",
+            )
         if evaluation.decision.decision != "allow":
             return await self._finish(
                 request_id,
@@ -63,8 +93,22 @@ class SkillResolutionService:
                 error_code="resource_not_found",
             )
 
-        async with self.sessions() as session:
-            skill = await SkillVersionRepository(session).get(skill_id, version)
+        try:
+            async with self.sessions() as session:
+                skill = await SkillVersionRepository(session).get(skill_id, version)
+        except Exception:
+            return await self._finish(
+                request_id,
+                started,
+                503,
+                {
+                    "error": {
+                        "code": "audit_unavailable",
+                        "message": "Audit unavailable.",
+                    }
+                },
+                error_code="audit_unavailable",
+            )
         if skill is None or skill.manifest.dependencies:
             return await self._finish(
                 request_id,
@@ -147,8 +191,20 @@ def skill_resolution_router(service: SkillResolutionService) -> APIRouter:
         "/v1/skills/{skill_id}/{version}/resolve",
         response_model=SkillResolutionResponse,
         responses={
-            401: {"description": "Authentication failed."},
-            404: {"description": "Skill unavailable."},
+            401: {
+                "model": ErrorEnvelope,
+                "description": "Authentication failed.",
+                "headers": {
+                    "WWW-Authenticate": {
+                        "description": "Bearer authentication challenge.",
+                        "schema": {"type": "string"},
+                        "example": "Bearer",
+                    }
+                },
+            },
+            404: {"model": ErrorEnvelope, "description": "Skill unavailable."},
+            422: {"model": ErrorEnvelope, "description": "Invalid skill path parameters."},
+            503: {"model": ErrorEnvelope, "description": "Audit unavailable."},
         },
         summary="Resolve one exact Skill version",
         operation_id="resolveSkillVersion",
@@ -166,8 +222,8 @@ def skill_resolution_router(service: SkillResolutionService) -> APIRouter:
     )
     async def resolve_skill(
         request: Request,
-        skill_id: Annotated[str, Path(pattern=_SKILL_ID_PATTERN)],
-        version: Annotated[str, Path(pattern=_VERSION_PATTERN)],
+        skill_id: Annotated[str, Path(json_schema_extra={"pattern": _SKILL_ID_PATTERN})],
+        version: Annotated[str, Path(json_schema_extra={"pattern": _VERSION_PATTERN})],
         _bearer: Annotated[
             HTTPAuthorizationCredentials | None,
             Security(bearer),
