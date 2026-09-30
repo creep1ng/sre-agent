@@ -1,12 +1,12 @@
-PR,head,tested_base,changed_lines,status
-387,402ff6e580fa15e765bedc89ae5a6f889202e640,5b6109bd2c8100455136cf12ce91c52830833c7f,380,"local tested; remote CI/review pending"
-388,c0d8076908dbe425f8dbb7b4ff7d717a39ae2117,402ff6e580fa15e765bedc89ae5a6f889202e640,317,"local tested; remote CI/review pending"
-397,7327ca0ef8a4d810afe2376aec2ce5bd0959677e,c0d8076908dbe425f8dbb7b4ff7d717a39ae2117,390,"local tested; remote CI/review pending"
-403,025476049fa094c852c48565f45d1e32f472bb3d,7327ca0ef8a4d810afe2376aec2ce5bd0959677e,325,"local tested; remote CI/review pending"
-402,6eb618906ff846f202ab6d43fca4fa7ae7523fd8,025476049fa094c852c48565f45d1e32f472bb3d,376,"local tested; remote CI/review pending"
-404,4b82922bef24bd455c41283b98409d1af5886830,6eb618906ff846f202ab6d43fca4fa7ae7523fd8,308,"local tested; remote CI/review pending"
-405,3b525e0a305e8b44bdcd54495284950393a7b415,4b82922bef24bd455c41283b98409d1af5886830,369,"local tested; remote CI/review pending"
-433,94d14d9e37c5b456b441201b4d98a13bacc056d1,3b525e0a305e8b44bdcd54495284950393a7b415,87,"local tested; remote CI/review pending"
-406,2e9b24004043d830b911c15cea6fb10d1da7a9cc,94d14d9e37c5b456b441201b4d98a13bacc056d1,198,"local tested atop #433; remote PR base still #405 pending native stack insertion; CI/review pending"
-407,c56f32eeed1e07d230f4de402c263075c5191809,2e9b24004043d830b911c15cea6fb10d1da7a9cc,156,"local tested; remote CI/review pending"
-409,e5ec78a0b0e60363af1ac674c2ce8d3a6627d094,c56f32eeed1e07d230f4de402c263075c5191809,282,"local tested; remote CI/review pending"
+PR,head,locally_tested_base,changed_lines,source_CI,source_CI_run,combined_pr_governance,current_remote_base_note
+387,402ff6e580fa15e765bedc89ae5a6f889202e640,5b6109bd2c8100455136cf12ce91c52830833c7f,380,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683741397,FAIL: Policy incomplete,—
+388,c0d8076908dbe425f8dbb7b4ff7d717a39ae2117,402ff6e580fa15e765bedc89ae5a6f889202e640,317,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683745634,FAIL: Policy incomplete,—
+397,7327ca0ef8a4d810afe2376aec2ce5bd0959677e,c0d8076908dbe425f8dbb7b4ff7d717a39ae2117,390,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683777531,FAIL: Policy incomplete,—
+403,025476049fa094c852c48565f45d1e32f472bb3d,7327ca0ef8a4d810afe2376aec2ce5bd0959677e,325,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683711681,FAIL: Policy incomplete,—
+402,6eb618906ff846f202ab6d43fca4fa7ae7523fd8,025476049fa094c852c48565f45d1e32f472bb3d,376,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683706531,FAIL: Policy incomplete,—
+404,4b82922bef24bd455c41283b98409d1af5886830,6eb618906ff846f202ab6d43fca4fa7ae7523fd8,308,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683727427,FAIL: Policy incomplete,—
+405,3b525e0a305e8b44bdcd54495284950393a7b415,4b82922bef24bd455c41283b98409d1af5886830,369,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683769669,FAIL: Policy incomplete,—
+433,94d14d9e37c5b456b441201b4d98a13bacc056d1,3b525e0a305e8b44bdcd54495284950393a7b415,87,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683758901,FAIL: Policy incomplete,—
+406,2e9b24004043d830b911c15cea6fb10d1da7a9cc,94d14d9e37c5b456b441201b4d98a13bacc056d1,198,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683744567,FAIL: Policy incomplete,GitHub PR base remains #405 while local test base is child #433; native insertion pending.
+407,c56f32eeed1e07d230f4de402c263075c5191809,2e9b24004043d830b911c15cea6fb10d1da7a9cc,156,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683738309,FAIL: Policy incomplete,—
+409,e5ec78a0b0e60363af1ac674c2ce8d3a6627d094,c56f32eeed1e07d230f4de402c263075c5191809,282,8/8 source CI succeeded,https://github.com/creep1ng/sre-agent/actions/runs/36683729625,FAIL: Policy incomplete,—

@@ -30,18 +30,25 @@
     "copied_capture_helper": "Passed under unique owned project `sre-agent-r9-public-validation`: checks image rebuilt and real #409 HTTP/PostgreSQL probe 1 passed in 3.34s. The first fresh-project attempt hit an IPAM overlap before test startup; after inspecting and removing only the completed old owned DB/network (no volumes), retry passed. New project DB/network then removed by scoped Compose down."
   },
   "hosted_ci_snapshot": {
-    "source": "parent read-only status snapshot after repaired pushes",
-    "state": "some hosted check contexts terminal green; six contract checks still active; complete hosted outcome pending",
-    "new_candidate_failures": "none reported at snapshot",
+    "as_of_utc": "2026-09-30T07:54:55Z",
+    "exact_heads_with_source_CI_8_of_8_success": 11,
+    "combined_pr_governance_failure_policy_incomplete": 11,
+    "open_contracts_or_policy_blockers": "PR governance is policy incomplete on all 11; source CI green does not clear it",
     "human_review": "pending"
   },
   "review_snapshot": {
+    "as_of_utc": "2026-09-30",
     "commented_reviews": 16,
     "approved_reviews": 0,
     "inline_threads": 9,
     "unresolved_threads": 9,
-    "not_outdated_threads": 9,
+    "not_outdated_threads": 6,
+    "outdated_threads": 3,
     "threads_with_replies": 0,
-    "freshness": "last authorized parent-refreshed inventory; refresh required before delivery"
+    "outdated_topics": [
+      "#402 atomicity",
+      "#406 auth context",
+      "#409 persistence-boundary coverage"
+    ]
   }
 }

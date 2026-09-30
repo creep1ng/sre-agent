@@ -26,3 +26,8 @@ The focused command invokes the DB-isolation guard before pytest inside the chec
 ## Deep behavior/persistence proof
 
 Deep selectors: `tests/test_skill_resolution.py::test_malformed_paths_return_correlated_terminal_validation_audit` and `tests/test_skill_resolution.py::test_resolution_openapi_keeps_bounded_path_patterns`; valid-semver 33-character case returns 422 with one persisted correlated audit, before protected-content read.
+
+## Hosted status snapshot
+
+- Exact-head source CI: [run 36683758901](https://github.com/creep1ng/sre-agent/actions/runs/36683758901) completed **8/8 jobs successfully** (snapshot through 2026-09-30T07:40:29Z).
+- Separate combined `pr-governance` status: **failure**, `Policy incomplete; see summary` ([status/action link](https://github.com/creep1ng/sre-agent/actions/runs/36683758877)). This is still a delivery blocker; do not equate green source CI with a green overall PR status.

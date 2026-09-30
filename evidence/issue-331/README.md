@@ -26,6 +26,6 @@ A guarded helper is available at [`scripts/reproduce-slice.sh`](scripts/reproduc
 
 Each PNG is an actual headless-browser render of an executed local FastAPI/PostgreSQL probe at the named source HEAD. The JSON records allowlisted response metadata and measured SQL counts. Screenshots do not replace tests: in particular, #387/#403 snapshots show zero rows and are readiness/schema evidence only; #404’s screenshot does not prove DTO rejection. See focused tests above and per-slice reports.
 
-At the last parent-refreshed status snapshot, some hosted checks were terminal green but six contract checks remained active; the complete hosted outcome is pending. Review snapshot: 16 COMMENTED reviews, 9 unresolved inline threads, zero replies, zero approvals. Human review remains pending; refresh before final delivery.
+Hosted status snapshot at 2026-09-30 07:54:55 UTC: all 11 exact source heads show 8/8 source-CI jobs successful, but all 11 separate combined `pr-governance` statuses fail with `Policy incomplete`. This is not an overall green PR status; see [`hosted-ci.md`](hosted-ci.md). Review: 16 COMMENTED, 9 unresolved threads, 0 replies, 6 not outdated/3 outdated, 0 approvals. Human review remains pending; refresh before final delivery.
 
 Video: Deferred: media storage unavailable; screenshot evidence is mandatory.
