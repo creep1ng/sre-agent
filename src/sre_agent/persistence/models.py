@@ -1,10 +1,11 @@
 from functools import partial
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy import CheckConstraint as CK
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 from sqlalchemy.sql import func
+from sqlalchemy.sql import text as sql_text
 from sqlalchemy.sql.schema import ForeignKeyConstraint, UniqueConstraint
 
 required = partial(mapped_column, nullable=False)
@@ -229,6 +230,11 @@ class BoKSectionChunkRow(Base):
             ondelete="CASCADE",
         ),
         CK("chunk_index >= 0", name="ck_bok_chunks_index"),
+        Index(
+            "ix_bok_section_chunks_english_fts",
+            sql_text("to_tsvector('english', content)"),
+            postgresql_using="gin",
+        ),
     )
     collection_id = mapped_column(String(100), primary_key=True)
     version = mapped_column(String(64), primary_key=True)
@@ -297,7 +303,8 @@ class AuditEventRow(Base):
             "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
             "'grants.create','grants.list','grants.revoke',"
             "'aliases.create','aliases.list','aliases.get',"
-            "'aliases.assignment.replace','aliases.status.replace')",
+            "'aliases.assignment.replace','aliases.status.replace','catalog.create',"
+            "'catalog.list','catalog.read','bok.search','bok.read')",
             name="ck_audit_events_operation",
         ),
         CK(
@@ -315,7 +322,8 @@ class AuditEventRow(Base):
             "reason_code IS NULL OR reason_code IN ('audit_unavailable','authentication_failed',"
             "'contract_validation_failed','grant_matched','no_matching_grant','redaction_failed',"
             "'redaction_uncertain','routing_unavailable','upstream_failed','upstream_invalid',"
-            "'upstream_unavailable','resource_not_found','status_conflict')",
+            "'upstream_unavailable','resource_not_found','status_conflict',"
+            "'index_unavailable','storage_unavailable')",
             name="ck_audit_events_reason_code",
         ),
         CK(
