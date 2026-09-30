@@ -539,6 +539,7 @@ class AuditEvent(StrictDTO):
         "mcp.discovery",
         "mcp.invoke",
         "usage.read",
+        "consumption_limits.get",
         "principals.create",
         "principals.get",
         "principals.list",

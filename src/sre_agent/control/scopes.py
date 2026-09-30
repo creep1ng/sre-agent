@@ -1,11 +1,6 @@
 """Administrative control-plane authorization scopes for issue #147."""
 
 CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
-    ("GET", "/v1/consumption-limits"): (
-        "admin.read",
-        "administrative_control",
-        "consumption_limits",
-    ),
     ("POST", "/v1/principals"): (
         "admin.write",
         "administrative_control",

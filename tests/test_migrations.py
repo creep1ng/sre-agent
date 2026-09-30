@@ -416,3 +416,89 @@ def test_consumption_is_append_only_with_exact_decimal_json() -> None:
             connection.execute(
                 "UPDATE audit_events SET consumption='{}'::jsonb WHERE event_id=%s", (event_id,)
             )
+
+
+def test_consumption_policy_defaults_and_bigint_storage() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT policy_id, version, incident_token_limit, monthly_usd_limit "
+            "FROM consumption_limit_policies"
+        ).fetchall() == [(1, 0, None, None)]
+        connection.execute(
+            "UPDATE consumption_limit_policies SET version=2147483648, "
+            "incident_token_limit=2147483648, monthly_usd_limit=0.000000000001"
+        )
+        assert connection.execute(
+            "SELECT version, incident_token_limit, monthly_usd_limit::text "
+            "FROM consumption_limit_policies"
+        ).fetchone() == (2147483648, 2147483648, "0.000000000001")
+        connection.rollback()
+
+
+@pytest.mark.parametrize(
+    "column", ["policy_id", "version", "incident_token_limit", "monthly_usd_limit"]
+)
+def test_consumption_policy_rejects_invalid_storage(column: str) -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(f"UPDATE consumption_limit_policies SET {column}=-1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "operation",
+    ["consumption_limits.get", "usage.read", "catalog.create", "catalog.list", "catalog.read"],
+)
+async def test_consumption_audit_vocabulary_persists_without_rewriting_history(
+    operation: str,
+) -> None:
+    from uuid import uuid4
+
+    from sre_agent.gateway.audit import AuditProjector
+    from sre_agent.gateway.responses import PostgresAuditStore
+
+    database = Database(DATABASE_URL)
+    try:
+        event = AuditProjector(b"synthetic-migration-evidence").control_event(
+            uuid4(),
+            503,
+            0,
+            "audit",
+            operation=operation,
+            action="admin.read",
+            reason="upstream_unavailable",
+            retryable=True,
+        )
+        await PostgresAuditStore(database.sessions).append(event)
+        with psycopg.connect(DATABASE_URL) as connection:
+            assert connection.execute(
+                "SELECT operation, content_state, consumption FROM audit_events WHERE event_id=%s",
+                (str(event.event_id),),
+            ).fetchone() == (operation, "absent", None)
+            assert connection.execute(
+                "SELECT consumption->>'billed_usd' FROM audit_events WHERE event_id=%s",
+                ("00000000-0000-4000-8000-000000000130",),
+            ).fetchone() == ("0.0012300",)
+    finally:
+        await database.dispose()
+
+
+def test_consumption_sql_audit_evidence_blocks_lossy_downgrade() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO audit_events SELECT (jsonb_populate_record(NULL::audit_events, "
+            "to_jsonb(a) || jsonb_build_object('operation','consumption_limits.get', "
+            "'event_id','00000000-0000-4000-8000-000000000334'))).* "
+            "FROM audit_events a WHERE event_id='00000000-0000-4000-8000-000000000000'"
+        )
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="consumption.*audit evidence"):
+        command.downgrade(config, "20260926_14")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20260929_15",
+        )
+        assert connection.execute("SELECT count(*) FROM consumption_limit_policies").fetchone() == (
+            1,
+        )

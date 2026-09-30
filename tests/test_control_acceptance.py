@@ -187,41 +187,6 @@ def test_rotation_operation_ref_matches_runtime_canonical_envelope() -> None:
     assert response_schema == {"$ref": "urn:sre-agent:schema:credential-rotation:2.0.0"}
 
 
-def test_consumption_policy_read_is_protected_and_defaults_to_unset(
-    client: TestClient,
-) -> None:
-    assert client.get("/v1/consumption-limits").status_code == 401
-    assert client.get("/v1/consumption-limits", headers=headers(RESTRICTED_KEY)).status_code == 403
-
-    response = client.get("/v1/consumption-limits", headers=headers())
-    assert response.status_code == 200
-    assert response.json()["version"] == 0
-    assert response.json()["incident_token_limit"] is None
-    assert response.json()["monthly_usd_limit"] is None
-    assert response.json()["updated_at"]
-
-    with psycopg.connect(DATABASE_URL) as connection:
-        persisted = connection.execute(
-            "SELECT policy_id, version, incident_token_limit, monthly_usd_limit "
-            "FROM consumption_limit_policies"
-        ).fetchall()
-    assert persisted == [(1, 0, None, None)]
-
-
-def test_consumption_policy_readback_supports_bigint_incident_limits(
-    client: TestClient,
-) -> None:
-    with psycopg.connect(DATABASE_URL) as connection:
-        connection.execute(
-            "UPDATE consumption_limit_policies SET incident_token_limit = %s WHERE policy_id = 1",
-            (2_147_483_648,),
-        )
-
-    response = client.get("/v1/consumption-limits", headers=headers())
-    assert response.status_code == 200
-    assert response.json()["incident_token_limit"] == 2_147_483_648
-
-
 def test_all_eight_routes_with_replays_expiry_and_revocation(
     client: TestClient, canonical: dict[str, Draft202012Validator]
 ) -> None:
