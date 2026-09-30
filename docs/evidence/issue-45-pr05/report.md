@@ -63,3 +63,7 @@ Witness metadata and shape do not prove that a source measures upstream
 counter was captured. This result does not close CA2 or any CA1–CA8 criterion.
 The current exact-source screenshot, parent independent verification, mirror,
 publication, hosted P6 CI, and human acceptance remain parent-owned or pending.
+
+## Parent committed current proof
+
+Exact `afcc54680d50069acfaa0349bc08ba74232839c1` independently passed cached Docker syntax and HTTP/CLI2/2 with unchanged current hashes. [Actual P6 PNG](offline-witness.png),1600×3800,331930bytes,SHA-256 `88c5787b707f6bad23e27961e87410652b9a5bee75cb868ccc29aa27b91df1cd`, shows real committed test output and desmasked witness failure diagnostics. Host sandboxed Chromium153.0.8010.52 rendered local CSP/no-external-assets HTML; visually inspected/sanitized. No live counter/CA2 or PR424 container-preview proof. Publication/current hosted CI/human review pending.
