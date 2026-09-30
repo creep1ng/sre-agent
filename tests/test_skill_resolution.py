@@ -5,6 +5,7 @@ import json
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from test_control_acceptance import ADMIN_KEY, DATABASE_URL, RESTRICTED_KEY, SEED_ENV, headers
 from test_control_acceptance import client as _client_fixture  # noqa: F401
 from test_control_acceptance import migrated_acceptance_database as _database_fixture  # noqa: F401
@@ -89,13 +90,42 @@ def test_exact_version_read_authorizes_before_content_and_audits_metadata_only(
     exact = client.get(
         "/v1/skills/authorized-root-skill/1.0.0/resolve", headers=headers(INCIDENT_KEY)
     )
-    unauthorized = client.get(
-        "/v1/skills/authorized-root-skill/1.0.0/resolve", headers=headers(RESTRICTED_KEY)
-    )
+    engine = client.app.state.database.engine.sync_engine
+    skill_reads: list[tuple[str, object]] = []
+
+    def capture_skill_version_read(
+        connection: object,
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+        executemany: bool,
+    ) -> None:
+        del connection, cursor, context, executemany
+        if "skill_versions" in statement.lower() and statement.lstrip().lower().startswith(
+            "select"
+        ):
+            skill_reads.append((statement, parameters))
+
+    event.listen(engine, "before_cursor_execute", capture_skill_version_read)
+    try:
+        unauthorized = client.get(
+            "/v1/skills/authorized-root-skill/1.0.0/resolve", headers=headers(RESTRICTED_KEY)
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_skill_version_read)
+    assert skill_reads == []
     absent = client.get("/v1/skills/absent-root-skill/1.0.0/resolve", headers=headers(INCIDENT_KEY))
-    dependency_bearing = client.get(
-        "/v1/skills/dependency-bearing-root/1.0.0/resolve", headers=headers(INCIDENT_KEY)
-    )
+    event.listen(engine, "before_cursor_execute", capture_skill_version_read)
+    try:
+        dependency_bearing = client.get(
+            "/v1/skills/dependency-bearing-root/1.0.0/resolve", headers=headers(INCIDENT_KEY)
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_skill_version_read)
+    assert len(skill_reads) == 1
+    assert "dependency-bearing-root" in repr(skill_reads[0][1])
+    assert "ungranted-dependency@1.0.0" not in repr(skill_reads[0][1])
     inactive = client.get(
         "/v1/skills/inactive-root-skill/1.0.0/resolve", headers=headers(INCIDENT_KEY)
     )
