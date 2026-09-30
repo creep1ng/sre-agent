@@ -356,6 +356,7 @@ async function openDetail(aliasId) {
     detailLoading.hidden = true;
     detailSubtitle.textContent = `${text(item.alias) || aliasId} · authoritative detail.`;
     announce(`Detail loaded for ${aliasId}.`);
+    detailCloseButton.focus({ preventScroll: true });
     return true;
   } catch (error) {
     if (generation !== sessionGeneration || readVersion !== detailReadVersion) return false;
@@ -470,6 +471,12 @@ rowsBody.addEventListener("click", (event) => {
 
 detailCloseButton.addEventListener("click", () => {
   closeDetail();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (deactivateDialog?.open || statusInFlight) return;
+  if (!detailSection.hidden) closeDetail();
 });
 
 detailEditButton.addEventListener("click", () => {
