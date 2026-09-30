@@ -1,7 +1,7 @@
 # Issue 45 P7-D: supplied service/IP boundary checks
 
 **Evidence kind:** controlled HTTP/CLI fixtures. **Route:** delegated direct.
-Base: P6 `529b2105a5f2ee841c804713b5e32b605edb965a`; local candidate is uncommitted.
+Current base: documentation prerequisite PR #435 `08bf3fb60649ba73a70a1480c00fa81b6409a38c`; owned service/IP candidate is locally committed and unpublished.
 
 This slice probes only supplied service-name and direct-IP targets using
 unauthenticated GET `/healthz`, manual redirects and cancelled response bodies.
@@ -46,7 +46,7 @@ Source SHA-256: `8d639e4c36cfc0fed5017cd692e2236b54a27fc487d442a8f67afe377bee328
 test SHA-256: `205885029a70adda1e9cd424f87efe446db473790d7334e93ff077b3bf7514c6`.
 Before restoring the preserved full-P7 sections, text delta against
 `529b2105a5f2ee841c804713b5e32b605edb965a` was 363 additions + 19 deletions
-= 382. With the required verbatim historical P7 entries restored, it is now
+= 382. At the pre-restack checkpoint, the restored full history measured
 393 additions + 19 deletions = 412, twelve above the repository hard gate before
 accounting for screenshot representation; no screenshot is included.
 Parent independently passed the current P7-D and gateway tests 7/7, four syntax
@@ -55,3 +55,9 @@ P6 hosted CI `36712710854` is terminal all-eight success; P7 is not published
 and has no hosted CI yet. Parent owns current screenshot, full mirror,
 commit/publication and P7 CI. No human acceptance or real boundary evidence is
 claimed; CA1–CA8 remain open.
+
+## Tracker-inclusive current candidate
+
+Full candidate backup `a81c10980fbae43cde58df53d16665b1e8629efa` remains preserved. Clean owned restack onto PR43508bf produced tested `66ff3d87f5deeb1eba9c86c5800f4cd2f836b647`,359 additions+20 deletions=379 before fresh proof/media. Source/test hashes above are unchanged. Parent independently observed exact66ff cached networkless256MiB Docker syntax4files and7/7 HTTP/CLI (4 service/IP+3 gateway), no skips; capture `/tmp/issue45-p7-service-ip-parent-evidence/restacked-green.log`. Hosted P7 CI and human acceptance remain pending; no real CA closed.
+
+Actual [service/IP PNG](service-ip.png),1600×2100/252193bytes/SHA`2f42b09e81780d16ff9e8565d34720c31f0fbd8099d2d2122bededc12ba16a7f`, shows the committed66ff Docker output excerpt and safe assertions. Visually inspected/sanitized, sandboxed hostChromium153/localCSP/noexternalassets. Later changes only correct historical base/count wording and attach this proof; runtime source/tests are unchanged. Not a live topology or total-isolation capture.

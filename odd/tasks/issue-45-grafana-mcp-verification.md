@@ -440,3 +440,7 @@ PR #435 published `08bf3fb60649ba73a70a1480c00fa81b6409a38c` on immediate owned 
 ## P7-D owned tracker-inclusive restack checkpoint
 
 Parent preserved complete service/IP source/tests/runbook/report/task in local `a81c10980fbae43cde58df53d16665b1e8629efa` and backup `codex/issue-45-06-service-ip-before-tracker-restack` before clean restack from529 onto PR43508bf. The sole task conflict uses the newest full parent recovery document, retaining all P6/P7/tracker-publication history and adding this current stage. Runtime source/test hashes remain `8d639e4c36cfc0fed5017cd692e2236b54a27fc487d442a8f67afe377bee3283` / `205885029a70adda1e9cd424f87efe446db473790d7334e93ff077b3bf7514c6`; exact restacked verification and actual <=400 per-base count/proof are pending. No reset/stash or oversized publication; P7-E and real CA1–CA8 remain required.
+
+## P7-D restacked parent verification and capture
+
+Exact committed66ff3d87f5deeb1eba9c86c5800f4cd2f836b647 independently passed cached Node22.14 networknone256MiB Docker syntax4files and7/7(4direct+3gateway),no skips; source8d639/test205885 unchanged. Real [P7-D PNG](../../docs/evidence/issue-45-pr06/service-ip.png),1600×2100/252193bytes/SHA`2f42b09e81780d16ff9e8565d34720c31f0fbd8099d2d2122bededc12ba16a7f`, inspected/sanitized; actual committed output excerpt, not full/liveboundary. P7-D-C publication/exactCI/humanrequest pending. All real CA1–CA8 and P7-E remain open.
