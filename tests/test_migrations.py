@@ -479,3 +479,33 @@ def test_skill_resolution_audit_operation_and_denied_404_are_persistable() -> No
         ("skills.resolve", 200, None),
         ("skills.resolve", 404, "resource_missing"),
     ]
+def test_merge_18_downgrade_preserves_usage_read_for_revision_17() -> None:
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events
+            SELECT (jsonb_populate_record(NULL::audit_events, to_jsonb(audit_events) ||
+              '{"event_id":"00000000-0000-4000-8000-000000000197",
+                "operation":"usage.read","action":"admin.read"}'::jsonb)).*
+            FROM audit_events LIMIT 1"""
+        )
+        connection.commit()
+    command.downgrade(config, "20260930_17")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events
+            SELECT (jsonb_populate_record(NULL::audit_events, to_jsonb(audit_events) ||
+              '{"event_id":"00000000-0000-4000-8000-000000000198",
+                "operation":"usage.read","action":"admin.read"}'::jsonb)).*
+            FROM audit_events LIMIT 1"""
+        )
+        connection.commit()
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+    assert "'usage.read'" in operation_check
+    assert "'catalog.status.replace'" not in operation_check
+    command.upgrade(config, "head")
