@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
 import { assertEveryPublishedRelease, assertImmutableManifest, assertReleaseMetadata, runConsumer, validateRelease, validateCompatibility, validateCoverage, validatePublishedReleases, writeImmutable, writeProjectionFixtures } from "../lib/release-validation.mjs";
+import { createSchemaRegistry, loadReleaseDirectory } from "../lib/schema-validation.mjs";
 
 test("consumer coverage pins every owner, fixture, command, and non-authority boundary", async () => { const result = await validateCoverage(); assert.equal(result.consumers.consumers.length, 6); assert.equal(result.suite.obligations.length, 6); });
 test("coverage rejects YAML command substitution without executing it", async () => {
@@ -82,6 +84,200 @@ test("release 2.2.0 validates catalog contract and additive compatibility", asyn
   assert.deepEqual(manifest.baseline, { previous_release: "2.1.0", previous_major: "2.0.0", compatibility: "additive" });
   assert.ok(manifest.inventory.schemas.some(({ path }) => path.endsWith("json-schema/domain/resource-catalog-entry.schema.json")));
   assert.ok(manifest.inventory.examples.some(({ path }) => path.endsWith("examples/catalog/resource-list.example.json")));
+});
+test("release tooling admits and discovers 2.3.0", async () => {
+  const command = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("../release.mjs", import.meta.url)), "validate", "--release", "2.3.0"],
+    { encoding: "utf8" },
+  );
+  assert.doesNotMatch(command.stderr, /Usage:/);
+
+  const root = fileURLToPath(new URL("../../releases/", import.meta.url));
+  const result = await validatePublishedReleases(root, async () => ({ artifacts: 1, results: 1 }));
+  assert.equal(result.releases.at(-1), "2.3.0");
+});
+test("release 2.3.0 is additive over 2.2.0", async () => {
+  const result = await validateCompatibility("2.2.0", "2.3.0");
+  assert.deepEqual(
+    {
+      previous_release: result.previous_release,
+      current_release: result.current_release,
+      status: result.status,
+    },
+    { previous_release: "2.2.0", current_release: "2.3.0", status: "passed" },
+  );
+  assert.ok(result.positive_fixtures > 0);
+  assert.ok(result.examples > 0);
+});
+test("release 2.3.0 admits grant revocation without changing 2.2.0", async () => {
+  const previous = await loadReleaseDirectory(
+    new URL("../../releases/2.2.0/", import.meta.url),
+    "audit",
+  );
+  const event = structuredClone(
+    previous.examples.find(({ name }) => name === "allow.example.json").data,
+  );
+  event.operation = "grants.revoke";
+  event.action = "admin.write";
+  const previousAudit = createSchemaRegistry(previous.schemas).getSchema(
+    "urn:sre-agent:schema:audit-event:2.2.0",
+  );
+  const previousMetadata = createSchemaRegistry(previous.schemas).getSchema(
+    "urn:sre-agent:schema:audit-event-metadata:2.2.0",
+  );
+  assert.equal(previousAudit(event), false);
+  assert.equal(previousMetadata(event), false);
+
+  const current = await loadReleaseDirectory(
+    new URL("../../releases/2.3.0/", import.meta.url),
+    "audit",
+  );
+  const currentAudit = createSchemaRegistry(current.schemas).getSchema(
+    "urn:sre-agent:schema:audit-event:2.3.0",
+  );
+  const currentMetadata = createSchemaRegistry(current.schemas).getSchema(
+    "urn:sre-agent:schema:audit-event-metadata:2.3.0",
+  );
+  assert.equal(currentAudit(event), true, JSON.stringify(currentAudit.errors));
+  assert.equal(currentMetadata(event), true, JSON.stringify(currentMetadata.errors));
+});
+test("release 2.3.0 inherits version-aware catalog validation", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.3.0/", import.meta.url));
+  const result = await runConsumer("issue-129", root);
+  assert.deepEqual(result, {
+    consumer: "issue-129",
+    action: "resource-catalog-contract",
+    fixture: "fixtures/positive/catalog.entries.positive.v2.3.0.fixture.json",
+    status: "passed",
+  });
+});
+test("release 2.3.0 admits grants.create and grants.list without losing revocation", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.3.0/", import.meta.url));
+  const current = await loadReleaseDirectory(root, "all");
+  const audit = createSchemaRegistry(current.schemas).getSchema(
+    "urn:sre-agent:schema:audit-event:2.3.0",
+  );
+  const revoke = structuredClone(
+    current.examples.find(({ name }) => name === "audit/allow.example.json").data,
+  );
+  Object.assign(revoke, {
+    operation: "grants.revoke",
+    action: "admin.write",
+    stage: "authorization",
+    outcome: "success",
+    reason_code: "grant_matched",
+    response_status: 204,
+  });
+  for (const field of ["consumption", "routing"]) delete revoke[field];
+  assert.equal(audit(revoke), true, JSON.stringify(audit.errors));
+
+  const httpCase = JSON.parse(
+    await readFile(
+      new URL("json-schema/http/control-http-case.schema.json", new URL("../../releases/2.3.0/", import.meta.url)),
+    ),
+  );
+  assert.deepEqual(httpCase.properties.operation.enum.filter((value) => value.startsWith("grants.")), [
+    "grants.list",
+  ]);
+
+  const previous = await loadReleaseDirectory(
+    new URL("../../releases/2.2.0/", import.meta.url),
+    "audit",
+  );
+  const previousAudit = createSchemaRegistry(previous.schemas).getSchema(
+    "urn:sre-agent:schema:audit-event:2.2.0",
+  );
+  for (const operation of ["grants.create", "grants.list"]) {
+    const admitted = structuredClone(revoke);
+    admitted.operation = operation;
+    assert.equal(audit(admitted), true, JSON.stringify(audit.errors));
+    const metadataSchema = createSchemaRegistry(current.schemas).getSchema(
+      "urn:sre-agent:schema:audit-event-metadata:2.3.0",
+    );
+    assert.equal(
+      metadataSchema(admitted),
+      true,
+      JSON.stringify(metadataSchema.errors),
+    );
+    assert.equal(previousAudit(admitted), false);
+  }
+});
+
+test("release 2.3.0 traces issue-184 grant revocation conformance", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.3.0/", import.meta.url));
+  const coverage = await validateCoverage(root);
+  assert.deepEqual(coverage.consumers.consumers.find(({ id }) => id === "issue-184"), {
+    id: "issue-184",
+    owner: "release",
+    obligations: ["issue-184.grant-revocation-contract"],
+    internal_models_are_authority: false,
+  });
+  const result = await runConsumer("issue-184", root);
+  assert.deepEqual(result, {
+    consumer: "issue-184",
+    action: "grant-revocation-contract",
+    fixture: "fixtures/positive/control.audit.grants-revoke-allow.positive.v2.3.0.fixture.json",
+    status: "passed",
+  });
+  const evidence = JSON.parse(
+    await readFile(new URL("../../releases/2.3.0/conformance/evidence.json", import.meta.url)),
+  );
+  assert.ok(
+    evidence.results.some(
+      (item) => item.consumer === "issue-184" && item.action === "grant-revocation-contract",
+    ),
+  );
+});
+test("release 2.3.0 traces issue-184 T2 grant create and list conformance", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.3.0/", import.meta.url));
+  const coverage = await validateCoverage(root);
+  assert.deepEqual(coverage.consumers.consumers.find(({ id }) => id === "issue-184-t2"), {
+    id: "issue-184-t2",
+    owner: "release",
+    obligations: ["issue-184.grant-create-list-contract"],
+    internal_models_are_authority: false,
+  });
+  const result = await runConsumer("issue-184-t2", root);
+  assert.deepEqual(result, {
+    consumer: "issue-184-t2",
+    action: "grant-create-list-contract",
+    fixture: "fixtures/positive/control.audit.grants-create-allow.positive.v2.3.0.fixture.json",
+    status: "passed",
+  });
+  const evidence = JSON.parse(
+    await readFile(new URL("../../releases/2.3.0/conformance/evidence.json", import.meta.url)),
+  );
+  assert.ok(
+    evidence.results.some(
+      (item) => item.consumer === "issue-184-t2" && item.action === "grant-create-list-contract",
+    ),
+  );
+});
+test("release 2.3.0 traces issue-184 T3 alias create and read conformance", async () => {
+  const root = fileURLToPath(new URL("../../releases/2.3.0/", import.meta.url));
+  const coverage = await validateCoverage(root);
+  assert.deepEqual(coverage.consumers.consumers.find(({ id }) => id === "issue-184-t3"), {
+    id: "issue-184-t3",
+    owner: "release",
+    obligations: ["issue-184.alias-create-read-contract"],
+    internal_models_are_authority: false,
+  });
+  const result = await runConsumer("issue-184-t3", root);
+  assert.deepEqual(result, {
+    consumer: "issue-184-t3",
+    action: "alias-create-read-contract",
+    fixture: "fixtures/positive/control.audit.aliases-create-allow.positive.v2.3.0.fixture.json",
+    status: "passed",
+  });
+  const evidence = JSON.parse(
+    await readFile(new URL("../../releases/2.3.0/conformance/evidence.json", import.meta.url)),
+  );
+  assert.ok(
+    evidence.results.some(
+      (item) => item.consumer === "issue-184-t3" && item.action === "alias-create-read-contract",
+    ),
+  );
 });
 test("2.1.0 is additive over immutable 2.0.0", async () => {
   const result = await validateRelease("2.1.0"), manifest = parse(await readFile(new URL("../../releases/2.1.0/manifest.yaml", import.meta.url), "utf8")), previous = parse(await readFile(new URL("../../releases/2.0.0/manifest.yaml", import.meta.url), "utf8"));

@@ -434,6 +434,64 @@ class ResourceRepository:
         return project_model_alias(row._mapping) if row is not None else None
 
 
+class ModelAliasRepository:
+    """Closed ModelAlias reads and creates over llm_model resource rows.
+
+    Only active llm_model assignments are visible as aliases: absent rows,
+    inactive rows, and non-llm resources never enumerate through this port.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(
+        self,
+        model_alias_id: str,
+        alias: str,
+        concrete_model: str,
+        router: str,
+        inference_provider: str,
+    ) -> ModelAlias:
+        row = ResourceRow(
+            resource_type="llm_model",
+            resource_id=model_alias_id,
+            status="active",
+            model_alias_id=model_alias_id,
+            alias=alias,
+            concrete_model=concrete_model,
+            router=router,
+            inference_provider=inference_provider,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return project_model_alias(row)
+
+    async def get(self, model_alias_id: str) -> ModelAlias | None:
+        row = await self._session.scalar(
+            select(ResourceRow).where(
+                ResourceRow.resource_type == "llm_model",
+                ResourceRow.model_alias_id == model_alias_id,
+                ResourceRow.status == "active",
+            )
+        )
+        return project_model_alias(row) if row is not None else None
+
+    async def list(self, *, limit: int) -> tuple[list[ModelAlias], bool]:
+        rows = (
+            await self._session.scalars(
+                select(ResourceRow)
+                .where(
+                    ResourceRow.resource_type == "llm_model",
+                    ResourceRow.status == "active",
+                )
+                .order_by(ResourceRow.model_alias_id.asc(), ResourceRow.alias.asc())
+                .limit(limit + 1)
+            )
+        ).all()
+        truncated = len(rows) > limit
+        return [project_model_alias(row) for row in rows[:limit]], truncated
+
+
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -453,6 +511,61 @@ class GrantRepository:
         )
         if row is None:
             return None
+        return self._project(row)
+
+    async def get(self, grant_id: str) -> Grant | None:
+        row = await self._session.get(GrantRow, grant_id)
+        return self._project(row) if row is not None else None
+
+    async def create(
+        self,
+        grant_id: str,
+        principal_id: str,
+        action: str,
+        resource_type: str,
+        resource_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> Grant:
+        row = GrantRow(
+            grant_id=grant_id,
+            principal_id=principal_id,
+            action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            effect="allow",
+            status="active",
+            created_at=now or datetime.now(UTC),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return self._project(row)
+
+    async def list_filtered(
+        self,
+        *,
+        principal_id: str | None,
+        resource_id: str | None,
+        limit: int,
+    ) -> tuple[list[Grant], bool]:
+        if (principal_id is None) == (resource_id is None):
+            raise ValueError("exactly one grant filter is required")
+        statement = select(GrantRow)
+        if principal_id is not None:
+            statement = statement.where(GrantRow.principal_id == principal_id)
+        else:
+            statement = statement.where(GrantRow.resource_id == resource_id)
+        rows = (
+            await self._session.scalars(
+                statement.order_by(GrantRow.created_at.desc(), GrantRow.grant_id.desc()).limit(
+                    limit + 1
+                )
+            )
+        ).all()
+        return [self._project(row) for row in rows[:limit]], len(rows) > limit
+
+    @staticmethod
+    def _project(row: GrantRow) -> Grant:
         return project_grant(
             {
                 "grant_id": row.grant_id,
@@ -467,6 +580,18 @@ class GrantRepository:
                 "created_at": row.created_at,
             }
         )
+
+    async def revoke(self, grant_id: str) -> Grant | None:
+        """Converge an existing direct grant on revoked without deleting its trace."""
+        await self._session.execute(
+            update(GrantRow)
+            .where(GrantRow.grant_id == grant_id, GrantRow.status == "active")
+            .values(status="revoked")
+        )
+        row = await self._session.get(GrantRow, grant_id)
+        if row is None:
+            return None
+        return self._project(row)
 
 
 class AuditRepository:

@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { validate } = require('../.github/governance/pr-evidence.cjs');
+const { test } = require('node:test');
+const { run, validate } = require('../.github/governance/pr-evidence.cjs');
 
 const sha = 'a'.repeat(40);
 const tested = 'c'.repeat(40);
@@ -53,3 +54,83 @@ assert.deepEqual(validate(data({
   additions: 401,
 })), []);
 assert.match(errors(data({ additions: -1 })), /Size metadata is unavailable/);
+
+function context() {
+  return {
+    repo: { owner: 'owner', repo: 'repo' },
+    serverUrl: 'https://github.com',
+    runId: 42,
+  };
+}
+
+function summary(headings = []) {
+  return {
+    addHeading(heading) { headings.push(heading); return this; },
+    addRaw() { return this; },
+    addList() { return this; },
+    async write() {},
+  };
+}
+
+function githubFor(pr, { snapshotError = null } = {}) {
+  const statuses = [];
+  let snapshots = 0;
+  return {
+    statuses,
+    github: {
+      paginate: async () => [{ number: pr.number, head: { sha: pr.head.sha } }],
+      rest: {
+        pulls: {
+          get: async () => {
+            snapshots++;
+            if (snapshotError && snapshots === 1) throw snapshotError;
+            return { data: pr };
+          },
+        },
+        repos: {
+          getCombinedStatusForRef: async () => ({ data: { statuses: [] } }),
+          createCommitStatus: async status => {
+            statuses.push(status);
+            return { data: status };
+          },
+        },
+      },
+    },
+  };
+}
+
+test('policy-invalid candidates publish failure without failing reconciliation', async () => {
+  const candidate = data({ fields: { Video: 'Video pending.' } }).pr;
+  const { github, statuses } = githubFor(candidate);
+  const aggregateFailures = [];
+  const headings = [];
+  const core = {
+    summary: summary(headings),
+    setFailed: message => aggregateFailures.push(message),
+    error: () => {},
+  };
+
+  await run({ github, context: context(), core });
+
+  assert.deepEqual(aggregateFailures, []);
+  assert.equal(statuses.length, 1);
+  assert.equal(statuses[0].state, 'failure');
+  assert.deepEqual(headings, ['PR #1: failure']);
+});
+
+test('operational errors fail reconciliation and publish an error status', async () => {
+  const candidate = data().pr;
+  const { github, statuses } = githubFor(candidate, { snapshotError: new Error('API unavailable') });
+  const aggregateFailures = [];
+  const core = {
+    summary: summary(),
+    setFailed: message => aggregateFailures.push(message),
+    error: () => {},
+  };
+
+  await run({ github, context: context(), core });
+
+  assert.equal(aggregateFailures.length, 1);
+  assert.equal(statuses.length, 1);
+  assert.equal(statuses[0].state, 'error');
+});
