@@ -2,8 +2,8 @@
 
 **Controlled integration, not live Grafana/MCP acceptance.** The [screenshot](discovery.png)
 shows actual current HTTP/CLI test output and the container command, not a service UI.
-Base: `73fd51ab6ea9a2235b51aa70e851ab930e89a5c0` (PR #424).
-The PR body binds the committed tested SHA; this report has no circular commit reference.
+Base: `73fd51ab6ea9a2235b51aa70e851ab930e89a5c0` (parent PR #424).
+The parent binds the committed tested SHA; this report has no circular commit reference.
 
 ## Reproduce
 
@@ -21,16 +21,18 @@ docker compose --project-directory "$PWD" --env-file .env --env-file .env.worktr
 
 ## Actual results
 
-- Fresh RED: 0/2; the CLI module was absent. GREEN and final check: 2/2, Node v22.14.0.
+- Fresh RED: 1/2 failed; valid IDs plus an extra malformed tool were falsely accepted.
+  Minimal raw-array validation GREEN: 2/2, Node v22.14.0.
 - Allowed discovery returned only the expected server/two tool IDs; restricted discovery
   returned non-enumerating 403, non-retryable, with the matching safe fixture UUID.
-- Only GET discovery requests occurred. Invalid configurations made no request.
+- HTTP cases cover missing/non-string IDs, null and an extra malformed entry; only GETs occurred.
 - Redirect, malformed-body and unavailable cases failed safely; alternate-server calls: 0.
 - Synthetic tokens/private body fields were absent from serialized reports.
-- Two in-container Node syntax checks passed; refactor review retained explicit validators.
-- Initial runner setup rejected unsupported `--no-build` before tests; the command above worked.
+- In-container `node --check` passed for probe and test; refactor retained explicit validators.
+- The exact command above used the cached harness image; no build/pull or provider service ran.
 
-The actual offline Chromium capture uses no external assets and retains the browser sandbox.
+The actual offline Chromium capture uses no external assets, retains the browser sandbox,
+and matches the current test/source SHA-256 values shown in the screenshot.
 All real CA1–CA8 stay open: no invocation, metric/log query, counter reconciliation,
 partial-tool filtering, live boundary inventory or cycle verification is delivered.
 HTTP fixtures are synthetic; output minimization is not a CA6 redaction guarantee.

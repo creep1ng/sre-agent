@@ -81,7 +81,10 @@ test("discovery CLI validates allowed and server-restricted HTTP responses witho
 
     for (const invalid of [null, { server: { server_id: PRIVATE_MARKER }, tools: [] },
       { ...allowed, tools: [...allowed.tools, { tool_id: PRIVATE_MARKER }] },
-      { ...allowed, tools: [{ tool_id: "query_prometheus" }, { tool_id: "query_prometheus" }] }]) {
+      { ...allowed, tools: [{ tool_id: "query_prometheus" }, { tool_id: "query_prometheus" }] },
+      { ...allowed, tools: [...allowed.tools, {}] },
+      { ...allowed, tools: [...allowed.tools, null] },
+      { ...allowed, tools: [...allowed.tools, { tool_id: 42 }] }]) {
       const previous = allowed;
       allowed = invalid;
       const result = await runCli(url);
