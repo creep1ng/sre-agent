@@ -29,7 +29,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     if op.get_bind().scalar(
         sa.text(
-            "SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation = 'catalog.status.replace')"
+            "SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation IN "
+            "('catalog.status.replace', 'skills.resolve'))"
         )
     ):
         raise RuntimeError("cannot downgrade integration while audit evidence exists")
