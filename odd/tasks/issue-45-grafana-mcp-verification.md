@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Current delivery stage: documentation-only recovery prerequisite for the complete Issue #45 tracker, based on P6 commit `529b2105a5f2ee841c804713b5e32b605edb965a`.** This candidate restores historical task records and adds a reproducible read-only tracker inspection; it does not include or execute P7 source/tests. The separate service/IP candidate is locally implemented and tested but unpublished; published-origin work remains P7-E. Dated checkpoints below distinguish historical status from this documentation-only candidate. CA1–CA8 and human acceptance remain open.
+**Current delivery stage: local P7-D supplied service-name/direct-IP boundary candidate, stacked on the owned documentation prerequisite PR #435 `08bf3fb60649ba73a70a1480c00fa81b6409a38c`.** P7-D is implemented and controlled tests previously passed; exact restacked checks/evidence/publication remain pending. Published-origin P7-E stays planned. Earlier documentation-only and combined-candidate sections below are dated historical records, not current runtime or acceptance claims. CA1–CA8 and human acceptance remain open.
 
 ## Objective
 
@@ -432,3 +432,11 @@ P7-D service/IP proof is separate from this candidate: local source `8d639e4c36c
 ## Tracker recovery parent evidence checkpoint
 
 Exact committed `bdc2d96a18a00d0426ff0a2209662c5417c5e7e7` read-only/networkless Node22.14 inspection exited0 and found seven selected markers; no application runtime or Markdown preview ran. Real [tracker inspection PNG](../../docs/evidence/issue-45-pr06-tracker/tracker-inspection.png),1600×1500/152003bytes/SHA`c4f39f73ef3c51790ca5d3a1cb31292e8f4f3cd6861d1e65ba0e6638eb59c072`, visually inspected/sanitized, records that tested checkpoint; later changes only record this proof/checklist and attach media. Initial entrypoint failure retained, direct Node command corrected. TR-C exact publication/CI/human request remains pending; all real CA1–CA8 open.
+
+## Tracker recovery public candidate checkpoint
+
+PR #435 published `08bf3fb60649ba73a70a1480c00fa81b6409a38c` on immediate owned P6 `529b2105a5f2ee841c804713b5e32b605edb965a`,84 additions+1 deletion=85 including realPNG. Public body/PNG were read back exact; papiarcacamilo requested, not approved. Parent current08bf document Docker inspection exited0/seven markers,82253bytes/taskSHA`40f5e29bc186b8001cf13dea93a174d25920e65c3478d1354ea2837fd0977342`,no runtime. ExactCI36716395896 is running; initial governance36716395845 cancelled, not a pass. TR-C remains pending terminal currentCI. This checkpoint is local recovery progress after publication, not pixels/current-tested bytes from the previous capture.
+
+## P7-D owned tracker-inclusive restack checkpoint
+
+Parent preserved complete service/IP source/tests/runbook/report/task in local `a81c10980fbae43cde58df53d16665b1e8629efa` and backup `codex/issue-45-06-service-ip-before-tracker-restack` before clean restack from529 onto PR43508bf. The sole task conflict uses the newest full parent recovery document, retaining all P6/P7/tracker-publication history and adding this current stage. Runtime source/test hashes remain `8d639e4c36cfc0fed5017cd692e2236b54a27fc487d442a8f67afe377bee3283` / `205885029a70adda1e9cd424f87efe446db473790d7334e93ff077b3bf7514c6`; exact restacked verification and actual <=400 per-base count/proof are pending. No reset/stash or oversized publication; P7-E and real CA1–CA8 remain required.

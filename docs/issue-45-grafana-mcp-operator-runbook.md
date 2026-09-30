@@ -13,7 +13,9 @@ Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 4. Follow the staged recovery checklist in the [issue tracker](../odd/tasks/issue-45-grafana-mcp-verification.md).
    Full-probe/cycle commands recorded there remain historical or planned;
    P3/P4 commands below describe their historical stages; P5 covers known-ID
-   denial, and current P6 covers offline witness reconciliation only.
+   denial, P6 covers offline witness reconciliation, and P7-D checks only
+   supplied service-name/direct-IP health targets. Published-origin checks are
+   a separate P7-E follow-up.
 
 ## Current contract and prerequisites
 
@@ -66,13 +68,16 @@ API, not the harness. Keep that boundary unchanged.
   by this probe's `--reconcile <report> --witness <file>` mode. It consumes a
   separately operator-validated witness without network access; it does not
   capture counters or independently establish witness provenance or semantics.
-- Harness boundary targets, including connect-only proxy/admin probes.
+- P7-D supplied service-name/direct-IP health checks and P7-E published-origin
+  checks are controlled target probes only; connect-only proxy/admin probes and
+  independently verified topology/binding evidence remain required for CA4/CA5.
 - Metric capture → log signal capture → offline two-cycle verification.
 
 The gateway probe is `scripts/demo_mcp_gateway_probe.mjs`; it does not directly
-connect to Grafana MCP. Signal capture
-in `scripts/demo_signal_cycles.mjs` and boundary updates to `scripts/demo_mcp_probe.mjs`
-remain planned, with their matching E2E tests. No future-stage command is prescribed here.
+connect to Grafana MCP. Signal capture in `scripts/demo_signal_cycles.mjs` and
+published-origin boundary checks remain planned, with matching E2E tests. The
+P7-D service/IP stage below does not prove complete harness isolation. No
+future-stage command is prescribed here.
 Each stage must retain behavior, tests, operator documentation and its own proof.
 
 ## Delivery and evidence boundaries
@@ -223,3 +228,28 @@ docker run --pull never --network none --rm \
 
 The controlled E2E uses synthetic loopback fixtures only. No actual operator
 counter was captured; no P6 result closes CA2 or any CA1–CA8 criterion.
+
+## P7-D: supplied service-name and direct-IP health checks
+
+The current `scripts/demo_mcp_probe.mjs` accepts only the supplied
+`MCP_PROBE_HOST`, `MCP_PROBE_PORT`, and `MCP_IPS` inventory. It issues
+unauthenticated GET requests to fixed `/healthz`, does not follow redirects,
+cancels response bodies, and emits only target kind/status/HTTP status. Any HTTP
+response is reachable and fails; missing, invalid or blocked targets remain
+`unverified` (exit 2), never an isolation pass. `coverage` is
+`supplied-targets-only` and `full_boundary` remains `pending`.
+
+Repeat the controlled loopback HTTP/CLI cases with the cached pinned image:
+
+```sh
+docker run --pull never --network none --memory=256m --memory-swap=256m --rm \
+  --tmpfs /workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0755 \
+  -v "$PWD/tests:/source/tests:ro" -v "$PWD/scripts:/source/scripts:ro" \
+  -v "$PWD/schemas:/source/schemas:ro" \
+  sha256:060b50ea88cf38bb3c2b6b0bb5920f2460091056381db72d802424c5f1df697d \
+  node --test /source/tests/test_demo_mcp_probe.mjs
+```
+
+These fixtures do not observe real harness networks or prove binding, proxy,
+admin, token-absence, or total isolation. P7-E published-origin checks and
+independent network/topology evidence remain pending; CA1–CA8 remain open.
