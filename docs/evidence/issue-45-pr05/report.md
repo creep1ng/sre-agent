@@ -17,7 +17,7 @@ The controlled HTTP/CLI test uses the cached Node 22.14.0 image. It requires no
 network, build, pull, credentials, `.env`, live API, database, or demo stack.
 
 ```sh
-docker run --pull never --network none --rm \
+docker run --pull never --network none --memory=256m --memory-swap=256m --rm \
   --tmpfs /workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0755 \
   -v "$PWD/tests:/source/tests:ro" -v "$PWD/scripts:/source/scripts:ro" \
   -v "$PWD/schemas:/source/schemas:ro" \
@@ -90,3 +90,9 @@ docker run --pull never --network none --memory=256m --memory-swap=256m --rm \
 - Current source SHA-256: `8a9d926288b416157e041e3a84c4e075a65bec799dcd5af227af1fe5f9e61583`; current test SHA-256: `c5e016a9f6445176ff0aa44d39bcac4347ff114da18e71ed027e0de57a161961`. Exact cached-container source/test syntax and `git diff --check` pass. Final verification log: `/tmp/issue45-p6-current-evidence/final-verification.log`, SHA-256 `d74f5a9ae8e052db5848b4eb074c914dd5710ce3d269080656bca4f728fab3fa`. Current base text delta is 456 additions + 20 deletions = 476; the existing PNG is binary and adds no text lines. The user's accepted size exception is limited to this correction.
 - Log-path collision: the earlier raw P6 retryable-schema files at `/tmp/issue45-p6-current-evidence/red.log` and `green.log` were overwritten by the new runs before this collision was noticed. They are not reconstructed or represented by the new captures; the earlier written checkpoint remains historical text, but its raw retryable RED/GREEN files are unavailable in this workspace. Current correction captures are separately named `io-red.log` and `io-green.log`.
 - Parent-owned independent verification, current genuine screenshot, full task mirror, commit/publication/current hosted CI and human review remain pending. No real counter/provenance or CA1–CA8 acceptance is claimed.
+
+## Parent committed bounded-read proof
+
+Tested `d4146e58b21fbbafd70c3d36f28ec884e2924e82` on base `9cdf424573b35216702787af6e45be4172757b9b`: parent independently reran both Node syntax checks and the full cached, networkless, 256MiB-capped Docker CLI suite; 3/3 passed with no skips. Source8a9d9262 and testc5e016a9 hashes above were unchanged. The 1GiB sparse report failed safely in 233 bytes; offline reconciliation and zero alternate-server assertions remained intact.
+
+[Actual committed bounded-read PNG](offline-witness-bounded.png), 1600×2000, 340903 bytes, SHA-256 `e22fab60b1bd66d2c835f1d97c9292adcfa7dcea01d49858322ca0d7e57f67af`, shows the real committed Docker output. Host sandboxed Chromium153.0.8010.52 rendered local CSP/no-external-assets HTML with a new isolated profile; visually inspected and sanitized. The prior PNG is retained as historical evidence. No real counter, live environment or PR424 container-preview proof is claimed. Current publication/hosted CI and human review remain pending.

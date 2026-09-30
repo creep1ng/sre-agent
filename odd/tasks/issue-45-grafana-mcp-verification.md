@@ -371,3 +371,7 @@ Current source SHA-256 `8a9d926288b416157e041e3a84c4e075a65bec799dcd5af227af1fe5
 ## P6 input-bound parent independent verification
 
 Parent exact cached Node22.14 networkless Docker, memory/swap 256MiB, syntax and full CLI suite passed 3/3 (no skips). The 1GiB sparse report failed safely with probe_report_invalid in 233 bytes; existing 15 gateway requests / zero alternate calls remain asserted. Source8a9d9262/testc5e016a9 unchanged after verification. Current runbook stage text inspected against implemented dispatch. IO-R3 remains pending committed proof, fresh PNG, mirror/publication/current CI/human request. Capture: /tmp/issue45-p6-io-parent-evidence/parent-green.log.
+
+## P6 bounded-read committed proof and fresh capture
+
+Exact d4146e58b21fbbafd70c3d36f28ec884e2924e82 independently passed syntax/full Docker CLI3/3, memory/swap256MiB, no network/skips; unchanged source8a9d9262/testc5e016a9. Real [bounded-read PNG](../../docs/evidence/issue-45-pr05/offline-witness-bounded.png),1600×2000/340903bytes/SHAe22fab60b1bd66d2c835f1d97c9292adcfa7dcea01d49858322ca0d7e57f67af inspected/sanitized; historical PNG retained. IO-R3 remains pending publication/currentCI/human request, all real CAs open.
