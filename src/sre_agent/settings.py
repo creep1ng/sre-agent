@@ -16,6 +16,9 @@ class Settings:
     release_metadata: ReleaseMetadata = field(default_factory=ReleaseMetadata.defaults)
     grafana_mcp_endpoint: str | None = None
     grafana_mcp_token: str | None = field(default=None, repr=False)
+    bok_jev_enabled: bool = False
+    typesafe_api_key: str | None = field(default=None, repr=False)
+    bok_jev_timeout_seconds: float = 5.0
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -29,6 +32,19 @@ class Settings:
             raise ValueError("OPENROUTER_TIMEOUT_SECONDS must be numeric") from None
         if not 0 < timeout <= 120:
             raise ValueError("OPENROUTER_TIMEOUT_SECONDS must be between 0 and 120")
+        jev_enabled_value = environment.get("BOK_JEV_ENABLED", "false").strip().lower()
+        if jev_enabled_value not in {"true", "false"}:
+            raise ValueError("BOK_JEV_ENABLED must be true or false")
+        bok_jev_enabled = jev_enabled_value == "true"
+        typesafe_api_key = environment.get("TYPESAFE_API_KEY") or None
+        if bok_jev_enabled and not typesafe_api_key:
+            raise RuntimeError("TYPESAFE_API_KEY is required when BOK_JEV_ENABLED is true")
+        try:
+            bok_jev_timeout = float(environment.get("BOK_JEV_TIMEOUT_SECONDS", "5"))
+        except ValueError:
+            raise ValueError("BOK_JEV_TIMEOUT_SECONDS must be numeric") from None
+        if not 0 < bok_jev_timeout <= 30:
+            raise ValueError("BOK_JEV_TIMEOUT_SECONDS must be between 0 and 30")
         mcp_token = (
             environment.get("GRAFANA_MCP_TOKEN")
             or environment.get("MCP_GRAFANA_SERVER_TOKEN")
@@ -42,4 +58,7 @@ class Settings:
             ReleaseMetadata.from_environment(environment),
             environment.get("GRAFANA_MCP_ENDPOINT") or None,
             mcp_token,
+            bok_jev_enabled,
+            typesafe_api_key,
+            bok_jev_timeout,
         )

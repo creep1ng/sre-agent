@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from pathlib import Path
 
 from sre_agent import control, harness, incident
+from sre_agent.bok.jev import JevEvaluator, TypeSafeJevEvaluator
+from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
@@ -37,12 +39,14 @@ def create_application(
     llm_provider: LLMProvider | None = None,
     audit_store: AuditStore | None = None,
     mcp_client: MCPUpstreamClient | None = None,
+    bok_jev_evaluator: JevEvaluator | None = None,
 ) -> FastAPI:
     runtime_settings = settings or Settings.from_environment()
     probe = readiness_probe or health.postgres_readiness_probe(runtime_settings.database_url)
     database = Database(runtime_settings.database_url)
     shared_provider_client = None
     shared_mcp_client = None
+    shared_jev_client = None
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
         shared_provider_client = provider_client or httpx.AsyncClient(
@@ -88,6 +92,23 @@ def create_application(
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+        jev_evaluator = bok_jev_evaluator
+        if runtime_settings.bok_jev_enabled and jev_evaluator is None:
+            if not runtime_settings.typesafe_api_key:
+                raise RuntimeError("TYPESAFE_API_KEY is required when BOK_JEV_ENABLED is true")
+            shared_jev_client = httpx.AsyncClient(timeout=runtime_settings.bok_jev_timeout_seconds)
+            jev_evaluator = TypeSafeJevEvaluator(
+                shared_jev_client, runtime_settings.typesafe_api_key
+            )
+        bok_service = BoKRetrievalService(
+            database.sessions,
+            store,
+            projector,
+            jev_enabled=runtime_settings.bok_jev_enabled,
+            jev_evaluator=jev_evaluator,
+        )
+        application.state.bok_service = bok_service
+        application.include_router(bok_router(bok_service))
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))
         )
@@ -124,4 +145,6 @@ def create_application(
         application.add_event_handler("shutdown", shared_provider_client.aclose)
     if shared_mcp_client is not None:
         application.add_event_handler("shutdown", shared_mcp_client.aclose)
+    if shared_jev_client is not None:
+        application.add_event_handler("shutdown", shared_jev_client.aclose)
     return application
