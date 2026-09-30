@@ -227,3 +227,47 @@ def test_skill_publication_adopts_preexisting_catalog_draft(
     assert version_row is not None
     assert catalog_count == 1
     assert catalog_row == ("published", "skill", draft_id)
+
+
+@pytest.mark.parametrize("status", ["active", "inactive", "revoked"])
+def test_skill_publication_rejects_adoption_of_lifecycle_states(
+    client: TestClient,  # noqa: F811 — pytest fixture binding
+    status: str,
+) -> None:
+    resource_id = f"lifecycle-{status}-skill@1.0.0"
+    draft = client.post(
+        "/v1/catalog/resources",
+        json={
+            "resource_type": "skill",
+            "resource_id": resource_id,
+            "owner_id": "demo-human",
+            "source": "skill",
+            "source_ref": "catalog-draft",
+            "status": status,
+            "discoverability": {
+                "display_name": "Lifecycle draft",
+                "visibility": "private",
+                "description": "Pre-existing lifecycle state.",
+                "tags": [],
+            },
+        },
+        headers=headers(idempotency_key=f"lifecycle-{status}-draft"),
+    )
+    assert draft.status_code == 201, draft.text
+    body = skill_body()
+    body.update(skill_id=f"lifecycle-{status}-skill", version="1.0.0")
+    rejected = client.post(
+        "/v1/skills/versions",
+        json=body,
+        headers=headers(idempotency_key=f"lifecycle-{status}-publish"),
+    )
+    assert rejected.status_code == 409, rejected.text
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM skill_versions WHERE skill_id=%s",
+            (f"lifecycle-{status}-skill",),
+        ).fetchone() == (0,)
+        assert connection.execute(
+            "SELECT status FROM resources WHERE resource_type='skill' AND resource_id=%s",
+            (resource_id,),
+        ).fetchone() == (status,)
