@@ -166,3 +166,61 @@ def test_status_missing_or_oversized_version_is_audited(
             "WHERE correlation->>'request_id'=%s",
             (result.json()["request_id"],),
         ).fetchone() == (status, "catalog.status.replace")
+
+
+def test_inactive_status_token_recoverable_via_management_read(
+    client: TestClient,  # noqa: F811 — pytest fixture binding
+) -> None:
+    published = client.post(
+        "/v1/skills/versions",
+        json={
+            "skill_id": "cas-recovery-demo",
+            "version": "1.0.0",
+            "owner_id": "demo-human",
+            "manifest": {
+                "display_name": "CAS recovery demo",
+                "description": "Lifecycle token recovery fixture.",
+                "instructions": "Keep this version immutable.",
+                "dependencies": [],
+            },
+        },
+        headers={
+            "Authorization": f"Bearer {ADMIN_KEY}",
+            "Idempotency-Key": "publish-cas-recovery-demo-1",
+        },
+    )
+    assert published.status_code == 201
+    status_path = "/v1/skills/cas-recovery-demo/1.0.0/status"
+    initial = client.get(
+        "/v1/skills/cas-recovery-demo/1.0.0",
+        headers={"Authorization": f"Bearer {ADMIN_KEY}"},
+    )
+    assert initial.status_code == 200
+    inactive = client.put(
+        status_path,
+        json={"status": "inactive", "expected_updated_at": initial.json()["created_at"]},
+        headers={"Authorization": f"Bearer {ADMIN_KEY}"},
+    )
+    assert inactive.status_code == 200
+    assert (
+        client.get(
+            "/v1/skills/cas-recovery-demo/1.0.0",
+            headers={"Authorization": f"Bearer {ADMIN_KEY}"},
+        ).status_code
+        == 404
+    )
+
+    recovered = client.get(status_path, headers={"Authorization": f"Bearer {ADMIN_KEY}"})
+    assert recovered.status_code == 200, recovered.text
+    assert recovered.json()["status"] == "inactive"
+    assert recovered.json()["updated_at"] == inactive.json()["updated_at"]
+
+    denied_recovery = client.get(status_path, headers={"Authorization": f"Bearer {RESTRICTED_KEY}"})
+    assert denied_recovery.status_code == 403
+
+    reactivated = client.put(
+        status_path,
+        json={"status": "active", "expected_updated_at": recovered.json()["updated_at"]},
+        headers={"Authorization": f"Bearer {ADMIN_KEY}"},
+    )
+    assert reactivated.status_code == 200, reactivated.text

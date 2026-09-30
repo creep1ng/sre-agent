@@ -899,6 +899,17 @@ class SkillVersionRepository:
                 raise StaleWriteError(resource_id)
         return project_catalog_entry(row), row.updated_at
 
+    async def get_status(
+        self, skill_id: str, version: str
+    ) -> tuple[ResourceCatalogEntry, datetime] | None:
+        resource_id = f"{skill_id}@{version}"
+        if await self.get(skill_id, version) is None:
+            return None
+        row = await self._session.get(ResourceRow, ("skill", resource_id))
+        if row is None:
+            return None
+        return project_catalog_entry(row), row.updated_at
+
     @staticmethod
     def _project(row: SkillVersionRow) -> SkillVersionRecord:
         return SkillVersionRecord.model_validate(
