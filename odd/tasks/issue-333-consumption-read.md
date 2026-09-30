@@ -154,6 +154,42 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
   and prior-run CI links. U333-10 remains unchecked: current hosted CI and human
   acceptance/publication of the reconciled report are pending the parent.
 
+- U333-8 follow-up on PR #429 finding `4141907709` (current local changes atop
+  parent-committed/pushed `1445ad9f82698842ec2e2a4071a6f9790c7ac609`): verified
+  that the old 2.5.0 audit schema admitted non-`admin.read` actions and missing
+  or leaked auth context across persisted usage outcomes. Strict TDD matrix RED
+  rejected real 403/413/503 events and admitted wrong-action 401/fake-principal
+  variants. Only the new 2.5.0 audit domain schema and its permanent tooling
+  conformance test/positive fixtures were changed; runtime is unchanged. Updated
+  only 2.5.0 projection goldens, evidence, and manifest through the existing
+  release CLI; older releases were not edited. GREEN: focused tooling 2/2,
+  usage/audit PostgreSQL/FastAPI acceptance 74/74, full tooling 125/125, all 11
+  releases validate, OpenAPI lint passes, and `git diff --check` passes. Recheck
+  exact full candidate size and hashes at parent handoff. The existing rendered
+  HTTP screenshot and sanitized capture remain fresh because runtime/OpenAPI HTTP
+  response code is unchanged; the contract projection itself has been regenerated.
+  U333-8 remains delivered; U333-10 is pending current-candidate hosted CI,
+  parent verification, and human acceptance. Prior hosted CI/governance for
+  parent head `1445ad9` is historical and not evidence for these uncommitted changes.
+
+- U333-8 reopened before publication by independent finding: the previous
+  usage.read 403 contract admitted only `grant_not_applicable`, but a scoped
+  owned-DB probe observed persisted denial rows for `principal_inactive`
+  (inactive principal), `resource_inactive` (active principal), and
+  `resource_missing` (active principal). Strict test-first RED observed all
+  three positive cases rejected; permanent tests also pin their contexts and
+  reject mismatched principal status. The new 2.5.0 denial branch now admits the
+  four runtime causes while preserving `admin.read`, authenticated identity,
+  resource, deny decision, and cause/status compatibility. Only the 2.5.0 schema,
+  outcome fixture/test, projections, manifest/evidence, and evidence/task docs
+  are in scope; runtime and earlier releases are unchanged. Focused usage schema
+  tests: 2 passed; focused usage/audit Python acceptance: 74 passed; full
+  tooling 125/125, all 11 release validations, and OpenAPI lint passed
+  sequentially. All 1.0.0–2.4.0 release paths retain exact bytes and modes.
+  The final complete candidate diff and refreshed hashes are recorded in
+  `docs/evidence/issue-333-contract-publication.md`; no commit, push, current CI,
+  or human review is claimed. U333-8 is complete; U333-10 remains pending.
+
 ## Next step
 
 Independent U333-7 verification passed: 74 Python, 123 tooling, ten releases;
@@ -184,8 +220,21 @@ release changed. GREEN: focused two Python tests, sequential configured Python
 1,251 passed / 1 skipped, tooling 124 passed, all eleven releases validate,
 OpenAPI lint passes; `git diff --check` and 2.4.0 immutability pass. A concurrent
 full-run attempt showed unrelated auth/control DB failures; sequential rerun
-passed. The release/test changes are 84 lines; with evidence/tracker changes the
-current candidate diff is 150 additions/deletions. Parent must inspect/freeze
-this exact candidate and run current hosted CI; no commit or remote action by
-this writer. `docs/evidence/issue-333-contract-publication.md` contains hashes,
-reproduction and the finding disposition.
+passed. The 150-line candidate count and parent-freeze instruction above were
+historical at that checkpoint; parent subsequently committed/pushed
+`1445ad9f82698842ec2e2a4071a6f9790c7ac609`, whose eight-job hosted CI and
+governance checks passed. They do not cover the further uncommitted audit-cause
+correction recorded above. `docs/evidence/issue-333-contract-publication.md`
+contains the current hashes, reproduction, and finding disposition.
+
+
+Final independent audit verification passed: focused tooling2/2, targeted
+Python setup/append-failure2/2, real three additional403cause HTTP/SQL probes,
+all11releases/lint, and zero drift in2,375candidate files/1,579oldrelease files.
+Sanitized actual denial-context output is published with the report separately
+from faithful projected fixtures. Append-only audit DELETE attempt rejected;
+successful probe preserved audit rows. Parent is freezing this correction next;
+new hosted CI and human evidence acceptance remain U333-10 dependencies.
+Parent guarded repeat helper: one setup test and all three actual403 SQL contexts
+passed; missing project guard rejected safely; Ruff lint/format passed no-cache.
+Public JSON and safe Docker replay helper accompany the final report.

@@ -2,22 +2,28 @@
 
 ## Status and scope
 
-U333-8 is complete locally: the existing release generator published immutable,
-self-contained `2.5.0` with the runtime usage-read contract; `2.4.0` is unchanged.
+U333-8 is complete locally, including the verified PR #429 audit-contract
+correction: the existing release generator published immutable, self-contained
+`2.5.0` with the runtime usage-read contract; `2.4.0` is unchanged.
 The original publication evidence bound the candidate to PR #428 head
 `8965cb1978f9363a807279b6ec1b60c76d739e42`. A follow-up on PR #429 base/HEAD
 `47673b9b4e9306c3c40aec638874b5505d002de6` corrected a published OpenAPI
-parity defect; the correction is local/uncommitted evidence for that candidate,
-not hosted CI or human acceptance. U333-10 remains pending parent publication,
-hosted CI on the final candidate, and human review.
+parity defect, then parent commit `1445ad9f82698842ec2e2a4071a6f9790c7ac609`
+was pushed with all eight hosted CI jobs passing ([run 36682652995](https://github.com/creep1ng/sre-agent/actions/runs/36682652995)); its governance check
+also passed ([run 36682650924](https://github.com/creep1ng/sre-agent/actions/runs/36682650924)).
+Those results are historical for `1445ad9`, not for the current uncommitted
+audit correction. U333-10 remains pending parent verification, hosted CI on the
+final candidate, and human review.
 No commit, push, PR/GitHub mutation, release tag or deployment was done here.
 
-Release inventory: 197 files; generator reports 202 artifacts and 17 checks.
+Release inventory: 198 files; generator reports 203 artifacts and 17 checks.
 All 194 published files in 2.4.0 retain their prior hashes; the focused diff
 against that release is empty. Existing all-release validation covers 11 releases
-(1.0.0–2.5.0). The publication-only size exception was explicitly authorized;
-the writer measured 7,461 text additions plus deletions before final metadata
-readback; bind the final complete diff at commit, including binary evidence.
+(1.0.0–2.5.0). The publication-only size exception was authorized at an
+estimated 6,500–7,500 changed lines. Current complete candidate diff from PR
+#428 is 8,702 text additions + 33 deletions (8,735 changed text lines), plus the existing binary PNG; this
+is above the estimate and is reported transparently, not code-golfed or claimed
+as a new exception. Parent owns final scope/size disposition.
 
 ## PR #429 finding 4141505117: selector nullability parity
 
@@ -52,6 +58,129 @@ The release artifact, refreshed generated metadata, and permanent test comprise
 84 additions/deletions; with this evidence-report and tracker update, the current
 candidate diff is 150 additions/deletions. This is separate from the original
 publication-only size exception and does not request or imply a new exception.
+
+## PR #429 finding 4141907709: operation-scoped audit context matrix
+
+Before adding tests, failure modes were enumerated from the actual publisher and
+existing PostgreSQL/FastAPI acceptance boundary (`tests/test_usage_read_acceptance.py`):
+
+| Persisted usage.read outcome | Expected action and context |
+| --- | --- |
+| `authorization/success/200` | `admin.read`; authenticated identity, administrative-control resource, allow decision; no denial cause. |
+| `authentication/error/401` | `admin.read`; no identity, resource, decision, or denial cause. |
+| `authorization/denied/403` | `admin.read`; authenticated identity/resource, deny decision, one of four reachable causes; principal state must match the cause. |
+| `validation/error/422` | `admin.read`; selector validation precedes auth context, so no identity/resource/decision. |
+| `validation/error/413` | `admin.read`; bounded projection occurs after auth, so include authenticated identity/resource and allow decision. |
+| `audit/error/503` storage failure | `admin.read`; authorized storage failure is auditable, include authenticated identity/resource and allow decision; reason `upstream_unavailable`, retryable. |
+| audit append unavailable response `503` | No persisted `usage.read` event exists; do not invent one or add unauthenticated principal/context. Existing acceptance asserts audit store failure suppresses response and persists no row. |
+
+Negative tests reject operation changes to `invoke` (including 401), invented
+unauthenticated 401 identity context, missing authenticated deny context,
+context leaked into pre-auth 422, missing post-auth 413/503 context, and the
+non-persisted `audit_unavailable` 503. The schema constrains usage.read to
+`admin.read` operation-wide and exact stage/outcome/status/reason/retryability
+combinations; generic validation/audit stage rules and unrelated operations
+remain in force. Existing `responses.create` audit fixtures remain valid.
+
+### Independent verifier finding: reachable denial causes
+
+The independent verifier exercised three additional legitimate persisted
+usage-read 403 events against the owned database. Each had one row with action
+`admin.read`, stage `authorization`, outcome `denied`, top-level reason
+`no_matching_grant`, policy decision `deny`, and an `administrative_control`
+resource:
+
+| Cause | Principal state |
+| --- | --- |
+| `principal_inactive` | `inactive` |
+| `resource_inactive` | `active` |
+| `resource_missing` | `active` |
+| `grant_not_applicable` | `active` |
+
+The old schema accepted only `grant_not_applicable`. Before changing the schema,
+three new positive 403 cases and two mismatch negatives were added permanently;
+the Docker RED log showed positive fixture cases 7–9 rejected. The correction
+accepts all four complete contexts while rejecting mismatches, such as
+`principal_inactive` with an active identity or a resource/grant cause with an
+inactive identity. A separate extra DB probe first failed because shell quoting
+stripped a value; as reported by the independent verifier (not observed from
+its raw log here), its successful parameterized-SQL rerun established the
+three additional causes. The successful runtime output is preserved at
+`/tmp/sre-issue333-residual-gv176v/audit-contract-independent/logs/runtime-403-reachability.log`.
+
+### Observed RED / GREEN for finding 4141907709
+
+Before schema edits, the permanent test and nine-event positive fixture were run
+in the owned Docker harness. The original matrix RED rejected persisted `403`,
+`413`, and storage `503` events while admitting `401` with action `invoke` and
+an invented principal. The independent-cause RED additionally rejected all
+three valid new 403 contexts: Docker failures identify positive fixture cases
+7–9 (`principal_inactive`, `resource_inactive`, `resource_missing`). After the
+2.5.0 schema repair, all nine positive events (six status classes, four 403
+causes) validate, and all nine negative mutations reject, including the two
+cause/principal-state mismatches. The append-unavailable response
+remains a distinct no-row outcome, verified by existing Python acceptance
+rather than fabricated as an event. Non-usage `responses.create` still
+validates. Two intermediate schema-only runs caught and fixed authoring issues:
+first the project closed-object checker rejected a partial nested identity
+matcher, then strict AJV required its `type: object`. Adding the authenticated
+identity reference plus `unevaluatedProperties: false` and explicit object type
+fixed those checks; no runtime code changed.
+
+Focused commands and observed GREEN:
+
+```sh
+docker compose --project-directory "$PWD" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --rm harness node --test schemas/tooling/test/usage-release.test.mjs
+docker compose --project-directory "$PWD" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_usage_read_acceptance.py tests/test_audit_events_contract.py tests/test_usage_read_contract.py'
+docker compose --project-directory "$PWD" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --rm harness sh -c 'npm --prefix schemas/tooling test && npm --prefix schemas/tooling run validate:releases && npm --prefix schemas/tooling run lint:openapi'
+```
+
+Observed after the denial-cause update: focused schema **2 passed**, Python
+acceptance **74 passed** (10.86s), full tooling **125 passed / 0 failed / 0
+skipped** (390.35s), all 11 releases validate, and OpenAPI lint/bundle checks
+pass. `git diff --check` passes. No runtime implementation changed.
+
+The audit schema changes alter the resolved `AuditEventMetadata` schema used by
+`/v1/audit-events`, so the 2.5.0 normalized FastAPI projection hashes changed.
+The first evidence generation failed closed on the stale projection (`f4ce…`
+expected vs `7fe9…` generated). In disposable harness tmpfs only, the existing
+`projection --release 2.5.0` command regenerated the new release's
+match/missing/extra goldens; existing `evidence --release 2.5.0` then generated
+203 artifacts / 17 checks. Only these 2.5.0 outputs were copied back. No older
+release file was edited or regenerated.
+
+Final correction artifact hashes:
+
+| File | SHA-256 |
+| --- | --- |
+| `schemas/releases/2.5.0/json-schema/domain/audit-event.schema.json` | `3a72d3ac325575c0856bb02c94584844ff591d4ecbae3c450571379efddbda77` |
+| `schemas/releases/2.5.0/fixtures/positive/audit.usage-read.runtime-outcomes.positive.v2.5.0.fixture.json` | `c10601d2800b57fd2e4b4c3ba25fca4e26e3d89cc28971dc2dc2a0b0f2315f5b` |
+| `schemas/releases/2.5.0/fixtures/positive/future-fastapi.match.projection.json` | `00f3e291aa616bc06b56345c1a82f6353a0a574c7209fadef1133dcca0f90767` |
+| `schemas/releases/2.5.0/manifest.yaml` | `db268e21c979421069776f2fa65ce4330dcee509b6203d72c2744123b05cc654` |
+| `schemas/releases/2.5.0/conformance/evidence.json` | `9de74449f31381064862315cfdb136f4b3e8e9d41fd37951bccad95d3a51aba4` |
+| `schemas/tooling/test/usage-release.test.mjs` | `aac812f04a70b10e08fcc2ca15778a83285be8680b0df4a2c838fc1faaa643d0` |
+| `src/sre_agent/gateway/usage.py` (unchanged) | `50398d281787490eb8f5c4184d749307d3bac695542dab48980cfc90660234be` |
+
+The new nine-event fixture is a faithful contract projection of the event
+shapes emitted by the existing usage-read publisher: values are derived from
+its event-building branches and cross-checked against the existing
+FastAPI/PostgreSQL acceptance tests plus the independent parameterized denial
+probe. It is not a raw capture or a claim that one HTTP transaction emitted all
+nine events. Those actual runtime
+boundaries are independently exercised by the 74-test controlled acceptance
+run; append-unavailable is explicitly asserted to leave no audit row. Detailed
+stdout logs from this correction are preserved outside the candidate at
+`/tmp/sre-issue333-residual-gv176v/audit-contract-correction-evidence/`:
+`audit-matrix-red.log`, `denial-causes-red.log`,
+`denial-causes-schema-green.log`, `denial-causes-focused-green.log`,
+`denial-causes-python-acceptance.log`, and
+`denial-causes-tooling-all-releases-lint.log`. The independent runtime outcome
+logs are under `/tmp/sre-issue333-residual-gv176v/audit-contract-independent/logs/`.
+
+Tracked paths under every prior release directory from 1.0.0 through 2.4.0
+have an empty Git byte/mode diff against the exact local base `1445ad9`; no
+older release file was touched. In particular, the prior 194-file 2.4.0
+snapshot retains its original hash set.
 
 ## Reproduce locally
 
@@ -156,7 +285,14 @@ disposition does not imply remote reviewer acceptance.
 
 ## Parent CI evidence, explicitly separate
 
-The parent reports PR #428's original exact-head hosted CI run
+The parent reports PR #429 head `1445ad9f82698842ec2e2a4071a6f9790c7ac609`'s
+hosted CI run
+[36682652995](https://github.com/creep1ng/sre-agent/actions/runs/36682652995)
+passed all eight jobs and governance run
+[36682650924](https://github.com/creep1ng/sre-agent/actions/runs/36682650924)
+passed. These are historical results for the current committed parent, **not
+for this uncommitted audit-contract correction**. The parent also reports PR
+#428's exact-head hosted CI run
 [36669102065](https://github.com/creep1ng/sre-agent/actions/runs/36669102065)
 passed all eight jobs and governance run
 [36669572776](https://github.com/creep1ng/sre-agent/actions/runs/36669572776)
@@ -168,20 +304,25 @@ verification, and human acceptance remain pending parent coordination.
 
 ## Source identity and rollback
 
-SHA-256 identities below were checked before and after capture/report authoring;
-source implementation and release contract did not change during U333-10.
+Runtime implementation hashes below are unchanged from the verified capture;
+the domain audit schema and generated metadata were changed afterward only for
+the audit-contract correction. All hashes below identify the final local
+candidate after regeneration.
 
 | File | SHA-256 |
 | --- | --- |
 | `src/sre_agent/release.py` | `d49f29fb60f9b49a8b9316876218b3efdf621fd97c1fbd72a55fbcfeb418e127` |
 | `src/sre_agent/gateway/usage.py` | `50398d281787490eb8f5c4184d749307d3bac695542dab48980cfc90660234be` |
 | `schemas/releases/2.5.0/openapi/usage-read.yaml` | `022069365e0604912a6f3e389382e0a3653ef6ef80a6869bdf38a1def736c6de` |
-| `schemas/releases/2.5.0/manifest.yaml` | `07882bc2e609e2df574578be8c1c8e516c44509c606f8a983ff49eeaf48961f3` |
-| `schemas/releases/2.5.0/conformance/evidence.json` | `6b96cba99e3d9f0461e6eb438e9e1568bcb26b306bcc14e34a53e00b1a2328e0` |
+| `schemas/releases/2.5.0/manifest.yaml` | `db268e21c979421069776f2fa65ce4330dcee509b6203d72c2744123b05cc654` |
+| `schemas/releases/2.5.0/conformance/evidence.json` | `9de74449f31381064862315cfdb136f4b3e8e9d41fd37951bccad95d3a51aba4` |
 | `schemas/releases/2.5.0/openapi/control-plane.yaml` | `d14ffa683a63abc6a6fd8947a12a3fb5a473ffd7e2555ca7ba9085eb0dfb8c1c` |
 | `schemas/releases/2.5.0/json-schema/http/usage-read.schema.json` | `00fec6b57cb767189b4babd702df0f23e84733eca96f1eba5ca2acf8a3ff3e3f` |
+| `schemas/releases/2.5.0/json-schema/domain/audit-event.schema.json` | `3a72d3ac325575c0856bb02c94584844ff591d4ecbae3c450571379efddbda77` |
+| `schemas/releases/2.5.0/fixtures/positive/audit.usage-read.runtime-outcomes.positive.v2.5.0.fixture.json` | `c10601d2800b57fd2e4b4c3ba25fca4e26e3d89cc28971dc2dc2a0b0f2315f5b` |
+| `schemas/releases/2.5.0/fixtures/positive/future-fastapi.match.projection.json` | `00f3e291aa616bc06b56345c1a82f6353a0a574c7209fadef1133dcca0f90767` |
 | `tests/test_usage_read_openapi.py` | `ebcab7e5d5fcce6c9974c163348921306a272ce11f6f81c1a6c6c6c27e171b81` |
-| `schemas/tooling/test/usage-release.test.mjs` | `00aec3aa2edfe6bd5295bdcf9ab5525202b5bfe0f5c05c184965212b3121b983` |
+| `schemas/tooling/test/usage-release.test.mjs` | `aac812f04a70b10e08fcc2ca15778a83285be8680b0df4a2c838fc1faaa643d0` |
 
 Rollback is additive: remove only the new 2.5.0 snapshot, its activation/test
 changes, and associated evidence if publication is rejected; retain every prior
@@ -190,3 +331,29 @@ release including 2.4.0. No migrations or runtime behavior rollback is implied.
 Final staging caught one trailing blank line in the new release test that
 untracked-only `git diff --check` had missed. The parent normalized that line
 and reran the affected release test successfully; source behavior is unchanged.
+
+## Final independent audit correction verification
+
+The independent verifier reran the final schema conformance (2 passed), targeted
+Python setup and audit-append failure (2 passed), all 11 release validations,
+and both canonical OpenAPI lint checks. Three real HTTP403 requests and SQL
+readbacks reproduced the additional denial causes.
+[Sanitized actual denial-context output](issue-333-audit-denial-contexts.json)
+is included separately from the faithful-projection conformance fixture.
+The earlier attempt to delete audit rows was rejected by the append-only trigger;
+the successful probe did not delete audit events or bypass the trigger.
+All 1,579 pre-2.5 release files retained their bytes/modes; the verifier's
+2,375-file candidate inventory and Git status were unchanged. No runtime source
+changed, so the existing real HTTP/SQL screenshot remains applicable; no new
+browser or provider was used. Final frozen SHA and hosted CI are bound by the
+PR body after commit; human acceptance remains pending.
+
+The parent published and executed the [guarded repeat helper](issue-333-audit-denial-probe.py):
+one fixture setup test passed, then all three actual HTTP403/SQL contexts matched
+the independent output. The helper rejects a missing project guard before DB
+mutation and verifies exact owned database URL/identity; it removes only the
+seeded usage grant/resource for the final case and never deletes audit rows.
+Run it only in the disposable checks database, after the setup test, using the
+exact Docker replay command in the sanitized JSON. Initial Ruff cache permission
+errors under the unprivileged capture UID were resolved with `--no-cache`; lint
+and format then passed without changing runtime source.

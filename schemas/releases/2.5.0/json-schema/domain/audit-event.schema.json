@@ -328,6 +328,32 @@
         },
         {
           "properties": {
+            "operation": {
+              "const": "usage.read"
+            },
+            "stage": {
+              "const": "validation"
+            },
+            "outcome": {
+              "const": "error"
+            },
+            "reason_code": {
+              "const": "contract_validation_failed"
+            },
+            "response_status": {
+              "const": 413
+            },
+            "retryable": {
+              "const": false
+            }
+          },
+          "required": [
+            "operation",
+            "reason_code"
+          ]
+        },
+        {
+          "properties": {
             "stage": {
               "const": "authentication"
             }
@@ -781,6 +807,35 @@
                   "const": "rejected"
                 }
               }
+            },
+            {
+              "properties": {
+                "operation": {
+                  "const": "usage.read"
+                },
+                "outcome": {
+                  "const": "error"
+                },
+                "reason_code": {
+                  "const": "upstream_unavailable"
+                },
+                "response_status": {
+                  "const": 503
+                },
+                "retryable": {
+                  "const": true
+                },
+                "authoritative_acceptance": {
+                  "const": "accepted"
+                },
+                "ordinary_result": {
+                  "const": "released"
+                }
+              },
+              "required": [
+                "operation",
+                "reason_code"
+              ]
             }
           ]
         }
@@ -794,6 +849,11 @@
               "validation",
               "audit"
             ]
+          },
+          "operation": {
+            "not": {
+              "const": "usage.read"
+            }
           }
         },
         "required": [
@@ -1512,6 +1572,11 @@
           "outcome": {
             "const": "denied"
           },
+          "operation": {
+            "not": {
+              "const": "usage.read"
+            }
+          },
           "resource": {
             "type": "object",
             "properties": {
@@ -1714,70 +1779,157 @@
         "properties": {
           "operation": {
             "const": "usage.read"
-          },
-          "stage": {
-            "const": "authorization"
-          },
-          "outcome": {
-            "const": "success"
           }
         },
-        "required": [
-          "operation",
-          "stage",
-          "outcome"
-        ]
+        "required": ["operation"]
       },
       "then": {
         "properties": {
           "action": {
             "const": "admin.read"
           },
-          "reason_code": {
-            "const": null
-          },
-          "response_status": {
-            "const": 200
-          },
-          "retryable": {
-            "const": false
-          },
-          "authorization_denial_cause": false,
-          "identity": {
-            "$ref": "#/$defs/authenticatedIdentity"
-          },
-          "resource": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "resource_type",
-              "resource_ref"
-            ],
-            "properties": {
-              "resource_type": {
-                "const": "administrative_control"
-              },
-              "resource_ref": {
-                "$ref": "#/$defs/auditRef"
-              }
-            }
-          },
-          "policy_decision": {
-            "$ref": "#/$defs/allowDecision"
-          },
           "model_alias_ref": false,
           "routing": false,
           "consumption": false,
           "untrusted_input": false
         },
-        "required": [
-          "action",
-          "reason_code",
-          "response_status",
-          "retryable",
-          "identity",
-          "resource",
-          "policy_decision"
+        "required": ["action"],
+        "oneOf": [
+          {
+            "properties": {
+              "stage": {"const": "authorization"},
+              "outcome": {"const": "success"},
+              "reason_code": {"const": null},
+              "response_status": {"const": 200},
+              "retryable": {"const": false},
+              "authorization_denial_cause": false,
+              "identity": {"$ref": "#/$defs/authenticatedIdentity"},
+              "resource": {"$ref": "#/$defs/usageReadResource"},
+              "policy_decision": {"$ref": "#/$defs/allowDecision"}
+            },
+            "required": [
+              "stage", "outcome", "reason_code", "response_status", "retryable",
+              "identity", "resource", "policy_decision"
+            ]
+          },
+          {
+            "properties": {
+              "stage": {"const": "authentication"},
+              "outcome": {"const": "error"},
+              "reason_code": {"const": "authentication_failed"},
+              "response_status": {"const": 401},
+              "retryable": {"const": false},
+              "authorization_denial_cause": false,
+              "identity": false,
+              "resource": false,
+              "policy_decision": false
+            },
+            "required": ["stage", "outcome", "reason_code", "response_status", "retryable"]
+          },
+          {
+            "properties": {
+              "stage": {"const": "authorization"},
+              "outcome": {"const": "denied"},
+              "reason_code": {"const": "no_matching_grant"},
+              "response_status": {"const": 403},
+              "retryable": {"const": false},
+              "authorization_denial_cause": {
+                "enum": [
+                  "grant_not_applicable",
+                  "principal_inactive",
+                  "resource_inactive",
+                  "resource_missing"
+                ]
+              },
+              "identity": {"$ref": "#/$defs/authenticatedIdentity"},
+              "resource": {"$ref": "#/$defs/usageReadResource"},
+              "policy_decision": {"$ref": "#/$defs/denyDecision"}
+            },
+            "oneOf": [
+              {
+                "properties": {
+                  "authorization_denial_cause": {"const": "principal_inactive"},
+                  "identity": {
+                    "$ref": "#/$defs/authenticatedIdentity",
+                    "type": "object",
+                    "unevaluatedProperties": false,
+                    "properties": {"principal_status": {"const": "inactive"}}
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "authorization_denial_cause": {
+                    "enum": [
+                      "grant_not_applicable",
+                      "resource_inactive",
+                      "resource_missing"
+                    ]
+                  },
+                  "identity": {
+                    "$ref": "#/$defs/authenticatedIdentity",
+                    "type": "object",
+                    "unevaluatedProperties": false,
+                    "properties": {"principal_status": {"const": "active"}}
+                  }
+                }
+              }
+            ],
+            "required": [
+              "stage", "outcome", "reason_code", "response_status", "retryable",
+              "authorization_denial_cause", "identity", "resource", "policy_decision"
+            ]
+          },
+          {
+            "properties": {
+              "stage": {"const": "validation"},
+              "outcome": {"const": "error"},
+              "reason_code": {"const": "contract_validation_failed"},
+              "response_status": {"const": 422},
+              "retryable": {"const": false},
+              "authorization_denial_cause": false,
+              "identity": false,
+              "resource": false,
+              "policy_decision": false
+            },
+            "required": ["stage", "outcome", "reason_code", "response_status", "retryable"]
+          },
+          {
+            "properties": {
+              "stage": {"const": "validation"},
+              "outcome": {"const": "error"},
+              "reason_code": {"const": "contract_validation_failed"},
+              "response_status": {"const": 413},
+              "retryable": {"const": false},
+              "authorization_denial_cause": false,
+              "identity": {"$ref": "#/$defs/authenticatedIdentity"},
+              "resource": {"$ref": "#/$defs/usageReadResource"},
+              "policy_decision": {"$ref": "#/$defs/allowDecision"}
+            },
+            "required": [
+              "stage", "outcome", "reason_code", "response_status", "retryable",
+              "identity", "resource", "policy_decision"
+            ]
+          },
+          {
+            "properties": {
+              "stage": {"const": "audit"},
+              "outcome": {"const": "error"},
+              "reason_code": {"const": "upstream_unavailable"},
+              "response_status": {"const": 503},
+              "retryable": {"const": true},
+              "authorization_denial_cause": false,
+              "identity": {"$ref": "#/$defs/authenticatedIdentity"},
+              "resource": {"$ref": "#/$defs/usageReadResource"},
+              "policy_decision": {"$ref": "#/$defs/allowDecision"},
+              "authoritative_acceptance": {"const": "accepted"},
+              "ordinary_result": {"const": "released"}
+            },
+            "required": [
+              "stage", "outcome", "reason_code", "response_status", "retryable",
+              "identity", "resource", "policy_decision"
+            ]
+          }
         ]
       }
     }
@@ -1981,6 +2133,22 @@
             "bok_collection",
             "administrative_control"
           ]
+        },
+        "resource_ref": {
+          "$ref": "#/$defs/auditRef"
+        }
+      }
+    },
+    "usageReadResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resource_type",
+        "resource_ref"
+      ],
+      "properties": {
+        "resource_type": {
+          "const": "administrative_control"
         },
         "resource_ref": {
           "$ref": "#/$defs/auditRef"
