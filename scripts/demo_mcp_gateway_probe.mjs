@@ -43,12 +43,14 @@ function safeRequestId(value) {
 }
 
 function summarizeDiscovery(status, body) {
-  const listed = Array.isArray(body?.tools)
-    ? body.tools.map((tool) => tool?.tool_id).filter((id) => typeof id === "string")
-    : [];
+  const rawTools = Array.isArray(body?.tools) ? body.tools : [];
+  const validEntries = Array.isArray(body?.tools) && rawTools.length === EXPECTED_TOOLS.length &&
+    rawTools.every((tool) => typeof tool?.tool_id === "string" && EXPECTED_TOOLS.includes(tool.tool_id));
+  const listed = rawTools.map((tool) => tool?.tool_id).filter((id) => typeof id === "string");
   const tools = [...new Set(listed.filter((id) => EXPECTED_TOOLS.includes(id)))].sort();
   const exact =
     status === 200 && body?.server?.server_id === EXPECTED_SERVER &&
+    validEntries &&
     listed.length === EXPECTED_TOOLS.length &&
     tools.length === EXPECTED_TOOLS.length &&
     listed.every((id) => EXPECTED_TOOLS.includes(id));
