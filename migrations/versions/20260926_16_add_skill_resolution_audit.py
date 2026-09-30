@@ -15,7 +15,8 @@ OLD_OPERATION = (
     "'credentials.revoke','credentials.rotate','grants.create','grants.list','grants.revoke',"
     "'aliases.create','aliases.list','aliases.get','aliases.assignment.replace',"
     "'aliases.status.replace','catalog.create','catalog.list','catalog.read',"
-    "'mcp.discovery','mcp.invoke','catalog.status.replace')"
+    "'mcp.discovery','mcp.invoke','usage.read','bok.search','bok.read',"
+    "'catalog.status.replace')"
 )
 NEW_OPERATION = OLD_OPERATION[:-1] + ",'skills.resolve')"
 OLD_DENIAL = """authorization_denial_cause IS NULL OR (
@@ -55,11 +56,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # This revision only admits 'skills.resolve'; every other operation in OLD_OPERATION is
+    # already carried by its ancestors, so only this slice can be lost by the downgrade.
     if op.get_bind().scalar(
-        sa.text(
-            "SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation IN "
-            "('skills.resolve', 'usage.read'))"
-        )
+        sa.text("SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation = 'skills.resolve')")
     ):
         raise RuntimeError("cannot downgrade while Skill resolution audit evidence exists")
     if op.get_bind().scalar(

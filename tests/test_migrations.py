@@ -19,7 +19,8 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, skill_versions, grants, credentials, resources, "
+            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, resources, "
             "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -73,6 +74,9 @@ def test_repeated_head_has_expected_domain_tables() -> None:
     assert {row[0] for row in rows} == {
         "alembic_version",
         "audit_events",
+        "bok_section_chunks",
+        "bok_documents",
+        "bok_collection_versions",
         "credentials",
         "grants",
         "idempotency_records",
@@ -442,7 +446,8 @@ def test_consumption_is_append_only_with_exact_decimal_json() -> None:
             )
 
 
-def test_merge_18_downgrade_preserves_usage_read_for_revision_17() -> None:
+def test_status_head_downgrade_preserves_usage_and_bok_operations() -> None:
+    """Rolling the status slice back must keep the parent's usage and BoK vocabulary."""
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     command.upgrade(config, "head")
@@ -456,21 +461,17 @@ def test_merge_18_downgrade_preserves_usage_read_for_revision_17() -> None:
             FROM audit_events LIMIT 1"""
         )
         connection.commit()
-    command.downgrade(config, "20260930_17")
+    # 20260930_20 is the last revision before the Skill status vocabulary is admitted, so
+    # downgrading to it must drop 'catalog.status.replace' and keep the BoK and usage words
+    # that its descendants inherit rather than re-declare.
+    command.downgrade(config, "20260930_20")
     with psycopg.connect(DATABASE_URL) as connection:
-        connection.execute(
-            """INSERT INTO audit_events
-            SELECT (jsonb_populate_record(NULL::audit_events, to_jsonb(audit_events) ||
-              '{"event_id":"00000000-0000-4000-8000-000000000198",
-                "operation":"usage.read","action":"admin.read"}'::jsonb)).*
-            FROM audit_events LIMIT 1"""
-        )
-        connection.commit()
         operation_check = connection.execute(
             "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
             "WHERE conname='ck_audit_events_operation'"
         ).fetchone()[0]
     assert "'usage.read'" in operation_check
+    assert "'bok.search'" in operation_check
     assert "'catalog.status.replace'" not in operation_check
     command.upgrade(config, "head")
 

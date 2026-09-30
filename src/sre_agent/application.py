@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from pathlib import Path
 
 from sre_agent import control, harness, incident
+from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
@@ -90,6 +91,9 @@ def create_application(
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+        bok_service = BoKRetrievalService(database.sessions, store, projector)
+        application.state.bok_service = bok_service
+        application.include_router(bok_router(bok_service))
         application.include_router(
             usage_router(
                 UsageReadProjection(

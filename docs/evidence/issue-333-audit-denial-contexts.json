@@ -1,0 +1,73 @@
+{
+  "candidate": {
+    "head": "1445ad9f82698842ec2e2a4071a6f9790c7ac609",
+    "schema_sha256": "3a72d3ac325575c0856bb02c94584844ff591d4ecbae3c450571379efddbda77",
+    "scope": "check-only; no candidate source or artifact edits"
+  },
+  "runtime_probe": {
+    "compose_project": "candidate-wt-9bb3531fa9f1",
+    "service": "python-checks",
+    "database_guard": "python scripts/assert_test_database_isolated.py passed immediately before targeted DB setup; dedicated python-checks-db service",
+    "request": "GET /v1/usage/consumption?month=2026-09 (authorization header omitted)",
+    "persisted_event_rows": [
+      {
+        "case": "inactive principal",
+        "http_status": 403,
+        "response_status": 403,
+        "action": "admin.read",
+        "stage": "authorization",
+        "outcome": "denied",
+        "reason_code": "no_matching_grant",
+        "authorization_denial_cause": "principal_inactive",
+        "identity_principal_status": "inactive",
+        "resource_type": "administrative_control",
+        "policy_decision": "deny"
+      },
+      {
+        "case": "inactive usage resource",
+        "http_status": 403,
+        "response_status": 403,
+        "action": "admin.read",
+        "stage": "authorization",
+        "outcome": "denied",
+        "reason_code": "no_matching_grant",
+        "authorization_denial_cause": "resource_inactive",
+        "identity_principal_status": "active",
+        "resource_type": "administrative_control",
+        "policy_decision": "deny"
+      },
+      {
+        "case": "missing usage resource",
+        "http_status": 403,
+        "response_status": 403,
+        "action": "admin.read",
+        "stage": "authorization",
+        "outcome": "denied",
+        "reason_code": "no_matching_grant",
+        "authorization_denial_cause": "resource_missing",
+        "identity_principal_status": "active",
+        "resource_type": "administrative_control",
+        "policy_decision": "deny"
+      }
+    ],
+    "sanitization": "No credential, authorization header, user/prompt data, event/request UUID, or HMAC digest is included.",
+    "notes": "To exercise resource_missing, the successful isolated probe removed only the seeded usage grant and resource row after restoring baseline state. It did not delete audit_events or bypass the append-only trigger. An earlier probe attempt that tried deleting audit_events was rejected by that trigger; it is not evidence for the successful result."
+  },
+  "commands": {
+    "guard_and_db_setup": "docker compose --project-directory \"$PWD\" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_usage_read_acceptance.py::test_usage_audit_allowed_read_commits_metadata_before_response \"tests/test_usage_read_acceptance.py::test_usage_audit_failure_suppresses_intended_response[success]\"'",
+    "successful_probe_locator": "docs/evidence/issue-333-audit-denial-probe.py",
+    "successful_probe_method": "Parent reran the guarded helper successfully after one acceptance fixture setup test; all three HTTP/SQL rows match the independent output. It imports fixture keys without printing them, rejects a missing project guard, checks exact owned database URL/identity, and never deletes audit rows.",
+    "focused_schema_test": "docker compose --project-directory \"$PWD\" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --rm harness node --test schemas/tooling/test/usage-release.test.mjs",
+    "replay": "docker compose --project-directory \"$PWD\" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --rm -e ISSUE333_CAPTURE_PROJECT=candidate-wt-9bb3531fa9f1 -v \"$PWD/docs/evidence:/evidence:ro\" python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_usage_read_acceptance.py::test_usage_audit_allowed_read_commits_metadata_before_response && python /evidence/issue-333-audit-denial-probe.py'"
+  },
+  "verification": {
+    "focused_schema_test": "2 passed, 0 failed",
+    "release_validation": "all 11 immutable releases 1.0.0\u20132.5.0 validated",
+    "openapi_lint": "control-plane and responses bundles validated",
+    "append_failure_no_event": "existing targeted test passed; append failure returns 503 and persists zero usage.read rows",
+    "older_release_inventory": "1,579 tracked files in releases 1.0.0\u20132.4.0 checked against HEAD: zero content or mode mismatches",
+    "candidate_drift": "2,375 nonignored tracked/untracked files snapshotted before/after; hashes, modes, and git status unchanged by verifier",
+    "git_diff_check": "passed",
+    "guarded_replay": "Parent: setup test 1 passed then three actual denial rows observed; missing Compose guard rejected before DB mutation; Ruff no-cache lint/format pass."
+  }
+}
