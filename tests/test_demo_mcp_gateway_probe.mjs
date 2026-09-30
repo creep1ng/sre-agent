@@ -189,6 +189,29 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
         failures: accepted.failures, upstream_delta: accepted.denied.upstream_delta,
         witness: accepted.witness })}`);
 
+      const retryablePending = { ...observed,
+        denied: { ...observed.denied, retryable: false } };
+      await writeFile(pendingPath, JSON.stringify(retryablePending));
+      const retryableCallsBefore = calls.length;
+      const retryableAccepted = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
+      assert.equal(retryableAccepted.status, 0, retryableAccepted.stderr || retryableAccepted.stdout);
+      const retryableAcceptedReport = report(retryableAccepted);
+      assert.equal(retryableAcceptedReport.denied.retryable, false,
+        "offline normalization must retain the current P5 nonretryable denial contract");
+      assert.equal(calls.length, retryableCallsBefore, "retryable validation must remain offline");
+      t.diagnostic(`Offline retryable=false retention: ${JSON.stringify({ status: retryableAcceptedReport.status,
+        denied: retryableAcceptedReport.denied, gateway_calls: calls.length - retryableCallsBefore })}`);
+      for (const retryable of [true, undefined, null, "false"]) {
+        const invalidRetryable = { ...retryablePending,
+          denied: { ...retryablePending.denied, retryable } };
+        if (retryable === undefined) delete invalidRetryable.denied.retryable;
+        await writeFile(pendingPath, JSON.stringify(invalidRetryable));
+        const rejectedRetryable = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
+        assert.equal(rejectedRetryable.status, 1);
+        assert.deepEqual(report(rejectedRetryable).failures, ["probe_report_invalid"]);
+        assert.equal(calls.length, retryableCallsBefore, "invalid retryable reports must remain offline");
+      }
+
       const caseVariantPending = { ...observed,
         denied: { ...observed.denied, request_id: "abcdef12-3456-4abc-8def-1234567890ab" },
         restricted_discovery: { ...observed.restricted_discovery,
@@ -205,21 +228,37 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       t.diagnostic(`Offline case-variant UUID rejection: ${JSON.stringify({ status: caseVariantReport.status,
         failures: caseVariantReport.failures, gateway_calls: calls.length - callsBeforeReconcile })}`);
 
-      for (const rejectedWitness of [
-        { ...validWitness, kind: "audit-counter", source: "audit_events_total" },
-        { ...validWitness, source: "audit_events_total" },
-        { ...validWitness, request_id: "10000000-0000-4000-8000-000000000099" },
-        { ...validWitness, after: 13 },
-        { ...validWitness, after: Number.MAX_SAFE_INTEGER + 1 },
-        { ...validWitness, after: 11 },
-      ]) {
+      const witnessCases = [
+        { label: "wrong kind", witness: { ...validWitness, kind: "audit-counter", source: "audit_events_total" },
+          failure: "upstream_witness_unavailable" },
+        { label: "relabelled audit source", witness: { ...validWitness, source: "audit_events_total" },
+          failure: "upstream_witness_unavailable" },
+        { label: "different request ID", witness: { ...validWitness,
+          request_id: "10000000-0000-4000-8000-000000000099" }, failure: "upstream_witness_mismatch" },
+        { label: "nonzero delta", witness: { ...validWitness, after: 13 },
+          failure: "denied_upstream_delta_nonzero" },
+        { label: "unsafe counter", witness: { ...validWitness, after: Number.MAX_SAFE_INTEGER + 1 },
+          failure: "upstream_witness_unavailable" },
+        { label: "reversed counter", witness: { ...validWitness, after: 11 },
+          failure: "upstream_witness_unavailable" },
+        { label: "case-variant witness ID", report: { ...observed,
+          denied: { ...observed.denied, request_id: "abcdef12-3456-4abc-8def-1234567890ab" } },
+        witness: { ...validWitness, request_id: "ABCDEF12-3456-4ABC-8DEF-1234567890AB" },
+        failure: "upstream_witness_mismatch" },
+      ];
+      for (const witnessCase of witnessCases) {
+        await writeFile(pendingPath, JSON.stringify(witnessCase.report ?? observed));
+        const rejectedWitness = witnessCase.witness;
         await writeFile(witnessPath, JSON.stringify(rejectedWitness));
         const result = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
         assert.equal(result.status, 1);
         const rejected = report(result);
         assert.equal(rejected.status, "fail");
+        assert.deepEqual(rejected.failures, [witnessCase.failure], `${witnessCase.label} must reach its guard`);
         assert.equal(calls.length, callsBeforeReconcile, "reconciliation must stay offline on failure too");
         assert.ok(!Object.hasOwn(rejected.witness ?? {}, "before"));
+        t.diagnostic(`Offline witness rejection (${witnessCase.label}): ${JSON.stringify({
+          failures: rejected.failures, gateway_calls: calls.length - callsBeforeReconcile })}`);
       }
 
       await writeFile(witnessPath, JSON.stringify(validWitness));

@@ -192,8 +192,9 @@ accepted, even if relabeled. Shape checks cannot establish counter semantics:
 the operator remains responsible for independently validating the source and
 correlation. A fixture witness is not real CA2 evidence.
 
-The CLI validates the current P5 `gateway-query-smoke` report and normalizes
-output to allowlisted summary fields. It reads bounded local JSON only and
+The CLI validates the current P5 `gateway-query-smoke` report, requires and
+retains `denied.retryable: false`, compares denial/discovery UUID identity
+case-insensitively, requires exact witness/denial request-ID matching, and normalizes output to allowlisted summary fields. It reads bounded local JSON only and
 makes no gateway or upstream call. Missing, malformed, oversized, mismatched,
 invalid, or nonzero witnesses fail closed. Keep witness source material private;
 do not attach raw counters, audit rows, credentials, or response bodies.

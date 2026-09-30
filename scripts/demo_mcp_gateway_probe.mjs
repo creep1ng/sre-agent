@@ -196,11 +196,12 @@ function safePendingReport(report) {
       report.logs.error_kind !== null || !validCount(report.logs.result_count) ||
       !validCount(report.logs.returned_count) || !validWarnings(report.logs.warning_count) ||
       report.denied?.http_status !== 403 || report.denied.error_code !== "resource_unavailable" ||
-      !safeRequestId(report.denied.request_id) || report.denied.upstream_delta !== null ||
+      !safeRequestId(report.denied.request_id) || report.denied.retryable !== false ||
+      report.denied.upstream_delta !== null ||
       report.restricted_discovery?.http_status !== 403 ||
       report.restricted_discovery.error_code !== "resource_unavailable" ||
       !safeRequestId(report.restricted_discovery.request_id) ||
-      report.restricted_discovery.request_id === report.denied.request_id ||
+      report.restricted_discovery.request_id.toLowerCase() === report.denied.request_id.toLowerCase() ||
       report.restricted_discovery.retryable !== false || report.restricted_discovery.enumeration_absent !== true) {
     return null;
   }
@@ -217,7 +218,7 @@ function safePendingReport(report) {
       http_status: 200, error_kind: null, result_count: report.logs.result_count,
       returned_count: report.logs.returned_count, warning_count: report.logs.warning_count },
     denied: { http_status: 403, error_code: "resource_unavailable",
-      request_id: report.denied.request_id, upstream_delta: null },
+      request_id: report.denied.request_id, retryable: false, upstream_delta: null },
     restricted_discovery: { http_status: 403, error_code: "resource_unavailable",
       request_id: report.restricted_discovery.request_id, retryable: false, enumeration_absent: true },
     witness: null,
