@@ -43,7 +43,7 @@ def snapshot():
     [
         ("20260926_14", "usage.read", "20260922_12"),
         ("20260926_15", "catalog.status.replace", "20260930_20"),
-        ("20260926_16", "skills.resolve", "20260930_18"),
+        ("20260926_16", "skills.resolve", "20260926_15"),
     ],
 )
 @pytest.mark.parametrize("fault", [None, "failure", "unvalidated"])
@@ -117,17 +117,18 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
     assert after["rows"] == before["rows"]
     assert after["grants"] == before["grants"]
     assert after["heads"] == [("20260930_19",)]
-    # Each revision guards only the evidence it owns; a downgrade past another
-    # revision's slice must still leave every persisted row intact.
-    if legacy == "20260926_15":
-        with pytest.raises(RuntimeError, match="cannot downgrade"):
-            command.downgrade(config, "20260926_14")
-        assert snapshot() == after
-    else:
+    # Each revision guards only the evidence it owns. Leaving the slice that introduced
+    # the persisted operation is lossy and must be refused, while rolling back past a
+    # sibling slice that does not own it must keep every row intact.
+    if legacy == "20260926_14":
         command.downgrade(config, "20260926_14")
         assert snapshot()["rows"] == after["rows"]
         command.upgrade(config, "head")
         assert snapshot()["rows"] == after["rows"]
+    else:
+        with pytest.raises(RuntimeError, match="cannot downgrade"):
+            command.downgrade(config, "20260926_14")
+        assert snapshot() == after
     definition, validated = after["constraint"]
     assert validated is True
     assert "'usage.read'" in definition and "'catalog.status.replace'" in definition

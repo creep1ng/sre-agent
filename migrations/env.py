@@ -25,10 +25,16 @@ def integrated_upgrade():
     ancestors = {revision.revision for revision in script.iterate_revisions(target, "base")}
     if current == {target} or not current <= ancestors:
         return None
+    # An intermediate vocabulary narrower than the union cannot be validated against rows
+    # already written by a sibling history, so it is created NOT VALID. The union itself is
+    # a superset of every ancestor vocabulary, so no existing row can violate it and it is
+    # always validated. Keying on the union text keeps an ancestor that already declares the
+    # full vocabulary on the validating path.
+    union = script.get_revision(target).module.NEW_OPERATION
     legacy_checks = {
         script.get_revision(revision).module.NEW_OPERATION
         for revision in ("20260926_14", "20260926_15", "20260926_16", "20260930_18")
-    }
+    } - {union}
     return target, legacy_checks
 
 

@@ -461,7 +461,10 @@ def test_status_head_downgrade_preserves_usage_and_bok_operations() -> None:
             FROM audit_events LIMIT 1"""
         )
         connection.commit()
-    command.downgrade(config, "20260926_15")
+    # 20260930_20 is the last revision before the Skill status vocabulary is admitted, so
+    # downgrading to it must drop 'catalog.status.replace' and keep the BoK and usage words
+    # that its descendants inherit rather than re-declare.
+    command.downgrade(config, "20260930_20")
     with psycopg.connect(DATABASE_URL) as connection:
         operation_check = connection.execute(
             "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
