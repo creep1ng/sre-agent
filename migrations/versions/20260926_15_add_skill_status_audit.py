@@ -4,7 +4,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20260926_15"
-down_revision = "20260924_14"
+down_revision = "20260930_20"
 branch_labels = None
 depends_on = None
 
@@ -17,7 +17,8 @@ OLD_OPERATION = (
     "'aliases.status.replace','catalog.create','catalog.list','catalog.read',"
     "'mcp.discovery','mcp.invoke')"
 )
-NEW_OPERATION = OLD_OPERATION[:-1] + ",'catalog.status.replace')"
+MERGED_OPERATION = OLD_OPERATION[:-1] + (",'usage.read','bok.search','bok.read')")
+NEW_OPERATION = MERGED_OPERATION[:-1] + ",'catalog.status.replace')"
 
 
 def upgrade() -> None:
@@ -28,10 +29,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     if op.get_bind().scalar(
         sa.text(
-            "SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation IN "
-            "('catalog.status.replace', 'usage.read'))"
+            "SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation = 'catalog.status.replace')"
         )
     ):
         raise RuntimeError("cannot downgrade while Skill status audit evidence exists")
     op.drop_constraint("ck_audit_events_operation", "audit_events", type_="check")
-    op.create_check_constraint("ck_audit_events_operation", "audit_events", OLD_OPERATION)
+    op.create_check_constraint("ck_audit_events_operation", "audit_events", MERGED_OPERATION)
