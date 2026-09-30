@@ -18,6 +18,8 @@ NEW_OPERATION = (
     "'mcp.discovery','mcp.invoke','usage.read','catalog.status.replace','skills.resolve')"
 )
 
+TARGET_OPERATION = NEW_OPERATION.replace(",'skills.resolve'", "")
+
 
 def upgrade() -> None:
     op.drop_constraint("ck_audit_events_operation", "audit_events", type_="check")
@@ -26,9 +28,8 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     if op.get_bind().scalar(
-        sa.text(
-            "SELECT EXISTS (SELECT 1 FROM audit_events "
-            "WHERE operation IN ('usage.read', 'catalog.status.replace', 'skills.resolve'))"
-        )
+        sa.text("SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation = 'skills.resolve')")
     ):
         raise RuntimeError("cannot downgrade integration while audit evidence exists")
+    op.drop_constraint("ck_audit_events_operation", "audit_events", type_="check")
+    op.create_check_constraint("ck_audit_events_operation", "audit_events", TARGET_OPERATION)

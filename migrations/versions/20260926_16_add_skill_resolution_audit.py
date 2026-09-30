@@ -56,7 +56,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     if op.get_bind().scalar(
-        sa.text("SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation='skills.resolve')")
+        sa.text(
+            "SELECT EXISTS (SELECT 1 FROM audit_events WHERE operation IN "
+            "('skills.resolve', 'usage.read'))"
+        )
     ):
         raise RuntimeError("cannot downgrade while Skill resolution audit evidence exists")
     if op.get_bind().scalar(
