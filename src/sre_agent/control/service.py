@@ -188,6 +188,12 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
         "administrative_control",
         "catalog",
     ),
+    ("GET", "/v1/skills/{skill_id}/{version}/status"): (
+        "catalog.read",
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
 }
 assert set(CONTROL_OPERATIONS) == set(CONTROL_SCOPES)
 assert all(CONTROL_OPERATIONS[route][1:] == scope for route, scope in CONTROL_SCOPES.items())
@@ -2889,6 +2895,101 @@ class ControlService:  # noqa: E305
             decision=evaluation.decision,
         )
 
+    async def get_skill_status(
+        self, skill_id: str, version: str, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "catalog.read", "admin.write"
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await self._finish(
+                request_id,
+                started,
+                401,
+                "authentication",
+                operation,
+                action,
+                error_code="authentication_failed",
+            )
+        if (
+            re.fullmatch(r"[a-z][a-z0-9-]{2,62}[a-z0-9]", skill_id) is None
+            or len(version) > 32
+            or re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version) is None
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                operation,
+                action,
+                error_code="validation_error",
+            )
+        scope = CONTROL_SCOPES[("GET", "/v1/skills/{skill_id}/{version}/status")]
+        async with self.sessions() as session:
+            evaluation = await self._authorize(session, context.principal, scope)
+        if evaluation.decision.decision == "deny":
+            return await self._finish(
+                request_id,
+                started,
+                403,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_unavailable",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+            )
+        async with self.sessions() as session:
+            located = await SkillVersionRepository(session).get_status(skill_id, version)
+        if located is None:
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_not_found",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+            )
+        _entry, updated_at = located
+        if _entry.status not in ("active", "inactive"):
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                operation,
+                action,
+                error_code="resource_not_found",
+                context=context,
+                resource_ref=("administrative_control", "catalog"),
+                decision=evaluation.decision,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            operation,
+            action,
+            payload=SkillStatusResponse(
+                resource_type="skill",
+                resource_id=f"{skill_id}@{version}",
+                status=_entry.status,  # type: ignore[arg-type]
+                updated_at=updated_at,
+            ).model_dump(mode="json"),
+            error_code="grant_matched",
+            context=context,
+            resource_ref=("administrative_control", "catalog"),
+            decision=evaluation.decision,
+        )
+
     async def replace_skill_status(
         self, skill_id: str, version: str, raw: Any, authorization: str | None
     ) -> Response:
@@ -3921,6 +4022,49 @@ def control_router(service: ControlService) -> APIRouter:
         credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
     ) -> Response:
         result = await service.get_skill_version(
+            skill_id, version, authorization_from(credentials, request)
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/skills/{skill_id}/{version}/status",
+        response_model=SkillStatusResponse,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "catalog",
+            }
+        },
+    )
+    async def get_skill_status(
+        skill_id: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$"}),
+        ],
+        version: Annotated[
+            str,
+            WithJsonSchema(
+                {
+                    "type": "string",
+                    "maxLength": 32,
+                    "pattern": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
+                }
+            ),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.get_skill_status(
             skill_id, version, authorization_from(credentials, request)
         )
         response.status_code = result.status_code

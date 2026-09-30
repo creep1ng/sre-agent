@@ -173,3 +173,57 @@ def test_version_storage_bound_rejects_before_persistence_with_audit(
             "WHERE correlation->>'request_id'=%s",
             (rejected.json()["request_id"],),
         ).fetchone() == (422, "contract_validation_failed")
+
+
+def test_skill_publication_adopts_preexisting_catalog_draft(
+    client: TestClient,  # noqa: F811 — pytest fixture binding
+) -> None:
+    draft_id = "adopted-catalog-skill@1.0.0"
+    draft = client.post(
+        "/v1/catalog/resources",
+        json={
+            "resource_type": "skill",
+            "resource_id": draft_id,
+            "owner_id": "demo-human",
+            "source": "skill",
+            "source_ref": "catalog-draft",
+            "status": "draft",
+            "discoverability": {
+                "display_name": "Adopted draft",
+                "visibility": "private",
+                "description": "Pre-existing catalog draft.",
+                "tags": [],
+            },
+        },
+        headers=headers(idempotency_key="adopt-catalog-draft"),
+    )
+    assert draft.status_code == 201, draft.text
+
+    body = skill_body()
+    body.update(skill_id="adopted-catalog-skill", version="1.0.0")
+    published = client.post(
+        "/v1/skills/versions",
+        json=body,
+        headers=headers(idempotency_key="adopt-catalog-publish"),
+    )
+    assert published.status_code == 201, published.text
+    assert published.json()["resource_id"] == draft_id
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        version_row = connection.execute(
+            "SELECT owner_id FROM skill_versions WHERE skill_id=%s AND version=%s",
+            ("adopted-catalog-skill", "1.0.0"),
+        ).fetchone()
+        catalog_row = connection.execute(
+            "SELECT status, source, source_ref FROM resources "
+            "WHERE resource_type='skill' AND resource_id=%s",
+            (draft_id,),
+        ).fetchone()
+        catalog_count = connection.execute(
+            "SELECT count(*) FROM resources WHERE resource_type='skill' AND resource_id=%s",
+            (draft_id,),
+        ).fetchone()[0]
+
+    assert version_row is not None
+    assert catalog_count == 1
+    assert catalog_row == ("published", "skill", draft_id)
