@@ -11,6 +11,7 @@ from sre_agent.gateway import health
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.openrouter import OpenRouterProvider
+from sre_agent.gateway.endpoint_catalog import OpenRouterEndpointCatalog
 from sre_agent.gateway.providers import LLMProvider
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.usage import UsageReadProjection, usage_router
@@ -50,6 +51,8 @@ def create_application(
     database = Database(runtime_settings.database_url)
     shared_provider_client = None
     shared_mcp_client = None
+    shared_endpoint_catalog_client = None
+    endpoint_catalog = None
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
         shared_provider_client = provider_client or httpx.AsyncClient(
@@ -58,6 +61,15 @@ def create_application(
         )
         provider = OpenRouterProvider(
             shared_provider_client, api_key=runtime_settings.openrouter_api_key
+        )
+    if runtime_settings.openrouter_management_key:
+        shared_endpoint_catalog_client = httpx.AsyncClient(
+            base_url="https://openrouter.ai",
+            timeout=runtime_settings.openrouter_timeout_seconds,
+        )
+        endpoint_catalog = OpenRouterEndpointCatalog(
+            shared_endpoint_catalog_client,
+            management_key=runtime_settings.openrouter_management_key,
         )
 
     release_metadata = runtime_settings.release_metadata
@@ -84,6 +96,7 @@ def create_application(
     application.state.session_provider = database.sessions
     application.state.database = database
     application.state.llm_provider = provider
+    application.state.endpoint_catalog = endpoint_catalog
     workflow = load_incident_workflow(INCIDENT_WORKFLOW_PATH)
     application.include_router(
         incident_router(
@@ -147,6 +160,8 @@ def create_application(
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:
         application.add_event_handler("shutdown", shared_provider_client.aclose)
+    if shared_endpoint_catalog_client is not None:
+        application.add_event_handler("shutdown", shared_endpoint_catalog_client.aclose)
     if shared_mcp_client is not None:
         application.add_event_handler("shutdown", shared_mcp_client.aclose)
     return application
