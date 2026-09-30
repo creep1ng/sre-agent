@@ -79,6 +79,12 @@ test("discovery CLI validates allowed and server-restricted HTTP responses witho
     assert.deepEqual(calls, ["GET /v1/mcp/discovery", "GET /v1/mcp/discovery"]);
     t.diagnostic(`Controlled discovery report: ${JSON.stringify(observed)}`);
 
+    const beforeRootSlash = calls.length;
+    const rootSlash = await runCli(`${url}/`);
+    assert.equal(rootSlash.status, 0, rootSlash.stderr);
+    assert.equal(report(rootSlash).status, "pass");
+    assert.deepEqual(calls.slice(beforeRootSlash), ["GET /v1/mcp/discovery", "GET /v1/mcp/discovery"]);
+
     for (const invalid of [null, { server: { server_id: PRIVATE_MARKER }, tools: [] },
       { ...allowed, tools: [...allowed.tools, { tool_id: PRIVATE_MARKER }] },
       { ...allowed, tools: [{ tool_id: "query_prometheus" }, { tool_id: "query_prometheus" }] },
@@ -102,7 +108,8 @@ test("discovery CLI validates allowed and server-restricted HTTP responses witho
       denied = previous;
     }
     const count = calls.length;
-    for (const invalidUrl of [`${url}?token=${PRIVATE_MARKER}`, `http://user:pass@127.0.0.1`, "file:///tmp/invalid"]) {
+    for (const invalidUrl of [`${url}/mcp-gateway`, `${url}/mcp-gateway/`, `${url}?token=${PRIVATE_MARKER}`,
+      `http://user:pass@127.0.0.1`, "file:///tmp/invalid"]) {
       const result = await runCli(invalidUrl);
       assert.equal(result.status, 1);
       assert.deepEqual(report(result).failures, ["probe_configuration_missing"]);

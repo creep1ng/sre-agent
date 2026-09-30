@@ -101,6 +101,8 @@ grant) only for explicitly authorized targets. Keep credentials out of command
 arguments, files for publication and output. Supply them through the harness
 environment using Compose `-e NAME`, not literal values. Then run
 `node scripts/demo_mcp_gateway_probe.mjs` inside that harness.
+`MCP_GATEWAY_URL` must identify a gateway origin (scheme, host and optional port)
+with no non-root path; unsupported paths fail before any HTTP request.
 
 This stage makes exactly two GET requests to `/v1/mcp/discovery`, never a tool
 invocation. Exit 0 means the expected server/two tools and a non-enumerating,

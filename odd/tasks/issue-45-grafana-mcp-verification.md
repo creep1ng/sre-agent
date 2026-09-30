@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Delivery stage: discovery-only CLI (P3).** All full-probe/cycle commands below remain historical or planned. Checked recovery repairs are historical outcomes, not fresh stage acceptance; CA1–CA8 remain open.
+**Current delivery stage: reject unsupported gateway URL paths (P3 correction).** This discovery-based candidate preserves the P3 probe while rejecting non-root paths rather than silently truncating them; CA1–CA8 remain open.
 
 ## Objective
 
@@ -19,22 +19,20 @@ The integrated demo can query Grafana MCP directly, while the gateway has govern
 - Do not claim total isolation if Grafana Admin, proxy, host-port, or other bypass remains reachable.
 - Keep real-container evidence distinct from simulated transport tests.
 - Current handoff authorizes bounded issue #45 local repair/tests and parent-owned GitHub operations only in `creep1ng/sre-agent`. This writer may not commit, publish, or restack. No cloud, SSH, paid-provider probe, deployment, merge, or issue closure is authorized.
-- Parent refreshed live GitHub Project #8: issue #45 remains Todo, Sprint 4, with CA1–CA8 in scope. No directly linked issue #45 PR/review exists.
+- Parent refreshed live GitHub Project #8: issue #45 remains Todo, Sprint 4, with CA1–CA8 in scope. PR #425 has an open gateway-root-path review finding; no human acceptance is claimed.
 - Follow the revised `AGENTS.md`: this is an academic tool for independent freelancers, not production SRE hardening. Prefer one repeatable E2E test over isolated or change-detector tests, and use only real evidence or exact reproduction instructions.
 
 ## Authorized Scope
 
-- Focused harness probes and signal verification under `scripts/`
-- Focused tests under `tests/`
-- Only the nine allowlisted recovery paths: three probes, four tests, operator runbook, and this tracker; no producer or Compose runtime edits
-- This task document
-- Current first-stage scope on `codex/issue-45-01-prerequisites`: prerequisite guide, full tracker, actual PNG and sanitized evidence report only; no executable stages.
+- Reject configured non-root gateway URL paths in `scripts/demo_mcp_gateway_probe.mjs`, with root/root-slash HTTP/CLI coverage and a concise evidence report.
+- Preserve P3 discovery behavior, malformed-entry/redirect/privacy coverage and 35-second budget. No P4/P5 source, producer/runtime, Compose/Dockerfile, dependency, live-service or credential changes.
+- Parent owns commits, publication, branch propagation and human-review requests; this writer works only in exclusive `codex/issue-45-gateway-root-path`.
 
 ## TDD
 
 - Mode: strict
-- Source: repository `AGENTS.md` (`Strict TDD Mode: enabled`)
-- Runner: use the existing Compose `harness` container for Node E2E checks; focused `node --test` checks may support RED/GREEN locally but cannot substitute for the real harness run. Compose needs safe local configuration because it interpolates the complete `.env`.
+- Source: issue-specific handoff §4 / OPERATING-RULES §4, which enables strict TDD for issue #45 implementation; repository `AGENTS.md` separately prefers E2E, prohibits writing unit tests after code, and requires failure modes first for isolated work.
+- Runner for the current URL correction: pinned Node 22.14 cached harness with controlled loopback HTTP/CLI tests in a networkless container; exact `docker run --pull never --network none` reproduction is recorded in the URL correction report. No host package manager, DB/API/demo or live credential is needed. Historical P4 and preview-helper runner notes remain in dated checkpoints below.
 
 ## Tasks
 
@@ -177,3 +175,50 @@ Final P3 checks passed: 2/2 current controlled tests, two Node syntax checks, 18
 ## PR #425 review correction checkpoint
 
 - [x] **MCP45-P3-R1 — Validate raw discovery tool entries**: PR #425 (`efb8446` over `73fd51a`); fix [review finding](https://github.com/creep1ng/sre-agent/pull/425#discussion_r4140568933) by validating raw `tools` cardinality and each expected string ID before normalization. Fresh HTTP/CLI scenarios observed RED (malformed extra entry accepted; `0 !== 1`), minimal fix GREEN 2/2, syntax checks passed on Node v22.14.0. Updated [current report](../../docs/evidence/issue-45-pr02/report.md) and exact-source screenshot; current diff is 392 text additions+deletions plus one PNG file, within 400. No CA1–CA8 closes; parent owns mirror/publication. Initial Docker denial was retried with authorized escalation; original recovery roots stayed untouched.
+
+## Current preview-helper prerequisite (2026-09-30)
+
+- Base/main: `5b6109bd2c8100455136cf12ce91c52830833c7f`; branch: `codex/issue-45-00-preview`. This independently useful preview helper precedes the foundation documentation PR #424; parent owns the documented stacked-to-main restack and the later discovery PR #425 correction.
+- The current issue-specific task identity remains this file. Preserve every dated P1/P2/P3/P3-R1 result above; they describe earlier candidates and do not imply their implementation is present in this main-based helper branch.
+- Live/current parent facts: PR #424 still has two open review corrections (repeatable Markdown→HTML/PNG proof and accurate TDD provenance). PR #425 has a fresh source correction at `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10`; hosted CI run 36669373324 passed all eight jobs, governance and reconciliation. CI, the preview screenshot, and requested review are not user approval.
+- Scope: render a supplied tracked Markdown document with the small syntax subset needed by the preview (`docs/pr-evidence.md`), into an offline local HTML template with source SHA; capture its real browser rendering in a pinned, networkless, sandboxed Chromium container. No general Markdown dependency/parser, service, public hosting, arbitrary URL fetch, or issue CA claim.
+
+- [ ] **MCP45-V1 — Write first-failing CLI coverage**: test valid Markdown/template/output, source-hash footer, escaping of raw HTML, bounded supported syntax (headings, paragraphs, lists, tables, links, inline code/strong and fenced code), and nonzero missing-input/template errors. Observe RED before writing the helper.
+- [ ] **MCP45-V2 — Implement the reusable preview helper**: standard-library Node CLI accepts explicit input/template/output paths; emits offline HTML and source SHA; rejects bad arguments/read failures/unresolved template placeholders; does not fetch links, scripts, images or fonts.
+- [ ] **MCP45-V3 — Verify actual rendered output safely**: run focused CLI E2E plus Chromium screenshot inside the cached pinned Playwright image, with docs/template/helper read-only, output isolated under `/tmp`, no network, no secrets and sandbox intact. Inspect the actual PNG; record browser version, dimensions, SHA-256 and exact command.
+- [ ] **MCP45-V4 — Record preview evidence and current scope**: concise report maps this helper to rendered-artifact evidence only, includes exact base/tested SHA/image/commands and observed expected/actual result, sanitizer check, rollback, and explicit non-claims. Preserve the full issue tracker and keep CA1–CA8/P4–P10 pending.
+
+
+## Frozen preview-helper checkpoint
+
+Terminal partial: CLI E2E observed RED 3/3 before implementation and GREEN 3/3 after (Node v24.20.0), plus syntax and actual docs/pr-evidence.md HTML rendering. Test coverage does not yet demonstrate every V1 failure case; V1/V2 remain unchecked against their full wording. Chromium capture exited 133 with generic `No usable sandbox!`; the cause is unattributed. No sandbox bypass or further capture attempt, PNG, report, commit, push or PR exists. V3/V4 remain pending. Four new files totaled 387 additions before this checkpoint; remeasure before publication and preserve all history. Parent must resolve the real rendered-proof gap; P4–P10 safe local work remains available.
+
+## Current P4 query stage (2026-09-30)
+
+Candidate: `codex/issue-45-03-queries`, base `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10` (PR #425); exclusive query worktree. Preview-helper checkpoints above describe a separate frozen main-based candidate; no renderer is installed in this branch. GitHub Projects refreshed: issue #45 OPEN / Project #8 Todo. P3 current CI passed all eight jobs; human review remains pending.
+
+Authorized scope: P4 only — fixed public-contract metric/Lucene log queries through the gateway; safe source/window/count/error summaries, controlled failure/empty/redirect coverage. No restricted invocation, witness reconciliation, producer repair, boundary probing, cycle capture or live acceptance. Preserve every P3 malformed-entry and sanitization check. Effective test-first mode comes from the issue handoff/workflow, not an asserted repository AGENTS toggle. Existing cached Node22.14 harness lane; RED before source implementation, GREEN then proportional refactor/checks. Keep measured whole PR additions+deletions <=400 without history/tests/format deletion.
+
+- [x] **MCP45-P4-A — Observe query HTTP/CLI RED**: permanent CLI tests asserted fixed request paths/payloads, safe summaries, empty/timeout failures, redirects, no leaked fixture secrets and invalid-config zero network. The networkless cached runner showed RED (0/2 passed before source).
+- [x] **MCP45-P4-B — Implement governed smoke queries**: added bounded POST transport with 35-second timeout and redirect rejection, plus fixed metric/Lucene query and allowlisted summaries; retained `runDiscovery` export name and invalid-config zero-network behavior. Harness GREEN 2/2.
+- [ ] **MCP45-P4-C — Verify and record evidence**: current full HTTP/CLI GREEN, syntax/structure/privacy/diff checks; exact candidate report and genuine rendered evidence, independent check and hosted CI/publication parent-owned. CA1–CA8 remain open without real environment proof.
+
+P4 local evidence: observed RED and GREEN in the cached Node 22.14 harness using an explicitly networkless loopback Compose overlay; direct `docker run --network none` reproduction also passed 2/2. The report records exact source/test SHA-256 and distinguishes controlled fixtures from real service evidence. A genuine screenshot was not captured in this scope, so P4-C and publication readiness remain pending.
+
+Parent verification checkpoint: current source `d6ca8ffd15ce609f3cc8a6f56f907cfba0076df2c76cdd7151fcb88f0cd35a0a` / test `9830e2a59a0c0e47ae1d58d7c1f75e07a45ca7a3d08250d396822537ff0a1221` passed 2/2 in the exact public networkless Docker command, with both hashes unchanged. Earlier independent verification used a pre-formatting test revision and remains historical. Source implementation is locally verified; P4-C/publication remains pending genuine screenshot, hosted CI and human review.
+
+Final label-only correction names tests/output as gateway smoke queries rather than invocation-free discovery. Parent exact current Docker run again passed 2/2; source hash unchanged, final test SHA-256 `ae917a52057545eb823ca25d354b39284da2418c2ca79725dd9d9ac71bdfb0d7`. The earlier hashes above retain their historical scope. Local commit is a recovery anchor, not publication/acceptance.
+
+## Priority gateway-root review correction
+
+Current candidate `codex/issue-45-gateway-root-path`, base PR #425 `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10`. Earlier P4 checkpoints describe local recovery commit `4c9697411e25d954d03d1afaaef7622d54422cad` (326 changed lines), not code installed in this discovery-based correction. P5 planning was started separately but no P5 source work is authorized until this routing finding is addressed. Fresh live Projects: issue #45 OPEN / #8 Todo; new unresolved [review](https://github.com/creep1ng/sre-agent/pull/425#discussion_r4140855307).
+
+The configured gateway is documented as an origin; non-root paths currently pass validation then are silently discarded by url.origin. Reject unsupported non-root paths rather than silently changing the configured route. Preserve root URLs, discovery behavior, malformed-entry fix and 35-second/no-redirect budget. No producer/cloud/runtime changes. This is a small cohesive corrective unit; keep all task history, full diff<=400 and real evidence requirements. Parent owns later bottom-up propagation into local P4/P5 and publication; no restack has occurred.
+
+- [x] **MCP45-URL-R1 — Observe configured-path HTTP/CLI RED**: permanent CLI test first; cached networkless runner observed the non-root base path incorrectly returned status 0 instead of rejecting configuration.
+- [x] **MCP45-URL-R2 — Reject unsupported gateway paths**: `validGatewayUrl` now accepts only root pathname; root and `/` both make the normal two discovery GETs, while `/mcp-gateway` and `/mcp-gateway/` fail before any HTTP. GREEN 2/2, syntax and diff checks passed.
+- [ ] **MCP45-URL-R3 — Bind correction proof and propagate**: concise report/current hashes prepared; genuine screenshot, independent review, hosted CI and parent-owned publication remain pending.
+
+URL correction test evidence is in `/tmp/issue45-gateway-root-evidence/url-red.log` and `url-green.log`; no screenshot was attempted in this slice. The controlled fix does not close CA1–CA8.
+
+Gateway-root parent checkpoint: exact current source/test hashes in the correction report independently passed 2/2 using the networkless cached Docker command, unchanged before/after. Public PR #425 remains draft at unfixed `9eb3eb3`; source finding was acknowledged in reply [4141205759](https://github.com/creep1ng/sre-agent/pull/425#discussion_r4141205759). No review thread was resolved; propagation, screenshot/publication and hosted CI remain pending.
