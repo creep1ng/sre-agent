@@ -235,7 +235,7 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260930_21"
+    assert version == "20260930_20"
     assert admin_resources == 5
     assert admin_grants == 9
     assert projection == [
