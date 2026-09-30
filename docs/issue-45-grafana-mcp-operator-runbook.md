@@ -1,6 +1,6 @@
 # Issue 45: operator prerequisites and evidence boundaries
 
-**P5 adds a controlled restricted known-ID denial before discovery; P3/P4 behavior is preserved, not live acceptance.**
+**P6 adds offline reconciliation of a separately trusted counter witness; P5 denial and P3/P4 behavior remain controlled-only, not live acceptance.**
 It helps independent freelancers prepare a safe environment before verifying
 Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 
@@ -12,8 +12,8 @@ Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 3. Distinguish a healthy service, a controlled test and a real failure signal.
 4. Follow the staged recovery checklist in the [issue tracker](../odd/tasks/issue-45-grafana-mcp-verification.md).
    Full-probe/cycle commands recorded there remain historical or planned;
-   P3/P4 commands below describe their historical stages, and the current P5
-   section covers controlled known-ID denial followed by the unchanged P4 flow.
+   P3/P4 commands below describe their historical stages; P5 covers known-ID
+   denial, and current P6 covers offline witness reconciliation only.
 
 ## Current contract and prerequisites
 
@@ -178,3 +178,40 @@ Repeat the controlled test with the cached pinned image and the P4 networkless
 Docker command above. This exercises loopback fixtures only; it is not live
 gateway, Grafana/MCP, upstream-counter, or CA1–CA8 acceptance evidence. No
 provider credential, stack, build, pull, or network is needed.
+
+## P6: offline upstream-witness reconciliation
+
+Only after an operator has independently established a trusted upstream
+`tools/call` counter and its correlation to the P5 denied request may the
+sanitized P5 pending report and a separate witness file be reconciled. The
+witness contains `kind: upstream-counter`, a bounded source identifier, the
+exact `denied.request_id`, and nonnegative safe-integer `before`/`after` counts.
+The request ID must match; `after` must be at least `before`; only zero delta
+passes. A generic audit/event count (including `audit_events_total`) is never
+accepted, even if relabeled. Shape checks cannot establish counter semantics:
+the operator remains responsible for independently validating the source and
+correlation. A fixture witness is not real CA2 evidence.
+
+The CLI validates the current P5 `gateway-query-smoke` report and normalizes
+output to allowlisted summary fields. It reads bounded local JSON only and
+makes no gateway or upstream call. Missing, malformed, oversized, mismatched,
+invalid, or nonzero witnesses fail closed. Keep witness source material private;
+do not attach raw counters, audit rows, credentials, or response bodies.
+
+Reconciliation can be repeated offline with the cached pinned image. Mount only
+the script, schemas, and private sanitized evidence read-only; no credentials or
+network are required:
+
+```sh
+docker run --pull never --network none --rm \
+  -v "$PWD/scripts:/source/scripts:ro" \
+  -v "$PWD/schemas:/source/schemas:ro" \
+  -v "$EVIDENCE_DIR:/source/evidence:ro" \
+  sha256:060b50ea88cf38bb3c2b6b0bb5920f2460091056381db72d802424c5f1df697d \
+  node /source/scripts/demo_mcp_gateway_probe.mjs \
+  --reconcile /source/evidence/pending.json \
+  --witness /source/evidence/witness.json
+```
+
+The controlled E2E uses synthetic loopback fixtures only. No actual operator
+counter was captured; no P6 result closes CA2 or any CA1–CA8 criterion.

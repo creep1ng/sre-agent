@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 
 // Public gateway smoke-query probe. All tool calls go through the API gateway.
+import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 const EXPECTED_SERVER = "grafana-mcp";
 const EXPECTED_TOOLS = ["query_elasticsearch", "query_prometheus"];
+const REPORT_SCHEMA = "sre-agent.mcp45-query-smoke/v1";
+const REPORT_PHASE = "gateway-query-smoke";
 const GATEWAY_RESPONSE_TIMEOUT_MS = 35_000;
 const METRIC_QUERY = {
   datasource_uid: "webstore-metrics", expr: "up", query_type: "instant", end_time: "now",
@@ -174,16 +177,107 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
   };
 }
 
+function safePendingReport(report) {
+  const validCount = (value) => Number.isSafeInteger(value) && value > 0;
+  const validWarnings = (value) => Number.isSafeInteger(value) && value >= 0;
+  if (!report || typeof report !== "object" || Array.isArray(report) ||
+      report.schema !== REPORT_SCHEMA || report.phase !== REPORT_PHASE || report.status !== "pending" ||
+      !Array.isArray(report.failures) || report.failures.length !== 1 ||
+      report.failures[0] !== "upstream_witness_pending" ||
+      report.discovery?.server !== EXPECTED_SERVER ||
+      !Array.isArray(report.discovery?.tools) || report.discovery.tools.length !== EXPECTED_TOOLS.length ||
+      !EXPECTED_TOOLS.every((tool, index) => report.discovery.tools[index] === tool) ||
+      report.metric?.http_status !== 200 || report.metric.source !== METRIC_QUERY.datasource_uid ||
+      report.metric.window !== "instant@now" || report.metric.error_kind !== null ||
+      report.metric.result_type !== "vector" || !validCount(report.metric.result_count) ||
+      !validWarnings(report.metric.warning_count) ||
+      report.logs?.http_status !== 200 || report.logs.source !== LOG_QUERY.datasource_uid ||
+      report.logs.window !== `${LOG_QUERY.start_time}..${LOG_QUERY.end_time}` ||
+      report.logs.error_kind !== null || !validCount(report.logs.result_count) ||
+      !validCount(report.logs.returned_count) || !validWarnings(report.logs.warning_count) ||
+      report.denied?.http_status !== 403 || report.denied.error_code !== "resource_unavailable" ||
+      !safeRequestId(report.denied.request_id) || report.denied.upstream_delta !== null ||
+      report.restricted_discovery?.http_status !== 403 ||
+      report.restricted_discovery.error_code !== "resource_unavailable" ||
+      !safeRequestId(report.restricted_discovery.request_id) ||
+      report.restricted_discovery.request_id === report.denied.request_id ||
+      report.restricted_discovery.retryable !== false || report.restricted_discovery.enumeration_absent !== true) {
+    return null;
+  }
+  return {
+    schema: REPORT_SCHEMA,
+    phase: REPORT_PHASE,
+    status: "pending",
+    failures: ["upstream_witness_pending"],
+    discovery: { server: EXPECTED_SERVER, tools: EXPECTED_TOOLS },
+    metric: { source: METRIC_QUERY.datasource_uid, window: "instant@now", http_status: 200,
+      error_kind: null, result_type: "vector", result_count: report.metric.result_count,
+      warning_count: report.metric.warning_count },
+    logs: { source: LOG_QUERY.datasource_uid, window: `${LOG_QUERY.start_time}..${LOG_QUERY.end_time}`,
+      http_status: 200, error_kind: null, result_count: report.logs.result_count,
+      returned_count: report.logs.returned_count, warning_count: report.logs.warning_count },
+    denied: { http_status: 403, error_code: "resource_unavailable",
+      request_id: report.denied.request_id, upstream_delta: null },
+    restricted_discovery: { http_status: 403, error_code: "resource_unavailable",
+      request_id: report.restricted_discovery.request_id, retryable: false, enumeration_absent: true },
+    witness: null,
+  };
+}
+
+function reconcileWitness(witness, deniedRequestId) {
+  if (!witness || typeof witness !== "object" || Array.isArray(witness)) {
+    return { failure: "upstream_witness_unavailable" };
+  }
+  const { kind, source, request_id: requestId, before, after } = witness;
+  if (kind !== "upstream-counter" || typeof source !== "string" ||
+      !/^[A-Za-z0-9_.:-]{1,128}$/.test(source) || source.toLowerCase() === "audit_events_total" ||
+      !safeRequestId(requestId) || !Number.isSafeInteger(before) || before < 0 ||
+      !Number.isSafeInteger(after) || after < 0 || after < before) {
+    return { failure: "upstream_witness_unavailable" };
+  }
+  if (requestId !== deniedRequestId) return { failure: "upstream_witness_mismatch" };
+  return { kind, source, request_id: requestId, delta: after - before };
+}
+
+export function reconcileReport(report, witness) {
+  const normalized = safePendingReport(report);
+  if (!normalized) return failureResult("probe_report_invalid");
+  const safeWitness = reconcileWitness(witness, normalized.denied.request_id);
+  if (safeWitness.failure) {
+    return { ...normalized, status: "fail", failures: [safeWitness.failure] };
+  }
+  normalized.denied.upstream_delta = safeWitness.delta;
+  normalized.witness = { kind: safeWitness.kind, source: safeWitness.source, request_id: safeWitness.request_id };
+  if (safeWitness.delta !== 0) {
+    return { ...normalized, status: "fail", failures: ["denied_upstream_delta_nonzero"] };
+  }
+  return { ...normalized, status: "pass", failures: [] };
+}
+
+async function loadJsonFile(path) {
+  if (!path) return null;
+  try {
+    const file = await readFile(path);
+    if (file.byteLength > 16_384) return null;
+    return JSON.parse(file.toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
-  const result = process.argv.length > 2
-    ? failureResult("probe_arguments_invalid")
-    : await runDiscovery({
+  const args = process.argv.slice(2);
+  const result = args.length === 0
+    ? await runDiscovery({
         gatewayUrl: process.env.MCP_GATEWAY_URL ?? "http://api:8000",
         humanToken: process.env.DEMO_HUMAN_API_KEY,
         restrictedToken: process.env.RESTRICTED_HARNESS_API_KEY,
-      });
+      })
+    : args.length === 4 && args[0] === "--reconcile" && args[2] === "--witness"
+      ? reconcileReport(await loadJsonFile(args[1]), await loadJsonFile(args[3]))
+      : failureResult("probe_arguments_invalid");
   process.stdout.write(`${JSON.stringify(result)}\n`);
-  process.exitCode = result.status === "pending" ? 0 : 1;
+  process.exitCode = result.status === "pending" || result.status === "pass" ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

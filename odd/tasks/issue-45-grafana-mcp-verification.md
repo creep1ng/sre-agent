@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Current delivery stage: P5 invocation retryable contract correction in draft PR #432.** Duplicate-ID correction remains installed and verified. P6 is a separate frozen local child with observed offline RED, not installed here. CA1–CA8 and human acceptance remain open.
+**Current delivery stage: local P6 candidate restacked onto ready P5 PR #432 head `9cdf424573b35216702787af6e45be4172757b9b`; offline retryable and UUID-identity checks are test-first in progress.** P5 duplicate-ID and retryable corrections remain installed and verified. P6 changes remain local and unpublished. CA1–CA8 and human acceptance remain open.
 
 ## Objective
 
@@ -18,21 +18,21 @@ The integrated demo can query Grafana MCP directly, while the gateway has govern
 - Never treat a healthy service check as proof of a failure signal.
 - Do not claim total isolation if Grafana Admin, proxy, host-port, or other bypass remains reachable.
 - Keep real-container evidence distinct from simulated transport tests.
-- Current handoff authorizes bounded issue #45 local repair/tests and parent-owned commits, owned-branch publication and PR evidence in `creep1ng/sre-agent`. This stage corrects PR #432 invocation retryable:false only; hold P6 source work/publication until the corrected parent is independently verified. No cloud, SSH, paid-provider probe, deployment, merge, or issue closure.
+- Current handoff authorizes bounded issue #45 local repair/tests and parent-owned commits, owned-branch publication and PR evidence in `creep1ng/sre-agent`. This P6 stage validates the current P5 retryable:false report field and case-insensitive offline UUID identity only; preserve offline/no-network witness boundaries. No cloud, SSH, paid-provider probe, deployment, merge, or issue closure.
 - Parent refreshed live GitHub Project #8: issue #45 remains Todo, Sprint 4, with CA1–CA8 in scope. PR #425 has an open gateway-root-path review finding; no human acceptance is claimed.
 - Follow the revised `AGENTS.md`: this is an academic tool for independent freelancers, not production SRE hardening. Prefer one repeatable E2E test over isolated or change-detector tests, and use only real evidence or exact reproduction instructions.
 
 ## Authorized Scope
 
-- Preserve root-only routing, P4 metric/Lucene queries and P5 known-ID-first denial; add permanent HTTP/CLI denial retryable cases before minimally capturing/validating retryable:false.
-- Preserve malformed-entry/redirect/privacy coverage and 35-second budget. Only the P5 probe, its behavior test, report and full task/evidence may change. No P6 source, producer/runtime, Compose/Dockerfile, dependency, live-service or credential changes.
-- Sole Luna high writer owns the bounded P5 source/test repair; parent owns independent checks, commits, screenshots, publication, branch propagation and human-review requests. Preserve frozen P6 local anchor `bc11898b5b1a9b9437b0b1b477400e351eabdc5c` and original backup `6f6f9569419aaa8eb261bf32dbefcc6b0948b2c6` until later restack.
+- Preserve root-only routing, P4 metric/Lucene queries and P5 known-ID-first denial; validate retryable:false in offline reconciliation and compare UUID identity case-insensitively.
+- Preserve malformed-entry/redirect/privacy coverage and 35-second budget. Only P6 offline reconciliation source/tests/report/runbook/task may change. No producer/runtime, Compose/Dockerfile, dependency, live-service, network or credential changes.
+- Sole Luna high writer owns the bounded P6 local restack and offline report correction; parent owns independent checks, commits, screenshots, publication, branch propagation and human-review requests. Preserve the original P6 backup `6f6f9569419aaa8eb261bf32dbefcc6b0948b2c6` and the pre-retryable-restack backup.
 
 ## TDD
 
 - Mode: strict
 - Source: issue-specific handoff §4 / OPERATING-RULES §4, which enables strict TDD for issue #45 implementation; repository `AGENTS.md` separately prefers E2E, prohibits writing unit tests after code, and requires failure modes first for isolated work.
-- Runner for this P5 correction: pinned Node 22.14 cached harness with controlled loopback HTTP/CLI tests in a networkless container; exact `docker run --pull never --network none` reproduction is recorded in the P5 report. No host package manager, DB/API/demo or live credential is needed. Historical root-only and preview-helper notes remain in dated checkpoints below.
+- Runner for this P6 correction: pinned Node 22.14 cached harness with offline CLI reconciliation in a networkless container; exact `docker run --pull never --network none` reproduction is recorded in the P6 report. No host package manager, DB/API/demo or live credential is needed. Historical root-only and preview-helper notes remain in dated checkpoints below.
 
 ## Tasks
 
@@ -254,7 +254,7 @@ Authorized scope: restricted known-ID Prometheus POST must be the first request,
 
 - [x] **MCP45-P5-A — Observe known-ID-first denial RED**: permanent HTTP/CLI test first; assert restricted POST is request one, exact public route/payload, safe denial UUID distinct from discovery UUID, null upstream_delta and pending success. Cover wrong status/code/missing or invalid UUID fail-closed without output leakage; cached networkless Docker run observed 0/2 before source implementation.
 - [x] **MCP45-P5-B — Implement bounded denial summary**: prepend restricted POST to unchanged four-request P4 sequence and allowlist denial output; never convert 403 or fixture counts into upstream-counter proof. Preserve existing public boundaries and 35-second/no-redirect budget; exact cached networkless Docker suite passed 2/2.
-- [ ] **MCP45-P5-C — Verify and bind evidence**: exact committed source/test hashes passed cached Docker 2/2 and Node syntax checks; the actual P5 PNG, full task mirror, PR #432 publication, and hosted CI passed at that checkpoint. Reopened after review finding 4141925985: the published P5 source accepts equal valid denial/discovery UUIDs and can still report pending. Parent moved PR #432 to draft; P5 source correction remains pending. CA1–CA8 and human acceptance remain open.
+- [x] **MCP45-P5-C — Verify and bind evidence**: exact committed source/test hashes passed cached Docker 2/2 and Node syntax checks; the actual P5 PNG, full task mirror, PR #432 publication, and hosted CI passed at that checkpoint. Reopened after review finding 4141925985: the published P5 source accepts equal valid denial/discovery UUIDs and can still report pending. Parent moved PR #432 to draft; P5 source correction remains pending. CA1–CA8 and human acceptance remain open.
 
 P5 local evidence: `/tmp/issue45-p5-evidence/red.log` records pre-source RED (0/2) on Node 22.14.0; `/tmp/issue45-p5-evidence/green.log` records current controlled GREEN (2/2). Source/test SHA-256 are recorded in `docs/evidence/issue-45-pr04/report.md`. The controlled success remains `pending` with `upstream_delta: null`; no zero-call or CA2 claim is made. Parent owns screenshot, task mirror, independent verification, commit, publication and hosted P5 CI. P4 hosted CI run `36680206014` passed all eight jobs per parent checkpoint; human acceptance and CA1–CA8 remain open.
 
@@ -320,7 +320,7 @@ Live [finding4142436803](https://github.com/creep1ng/sre-agent/pull/432#discussi
 
 - [x] **MCP45-P5-RET-R1 — Observe invocation retryable RED**: permanent actual HTTP/CLI fixture sets valid denial retryable:false; expect normalized denied.retryable:false, true/missing/nonboolean/null fail closed and preserve five requests/privacy/null upstream delta. RED observed before source edits: CLI report omitted required `retryable:false`. Capture: `/tmp/issue45-p5-retryable-evidence/red.log`.
 - [x] **MCP45-P5-RET-R2 — Enforce denial retryable contract**: capture only boolean or null, require false in invocation-denial guard; preserve UUID distinctness and all P4 behavior. Exact cached Docker GREEN 2/2; syntax/diff and current report hashes recorded in the report. Capture: `/tmp/issue45-p5-retryable-evidence/green.log`.
-- [ ] **MCP45-P5-RET-R3 — Refresh current delivery proof**: parent independent exact-current tests, fresh real screenshot, report/full mirror, <=400 total current-base delta, owned commit/publication/CI/review reply. Human acceptance and real CA1–CA8 remain open.
+- [x] **MCP45-P5-RET-R3 — Refresh current delivery proof**: parent independent exact-current tests, fresh real screenshot, report/full mirror, <=400 total current-base delta, owned commit/publication/CI/review reply. Human acceptance and real CA1–CA8 remain open.
 
 Sole Luna high writer repairs only P5 source/test/report and this full tracker; no P6/producers/runtime/Compose/dependencies/cloud changes. Strict test-first runner unchanged cached Node22.14 networkless Docker. Parent owns Git/PNG/publication/current CI. Keep all dated history; no size-only trimming.
 
@@ -329,3 +329,11 @@ Observed P5 retryable correction candidate: source `5aecebdcbdb4601296f8969a9832
 ## P5 retryable parent committed evidence checkpoint
 
 Exact `c2500771560c8e89b3e4d4656547ab8871146250` independently passed cached Docker syntax and HTTP/CLI2/2 with unchanged source5aecebdc/test0429268a. Real [fresh retryable PNG](../../docs/evidence/issue-45-pr04/known-id-retryable.png),SHA-256 `71ba7b1fc7b5ee7e9f302a8c30a45797b72974b3acc167295e6ad50bedb915b2`, visually inspected/sanitized. RET-R3/P5-C pending publication/currentCI; P6bc118 deliberately RED and frozen. All real CA1–CA8/human acceptance open.
+
+## P5 retryable current hosted proof and P6 next step
+
+Current PR #432 `9cdf424573b35216702787af6e45be4172757b9b` ready, 351 additions + 27 deletions =378, tested `c2500771560c8e89b3e4d4656547ab8871146250`. Exact CI `36693158406` all8 terminal success; watch exit0 and exactAPI verified, governance/reconciliation/GitGuardian pass. Current public PNG ContentsAPI bytes/hash and body readback exact; reply [4142791153](https://github.com/creep1ng/sre-agent/pull/432#discussion_r4142791153) records correction without resolving thread. RET-R3/P5-C controlled delivery complete; requested human review and all real CA1–CA8 open. This tracker-only checkpoint is local pending repository commit; no published source/evidence changes.
+
+Next authorized P6 recovery: preserve backup to frozen `bc11898b5b1a9b9437b0b1b477400e351eabdc5c` before restack from987 onto9cdf, preserve original6f6backup, full parent/child history and permanent offline UUID RED. P6-ID-R2 minimal case-insensitive guard remains pending. Current P5 adds denied.retryable; offline adapter must require/normalize false rather than discard this field.
+- [ ] **MCP45-P6-RET-R1 — Verify current denial schema offline**: test FIRST saved valid pending denial retryable:false is retained; true/missing/null/string report values fail offline with zero gateway calls/privacy; observe RED before adapter source change.
+- [ ] **MCP45-P6-RET-R2 — Preserve nonretryable denial semantics**: minimal validate/normalize denied.retryable:false with current P5 schema, retain counter/file/count/UUID guards; cached Docker GREEN/syntax/diff, current hashes/report/full task, parent independent evidence/publication/CI. No counter provenance or actual CA2 claim.

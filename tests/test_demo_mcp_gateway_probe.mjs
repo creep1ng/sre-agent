@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -161,6 +164,97 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       })}`);
       denied = previousDenied;
       invocationDenied = previousInvocationDenied;
+    }
+    const evidenceDir = await mkdtemp(join(tmpdir(), "issue45-p6-"));
+    const pendingPath = join(evidenceDir, "pending.json");
+    const witnessPath = join(evidenceDir, "witness.json");
+    try {
+      await writeFile(pendingPath, success.stdout);
+      const validWitness = { kind: "upstream-counter", source: "mcp_tool_calls_total",
+        request_id: DENIAL_REQUEST_ID, before: 12, after: 12 };
+      await writeFile(witnessPath, JSON.stringify(validWitness));
+      const callsBeforeReconcile = calls.length;
+      const reconciled = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
+      assert.equal(reconciled.status, 0, reconciled.stderr || reconciled.stdout);
+      const accepted = report(reconciled);
+      assert.equal(accepted.schema, "sre-agent.mcp45-query-smoke/v1");
+      assert.equal(accepted.phase, "gateway-query-smoke");
+      assert.equal(accepted.status, "pass");
+      assert.deepEqual(accepted.failures, []);
+      assert.equal(accepted.denied.upstream_delta, 0);
+      assert.deepEqual(accepted.witness, { kind: "upstream-counter", source: "mcp_tool_calls_total",
+        request_id: DENIAL_REQUEST_ID });
+      assert.equal(calls.length, callsBeforeReconcile, "offline reconciliation must not contact the gateway");
+      t.diagnostic(`Offline witness reconciliation: ${JSON.stringify({ status: accepted.status,
+        failures: accepted.failures, upstream_delta: accepted.denied.upstream_delta,
+        witness: accepted.witness })}`);
+
+      const caseVariantPending = { ...observed,
+        denied: { ...observed.denied, request_id: "abcdef12-3456-4abc-8def-1234567890ab" },
+        restricted_discovery: { ...observed.restricted_discovery,
+          request_id: "ABCDEF12-3456-4ABC-8DEF-1234567890AB" } };
+      await writeFile(pendingPath, JSON.stringify(caseVariantPending));
+      await writeFile(witnessPath, JSON.stringify({ ...validWitness,
+        request_id: caseVariantPending.denied.request_id }));
+      const caseVariantRejected = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
+      assert.equal(caseVariantRejected.status, 1);
+      const caseVariantReport = report(caseVariantRejected);
+      assert.equal(caseVariantReport.status, "fail");
+      assert.deepEqual(caseVariantReport.failures, ["probe_report_invalid"]);
+      assert.equal(calls.length, callsBeforeReconcile, "case-variant report rejection must remain offline");
+      t.diagnostic(`Offline case-variant UUID rejection: ${JSON.stringify({ status: caseVariantReport.status,
+        failures: caseVariantReport.failures, gateway_calls: calls.length - callsBeforeReconcile })}`);
+
+      for (const rejectedWitness of [
+        { ...validWitness, kind: "audit-counter", source: "audit_events_total" },
+        { ...validWitness, source: "audit_events_total" },
+        { ...validWitness, request_id: "10000000-0000-4000-8000-000000000099" },
+        { ...validWitness, after: 13 },
+        { ...validWitness, after: Number.MAX_SAFE_INTEGER + 1 },
+        { ...validWitness, after: 11 },
+      ]) {
+        await writeFile(witnessPath, JSON.stringify(rejectedWitness));
+        const result = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
+        assert.equal(result.status, 1);
+        const rejected = report(result);
+        assert.equal(rejected.status, "fail");
+        assert.equal(calls.length, callsBeforeReconcile, "reconciliation must stay offline on failure too");
+        assert.ok(!Object.hasOwn(rejected.witness ?? {}, "before"));
+      }
+
+      await writeFile(witnessPath, JSON.stringify(validWitness));
+      await writeFile(pendingPath, success.stdout);
+      for (const invalidReport of [
+        { ...observed, schema: "other/v1" },
+        { ...observed, phase: "gateway-probe" },
+        { ...observed, failures: ["log_query_failed", "upstream_witness_pending"] },
+        { ...observed, metric: { ...observed.metric, error_kind: "upstream_timeout" } },
+        { ...observed, restricted_discovery: { ...observed.restricted_discovery,
+          request_id: observed.denied.request_id } },
+      ]) {
+        await writeFile(pendingPath, JSON.stringify(invalidReport));
+        const result = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
+        assert.equal(result.status, 1);
+        assert.ok(report(result).failures.includes("probe_report_invalid"));
+      }
+
+      await writeFile(pendingPath, success.stdout);
+      await writeFile(witnessPath, "{");
+      for (const args of [
+        ["--reconcile", pendingPath, "--witness", witnessPath],
+        ["--reconcile", join(evidenceDir, "missing.json"), "--witness", witnessPath],
+        ["--reconcile", pendingPath],
+      ]) {
+        const result = await runCli(url, {}, args);
+        assert.equal(result.status, 1);
+        report(result);
+      }
+      await writeFile(witnessPath, " ".repeat(16_385));
+      const oversized = await runCli(url, {}, ["--reconcile", pendingPath, "--witness", witnessPath]);
+      assert.equal(oversized.status, 1);
+      assert.equal(calls.length, callsBeforeReconcile);
+    } finally {
+      await rm(evidenceDir, { recursive: true, force: true });
     }
 
     const retryableCases = [
