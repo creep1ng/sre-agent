@@ -92,3 +92,61 @@ def test_active_runtime_publishes_the_versioned_usage_contract() -> None:
     filter_schema = runtime_model["properties"]["filter"]
     assert "anyOf" in filter_schema or "oneOf" in filter_schema
     assert any(item["id"] == canonical_success["$ref"] for item in manifest["inventory"]["schemas"])
+
+
+def test_every_published_usage_openapi_selector_preserves_optional_null_semantics() -> None:
+    """Every shipped source must accept omission/null and retain selector constraints."""
+    proposal = yaml.safe_load(
+        Path("schemas/proposals/issue-333/usage-read.openapi.yaml").read_text()
+    )
+    release = RELEASES / CONTRACT_VERSION
+    standalone = yaml.safe_load((release / "openapi/usage-read.yaml").read_text())
+    canonical = yaml.safe_load((release / "openapi/control-plane.yaml").read_text())
+    runtime = create_application(
+        Settings.from_environment(
+            {
+                "DATABASE_URL": "postgresql://unused",
+                "AUDIT_HMAC_KEY": "contract-test-hmac-key",
+            }
+        )
+    ).openapi()
+
+    expected_constraints = {
+        "request_id": {"format": "uuid"},
+        "incident_id": {"minLength": 1, "maxLength": 128},
+        "month": {"pattern": r"^\d{4}-(0[1-9]|1[0-2])$"},
+    }
+
+    def variants(schema: dict[str, Any]) -> list[dict[str, Any]]:
+        found = [schema]
+        for key in ("anyOf", "oneOf", "allOf"):
+            for child in schema.get(key, []):
+                found.extend(variants(child))
+        return found
+
+    artifacts = {
+        "standalone release": standalone,
+        "canonical release": canonical,
+        "proposal": proposal,
+        "runtime": runtime,
+    }
+    for label, document in artifacts.items():
+        operation = document["paths"]["/v1/usage/consumption"]["get"]
+        parameters = {
+            parameter["name"]: parameter
+            for parameter in operation["parameters"]
+            if parameter["in"] == "query"
+        }
+        assert set(parameters) == set(expected_constraints), label
+        for name, constraints in expected_constraints.items():
+            parameter = parameters[name]
+            assert parameter["required"] is False, f"{label}: {name} must be optional"
+            choices = variants(parameter["schema"])
+            assert any(choice.get("type") == "null" for choice in choices), (
+                f"{label}: {name} must preserve explicit null semantics"
+            )
+            assert any(
+                choice.get("type") == "string"
+                and all(choice.get(key) == value for key, value in constraints.items())
+                for choice in choices
+            ), f"{label}: {name} selector constraints are missing"

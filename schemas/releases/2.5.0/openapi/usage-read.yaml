@@ -39,23 +39,29 @@ paths:
           required: false
           description: Return the aggregate for one effective request.
           schema:
-            type: string
-            format: uuid
+            anyOf:
+              - type: string
+                format: uuid
+              - type: 'null'
         - name: incident_id
           in: query
           required: false
           description: Return only the identified incident's distinct runs and requests.
           schema:
-            type: string
-            minLength: 1
-            maxLength: 128
+            anyOf:
+              - type: string
+                minLength: 1
+                maxLength: 128
+              - type: 'null'
         - name: month
           in: query
           required: false
           description: UTC calendar month in YYYY-MM form.
           schema:
-            type: string
-            pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+            anyOf:
+              - type: string
+                pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+              - type: 'null'
       x-forbidden-query-parameters:
         - from
         - to

@@ -173,3 +173,19 @@ Independent final publication verification passed: 1,250 Python / 124 tooling,
 11 releases, guarded fresh HTTP/SQL capture, and zero file hash/mode drift.
 Parent OpenAPI parity spot check passed. Publish this verified candidate next;
 hosted CI, current PR reconciliation and human review remain pending.
+
+PR #429 automated finding `4141505117` was reproduced on base `47673b9b4e9306c3c40aec638874b5505d002de6`:
+the standalone `2.5.0/openapi/usage-read.yaml` omitted explicit nullable branches
+for all three optional query selectors. Permanent test RED observed for
+`request_id`; fixing only this unmerged 2.5.0 artifact restored parity with the
+proposal, canonical control-plane schema, and FastAPI runtime. The 2.5.0 evidence
+and manifest were regenerated through the existing release tool; no older
+release changed. GREEN: focused two Python tests, sequential configured Python
+1,251 passed / 1 skipped, tooling 124 passed, all eleven releases validate,
+OpenAPI lint passes; `git diff --check` and 2.4.0 immutability pass. A concurrent
+full-run attempt showed unrelated auth/control DB failures; sequential rerun
+passed. The release/test changes are 84 lines; with evidence/tracker changes the
+current candidate diff is 150 additions/deletions. Parent must inspect/freeze
+this exact candidate and run current hosted CI; no commit or remote action by
+this writer. `docs/evidence/issue-333-contract-publication.md` contains hashes,
+reproduction and the finding disposition.

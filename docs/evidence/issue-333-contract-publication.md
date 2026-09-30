@@ -4,10 +4,12 @@
 
 U333-8 is complete locally: the existing release generator published immutable,
 self-contained `2.5.0` with the runtime usage-read contract; `2.4.0` is unchanged.
-This is local evidence for the uncommitted candidate on `fix/issue-333-contract-publication`,
-base/HEAD `8965cb1978f9363a807279b6ec1b60c76d739e42` (PR #428 parent). The
-candidate is **not** a hosted CI result or human acceptance. U333-10 remains
-pending parent publication, hosted CI on the eventual candidate, and human review.
+The original publication evidence bound the candidate to PR #428 head
+`8965cb1978f9363a807279b6ec1b60c76d739e42`. A follow-up on PR #429 base/HEAD
+`47673b9b4e9306c3c40aec638874b5505d002de6` corrected a published OpenAPI
+parity defect; the correction is local/uncommitted evidence for that candidate,
+not hosted CI or human acceptance. U333-10 remains pending parent publication,
+hosted CI on the final candidate, and human review.
 No commit, push, PR/GitHub mutation, release tag or deployment was done here.
 
 Release inventory: 197 files; generator reports 202 artifacts and 17 checks.
@@ -16,6 +18,40 @@ against that release is empty. Existing all-release validation covers 11 release
 (1.0.0–2.5.0). The publication-only size exception was explicitly authorized;
 the writer measured 7,461 text additions plus deletions before final metadata
 readback; bind the final complete diff at commit, including binary evidence.
+
+## PR #429 finding 4141505117: selector nullability parity
+
+Verified finding: `schemas/releases/2.5.0/openapi/usage-read.yaml` had nonnullable
+schemas for optional `request_id`, `incident_id`, and `month`, while the proposal,
+published control-plane OpenAPI, and FastAPI runtime emitted nullable `anyOf`
+schemas. Added a permanent assertion over all four real artifacts. Its strict
+Docker RED on base `47673b9` failed first at standalone `request_id`'s missing
+`type: 'null'`; after repair all three selectors retain their UUID, min/max, and
+month-pattern constraints while explicitly allowing null. No runtime model or
+HTTP behavior changed, so the existing actual runtime HTTP capture above remains
+current; no browser was relaunched.
+
+```sh
+docker compose --project-directory "$PWD" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_usage_read_openapi.py::test_every_published_usage_openapi_selector_preserves_optional_null_semantics tests/test_usage_read_openapi.py::test_active_runtime_publishes_the_versioned_usage_contract'
+```
+
+Observed GREEN: **2 passed**; final configured Python run: **1,251 passed,
+1 skipped** (96.34s), with all configured lint/format, lock, import-boundary,
+typing, pytest, and Alembic checks passing. The same full runner was initially
+launched twice with overlapping access to the one disposable test database; that
+overlapping run reported nine unrelated auth/control failures alongside missing
+database objects and audit rows. After both runs stopped, one sequential full
+rerun passed as above; no product-code change was made for those failures. Tooling remains
+**124 passed / 0 failed**; all 11 releases validate and OpenAPI lint passes.
+Existing `2.5.0` immutable generator data were backed up outside the candidate,
+then only `2.5.0` evidence and manifest were regenerated with the existing
+`node schemas/tooling/release.mjs evidence --release 2.5.0` harness workflow.
+The resulting manifest/evidence changes are limited to the standalone OpenAPI
+and evidence hashes; every older release, including 2.4.0, remains unchanged.
+The release artifact, refreshed generated metadata, and permanent test comprise
+84 additions/deletions; with this evidence-report and tracker update, the current
+candidate diff is 150 additions/deletions. This is separate from the original
+publication-only size exception and does not request or imply a new exception.
 
 ## Reproduce locally
 
@@ -139,10 +175,12 @@ source implementation and release contract did not change during U333-10.
 | --- | --- |
 | `src/sre_agent/release.py` | `d49f29fb60f9b49a8b9316876218b3efdf621fd97c1fbd72a55fbcfeb418e127` |
 | `src/sre_agent/gateway/usage.py` | `50398d281787490eb8f5c4184d749307d3bac695542dab48980cfc90660234be` |
-| `schemas/releases/2.5.0/manifest.yaml` | `a4a73ecebe1f8928430ae80486aec66d9e6c2a483552e4a7f28cb392461a0830` |
+| `schemas/releases/2.5.0/openapi/usage-read.yaml` | `022069365e0604912a6f3e389382e0a3653ef6ef80a6869bdf38a1def736c6de` |
+| `schemas/releases/2.5.0/manifest.yaml` | `07882bc2e609e2df574578be8c1c8e516c44509c606f8a983ff49eeaf48961f3` |
+| `schemas/releases/2.5.0/conformance/evidence.json` | `6b96cba99e3d9f0461e6eb438e9e1568bcb26b306bcc14e34a53e00b1a2328e0` |
 | `schemas/releases/2.5.0/openapi/control-plane.yaml` | `d14ffa683a63abc6a6fd8947a12a3fb5a473ffd7e2555ca7ba9085eb0dfb8c1c` |
 | `schemas/releases/2.5.0/json-schema/http/usage-read.schema.json` | `00fec6b57cb767189b4babd702df0f23e84733eca96f1eba5ca2acf8a3ff3e3f` |
-| `tests/test_usage_read_openapi.py` | `f485852510a45cff7d92aaa7f31a45a5888472982655d7c4e6af2ad31fa869a3` |
+| `tests/test_usage_read_openapi.py` | `ebcab7e5d5fcce6c9974c163348921306a272ce11f6f81c1a6c6c6c27e171b81` |
 | `schemas/tooling/test/usage-release.test.mjs` | `00aec3aa2edfe6bd5295bdcf9ab5525202b5bfe0f5c05c184965212b3121b983` |
 
 Rollback is additive: remove only the new 2.5.0 snapshot, its activation/test

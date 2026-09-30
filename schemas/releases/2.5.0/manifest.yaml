@@ -26,7 +26,7 @@ inventory:
     - path: releases/2.5.0/conformance/consumers.yaml
       sha256: sha256:7c4b5ff7475c4eb63590ec77880964d4aad915a5426471564e91c046b8c5af31
     - path: releases/2.5.0/conformance/evidence.json
-      sha256: sha256:e153fc37947ab4a203c0399443f3c7afa1bca764f527ab5f6d2f2e4385975bb6
+      sha256: sha256:6b96cba99e3d9f0461e6eb438e9e1568bcb26b306bcc14e34a53e00b1a2328e0
     - path: releases/2.5.0/conformance/migration.md
       sha256: sha256:32ae66b8046a8acda7a742ae875daf49f82dc5406d075ad1ccf740c435b0bb09
     - path: releases/2.5.0/conformance/ownership-evidence.json
@@ -367,7 +367,7 @@ inventory:
     - api_major: 1
       dialect: 3.1.0
       path: releases/2.5.0/openapi/usage-read.yaml
-      sha256: sha256:1df8e414f89e3eac6c074679363f0e3cb38f0625baa1d582a6a604e5101f22a9
+      sha256: sha256:022069365e0604912a6f3e389382e0a3653ef6ef80a6869bdf38a1def736c6de
       version: 2.5.0
   schemas:
     - dialect: https://json-schema.org/draft/2020-12/schema
