@@ -229,6 +229,7 @@ async def activate_version(
     resource = await session.get(ResourceRow, ("bok_collection", f"{collection_id}@{version}"))
     if resource is not None:
         resource.status = "active"
+        resource.updated_at = func.now()
     await session.flush()
 
 

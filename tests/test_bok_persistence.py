@@ -370,6 +370,17 @@ async def test_activation_rejects_persisted_chunk_drift_without_lifecycle_change
                 )
             assert result.rowcount == 1
 
+        async with database.sessions() as session:
+            catalog_updated_at_before_rejection = (
+                await session.execute(
+                    text(
+                        "SELECT updated_at FROM resources WHERE resource_type='bok_collection' "
+                        "AND resource_id=:resource_id"
+                    ),
+                    {"resource_id": f"{collection_id}@1.0.0"},
+                )
+            ).scalar_one()
+
         rejected = False
         try:
             async with database.transaction() as session:
@@ -379,10 +390,11 @@ async def test_activation_rejects_persisted_chunk_drift_without_lifecycle_change
         assert rejected, "activation must reject missing or changed persisted children"
 
         async with database.sessions() as session:
-            owner_status, catalog_status = (
+            owner_status, catalog_status, catalog_updated_at_after_rejection = (
                 await session.execute(
                     text(
-                        "SELECT v.status, r.status FROM bok_collection_versions AS v "
+                        "SELECT v.status, r.status, r.updated_at "
+                        "FROM bok_collection_versions AS v "
                         "JOIN resources AS r ON r.resource_type='bok_collection' "
                         "AND r.resource_id=:resource_id "
                         "WHERE v.collection_id=:collection_id AND v.version='1.0.0'"
@@ -404,6 +416,7 @@ async def test_activation_rejects_persisted_chunk_drift_without_lifecycle_change
             ).all()
         assert owner_status == "ready"
         assert catalog_status == "inactive"
+        assert catalog_updated_at_after_rejection == catalog_updated_at_before_rejection
         if drift == "delete":
             assert len(chunks) == 1
         else:
@@ -433,6 +446,64 @@ async def test_activation_accepts_valid_arbitrary_document_and_chunk_order() -> 
                 )
             ).scalar_one()
         assert status == "active"
+    finally:
+        await database.dispose()
+
+
+@pytest.mark.asyncio
+async def test_activation_advances_catalog_timestamp_without_changing_creation_time() -> None:
+    collection_id = "activation-catalog-timestamp"
+    source = bundle(collection_id=collection_id)
+    old_timestamp = "2000-01-01T00:00:00+00:00"
+    database = Database(DATABASE_URL)
+    try:
+        async with database.transaction() as session:
+            assert await ingest_bundle(session, source) is True
+            await insert_inactive_catalog_projection(session, collection_id, "1.0.0")
+            seeded = await session.execute(
+                text(
+                    "UPDATE resources SET updated_at=:old "
+                    "WHERE resource_type='bok_collection' AND resource_id=:resource_id"
+                ),
+                {"old": old_timestamp, "resource_id": f"{collection_id}@1.0.0"},
+            )
+            assert seeded.rowcount == 1
+        async with database.sessions() as session:
+            owner_created_at = (
+                await session.execute(
+                    text(
+                        "SELECT created_at FROM bok_collection_versions "
+                        "WHERE collection_id=:collection_id AND version='1.0.0'"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            ).scalar_one()
+
+        async with database.transaction() as session:
+            await activate_version(session, collection_id, "1.0.0", expected_bundle=source)
+
+        async with database.sessions() as session:
+            status, updated_at = (
+                await session.execute(
+                    text(
+                        "SELECT status, updated_at FROM resources "
+                        "WHERE resource_type='bok_collection' AND resource_id=:resource_id"
+                    ),
+                    {"resource_id": f"{collection_id}@1.0.0"},
+                )
+            ).one()
+            persisted_owner_created_at = (
+                await session.execute(
+                    text(
+                        "SELECT created_at FROM bok_collection_versions "
+                        "WHERE collection_id=:collection_id AND version='1.0.0'"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            ).scalar_one()
+        assert status == "active"
+        assert updated_at.isoformat() != old_timestamp
+        assert persisted_owner_created_at == owner_created_at
     finally:
         await database.dispose()
 
