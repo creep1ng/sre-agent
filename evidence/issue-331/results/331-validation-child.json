@@ -1,0 +1,35 @@
+{
+  "container_image_manifest_list_sha256": "59349e0aa3213586f0a92cb72d9c55e412ea359d6c5294a177b42da3ca250635",
+  "http": {
+    "allowlisted_fields": [
+      "request_id",
+      "retryable"
+    ],
+    "request_id": "b17abf8d-820f-4c1a-9c15-331331331331",
+    "retryable": false,
+    "status": 422
+  },
+  "observed_at_utc": "2026-09-30T07:36:44+00:00",
+  "probe_command": "docker compose --project-directory \"$SOURCE_CHECKOUT\" --env-file \"$SOURCE_CHECKOUT/.env\" --env-file \"$SOURCE_CHECKOUT/.env.worktree\" --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_skill_resolution.py'",
+  "slice": "331-validation-child",
+  "sql": {
+    "audit_outcome": "error",
+    "audit_reason": "contract_validation_failed",
+    "audit_rows_correlated": 1,
+    "audit_status": 422,
+    "grant_rows": 0,
+    "migration_heads": 1,
+    "migration_revision": "20260930_19",
+    "skill_rows": 0,
+    "statement_categories": [
+      "SELECT alembic_version"
+    ]
+  },
+  "tested_sha": "94d14d9e37c5b456b441201b4d98a13bacc056d1",
+  "toolchain": {
+    "containerized_probe": "Docker Compose checks runner",
+    "postgres": "PostgreSQL 17.4 image sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5",
+    "python_base": "python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea",
+    "uv": "0.8.14"
+  }
+}

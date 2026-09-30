@@ -1,0 +1,90 @@
+[
+  {
+    "slice": "387",
+    "pull_request": 387,
+    "head": "402ff6e580fa15e765bedc89ae5a6f889202e640",
+    "tested_base": "5b6109bd2c8100455136cf12ce91c52830833c7f",
+    "changed_lines": 380,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/402ff6e580fa15e765bedc89ae5a6f889202e640"
+  },
+  {
+    "slice": "388",
+    "pull_request": 388,
+    "head": "c0d8076908dbe425f8dbb7b4ff7d717a39ae2117",
+    "tested_base": "402ff6e580fa15e765bedc89ae5a6f889202e640",
+    "changed_lines": 317,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/c0d8076908dbe425f8dbb7b4ff7d717a39ae2117"
+  },
+  {
+    "slice": "397",
+    "pull_request": 397,
+    "head": "7327ca0ef8a4d810afe2376aec2ce5bd0959677e",
+    "tested_base": "c0d8076908dbe425f8dbb7b4ff7d717a39ae2117",
+    "changed_lines": 390,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/7327ca0ef8a4d810afe2376aec2ce5bd0959677e"
+  },
+  {
+    "slice": "403",
+    "pull_request": 403,
+    "head": "025476049fa094c852c48565f45d1e32f472bb3d",
+    "tested_base": "7327ca0ef8a4d810afe2376aec2ce5bd0959677e",
+    "changed_lines": 325,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/025476049fa094c852c48565f45d1e32f472bb3d"
+  },
+  {
+    "slice": "402",
+    "pull_request": 402,
+    "head": "6eb618906ff846f202ab6d43fca4fa7ae7523fd8",
+    "tested_base": "025476049fa094c852c48565f45d1e32f472bb3d",
+    "changed_lines": 376,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/6eb618906ff846f202ab6d43fca4fa7ae7523fd8"
+  },
+  {
+    "slice": "404",
+    "pull_request": 404,
+    "head": "4b82922bef24bd455c41283b98409d1af5886830",
+    "tested_base": "6eb618906ff846f202ab6d43fca4fa7ae7523fd8",
+    "changed_lines": 308,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/4b82922bef24bd455c41283b98409d1af5886830"
+  },
+  {
+    "slice": "405",
+    "pull_request": 405,
+    "head": "3b525e0a305e8b44bdcd54495284950393a7b415",
+    "tested_base": "4b82922bef24bd455c41283b98409d1af5886830",
+    "changed_lines": 369,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/3b525e0a305e8b44bdcd54495284950393a7b415"
+  },
+  {
+    "slice": "331-validation-child",
+    "pull_request": 433,
+    "head": "94d14d9e37c5b456b441201b4d98a13bacc056d1",
+    "tested_base": "3b525e0a305e8b44bdcd54495284950393a7b415",
+    "changed_lines": 87,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/94d14d9e37c5b456b441201b4d98a13bacc056d1"
+  },
+  {
+    "slice": "406",
+    "pull_request": 406,
+    "head": "2e9b24004043d830b911c15cea6fb10d1da7a9cc",
+    "tested_base": "94d14d9e37c5b456b441201b4d98a13bacc056d1",
+    "changed_lines": 198,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/2e9b24004043d830b911c15cea6fb10d1da7a9cc"
+  },
+  {
+    "slice": "407",
+    "pull_request": 407,
+    "head": "c56f32eeed1e07d230f4de402c263075c5191809",
+    "tested_base": "2e9b24004043d830b911c15cea6fb10d1da7a9cc",
+    "changed_lines": 156,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/c56f32eeed1e07d230f4de402c263075c5191809"
+  },
+  {
+    "slice": "409",
+    "pull_request": 409,
+    "head": "e5ec78a0b0e60363af1ac674c2ce8d3a6627d094",
+    "tested_base": "c56f32eeed1e07d230f4de402c263075c5191809",
+    "changed_lines": 282,
+    "source_url": "https://github.com/creep1ng/sre-agent/commit/e5ec78a0b0e60363af1ac674c2ce8d3a6627d094"
+  }
+]

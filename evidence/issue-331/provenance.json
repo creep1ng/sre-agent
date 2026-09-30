@@ -1,0 +1,47 @@
+{
+  "capture_date_utc": "2026-09-30",
+  "evidence_kind": "controlled local HTTP/PostgreSQL integration with synthetic data",
+  "candidate_heads": {
+    "387": "402ff6e580fa15e765bedc89ae5a6f889202e640",
+    "388": "c0d8076908dbe425f8dbb7b4ff7d717a39ae2117",
+    "397": "7327ca0ef8a4d810afe2376aec2ce5bd0959677e",
+    "403": "025476049fa094c852c48565f45d1e32f472bb3d",
+    "402": "6eb618906ff846f202ab6d43fca4fa7ae7523fd8",
+    "404": "4b82922bef24bd455c41283b98409d1af5886830",
+    "405": "3b525e0a305e8b44bdcd54495284950393a7b415",
+    "331-validation-child": "94d14d9e37c5b456b441201b4d98a13bacc056d1",
+    "406": "2e9b24004043d830b911c15cea6fb10d1da7a9cc",
+    "407": "c56f32eeed1e07d230f4de402c263075c5191809",
+    "409": "e5ec78a0b0e60363af1ac674c2ce8d3a6627d094"
+  },
+  "independent_full_suite": {
+    "tested_head": "e5ec78a0b0e60363af1ac674c2ce8d3a6627d094",
+    "tree": "8de36f536fedb3e73bf3a46527b23e2142bfe658",
+    "result": "1264 passed, 1 opt-in live-provider skip; 86.31 seconds",
+    "quality_and_alembic": "green",
+    "source": "independent local verifier",
+    "hosted_ci": "pending"
+  },
+  "renderer": "headless Chromium 153.0.8010.52; actual local rendered HTTP/SQL observations",
+  "raw_logs_in_bundle": false,
+  "source_checkout_changed": false,
+  "helper_validation": {
+    "normal_focused_reproduction": "Previously passed at exact #409 head: 8 tests passed in 5.69s",
+    "copied_capture_helper": "Passed under unique owned project `sre-agent-r9-public-validation`: checks image rebuilt and real #409 HTTP/PostgreSQL probe 1 passed in 3.34s. The first fresh-project attempt hit an IPAM overlap before test startup; after inspecting and removing only the completed old owned DB/network (no volumes), retry passed. New project DB/network then removed by scoped Compose down."
+  },
+  "hosted_ci_snapshot": {
+    "source": "parent read-only status snapshot after repaired pushes",
+    "state": "some hosted check contexts terminal green; six contract checks still active; complete hosted outcome pending",
+    "new_candidate_failures": "none reported at snapshot",
+    "human_review": "pending"
+  },
+  "review_snapshot": {
+    "commented_reviews": 16,
+    "approved_reviews": 0,
+    "inline_threads": 9,
+    "unresolved_threads": 9,
+    "not_outdated_threads": 9,
+    "threads_with_replies": 0,
+    "freshness": "last authorized parent-refreshed inventory; refresh required before delivery"
+  }
+}

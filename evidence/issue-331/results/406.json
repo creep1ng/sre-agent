@@ -1,0 +1,39 @@
+{
+  "container_image_manifest_list_sha256": "0e90421c8d7c7ca112365a9e458250bd54b0d90a5ddcbab643e193dbb6401239",
+  "http": {
+    "allowlisted_fields": [
+      "dependencies",
+      "request_id",
+      "retryable",
+      "skill"
+    ],
+    "credential_verifier_calls": 1,
+    "dependency_count": 16,
+    "request_id": "63d31e22-a2a7-4ff8-b063-1e12f9db1fdd",
+    "retryable": false,
+    "status": 200
+  },
+  "observed_at_utc": "2026-09-30T07:37:07+00:00",
+  "probe_command": "docker compose --project-directory \"$SOURCE_CHECKOUT\" --env-file \"$SOURCE_CHECKOUT/.env\" --env-file \"$SOURCE_CHECKOUT/.env.worktree\" --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_skill_resolution.py tests/test_governed_authorization.py'",
+  "slice": "406",
+  "sql": {
+    "audit_outcome": "success",
+    "audit_reason": "grant_matched",
+    "audit_rows_correlated": 1,
+    "audit_status": 200,
+    "grant_rows": 16,
+    "migration_heads": 1,
+    "migration_revision": "20260930_19",
+    "skill_rows": 17,
+    "statement_categories": [
+      "SELECT alembic_version"
+    ]
+  },
+  "tested_sha": "2e9b24004043d830b911c15cea6fb10d1da7a9cc",
+  "toolchain": {
+    "containerized_probe": "Docker Compose checks runner",
+    "postgres": "PostgreSQL 17.4 image sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5",
+    "python_base": "python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea",
+    "uv": "0.8.14"
+  }
+}

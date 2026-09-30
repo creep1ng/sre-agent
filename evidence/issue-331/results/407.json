@@ -1,0 +1,49 @@
+{
+  "container_image_manifest_list_sha256": "f1097bd14c1b889e9cc52366f2548fc3c32de54b5257566cf6b29b8777513505",
+  "http": {
+    "allowlisted_fields": [
+      "status"
+    ],
+    "request_ids": [
+      "d31cb4cc-b576-4646-9079-175e8ccb4d6a",
+      "8667ba52-046b-4172-aa30-9e4ecc116f30",
+      "8051bb99-302e-41f8-bd45-3064ff576e96",
+      "5eac74c8-470f-4b11-881b-049725227dbd",
+      "f9a93038-4a0f-4edf-83d2-16540f4931f3",
+      "01dca935-7cac-43a8-8c35-6de5f92d8654",
+      "fa6e54e5-b433-4818-8a79-bd5414e3436a"
+    ],
+    "resolution_count": 7,
+    "status": 200,
+    "status_sequence": [
+      200,
+      200,
+      200,
+      404,
+      200,
+      404,
+      200
+    ]
+  },
+  "observed_at_utc": "2026-09-30T07:37:22+00:00",
+  "probe_command": "docker compose --project-directory \"$SOURCE_CHECKOUT\" --env-file \"$SOURCE_CHECKOUT/.env\" --env-file \"$SOURCE_CHECKOUT/.env.worktree\" --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_skill_lifecycle_proof.py'",
+  "slice": "407",
+  "sql": {
+    "audit_rows_correlated": 7,
+    "grant_rows": 1,
+    "migration_heads": 1,
+    "migration_revision": "20260930_19",
+    "skill_rows": 2,
+    "statement_categories": [
+      "SELECT alembic_version"
+    ],
+    "status_rows": 2
+  },
+  "tested_sha": "c56f32eeed1e07d230f4de402c263075c5191809",
+  "toolchain": {
+    "containerized_probe": "Docker Compose checks runner",
+    "postgres": "PostgreSQL 17.4 image sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5",
+    "python_base": "python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea",
+    "uv": "0.8.14"
+  }
+}

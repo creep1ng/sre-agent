@@ -1,0 +1,33 @@
+{
+  "container_image_manifest_list_sha256": "60b4b1b2c65dd8f5d622fa2cb5e585affe1df42164360305c229b914b270b1db",
+  "http": {
+    "allowlisted_fields": [
+      "resource_id",
+      "status",
+      "updated_at"
+    ],
+    "publish_status": 201,
+    "status": 200
+  },
+  "observed_at_utc": "2026-09-30T07:34:30+00:00",
+  "probe_command": "docker compose --project-directory \"$SOURCE_CHECKOUT\" --env-file \"$SOURCE_CHECKOUT/.env\" --env-file \"$SOURCE_CHECKOUT/.env.worktree\" --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_audit.py tests/test_persistence_repositories.py tests/test_skill_migration_compatibility.py tests/test_migrations.py tests/test_health.py'",
+  "slice": "404",
+  "sql": {
+    "grant_rows": 0,
+    "migration_heads": 1,
+    "migration_revision": "20260930_19",
+    "skill_rows": 1,
+    "statement_categories": [
+      "SELECT alembic_version"
+    ],
+    "status_rows": 1,
+    "successful_status_audit_rows": 1
+  },
+  "tested_sha": "4b82922bef24bd455c41283b98409d1af5886830",
+  "toolchain": {
+    "containerized_probe": "Docker Compose checks runner",
+    "postgres": "PostgreSQL 17.4 image sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5",
+    "python_base": "python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea",
+    "uv": "0.8.14"
+  }
+}
