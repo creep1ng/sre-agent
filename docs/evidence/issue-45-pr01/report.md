@@ -1,5 +1,7 @@
 # Issue 45: prerequisite documentation evidence
 
+Historical PR #424 evidence: hashes below identify its original guide, before P3 documentation updates.
+
 **Rendered documentation only; no live MCP acceptance.** This report records the
 first stacked-to-main stage. Read the [operator guide](../../issue-45-grafana-mcp-operator-runbook.md)
 and view its [actual screenshot](prerequisites.png).
