@@ -389,7 +389,7 @@ class SkillPublishRequest(BaseModel):
     skill_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
     version: Annotated[
         str,
-        Field(pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
+        Field(max_length=32, pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
     ]
     owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
     manifest: SkillManifest
@@ -2830,6 +2830,7 @@ class ControlService:  # noqa: E305
         if (
             re.fullmatch(r"[a-z][a-z0-9-]{2,62}[a-z0-9]", skill_id) is None
             or re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version) is None
+            or len(version) > 32
         ):
             return await self._finish(
                 request_id,
@@ -3802,6 +3803,7 @@ def control_router(service: ControlService) -> APIRouter:
                 {
                     "type": "string",
                     "pattern": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
+                    "maxLength": 32,
                 }
             ),
         ],

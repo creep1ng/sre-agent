@@ -82,12 +82,33 @@
               <p id="alias-detail-subtitle" class="ma-panel__description" aria-live="polite">No alias selected.</p>
             </div>
             <div class="ma-button-row">
+              <button id="detail-deactivate-button" class="ma-button ma-button--secondary ma-button--small" type="button" hidden>Deactivate</button>
+              <button id="detail-edit-button" class="ma-button ma-button--secondary ma-button--small" type="button" hidden>Edit</button>
               <button id="detail-close-button" class="ma-button ma-button--secondary ma-button--small" type="button">Close</button>
             </div>
           </div>
           <div class="ma-panel__body">
             <div id="detail-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading alias…</div>
             <dl id="detail-content" class="ma-detail-list" hidden></dl>
+            <form id="assignment-form" class="ma-assignment-form" autocomplete="off" novalidate hidden>
+              <div class="ma-field">
+                <label class="ma-field__label" for="edit-concrete-model">Effective model</label>
+                <input class="ma-input ma-mono" id="edit-concrete-model" name="concrete_model" type="text" autocomplete="off" spellcheck="false" required placeholder="openai/gpt-4o-mini" />
+              </div>
+              <div class="ma-field">
+                <label class="ma-field__label" for="edit-router">Router</label>
+                <input class="ma-input ma-mono" id="edit-router" name="router" type="text" autocomplete="off" spellcheck="false" required placeholder="openrouter" />
+              </div>
+              <div class="ma-field">
+                <label class="ma-field__label" for="edit-inference-provider">Inference provider</label>
+                <input class="ma-input ma-mono" id="edit-inference-provider" name="inference_provider" type="text" autocomplete="off" spellcheck="false" required placeholder="openai" />
+              </div>
+              <div class="ma-button-row">
+                <button id="assignment-save-button" class="ma-button ma-button--primary ma-button--small" type="submit">Save assignment</button>
+                <button id="assignment-cancel-button" class="ma-button ma-button--secondary ma-button--small" type="button">Cancel</button>
+                <button id="assignment-refresh-button" class="ma-button ma-button--secondary ma-button--small" type="button" hidden>Refresh</button>
+              </div>
+            </form>
             <div id="detail-error" class="ma-alert" data-tone="critical" hidden>
               <p id="detail-error-title" class="ma-alert__title">Request failed</p>
             </div>
@@ -95,6 +116,18 @@
         </section>
       </div>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
+      <dialog id="deactivate-dialog" class="principals__dialog" aria-labelledby="deactivate-title">
+        <form id="deactivate-form" class="principals__create-form" novalidate>
+          <h2 id="deactivate-title" class="ma-panel__title">Deactivate alias</h2>
+          <p id="deactivate-detail" class="ma-panel__description"></p>
+          <p class="ma-panel__description">This alias will become unavailable and cannot be reactivated from this control-plane flow.</p>
+          <div id="deactivate-error" class="ma-alert" data-tone="critical" hidden><p id="deactivate-error-title" class="ma-alert__title">Request failed</p></div>
+          <div class="ma-button-row">
+            <button id="deactivate-submit" class="ma-button ma-button--primary" type="submit">Deactivate</button>
+            <button id="deactivate-cancel" class="ma-button ma-button--secondary" type="button" value="cancel" formnovalidate>Cancel</button>
+          </div>
+        </form>
+      </dialog>
     </main>
     <script type="module" src="/public/admin/model-aliases.js"></script>
   </body>

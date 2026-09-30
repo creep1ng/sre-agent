@@ -9,15 +9,18 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from sre_agent.control import scopes
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.control.service import (
     CONTROL_OPERATIONS,
     ControlService,
+    SkillPublishRequest,
     _key_digest,
     _payload_sha256,
     _public_principal,
@@ -634,3 +637,22 @@ def test_principal_operations_use_shared_governed_authorization_before_effects(
     assert effects.await_count == 1
     assert audit.events[-1].policy_decision is not None
     assert audit.events[-1].policy_decision.grant_ref is not None
+
+
+def test_skill_publication_request_enforces_storage_version_bound() -> None:
+    request = SkillPublishRequest(
+        skill_id="bounded-skill",
+        version="1" * 28 + ".0.0",
+        owner_id="skill-owner",
+        manifest={
+            "display_name": "Bounded",
+            "description": "Instructions only.",
+            "instructions": "Verify the incident.",
+            "dependencies": [],
+        },
+    )
+    assert len(request.version) == 32
+    with pytest.raises(ValidationError):
+        SkillPublishRequest.model_validate(
+            {**request.model_dump(), "version": "1" + request.version}
+        )

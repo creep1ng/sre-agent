@@ -1,7 +1,9 @@
 import os
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from alembic.script import ScriptDirectory
+from sqlalchemy import engine_from_config, event, pool, text
+from sqlalchemy.schema import AddConstraint
 
 from sre_agent.persistence.models import Base
 
@@ -12,6 +14,24 @@ if url.startswith("postgresql://"):
 config.set_main_option("sqlalchemy.url", url)
 
 
+def integrated_upgrade():
+    """Recognize only a forward upgrade into the explicitly supported union head."""
+    script = ScriptDirectory.from_config(config)
+    destination = context.get_context().opts.get("destination_rev")
+    target = script.as_revision_number(destination) if destination else None
+    if target != "20260930_18":
+        return None
+    current = set(context.get_context().get_current_heads())
+    ancestors = {revision.revision for revision in script.iterate_revisions(target, "base")}
+    if current == {target} or not current <= ancestors:
+        return None
+    legacy_checks = {
+        script.get_revision(revision).module.NEW_OPERATION
+        for revision in ("20260926_14", "20260926_15")
+    }
+    return target, legacy_checks
+
+
 def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section) or {}
     engine = engine_from_config(section, poolclass=pool.NullPool)
@@ -20,7 +40,39 @@ def run_migrations_online() -> None:
             connection=connection, target_metadata=Base.metadata, transactional_ddl=True
         )
         with context.begin_transaction():
-            context.run_migrations()
+            integration = integrated_upgrade()
+            if integration is None:
+                context.run_migrations()
+                return
+            target, legacy_checks = integration
+
+            def defer_legacy_scan(connection, clause, multiparams, params, options):
+                if isinstance(clause, AddConstraint):
+                    constraint = clause.element
+                    if (
+                        constraint.table.schema is None
+                        and constraint.table.name == "audit_events"
+                        and constraint.name == "ck_audit_events_operation"
+                        and str(constraint.sqltext) in legacy_checks
+                    ):
+                        constraint.dialect_options["postgresql"]["not_valid"] = True
+
+            # Existing rows may span sibling histories; only the final bounded union
+            # may commit. The connection listener never participates in old targets.
+            event.listen(connection, "before_execute", defer_legacy_scan)
+            try:
+                context.run_migrations()
+                validated = connection.scalar(
+                    text(
+                        "SELECT convalidated FROM pg_constraint "
+                        "WHERE conrelid='audit_events'::regclass "
+                        "AND conname='ck_audit_events_operation'"
+                    )
+                )
+                if context.get_context().get_current_heads() != (target,) or validated is not True:
+                    raise RuntimeError("audit migration integration incomplete")
+            finally:
+                event.remove(connection, "before_execute", defer_legacy_scan)
 
 
 run_migrations_online()
