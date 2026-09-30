@@ -154,3 +154,62 @@ def test_unauthenticated_resolution_returns_bearer_challenge(client: TestClient)
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
+
+
+@pytest.mark.parametrize(
+    ("path", "request_id"),
+    (
+        ("/v1/skills/INVALID/1.0.0/resolve", "195fa25c-cdd3-4c89-87a6-dd4cf1c79d80"),
+        ("/v1/skills/valid-skill/1.0/resolve", "b1eb3959-9358-425b-92dc-c5a6fb239e99"),
+        (
+            f"/v1/skills/valid-skill/1.0.{'1' * 29}/resolve",
+            "e411734b-2ddf-46d5-93cc-655fbca3fa2b",
+        ),
+    ),
+)
+def test_malformed_paths_return_correlated_terminal_validation_audit(
+    client: TestClient, path: str, request_id: str
+) -> None:
+    response = client.get(path, headers={"X-Request-ID": request_id})
+    with psycopg.connect(DATABASE_URL) as connection:
+        row = connection.execute(
+            "SELECT operation, action, stage, response_status, outcome, reason_code, "
+            "identity, resource FROM audit_events WHERE correlation->>'request_id'=%s",
+            (request_id,),
+        ).fetchone()
+
+    body = response.json()
+    assert (
+        response.status_code,
+        body.get("request_id"),
+        body.get("retryable"),
+        body.get("error", {}).get("code"),
+        row,
+    ) == (
+        422,
+        request_id,
+        False,
+        "contract_validation_failed",
+        (
+            "skills.resolve",
+            "invoke",
+            "validation",
+            422,
+            "error",
+            "contract_validation_failed",
+            None,
+            None,
+        ),
+    )
+
+
+def test_resolution_openapi_keeps_bounded_path_patterns(client: TestClient) -> None:
+    operation = client.get("/openapi.json").json()["paths"][
+        "/v1/skills/{skill_id}/{version}/resolve"
+    ]["get"]
+    patterns = {param["name"]: param["schema"]["pattern"] for param in operation["parameters"]}
+
+    assert patterns == {
+        "skill_id": r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$",
+        "version": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
+    }

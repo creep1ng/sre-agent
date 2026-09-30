@@ -1,5 +1,6 @@
 """Grant-governed access to exact-version instruction-only Skills."""
 
+import re
 from time import monotonic
 from typing import Annotated, Any
 from uuid import UUID, uuid4
@@ -39,6 +40,23 @@ class SkillResolutionService:
     ) -> JSONResponse:
         started = monotonic()
         resource_id = f"{skill_id}@{version}"
+        if (
+            re.fullmatch(_SKILL_ID_PATTERN, skill_id) is None
+            or len(version) > 32
+            or re.fullmatch(_VERSION_PATTERN, version) is None
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                {
+                    "error": {
+                        "code": "contract_validation_failed",
+                        "message": "Request validation failed.",
+                    }
+                },
+                error_code="contract_validation_failed",
+            )
         try:
             context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, "invoke", "skill", resource_id
@@ -105,7 +123,11 @@ class SkillResolutionService:
             stage = (
                 "authorization"
                 if context is not None and evaluation is not None
-                else ("authentication" if status == 401 else "audit")
+                else (
+                    "validation"
+                    if status == 422
+                    else ("authentication" if status == 401 else "audit")
+                )
             )
             event = self.projector.control_event(
                 request_id,
@@ -166,8 +188,8 @@ def skill_resolution_router(service: SkillResolutionService) -> APIRouter:
     )
     async def resolve_skill(
         request: Request,
-        skill_id: Annotated[str, Path(pattern=_SKILL_ID_PATTERN)],
-        version: Annotated[str, Path(pattern=_VERSION_PATTERN)],
+        skill_id: Annotated[str, Path(json_schema_extra={"pattern": _SKILL_ID_PATTERN})],
+        version: Annotated[str, Path(json_schema_extra={"pattern": _VERSION_PATTERN})],
         _bearer: Annotated[
             HTTPAuthorizationCredentials | None,
             Security(bearer),
