@@ -45,9 +45,22 @@ Test SHA-256: `ff8bf3e4fe02ee31c1e7d1df471a1431d7507a42240637dc899bbd2a8f6b447e`
 
 `node --check` for source and test plus `git diff --check` passed. Private TAP
 outputs: `/tmp/issue45-gateway-root-evidence/url-red.log` and `url-green.log`.
-No screenshot was captured; genuine rendered evidence and parent-owned
-independent review, hosted CI and publication remain pending.
+At the initial code freeze no screenshot had been captured; hosted CI and publication were pending.
 
 Parent independently reran the exact source/test hashes above: 2/2 passed,
-with hashes unchanged. This is local controlled proof; no screenshot or hosted
-CI/publication exists for this correction yet.
+with hashes unchanged. This is local controlled proof; hosted CI/publication were pending at that checkpoint.
+
+## Current screenshot and scope
+
+[Actual controlled evidence](gateway-root.png): PNG1600×3400,185878bytes, SHA-256
+`56bc41f324877a53ab9dc1ecc1bb3a4fb7a279003550f0d314c3969115133587`.
+Existing sandboxed host Chromium captured the actual parent Docker TAP output,
+tested assertions and source/test hash footer from offline HTML with CSP blocking
+external assets. The image was visually inspected and contains only controlled
+fixture output; no live tokens, personal data or confidential payloads.
+This is a screenshot of the controlled HTTP/CLI evidence reproduced above, not
+proof that containerized Chromium or the separate PR424 Markdown preview works.
+Source/test bytes remain those independently tested at local commit `f23e9a01f01b0ef85c3a7a43a134e413af0a87dc`;
+the later metadata/media commit does not change executable behavior. Human review
+and candidate-bound hosted CI remain pending. Revert this corrective unit to
+restore its parent; unsupported gateway path prefixes are intentionally rejected.
