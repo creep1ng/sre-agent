@@ -226,6 +226,7 @@ class SkillResolutionService:
         resource_ref: tuple[str, str] | None = None,
         error_code: str | None = None,
     ) -> JSONResponse:
+        retryable = status == 503
         try:
             stage = (
                 "authorization"
@@ -244,6 +245,7 @@ class SkillResolutionService:
                 operation="skills.resolve",
                 action="invoke",
                 reason=error_code,
+                retryable=retryable,
                 context=context if stage == "authorization" else None,
                 resource_ref=resource_ref if stage == "authorization" else None,
                 decision=evaluation.decision if stage == "authorization" else None,
@@ -262,7 +264,7 @@ class SkillResolutionService:
                 status_code=503,
             )
         return JSONResponse(
-            {**payload, "request_id": str(request_id), "retryable": False},
+            {**payload, "request_id": str(request_id), "retryable": retryable},
             status_code=status,
             headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
         )
