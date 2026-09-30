@@ -80,6 +80,145 @@ async def test_same_version_replay_is_idempotent_and_changed_bytes_collide() -> 
         await database.dispose()
 
 
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "chunk_content_update",
+        "chunk_delete",
+        "document_metadata_update",
+        "document_content_hash_update",
+    ],
+)
+@pytest.mark.asyncio
+async def test_exact_replay_rejects_persisted_child_drift_without_repairing(drift: str) -> None:
+    """An unchanged owner manifest cannot certify mutated or missing child rows."""
+    collection_id = f"replay-integrity-{drift}"
+    original = bundle(collection_id=collection_id, content="original content")
+    database = Database(DATABASE_URL)
+    try:
+        async with database.transaction() as session:
+            assert await ingest_bundle(session, original) is True
+        async with database.sessions() as session:
+            original_manifest = (
+                await session.execute(
+                    text(
+                        "SELECT manifest_sha256 FROM bok_collection_versions "
+                        "WHERE collection_id=:collection_id AND version='1.0.0'"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            ).scalar_one()
+
+        async with database.transaction() as session:
+            if drift == "chunk_content_update":
+                result = await session.execute(
+                    text(
+                        "UPDATE bok_section_chunks SET content='changed child content' "
+                        "WHERE collection_id=:collection_id AND version='1.0.0' "
+                        "AND document_id='doc-1' AND section_id='section-1' AND chunk_index=0"
+                    ),
+                    {"collection_id": collection_id},
+                )
+                assert result.rowcount == 1
+            elif drift == "chunk_delete":
+                result = await session.execute(
+                    text(
+                        "DELETE FROM bok_section_chunks WHERE collection_id=:collection_id "
+                        "AND version='1.0.0' AND document_id='doc-1' "
+                        "AND section_id='section-1' AND chunk_index=0"
+                    ),
+                    {"collection_id": collection_id},
+                )
+                assert result.rowcount == 1
+            elif drift == "document_metadata_update":
+                result = await session.execute(
+                    text(
+                        "UPDATE bok_documents SET title='changed child metadata' "
+                        "WHERE collection_id=:collection_id AND version='1.0.0' "
+                        "AND document_id='doc-1'"
+                    ),
+                    {"collection_id": collection_id},
+                )
+                assert result.rowcount == 1
+            else:
+                result = await session.execute(
+                    text(
+                        "UPDATE bok_documents SET content_sha256=:content_sha256 "
+                        "WHERE collection_id=:collection_id AND version='1.0.0' "
+                        "AND document_id='doc-1'"
+                    ),
+                    {"collection_id": collection_id, "content_sha256": "0" * 64},
+                )
+                assert result.rowcount == 1
+
+        async with database.sessions() as session:
+            persisted_manifest = (
+                await session.execute(
+                    text(
+                        "SELECT manifest_sha256 FROM bok_collection_versions "
+                        "WHERE collection_id=:collection_id AND version='1.0.0'"
+                    ),
+                    {"collection_id": collection_id},
+                )
+            ).scalar_one()
+        assert persisted_manifest == original_manifest
+
+        with pytest.raises(BoKVersionCollision, match="collection_version_collision"):
+            async with database.transaction() as session:
+                await ingest_bundle(session, original)
+
+        async with database.sessions() as session:
+            if drift == "chunk_content_update":
+                persisted_child = (
+                    await session.execute(
+                        text(
+                            "SELECT content FROM bok_section_chunks "
+                            "WHERE collection_id=:collection_id AND version='1.0.0' "
+                            "AND document_id='doc-1' AND section_id='section-1' AND chunk_index=0"
+                        ),
+                        {"collection_id": collection_id},
+                    )
+                ).scalar_one()
+                assert persisted_child == "changed child content"
+            elif drift == "chunk_delete":
+                chunk_count = (
+                    await session.execute(
+                        text(
+                            "SELECT count(*) FROM bok_section_chunks "
+                            "WHERE collection_id=:collection_id AND version='1.0.0'"
+                        ),
+                        {"collection_id": collection_id},
+                    )
+                ).scalar_one()
+                assert chunk_count == 0
+            elif drift == "document_metadata_update":
+                persisted_child = (
+                    await session.execute(
+                        text(
+                            "SELECT title FROM bok_documents "
+                            "WHERE collection_id=:collection_id AND version='1.0.0' "
+                            "AND document_id='doc-1'"
+                        ),
+                        {"collection_id": collection_id},
+                    )
+                ).scalar_one()
+                assert persisted_child == "changed child metadata"
+            else:
+                persisted_child = (
+                    await session.execute(
+                        text(
+                            "SELECT content_sha256 FROM bok_documents "
+                            "WHERE collection_id=:collection_id AND version='1.0.0' "
+                            "AND document_id='doc-1'"
+                        ),
+                        {"collection_id": collection_id},
+                    )
+                ).scalar_one()
+                assert persisted_child == "0" * 64
+    finally:
+        await database.dispose()
+
+
 @pytest.mark.asyncio
 async def test_activation_requires_ready_owner_version_and_seed_converges() -> None:
     database = Database(DATABASE_URL)

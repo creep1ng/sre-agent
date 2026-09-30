@@ -72,6 +72,73 @@ def _digest(bundle: dict[str, Any]) -> str:
     return sha256(encoded.encode("utf-8")).hexdigest()
 
 
+async def _persisted_children_match(session: AsyncSession, bundle: dict[str, Any]) -> bool:
+    collection_id = bundle["collection_id"]
+    version = bundle["version"]
+    expected_documents = []
+    expected_chunks = []
+    for document in bundle["documents"]:
+        document_id = document["document_id"]
+        chunks = document["chunks"]
+        content = "\n".join(chunk["content"] for chunk in chunks)
+        expected_documents.append(
+            (
+                document_id,
+                document["title"],
+                document["source_ref"],
+                sha256(content.encode("utf-8")).hexdigest(),
+            )
+        )
+        expected_chunks.extend(
+            (
+                document_id,
+                chunk["section_id"],
+                chunk["chunk_index"],
+                chunk["content"],
+            )
+            for chunk in chunks
+        )
+
+    scope = (
+        BoKDocumentRow.collection_id == collection_id,
+        BoKDocumentRow.version == version,
+    )
+    persisted_documents = (
+        (
+            await session.execute(
+                select(
+                    BoKDocumentRow.document_id,
+                    BoKDocumentRow.title,
+                    BoKDocumentRow.source_ref,
+                    BoKDocumentRow.content_sha256,
+                ).where(*scope)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    persisted_chunks = (
+        (
+            await session.execute(
+                select(
+                    BoKSectionChunkRow.document_id,
+                    BoKSectionChunkRow.section_id,
+                    BoKSectionChunkRow.chunk_index,
+                    BoKSectionChunkRow.content,
+                ).where(
+                    BoKSectionChunkRow.collection_id == collection_id,
+                    BoKSectionChunkRow.version == version,
+                )
+            )
+        )
+        .tuples()
+        .all()
+    )
+    return sorted(expected_documents) == sorted(persisted_documents) and sorted(
+        expected_chunks
+    ) == sorted(persisted_chunks)
+
+
 async def ingest_bundle(session: AsyncSession, bundle: dict[str, Any]) -> bool:
     """Insert a complete immutable version, or return False for an exact replay."""
     digest = _digest(bundle)
@@ -80,6 +147,8 @@ async def ingest_bundle(session: AsyncSession, bundle: dict[str, Any]) -> bool:
     existing = await session.get(BoKCollectionVersionRow, (collection_id, version))
     if existing is not None:
         if existing.manifest_sha256 != digest:
+            raise BoKVersionCollision("collection_version_collision")
+        if not await _persisted_children_match(session, bundle):
             raise BoKVersionCollision("collection_version_collision")
         return False
 
