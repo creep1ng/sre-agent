@@ -1,0 +1,28 @@
+{
+  "foundation": {
+    "source_sha": "1b70672629d0c65b393fc6d31022f6a04207b615",
+    "base_sha": "5b6109bd2c8100455136cf12ce91c52830833c7f",
+    "runtime_image": "sha256:5a0c4893411bb6a31bd5efe73ed12c32552b36f5213e83076625ba4766462df0",
+    "checks_image": "sha256:e114368c4667f4b87c91a974229849f0fb5aff299f429271cbd30c6e6273e21e",
+    "head": "20260929_15",
+    "ci_run": "36660022792"
+  },
+  "retrieval": {
+    "source_sha": "c37c3403c374350be676a56e9989132fdc200c8d",
+    "base_sha": "1b70672629d0c65b393fc6d31022f6a04207b615",
+    "runtime_image": "sha256:4f33ab086d14da15df18098adc53ed2cb59398f0573954c1b0c0111d327cea38",
+    "checks_image": "sha256:4aa6186e275b6cb7d0345edbf97dc73d7e5575f39101d3be2813f49cf2cc89e6",
+    "head": "20260929_16",
+    "ci_run": "36660634684"
+  },
+  "shared": {
+    "python": "3.12.14",
+    "docker_server": "29.8.1",
+    "compose": "5.5.1",
+    "runtime_user": "65532:65532",
+    "postgres_image": "postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5",
+    "uv_lock_sha256": "783c78b44e4ab07091d0ee1d44a693b77f1ec0fdc94f9aa3c0e212cd34dc878b",
+    "browser": "Chromium headless; fresh profiles; background networking disabled; DNS blocked",
+    "runtime_cleanup": "Both owned API foreground handles exited0; both named tmpfs projects removed without volumes/global cleanup."
+  }
+}

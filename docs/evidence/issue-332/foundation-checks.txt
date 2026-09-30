@@ -1,0 +1,8 @@
+Observed local verification summary for the tree frozen as 1b70672629d0c65b393fc6d31022f6a04207b615.
+Pre-freeze writer output; parent separately verified source preservation and current source checks.
+All checks passed!
+166 files already formatted
+Contracts: 5 kept, 0 broken.
+Success: no issues found in 12 source files
+================== 1223 passed, 1 skipped in 82.95s (0:01:22) ==================
+No new upgrade operations detected.

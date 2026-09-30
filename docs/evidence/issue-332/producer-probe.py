@@ -1,0 +1,208 @@
+"""Run only inside the checks image against its disposable isolated PostgreSQL database.
+
+The caller must first run assert_test_database_isolated.py. Credentials are generated
+in memory, used for the synthetic seed/HTTP requests, and never printed or serialized.
+"""
+import asyncio
+import copy
+import json
+import os
+import sys
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+
+import httpx
+import psycopg
+from psycopg import sql
+
+from sre_agent.bok.owner import (
+    DEMO_BUNDLES, BoKVersionCollision, activate_version, ingest_bundle, seed_bok_demo,
+)
+from sre_agent.persistence.api_keys import generate_api_key
+from sre_agent.persistence.database import Database
+from sre_agent.persistence.seeds import KEY_ENV, SeedSettings, seed
+
+mode, source_sha = sys.argv[1:3]
+assert mode in {"foundation", "retrieval"}
+assert os.environ["DATABASE_URL"] == os.environ["TEST_DATABASE_URL"]
+dsn = os.environ["TEST_DATABASE_URL"]
+keys = {name: generate_api_key() for name in KEY_ENV}
+observed = []
+result = {
+    "source_sha": source_sha, "mode": mode,
+    "captured_at_utc": datetime.now(UTC).isoformat(),
+    "evidence_kind": "controlled integration",
+    "surface": "Runtime FastAPI over TCP plus real disposable PostgreSQL",
+    "observations": observed,
+}
+
+
+def record(name, **data):
+    observed.append({"scenario": name, **data})
+
+
+async def bootstrap():
+    database = Database(dsn)
+    try:
+        settings = SeedSettings.from_environment({
+            **keys, "TRIAGE_AGENT_MODEL": "openai/gpt-4o-mini",
+            "TRIAGE_AGENT_PROVIDER": "openai",
+            "REMEDIATION_AGENT_MODEL": "anthropic/claude-3.5-haiku",
+            "REMEDIATION_AGENT_PROVIDER": "anthropic",
+        })
+        assert await seed(database, settings)
+        async with database.transaction() as session:
+            first = await seed_bok_demo(session)
+        async with database.transaction() as session:
+            replay = await seed_bok_demo(session)
+        assert first is True and replay is False
+        record("immutable_seed_replay", first_created=first, replay_created=replay)
+        changed = copy.deepcopy(DEMO_BUNDLES[0])
+        changed["documents"][0]["chunks"][0]["content"] = "Changed synthetic collision probe."
+        try:
+            async with database.transaction() as session:
+                await ingest_bundle(session, changed)
+        except BoKVersionCollision:
+            record("same_version_collision", outcome="rejected; original persisted bytes retained")
+        else:
+            raise AssertionError("changed bytes accepted")
+        empty = copy.deepcopy(DEMO_BUNDLES[0])
+        empty["collection_id"] = "proof-unready"
+        empty["documents"][0]["chunks"][0]["content"] = ""
+        async with database.transaction() as session:
+            await ingest_bundle(session, empty)
+        try:
+            async with database.transaction() as session:
+                await activate_version(session, "proof-unready", "1.0.0")
+        except ValueError as error:
+            assert str(error) == "bok_version_not_ready"
+            record("empty_activation", outcome="bok_version_not_ready")
+        else:
+            raise AssertionError("empty owner version activated")
+    finally:
+        await database.dispose()
+
+
+asyncio.run(bootstrap())
+with psycopg.connect(dsn, autocommit=True) as connection:
+    query = """SELECT v.collection_id, v.version, v.status,
+        (SELECT count(*) FROM bok_documents d WHERE d.collection_id=v.collection_id AND d.version=v.version),
+        (SELECT count(*) FROM bok_section_chunks c WHERE c.collection_id=v.collection_id AND c.version=v.version)
+        FROM bok_collection_versions v WHERE v.collection_id LIKE 'demo-%' ORDER BY v.collection_id"""
+    rows = connection.execute(query).fetchall()
+    assert rows == [(b["collection_id"], "1.0.0", "active", 1, 1) for b in DEMO_BUNDLES]
+    record("persisted_demo_rows", sql=query, columns=["collection_id", "version", "status", "documents", "chunks"], rows=rows)
+    original = connection.execute("SELECT content FROM bok_section_chunks WHERE collection_id='demo-incident-response'").fetchone()[0]
+    assert original == DEMO_BUNDLES[0]["documents"][0]["chunks"][0]["content"]
+    record("collision_preserves_original", unchanged=True)
+    revision = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+    assert revision == ("20260929_15" if mode == "foundation" else "20260929_16")
+    record("schema_head", revision=revision)
+    if mode == "retrieval":
+        for principal, collection in (("demo-human", "demo-incident-response"), ("restricted-harness", "demo-platform-operations")):
+            for action in ("bok.search", "bok.read"):
+                connection.execute("""INSERT INTO grants (grant_id,principal_id,action,resource_type,resource_id,effect,status,created_at)
+                    VALUES (%s,%s,%s,'bok_collection',%s,'allow','active',now())""",
+                    (f"proof-{principal}-{action.replace('.', '-')}", principal, action, f"{collection}@1.0.0"))
+        connection.execute("""INSERT INTO resources (resource_type,resource_id,status,owner_id,source,source_ref,display_name,visibility,description,tags)
+            VALUES ('bok_collection','proof-unready@1.0.0','active','bok-platform','bok','proof-unready@1.0.0','Synthetic unready','private','Empty proof corpus','[]')""")
+        connection.execute("""INSERT INTO grants (grant_id,principal_id,action,resource_type,resource_id,effect,status,created_at)
+            VALUES ('proof-unready-search','demo-human','bok.search','bok_collection','proof-unready@1.0.0','allow','active',now())""")
+        grants = connection.execute("SELECT principal_id,action,resource_type,resource_id FROM grants WHERE grant_id LIKE 'proof-%' ORDER BY principal_id,action,resource_id").fetchall()
+        record("exact_synthetic_grants", columns=["principal_id", "action", "resource_type", "resource_id"], rows=grants)
+
+client = httpx.Client(base_url="http://api:8000", timeout=10, trust_env=False)
+for attempt in range(40):
+    try:
+        ready = client.get("/health/ready")
+        if ready.status_code == 200:
+            break
+    except httpx.TransportError:
+        pass
+    time.sleep(0.5)
+else:
+    raise AssertionError("runtime API did not become ready")
+record("runtime_readiness", method="GET", path="/health/ready", status=ready.status_code, body=ready.json())
+
+
+def request(name, method, path, expected, key=None, body=None):
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    response = client.request(method, path, headers=headers, json=body)
+    value = response.json()
+    assert response.status_code == expected, (name, response.status_code)
+    record(name, method=method, path=path, status=response.status_code, body=value)
+    return value
+
+
+def url(collection):
+    return f"/v1/bok/collections/{collection}/versions/1.0.0"
+
+
+if mode == "foundation":
+    request("retrieval_not_part_of_foundation", "POST", url("demo-incident-response") + "/search", 404,
+            body={"query": "severity"})
+else:
+    demo, restricted = keys["DEMO_HUMAN_API_KEY"], keys["RESTRICTED_HARNESS_API_KEY"]
+    for bundle, key, other in ((DEMO_BUNDLES[0], demo, restricted), (DEMO_BUNDLES[1], restricted, demo)):
+        collection = bundle["collection_id"]
+        document = bundle["documents"][0]
+        chunk = document["chunks"][0]
+        body = {"query": "severity OR rollback", "limit": 5}
+        found = request(f"{collection}_allowed", "POST", url(collection) + "/search", 200, key, body)
+        assert len(found["results"]) == 1
+        expected = {"collection_id": collection, "version": "1.0.0", "document_id": document["document_id"],
+                    "title": document["title"], "source_ref": document["source_ref"], **chunk}
+        assert {k: v for k, v in found["results"][0].items() if k != "score"} == expected
+        direct_path = url(collection) + f"/chunks/{document['document_id']}/{chunk['section_id']}/0"
+        direct = request(f"{collection}_direct", "GET", direct_path, 200, key)
+        assert direct == expected
+        request(f"{collection}_other_identity", "POST", url(collection) + "/search", 403, other, body)
+        request(f"{collection}_direct_denied", "GET", direct_path, 403, other)
+    request("unauthenticated", "POST", url("demo-incident-response") + "/search", 401, body={"query": "severity"})
+    empty = request("authorized_no_match", "POST", url("demo-incident-response") + "/search", 200, demo, {"query": "nonexistent-needle"})
+    assert empty == {"results": []}
+    request("authorized_exact_miss", "GET", url("demo-incident-response") + "/chunks/unknown/unknown/0", 404, demo)
+    request("owner_unready", "POST", url("proof-unready") + "/search", 503, demo, {"query": "severity"})
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        for kind, table, column, value, state, status in (
+            ("grant_revocation", "grants", "grant_id", "proof-restricted-harness-bok-search", "revoked", 403),
+            ("catalog_deactivation", "resources", "resource_id", "demo-platform-operations@1.0.0", "inactive", 403),
+            ("owner_revocation", "bok_collection_versions", "collection_id", "demo-platform-operations", "revoked", 503),
+        ):
+            statement = sql.SQL("UPDATE {} SET status=%s WHERE {}=%s").format(sql.Identifier(table), sql.Identifier(column))
+            try:
+                connection.execute(statement, (state, value))
+                request(kind, "POST", url("demo-platform-operations") + "/search", status, restricted, {"query": "rollback"})
+            finally:
+                connection.execute(statement, ("active", value))
+            request(kind + "_restored", "POST", url("demo-platform-operations") + "/search", 200, restricted, {"query": "rollback"})
+        for table in ("bok_section_chunks", "credentials"):
+            rename = sql.SQL("ALTER TABLE {} RENAME TO {}").format(sql.Identifier(table), sql.Identifier("proof_unavailable_" + table))
+            restore = sql.SQL("ALTER TABLE {} RENAME TO {}").format(sql.Identifier("proof_unavailable_" + table), sql.Identifier(table))
+            try:
+                connection.execute(rename)
+                if table == "bok_section_chunks":
+                    request("denied_while_content_storage_unavailable", "POST", url("demo-platform-operations") + "/search", 403, demo, {"query": "rollback"})
+                failed = request(table + "_storage_failure", "POST", url("demo-incident-response") + "/search", 503, demo, {"query": "severity"})
+                assert failed["error"]["code"] == "storage_unavailable"
+            finally:
+                connection.execute(restore)
+        events = [r[0] for r in connection.execute("SELECT to_jsonb(audit_events) FROM audit_events WHERE operation IN ('bok.search','bok.read') ORDER BY occurred_at,event_id")]
+        serialized = json.dumps(events, default=str)
+        for private in [*keys.values(), "severity OR rollback", "nonexistent-needle", *[b["documents"][0]["chunks"][0]["content"] for b in DEMO_BUNDLES]]:
+            assert private not in serialized
+        assert all(row["content_state"] == "absent" and row["redacted_content"] is None for row in events)
+        record("persisted_metadata_only_audit", rows=[{
+            "operation": row["operation"], "stage": row["stage"], "status": row["response_status"],
+            "decision": row["policy_decision"]["decision"] if row["policy_decision"] else None,
+            "identity_present": row["identity"] is not None, "resource_present": row["resource"] is not None,
+            "content_state": row["content_state"],
+        } for row in events], query_fragment_credential_scan="passed")
+client.close()
+result["outcome"] = "all assertions passed"
+result["storage_observer_scope"] = "Network probe reads persisted owner/audit SQL. Zero-content-read counts are independently covered by source TestClient SQL observer tests; not measured by this network process."
+encoded = json.dumps(result, indent=2, default=str) + "\n"
+assert all(secret not in encoded for secret in keys.values())
+Path(f"/evidence/{mode}-results.json").write_text(encoded)
+print(json.dumps({"mode": mode, "source_sha": source_sha, "scenarios": len(observed), "outcome": result["outcome"]}))

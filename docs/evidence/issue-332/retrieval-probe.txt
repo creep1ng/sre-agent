@@ -1,0 +1,7 @@
+{
+  "mode": "retrieval",
+  "source_sha": "c37c3403c374350be676a56e9989132fdc200c8d",
+  "scenarios": 30,
+  "outcome": "all assertions passed",
+  "exit": 0
+}

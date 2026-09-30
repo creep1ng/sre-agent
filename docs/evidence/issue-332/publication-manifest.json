@@ -1,0 +1,121 @@
+{
+  "proposed_repository_directory": "docs/evidence/issue-332",
+  "publication_status": "prepared locally; parent must publish and bind actual evidence commit",
+  "scan": "no personal paths, known safe-config secrets or serialized API keys detected; all three PNGs visually inspected",
+  "files": [
+    {
+      "path": "foundation-capture.html",
+      "bytes": 2995,
+      "sha256": "6519025dcf88278c6055a8777682948713eacfe1862ec94283c3ff30c072c1e0",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "foundation-checks.txt",
+      "bytes": 438,
+      "sha256": "388a478f55c0f24cf9a0cef95a85ba766e6cc57b3e9d33f0d915765db27a8e66",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "foundation-probe.txt",
+      "bytes": 156,
+      "sha256": "4e97685cd532362ec3abb1caf91d85b060e6c25dbb050bed5c0a44deab378106",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "foundation-report.md",
+      "bytes": 5048,
+      "sha256": "63e4ee7088f47df65f621fd9479ab8bcf76b94fab84473c87bf6fb98a261b947",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "foundation-results.json",
+      "bytes": 2319,
+      "sha256": "bdb6105c5eae09750992319446272f33d66c57cd8343ae2a75d56592bd055096",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "foundation.png",
+      "bytes": 118822,
+      "sha256": "d834cce67ec939cc695a7369cc88ca35b42850936d9f6bc356e48e00e2fe3161",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "producer-probe.py",
+      "bytes": 12299,
+      "sha256": "24cafb4b9152be7df50506ed9bbb3079e2c1886ccdeab0b8988491281701ae58",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "provenance.json",
+      "bytes": 1357,
+      "sha256": "8e6ac98d9a05d183b0787c276bf4d4f6b054f2b680370f25ea21b7eb14cacae6",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "render-captures.py",
+      "bytes": 4089,
+      "sha256": "a4c48a3cf6732589deb8595508b93bc8c1dd01ee9ed37b02d1133ce42d2fe74e",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "reproduction.md",
+      "bytes": 5683,
+      "sha256": "dad3f26e5f6777e9fa70711d2cb364c24b37e8ae4600ab263d9d14e7debbebb6",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval-audit-capture.html",
+      "bytes": 4333,
+      "sha256": "3c451beae9af23596eaf9e37e224e0685feaa25dc3d80238132373292267879a",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval-audit.png",
+      "bytes": 164759,
+      "sha256": "558691c8b959c613d49b88456948ca8738d28a5cec628c92476b7560e26d314a",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval-capture.html",
+      "bytes": 4975,
+      "sha256": "dfa9275da0b6846eac9b8483a75c3ceff71a9cbd846ea5f43732ea1c49bfd9bc",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval-checks.txt",
+      "bytes": 445,
+      "sha256": "5fc5214b1d44a1da6202d50da66a133feee70c9c22235908e1c00a7885b927c9",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval-probe.txt",
+      "bytes": 156,
+      "sha256": "f9333ddf622662586038d5adfb06ce7625d3b1e69e5cc7a8e6e3f9efd1ec832a",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval-report.md",
+      "bytes": 10140,
+      "sha256": "0b035206022fd236c4158463213f5c6f54350662ff0191baabb3b4d23bd72140",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval-results.json",
+      "bytes": 18684,
+      "sha256": "e892da861dc86f0366dbeeea6de4d126e647ca5849c1e93d46ae4544c2b2e382",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "retrieval.png",
+      "bytes": 176390,
+      "sha256": "dd87eb4e1eab293777cf8fe9c115ae4749357c2a3cd1b1db40e092aea2e5420a",
+      "purpose": "allowlisted evidence asset"
+    },
+    {
+      "path": "review-ledger.md",
+      "bytes": 6352,
+      "sha256": "ccb0ca98006db72e19e6fa3073d049808e0a4308e0f69a6c438a3a493af464de",
+      "purpose": "allowlisted evidence asset"
+    }
+  ]
+}

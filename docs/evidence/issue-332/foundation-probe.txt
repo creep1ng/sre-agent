@@ -1,0 +1,7 @@
+{
+  "mode": "foundation",
+  "source_sha": "1b70672629d0c65b393fc6d31022f6a04207b615",
+  "scenarios": 8,
+  "outcome": "all assertions passed",
+  "exit": 0
+}
