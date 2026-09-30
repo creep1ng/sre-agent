@@ -26,6 +26,8 @@ class SkillResolutionResponse(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     skill: SkillVersionRecord
+    request_id: UUID
+    retryable: bool
 
 
 class SkillResolutionService:
@@ -78,7 +80,9 @@ class SkillResolutionService:
             request_id,
             started,
             200,
-            SkillResolutionResponse(skill=skill).model_dump(mode="json"),
+            SkillResolutionResponse(skill=skill, request_id=request_id, retryable=False).model_dump(
+                mode="json"
+            ),
             context=context,
             evaluation=evaluation,
             resource_ref=("skill", resource_id),
@@ -131,6 +135,7 @@ class SkillResolutionService:
         return JSONResponse(
             {**payload, "request_id": str(request_id), "retryable": False},
             status_code=status,
+            headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
         )
 
 
