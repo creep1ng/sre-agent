@@ -832,19 +832,33 @@ class SkillVersionRepository:
             content_sha256=content_sha256,
             created_at=created_at,
         )
-        await CatalogRepository(self._session).create(
-            resource_type="skill",
-            resource_id=resource_id,
-            owner_id=owner_id,
-            source="skill",
-            source_ref=resource_id,
-            status="published",
-            display_name=manifest.display_name,
-            visibility="private",
-            description=manifest.description,
-            tags=[],
-            now=created_at,
-        )
+        catalog_row = await self._session.get(ResourceRow, ("skill", resource_id))
+        if catalog_row is not None:
+            if catalog_row.owner_id != owner_id:
+                raise SkillVersionConflictError(resource_id)
+            catalog_row.source = "skill"
+            catalog_row.source_ref = resource_id
+            catalog_row.status = "published"
+            catalog_row.display_name = manifest.display_name
+            catalog_row.visibility = "private"
+            catalog_row.description = manifest.description
+            catalog_row.tags = []
+            catalog_row.updated_at = created_at
+            await self._session.flush()
+        else:
+            await CatalogRepository(self._session).create(
+                resource_type="skill",
+                resource_id=resource_id,
+                owner_id=owner_id,
+                source="skill",
+                source_ref=resource_id,
+                status="published",
+                display_name=manifest.display_name,
+                visibility="private",
+                description=manifest.description,
+                tags=[],
+                now=created_at,
+            )
         self._session.add(row)
         await self._session.flush()
         return self._project(row)
