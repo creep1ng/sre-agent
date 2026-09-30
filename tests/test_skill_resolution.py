@@ -326,3 +326,39 @@ def test_direct_dependencies_reuse_verified_context_and_fail_closed_atomically(
     assert "PRIVATE_NESTED_ROOT_331" not in nested.text
     assert "PRIVATE_NESTED_331" not in nested.text
     assert "PRIVATE_TRANSITIVE_331" not in nested.text
+
+
+def test_resolution_openapi_declares_custom_validation_envelope(client: TestClient) -> None:
+    responses = client.get("/openapi.json").json()["paths"][
+        "/v1/skills/{skill_id}/{version}/resolve"
+    ]["get"]["responses"]
+    assert "422" in responses and "503" in responses
+    challenge = responses["401"]["headers"]["WWW-Authenticate"]
+    assert challenge["schema"] == {"type": "string"}
+    assert challenge["example"] == "Bearer"
+
+
+@pytest.mark.parametrize(
+    "skill_id,version,request_id",
+    (
+        ("Invalid!", "1.0.0", "30000000-0000-4000-8000-000000000001"),
+        ("valid-skill-id", "latest", "30000000-0000-4000-8000-000000000002"),
+    ),
+)
+def test_invalid_resolution_paths_return_correlated_audited_422(
+    client: TestClient, skill_id: str, version: str, request_id: str
+) -> None:
+    response = client.get(
+        f"/v1/skills/{skill_id}/{version}/resolve",
+        headers={**headers(INCIDENT_KEY), "X-Request-ID": request_id},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["request_id"] == request_id
+    assert response.json()["error"]["code"] == "contract_validation_failed"
+    with psycopg.connect(DATABASE_URL) as connection:
+        audit = connection.execute(
+            "SELECT operation, response_status, outcome, reason_code FROM audit_events "
+            "WHERE correlation->>'request_id' = %s",
+            (request_id,),
+        ).fetchone()
+    assert audit == ("skills.resolve", 422, "error", "contract_validation_failed")

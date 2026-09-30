@@ -2,7 +2,7 @@
 
 import re
 from time import monotonic
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Path, Request, Security
@@ -16,7 +16,7 @@ from sre_agent.gateway.authentication import (
     authorize_governed_access,
     authorize_governed_access_for_context,
 )
-from sre_agent.gateway.responses import AuditStore
+from sre_agent.gateway.responses import AuditStore, ErrorEnvelope
 from sre_agent.governance.dto import SkillVersionRecord
 from sre_agent.persistence.repositories import SkillVersionRepository
 
@@ -33,7 +33,7 @@ class SkillResolutionResponse(BaseModel):
     skill: SkillVersionRecord
     dependencies: list[SkillVersionRecord]
     request_id: UUID
-    retryable: bool
+    retryable: Literal[False]
 
 
 class SkillResolutionService:
@@ -74,6 +74,19 @@ class SkillResolutionService:
                 {"error": {"code": "authentication_failed", "message": "Authentication failed."}},
                 error_code="authentication_failed",
             )
+        except Exception:
+            return await self._finish(
+                request_id,
+                started,
+                503,
+                {
+                    "error": {
+                        "code": "audit_unavailable",
+                        "message": "Audit unavailable.",
+                    }
+                },
+                error_code="audit_unavailable",
+            )
         if evaluation.decision.decision != "allow":
             return await self._finish(
                 request_id,
@@ -86,8 +99,22 @@ class SkillResolutionService:
                 error_code="resource_not_found",
             )
 
-        async with self.sessions() as session:
-            skill = await SkillVersionRepository(session).get(skill_id, version)
+        try:
+            async with self.sessions() as session:
+                skill = await SkillVersionRepository(session).get(skill_id, version)
+        except Exception:
+            return await self._finish(
+                request_id,
+                started,
+                503,
+                {
+                    "error": {
+                        "code": "audit_unavailable",
+                        "message": "Audit unavailable.",
+                    }
+                },
+                error_code="audit_unavailable",
+            )
         if skill is None:
             return await self._finish(
                 request_id,
@@ -103,13 +130,27 @@ class SkillResolutionService:
         authorized_dependencies: list[tuple[str, Any]] = []
         for dependency in skill.manifest.dependencies:
             dependency_id = f"{dependency.skill_id}@{dependency.version}"
-            dependency_evaluation = await authorize_governed_access_for_context(
-                self.sessions,
-                context,
-                "invoke",
-                "skill",
-                dependency_id,
-            )
+            try:
+                dependency_evaluation = await authorize_governed_access_for_context(
+                    self.sessions,
+                    context,
+                    "invoke",
+                    "skill",
+                    dependency_id,
+                )
+            except Exception:
+                return await self._finish(
+                    request_id,
+                    started,
+                    503,
+                    {
+                        "error": {
+                            "code": "audit_unavailable",
+                            "message": "Audit unavailable.",
+                        }
+                    },
+                    error_code="audit_unavailable",
+                )
             if dependency_evaluation.decision.decision != "allow":
                 return await self._finish(
                     request_id,
@@ -124,24 +165,38 @@ class SkillResolutionService:
             authorized_dependencies.append((dependency_id, dependency_evaluation))
 
         resolved_dependencies: list[SkillVersionRecord] = []
-        async with self.sessions() as session:
-            repository = SkillVersionRepository(session)
-            for dependency, (dependency_id, dependency_evaluation) in zip(
-                skill.manifest.dependencies, authorized_dependencies, strict=True
-            ):
-                resolved = await repository.get(dependency.skill_id, dependency.version)
-                if resolved is None or resolved.manifest.dependencies:
-                    return await self._finish(
-                        request_id,
-                        started,
-                        404,
-                        _UNAVAILABLE,
-                        context=context,
-                        evaluation=dependency_evaluation,
-                        resource_ref=("skill", dependency_id),
-                        error_code="resource_not_found",
-                    )
-                resolved_dependencies.append(resolved)
+        try:
+            async with self.sessions() as session:
+                repository = SkillVersionRepository(session)
+                for dependency, (dependency_id, dependency_evaluation) in zip(
+                    skill.manifest.dependencies, authorized_dependencies, strict=True
+                ):
+                    resolved = await repository.get(dependency.skill_id, dependency.version)
+                    if resolved is None or resolved.manifest.dependencies:
+                        return await self._finish(
+                            request_id,
+                            started,
+                            404,
+                            _UNAVAILABLE,
+                            context=context,
+                            evaluation=dependency_evaluation,
+                            resource_ref=("skill", dependency_id),
+                            error_code="resource_not_found",
+                        )
+                    resolved_dependencies.append(resolved)
+        except Exception:
+            return await self._finish(
+                request_id,
+                started,
+                503,
+                {
+                    "error": {
+                        "code": "audit_unavailable",
+                        "message": "Audit unavailable.",
+                    }
+                },
+                error_code="audit_unavailable",
+            )
 
         return await self._finish(
             request_id,
@@ -221,8 +276,20 @@ def skill_resolution_router(service: SkillResolutionService) -> APIRouter:
         "/v1/skills/{skill_id}/{version}/resolve",
         response_model=SkillResolutionResponse,
         responses={
-            401: {"description": "Authentication failed."},
-            404: {"description": "Skill unavailable."},
+            401: {
+                "model": ErrorEnvelope,
+                "description": "Authentication failed.",
+                "headers": {
+                    "WWW-Authenticate": {
+                        "description": "Bearer authentication challenge.",
+                        "schema": {"type": "string"},
+                        "example": "Bearer",
+                    }
+                },
+            },
+            404: {"model": ErrorEnvelope, "description": "Skill unavailable."},
+            422: {"model": ErrorEnvelope, "description": "Invalid skill path parameters."},
+            503: {"model": ErrorEnvelope, "description": "Audit unavailable."},
         },
         summary="Resolve one exact Skill version",
         operation_id="resolveSkillVersion",
