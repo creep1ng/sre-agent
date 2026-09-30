@@ -93,11 +93,14 @@ Its publication, hosted CI and human review remain parent-owned. See
 
 ## Rollback and next step
 
-P5 adds only a restricted invocation to the CLI, matching controlled E2E
-assertions, and stage documentation; no producer, runtime, configuration,
-migration or dependency changes. Roll back the P5 source, test, and P5-specific
-documentation together while preserving P3/P4 history and evidence. The later
-upstream-counter witness and real CA1–CA8 evidence remain separate work.
+P6 adds offline reconciliation to the CLI, matching controlled E2E assertions,
+and P6-specific stage documentation; no producer, runtime, configuration,
+migration or dependency changes. Roll back the P6 reconciliation and bounded
+file-reader source, its offline CLI tests, and P6-specific documentation together.
+Preserve P5 known-ID-first denial, retryable:false validation, distinct denial
+and discovery UUIDs, and the P3/P4 history and evidence. Offline reconciliation
+is implemented; actual upstream-counter capture/provenance and real CA1–CA8
+evidence remain separate pending work.
 Reassess each actual diff against its current base; retained source-line
 estimates do not justify an exception.
 
