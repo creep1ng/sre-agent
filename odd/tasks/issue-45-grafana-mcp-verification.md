@@ -325,3 +325,7 @@ Live [finding4142436803](https://github.com/creep1ng/sre-agent/pull/432#discussi
 Sole Luna high writer repairs only P5 source/test/report and this full tracker; no P6/producers/runtime/Compose/dependencies/cloud changes. Strict test-first runner unchanged cached Node22.14 networkless Docker. Parent owns Git/PNG/publication/current CI. Keep all dated history; no size-only trimming.
 
 Observed P5 retryable correction candidate: source `5aecebdcbdb4601296f8969a9832e7b51ed38280baa38ab4f7c3a01987ae6e00`; test `0429268af26e224df3b3b03a9c91942df846af23e6001e36092c543507703a4d`. Valid `retryable:false` is now summarized; true, missing, null, and string values fail with `restricted_invocation_not_denied`, while the five-request order, distinct IDs, privacy checks and `upstream_delta:null` remain asserted. P5-RET-R3 and P5-C remain pending parent independent verification, screenshot, mirror, commit/publication/current CI; P6 remains frozen, deliberately RED, and unmodified.
+
+## P5 retryable parent committed evidence checkpoint
+
+Exact `c2500771560c8e89b3e4d4656547ab8871146250` independently passed cached Docker syntax and HTTP/CLI2/2 with unchanged source5aecebdc/test0429268a. Real [fresh retryable PNG](../../docs/evidence/issue-45-pr04/known-id-retryable.png),SHA-256 `71ba7b1fc7b5ee7e9f302a8c30a45797b72974b3acc167295e6ad50bedb915b2`, visually inspected/sanitized. RET-R3/P5-C pending publication/currentCI; P6bc118 deliberately RED and frozen. All real CA1–CA8/human acceptance open.
