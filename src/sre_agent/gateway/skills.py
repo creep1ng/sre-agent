@@ -11,7 +11,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gateway.authentication import (
+    AuthenticationFailed,
+    authorize_governed_access,
+    authorize_governed_access_for_context,
+)
 from sre_agent.gateway.responses import AuditStore
 from sre_agent.governance.dto import SkillVersionRecord
 from sre_agent.persistence.repositories import SkillVersionRepository
@@ -27,6 +31,7 @@ class SkillResolutionResponse(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     skill: SkillVersionRecord
+    dependencies: list[SkillVersionRecord]
     request_id: UUID
     retryable: bool
 
@@ -83,7 +88,7 @@ class SkillResolutionService:
 
         async with self.sessions() as session:
             skill = await SkillVersionRepository(session).get(skill_id, version)
-        if skill is None or skill.manifest.dependencies:
+        if skill is None:
             return await self._finish(
                 request_id,
                 started,
@@ -94,13 +99,60 @@ class SkillResolutionService:
                 resource_ref=("skill", resource_id),
                 error_code="resource_not_found",
             )
+
+        authorized_dependencies: list[tuple[str, Any]] = []
+        for dependency in skill.manifest.dependencies:
+            dependency_id = f"{dependency.skill_id}@{dependency.version}"
+            dependency_evaluation = await authorize_governed_access_for_context(
+                self.sessions,
+                context,
+                "invoke",
+                "skill",
+                dependency_id,
+            )
+            if dependency_evaluation.decision.decision != "allow":
+                return await self._finish(
+                    request_id,
+                    started,
+                    404,
+                    _UNAVAILABLE,
+                    context=context,
+                    evaluation=dependency_evaluation,
+                    resource_ref=("skill", dependency_id),
+                    error_code="resource_not_found",
+                )
+            authorized_dependencies.append((dependency_id, dependency_evaluation))
+
+        resolved_dependencies: list[SkillVersionRecord] = []
+        async with self.sessions() as session:
+            repository = SkillVersionRepository(session)
+            for dependency, (dependency_id, dependency_evaluation) in zip(
+                skill.manifest.dependencies, authorized_dependencies, strict=True
+            ):
+                resolved = await repository.get(dependency.skill_id, dependency.version)
+                if resolved is None or resolved.manifest.dependencies:
+                    return await self._finish(
+                        request_id,
+                        started,
+                        404,
+                        _UNAVAILABLE,
+                        context=context,
+                        evaluation=dependency_evaluation,
+                        resource_ref=("skill", dependency_id),
+                        error_code="resource_not_found",
+                    )
+                resolved_dependencies.append(resolved)
+
         return await self._finish(
             request_id,
             started,
             200,
-            SkillResolutionResponse(skill=skill, request_id=request_id, retryable=False).model_dump(
-                mode="json"
-            ),
+            SkillResolutionResponse(
+                skill=skill,
+                dependencies=resolved_dependencies,
+                request_id=request_id,
+                retryable=False,
+            ).model_dump(mode="json"),
             context=context,
             evaluation=evaluation,
             resource_ref=("skill", resource_id),
@@ -175,8 +227,9 @@ def skill_resolution_router(service: SkillResolutionService) -> APIRouter:
         summary="Resolve one exact Skill version",
         operation_id="resolveSkillVersion",
         description=(
-            "Requires an active direct `invoke` grant for the exact version. Authorization is "
-            "checked before its instructions are read; unavailable versions share one response."
+            "Requires active direct `invoke` grants for the root and each pinned dependency. "
+            "Every grant is checked before content is read; unavailable versions share one "
+            "response. Nested dependencies are unsupported."
         ),
         openapi_extra={
             "x-governed-scope": {

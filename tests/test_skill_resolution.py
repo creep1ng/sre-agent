@@ -10,6 +10,7 @@ from test_control_acceptance import client as _client_fixture  # noqa: F401
 from test_control_acceptance import migrated_acceptance_database as _database_fixture  # noqa: F401
 
 from sre_agent.gateway.skills import SkillResolutionResponse
+from sre_agent.persistence import repositories
 
 INCIDENT_KEY = SEED_ENV["INCIDENT_HARNESS_API_KEY"]
 
@@ -43,15 +44,16 @@ def publish(
     assert response.status_code == 201
 
 
-def grant_invoke(skill_id: str) -> None:
+def grant_invoke(*skill_ids: str) -> None:
     with psycopg.connect(DATABASE_URL) as connection:
-        connection.execute(
-            "INSERT INTO grants "
-            "(grant_id, principal_id, action, resource_type, resource_id, effect, status, "
-            "created_at) VALUES (%s, 'incident-harness', 'invoke', 'skill', %s, 'allow', "
-            "'active', now())",
-            (f"grant-resolution-{skill_id}", f"{skill_id}@1.0.0"),
-        )
+        for skill_id in skill_ids:
+            connection.execute(
+                "INSERT INTO grants "
+                "(grant_id, principal_id, action, resource_type, resource_id, effect, status, "
+                "created_at) VALUES (%s, 'incident-harness', 'invoke', 'skill', %s, 'allow', "
+                "'active', now())",
+                (f"grant-resolution-{skill_id}", f"{skill_id}@1.0.0"),
+            )
 
 
 def activate(client: TestClient, skill_id: str, status: str) -> None:
@@ -103,11 +105,12 @@ def test_exact_version_read_authorizes_before_content_and_audits_metadata_only(
     assert str(resolved.request_id) == exact.json()["request_id"]
     assert resolved.retryable is False
     schema = client.get("/openapi.json").json()["components"]["schemas"]["SkillResolutionResponse"]
-    assert set(schema["properties"]) == {"skill", "request_id", "retryable"}
-    assert set(schema["required"]) == {"skill", "request_id", "retryable"}
+    assert set(schema["properties"]) == {"skill", "dependencies", "request_id", "retryable"}
+    assert set(schema["required"]) == {"skill", "dependencies", "request_id", "retryable"}
     assert exact.json()["skill"]["skill_id"] == "authorized-root-skill"
     assert exact.json()["skill"]["version"] == "1.0.0"
     assert exact.json()["skill"]["manifest"]["instructions"] == private_instructions
+    assert exact.json()["dependencies"] == []
 
     expected_error = dict(
         code="resource_not_found", message="The requested resource was not found."
@@ -137,7 +140,7 @@ def test_exact_version_read_authorizes_before_content_and_audits_metadata_only(
     dependency_audit = next(
         row for row in rows if row[2]["request_id"] == dependency_bearing.json()["request_id"]
     )
-    assert dependency_audit[7:] == (404, "error", "resource_not_found")
+    assert dependency_audit[7:] == (404, "denied", "no_matching_grant")
     assert all(
         instruction not in audit_json
         for instruction in (
@@ -213,3 +216,83 @@ def test_resolution_openapi_keeps_bounded_path_patterns(client: TestClient) -> N
         "skill_id": r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$",
         "version": r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$",
     }
+
+
+def test_direct_dependencies_reuse_verified_context_and_fail_closed_atomically(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dependency_ids = [f"direct-dependency-{index:02d}" for index in range(16)]
+    for skill_id in dependency_ids:
+        publish(client, skill_id, f"PRIVATE_{skill_id}_331")
+        activate(client, skill_id, "active")
+    root_id = "sixteen-dependency-root"
+    publish(
+        client,
+        root_id,
+        "PRIVATE_ROOT_331",
+        dependencies=[{"skill_id": item, "version": "1.0.0"} for item in dependency_ids],
+    )
+    activate(client, root_id, "active")
+    grant_invoke(root_id, *dependency_ids)
+
+    original_verify = repositories.verify_api_key
+    scrypt_verifications = 0
+
+    def counted_real_verification(key: str, encoded_hash: str) -> bool:
+        nonlocal scrypt_verifications
+        scrypt_verifications += 1
+        return original_verify(key, encoded_hash)
+
+    monkeypatch.setattr(repositories, "verify_api_key", counted_real_verification)
+    response = client.get(f"/v1/skills/{root_id}/1.0.0/resolve", headers=headers(INCIDENT_KEY))
+    assert response.status_code == 200, response.text
+    assert [item["skill_id"] for item in response.json()["dependencies"]] == dependency_ids
+    assert [item["manifest"]["instructions"] for item in response.json()["dependencies"]] == [
+        f"PRIVATE_{skill_id}_331" for skill_id in dependency_ids
+    ]
+    assert scrypt_verifications == 1
+
+    activate(client, dependency_ids[0], "inactive")
+    calls_before_inactive = scrypt_verifications
+    inactive = client.get(f"/v1/skills/{root_id}/1.0.0/resolve", headers=headers(INCIDENT_KEY))
+    assert inactive.status_code == 404
+    assert scrypt_verifications - calls_before_inactive == 1
+    assert "PRIVATE_ROOT_331" not in inactive.text
+    activate(client, dependency_ids[0], "active")
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "DELETE FROM grants WHERE principal_id='incident-harness' AND action='invoke' "
+            "AND resource_type='skill' AND resource_id=%s",
+            (f"{dependency_ids[-1]}@1.0.0",),
+        )
+    calls_before_denial = scrypt_verifications
+    denied = client.get(f"/v1/skills/{root_id}/1.0.0/resolve", headers=headers(INCIDENT_KEY))
+    assert denied.status_code == 404
+    assert scrypt_verifications - calls_before_denial == 1
+    assert "PRIVATE_ROOT_331" not in denied.text
+    assert all(f"PRIVATE_{skill_id}_331" not in denied.text for skill_id in dependency_ids)
+
+    nested_id = "nested-direct-dependency"
+    nested_root = "root-with-nested-dependency"
+    publish(client, "hidden-transitive-dep", "PRIVATE_TRANSITIVE_331")
+    publish(
+        client,
+        nested_id,
+        "PRIVATE_NESTED_331",
+        dependencies=[{"skill_id": "hidden-transitive-dep", "version": "1.0.0"}],
+    )
+    publish(
+        client,
+        nested_root,
+        "PRIVATE_NESTED_ROOT_331",
+        dependencies=[{"skill_id": nested_id, "version": "1.0.0"}],
+    )
+    for skill_id in (nested_id, nested_root, "hidden-transitive-dep"):
+        activate(client, skill_id, "active")
+    grant_invoke(nested_root, nested_id)
+    nested = client.get(f"/v1/skills/{nested_root}/1.0.0/resolve", headers=headers(INCIDENT_KEY))
+    assert nested.status_code == 404
+    assert "PRIVATE_NESTED_ROOT_331" not in nested.text
+    assert "PRIVATE_NESTED_331" not in nested.text
+    assert "PRIVATE_TRANSITIVE_331" not in nested.text

@@ -45,10 +45,12 @@ MCP and knowledge execution runtimes remain future-only until their runtime boun
 administrative read path returns a persisted exact Skill version under the catalog grant, but does
 not execute it. Administrators can activate or deactivate one exact version with an optimistic
 `expected_updated_at` check. The separate content GET is `/v1/skills/{skill_id}/{version}/resolve`.
-It requires an active direct `invoke` grant before reading that version; unauthorized, absent, and
-inactive versions share the same 404 response. Skills declaring dependencies are unavailable until
-atomic dependency resolution is added. Successful requests record a correlated metadata-only audit
-event before releasing the requested root. There is no implicit latest-version selection or cache.
+It requires direct active `invoke` grants for the exact root and every pinned dependency before
+reading each version. Success returns the root and all direct dependencies atomically; an unavailable
+dependency or any nested dependency produces the same non-disclosing 404. Status and grants are
+rechecked on every request, and the exact URL keeps resume pinned to its original versions. The
+request-correlated audit records metadata only; no implicit latest-version selection or content cache
+is used.
 
 ## Release metadata
 
