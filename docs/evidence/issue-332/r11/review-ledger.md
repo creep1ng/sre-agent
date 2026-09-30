@@ -1,0 +1,13 @@
+# Issue #332 — R11 review ledger
+
+**Scope:** Five reviewer-owned unresolved threads at R11 publication. Outdated never means resolved. Human approval and ordered #382-then-#422 integration remain pending user decisions. CI/governance SUCCESS is not semantic acceptance. No thread resolved, no merge, no closure, no labels.
+
+| PR | Thread | Review point | R11 evidence | Status |
+|---|---|---|---|---|
+| #382 | [4140754411](https://github.com/creep1ng/sre-agent/pull/382#discussion_r4140754411) | Committed child-row drift / immutable replay (R5) | `results/foundation-results.json` replay cases (4 drifts, parent manifest unchanged, `BoKVersionCollision`, restore, intact replay false) + `results/retrieval-results.json`; captures `foundation.png`/`retrieval.png`; source `src/sre_agent/bok/owner.py` | Unresolved, reviewer-owned; proof bound, awaiting human |
+| #382 | [4141380474](https://github.com/creep1ng/sre-agent/pull/382#discussion_r4141380474) | Partial document chunk readiness (R7) | `activation_partial_document` (`bok_version_not_ready`, `indexing` preserved) in both JSONs/captures | Unresolved/outdated, reviewer-owned; proof bound |
+| #382 | [4141380485](https://github.com/creep1ng/sre-agent/pull/382#discussion_r4141380485) | Activation after persisted chunk mutation/deletion (R7) | `activation_changed_chunk`/`activation_deleted_chunk` (`collection_version_collision`, drift survived, `finally` restore, valid activation `active`) | Unresolved/outdated, reviewer-owned; proof bound |
+| #422 | [4141390128](https://github.com/creep1ng/sre-agent/pull/422#discussion_r4141390128) | Locked authorization actual denial cause (R8) | [R8 summary](r8-denial-cause.json): exact M `7438b5a`, `tests/test_bok_http.py:627-727`, `44 passed in 16.47s`; causes principal/resource/grant verified, generic 403, zero extra content SELECTs; separate from 20 TCP audit rows in `retrieval-audit.png` | Unresolved, reviewer-owned; proof bound |
+| #382 | [4144717613](https://github.com/creep1ng/sre-agent/pull/382#discussion_r4144717613) | Activation advances catalog `updated_at` (R10) | `activation_catalog_timestamp` (inactive → active, `updated_at` advanced from 2000-01-01, owner `created_at` preserved) + `activation_rejected_catalog_timestamp` (`BoKVersionCollision`, catalog stays `inactive`, timestamp unchanged, drift restored) | Unresolved, reviewer-owned; proof bound |
+
+Prior proof replies `4144679137`/`4144679411`/`4144679624`/`4144679837` and issue comment `5911537020` remain historical R9 evidence, not R11 closure. New timestamp proof reply and current issue handoff are pending parent PR operations after publication readback. Refresh live review inventory after publication; do not infer no-new-findings from old baseline.

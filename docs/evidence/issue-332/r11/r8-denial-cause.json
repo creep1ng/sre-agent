@@ -1,0 +1,24 @@
+{
+  "artifact_type": "sanitized source-test assertion summary, not a serialized audit-row dump",
+  "source_commit": "7438b5a87dbf389fd1a936c899281520c1300295",
+  "source_file": "tests/test_bok_http.py",
+  "test": "test_locked_authority_recheck_audits_actual_denial_cause",
+  "test_lines": "627-727",
+  "runner": "docker compose ... run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_bok_http.py tests/test_governed_authorization.py tests/test_bok_persistence.py'",
+  "test_output_excerpt": "44 passed in 16.47s; exit 0",
+  "verification_state": "verified",
+  "verification_log_note": "exact-current-M head 7438b5a observed via overlay network project issue332-r11-r8check; scoped down without -v, network removed",
+  "verified_scenarios": [
+    {"committed_transition": "principal inactive plus grant revoked", "asserted_audit_cause": "principal_inactive"},
+    {"committed_transition": "resource inactive plus grant revoked", "asserted_audit_cause": "resource_inactive"},
+    {"committed_transition": "grant revoked", "asserted_audit_cause": "grant_not_applicable"}
+  ],
+  "verified_assertions": [
+    "TestClient response remains generic 403 resource_unavailable / no_matching_grant",
+    "per-collection content SELECT counts do not increase on denial",
+    "test queries persisted audit metadata and asserts actual cause with content absent and without request query, credential, or corpus content",
+    "synthetic state is restored and subsequent request succeeds"
+  ],
+  "evidence_basis": "The JSON summarizes assertions in the exact source test plus the actual passing focused runner output. The audit event was queried and checked by the test, but no serialized row is published.",
+  "scope_note": "This is the real-PostgreSQL TestClient locked-method injection test, distinct from the TCP producer probe. It does not claim a TCP-level transition race or TCP-probe SQL-read count."
+}

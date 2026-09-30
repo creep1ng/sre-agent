@@ -1,0 +1,708 @@
+{
+  "source_sha": "7438b5a87dbf389fd1a936c899281520c1300295",
+  "mode": "retrieval",
+  "captured_at_utc": "2026-09-30T14:01:13.759862+00:00",
+  "evidence_kind": "controlled integration",
+  "surface": "Runtime FastAPI over TCP plus real disposable PostgreSQL",
+  "observations": [
+    {
+      "scenario": "immutable_seed_replay",
+      "first_created": true,
+      "replay_created": false
+    },
+    {
+      "scenario": "same_version_collision",
+      "outcome": "rejected; original persisted bytes retained"
+    },
+    {
+      "scenario": "empty_activation",
+      "outcome": "bok_version_not_ready"
+    },
+    {
+      "scenario": "activation_partial_document",
+      "outcome": "bok_version_not_ready",
+      "status_before": "indexing",
+      "status_after": "indexing"
+    },
+    {
+      "scenario": "activation_changed_chunk",
+      "outcome": "collection_version_collision",
+      "status_before": "ready",
+      "status_after_rejection": "ready",
+      "drift_survived_rejection": true,
+      "restored_in_finally": true,
+      "status_after_restored_activation": "active"
+    },
+    {
+      "scenario": "activation_deleted_chunk",
+      "outcome": "collection_version_collision",
+      "status_before": "ready",
+      "status_after_rejection": "ready",
+      "drift_survived_rejection": true,
+      "restored_in_finally": true,
+      "status_after_restored_activation": "active"
+    },
+    {
+      "scenario": "activation_arbitrary_document_chunk_order",
+      "outcome": "accepted",
+      "persisted_status": "active"
+    },
+    {
+      "scenario": "activation_catalog_timestamp",
+      "operation": "owner activation against controlled inactive catalog projection",
+      "catalog_status": "active",
+      "catalog_updated_at_before": "2000-01-01 00:00:00+00:00",
+      "catalog_updated_at_advanced": true,
+      "owner_version_created_at_preserved": true,
+      "storage_surface": "isolated PostgreSQL owner SQL probe; not a TCP HTTP or audit observation"
+    },
+    {
+      "scenario": "activation_rejected_catalog_timestamp",
+      "outcome": "BoKVersionCollision; catalog remains inactive and timestamp unchanged",
+      "catalog_status": "inactive",
+      "catalog_updated_at_unchanged": true,
+      "version_status_after_rejection": "ready",
+      "owner_version_created_at_preserved": true,
+      "committed_child_drift_restored_in_finally": true,
+      "storage_surface": "isolated PostgreSQL owner SQL probe; not a TCP HTTP or audit observation"
+    },
+    {
+      "scenario": "replay_drift_chunk_content_update",
+      "operation": "committed chunk content UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_chunk_delete",
+      "operation": "committed chunk DELETE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_title_update",
+      "operation": "committed document title UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "replay_drift_document_hash_update",
+      "operation": "committed document content_sha256 UPDATE",
+      "parent_manifest_unchanged": true,
+      "replay_outcome": "BoKVersionCollision",
+      "child_drift_survived_replay": true,
+      "restored": true,
+      "intact_replay_created": false
+    },
+    {
+      "scenario": "persisted_demo_rows",
+      "sql": "SELECT v.collection_id, v.version, v.status,\n        (SELECT count(*) FROM bok_documents d WHERE d.collection_id=v.collection_id AND d.version=v.version),\n        (SELECT count(*) FROM bok_section_chunks c WHERE c.collection_id=v.collection_id AND c.version=v.version)\n        FROM bok_collection_versions v WHERE v.collection_id LIKE 'demo-%' ORDER BY v.collection_id",
+      "columns": [
+        "collection_id",
+        "version",
+        "status",
+        "documents",
+        "chunks"
+      ],
+      "rows": [
+        [
+          "demo-incident-response",
+          "1.0.0",
+          "active",
+          1,
+          1
+        ],
+        [
+          "demo-platform-operations",
+          "1.0.0",
+          "active",
+          1,
+          1
+        ]
+      ]
+    },
+    {
+      "scenario": "collision_preserves_original",
+      "unchanged": true
+    },
+    {
+      "scenario": "schema_head",
+      "revision": "20260929_16"
+    },
+    {
+      "scenario": "exact_synthetic_grants",
+      "columns": [
+        "principal_id",
+        "action",
+        "resource_type",
+        "resource_id"
+      ],
+      "rows": [
+        [
+          "demo-human",
+          "bok.read",
+          "bok_collection",
+          "demo-incident-response@1.0.0"
+        ],
+        [
+          "demo-human",
+          "bok.search",
+          "bok_collection",
+          "demo-incident-response@1.0.0"
+        ],
+        [
+          "demo-human",
+          "bok.search",
+          "bok_collection",
+          "proof-unready@1.0.0"
+        ],
+        [
+          "restricted-harness",
+          "bok.read",
+          "bok_collection",
+          "demo-platform-operations@1.0.0"
+        ],
+        [
+          "restricted-harness",
+          "bok.search",
+          "bok_collection",
+          "demo-platform-operations@1.0.0"
+        ]
+      ]
+    },
+    {
+      "scenario": "runtime_readiness",
+      "method": "GET",
+      "path": "/health/ready",
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "dependency": "postgresql"
+      }
+    },
+    {
+      "scenario": "demo-incident-response_allowed",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/search",
+      "status": 200,
+      "body": {
+        "results": [
+          {
+            "collection_id": "demo-incident-response",
+            "version": "1.0.0",
+            "document_id": "incident-triage",
+            "section_id": "severity",
+            "chunk_index": 0,
+            "title": "Incident triage",
+            "source_ref": "synthetic://incident-response/triage",
+            "content": "Assign severity from customer impact, scope, and active risk.",
+            "score": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "demo-incident-response_direct",
+      "method": "GET",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/chunks/incident-triage/severity/0",
+      "status": 200,
+      "body": {
+        "collection_id": "demo-incident-response",
+        "version": "1.0.0",
+        "document_id": "incident-triage",
+        "section_id": "severity",
+        "chunk_index": 0,
+        "title": "Incident triage",
+        "source_ref": "synthetic://incident-response/triage",
+        "content": "Assign severity from customer impact, scope, and active risk."
+      }
+    },
+    {
+      "scenario": "demo-incident-response_other_identity",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/search",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Resource unavailable."
+        },
+        "request_id": "2f438b4c-f75b-4b1b-b9ae-4dc7687b036b",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "demo-incident-response_direct_denied",
+      "method": "GET",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/chunks/incident-triage/severity/0",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Resource unavailable."
+        },
+        "request_id": "fdc732fc-e957-428b-95f8-1a3a720efaa1",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "demo-platform-operations_allowed",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 200,
+      "body": {
+        "results": [
+          {
+            "collection_id": "demo-platform-operations",
+            "version": "1.0.0",
+            "document_id": "deployment-checks",
+            "section_id": "preflight",
+            "chunk_index": 0,
+            "title": "Deployment checks",
+            "source_ref": "synthetic://platform-operations/deployment-checks",
+            "content": "Verify health checks and rollback readiness before deployment.",
+            "score": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "demo-platform-operations_direct",
+      "method": "GET",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/chunks/deployment-checks/preflight/0",
+      "status": 200,
+      "body": {
+        "collection_id": "demo-platform-operations",
+        "version": "1.0.0",
+        "document_id": "deployment-checks",
+        "section_id": "preflight",
+        "chunk_index": 0,
+        "title": "Deployment checks",
+        "source_ref": "synthetic://platform-operations/deployment-checks",
+        "content": "Verify health checks and rollback readiness before deployment."
+      }
+    },
+    {
+      "scenario": "demo-platform-operations_other_identity",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Resource unavailable."
+        },
+        "request_id": "ffd8e64f-6afa-4790-a224-2a6377f2b3bd",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "demo-platform-operations_direct_denied",
+      "method": "GET",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/chunks/deployment-checks/preflight/0",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Resource unavailable."
+        },
+        "request_id": "108b6ad1-42e2-42d2-91f6-467d61a5fb65",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "unauthenticated",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/search",
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "authentication_failed",
+          "message": "Authentication failed."
+        },
+        "request_id": "47459040-2f82-41c7-b7e1-17c588e4ff6c",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "authorized_no_match",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/search",
+      "status": 200,
+      "body": {
+        "results": []
+      }
+    },
+    {
+      "scenario": "authorized_exact_miss",
+      "method": "GET",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/chunks/unknown/unknown/0",
+      "status": 404,
+      "body": {
+        "error": {
+          "code": "resource_not_found",
+          "message": "Resource not found."
+        },
+        "request_id": "7f424c52-3f3e-4097-a698-685824f37ecd",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "owner_unready",
+      "method": "POST",
+      "path": "/v1/bok/collections/proof-unready/versions/1.0.0/search",
+      "status": 503,
+      "body": {
+        "error": {
+          "code": "index_unavailable",
+          "message": "Index unavailable."
+        },
+        "request_id": "df7eb88f-2618-4817-840e-f9295b379512",
+        "retryable": true
+      }
+    },
+    {
+      "scenario": "grant_revocation",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Resource unavailable."
+        },
+        "request_id": "a38f299e-adbe-45ad-aab1-f985647c4471",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "grant_revocation_restored",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 200,
+      "body": {
+        "results": [
+          {
+            "collection_id": "demo-platform-operations",
+            "version": "1.0.0",
+            "document_id": "deployment-checks",
+            "section_id": "preflight",
+            "chunk_index": 0,
+            "title": "Deployment checks",
+            "source_ref": "synthetic://platform-operations/deployment-checks",
+            "content": "Verify health checks and rollback readiness before deployment.",
+            "score": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "catalog_deactivation",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Resource unavailable."
+        },
+        "request_id": "416baed8-717a-48be-8524-df3a813b42ca",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "catalog_deactivation_restored",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 200,
+      "body": {
+        "results": [
+          {
+            "collection_id": "demo-platform-operations",
+            "version": "1.0.0",
+            "document_id": "deployment-checks",
+            "section_id": "preflight",
+            "chunk_index": 0,
+            "title": "Deployment checks",
+            "source_ref": "synthetic://platform-operations/deployment-checks",
+            "content": "Verify health checks and rollback readiness before deployment.",
+            "score": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "owner_revocation",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 503,
+      "body": {
+        "error": {
+          "code": "index_unavailable",
+          "message": "Index unavailable."
+        },
+        "request_id": "c487870c-91c1-46f9-9c42-3f1b7dc3dc62",
+        "retryable": true
+      }
+    },
+    {
+      "scenario": "owner_revocation_restored",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 200,
+      "body": {
+        "results": [
+          {
+            "collection_id": "demo-platform-operations",
+            "version": "1.0.0",
+            "document_id": "deployment-checks",
+            "section_id": "preflight",
+            "chunk_index": 0,
+            "title": "Deployment checks",
+            "source_ref": "synthetic://platform-operations/deployment-checks",
+            "content": "Verify health checks and rollback readiness before deployment.",
+            "score": 0.1
+          }
+        ]
+      }
+    },
+    {
+      "scenario": "denied_while_content_storage_unavailable",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-platform-operations/versions/1.0.0/search",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Resource unavailable."
+        },
+        "request_id": "8163ec44-d4fb-4dc5-98e3-4aafd6ce6319",
+        "retryable": false
+      }
+    },
+    {
+      "scenario": "bok_section_chunks_storage_failure",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/search",
+      "status": 503,
+      "body": {
+        "error": {
+          "code": "storage_unavailable",
+          "message": "Storage unavailable."
+        },
+        "request_id": "00e0518c-a9b2-4eee-9552-3d614f768187",
+        "retryable": true
+      }
+    },
+    {
+      "scenario": "credentials_storage_failure",
+      "method": "POST",
+      "path": "/v1/bok/collections/demo-incident-response/versions/1.0.0/search",
+      "status": 503,
+      "body": {
+        "error": {
+          "code": "storage_unavailable",
+          "message": "Storage unavailable."
+        },
+        "request_id": "4c1d2eb4-8995-47f8-83d1-b3c107e91a97",
+        "retryable": true
+      }
+    },
+    {
+      "scenario": "persisted_metadata_only_audit",
+      "rows": [
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.read",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "authorization",
+          "status": 403,
+          "decision": "deny",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.read",
+          "stage": "authorization",
+          "status": 403,
+          "decision": "deny",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.read",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "authorization",
+          "status": 403,
+          "decision": "deny",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.read",
+          "stage": "authorization",
+          "status": 403,
+          "decision": "deny",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.read",
+          "stage": "response",
+          "status": 404,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 503,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "authorization",
+          "status": 403,
+          "decision": "deny",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "authorization",
+          "status": 403,
+          "decision": "deny",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 503,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "response",
+          "status": 200,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "authorization",
+          "status": 403,
+          "decision": "deny",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "upstream",
+          "status": 503,
+          "decision": "allow",
+          "identity_present": true,
+          "resource_present": true,
+          "content_state": "absent"
+        },
+        {
+          "operation": "bok.search",
+          "stage": "authentication",
+          "status": 503,
+          "decision": null,
+          "identity_present": false,
+          "resource_present": false,
+          "content_state": "absent"
+        }
+      ],
+      "query_fragment_credential_scan": "passed"
+    }
+  ],
+  "outcome": "all assertions passed",
+  "storage_observer_scope": "Network probe reads persisted owner/audit SQL. Zero-content-read counts are independently covered by source TestClient SQL observer tests; not measured by this network process."
+}
