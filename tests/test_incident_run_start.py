@@ -40,7 +40,8 @@ def run_start_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, audit_events, grants, credentials, "
+            "resources, "
             "mcp_tools, mcp_servers, principals, idempotency_records CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
