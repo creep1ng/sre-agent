@@ -4,6 +4,8 @@ Failure modes the usage read must prevent:
 - a related audit event counts the same effective request twice;
 - a UTC month includes the next month's first instant or omits its last;
 - incident aggregation crosses incident boundaries or counts one run twice;
+- filtering hides conflicting incident attribution, even with identical consumption;
+- related foreign evidence bypasses the inspected-row limit;
 - absent/unavailable consumption is reported as zero or complete coverage;
 - distinct price versions are merged, or decimal USD is rounded;
 - authorization failure reveals counts or touches persisted usage;
@@ -18,6 +20,7 @@ No provider body, prompt, or credential is used as usage source data.
 """
 
 import asyncio
+import json
 import os
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -408,6 +411,7 @@ def append_event(
     price_version: str = "openrouter:2026-09-10T14:00:00Z",
     status: int = 200,
     stage: str = "response",
+    copies: int = 1,
 ) -> None:
     consumption = None
     if availability is not None:
@@ -476,7 +480,9 @@ def append_event(
     async def persist() -> None:
         database = Database(DATABASE_URL)
         try:
-            await PostgresAuditStore(database.sessions).append(event)
+            store = PostgresAuditStore(database.sessions)
+            for _ in range(copies):
+                await store.append(event.model_copy(update={"event_id": uuid4()}))
         finally:
             await database.dispose()
 
@@ -810,6 +816,88 @@ def test_incident_read_deduplicates_runs_and_excludes_other_incidents(client) ->
     assert body["request_count"] == 2
     assert body["incident_runs"] == 2
     assert body["totals"]["total_tokens"] == 36
+
+
+@pytest.mark.parametrize("second_amount", ["0.0012300", "0.0080000"])
+def test_cross_incident_attribution_is_unknown_even_with_matching_consumption(
+    client, second_amount, tmp_path
+) -> None:
+    request_id = str(uuid4())
+    instant = datetime(2026, 9, 12, tzinfo=UTC)
+    for incident, run, amount in (
+        ("incident-a", "run-a1", "0.0012300"),
+        ("incident-a", "run-a2", "0.0012300"),
+        ("incident-b", "run-b", second_amount),
+    ):
+        append_event(
+            request_id=request_id,
+            at=instant,
+            incident_id=incident,
+            run_id=run,
+            amount=amount,
+        )
+    append_event(
+        request_id=str(uuid4()),
+        at=instant,
+        incident_id="unrelated-incident",
+        run_id="unrelated-run",
+    )
+
+    for selector, expected_runs in (
+        ({"incident_id": "incident-a"}, 2),
+        ({"incident_id": "incident-b"}, 1),
+        ({"request_id": request_id}, 3),
+    ):
+        response = client.get("/v1/usage/consumption", params=selector, headers=auth())
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["filter"] == selector
+        assert body["request_count"] == 1
+        assert body["incident_runs"] == expected_runs
+        assert body["months"] == [{"month": "2026-09", "request_count": 1}]
+        assert body["coverage"] == {"status": "unknown", "known": 0, "incomplete": 0, "unknown": 1}
+        assert body["totals"]["total_tokens"] is None
+        assert body["totals"]["cost"]["amount"] is None
+        capture = tmp_path / f"{next(iter(selector.values()))}.json"
+        capture.write_text(json.dumps(body, indent=2) + "\n")
+
+    monthly = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+    assert monthly.status_code == 200, monthly.text
+    assert monthly.json()["request_count"] == 2
+    assert monthly.json()["coverage"] == {
+        "status": "partial",
+        "known": 1,
+        "incomplete": 0,
+        "unknown": 1,
+    }
+    assert monthly.json()["totals"]["cost"]["amount"] is None
+
+
+def test_cross_incident_related_evidence_counts_toward_actual_row_limit(client) -> None:
+    request_id = str(uuid4())
+    instant = datetime(2026, 9, 12, tzinfo=UTC)
+    append_event(request_id=request_id, at=instant, incident_id="incident-a", run_id="run-a")
+    append_event(
+        request_id=request_id,
+        at=instant,
+        incident_id="incident-b",
+        run_id="run-b",
+        copies=999,
+    )
+    at_limit = client.get(
+        "/v1/usage/consumption", params={"incident_id": "incident-a"}, headers=auth()
+    )
+    assert at_limit.status_code == 200, at_limit.text
+    assert at_limit.json()["request_count"] == 1
+    assert at_limit.json()["incident_runs"] == 1
+
+    append_event(request_id=request_id, at=instant, incident_id="incident-b", run_id="run-b")
+    overflow = client.get(
+        "/v1/usage/consumption", params={"incident_id": "incident-a"}, headers=auth()
+    )
+    assert overflow.status_code == 413, overflow.text
+    assert overflow.json()["error"]["code"] == "usage_scope_too_large"
+    assert "request_count" not in overflow.text
 
 
 @pytest.mark.parametrize("availability", ["absent", "unavailable"])

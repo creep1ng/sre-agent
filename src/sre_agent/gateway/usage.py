@@ -116,6 +116,7 @@ class UsageReadProjection:
             .where(AuditEventRow.operation == "responses.create")
         )
 
+        incident_ref = None
         if request_id is not None:
             statement = statement.where(
                 AuditEventRow.correlation["request_id"].astext == str(request_id)
@@ -123,7 +124,9 @@ class UsageReadProjection:
             selected_filter: dict[str, str] = {"request_id": str(request_id)}
         elif incident_id is not None:
             incident_ref = self._audit.reference("incident_id", incident_id).model_dump(mode="json")
-            statement = statement.where(
+            # Select requests first: conflicting attribution must remain visible.
+            incident_requests = select(request_ids).where(
+                AuditEventRow.operation == "responses.create",
                 AuditEventRow.correlation["incident_ref"]["digest"].astext
                 == incident_ref["digest"],
                 AuditEventRow.correlation["incident_ref"]["key_version"].as_integer()
@@ -131,6 +134,7 @@ class UsageReadProjection:
                 AuditEventRow.correlation["incident_ref"]["algorithm"].astext
                 == incident_ref["algorithm"],
             )
+            statement = statement.where(request_ids.in_(incident_requests))
             selected_filter = {"incident_id": incident_id}
         else:
             month_start, month_end = self._month_range(month or "")
@@ -148,7 +152,7 @@ class UsageReadProjection:
         if len(rows) > self.MAX_ROWS:
             raise UsageReadLimitExceeded("usage scope exceeds the evidence row limit")
 
-        return self._aggregate(rows, selected_filter)
+        return self._aggregate(rows, selected_filter, incident_ref)
 
     @staticmethod
     def _month_range(month: str) -> tuple[datetime, datetime]:
@@ -168,7 +172,10 @@ class UsageReadProjection:
 
     @classmethod
     def _aggregate(
-        cls, rows: list[dict[str, Any]], selected_filter: dict[str, str]
+        cls,
+        rows: list[dict[str, Any]],
+        selected_filter: dict[str, str],
+        selected_incident_ref: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         requests: dict[str, list[dict[str, Any]]] = defaultdict(list)
         runs: set[tuple[str, int, str]] = set()
@@ -177,7 +184,10 @@ class UsageReadProjection:
         for row in rows:
             request_key = str(row["request_id"])
             requests[request_key].append(row)
-            if row["run_ref"] is not None:
+            # Foreign related rows are consistency evidence, not selected runs.
+            if row["run_ref"] is not None and (
+                selected_incident_ref is None or row["incident_ref"] == selected_incident_ref
+            ):
                 run_ref = row["run_ref"]
                 runs.add((run_ref["algorithm"], run_ref["key_version"], run_ref["digest"]))
             month_key = row["canonical_at"].astimezone(UTC).strftime("%Y-%m")
@@ -193,7 +203,8 @@ class UsageReadProjection:
                 else "null"
                 for row in evidence
             }
-            if len(consumption_values) != 1:
+            incident_refs = {json.dumps(row["incident_ref"], sort_keys=True) for row in evidence}
+            if len(consumption_values) != 1 or len(incident_refs) != 1:
                 unknown += 1
                 continue
             consumption = evidence[0]["consumption"]
