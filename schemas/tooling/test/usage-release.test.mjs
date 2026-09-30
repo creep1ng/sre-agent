@@ -47,10 +47,17 @@ test("usage.read audit conformance captures each persisted runtime outcome and c
     ({ $id }) => $id === "urn:sre-agent:schema:audit-event:2.5.0",
   );
   const validate = createSchemaRegistry(release.schemas).getSchema(schema.$id);
+  const preAuthorizationStorageFixture = release.fixtures.find(
+    ({ group }) => group === "usage-read-audit-preauthorization-storage",
+  );
+  assert.ok(preAuthorizationStorageFixture, "pre-authorization 503 projection is documented");
   const byStatus = Object.fromEntries(
     outcomes.map(({ data }) => [data.response_status, structuredClone(data)]),
   );
-  assert.deepEqual(Object.keys(byStatus).map(Number).sort((a, b) => a - b), [200, 401, 403, 413, 422, 503]);
+  assert.deepEqual(
+    [...new Set(Object.keys(byStatus).map(Number))].sort((a, b) => a - b),
+    [200, 401, 403, 413, 422, 503],
+  );
   const deniedOutcomes = outcomes
     .filter(({ data }) => data.response_status === 403)
     .map(({ data }) => data);
@@ -101,14 +108,27 @@ test("usage.read audit conformance captures each persisted runtime outcome and c
   preAuthValidationWithContext.resource = authenticated.resource;
   preAuthValidationWithContext.policy_decision = authenticated.policy_decision;
   const overflowWithoutContext = structuredClone(byStatus[413]);
-  const storageFailureWithoutContext = structuredClone(byStatus[503]);
-  for (const event of [overflowWithoutContext, storageFailureWithoutContext]) {
-    for (const field of ["identity", "resource", "policy_decision"]) delete event[field];
+  for (const field of ["identity", "resource", "policy_decision"]) {
+    delete overflowWithoutContext[field];
   }
-  const unrecordedAuditUnavailable = structuredClone(storageFailureWithoutContext);
+  const authenticatedStorageFailure = structuredClone(byStatus[503]);
+  const preAuthorizationStorageFailure = structuredClone(authenticatedStorageFailure);
+  for (const field of ["identity", "resource", "policy_decision"]) {
+    delete preAuthorizationStorageFailure[field];
+  }
+  preAuthorizationStorageFailure.exporter_result = "not_attempted";
+  const storageFailureWithPartialIdentity = structuredClone(preAuthorizationStorageFailure);
+  storageFailureWithPartialIdentity.identity = structuredClone(authenticatedStorageFailure.identity);
+  const storageFailureWithPartialResource = structuredClone(preAuthorizationStorageFailure);
+  storageFailureWithPartialResource.resource = structuredClone(authenticatedStorageFailure.resource);
+  const storageFailureWithPartialPolicy = structuredClone(preAuthorizationStorageFailure);
+  storageFailureWithPartialPolicy.policy_decision = structuredClone(authenticatedStorageFailure.policy_decision);
+  const unrecordedAuditUnavailable = structuredClone(preAuthorizationStorageFailure);
   unrecordedAuditUnavailable.reason_code = "audit_unavailable";
   unrecordedAuditUnavailable.authoritative_acceptance = "rejected";
   unrecordedAuditUnavailable.ordinary_result = "suppressed";
+  const preAuthorizationWrongAction = structuredClone(preAuthorizationStorageFailure);
+  preAuthorizationWrongAction.action = "invoke";
 
   const invalidCases = [
     ["usage.read uses admin.read even before authentication", expectedAction],
@@ -118,7 +138,10 @@ test("usage.read audit conformance captures each persisted runtime outcome and c
     ["resource_inactive requires an active principal", resourceCauseWithInactiveContext],
     ["422 validation does not leak auth context", preAuthValidationWithContext],
     ["413 overflow retains auth context", overflowWithoutContext],
-    ["audited storage 503 retains auth context", storageFailureWithoutContext],
+    ["context-free storage 503 cannot leak partial identity", storageFailureWithPartialIdentity],
+    ["context-free storage 503 cannot leak partial resource", storageFailureWithPartialResource],
+    ["context-free storage 503 cannot leak partial policy", storageFailureWithPartialPolicy],
+    ["context-free storage 503 remains usage.read admin.read", preAuthorizationWrongAction],
     ["audit_unavailable response is not a persisted usage event", unrecordedAuditUnavailable],
   ];
   const invalidVariantsAccepted = invalidCases
@@ -129,6 +152,20 @@ test("usage.read audit conformance captures each persisted runtime outcome and c
     { runtimeOutcomesRejected: [], invalidVariantsAccepted: [] },
     "usage.read positive and negative outcomes must have exact action/context constraints",
   );
+  assert.equal(
+    validate(preAuthorizationStorageFailure),
+    true,
+    "pre-authorization storage 503 has a complete context-free audit shape",
+  );
+  assert.equal(
+    validate(preAuthorizationStorageFixture.data),
+    true,
+    "the labeled pre-authorization storage projection validates",
+  );
+  assert.equal(preAuthorizationStorageFixture.data.action, "admin.read");
+  assert.equal(preAuthorizationStorageFixture.data.identity, undefined);
+  assert.equal(preAuthorizationStorageFixture.data.resource, undefined);
+  assert.equal(preAuthorizationStorageFixture.data.policy_decision, undefined);
   assert.doesNotThrow(() => validateFixtures(release.schemas, outcomes));
   for (const [name, invalid] of invalidCases) {
     assert.equal(validate(invalid), false, name);

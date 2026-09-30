@@ -66,7 +66,7 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
   describe distinct requests and sum to request_count; status reflects counts.
   Use semantic validation for arithmetic, not a false JSON Schema claim.
   Checks: conformance negatives/positives plus runtime acceptance.
-- [x] **U333-8 — Publish and activate an additive contract.**
+- [ ] **U333-8 — Publish and activate an additive contract.**
   Publish a self-contained next release containing the delivered usage route
   and usage.read audit operation; activate it without editing 2.4.0.
   Publication-size exception approved; coordinate the next additive version.
@@ -238,3 +238,90 @@ new hosted CI and human evidence acceptance remain U333-10 dependencies.
 Parent guarded repeat helper: one setup test and all three actual403 SQL contexts
 passed; missing project guard rejected safely; Ruff lint/format passed no-cache.
 Public JSON and safe Docker replay helper accompany the final report.
+
+
+## Reopened publication corrections — authorized 2026-09-30
+
+The frozen `6ed5335ab91f0056ccb4f93bb6f961ac0e25728a` passed all eight
+hosted CI jobs in run36693220835 and governance36693219129. Later live reviews
+4142861478/4142861488 found input-month and pre-authorization503 contract gaps;
+these invalidate final publication completeness, not the earlier verified work.
+The user explicitly chose early rejection of unrepresentable input months.
+Current Project8 is consulted live before edits; one writer retains this owned
+publication candidate, and the dirty recovery root remains read-only.
+
+- [x] **U333-8a — Reject unrepresentable input months before authorization.**
+  Supported selectors have year0001..9999, excluding9999-12 because the exclusive
+  following-month bound is unrepresentable. Match Query validation, typed input
+  filter and all proposal/proposed2.5 selector schemas. Leave observed output
+  month-list shape unchanged. Prove HTTP422 precedes authorization, persists a
+  context-free validation event, and does not invent identity; normal and valid
+  boundary months still work. Permanent behavior/conformance tests first with
+  observed RED, then GREEN using the existing owned Docker/Python/Node runners.
+  RED: focused Docker tests were 3 failed / 3 passed: `0000-01` and `9999-12`
+  reached authorization and returned 503 under the guard; standalone selector
+  constraint parity failed. GREEN: added a portable shared supported-month
+  pattern (years 0001–9999 excluding 9999-12) to the FastAPI query, typed filter,
+  proposal and 2.5.0 selector/filter schemas; an explicit pre-authorization
+  runtime check is necessary because FastAPI's Query pattern is emitted to
+  OpenAPI but did not reject these query strings at runtime. The month-list
+  output schema/model remains unchanged. Invalid selectors now return 422 and
+  persist context-free validation audit rows; `0001-01`, `9999-11`, and `2026-09`
+  remain successful. Focused configured Docker/Python acceptance + release/runtime
+  OpenAPI parity: 6 passed. Full release tooling/manifest normalization remains
+  to be performed after U333-8b.
+- [x] **U333-8b — Admit real pre-authorization storage503 audit context.**
+  Inject an authorization/credential storage fault before context exists and
+  observe HTTP503 plus an independently persisted usage.read event with absent
+  identity/resource/policy; distinguish audit append failure503 with no row.
+  Add permanent test-first conformance positive/negative coverage and allow only
+  complete authenticated or complete context-free503 shapes, not partial context.
+  Conformance RED was observed against the real stale 2.5.0 schema: the complete
+  context-free `usage.read/admin.read` 503 event was rejected. Runtime behavior
+  was already delivered; new PostgreSQL/FastAPI acceptance GREEN passed and
+  confirmed persisted JSON-null identity/resource/policy context. The existing
+  append-failure cases still return `audit_unavailable` with zero rows. Added an
+  explicitly labeled faithful positive schema fixture, strict partial-context,
+  wrong-action and `audit_unavailable` negatives, and a separate sanitized actual
+  HTTP/SQL observation at `docs/evidence/issue-333-preauth-storage-503.json`.
+  The focused conformance test passed 1/1, and the scoped HTTP/SQL test plus
+  existing append-failure parameter cases passed 5/5. The fixture remains a
+  faithful schema projection; the JSON evidence is the distinct real observation.
+
+Constraints: strict TDD enabled by the handoff; exact focused runner above,
+plus tests/test_usage_read_contract.py and tests/test_usage_read_openapi.py as
+applicable. Preserve all older release bytes/modes. Refresh only unmerged2.5
+projections before evidence/manifest using the existing release tools. No new
+calendar mechanism, billing, admission enforcement, live provider, browser or
+remote deployment. About400 authored lines/task is advisory, never code-golf;
+the publication-only exception remains scoped and actual count is disclosed.
+
+After each task, record observed outcomes/checks here and parent-mirror the full
+document. U333-8a and U333-8b now have focused local GREEN evidence; refresh only
+2.5.0 generated projection/evidence/manifest and run full sequential local checks
+before independent verification. Independent sequential verification, current frozen-head CI/watch,
+real sanitized evidence and updated PR/review dispositions remain U333-10.
+Human review is still pending; do not mark the whole issue accepted.
+
+Final reopened-correction checks (candidate still uncommitted at base
+`6ed5335ab91f0056ccb4f93bb6f961ac0e25728a`): sequential rebuilt configured
+Python runner passed **1,257 tests, 1 skipped** in 101.81s, Ruff lint/format,
+five import contracts, typing (12 source files), and Alembic no-new-upgrade
+check. Skip: `tests/test_openrouter_live.py::test_openrouter_gateway_live_smoke`
+(live provider intentionally disabled). Release tooling **125/125**, all 11
+releases validate, OpenAPI lint/bundles pass; focused usage-release **2/2**,
+focused usage acceptance/OpenAPI **82/82**, month RED **3 failed / 3 passed**
+then GREEN **6/6**, preauth schema RED then GREEN **1/1**, actual preauth and
+append failure acceptance **5/5**. Older release byte/mode snapshot comparison
+reported zero drift across 1,579 files. U333-10 stays pending parent independent
+verification, current-candidate hosted CI, PR reconciliation and human review.
+No commit/push/remote provider/browser run was performed. See
+`docs/evidence/issue-333-contract-publication.md` for evidence paths, exact
+scope, findings, hash identities, and reproduction details.
+
+Final independent 8a/8b verification: 82 Python, two Node conformance tests,
+all11releases/lint/whitespace passed;1,579oldreleasepaths/2,380candidateentries
+hash/mode/status zero drift. Current2.5inventory199files/204artifacts/17checks.
+Parent rebuilt focused actual Docker spot: both forbiddenmonths pluspreauth503
+threepassed. OriginalrawREDwasnotindependentlyreviewed; writerobservedsequence
+reported honestly. Freeze/push newcandidate next; exactheadCI/humanpending.

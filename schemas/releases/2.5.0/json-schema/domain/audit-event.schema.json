@@ -1929,6 +1929,24 @@
               "stage", "outcome", "reason_code", "response_status", "retryable",
               "identity", "resource", "policy_decision"
             ]
+          },
+          {
+            "properties": {
+              "stage": {"const": "audit"},
+              "outcome": {"const": "error"},
+              "reason_code": {"const": "upstream_unavailable"},
+              "response_status": {"const": 503},
+              "retryable": {"const": true},
+              "authorization_denial_cause": false,
+              "identity": false,
+              "resource": false,
+              "policy_decision": false,
+              "authoritative_acceptance": {"const": "accepted"},
+              "ordinary_result": {"const": "released"}
+            },
+            "required": [
+              "stage", "outcome", "reason_code", "response_status", "retryable"
+            ]
           }
         ]
       }

@@ -114,7 +114,13 @@ def test_every_published_usage_openapi_selector_preserves_optional_null_semantic
     expected_constraints = {
         "request_id": {"format": "uuid"},
         "incident_id": {"minLength": 1, "maxLength": 128},
-        "month": {"pattern": r"^\d{4}-(0[1-9]|1[0-2])$"},
+        "month": {
+            "pattern": (
+                r"^(?:(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|"
+                r"[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-8])-"
+                r"(?:0[1-9]|1[0-2])|9999-(?:0[1-9]|1[01]))$"
+            )
+        },
     }
 
     def variants(schema: dict[str, Any]) -> list[dict[str, Any]]:

@@ -1,0 +1,32 @@
+{
+  "capture_kind": "controlled FastAPI integration plus PostgreSQL readback",
+  "captured_at": "2026-09-30",
+  "scope": "issue-333 usage.read only; no provider call",
+  "replay_command": "docker compose --project-directory \"$PWD\" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_usage_read_acceptance.py::test_preauthorization_storage_failure_commits_context_free_usage_event tests/test_usage_read_acceptance.py::test_usage_audit_failure_suppresses_intended_response'",
+  "observed": {
+    "http": {
+      "status": 503,
+      "error_code": "storage_unavailable",
+      "retryable": true
+    },
+    "persisted_row": {
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "audit",
+      "outcome": "error",
+      "reason_code": "upstream_unavailable",
+      "response_status": 503,
+      "retryable": true,
+      "authorization_denial_cause": null,
+      "identity_json_null": true,
+      "resource_json_null": true,
+      "policy_decision_json_null": true,
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "not_attempted"
+    }
+  },
+  "readback": "A parameterized SELECT located the row using the HTTP response request_id but did not emit that identifier. The JSONB columns contain JSON null, so the capture tested equality to 'null'::jsonb rather than SQL IS NULL.",
+  "distinction": "A separate existing append-failure acceptance case returns 503 audit_unavailable and persists no usage.read row.",
+  "fixture_provenance": "The positive conformance fixture is a faithful projection of AuditProjector.control_event for the context-free pre-authorization failure; this artifact is the separate actual HTTP/SQL observation."
+}

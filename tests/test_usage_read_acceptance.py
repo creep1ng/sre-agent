@@ -318,6 +318,37 @@ def test_usage_audit_selector_validation_and_projection_failures(client, monkeyp
     assert all(storage_event[field] is None for field in ("consumption", "untrusted_input"))
 
 
+@pytest.mark.parametrize("month", ["0000-01", "9999-12"])
+def test_unrepresentable_month_is_rejected_before_authorization(client, monkeypatch, month) -> None:
+    from sre_agent.gateway import usage
+
+    authorization_calls = []
+
+    async def forbidden_authorization(*args, **kwargs):
+        authorization_calls.append(True)
+        raise AssertionError("unrepresentable month must fail before authorization")
+
+    monkeypatch.setattr(usage, "authorize_governed_access", forbidden_authorization)
+    response = client.get("/v1/usage/consumption", params={"month": month}, headers=auth())
+
+    assert response.status_code == 422
+    assert authorization_calls == []
+    [event] = persisted_usage_audit_rows()
+    assert event["stage"] == "validation"
+    assert event["outcome"] == "error"
+    assert event["reason_code"] == "contract_validation_failed"
+    assert event["response_status"] == 422
+    assert_no_usage_authorization_context(event)
+
+
+@pytest.mark.parametrize("month", ["0001-01", "9999-11", "2026-09"])
+def test_supported_month_boundaries_remain_readable(client, month) -> None:
+    response = client.get("/v1/usage/consumption", params={"month": month}, headers=auth())
+
+    assert response.status_code == 200, response.text
+    assert response.json()["filter"] == {"month": month}
+
+
 @pytest.mark.parametrize(
     "outcome",
     ["success", "denied", "validation", "storage"],
@@ -1075,6 +1106,35 @@ def test_storage_failure_is_not_an_empty_success(client, monkeypatch) -> None:
     assert response.json()["error"]["code"] == "storage_unavailable"
 
 
+def test_preauthorization_storage_failure_commits_context_free_usage_event(
+    client, monkeypatch
+) -> None:
+    from sre_agent.gateway import usage
+
+    async def credential_storage_unavailable(*args, **kwargs):
+        raise RuntimeError("credential storage unavailable")
+
+    monkeypatch.setattr(usage, "authorize_governed_access", credential_storage_unavailable)
+    response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "storage_unavailable"
+    [event] = persisted_usage_audit_rows()
+    assert (event["action"], event["stage"], event["outcome"]) == (
+        "admin.read",
+        "audit",
+        "error",
+    )
+    assert (event["reason_code"], event["response_status"], event["retryable"]) == (
+        "upstream_unavailable",
+        503,
+        True,
+    )
+    assert_no_usage_authorization_context(event)
+    assert event["authorization_denial_cause"] is None
+    assert event["consumption"] is None
+
+
 def test_valid_empty_month_has_explicit_empty_coverage(client) -> None:
     response = client.get("/v1/usage/consumption", params={"month": "2026-09"}, headers=auth())
 
@@ -1161,7 +1221,12 @@ def test_generated_http_contract_describes_validated_selectors_and_response(clie
     assert any(variant.get("minLength") == 1 for variant in incident_constraints)
     assert any(variant.get("maxLength") == 128 for variant in incident_constraints)
     assert any(
-        variant.get("pattern") == r"^\d{4}-(0[1-9]|1[0-2])$"
+        variant.get("pattern")
+        == (
+            r"^(?:(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|"
+            r"[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-8])-"
+            r"(?:0[1-9]|1[0-2])|9999-(?:0[1-9]|1[01]))$"
+        )
         for variant in schema_variants(parameters["month"]["schema"])
     )
 

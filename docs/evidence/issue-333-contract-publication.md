@@ -2,6 +2,11 @@
 
 ## Status and scope
 
+Earlier sections retain their historical checkpoints. The final reopened
+corrections section describes the current runtime input-validation change and
+current source hashes; earlier “runtime unchanged” statements refer only to the
+preceding schema-only repairs. The PR body binds the final frozen SHA and CI.
+
 U333-8 is complete locally, including the verified PR #429 audit-contract
 correction: the existing release generator published immutable, self-contained
 `2.5.0` with the runtime usage-read contract; `2.4.0` is unchanged.
@@ -16,14 +21,16 @@ audit correction. U333-10 remains pending parent verification, hosted CI on the
 final candidate, and human review.
 No commit, push, PR/GitHub mutation, release tag or deployment was done here.
 
-Release inventory: 198 files; generator reports 203 artifacts and 17 checks.
+Current release inventory: 199 files; generator reports 204 artifacts and 17 checks.
 All 194 published files in 2.4.0 retain their prior hashes; the focused diff
 against that release is empty. Existing all-release validation covers 11 releases
 (1.0.0–2.5.0). The publication-only size exception was authorized at an
-estimated 6,500–7,500 changed lines. Current complete candidate diff from PR
-#428 is 8,702 text additions + 33 deletions (8,735 changed text lines), plus the existing binary PNG; this
-is above the estimate and is reported transparently, not code-golfed or claimed
-as a new exception. Parent owns final scope/size disposition.
+estimated 6,500–7,500 changed lines. At the initial publication checkpoint the candidate diff from PR #428 was
+8,702 additions + 33 deletions. After authorized reopened corrections, the final
+count against exact base `8965cb1978f9363a807279b6ec1b60c76d739e42` is
+9,091 text additions + 35 deletions (9,126 changed text lines), plus the binary
+PNG; this is above the estimate and is reported transparently, not code-golfed
+or claimed as a new exception. Parent owns final scope/size disposition.
 
 ## PR #429 finding 4141505117: selector nullability parity
 
@@ -357,3 +364,55 @@ Run it only in the disposable checks database, after the setup test, using the
 exact Docker replay command in the sanitized JSON. Initial Ruff cache permission
 errors under the unprivileged capture UID were resolved with `--no-cache`; lint
 and format then passed without changing runtime source.
+
+## Authorized reopened corrections — 2026-09-30 (findings 4142861478 / 4142861488)
+
+The parent-authorized candidate starts at `6ed5335ab91f0056ccb4f93bb6f961ac0e25728a`; no source commit was made here. The frozen 6ed CI/governance results recorded above are historical and do not validate this uncommitted candidate. User explicitly selected early rejection for unsupported months. No terminal-month calendar implementation, billing change, provider access, or browser capture was added.
+
+### 4142861478 — reject unsupported query months before authorization
+
+TDD first: the permanent acceptance/OpenAPI tests were written and run against the old runtime before production changes. RED: **3 failed / 3 passed**; `0000-01` and `9999-12` reached authorization and produced the guarded 503, and the generated selector constraints did not match. The portable `SUPPORTED_MONTH_PATTERN` now accepts `0001-01` through `9999-11` (including ordinary valid months) and rejects zero-year or `9999-12`. It is applied to the query, typed request filter, proposal and 2.5.0 inputs. The explicit runtime check runs before authorization: for this optional-month query path, the Query pattern appeared in OpenAPI but did not reject these tested values at runtime. The output month-list schema/model is unchanged. GREEN focused tests: **6 passed**; valid boundaries `0001-01` and `9999-11`, plus `2026-09`, still succeed. A controlled test-database HTTP capture shows an actual 422 and persisted context-free validation event at `docs/evidence/issue-333-input-month-422.json`; this is separate from the successful-flow screenshot and producer/read/SQL bundle. Its repeatable acceptance test is `tests/test_usage_read_acceptance.py::test_unrepresentable_month_is_rejected_before_authorization` (exact test name retained in source); no live service/provider is involved.
+
+### 4142861488 — pre-authorization storage-failure audit envelope
+
+The permanent schema/conformance test was first run against the stale 2.5.0 contract. RED: the actual complete context-free `usage.read/admin.read` audit error for an injected pre-context storage failure was rejected. The 2.5.0 schema now permits the distinct complete context-free `audit/error/upstream_unavailable/503/retryable` envelope, while keeping operation-wide `admin.read`, forbidding invented authorization denial cause, and separately requiring full identity/resource/policy context for the authenticated storage-failure variant. Negative cases reject partial context, wrong action, and a fabricated persisted `audit_unavailable` event. No runtime behavior or principal was invented. Focused schema GREEN: **1 passed**. Controlled actual FastAPI/PostgreSQL acceptance plus existing append-failure cases: **5 passed**. The sanitized HTTP/SQL observation is `docs/evidence/issue-333-preauth-storage-503.json`; it shows the independently persisted context-free usage.read row. PostgreSQL JSONB encodes Python `None` as JSON `null`; readback compares against `'null'::jsonb`, not SQL NULL. The append-failure path still produces no audit row and is covered by its existing acceptance case. The separately labeled positive fixture is a faithful contract projection, not a raw capture.
+
+### Runtime OpenAPI and evidence freshness
+
+Because the runtime month selector changed, `docs/evidence/issue-333-contract-openapi-http.json` was refreshed from the actual current `GET /openapi.json` using the existing guarded capture process; it advertises 2.5.0, the canonical route, and the supported pattern. This is a controlled local application capture, not a hosted or live-provider result. The existing actual successful producer/read/SQL bundle and its real Chromium screenshot are retained as the previously captured normal valid-month flow: the successful flow was not changed, but the prior screenshot is not evidence for the new 422/503 errors. The new JSON/SQL 422 and 503 observations above are the actual error-path evidence; no new screenshot was produced.
+
+Only proposed 2.5.0 projections, evidence, and manifest were regenerated with the existing release CLI after backing up the proposed manifest/evidence outside the candidate. The generator produced three future-FastAPI projection fixtures; the evidence reports 204 artifacts / 17 checks. No 1.0.0–2.4.0 release was regenerated or edited. A byte-and-mode comparison of the exact older-release inventory recorded before regeneration found **zero drift across 1,579 files**; `git diff --quiet 6ed5335 -- schemas/releases/1.0.0 ... schemas/releases/2.4.0` also returned zero.
+
+### Final local checks and remaining delivery boundary
+
+After all artifact normalization, the exact owned Docker compose project ran the full configured Python check command (`docker compose ... --profile checks run --build --rm python-checks`) sequentially: Ruff lint passed; all **165 Python files** formatted; five import-boundary contracts kept; typing succeeded for 12 source files; **1,257 passed, 1 skipped** in 101.81s; no new Alembic upgrade operations. The one skip is `tests/test_openrouter_live.py::test_openrouter_gateway_live_smoke`, intentionally disabled unless `RUN_OPENROUTER_LIVE_SMOKE=1` because it makes a live provider request. No live provider request was made. The complete tooling run after the schema/projection normalization was **125 passed / 0 failed / 0 skipped**; all **11 releases (1.0.0–2.5.0)** validate and OpenAPI lint/bundle checks pass. The focused Python acceptance/OpenAPI suite was **82 passed**; the focused usage-release Node suite was **2 passed**. `git diff --check` and manual untracked-file whitespace checks are recorded at terminal handoff.
+
+The complete candidate remains uncommitted at base `6ed5335ab91f0056ccb4f93bb6f961ac0e25728a`; current local results do not supersede the hosted CI run on that prior frozen SHA. Against exact base `8965cb1978f9363a807279b6ec1b60c76d739e42`, final candidate diff is 9,091 text additions + 35 deletions (9,126 text lines), plus the existing binary PNG. The original 6,500–7,500 changed-line estimate was advisory, not a ceiling; actual size is reported without code-golf or a claim of a new exception. U333-10, current-candidate hosted CI, PR reconciliation, and human review remain pending parent verification; no acceptance/deployment is claimed.
+
+Current key SHA-256 values after final normalization:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `src/sre_agent/gateway/usage.py` | `107c2f09f76cb673f2733c96e162ee7529b151bfd846411b6c90a99d4a16b2b7` |
+| `docs/evidence/issue-333-contract-openapi-http.json` | `cf52d10279655b07acfe6bba8069b237cbeedb751c50910e94bb1fb6667222da` |
+| `docs/evidence/issue-333-input-month-422.json` | `78155a93a823850a9a26031510cf1dcdce9abf3ac62722b6ee400b4c23cb61b4` |
+| `docs/evidence/issue-333-preauth-storage-503.json` | `494330e023c6d231eaf44eb59342769849d06e356cff4c20503510dce7e02ab6` |
+| `schemas/releases/2.5.0/json-schema/domain/audit-event.schema.json` | `121baa0eabc13c76ae52f04d701abfcf8bacfdba52343cc882cd8f1039f0dc75` |
+| `schemas/releases/2.5.0/openapi/usage-read.yaml` | `4d05ed8c23ea48fea54af3758b3dfc534605b76169be360bdea4dd882541daa6` |
+| `schemas/releases/2.5.0/manifest.yaml` | `9a6b566c2aa843f8d914d810297d9b0a4fb6d1c194e69f5a23f538874088a263` |
+| `schemas/releases/2.5.0/conformance/evidence.json` | `e33807475e7426ac1c552206154b6da1f3b9a0a3cd31024cdd3d8c03ef044089` |
+
+### Final independent and parent spot verification
+
+Independent checks on these exact source/schema bytes passed: 82 Python
+acceptance/OpenAPI cases, two focused Node conformance tests, all 11 release
+validations, both canonical OpenAPI lint checks and whitespace checks. The
+verifier compared 1,579 earlier-release paths and a 2,380-entry candidate
+inventory: no content/mode or status drift. It confirmed the current inventory
+of 199 files/204 artifacts/17 checks; stale report metadata was corrected only
+after its terminal check. The parent rebuilt and ran both rejected-month cases
+and the pre-authorization storage-failure case: three passed in 2.97s.
+Raw original RED output was not independently reviewed by the final verifier;
+the test-first sequence/counts above are the implementing writer's observed
+report. No retrospective RED execution is claimed. New exact-head hosted CI
+and independent human evidence acceptance remain delivery dependencies.

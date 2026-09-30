@@ -26,7 +26,7 @@ inventory:
     - path: releases/2.5.0/conformance/consumers.yaml
       sha256: sha256:7c4b5ff7475c4eb63590ec77880964d4aad915a5426471564e91c046b8c5af31
     - path: releases/2.5.0/conformance/evidence.json
-      sha256: sha256:9de74449f31381064862315cfdb136f4b3e8e9d41fd37951bccad95d3a51aba4
+      sha256: sha256:e33807475e7426ac1c552206154b6da1f3b9a0a3cd31024cdd3d8c03ef044089
     - path: releases/2.5.0/conformance/migration.md
       sha256: sha256:32ae66b8046a8acda7a742ae875daf49f82dc5406d075ad1ccf740c435b0bb09
     - path: releases/2.5.0/conformance/ownership-evidence.json
@@ -140,9 +140,9 @@ inventory:
     - path: releases/2.5.0/fixtures/negative/control.principal.status.missing-expected-updated-at.negative.v2.5.0.fixture.json
       sha256: sha256:0465134bdfce93f77f29f6cb8801f55089a2813e999f4cdf69376fe794e26d46
     - path: releases/2.5.0/fixtures/negative/future-fastapi.extra.projection.json
-      sha256: sha256:336025edad7817de7c868567d02d5d0810f288452f28d4630fa30b55b6c4df03
+      sha256: sha256:c5934ceb3db537456e4eebab1ef3ecaed5d8e91c1425ee62b7102b358bff9a13
     - path: releases/2.5.0/fixtures/negative/future-fastapi.missing.projection.json
-      sha256: sha256:3e0b7cc01a60ddcae820fc0cfb66ad1218ebc3ee9f943bbbd592f10548d3c539
+      sha256: sha256:4b89615d6bedc0a8aa936b613d2bb9c80f58a0f7417708e2ae0f29cc95576ae0
     - path: releases/2.5.0/fixtures/negative/shared.correlation.authority.negative.v2.5.0.fixture.json
       sha256: sha256:cb147f1122d07aff8c16b732fe1284461ca8d8e44ef8d0b7c0ac1d56691298e1
     - path: releases/2.5.0/fixtures/negative/shared.credential-reference.hash.negative.v2.5.0.fixture.json
@@ -211,6 +211,8 @@ inventory:
       sha256: sha256:b78a04de1e01acb8eaad25668cfdb0bfaac7826ba23970d62a61d71f61c3bbad
     - path: releases/2.5.0/fixtures/positive/audit.store.rejected.positive.v2.5.0.fixture.json
       sha256: sha256:d3167940ff8ba9c9265cb970c2730d17327dd7e8c9e86e9c6d1626ad1b6a643a
+    - path: releases/2.5.0/fixtures/positive/audit.usage-read.preauthorization-storage.positive.v2.5.0.fixture.json
+      sha256: sha256:8489d002f0e96e818aeffe3cbeb08e07c88eedb7431ec26804072246e96be297
     - path: releases/2.5.0/fixtures/positive/audit.usage-read.runtime-outcomes.positive.v2.5.0.fixture.json
       sha256: sha256:c10601d2800b57fd2e4b4c3ba25fca4e26e3d89cc28971dc2dc2a0b0f2315f5b
     - path: releases/2.5.0/fixtures/positive/audit.validation.pre-auth-422.positive.v2.5.0.fixture.json
@@ -316,7 +318,7 @@ inventory:
     - path: releases/2.5.0/fixtures/positive/control.principal.status.replace.positive.v2.5.0.fixture.json
       sha256: sha256:62465ea5258916291288ecd4738c2624866bea444af17922d5c940c104374f81
     - path: releases/2.5.0/fixtures/positive/future-fastapi.match.projection.json
-      sha256: sha256:00f3e291aa616bc06b56345c1a82f6353a0a574c7209fadef1133dcca0f90767
+      sha256: sha256:fd620384551fa2f1d1a2d4847fba08c1d896cc5876f64904eea2944028e92faf
     - path: releases/2.5.0/fixtures/positive/responses.boundary.aliases.positive.v2.5.0.fixture.json
       sha256: sha256:40d2285aafacdfbafda4eac3b2ebe01293bfa864fcecd616f286641f105f237d
     - path: releases/2.5.0/fixtures/positive/responses.boundary.credentials.positive.v2.5.0.fixture.json
@@ -359,7 +361,7 @@ inventory:
     - api_major: 1
       dialect: 3.1.0
       path: releases/2.5.0/openapi/control-plane.yaml
-      sha256: sha256:d14ffa683a63abc6a6fd8947a12a3fb5a473ffd7e2555ca7ba9085eb0dfb8c1c
+      sha256: sha256:d377f4f2ada2a24a97fce63ee5582eceb68787ac3e2cfc48e2cf8b0614f77d24
       version: 2.5.0
     - api_major: 1
       dialect: 3.1.0
@@ -369,13 +371,13 @@ inventory:
     - api_major: 1
       dialect: 3.1.0
       path: releases/2.5.0/openapi/usage-read.yaml
-      sha256: sha256:022069365e0604912a6f3e389382e0a3653ef6ef80a6869bdf38a1def736c6de
+      sha256: sha256:4d05ed8c23ea48fea54af3758b3dfc534605b76169be360bdea4dd882541daa6
       version: 2.5.0
   schemas:
     - dialect: https://json-schema.org/draft/2020-12/schema
       id: urn:sre-agent:schema:audit-event:2.5.0
       path: releases/2.5.0/json-schema/domain/audit-event.schema.json
-      sha256: sha256:3a72d3ac325575c0856bb02c94584844ff591d4ecbae3c450571379efddbda77
+      sha256: sha256:121baa0eabc13c76ae52f04d701abfcf8bacfdba52343cc882cd8f1039f0dc75
     - dialect: https://json-schema.org/draft/2020-12/schema
       id: urn:sre-agent:schema:consumption:2.5.0
       path: releases/2.5.0/json-schema/domain/consumption.schema.json
@@ -483,5 +485,5 @@ inventory:
     - dialect: https://json-schema.org/draft/2020-12/schema
       id: urn:sre-agent:schema:usage-read:2.5.0
       path: releases/2.5.0/json-schema/http/usage-read.schema.json
-      sha256: sha256:00fec6b57cb767189b4babd702df0f23e84733eca96f1eba5ca2acf8a3ff3e3f
+      sha256: sha256:d9d054c2c2bdee751488ee641f04de8e294d1d61fcef46fbc292fd84bc6782d4
 status: immutable

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from datetime import UTC, datetime
 from time import monotonic
@@ -22,6 +23,12 @@ from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.governance.dto import AuthorizationDenialCause
 from sre_agent.persistence.models import AuditEventRow
+
+SUPPORTED_MONTH_PATTERN = (
+    r"^(?:(?:000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|"
+    r"[1-8][0-9]{3}|9[0-8][0-9]{2}|99[0-8][0-9]|999[0-8])-"
+    r"(?:0[1-9]|1[0-2])|9999-(?:0[1-9]|1[01]))$"
+)
 
 
 class UsageReadLimitExceeded(RuntimeError):
@@ -134,7 +141,7 @@ class IncidentUsageFilter(BaseModel):
 class MonthUsageFilter(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    month: Annotated[str, Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]
+    month: Annotated[str, Field(pattern=SUPPORTED_MONTH_PATTERN)]
 
 
 UsageReadFilter = Annotated[
@@ -539,7 +546,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             UUID | None, Query(description="Effective response request UUID.")
         ] = None,
         incident_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
-        month: Annotated[str | None, Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")] = None,
+        month: Annotated[str | None, Query(pattern=SUPPORTED_MONTH_PATTERN)] = None,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_usage_bearer)] = None,
     ) -> UsageReadResponse | JSONResponse:
         request.state.usage_request_id = uuid4()
@@ -571,6 +578,14 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 stage="validation",
                 code="validation_error",
                 message="Exactly one bounded usage selector is required.",
+            )
+        if month is not None and re.fullmatch(SUPPORTED_MONTH_PATTERN, month) is None:
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="The usage selector is invalid.",
             )
 
         try:
