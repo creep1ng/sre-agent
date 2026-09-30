@@ -15,7 +15,8 @@ NEW_OPERATION = (
     "'credentials.revoke','credentials.rotate','grants.create','grants.list','grants.revoke',"
     "'aliases.create','aliases.list','aliases.get','aliases.assignment.replace',"
     "'aliases.status.replace','catalog.create','catalog.list','catalog.read',"
-    "'mcp.discovery','mcp.invoke','usage.read','catalog.status.replace','skills.resolve')"
+    "'mcp.discovery','mcp.invoke','usage.read','bok.search','bok.read',"
+    "'catalog.status.replace','skills.resolve')"
 )
 
 TARGET_OPERATION = NEW_OPERATION.replace(",'skills.resolve'", "")
