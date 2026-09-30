@@ -49,11 +49,18 @@ ERRORS: dict[int, tuple[str, str]] = {
     503: ("audit_unavailable", "Audit unavailable."),
 }
 ERROR_MESSAGES = {
+    "policy_unavailable": "The consumption policy is unavailable.",
     "status_conflict": "The status was changed by another request.",
     "credential_inactive": "The credential is not active.",
     "credential_issuance_failed": "Credential issuance could not be completed.",
 }
 CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
+    ("GET", "/v1/consumption-limits"): (
+        "consumption_limits.get",
+        "admin.read",
+        "administrative_control",
+        "consumption_limits",
+    ),
     ("POST", "/v1/principals"): (
         "principals.create",
         "admin.write",
@@ -466,6 +473,7 @@ class ControlService:  # noqa: E305
             "rotation_failed": "upstream_failed",
             "credential_issuance_failed": "upstream_failed",
             "resource_unavailable": "no_matching_grant",
+            "policy_unavailable": "upstream_unavailable",
         }.get(error_code, error_code)
         try:
             event = self.projector.control_event(
