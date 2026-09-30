@@ -165,9 +165,10 @@ allowed Prometheus POST, allowed Elasticsearch/Lucene POST, and restricted
 discovery. The complete controlled request order is asserted by the E2E test.
 
 The report uses the `denied` summary key and exposes only HTTP status, the
-allowlisted `resource_unavailable` code, a validated safe UUID, and
-`upstream_delta: null`. The later restricted-discovery request keeps a distinct
-UUID. Invalid status, code, or UUID fails closed; response bodies and
+allowlisted `resource_unavailable` code, a validated safe UUID, the contract's
+`retryable: false` value, and `upstream_delta: null`. The later restricted-
+discovery request keeps a distinct UUID. Invalid status, code, UUID, or missing,
+true, null, or nonboolean retryable values fail closed; response bodies and
 credentials are not summarized. A successful controlled fixture remains
 `pending` because it supplies no trusted upstream-call witness. In particular,
 the 403 and null delta do not prove zero upstream invocations or satisfy CA2.

@@ -124,6 +124,7 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
     http_status: invocation.status,
     error_code: invocationBody.error?.code === "resource_unavailable" ? "resource_unavailable" : null,
     request_id: safeRequestId(invocationBody.request_id),
+    retryable: typeof invocationBody.retryable === "boolean" ? invocationBody.retryable : null,
     upstream_delta: null,
   };
   const allowed = await call("GET", "/v1/mcp/discovery", humanToken);
@@ -146,7 +147,9 @@ export async function runDiscovery({ gatewayUrl, humanToken, restrictedToken }) 
   if (!metric.ok) failures.push(metric.failure);
   if (!logs.ok) failures.push(logs.failure);
   if (restrictedInvocation.http_status !== 403 || restrictedInvocation.error_code !== "resource_unavailable" ||
-      !restrictedInvocation.request_id) failures.push("restricted_invocation_not_denied");
+      !restrictedInvocation.request_id || restrictedInvocation.retryable !== false) {
+    failures.push("restricted_invocation_not_denied");
+  }
   if (restrictedDiscovery.http_status !== 403 || restrictedDiscovery.error_code !== "resource_unavailable" ||
       !restrictedDiscovery.request_id || restrictedDiscovery.retryable !== false || !restrictedDiscovery.enumeration_absent) {
     failures.push("restricted_discovery_not_denied");

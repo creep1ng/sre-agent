@@ -59,7 +59,7 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
   let denied = { error: { code: "resource_unavailable", message: PRIVATE_MARKER },
     request_id: DISCOVERY_REQUEST_ID, retryable: false };
   let invocationDenied = { error: { code: "resource_unavailable", message: PRIVATE_MARKER },
-    request_id: DENIAL_REQUEST_ID };
+    request_id: DENIAL_REQUEST_ID, retryable: false };
   const server = createServer((request, response) => {
     calls.push(`${request.method} ${request.url}`);
     let rawBody = "";
@@ -107,7 +107,7 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       error_kind: null, result_count: 1, returned_count: 1, warning_count: 0 });
     assert.deepEqual(observed.denied, {
       http_status: 403, error_code: "resource_unavailable", request_id: DENIAL_REQUEST_ID,
-      upstream_delta: null,
+      retryable: false, upstream_delta: null,
     });
     assert.deepEqual(observed.restricted_discovery, {
       http_status: 403, error_code: "resource_unavailable", request_id: DISCOVERY_REQUEST_ID,
@@ -127,6 +127,8 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       { datasource_uid: "webstore-logs", index: "otel-logs-*", query: "resource.service.name:checkout",
         start_time: "now-5m", end_time: "now", limit: 1 },
     ]);
+    t.diagnostic(`Valid restricted denial summary: ${JSON.stringify({ status: observed.status,
+      denied: observed.denied, restricted_discovery: observed.restricted_discovery })}`);
 
     const fiveRequestSequence = ["POST /v1/mcp/tools/query_prometheus", "GET /v1/mcp/discovery",
       "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
@@ -158,6 +160,34 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
         upstream_delta: duplicateReport.denied.upstream_delta, calls: calls.slice(before),
       })}`);
       denied = previousDenied;
+      invocationDenied = previousInvocationDenied;
+    }
+
+    const retryableCases = [
+      { label: "true", fields: { retryable: true }, expected: true },
+      { label: "missing", fields: { retryable: undefined }, expected: null },
+      { label: "null", fields: { retryable: null }, expected: null },
+      { label: "non-boolean", fields: { retryable: "false" }, expected: null },
+    ];
+    for (const retryableCase of retryableCases) {
+      const before = calls.length;
+      const previousInvocationDenied = invocationDenied;
+      invocationDenied = { error: { code: "resource_unavailable", message: PRIVATE_MARKER },
+        request_id: DENIAL_REQUEST_ID, ...retryableCase.fields };
+      const invalidRetryable = await runCli(url);
+      const invalidRetryableReport = report(invalidRetryable);
+      assert.equal(invalidRetryable.status, 1);
+      assert.equal(invalidRetryableReport.status, "fail");
+      assert.ok(invalidRetryableReport.failures.includes("restricted_invocation_not_denied"));
+      assert.equal(invalidRetryableReport.denied.request_id, DENIAL_REQUEST_ID);
+      assert.equal(invalidRetryableReport.denied.retryable, retryableCase.expected);
+      assert.equal(invalidRetryableReport.denied.upstream_delta, null);
+      assert.deepEqual(calls.slice(before), ["POST /v1/mcp/tools/query_prometheus", "GET /v1/mcp/discovery",
+        "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch", "GET /v1/mcp/discovery"]);
+      t.diagnostic(`Restricted denial retryable=${retryableCase.label}: ${JSON.stringify({
+        status: invalidRetryableReport.status, failures: invalidRetryableReport.failures,
+        denied: invalidRetryableReport.denied, calls: calls.slice(before),
+      })}`);
       invocationDenied = previousInvocationDenied;
     }
 
