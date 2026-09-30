@@ -2,19 +2,25 @@
 
 Read [the team workflow](docs/team-workflow.md) before contributing and
 [the PR evidence policy](docs/pr-evidence.md) before preparing a pull request.
-The evaluated tool/skill inventory is in
-[the documentation manifest](docs/gentle-ai-profile.yaml), not a native harness config.
 
 - Establish explicit mutation intent before changing files or external systems.
   Investigation and planning requests remain read-only.
-- Use direct work for bounded, understood changes. Propose SDD when durable
-  requirements/design would resolve substantial ambiguity; do not start it without
-  the user's explicit request or acceptance. Record the selected route in the PR.
-- OpenSpec is the shared source of specifications. Personal memory is supplementary,
-  not a replacement for versioned decisions accessible to teammates.
-- RDD is documented and optional. Never enable it through installation, hooks,
-  shared configuration, or on another person's behalf. With RDD off, follow normal
-  repository review policy; do not fabricate receipts or approvals.
+- User and scope: build for independent freelancers maintaining several services.
+  This is an academic project with no SRE on-call team, no imminent production,
+  and no complex edge-case validation required.
+- Real evidence only: never use invented SVGs nor generated captures. Provide real
+  FastAPI output, SQL queries, UI, or exact instructions to repeat the expected behavior.
+- Use direct work for bounded, understood changes. Record the selected route in the PR.
+- GitHub Projects is the authoritative reference for developing issues. Always consult
+  GitHub Projects when scoping or implementing an issue. Do not use prior memories
+  or snapshots as a substitute.
+- Testing policy:
+  - NEVER write unit tests after you write code.
+  - Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
+  - If you must test a system in isolation, FIRST write all the ways it could fail, THEN write the code.
+  - Tautological tests considered harmful.
+  - Change-detector tests considered harmful.
+  - Do not create regression tests for bug fixes without a genuine gap in behavior testing.
 - Preserve existing tests and runtime boundaries unless the requested change
   authorizes editing them. Validate the actual current candidate, not another
   task's reported result. Clearly separate local tests from hosted CI evidence.

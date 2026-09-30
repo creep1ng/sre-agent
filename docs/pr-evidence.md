@@ -75,8 +75,11 @@ an endpoint executes successfully. Passing tests complement observable behavior.
 
 Acceptable: a documentation PR records its rendered page, the requested change,
 an image, exact build/preview command, SHA and expected/observed result.
+Real behavior proof must be FastAPI output, SQL query output, UI, or exact
+instructions to repeat the expected behavior.
 Unacceptable: only a test count, unrelated screenshot, example.com link,
-placeholder, or a claimed live integration demonstrated with a fixture.
+placeholder, invented SVG, generated capture, or a claimed live integration
+demonstrated with a fixture.
 
 Screenshots, any recordings, commands and artifacts must exclude API keys,
 Authorization headers, personal data, full prompts/outputs and sensitive request
