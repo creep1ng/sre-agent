@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Delivery stage: prerequisites documentation only.** Probe paths and commands below describe the preserved complete recovery or planned later stages; they are not available or runnable in this first PR. Checked local repair items are historical full-candidate outcomes, not first-stage executable acceptance.
+**Delivery stage: discovery-only CLI (P3).** All full-probe/cycle commands below remain historical or planned. Checked recovery repairs are historical outcomes, not fresh stage acceptance; CA1–CA8 remain open.
 
 ## Objective
 
@@ -148,7 +148,7 @@ Prior foundation353/boundary383/signal601/gateway781 groupings were not minimal 
 
 - [x] **MCP45-P1 — Map semantic delivery stages**: record precise recovered path/hunk ownership, measured retained lines and adapter uncertainty outside the repository; keep every behavior/test/documentation section assigned. No later stage is built in this task. The private semantic map assigns every recovered source/test/runbook line once; retained totals P3=329, P4=214, P5=49, P6=241, P7=372 (383 existing diff), P8=297, P9=102, P10=398. These are not final runnable diffs; CLI/test adapters and tracker changes remain to measure. P10 includes separable passive documentation, not an exception prerequisite.
 - [x] **MCP45-P2 — Prerequisites documentation PR**: preserve this full tracker, publish a useful operator prerequisite/CA-gap guide, verify shell syntax/current links, render a fresh actual screenshot and prepare the exact PR template. Require <=400 measured additions plus deletions; publication/CI/human review remain parent-owned and pending. Observed first-stage checks: initial guide/tracker checks parsed one historical shell block and resolved ten links; publication-readiness checks now parse three blocks and resolve fifteen links with the added report. Fresh cached-container readback equals guide bytes / Node v22.14.0, and the unchanged sandboxed offline Chromium capture was visually inspected. Current mirror refresh is pending.
-- [ ] **MCP45-P3 — Discovery CLI**: full-grant and server-restricted discovery, bounded transport and redirect behavior with HTTP/CLI E2E; no CA2/partial-tool acceptance claim. Stage tests pending.
+- [x] **MCP45-P3 — Discovery CLI**: allowed/server-restricted GET discovery, safe normalization, 35-second budget and redirect rejection. Fresh container HTTP/CLI RED 0/2 (module absent), GREEN 2/2; refactor review retained the small validators and explicit safe report. No query, invocation, witness, capture, CA2 or partial-tool filtering. Final syntax/docs/evidence checks recorded below; mirror pending.
 - [ ] **MCP45-P4 — Governed metric/log smoke queries**: published PromQL/Lucene, safe summaries and failure/empty signals with E2E. Stage tests pending; real CA1 remains open.
 - [ ] **MCP45-P5 — Known-ID denial before discovery**: correct request order and separate safe IDs, keep upstream proof pending; E2E must observe no earlier restricted discovery. Stage tests pending.
 - [ ] **MCP45-P6 — Offline upstream witness reconciliation**: upstream-counter only, UUID/delta validation, no network/no audit-event substitution; matching/malformed/mismatched E2E. Stage tests pending.
@@ -166,3 +166,10 @@ The fresh [prerequisite-guide screenshot](../../docs/evidence/issue-45-pr01/prer
 ## Next Step
 
 The documentation prerequisite stage has its own observed structural/rendered evidence and a [sanitized report](../../docs/evidence/issue-45-pr01/report.md). Fresh cached-image readback returned exit 0 / Node v22.14.0 and exact guide bytes. The public Node base is not cached; the source-validated Compose build recipe is explicitly unexecuted. Guide/PNG bytes are unchanged; current tracker mirror is pending. Parent reviews, commits and publishes it, then independently scopes the next semantic stage against its actual base. Preserve all real CA1–CA8 gaps and producer dependencies; no automatic integration is authorized.
+
+## P3 execution checkpoint
+
+Base `73fd51ab6ea9a2235b51aa70e851ab930e89a5c0`, branch `codex/issue-45-02-discovery`; parent PR [#424](https://github.com/creep1ng/sre-agent/pull/424) is published with 346 changed lines. Parent refreshed issue #45 OPEN / Project #8 Todo / Sprint 4. Some PR checks passed and others are running; requested human review is not approval. Only this new discovery worktree is writable. Original recovery, full recovery and published first-stage worktree stay read-only. Existing task history and future stages remain intact.
+
+P3 checks: the exact existing worktree checks harness ran Node E2E from current mounted tests. Initial runner setup rejected unsupported `--no-build` before execution; removing that flag restored the authorized command. No build/pull occurred. [Current controlled evidence](../../docs/evidence/issue-45-pr02/report.md) is separate from historical full-recovery results. All live acceptance tasks remain open; publication and human review remain parent-owned.
+Final P3 checks passed: 2/2 current controlled tests, two Node syntax checks, 18 relative links, five shell blocks parsed only, whitespace/privacy checks and a genuine offline rendered E2E screenshot. Protected original/full recovery and published first-stage hashes/status/HEAD are unchanged. No actual CA completion, hosted CI or human approval is inferred; the tracker mirror remains pending.

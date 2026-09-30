@@ -1,6 +1,6 @@
 # Issue 45: operator prerequisites and evidence boundaries
 
-**This first PR delivers documentation, not new probe commands or live acceptance.**
+**The prerequisites stage delivers documentation; the P3 section below adds discovery only, not live acceptance.**
 It helps independent freelancers prepare a safe environment before verifying
 Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 
@@ -11,8 +11,8 @@ Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 2. Confirm capacity, isolated resources and explicit target authorization.
 3. Distinguish a healthy service, a controlled test and a real failure signal.
 4. Follow the staged recovery checklist in the [issue tracker](../odd/tasks/issue-45-grafana-mcp-verification.md).
-   Probe/cycle commands recorded there are historical or planned, not available
-   as new functionality in this documentation-only stage.
+   Full-probe/cycle commands recorded there remain historical or planned;
+   only the P3 discovery command below is delivered here.
 
 ## Current contract and prerequisites
 
@@ -55,19 +55,19 @@ API, not the harness. Keep that boundary unchanged.
 | CA4 | Actual harness name/IP/port/proxy boundaries and no secret delivery | Missing targets or an unvalidated absent port binding remain unverified |
 | CA5 | Read-only MCP with bypass/admin risk disclosed | `--disable-write` does not remove anonymous Grafana Admin or published proxy exposure; reachable paths are failure/risk |
 | CA6 | Marker absent from complete logs, audit, snapshots and evidence | Sanitized CLI output is not an arbitrary-output redaction guarantee |
-| CA7 | Normalized timeout/failure without alternate routes | Future redirect-negative checks need observed alternate-server counters; none are run by this PR |
+| CA7 | Normalized timeout/failure without alternate routes | P3 controlled redirects leave alternate-server counters at zero; live timeout evidence remains pending |
 | CA8 | Two ordered failure→signal→reset cycles with measured baselines | Availability is not baseline recovery; real metric/log windows and chronology are required |
 
-## Planned executable stages — not installed by this PR
+## Executable stage boundaries
 
-- Discovery CLI → governed metric/log queries → known-ID-first denial →
+- Discovery CLI (P3 delivered) → planned metric/log queries → known-ID-first denial →
   offline upstream-counter reconciliation.
 - Harness boundary targets, including connect-only proxy/admin probes.
 - Metric capture → log signal capture → offline two-cycle verification.
 
-The planned files are `scripts/demo_mcp_gateway_probe.mjs`,
-`scripts/demo_signal_cycles.mjs`, updates to `scripts/demo_mcp_probe.mjs`, and
-matching Node E2E tests. No command for those future changes is prescribed here.
+The discovery-only file is `scripts/demo_mcp_gateway_probe.mjs`. Signal capture
+in `scripts/demo_signal_cycles.mjs` and boundary updates to `scripts/demo_mcp_probe.mjs`
+remain planned, with their matching E2E tests. No future-stage command is prescribed here.
 Each stage must retain behavior, tests, operator documentation and its own proof.
 
 ## Delivery and evidence boundaries
@@ -79,16 +79,44 @@ feature tracker branch, automatic merge, issue closure or approved size exceptio
 
 The full recovery previously passed 13 controlled tests and three independent
 targeted checks. Its rendered screenshot is historical full-candidate evidence,
-not evidence for this first stage. This stage requires its own actual browser
-render of this guide and structural checks; neither proves live CA completion.
-Publication, hosted CI and human review remain pending until the parent records
-them. See [PR evidence requirements](pr-evidence.md).
+not discovery-stage evidence. PR #424 published the prerequisite documentation;
+P3 has separate current controlled HTTP/CLI evidence, not live CA completion.
+Its publication, hosted CI and human review remain parent-owned. See
+[PR evidence requirements](pr-evidence.md).
 
 ## Rollback and next step
 
-This unit changes documentation and its screenshot only; it introduces no
-runtime, configuration, migration, network or dependency changes. Revert these
-artifacts together without touching preserved recovery sources or running stacks.
-After human review, the next useful unit is the discovery CLI with matching
-controlled HTTP/CLI checks. Reassess its actual diff against its current base;
+P3 adds only the discovery CLI, matching tests and documentation/evidence; no
+producer, configuration, migration or dependency changes. Revert those additions
+and documentation updates together, preserving PR #424 and recovery sources.
+The next unit is governed metric/log queries with matching controlled checks.
+Reassess its actual diff against its current base;
 retained source-line estimates do not justify an exception.
+
+## P3: discovery-only CLI
+
+After the private local configuration setup above, use `MCP_GATEWAY_URL`,
+`DEMO_HUMAN_API_KEY` (server grant) and `RESTRICTED_HARNESS_API_KEY` (no server
+grant) only for explicitly authorized targets. Keep credentials out of command
+arguments, files for publication and output. Supply them through the harness
+environment using Compose `-e NAME`, not literal values. Then run
+`node scripts/demo_mcp_gateway_probe.mjs` inside that harness.
+
+This stage makes exactly two GET requests to `/v1/mcp/discovery`, never a tool
+invocation. Exit 0 means the expected server/two tools and a non-enumerating,
+non-retryable 403 with a safe UUID were observed; exit 1 means failure. Redirects
+are rejected; each request keeps a 35-second budget. Reports allowlist fields,
+not raw response text. This does not prove CA2 or partial-tool CA3 filtering.
+
+Run the controlled HTTP/CLI scenarios, without live credentials:
+
+```sh
+docker compose --project-directory "$PWD" --env-file .env --env-file .env.worktree \
+  -f compose.yaml --profile checks run --rm --no-deps \
+  -v "$PWD/tests:/source/tests:ro" harness node --test /source/tests/test_demo_mcp_gateway_probe.mjs
+```
+
+Use the existing harness image or an independently authorized harness build;
+this stage reused the cached image without building. See the current
+[controlled evidence](evidence/issue-45-pr02/report.md). Metric/log queries,
+known-ID invocation, upstream counters and cycle verification remain planned.
