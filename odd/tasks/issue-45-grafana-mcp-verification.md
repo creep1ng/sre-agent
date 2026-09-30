@@ -1,6 +1,6 @@
 # Issue 45: Governed Grafana MCP Verification
 
-**Current delivery stage: local P6 candidate restacked onto ready P5 PR #432 head `9cdf424573b35216702787af6e45be4172757b9b`; offline retryable and UUID-identity checks are test-first in progress.** P5 duplicate-ID and retryable corrections remain installed and verified. P6 changes remain local and unpublished. CA1–CA8 and human acceptance remain open.
+**Current delivery stage: draft PR #434 head `7cf7a6b3303c1f928f1b2d78bc46ebde24c4f0e1`, stacked onto ready P5 PR #432 `9cdf424573b35216702787af6e45be4172757b9b`.** The published head remains unfixed; the owned local candidate has a test-first bounded-read correction and current runbook wording, with independent verification/publication pending. P5 controlled checks are verified. CA1–CA8 and human acceptance remain open.
 
 ## Objective
 
@@ -348,3 +348,26 @@ Observed retryable:false RED/GREEN. Parent found that the earlier witness-negati
 ## P6 parent committed evidence checkpoint
 
 Exact `afcc54680d50069acfaa0349bc08ba74232839c1` independently passed Docker syntax/HTTP-CLI2/2 with unchanged source06260e9c/test29013ec0. Actual [P6 PNG](../../docs/evidence/issue-45-pr05/offline-witness.png),SHA-256 `88c5787b707f6bad23e27961e87410652b9a5bee75cb868ccc29aa27b91df1cd`, visually inspected/sanitized. P6-C remains pending publication/currentCI; all real CAs/human acceptance open.
+
+## P6 input-read and runbook review correction
+
+Public4347cf7a6b remains source-unfixed/DRAFT after reviews4143234061/4143234075: readFile loads all bytes before16KiBcheck; runbook64–66 incorrectly says reconciliation unimplemented. Parent source-confirmed/ack4143288241. Current388publishedlines; preserve full history/tests, measure correction beforepublication, split cohesive units or obtain explicit maintainer exception if >400. No implicit exception. P6-C reopened; no realCAclosed.
+- [x] **MCP45-P6-IO-R1 — Observe bounded-file CLI RED**: permanent CLI test creates a 1 GiB sparse report and requires exit 1 plus a small structured `probe_report_invalid`. Under the cached Node22.14 networkless Docker runner capped at 256 MiB memory/swap, the pre-fix CLI child closed with status `null` and no structured report; test runner exited 1 (2/3 passed). Capture: `/tmp/issue45-p6-current-evidence/io-red.log`. No source edits preceded RED.
+- [x] **MCP45-P6-IO-R2 — Enforce pre-read bound and current stage docs**: loader uses `open` and a fixed 16,385-byte buffer, reads at most limit+1 through EOF, rejects oversized content before parse, and closes the handle. Same capped Docker GREEN 3/3; the sparse report failed safely with `probe_report_invalid` in 233 output bytes. Existing malformed/missing input, offline witness guards, retryable:false, 15-request sequence and zero alternate-server assertions remained green. Runbook now correctly identifies implemented P6 offline reconcile and states it does not capture counters or establish witness provenance/semantics. Source/test hashes and full-base diff recorded in the current checkpoint below.
+- [ ] **MCP45-P6-IO-R3 — Bind corrective delivery proof**: parent independent current tests/realPNG/report/fullmirror, actualbase<=400 or explicit maintainer exception, owned publication/currentCI/humanrequest; preserve originalscope/allhistory.
+
+## Accepted PR434 corrective size exception (2026-09-30)
+
+User explicitly accepted the parent question permitting PR #434 to exceed 400 additions plus deletions for the coherent input-read bound, permanent behavioral test, runbook stage correction and current delivery proof. The pre-repair candidate measured 404 additions + 17 deletions = 421. This is a scoped maintainer exception, not blanket approval for future PRs or functional/human acceptance; no exception label is authorized. Resume IO-R1/R2/R3 with strict test-first and the existing cached networkless Node22.14 runner, adding a 256MiB memory/swap ceiling for the sparse-input case. All real CA1–CA8 remain open.
+
+## Current P6 IO correction checkpoint (2026-09-30)
+
+The parent-authorized exception remains limited to this current PR #434 input-read/test/runbook/current-proof correction. Base remains P5 `9cdf424573b35216702787af6e45be4172757b9b`; published PR434 head remains `7cf7a6b3303c1f928f1b2d78bc46ebde24c4f0e1` and the source finding is not yet published as fixed. Exact GREEN is `/tmp/issue45-p6-current-evidence/io-green.log`; test-first RED is `/tmp/issue45-p6-current-evidence/io-red.log`.
+
+The RED run's prior shared log filenames accidentally overwrote raw retryable-schema captures: `/tmp/issue45-p6-current-evidence/red.log` and `green.log` now contain the IO correction runs. Those earlier raw bytes are unavailable and are not reconstructed. Earlier written checkpoint text is retained as historical documentation only; the separately named current IO captures remain available. No witness provenance/counter source validation, producer, network capture, real CA2, or CA1–CA8 closure is claimed.
+
+Current source SHA-256 `8a9d926288b416157e041e3a84c4e075a65bec799dcd5af227af1fe5f9e61583`; test SHA-256 `c5e016a9f6445176ff0aa44d39bcac4347ff114da18e71ed027e0de57a161961`; full current-base text diff is 456 additions + 20 deletions = 476, within the user's exception only for this correction. Final syntax/full-suite log is `/tmp/issue45-p6-current-evidence/final-verification.log` (SHA-256 `d74f5a9ae8e052db5848b4eb074c914dd5710ce3d269080656bca4f728fab3fa`). Parent owns independent verification, genuine current screenshot, full mirror readback, commit/publication/current CI, and human review; P6-IO-R3 remains pending.
+
+## P6 input-bound parent independent verification
+
+Parent exact cached Node22.14 networkless Docker, memory/swap 256MiB, syntax and full CLI suite passed 3/3 (no skips). The 1GiB sparse report failed safely with probe_report_invalid in 233 bytes; existing 15 gateway requests / zero alternate calls remain asserted. Source8a9d9262/testc5e016a9 unchanged after verification. Current runbook stage text inspected against implemented dispatch. IO-R3 remains pending committed proof, fresh PNG, mirror/publication/current CI/human request. Capture: /tmp/issue45-p6-io-parent-evidence/parent-green.log.

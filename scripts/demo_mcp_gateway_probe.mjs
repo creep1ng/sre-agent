@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Public gateway smoke-query probe. All tool calls go through the API gateway.
-import { readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 const EXPECTED_SERVER = "grafana-mcp";
@@ -257,12 +257,22 @@ export function reconcileReport(report, witness) {
 
 async function loadJsonFile(path) {
   if (!path) return null;
+  let handle;
   try {
-    const file = await readFile(path);
-    if (file.byteLength > 16_384) return null;
-    return JSON.parse(file.toString("utf8"));
+    handle = await open(path, "r");
+    const bytes = Buffer.alloc(16_385);
+    let length = 0;
+    while (length < bytes.length) {
+      const { bytesRead } = await handle.read(bytes, length, bytes.length - length, length);
+      if (bytesRead === 0) break;
+      length += bytesRead;
+    }
+    if (length > 16_384) return null;
+    return JSON.parse(bytes.toString("utf8", 0, length));
   } catch {
     return null;
+  } finally {
+    if (handle) await handle.close().catch(() => {});
   }
 }
 

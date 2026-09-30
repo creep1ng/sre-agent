@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -406,6 +406,32 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
     assert.equal(calls.length, count, "invalid configuration and unsupported stages must not contact the gateway");
   } finally {
     await close(server);
+  }
+});
+
+test("offline CLI rejects oversized sparse evidence with a bounded failure", async (t) => {
+  const evidenceDir = await mkdtemp(join(tmpdir(), "issue45-sparse-evidence-"));
+  const reportPath = join(evidenceDir, "oversized.json");
+  const witnessPath = join(evidenceDir, "witness.json");
+  try {
+    const sparseReport = await open(reportPath, "w");
+    await sparseReport.truncate(1024 * 1024 * 1024);
+    await sparseReport.close();
+    await writeFile(witnessPath, JSON.stringify({ kind: "upstream-counter",
+      source: "mcp_tool_calls_total", request_id: DENIAL_REQUEST_ID, before: 0, after: 0 }));
+
+    const result = await runCli("http://127.0.0.1:1", {}, [
+      "--reconcile", reportPath, "--witness", witnessPath,
+    ]);
+    assert.equal(result.status, 1);
+    const rejected = report(result);
+    assert.equal(rejected.status, "fail");
+    assert.deepEqual(rejected.failures, ["probe_report_invalid"]);
+    assert.ok(result.stdout.length < 1024, "oversized input must not be echoed or summarized");
+    t.diagnostic(`Oversized sparse report: ${JSON.stringify({ size_bytes: 1024 ** 3,
+      status: rejected.status, failures: rejected.failures, output_bytes: result.stdout.length })}`);
+  } finally {
+    await rm(evidenceDir, { recursive: true, force: true });
   }
 });
 

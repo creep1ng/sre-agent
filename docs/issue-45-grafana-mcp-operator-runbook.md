@@ -62,8 +62,10 @@ API, not the harness. Keep that boundary unchanged.
 ## Executable stage boundaries
 
 - P3 discovery → P4 fixed metric/log smoke queries → P5 known-ID-first denial
-  before all discovery. Any offline upstream-counter reconciliation is a later,
-  separate stage and is not implemented by this probe.
+  before all discovery. P6 offline upstream-counter reconciliation is implemented
+  by this probe's `--reconcile <report> --witness <file>` mode. It consumes a
+  separately operator-validated witness without network access; it does not
+  capture counters or independently establish witness provenance or semantics.
 - Harness boundary targets, including connect-only proxy/admin probes.
 - Metric capture → log signal capture → offline two-cycle verification.
 
@@ -78,7 +80,9 @@ Each stage must retain behavior, tests, operator documentation and its own proof
 The user selected **stacked-to-main**: first PR targets main; subsequent PRs
 review against their preceding owned branch while pending, then retarget main
 after that parent integrates. Every PR integrates separately. There is no
-feature tracker branch, automatic merge, issue closure or approved size exception.
+feature tracker branch, automatic merge or issue closure. A user-approved size
+exception applies only to PR #434's current P6 input-read correction; it does
+not authorize future PRs.
 
 The full recovery previously passed 13 controlled tests and three independent
 targeted checks. Its rendered screenshot is historical full-candidate evidence,

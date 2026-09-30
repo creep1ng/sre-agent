@@ -5,8 +5,8 @@ and summary behavior only; it does not capture a real upstream counter or
 establish CA2.
 
 Current base: published P5 PR #432, `9cdf424573b35216702787af6e45be4172757b9b`.
-Current tested source SHA-256: `06260e9cb35327f234ac40c880f838fd9398f43831c588eae7711de82dbf97cb`.
-Current test SHA-256: `29013ec083adab404f7531039105477a0e82eb5d6d19f371e82f5b099013a138`.
+Previous P6 checkpoint source SHA-256: `06260e9cb35327f234ac40c880f838fd9398f43831c588eae7711de82dbf97cb`.
+Previous P6 checkpoint test SHA-256: `29013ec083adab404f7531039105477a0e82eb5d6d19f371e82f5b099013a138`.
 
 Earlier P6 implementation and its evidence below were captured against P5 head
 `0022a2a7373bba3309a0c82caf2e0e6ab7b9fe97`; they remain historical, not current-base proof.
@@ -67,3 +67,26 @@ publication, hosted P6 CI, and human acceptance remain parent-owned or pending.
 ## Parent committed current proof
 
 Exact `afcc54680d50069acfaa0349bc08ba74232839c1` independently passed cached Docker syntax and HTTP/CLI2/2 with unchanged current hashes. [Actual P6 PNG](offline-witness.png),1600×3800,331930bytes,SHA-256 `88c5787b707f6bad23e27961e87410652b9a5bee75cb868ccc29aa27b91df1cd`, shows real committed test output and desmasked witness failure diagnostics. Host sandboxed Chromium153.0.8010.52 rendered local CSP/no-external-assets HTML; visually inspected/sanitized. No live counter/CA2 or PR424 container-preview proof. Publication/current hosted CI/human review pending.
+
+## P6 bounded input-read correction (local candidate, 2026-09-30)
+
+Base is published P5 PR #432 `9cdf424573b35216702787af6e45be4172757b9b`; PR #434 remains draft at its unchanged published head. The user accepted a size exception limited to this coherent PR #434 correction; no future exception, merge, acceptance, or CA closure is implied.
+
+- Test-first RED used the cached Node 22.14.0 image with `--pull never --network none --memory=256m --memory-swap=256m` and the 512 MiB `/workspace` tmpfs. The permanent CLI test created a 1 GiB sparse report. Existing full-file reading returned no structured CLI result: child close status was `null` instead of required exit 1 with a bounded `probe_report_invalid` report. The test runner exited 1 (2/3 top-level tests passed). Capture: `/tmp/issue45-p6-current-evidence/io-red.log`, SHA-256 `c1daa64592cf86dc20b0ffe3e097fbe64c6a1ea122ab9149fc09cba44db22c30`.
+- The loader now opens the file and reads through a fixed 16,385-byte buffer, stopping at EOF or limit+1, rejects oversized input before parsing, and closes the handle. It retains structured failure for malformed/missing inputs and performs no network work in reconciliation.
+- GREEN on the same capped, networkless command: 3/3 top-level tests passed. The 1 GiB sparse report returned status `fail`, `probe_report_invalid`, and only 233 output bytes. Existing offline witness failure guards, retryable:false contract, P5 five-request sequence, 15 controlled requests, and zero alternate-server calls remained passing. Capture: `/tmp/issue45-p6-current-evidence/io-green.log`, SHA-256 `99e82f9d7e9c27ec74fe0918f644f259a5b582b6f29c268433cca5ac8e621e13`.
+
+The exact memory-capped test command was:
+
+```sh
+docker run --pull never --network none --memory=256m --memory-swap=256m --rm \
+  --tmpfs /workspace:rw,nosuid,size=512m,uid=1000,gid=1000,mode=0755 \
+  -v "$PWD/tests:/source/tests:ro" -v "$PWD/scripts:/source/scripts:ro" \
+  -v "$PWD/schemas:/source/schemas:ro" \
+  sha256:060b50ea88cf38bb3c2b6b0bb5920f2460091056381db72d802424c5f1df697d \
+  node --test /source/tests/test_demo_mcp_gateway_probe.mjs
+```
+- The runbook now identifies offline P6 reconciliation as implemented while stating it neither captures counters nor validates witness provenance/semantics. No producer, runtime, dependency, Compose, route, query, or counter semantics changed.
+- Current source SHA-256: `8a9d926288b416157e041e3a84c4e075a65bec799dcd5af227af1fe5f9e61583`; current test SHA-256: `c5e016a9f6445176ff0aa44d39bcac4347ff114da18e71ed027e0de57a161961`. Exact cached-container source/test syntax and `git diff --check` pass. Final verification log: `/tmp/issue45-p6-current-evidence/final-verification.log`, SHA-256 `d74f5a9ae8e052db5848b4eb074c914dd5710ce3d269080656bca4f728fab3fa`. Current base text delta is 456 additions + 20 deletions = 476; the existing PNG is binary and adds no text lines. The user's accepted size exception is limited to this correction.
+- Log-path collision: the earlier raw P6 retryable-schema files at `/tmp/issue45-p6-current-evidence/red.log` and `green.log` were overwritten by the new runs before this collision was noticed. They are not reconstructed or represented by the new captures; the earlier written checkpoint remains historical text, but its raw retryable RED/GREEN files are unavailable in this workspace. Current correction captures are separately named `io-red.log` and `io-green.log`.
+- Parent-owned independent verification, current genuine screenshot, full task mirror, commit/publication/current hosted CI and human review remain pending. No real counter/provenance or CA1–CA8 acceptance is claimed.
