@@ -24,6 +24,7 @@ from psycopg import sql
 from sqlalchemy import event
 
 from sre_agent.application import create_application
+from sre_agent.bok import retrieval as bok_retrieval
 from sre_agent.bok.owner import DEMO_BUNDLES, activate_version, ingest_bundle, seed_bok_demo
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.persistence.database import Database
@@ -118,7 +119,9 @@ def migrated_database() -> None:
                     ],
                 }
                 await ingest_bundle(session, alternate)
-                await activate_version(session, "demo-incident-response", "2.0.0")
+                await activate_version(
+                    session, "demo-incident-response", "2.0.0", expected_bundle=alternate
+                )
                 session.add(
                     ResourceRow(
                         resource_type="bok_collection",
@@ -223,7 +226,9 @@ def migrated_database() -> None:
                     ],
                 }
                 await ingest_bundle(session, ordered)
-                await activate_version(session, "demo-stable-order", "1.0.0")
+                await activate_version(
+                    session, "demo-stable-order", "1.0.0", expected_bundle=ordered
+                )
                 session.add(
                     ResourceRow(
                         resource_type="bok_collection",
@@ -609,6 +614,115 @@ def test_committed_authority_change_stops_warm_reads(client, sql_content_reads, 
             connection.execute(statement, ("active", value))
     assert client.post(url, headers=headers, json=body).status_code == 200
     assert sql_content_reads["demo-platform-operations@1.0.0"] == 2
+
+
+@pytest.mark.parametrize(
+    ("change", "expected_cause"),
+    [
+        ("principal", "principal_inactive"),
+        ("resource", "resource_inactive"),
+        ("grant", "grant_not_applicable"),
+    ],
+)
+def test_locked_authority_recheck_audits_actual_denial_cause(
+    client, sql_content_reads, monkeypatch, change, expected_cause
+):
+    """A committed change between authorization and locks must retain its real audit cause."""
+    headers = {"Authorization": f"Bearer {RESTRICTED_KEY}"}
+    collection = "demo-platform-operations"
+    resource_id = f"{collection}@1.0.0"
+    grant_id = "grant-restricted-bok-search"
+    url = _url(collection) + "/search"
+    body = {"query": "rollback"}
+    assert client.post(url, headers=headers, json=body).status_code == 200
+    content_reads_before = sql_content_reads.copy()
+    original = bok_retrieval.BoKOwnerRepository.lock_current_authority
+    applied = False
+
+    def apply_committed_change() -> None:
+        changes = {
+            "principal": [
+                "UPDATE principals SET status='inactive', updated_at=now() "
+                "WHERE principal_id='restricted-harness'",
+                "UPDATE grants SET status='revoked' WHERE grant_id=%s",
+            ],
+            "resource": [
+                "UPDATE resources SET status='inactive' "
+                "WHERE resource_type='bok_collection' AND resource_id=%s",
+                "UPDATE grants SET status='revoked' WHERE grant_id=%s",
+            ],
+            "grant": ["UPDATE grants SET status='revoked' WHERE grant_id=%s"],
+        }
+        parameters = {
+            "principal": [(), (grant_id,)],
+            "resource": [(resource_id,), (grant_id,)],
+            "grant": [(grant_id,)],
+        }[change]
+        with psycopg.connect(DATABASE_URL) as connection:
+            for statement, params in zip(changes[change], parameters, strict=True):
+                connection.execute(statement, params)
+
+    async def change_before_locked_read(repository, context, action, locked_resource_id):
+        nonlocal applied
+        if not applied:
+            applied = True
+            apply_committed_change()
+        return await original(repository, context, action, locked_resource_id)
+
+    monkeypatch.setattr(
+        bok_retrieval.BoKOwnerRepository,
+        "lock_current_authority",
+        change_before_locked_read,
+    )
+    try:
+        response = client.post(url, headers=headers, json=body)
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "resource_unavailable"
+        assert response.json()["retryable"] is False
+        assert sql_content_reads == content_reads_before
+        with psycopg.connect(DATABASE_URL) as connection:
+            event_row = connection.execute(
+                "SELECT to_jsonb(audit_events)::text FROM audit_events "
+                "WHERE operation='bok.search' AND response_status=403 "
+                "ORDER BY occurred_at DESC LIMIT 1"
+            ).fetchone()
+        assert event_row is not None
+        event = json.loads(event_row[0])
+        assert event["authorization_denial_cause"] == expected_cause
+        assert event["policy_decision"] == {
+            "decision": "deny",
+            "reason_code": "no_matching_grant",
+        }
+        serialized = json.dumps(event)
+        assert body["query"] not in serialized
+        assert RESTRICTED_KEY not in serialized
+        for document in DEMO_BUNDLES[1]["documents"]:
+            for chunk in document["chunks"]:
+                assert chunk["content"] not in serialized
+        assert event["content_state"] == "absent"
+    finally:
+        restores = {
+            "principal": [
+                "UPDATE principals SET status='active', updated_at=now() "
+                "WHERE principal_id='restricted-harness'",
+                "UPDATE grants SET status='active' WHERE grant_id=%s",
+            ],
+            "resource": [
+                "UPDATE resources SET status='active' "
+                "WHERE resource_type='bok_collection' AND resource_id=%s",
+                "UPDATE grants SET status='active' WHERE grant_id=%s",
+            ],
+            "grant": ["UPDATE grants SET status='active' WHERE grant_id=%s"],
+        }
+        parameters = {
+            "principal": [(), (grant_id,)],
+            "resource": [(resource_id,), (grant_id,)],
+            "grant": [(grant_id,)],
+        }[change]
+        with psycopg.connect(DATABASE_URL) as connection:
+            for statement, params in zip(restores[change], parameters, strict=True):
+                connection.execute(statement, params)
+    assert client.post(url, headers=headers, json=body).status_code == 200
 
 
 def test_unready_unauthenticated_and_wrong_version_read_no_content(client, sql_content_reads):

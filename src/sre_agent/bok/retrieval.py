@@ -59,8 +59,8 @@ class BoKOwnerRepository:
 
     async def lock_current_authority(
         self, context: PrincipalContext, action: str, resource_id: str
-    ) -> bool:
-        """Hold exact active authorization facts stable through the content query."""
+    ) -> AuthorizationDenialCause | None:
+        """Hold exact authorization facts stable and report the first denial cause."""
         principal = await self.session.scalar(
             select(PrincipalRow)
             .where(PrincipalRow.principal_id == context.principal.principal_id)
@@ -95,16 +95,23 @@ class BoKOwnerRepository:
             .with_for_update(read=True)
         )
         now = datetime.now(UTC)
-        return bool(
-            principal is not None
-            and principal.status == "active"
-            and credential is not None
+        credential_is_current = bool(
+            credential is not None
             and credential.status == "active"
             and (credential.expires_at is None or credential.expires_at > now)
-            and resource is not None
-            and resource.status == "active"
-            and grant is not None
         )
+        if principal is None or principal.status != "active":
+            return AuthorizationDenialCause.PRINCIPAL_INACTIVE
+        if resource is None:
+            return AuthorizationDenialCause.RESOURCE_MISSING
+        if resource.status != "active":
+            return AuthorizationDenialCause.RESOURCE_INACTIVE
+        # Credentials retain their existing fail-closed behavior without expanding
+        # the audit denial taxonomy; only the governed principal/resource/grant facts
+        # participate in the shared authorization-cause precedence.
+        if not credential_is_current or grant is None:
+            return AuthorizationDenialCause.GRANT_NOT_APPLICABLE
+        return None
 
     async def search(self, collection_id: str, version: str, query: str, limit: int):
         vector = func.to_tsvector("english", BoKSectionChunkRow.content)
@@ -316,12 +323,13 @@ class BoKRetrievalService:
         try:
             async with self.sessions() as session, session.begin():
                 repository = BoKOwnerRepository(session)
-                if not await repository.lock_current_authority(context, action, resource_id):
+                denial_cause = await repository.lock_current_authority(context, action, resource_id)
+                if denial_cause is not None:
                     denied_evaluation = AuthorizationEvaluation(
                         PolicyDecision(
                             decision="deny", reason_code="no_matching_grant", policy_id=None
                         ),
-                        AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
+                        denial_cause,
                     )
                     return await self._finish(
                         request_id,
