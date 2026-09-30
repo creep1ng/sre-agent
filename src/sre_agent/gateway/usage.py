@@ -14,7 +14,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -29,11 +29,26 @@ class UsageReadLimitExceeded(RuntimeError):
 
 
 class UsageReadCost(BaseModel):
+    # FastAPI omits const: None when serializing OpenAPI; type: null survives.
+    model_config = ConfigDict(
+        json_schema_extra={
+            "if": {"properties": {"amount": {"type": "null"}}},
+            "then": {"properties": {"currency": {"type": "null"}, "precision": {"type": "null"}}},
+            "else": {"properties": {"currency": {"const": "USD"}, "precision": {"const": "exact"}}},
+        }
+    )
     amount: Annotated[str | None, Field(pattern=r"^(0|[1-9]\d*)(\.\d+)?$")]
     currency: Literal["USD"] | None
     nature: Literal["billed"]
     precision: Literal["exact"] | None
     price_versions: list[str]
+
+    @model_validator(mode="after")
+    def validate_metadata(self) -> UsageReadCost:
+        expected = (None, None) if self.amount is None else ("USD", "exact")
+        if (self.currency, self.precision) != expected:
+            raise ValueError("cost metadata must match the billed amount availability")
+        return self
 
 
 class UsageReadTotals(BaseModel):
@@ -44,10 +59,53 @@ class UsageReadTotals(BaseModel):
 
 
 class UsageReadCoverage(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "oneOf": [
+                {
+                    "properties": {
+                        "status": {"const": "complete"},
+                        "incomplete": {"const": 0},
+                        "unknown": {"const": 0},
+                    }
+                },
+                {
+                    "properties": {
+                        "status": {"const": "unknown"},
+                        "known": {"const": 0},
+                        "incomplete": {"const": 0},
+                        "unknown": {"type": "integer", "minimum": 1},
+                    }
+                },
+                {
+                    "properties": {"status": {"const": "partial"}},
+                    "anyOf": [
+                        {"properties": {"incomplete": {"type": "integer", "minimum": 1}}},
+                        {
+                            "properties": {
+                                "known": {"type": "integer", "minimum": 1},
+                                "unknown": {"type": "integer", "minimum": 1},
+                            }
+                        },
+                    ],
+                },
+            ]
+        }
+    )
     status: Literal["complete", "partial", "unknown"]
     known: Annotated[int, Field(ge=0)]
     incomplete: Annotated[int, Field(ge=0)]
     unknown: Annotated[int, Field(ge=0)]
+
+    @model_validator(mode="after")
+    def validate_status(self) -> UsageReadCoverage:
+        if self.incomplete or (self.known and self.unknown):
+            expected = "partial"
+        else:
+            expected = "unknown" if self.unknown else "complete"
+        if self.status != expected:
+            raise ValueError("coverage status must match the request evidence counts")
+        return self
 
 
 class UsageReadMonth(BaseModel):
@@ -62,6 +120,13 @@ class UsageReadResponse(BaseModel):
     months: list[UsageReadMonth]
     totals: UsageReadTotals
     coverage: UsageReadCoverage
+
+    @model_validator(mode="after")
+    def validate_request_count(self) -> UsageReadResponse:
+        coverage = self.coverage
+        if coverage.known + coverage.incomplete + coverage.unknown != self.request_count:
+            raise ValueError("coverage counts must sum to request_count")
+        return self
 
 
 # The dependency is module-scoped so FastAPI can resolve its postponed annotation

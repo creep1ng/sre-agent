@@ -24,6 +24,14 @@ proof of a current defect. GitHub Project 8 remains Todo / Sprint 4.
   Above 400 requires a new scoped maintainer exception or cohesive slicing.
 - GitHub credentials are authorized only for `creep1ng/sre-agent`.
 - RDD is off (global); do not change the user-owned switch.
+- User now requires GPT-6 Luna high for delegated agents, never Astra xhigh.
+- Maintainer approval: the user answered `aprobado` to the NEW size exception
+  solely for the self-contained additive contract publication/activation
+  (estimated 6,500–7,500 changed lines). Do not transfer it to other slices.
+- Retain the user's established stacked-to-main strategy for issue #333:
+  PR #421 → invariant preparation → publication/activation. Child PRs initially
+  target their immediate parent for focused review; retarget after parent merge.
+  There is no feature tracker and no automatic merge authority.
 
 ## TDD and checks
 
@@ -52,7 +60,7 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
   preserve exact-once, scoped run counts, UTC months and inspected-row cap.
   Checks: observed RED/GREEN, existing usage/audit acceptance, lint/format.
   Rollback: only query/aggregation change and its scenarios/documentation.
-- [ ] **U333-7 — Enforce cost and coverage contract invariants.**
+- [x] **U333-7 — Enforce cost and coverage contract invariants.**
   Reproduce contradictory cost metadata and coverage status/count examples;
   couple non-null amount to USD/exact and null amount to null metadata. Counts
   describe distinct requests and sum to request_count; status reflects counts.
@@ -61,7 +69,7 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
 - [ ] **U333-8 — Publish and activate an additive contract.**
   Publish a self-contained next release containing the delivered usage route
   and usage.read audit operation; activate it without editing 2.4.0.
-  Pending: next-version coordination and NEW publication-size exception.
+  Publication-size exception approved; coordinate the next additive version.
   Checks: immutable inventory, generation, conformance and runtime version/path.
 - [x] **U333-9 — Retest delivered historical corrections.**
   Verify audit-before-release and audit_unavailable suppression, denial cause,
@@ -80,7 +88,8 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
 - #384 merged at `6f637a6f1ddc3a206c744c9effb6690a22696829`;
   #383 merged at `4b0c8740a042a8654979dd43481c7ad4f9992ea1`.
 - Live inventory is paginated; two #383 and six #384 threads were inspected.
-  No issue-333-related PR remains open. Project 8 was read live before scoping.
+  The initial inventory had no open issue-333 PR; subsequent PR #421 is below.
+  Project 8 was read live before scoping.
 - Current source confirms three residual leads: incident filtering before
   consistency, missing proposal invariants, advertised 2.4.0 without usage path.
   U333-6 is locally verified; contract/release leads remain U333-7/U333-8.
@@ -99,9 +108,32 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
   Independent verification, publication, hosted CI and human acceptance remain pending.
 - Full existing release snapshot is 194 files / 6,150 lines before additions;
   its self-contained publication cannot fit a 400-line PR by omitting evidence.
+- PR #421 is published at `c57732f4407e9a0d4e9ee89fde7286e79b4f1876`:
+  304 changed lines, real JSON/PNG/SQL, independent 48+103 tests, parent 48-test
+  spot check, and all eight hosted CI jobs passed in run `36657302250`.
+  Final evidence-binding governance run `36659223751` also passed.
+- Source/head and actual hosted synthetic merge `36d44dcd04b9f0207ff6eb0d86722741bf8e03d1`
+  share full tree `1a89670e5aa0e25352a1c93ec09a2c67000c0c9e`. The unavailable
+  `d6f31fb` in review prose was not substituted for the actual candidate.
+- Remaining invariants were reproduced on this exact head: AJV and runtime
+  accept four contradictory cost/coverage payloads; seven valid examples pass.
+  ASGI OpenAPI still advertises 2.4.0 with a usage route absent from that snapshot.
+  Existing immutable 2.4.0 validates: 199 artifacts / 16 checks, hashes unchanged.
+- Current implementation branch is `fix/issue-333-contract-invariants`, based on
+  the owned PR #421 head. Publication follows only after invariant verification.
+
+- U333-7 RED: runtime 16 failed / 10 passed; after fixing composed-filter closure,
+  schema/semantic checks had 16 failed / 11 passed. Focused schema GREEN: 27 passed.
+  Final runtime/usage/audit: 74 passed; full tooling: 123 passed; all ten immutable
+  releases validate; all 194 published 2.4.0 file hashes are unchanged. Ruff and
+  whitespace checks pass. [Invariant evidence](../../docs/evidence/issue-333-contract-invariants.md).
+- Runtime identity is restored; reconcile the full Engram mirror before commit.
+  Future delegated agents use the current user-selected GPT-6 Luna high profile.
 
 ## Next step
 
-Independently verify the normalized candidate and bind/publish its tested SHA and evidence.
-Keep U333-8 blocked on its scoped size/version decision; continue independent
-safe tasks without narrowing the full objective.
+Independent U333-7 verification passed: 74 Python, 123 tooling, ten releases;
+2,168 file hashes/modes unchanged. Parent focused spot check: 27 passed.
+Bind the tested SHA, then publish and coordinate U333-8 under its approved
+exception. Remote reads were rejected before execution twice; explicit current
+GitHub repository/session authorization is pending. Preserve recovery roots.

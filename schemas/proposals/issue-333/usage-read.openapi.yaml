@@ -96,6 +96,8 @@ components:
       required: [filter, request_count, incident_runs, months, totals, coverage]
       properties:
         filter:
+          type: object
+          unevaluatedProperties: false
           oneOf:
             - type: object
               additionalProperties: false
@@ -139,7 +141,18 @@ components:
             total_tokens: { type: [integer, 'null'], minimum: 0 }
             cost:
               type: object
-              additionalProperties: false
+              unevaluatedProperties: false
+              if:
+                properties:
+                  amount: {type: 'null'}
+              then:
+                properties:
+                  currency: {const: null}
+                  precision: {const: null}
+              else:
+                properties:
+                  currency: {const: USD}
+                  precision: {const: exact}
               required: [amount, currency, nature, precision, price_versions]
               properties:
                 amount:
@@ -157,7 +170,30 @@ components:
                   items: { type: string, minLength: 1, maxLength: 128 }
         coverage:
           type: object
-          additionalProperties: false
+          unevaluatedProperties: false
+          description: >-
+            Counts describe distinct effective requests, never evidence rows.
+            known + incomplete + unknown must equal request_count; this arithmetic
+            is enforced by runtime and semantic conformance, not JSON Schema.
+            Empty scopes are complete with zero counts and unavailable totals.
+          oneOf:
+            - properties:
+                status: {const: complete}
+                incomplete: {const: 0}
+                unknown: {const: 0}
+            - properties:
+                status: {const: unknown}
+                known: {const: 0}
+                incomplete: {const: 0}
+                unknown: {type: integer, minimum: 1}
+            - properties:
+                status: {const: partial}
+              anyOf:
+                - properties:
+                    incomplete: {type: integer, minimum: 1}
+                - properties:
+                    known: {type: integer, minimum: 1}
+                    unknown: {type: integer, minimum: 1}
           required: [status, known, incomplete, unknown]
           properties:
             status: { enum: [complete, partial, unknown] }

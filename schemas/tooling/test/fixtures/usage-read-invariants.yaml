@@ -1,0 +1,41 @@
+# Shared boundary cases: metadata lies, contradictory coverage, and request/evidence
+# count confusion must be rejected; null cost alone does not imply partial coverage.
+base:
+  filter: {month: '2026-09'}
+  request_count: 1
+  incident_runs: 0
+  months: [{month: '2026-09', request_count: 1}]
+  totals:
+    input_tokens: 2
+    output_tokens: 3
+    total_tokens: 5
+    cost: {amount: '0.001', currency: USD, nature: billed, precision: exact, price_versions: [controlled-v1]}
+  coverage: {status: complete, known: 1, incomplete: 0, unknown: 0}
+cost_cases:
+  - {name: billed, amount: '0.001', currency: USD, precision: exact, valid: true}
+  - {name: billed-zero, amount: '0', currency: USD, precision: exact, valid: true}
+  - {name: incompatible-prices, amount: null, currency: null, precision: null, valid: true}
+  - {name: missing-currency, amount: '0.001', currency: null, precision: exact, valid: false}
+  - {name: missing-precision, amount: '0.001', currency: USD, precision: null, valid: false}
+  - {name: missing-metadata, amount: '0.001', currency: null, precision: null, valid: false}
+  - {name: null-with-currency, amount: null, currency: USD, precision: null, valid: false}
+  - {name: null-with-precision, amount: null, currency: null, precision: exact, valid: false}
+  - {name: null-with-metadata, amount: null, currency: USD, precision: exact, valid: false}
+coverage_cases:
+  - {name: empty, status: complete, known: 0, incomplete: 0, unknown: 0, request_count: 0, valid: true}
+  - {name: complete, status: complete, known: 1, incomplete: 0, unknown: 0, request_count: 1, valid: true}
+  - {name: partial-known-incomplete, status: partial, known: 1, incomplete: 1, unknown: 0, request_count: 2, valid: true}
+  - {name: partial-only-incomplete, status: partial, known: 0, incomplete: 1, unknown: 0, request_count: 1, valid: true}
+  - {name: partial-known-unknown, status: partial, known: 1, incomplete: 0, unknown: 1, request_count: 2, valid: true}
+  - {name: partial-incomplete-unknown, status: partial, known: 0, incomplete: 1, unknown: 1, request_count: 2, valid: true}
+  - {name: unknown-only, status: unknown, known: 0, incomplete: 0, unknown: 1, request_count: 1, valid: true}
+  - {name: complete-with-unknown, status: complete, known: 0, incomplete: 0, unknown: 1, request_count: 1, valid: false}
+  - {name: complete-with-incomplete, status: complete, known: 0, incomplete: 1, unknown: 0, request_count: 1, valid: false}
+  - {name: unknown-with-known, status: unknown, known: 1, incomplete: 0, unknown: 1, request_count: 2, valid: false}
+  - {name: unknown-with-incomplete, status: unknown, known: 0, incomplete: 1, unknown: 1, request_count: 2, valid: false}
+  - {name: unknown-empty, status: unknown, known: 0, incomplete: 0, unknown: 0, request_count: 0, valid: false}
+  - {name: partial-empty, status: partial, known: 0, incomplete: 0, unknown: 0, request_count: 0, valid: false}
+  - {name: partial-only-known, status: partial, known: 1, incomplete: 0, unknown: 0, request_count: 1, valid: false}
+  - {name: partial-only-unknown, status: partial, known: 0, incomplete: 0, unknown: 1, request_count: 1, valid: false}
+  - {name: undercount, status: complete, known: 1, incomplete: 0, unknown: 0, request_count: 0, valid: false, rule: semantic}
+  - {name: overcount, status: complete, known: 1, incomplete: 0, unknown: 0, request_count: 2, valid: false, rule: semantic}
