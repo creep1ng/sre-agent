@@ -6,6 +6,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from pydantic import ValidationError
 from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
 
@@ -175,6 +176,13 @@ async def test_skill_version_repository_persists_immutable_owner_backed_version(
         instructions="Assess impact before proposing recovery.",
         dependencies=[],
     )
+    with pytest.raises(ValidationError):
+        SkillManifest.model_validate(
+            {
+                **manifest.model_dump(),
+                "dependencies": [{"skill_id": "long-version", "version": "1" * 29 + ".0.0"}],
+            }
+        )
     repository = None
     async with database.transaction() as session:
         repository = SkillVersionRepository(session)
