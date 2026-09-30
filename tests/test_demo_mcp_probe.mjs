@@ -80,6 +80,7 @@ function directTargets(port, overrides = {}) {
     MCP_PROBE_HOST: "localhost",
     MCP_PROBE_PORT: String(port),
     MCP_IPS: "::1",
+    MCP_PUBLISHED_ENDPOINTS: `http://[::1]:${port}`,
     ...overrides,
   };
 }
@@ -105,14 +106,16 @@ test("supplied service and IP health targets fail closed without leaking respons
     assert.deepEqual(output.targets, [
       { kind: "service-name", status: "reachable", http_status: 503 },
       { kind: "direct-ip", status: "reachable", http_status: 503 },
+      { kind: "published-port", status: "reachable", http_status: 503 },
     ]);
     assert.deepEqual(requests, [
+      { url: "/healthz", authorization: null },
       { url: "/healthz", authorization: null },
       { url: "/healthz", authorization: null },
     ]);
     assert.ok(!result.stdout.includes(PRIVATE_MARKER));
     assert.ok(!result.stdout.includes(String(server.address().port)));
-    t.diagnostic(`Supplied targets=${output.targets.length}; reachable=2; status=${output.status}; response marker exposed=false`);
+    t.diagnostic(`Supplied targets=${output.targets.length}; reachable=3; status=${output.status}; response marker exposed=false`);
   } finally {
     await close(server);
   }
@@ -129,6 +132,7 @@ test("blocked service and IP targets remain unverified, never an isolation pass"
   assert.deepEqual(output.targets, [
     { kind: "service-name", status: "blocked", http_status: null },
     { kind: "direct-ip", status: "blocked", http_status: null },
+    { kind: "published-port", status: "blocked", http_status: null },
   ]);
   t.diagnostic(`Blocked supplied targets: status=${output.status}; full_boundary=${output.full_boundary}; no isolation pass claimed`);
 });
@@ -141,6 +145,10 @@ test("missing or invalid direct inventory is unverified before contact", async (
   });
   const port = server.address().port;
   const invalid = [
+    { MCP_PUBLISHED_ENDPOINTS: `http://${PRIVATE_MARKER}@[::1]:${port}` },
+    { MCP_PUBLISHED_ENDPOINTS: `http://[::1]:${port}/private` },
+    { MCP_PUBLISHED_ENDPOINTS: `http://[::1]:${port}/?token=${PRIVATE_MARKER}` },
+    { MCP_PUBLISHED_ENDPOINTS: `http://[::1]:${port}/#${PRIVATE_MARKER}` },
     { MCP_PROBE_HOST: "localhost/private" },
     { MCP_PROBE_PORT: "65536" },
     { MCP_IPS: "not-an-ip" },
@@ -167,6 +175,31 @@ test("missing or invalid direct inventory is unverified before contact", async (
   }
 });
 
+test("missing published-origin inventory is unverified before direct-target contact", async (t) => {
+  let requests = 0;
+  const server = await listenHttp((_request, response) => {
+    requests += 1;
+    response.end(PRIVATE_MARKER);
+  });
+  const port = server.address().port;
+  const inventory = directTargets(port);
+  delete inventory.MCP_PUBLISHED_ENDPOINTS;
+  try {
+    const result = await runCli(inventory);
+    assert.equal(result.status, 2);
+    const output = report(result);
+    assert.equal(output.status, "unverified");
+    assert.deepEqual(output.failures, ["target_inventory_missing"]);
+    assert.deepEqual(output.targets, []);
+    assert.equal(requests, 0);
+    assert.ok(!result.stdout.includes(PRIVATE_MARKER));
+    assert.ok(!result.stdout.includes(String(port)));
+    t.diagnostic(`Missing published inventory: status=${output.status}; targets=${output.targets.length}; contacted_targets=${requests}`);
+  } finally {
+    await close(server);
+  }
+});
+
 test("redirect responses are reachable but never followed", async (t) => {
   let alternateRequests = 0;
   const alternate = await listenHttp((_request, response) => {
@@ -184,6 +217,7 @@ test("redirect responses are reachable but never followed", async (t) => {
     assert.equal(result.status, 1);
     const output = report(result);
     assert.equal(output.status, "fail");
+    assert.equal(output.targets.length, 3);
     assert.ok(output.targets.every((target) => target.status === "reachable" && target.http_status === 302));
     assert.equal(alternateRequests, 0);
     assert.ok(!result.stdout.includes(PRIVATE_MARKER));

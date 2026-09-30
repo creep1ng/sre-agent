@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Probe only supplied service-name and direct-IP health targets; full boundary proof remains pending.
+// Probe only supplied service-name, direct-IP, and published-origin health targets; full boundary proof remains pending.
 import { realpathSync } from "node:fs";
 import { isIP } from "node:net";
 import { fileURLToPath } from "node:url";
@@ -29,22 +29,50 @@ function parsePort(value) {
   return port >= 1 && port <= 65_535 ? port : null;
 }
 
+function parsePublishedEndpoint(value) {
+  if (typeof value !== "string" || value.length > 512 || /\s|[?#]/.test(value) ||
+      !/^https?:\/\//i.test(value)) return null;
+  try {
+    const separator = value.indexOf("://");
+    const authority = value.slice(separator + 3).split(/[/?#]/, 1)[0];
+    if (!authority || authority.includes("@")) return null;
+    const url = new URL(value);
+    if (!(["http:", "https:"].includes(url.protocol)) || !url.hostname ||
+        url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
+    const host = url.hostname.replace(/^\[|\]$/g, "");
+    if (isIP(host) === 0 && !validServiceName(host)) return null;
+    if (url.port && parsePort(url.port) === null) return null;
+    url.pathname = HEALTH_PATH;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function buildInventory(env) {
-  if (!env.MCP_PROBE_HOST || !env.MCP_PROBE_PORT || !env.MCP_IPS) {
+  const host = env.MCP_PROBE_HOST;
+  const portValue = env.MCP_PROBE_PORT;
+  const ipValues = splitTargets(env.MCP_IPS);
+  const publishedValues = splitTargets(env.MCP_PUBLISHED_ENDPOINTS);
+  if (!host || !portValue || !env.MCP_IPS || !env.MCP_PUBLISHED_ENDPOINTS) {
     return { failure: "target_inventory_missing" };
   }
-  const port = parsePort(env.MCP_PROBE_PORT);
-  const ips = splitTargets(env.MCP_IPS);
-  if (!validServiceName(env.MCP_PROBE_HOST) || port === null || !ips ||
-      ips.some((ip) => isIP(ip) === 0) || 1 + ips.length > MAX_TARGETS) {
+  const port = parsePort(portValue);
+  if (!validServiceName(host) || port === null || !ipValues || !publishedValues ||
+      ipValues.some((ip) => isIP(ip) === 0)) {
     return { failure: "target_inventory_invalid" };
   }
-  const serviceUrl = `http://${env.MCP_PROBE_HOST}:${port}${HEALTH_PATH}`;
-  const ipTargets = ips.map((ip) => ({
-    kind: "direct-ip",
-    url: `http://${isIP(ip) === 6 ? `[${ip}]` : ip}:${port}${HEALTH_PATH}`,
-  }));
-  return { targets: [{ kind: "service-name", url: serviceUrl }, ...ipTargets] };
+  const publishedUrls = publishedValues.map(parsePublishedEndpoint);
+  if (publishedUrls.some((url) => !url) || 1 + ipValues.length + publishedUrls.length > MAX_TARGETS) {
+    return { failure: "target_inventory_invalid" };
+  }
+  const serviceUrl = `http://${host}:${port}${HEALTH_PATH}`;
+  const ipUrls = ipValues.map((ip) => `http://${isIP(ip) === 6 ? `[${ip}]` : ip}:${port}${HEALTH_PATH}`);
+  return { targets: [
+    { kind: "service-name", url: serviceUrl },
+    ...ipUrls.map((url) => ({ kind: "direct-ip", url })),
+    ...publishedUrls.map((url) => ({ kind: "published-port", url })),
+  ] };
 }
 
 async function probe(target) {

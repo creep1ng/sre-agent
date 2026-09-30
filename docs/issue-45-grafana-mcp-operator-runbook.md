@@ -75,8 +75,8 @@ API, not the harness. Keep that boundary unchanged.
 
 The gateway probe is `scripts/demo_mcp_gateway_probe.mjs`; it does not directly
 connect to Grafana MCP. Signal capture in `scripts/demo_signal_cycles.mjs` and
-published-origin boundary checks remain planned, with matching E2E tests. The
-P7-D service/IP stage below does not prove complete harness isolation. No
+the P7-E published-origin candidate with matching E2E tests are implemented
+separately; the P7-D service/IP stage below does not prove complete harness isolation. No
 future-stage command is prescribed here.
 Each stage must retain behavior, tests, operator documentation and its own proof.
 
