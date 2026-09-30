@@ -48,6 +48,7 @@ STATES = {
 }
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ELIGIBLE = {"active", "investigating", "mitigating", "verifying"}
+SEVERITIES = ("sev1", "sev2", "sev3", "sev4")
 ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
 
 
@@ -116,8 +117,12 @@ class TriageService:
             raise TriageError(422, "invalid_reason")
         if reason is not None and not 1 <= len(reason) <= 1000:
             raise TriageError(422, "invalid_reason")
-        if operation == "triage_link" and (target is None or not re.fullmatch(ID_PATTERN, target)):
+        if operation == "triage_link" and (
+            not isinstance(target, str) or not re.fullmatch(ID_PATTERN, target)
+        ):
             raise TriageError(422, "invalid_target")
+        if operation == "triage_link" and severity is not None and severity not in SEVERITIES:
+            raise TriageError(422, "invalid_severity")
         # Slice boundary: declaration executes in C2a-4. Rejected here as 422.
         if operation == "triage_declare":
             raise TriageError(422, "operation_not_supported")
@@ -232,7 +237,8 @@ class TriageService:
         target_incident_id: str | None,
     ) -> str | None:
         if operation == "triage_link":
-            assert target_incident_id is not None
+            if target_incident_id is None:
+                raise TriageError(422, "invalid_target")
             row = (
                 (
                     await session.execute(

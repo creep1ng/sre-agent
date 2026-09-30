@@ -207,6 +207,31 @@ async def test_link_and_destination_eligibility() -> None:
 
 
 @pytest.mark.asyncio
+async def test_link_rejects_malformed_target_and_severity() -> None:
+    assert SERVICE is not None
+    me = _principal("op-human")
+    good = {
+        "alert_id": "al-shape",
+        "operation": "triage_link",
+        "expected_version": 1,
+        "reason": REASON,
+        "target_incident_id": "inc-eligible",
+    }
+    bad = [
+        ({"target_incident_id": ["inc-eligible"]}, "invalid_target", 422),
+        ({"target_incident_id": None}, "invalid_target", 422),
+        ({"severity": ["sev2"]}, "invalid_severity", 422),
+        ({"severity": "bogus"}, "invalid_severity", 422),
+        ({"reason": ""}, "invalid_reason", 422),
+    ]
+    for override, code, status in bad:
+        with pytest.raises(TriageError) as error:
+            key = f"k-shape-{code}-{status}-12345"
+            await SERVICE.execute(me, **(good | override | {"idempotency_key": key}))
+        assert (error.value.code, error.value.http_status) == (code, status)
+
+
+@pytest.mark.asyncio
 async def test_link_rejects_bad_target_and_declare_waits() -> None:
     assert SERVICE is not None
     with pytest.raises(TriageError) as bad_target:
