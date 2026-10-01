@@ -106,9 +106,9 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         ).fetchone()
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 7, 11]
-    assert admin_resources == 5
-    assert admin_grants == 9
+    assert counts == [4, 4, 8, 12]
+    assert admin_resources == 6
+    assert admin_grants == 10
     assert usage_resource == ("active",)
     assert usage_read_grant == (
         "admin-human",
@@ -161,9 +161,9 @@ async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
     await database.dispose()
-    assert counts == [4, 4, 7, 11]
-    assert admin_resources == 5
-    assert admin_grants == 9
+    assert counts == [4, 4, 8, 12]
+    assert admin_resources == 6
+    assert admin_grants == 10
 
 
 @pytest.mark.asyncio
@@ -177,7 +177,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             connection.execute(
                 "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
             ).fetchone()[0]
-            == 5
+            == 6
         )
 
     database = Database(DATABASE_URL)
@@ -194,7 +194,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
         ).fetchone()
     assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
-    assert counts == (9, 11)
+    assert counts == (10, 12)
 
 
 @pytest.mark.asyncio
@@ -237,8 +237,8 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
     assert version == "20261001_01"
-    assert admin_resources == 5
-    assert admin_grants == 9
+    assert admin_resources == 6
+    assert admin_grants == 10
     assert projection == [
         (
             "remediation-agent",

@@ -101,6 +101,11 @@ def _governed_operations(document: dict[str, Any]) -> set[tuple[str, str]]:
 
 
 EXPECTED_SCOPES = {
+    ("GET", "/v1/consumption-limits"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "consumption_limits",
+    },
     ("POST", "/v1/bok/collections/{collection_id}/versions/{version}/search"): {
         "action": "bok.search",
         "resource_type": "bok_collection",
