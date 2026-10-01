@@ -572,7 +572,14 @@ def test_consumption_policy_rejects_invalid_storage(column: str) -> None:
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "operation",
-    ["consumption_limits.get", "usage.read", "catalog.create", "catalog.list", "catalog.read"],
+    [
+        "consumption_limits.get",
+        "consumption_limits.replace",
+        "usage.read",
+        "catalog.create",
+        "catalog.list",
+        "catalog.read",
+    ],
 )
 async def test_consumption_audit_vocabulary_persists_without_rewriting_history(
     operation: str,
@@ -590,7 +597,7 @@ async def test_consumption_audit_vocabulary_persists_without_rewriting_history(
             0,
             "audit",
             operation=operation,
-            action="admin.read",
+            action="admin.write" if operation.endswith("replace") else "admin.read",
             reason="upstream_unavailable",
             retryable=True,
         )
@@ -622,8 +629,37 @@ def test_consumption_sql_audit_evidence_blocks_lossy_downgrade() -> None:
         command.downgrade(config, "20260926_14")
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261001_01",
+            "20261001_02",
         )
         assert connection.execute("SELECT count(*) FROM consumption_limit_policies").fetchone() == (
             1,
+        )
+
+
+def test_consumption_put_binding_persists_and_blocks_lossy_downgrade() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO principals (principal_id,kind,display_name,status,created_at,updated_at) "
+            "VALUES ('policy-schema-admin','human','Synthetic administrator','active',now(),now())"
+        )
+        connection.execute(
+            "INSERT INTO idempotency_records (scope,key_digest,payload_sha256,principal_id,method,"
+            "canonical_path,binding,outcome,created_at,expires_at,transition_count) "
+            "VALUES ('policy-schema-admin|PUT|/v1/consumption-limits',"
+            "repeat('a',64),repeat('b',64),"
+            "'policy-schema-admin','PUT','/v1/consumption-limits','at_least_24h',"
+            '\'{"response_status":200,"response_payload":{"version":1}}\','
+            "now(),now()+interval '1 day',1)"
+        )
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="PUT.*bindings"):
+        command.downgrade(config, "20260929_15")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT method, transition_count, outcome->'response_payload'->>'version' "
+            "FROM idempotency_records WHERE principal_id='policy-schema-admin'"
+        ).fetchone() == ("PUT", 1, "1")
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20261001_02",
         )

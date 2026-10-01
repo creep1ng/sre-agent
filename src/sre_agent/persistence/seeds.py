@@ -50,6 +50,7 @@ ADMIN_GRANTS = (
     ("grant-admin-human-admin-write-model-aliases", "admin-human", "admin.write"),
     ("grant-admin-human-admin-read-usage", "admin-human", "admin.read"),
     ("grant-admin-human-admin-read-consumption-limits", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-consumption-limits", "admin-human", "admin.write"),
     ("grant-admin-human-admin-read-catalog", "admin-human", "admin.read"),
     ("grant-admin-human-admin-write-catalog", "admin-human", "admin.write"),
 )
@@ -453,7 +454,7 @@ async def _seed_session(
         len(grants),
         len(admin_resources),
         len(admin_grants),
-    ) != (4, 4, 2, 2, 6, 10):
+    ) != (4, 4, 2, 2, 6, 11):
         raise SeedConflict("seed_state_conflict: incomplete_seed_graph")
     by_principal = {row.principal_id: row for row in principals}
     by_credential = {row.principal_id: row for row in credentials}

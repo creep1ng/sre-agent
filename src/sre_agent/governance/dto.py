@@ -589,6 +589,7 @@ class AuditEvent(StrictDTO):
         "bok.read",
         "usage.read",
         "consumption_limits.get",
+        "consumption_limits.replace",
         "principals.create",
         "principals.get",
         "principals.list",

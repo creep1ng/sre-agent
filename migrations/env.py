@@ -19,7 +19,7 @@ def integrated_upgrade():
     script = ScriptDirectory.from_config(config)
     destination = context.get_context().opts.get("destination_rev")
     target = script.as_revision_number(destination) if destination else None
-    if target != "20261001_01":
+    if target != "20261001_02":
         return None
     current = set(context.get_context().get_current_heads())
     ancestors = {revision.revision for revision in script.iterate_revisions(target, "base")}
@@ -40,6 +40,7 @@ def integrated_upgrade():
             "20260929_16",
             "20260930_18",
             "20260930_19",
+            "20261001_01",
         )
     } - {union}
     return target, legacy_checks
