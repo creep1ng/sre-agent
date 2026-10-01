@@ -1,23 +1,28 @@
-"""Create the unset single-workspace consumption policy."""
+"""Create the unset single-workspace consumption policy.
+
+Rebased onto the main head (20260930_19) during the #420 merge: the operation
+vocabulary below starts from the main-head list and only appends the
+consumption read operation, so BoK/skill/status words survive the upgrade.
+"""
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260929_15"
-down_revision = "20260926_14"
+revision = "20261001_01"
+down_revision = "20260930_19"
 branch_labels = None
 depends_on = None
 
 
 OLD_OPERATION = (
     "operation IN ('audit.accept','audit.export','audit.project','audit.redact',"
-    "'credentials.authenticate','responses.create','principals.create',"
-    "'mcp.discovery','mcp.invoke',"
-    "'principals.get','principals.list','principals.status.replace',"
-    "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
-    "'grants.create','grants.list','grants.revoke','aliases.create','aliases.list',"
-    "'aliases.get','aliases.assignment.replace','aliases.status.replace','catalog.create',"
-    "'catalog.list','catalog.read','usage.read')"
+    "'credentials.authenticate','responses.create','principals.create','principals.get',"
+    "'principals.list','principals.status.replace','credentials.issue','credentials.list',"
+    "'credentials.revoke','credentials.rotate','grants.create','grants.list','grants.revoke',"
+    "'aliases.create','aliases.list','aliases.get','aliases.assignment.replace',"
+    "'aliases.status.replace','catalog.create','catalog.list','catalog.read',"
+    "'mcp.discovery','mcp.invoke','usage.read','bok.search','bok.read',"
+    "'catalog.status.replace','skills.resolve')"
 )
 NEW_OPERATION = OLD_OPERATION[:-1] + ",'consumption_limits.get')"
 

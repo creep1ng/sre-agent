@@ -1,0 +1,32 @@
+{
+  "capture_kind": "actual FastAPI HTTP request plus PostgreSQL audit readback",
+  "captured_at": "2026-09-30",
+  "scope": "unsupported issue-333 usage.read selector; no provider call",
+  "selector": "0000-01",
+  "replay_command": "docker compose --project-directory \"$PWD\" --project-name candidate-wt-9bb3531fa9f1 --env-file .env --env-file .env.worktree -f compose.yaml --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_usage_read_acceptance.py::test_unrepresentable_month_is_rejected_before_authorization tests/test_usage_read_acceptance.py::test_supported_month_boundaries_remain_readable'",
+  "observed": {
+    "http": {
+      "status": 422,
+      "error_code": "validation_error",
+      "retryable": false
+    },
+    "persisted_row": {
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "validation",
+      "outcome": "error",
+      "reason_code": "contract_validation_failed",
+      "response_status": 422,
+      "retryable": false,
+      "authorization_denial_cause": null,
+      "identity_json_null": true,
+      "resource_json_null": true,
+      "policy_decision_json_null": true,
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "not_attempted"
+    }
+  },
+  "readback": "A parameterized SQL query matched the actual response request_id without emitting it. The JSONB null checks compare against 'null'::jsonb.",
+  "coverage": "Permanent acceptance guards that authorization was not called and validates supported boundary reads for 0001-01, 9999-11, and 2026-09."
+}

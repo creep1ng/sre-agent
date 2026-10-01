@@ -1,0 +1,17 @@
+{
+  "resource_type": "llm_model",
+  "resource_id": "model-prod",
+  "owner_id": "alias-prod",
+  "status": "active",
+  "source": "model_alias",
+  "source_ref": "alias-prod",
+  "discoverability": {
+    "display_name": "Production model",
+    "visibility": "public",
+    "description": "Stable production model alias.",
+    "tags": [
+      "llm",
+      "production"
+    ]
+  }
+}

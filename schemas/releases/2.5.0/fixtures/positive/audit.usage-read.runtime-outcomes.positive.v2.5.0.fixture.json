@@ -1,0 +1,460 @@
+{
+  "target": "urn:sre-agent:schema:audit-event:2.5.0",
+  "rule": "valid",
+  "status": "positive",
+  "version": "2.5.0",
+  "group": "usage-read-audit-outcomes",
+  "cases": [
+    {
+      "event_id": "10000000-0000-4000-8000-000000000101",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "authorization",
+      "outcome": "success",
+      "reason_code": null,
+      "response_status": 200,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000101"
+      },
+      "identity": {
+        "principal_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "principal_kind": "agent",
+        "principal_status": "active",
+        "credential_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "authenticated_at": "2026-08-17T11:59:59Z"
+      },
+      "resource": {
+        "resource_type": "administrative_control",
+        "resource_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "policy_decision": {
+        "decision": "allow",
+        "reason_code": "grant_matched",
+        "grant_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000101",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "authentication",
+      "outcome": "error",
+      "reason_code": "authentication_failed",
+      "response_status": 401,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000101"
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000101",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "authorization",
+      "outcome": "denied",
+      "reason_code": "no_matching_grant",
+      "response_status": 403,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000101"
+      },
+      "identity": {
+        "principal_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "principal_kind": "agent",
+        "principal_status": "active",
+        "credential_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "authenticated_at": "2026-08-17T11:59:59Z"
+      },
+      "resource": {
+        "resource_type": "administrative_control",
+        "resource_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "policy_decision": {
+        "decision": "deny",
+        "reason_code": "no_matching_grant"
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12,
+      "authorization_denial_cause": "grant_not_applicable"
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000101",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "validation",
+      "outcome": "error",
+      "reason_code": "contract_validation_failed",
+      "response_status": 422,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000101"
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000101",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "validation",
+      "outcome": "error",
+      "reason_code": "contract_validation_failed",
+      "response_status": 413,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000101"
+      },
+      "identity": {
+        "principal_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "principal_kind": "agent",
+        "principal_status": "active",
+        "credential_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "authenticated_at": "2026-08-17T11:59:59Z"
+      },
+      "resource": {
+        "resource_type": "administrative_control",
+        "resource_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "policy_decision": {
+        "decision": "allow",
+        "reason_code": "grant_matched",
+        "grant_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000101",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "audit",
+      "outcome": "error",
+      "reason_code": "upstream_unavailable",
+      "response_status": 503,
+      "retryable": true,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000101"
+      },
+      "identity": {
+        "principal_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "principal_kind": "agent",
+        "principal_status": "active",
+        "credential_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "authenticated_at": "2026-08-17T11:59:59Z"
+      },
+      "resource": {
+        "resource_type": "administrative_control",
+        "resource_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "policy_decision": {
+        "decision": "allow",
+        "reason_code": "grant_matched",
+        "grant_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        }
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000102",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "authorization",
+      "outcome": "denied",
+      "reason_code": "no_matching_grant",
+      "response_status": 403,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000102"
+      },
+      "identity": {
+        "principal_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "principal_kind": "agent",
+        "principal_status": "inactive",
+        "credential_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "authenticated_at": "2026-08-17T11:59:59Z"
+      },
+      "resource": {
+        "resource_type": "administrative_control",
+        "resource_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "policy_decision": {
+        "decision": "deny",
+        "reason_code": "no_matching_grant"
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12,
+      "authorization_denial_cause": "principal_inactive"
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000103",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "authorization",
+      "outcome": "denied",
+      "reason_code": "no_matching_grant",
+      "response_status": 403,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000103"
+      },
+      "identity": {
+        "principal_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "principal_kind": "agent",
+        "principal_status": "active",
+        "credential_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "authenticated_at": "2026-08-17T11:59:59Z"
+      },
+      "resource": {
+        "resource_type": "administrative_control",
+        "resource_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "policy_decision": {
+        "decision": "deny",
+        "reason_code": "no_matching_grant"
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12,
+      "authorization_denial_cause": "resource_inactive"
+    },
+    {
+      "event_id": "10000000-0000-4000-8000-000000000104",
+      "occurred_at": "2026-08-17T12:00:00Z",
+      "operation": "usage.read",
+      "action": "admin.read",
+      "stage": "authorization",
+      "outcome": "denied",
+      "reason_code": "no_matching_grant",
+      "response_status": 403,
+      "retryable": false,
+      "correlation": {
+        "request_id": "20000000-0000-4000-8000-000000000104"
+      },
+      "identity": {
+        "principal_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "principal_kind": "agent",
+        "principal_status": "active",
+        "credential_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "authenticated_at": "2026-08-17T11:59:59Z"
+      },
+      "resource": {
+        "resource_type": "administrative_control",
+        "resource_ref": {
+          "algorithm": "hmac-sha-256",
+          "key_version": 1,
+          "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "policy_decision": {
+        "decision": "deny",
+        "reason_code": "no_matching_grant"
+      },
+      "redaction": {
+        "policy_version": "redaction-1.0.0",
+        "result": "success",
+        "source_class": "none",
+        "categories": [],
+        "match_count": 0,
+        "sink_eligible": false
+      },
+      "content_state": "absent",
+      "authoritative_acceptance": "accepted",
+      "ordinary_result": "released",
+      "exporter_result": "succeeded",
+      "latency_ms": 12,
+      "authorization_denial_cause": "resource_missing"
+    }
+  ]
+}
