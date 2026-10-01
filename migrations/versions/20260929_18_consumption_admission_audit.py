@@ -20,7 +20,8 @@ NEW_REASON = """reason_code IS NULL OR reason_code IN (
   'grant_matched', 'no_matching_grant', 'redaction_failed', 'redaction_uncertain',
   'routing_unavailable', 'upstream_failed', 'upstream_invalid', 'upstream_unavailable',
   'resource_not_found', 'status_conflict', 'incident_limit_exceeded',
-  'monthly_limit_exceeded', 'consumption_bounds_unavailable', 'policy_unavailable'
+  'monthly_limit_exceeded', 'consumption_bounds_unavailable', 'policy_unavailable',
+  'index_unavailable', 'storage_unavailable'
 )"""
 
 
@@ -34,7 +35,8 @@ def downgrade() -> None:
         sa.text(
             "SELECT EXISTS (SELECT 1 FROM audit_events WHERE reason_code IN ("
             "'incident_limit_exceeded','monthly_limit_exceeded',"
-            "'consumption_bounds_unavailable','policy_unavailable'))"
+            "'consumption_bounds_unavailable','policy_unavailable',"
+            "'index_unavailable','storage_unavailable'))"
         )
     )
     if has_admission_evidence:

@@ -733,3 +733,226 @@ test("no secrets or storage leakage after mutation", async ({ page }) => {
     await restoreAssignment(page, adminKey, ALIAS, original);
   }
 });
+
+// --- Issue #381: Resources & aliases layout (mocked control plane, no backend needed) ---
+
+const LAYOUT_ITEMS = [
+  {
+    model_alias_id: "triage-agent",
+    alias: "triage-agent",
+    concrete_model: "openai/gpt-4o-mini",
+    router: "openrouter",
+    inference_provider: "openai",
+    status: "active",
+    updated_at: "2026-09-01T00:00:00Z",
+  },
+  {
+    model_alias_id: "remediation-agent",
+    alias: "remediation-agent",
+    concrete_model: "anthropic/claude-sonnet-4",
+    router: "openrouter",
+    inference_provider: "anthropic",
+    status: "active",
+    updated_at: "2026-09-02T00:00:00Z",
+  },
+];
+
+async function connectMocked(page, items = LAYOUT_ITEMS) {
+  await page.route("**/api/v1/model-aliases**", (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== "GET") return route.continue();
+    if (url.pathname === "/api/v1/model-aliases") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items, truncated: false }),
+      });
+    }
+    const match = url.pathname.match(/^\/api\/v1\/model-aliases\/([^/]+)$/);
+    if (match) {
+      const item = items.find(
+        (entry) => (entry.model_alias_id ?? entry.alias) === decodeURIComponent(match[1]),
+      );
+      if (item) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(item),
+        });
+      }
+      return route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "resource_not_found" } }),
+      });
+    }
+    return route.continue();
+  });
+  await page.fill("#api-key", "sre_synthetic_0123456789abcdef_layout");
+  await page.click("#connect-button");
+  await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "ready", {
+    timeout: 10_000,
+  });
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1);
+}
+
+test("page identity follows the Resources & aliases surface", async ({ page }) => {
+  await expect(page).toHaveTitle(/Resources & aliases/);
+  await expect(page.locator(".principals__context")).toHaveText("Control plane / Resources & aliases");
+  await expect(page.locator("#model-aliases-page h1")).toHaveText("Resources & aliases");
+});
+
+test("sidebar covers the control plane without fictitious routes", async ({ page }) => {
+  const nav = page.locator("nav[aria-label='Control plane']");
+  await expect(nav).toBeVisible();
+  await expect(nav.locator("a[href='/public/admin/principals.html']")).toHaveText("Principals");
+  const current = nav.locator("[aria-current='page']");
+  await expect(current).toHaveText("Resources & aliases");
+  await expect(nav.locator("a[href*='grant' i]")).toHaveCount(0);
+  await expect(nav.locator("a[href*='audit' i]")).toHaveCount(0);
+  for (const label of ["Grants", "Audit & consumption"]) {
+    const item = nav.getByText(label, { exact: true });
+    await expect(item).toBeVisible();
+    await expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(await item.evaluate((node) => node.tagName)).toBe("SPAN");
+  }
+});
+
+test("resources section frames aliases without fabricated catalog data", async ({ page }) => {
+  const section = page.locator("#resources-context");
+  await expect(section).toBeVisible();
+  await expect(section.locator("#resources-context-title")).toHaveText("Resources");
+  await expect(section.locator("button")).toHaveCount(0);
+  await expect(section.locator("table")).toHaveCount(0);
+  expect(((await section.textContent()) ?? "").toLowerCase()).not.toContain("new resource");
+});
+
+test("selecting an alias opens a contextual side panel with the list visible", async ({
+  page,
+}) => {
+  await connectMocked(page);
+  await page.click("[data-detail-open='triage-agent']");
+  const panel = page.locator("#alias-detail");
+  await expect(panel).toBeVisible();
+  expect(await panel.evaluate((node) => node.tagName)).toBe("ASIDE");
+  await expect(page.locator("#alias-list")).toBeVisible();
+  await expect(page.locator("[data-alias-row='triage-agent']")).toBeVisible();
+  await expect(page.locator("[data-alias-row='remediation-agent']")).toBeVisible();
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText(
+    "openai/gpt-4o-mini",
+  );
+  await expect(page.locator("[data-detail-field='router']")).toHaveText("openrouter");
+  await expect(page.locator("[data-detail-field='inference_provider']")).toHaveText("openai");
+  await expect(page.locator("[data-detail-field='status']")).toHaveText("active");
+  await expect(page.locator("[data-detail-field='updated_at']")).toHaveText(
+    "2026-09-01T00:00:00Z",
+  );
+  await expect(page.locator("#detail-edit-button")).toBeVisible();
+  await expect(page.locator("#detail-deactivate-button")).toBeVisible();
+  await expect(page.locator("#detail-close-button")).toBeVisible();
+});
+
+test("selecting B after A reuses the same contextual panel", async ({ page }) => {
+  await connectMocked(page);
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  await page.click("[data-detail-open='remediation-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("remediation-agent");
+  await expect(page.locator("[data-detail-field='concrete_model']")).toHaveText(
+    "anthropic/claude-sonnet-4",
+  );
+  expect(await page.locator("#alias-detail").count()).toBe(1);
+  await expect(page.locator("[data-alias-row='triage-agent']")).toBeVisible();
+});
+
+test("close hides the panel and preserves the list", async ({ page }) => {
+  await connectMocked(page);
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  await page.click("#detail-close-button");
+  await expect(page.locator("#alias-detail")).toBeHidden();
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1);
+  await expect(page.locator("[data-alias-row='remediation-agent']")).toHaveCount(1);
+  await expect(page.locator("#alias-count")).toContainText("2 aliases");
+});
+
+test("desktop renders the detail as a lateral side panel", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await connectMocked(page);
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  const layout = await page.evaluate(() => {
+    const list = document.querySelector("#alias-list").getBoundingClientRect();
+    const panel = document.querySelector("#alias-detail").getBoundingClientRect();
+    return {
+      position: getComputedStyle(document.querySelector("#alias-detail")).position,
+      list,
+      panel,
+    };
+  });
+  expect(layout.position).toBe("sticky");
+  expect(layout.panel.x).toBeGreaterThan(layout.list.x);
+  expect(Math.abs(layout.panel.y - layout.list.y)).toBeLessThan(400);
+  expect(layout.list.width).toBeGreaterThan(300);
+});
+
+test("narrow viewport keeps the panel usable as a bottom sheet", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await connectMocked(page);
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  const usability = await page.evaluate(() => {
+    const panel = document.querySelector("#alias-detail");
+    const rect = panel.getBoundingClientRect();
+    const close = document.querySelector("#detail-close-button").getBoundingClientRect();
+    const edit = document.querySelector("#detail-edit-button").getBoundingClientRect();
+    return {
+      position: getComputedStyle(panel).position,
+      rect: { x: rect.x, width: rect.width, bottom: rect.bottom },
+      close: { x: close.x, y: close.y, width: close.width },
+      editVisible: edit.width > 0 && edit.height > 0,
+      scrollWidth: document.documentElement.scrollWidth,
+      viewport: window.innerWidth,
+    };
+  });
+  expect(usability.position).toBe("fixed");
+  expect(usability.rect.x).toBeGreaterThanOrEqual(-1);
+  expect(usability.rect.width).toBeLessThanOrEqual(usability.viewport + 1);
+  expect(usability.scrollWidth).toBeLessThanOrEqual(usability.viewport + 1);
+  expect(usability.close.width).toBeGreaterThan(0);
+  expect(usability.close.x).toBeGreaterThanOrEqual(0);
+  expect(usability.close.y).toBeGreaterThanOrEqual(0);
+  expect(usability.editVisible).toBe(true);
+  await expect(page.locator("#detail-close-button")).toBeVisible();
+  await page.click("#detail-close-button");
+  await expect(page.locator("#alias-detail")).toBeHidden();
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1);
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth);
+  expect(overflow).toBeLessThanOrEqual(391);
+});
+
+test("restricted identity sees no alias metadata", async ({ page }) => {
+  await page.route("**/api/v1/model-aliases**", (route) =>
+    route.fulfill({ status: 403, contentType: "application/json", body: "{}" }),
+  );
+  await page.fill("#api-key", "sre_synthetic_0123456789abcdef_layout");
+  await page.click("#connect-button");
+  await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "error", {
+    timeout: 10_000,
+  });
+  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expect(page.locator("[data-alias-row]")).toHaveCount(0);
+});
+
+test("side panel exposes no secrets or stored credentials", async ({ page }) => {
+  await connectMocked(page);
+  await page.click("[data-detail-open='triage-agent']");
+  await expect(page.locator("[data-detail-field='alias']")).toHaveText("triage-agent");
+  const panelText = (await page.locator("#alias-detail").textContent()) ?? "";
+  expect(/\bsre_[A-Za-z0-9_-]{24,128}\b/.test(panelText)).toBe(false);
+  expect(panelText.toLowerCase()).not.toContain("secret");
+  expect(panelText.toLowerCase()).not.toContain("api_key");
+  expect(panelText).not.toContain("Authorization");
+  expect(await storageContents(page)).toEqual({ local: {}, session: {} });
+});
