@@ -19,7 +19,8 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, resources, "
             "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
@@ -78,6 +79,7 @@ def test_repeated_head_has_expected_domain_tables() -> None:
         "bok_documents",
         "bok_collection_versions",
         "credentials",
+        "consumption_limit_policies",
         "grants",
         "idempotency_records",
         "mcp_servers",
@@ -539,3 +541,125 @@ def test_skill_resolution_audit_operation_and_denied_404_are_persistable() -> No
         ("skills.resolve", 200, None),
         ("skills.resolve", 404, "resource_missing"),
     ]
+
+
+def test_consumption_policy_defaults_and_bigint_storage() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT policy_id, version, incident_token_limit, monthly_usd_limit "
+            "FROM consumption_limit_policies"
+        ).fetchall() == [(1, 0, None, None)]
+        connection.execute(
+            "UPDATE consumption_limit_policies SET version=2147483648, "
+            "incident_token_limit=2147483648, monthly_usd_limit=0.000000000001"
+        )
+        assert connection.execute(
+            "SELECT version, incident_token_limit, monthly_usd_limit::text "
+            "FROM consumption_limit_policies"
+        ).fetchone() == (2147483648, 2147483648, "0.000000000001")
+        connection.rollback()
+
+
+@pytest.mark.parametrize(
+    "column", ["policy_id", "version", "incident_token_limit", "monthly_usd_limit"]
+)
+def test_consumption_policy_rejects_invalid_storage(column: str) -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(f"UPDATE consumption_limit_policies SET {column}=-1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "consumption_limits.get",
+        "consumption_limits.replace",
+        "usage.read",
+        "catalog.create",
+        "catalog.list",
+        "catalog.read",
+    ],
+)
+async def test_consumption_audit_vocabulary_persists_without_rewriting_history(
+    operation: str,
+) -> None:
+    from uuid import uuid4
+
+    from sre_agent.gateway.audit import AuditProjector
+    from sre_agent.gateway.responses import PostgresAuditStore
+
+    database = Database(DATABASE_URL)
+    try:
+        event = AuditProjector(b"synthetic-migration-evidence").control_event(
+            uuid4(),
+            503,
+            0,
+            "audit",
+            operation=operation,
+            action="admin.write" if operation.endswith("replace") else "admin.read",
+            reason="upstream_unavailable",
+            retryable=True,
+        )
+        await PostgresAuditStore(database.sessions).append(event)
+        with psycopg.connect(DATABASE_URL) as connection:
+            assert connection.execute(
+                "SELECT operation, content_state, consumption FROM audit_events WHERE event_id=%s",
+                (str(event.event_id),),
+            ).fetchone() == (operation, "absent", None)
+            assert connection.execute(
+                "SELECT consumption->>'billed_usd' FROM audit_events WHERE event_id=%s",
+                ("00000000-0000-4000-8000-000000000130",),
+            ).fetchone() == ("0.0012300",)
+    finally:
+        await database.dispose()
+
+
+def test_consumption_sql_audit_evidence_blocks_lossy_downgrade() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO audit_events SELECT (jsonb_populate_record(NULL::audit_events, "
+            "to_jsonb(a) || jsonb_build_object('operation','consumption_limits.get', "
+            "'event_id','00000000-0000-4000-8000-000000000334'))).* "
+            "FROM audit_events a WHERE event_id='00000000-0000-4000-8000-000000000000'"
+        )
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="consumption.*audit evidence"):
+        command.downgrade(config, "20260926_14")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20261001_02",
+        )
+        assert connection.execute("SELECT count(*) FROM consumption_limit_policies").fetchone() == (
+            1,
+        )
+
+
+def test_consumption_put_binding_persists_and_blocks_lossy_downgrade() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO principals (principal_id,kind,display_name,status,created_at,updated_at) "
+            "VALUES ('policy-schema-admin','human','Synthetic administrator','active',now(),now())"
+        )
+        connection.execute(
+            "INSERT INTO idempotency_records (scope,key_digest,payload_sha256,principal_id,method,"
+            "canonical_path,binding,outcome,created_at,expires_at,transition_count) "
+            "VALUES ('policy-schema-admin|PUT|/v1/consumption-limits',"
+            "repeat('a',64),repeat('b',64),"
+            "'policy-schema-admin','PUT','/v1/consumption-limits','at_least_24h',"
+            '\'{"response_status":200,"response_payload":{"version":1}}\','
+            "now(),now()+interval '1 day',1)"
+        )
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="PUT.*bindings"):
+        command.downgrade(config, "20260929_15")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT method, transition_count, outcome->'response_payload'->>'version' "
+            "FROM idempotency_records WHERE principal_id='policy-schema-admin'"
+        ).fetchone() == ("PUT", 1, "1")
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20261001_02",
+        )

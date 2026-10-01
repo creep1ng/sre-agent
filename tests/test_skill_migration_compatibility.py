@@ -116,7 +116,7 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
     after = snapshot()
     assert after["rows"] == before["rows"]
     assert after["grants"] == before["grants"]
-    assert after["heads"] == [("20260930_19",)]
+    assert after["heads"] == [("20261001_02",)]
     # Each revision guards only the evidence it owns. Leaving the slice that introduced
     # the persisted operation is lossy and must be refused, while rolling back past a
     # sibling slice that does not own it must keep every row intact.

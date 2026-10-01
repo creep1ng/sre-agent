@@ -136,6 +136,8 @@ def test_control_grant_actions_cover_read_and_write() -> None:
 
 def test_control_scopes_cover_all_routes_exactly_once() -> None:
     assert set(CONTROL_SCOPES) == {
+        ("GET", "/v1/consumption-limits"),
+        ("PUT", "/v1/consumption-limits"),
         ("POST", "/v1/principals"),
         ("GET", "/v1/principals"),
         ("GET", "/v1/principals/{id}"),
@@ -160,7 +162,7 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("PUT", "/v1/skills/{skill_id}/{version}/status"),
         ("GET", "/v1/skills/{skill_id}/{version}/status"),
     }
-    assert len({*CONTROL_SCOPES.values()}) == 10
+    assert len({*CONTROL_SCOPES.values()}) == 12
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
 
 

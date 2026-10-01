@@ -1,6 +1,16 @@
 from functools import partial
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy import CheckConstraint as CK
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, mapped_column
@@ -299,11 +309,11 @@ class GrantRow(Base):
 
 
 class IdempotencyRecordRow(Base):
-    """Scoped POST binding: replay on same hash, conflict on different hash."""
+    """Scoped request binding: replay on same hash, conflict on different hash."""
 
     __tablename__ = "idempotency_records"
     __table_args__ = (
-        CK("method = 'POST'", name="ck_idempotency_method"),
+        CK("method IN ('POST','PUT')", name="ck_idempotency_method"),
         CK(
             "binding IN ('at_least_24h','principal_lifetime')",
             name="ck_idempotency_binding",
@@ -323,6 +333,29 @@ class IdempotencyRecordRow(Base):
     transition_count = required(Integer)
 
 
+class ConsumptionLimitPolicyRow(Base):
+    """Versioned singleton policy for incident and workspace consumption limits."""
+
+    __tablename__ = "consumption_limit_policies"
+    __table_args__ = (
+        CK("policy_id = 1", name="ck_consumption_policy_singleton"),
+        CK("version >= 0", name="ck_consumption_policy_version"),
+        CK(
+            "incident_token_limit IS NULL OR incident_token_limit >= 0",
+            name="ck_consumption_policy_incident_limit",
+        ),
+        CK(
+            "monthly_usd_limit IS NULL OR monthly_usd_limit >= 0",
+            name="ck_consumption_policy_monthly_limit",
+        ),
+    )
+    policy_id = mapped_column(Integer, primary_key=True)
+    version = required(BigInteger)
+    incident_token_limit = mapped_column(BigInteger, nullable=True)
+    monthly_usd_limit = mapped_column(Numeric(32, 12), nullable=True)
+    updated_at = required(DateTime(timezone=True))
+
+
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
@@ -335,7 +368,7 @@ class AuditEventRow(Base):
             "'grants.create','grants.list','grants.revoke',"
             "'aliases.create','aliases.list','aliases.get',"
             "'aliases.assignment.replace','aliases.status.replace','catalog.create',"
-            "'catalog.list','catalog.read','bok.search','bok.read')",
+            "'catalog.list','catalog.read','bok.search','bok.read','consumption_limits.get','consumption_limits.replace')",
             name="ck_audit_events_operation",
         ),
         CK(

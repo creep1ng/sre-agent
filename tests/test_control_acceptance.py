@@ -60,7 +60,8 @@ def migrated_acceptance_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
             "resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
@@ -236,6 +237,315 @@ def test_rotation_operation_ref_matches_runtime_canonical_envelope() -> None:
         "201"
     ]["content"]["application/json"]["schema"]
     assert response_schema == {"$ref": "urn:sre-agent:schema:credential-rotation:2.0.0"}
+
+
+def test_consumption_policy_read_is_protected_and_defaults_to_unset(
+    client: TestClient,
+) -> None:
+    assert client.get("/v1/consumption-limits").status_code == 401
+    assert client.get("/v1/consumption-limits", headers=headers(RESTRICTED_KEY)).status_code == 403
+
+    response = client.get("/v1/consumption-limits", headers=headers())
+    assert response.status_code == 200
+    assert response.json()["version"] == 0
+    assert response.json()["incident_token_limit"] is None
+    assert response.json()["monthly_usd_limit"] is None
+    assert response.json()["updated_at"]
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        persisted = connection.execute(
+            "SELECT policy_id, version, incident_token_limit, monthly_usd_limit "
+            "FROM consumption_limit_policies"
+        ).fetchall()
+    assert persisted == [(1, 0, None, None)]
+
+
+def test_consumption_policy_readback_supports_bigint_incident_limits(
+    client: TestClient,
+) -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE consumption_limit_policies SET incident_token_limit = %s WHERE policy_id = 1",
+            (2_147_483_648,),
+        )
+
+    response = client.get("/v1/consumption-limits", headers=headers())
+    assert response.status_code == 200
+    assert response.json()["incident_token_limit"] == 2_147_483_648
+
+
+@pytest.mark.parametrize(
+    "key,status,decision",
+    [(ADMIN_KEY, 200, "allow"), (RESTRICTED_KEY, 403, "deny")],
+    ids=["allowed", "denied"],
+)
+def test_consumption_policy_read_persists_metadata_only_audit(
+    client: TestClient, key: str, status: int, decision: str
+) -> None:
+    from sre_agent.governance.dto import AuditEvent
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        before = connection.execute(
+            "SELECT count(*) FROM audit_events WHERE operation = 'consumption_limits.get'"
+        ).fetchone()[0]
+    response = client.get("/v1/consumption-limits", headers=headers(key))
+    assert response.status_code == status
+    with psycopg.connect(DATABASE_URL) as connection:
+        events = connection.execute(
+            "SELECT to_jsonb(a) FROM audit_events a "
+            "WHERE operation = 'consumption_limits.get' ORDER BY occurred_at, event_id"
+        ).fetchall()
+    assert len(events) == before + 1
+    event = events[-1][0]
+    AuditEvent.model_validate_json(json.dumps(event))
+    assert event["response_status"] == status
+    assert event["action"] == "admin.read"
+    assert event["policy_decision"]["decision"] == decision
+    assert event["identity"]["principal_ref"]["algorithm"] == "hmac-sha-256"
+    assert event["resource"]["resource_type"] == "administrative_control"
+    assert event["content_state"] == "absent"
+    assert event["consumption"] is None and event["untrusted_input"] is None
+    assert key not in json.dumps(event)
+
+
+@pytest.mark.parametrize("key", [ADMIN_KEY, RESTRICTED_KEY], ids=["admin", "restricted"])
+def test_consumption_policy_audit_failure_suppresses_read(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    from sre_agent.gateway.responses import PostgresAuditStore
+
+    async def unavailable(self, event):
+        raise RuntimeError("private audit storage details")
+
+    monkeypatch.setattr(PostgresAuditStore, "append", unavailable)
+    response = client.get("/v1/consumption-limits", headers=headers(key))
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    assert response.json()["retryable"] is True
+    assert "incident_token_limit" not in response.json()
+    assert "private audit storage details" not in response.text
+
+
+@pytest.mark.parametrize("method", ["GET", "PUT"])
+def test_consumption_policy_missing_row_is_retryable(client: TestClient, method: str) -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        policy = connection.execute(
+            "DELETE FROM consumption_limit_policies WHERE policy_id = 1 "
+            "RETURNING policy_id, version, incident_token_limit, monthly_usd_limit, updated_at"
+        ).fetchone()
+    assert policy is not None
+    try:
+        response = client.request(
+            method,
+            "/v1/consumption-limits",
+            headers=headers(idempotency_key="consumption-policy-missing-row"),
+            json={"expected_version": 0, "incident_token_limit": None, "monthly_usd_limit": None},
+        )
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "policy_unavailable"
+        assert response.json()["retryable"] is True
+    finally:
+        with psycopg.connect(DATABASE_URL) as connection:
+            connection.execute(
+                "INSERT INTO consumption_limit_policies "
+                "(policy_id, version, incident_token_limit, monthly_usd_limit, updated_at) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                policy,
+            )
+
+
+def test_consumption_policy_put_is_guarded_idempotent_versioned_and_persists(
+    client: TestClient,
+) -> None:
+    path = "/v1/consumption-limits"
+    payload = {
+        "expected_version": 0,
+        "incident_token_limit": 9_223_372_036_854_775_807,
+        "monthly_usd_limit": "0.000000000001",
+    }
+    key = "consumption-policy-write-0001"
+
+    unauthenticated = client.put(path, json=payload)
+    assert unauthenticated.status_code == 401, unauthenticated.text
+    assert client.put(path, json=payload, headers=headers(RESTRICTED_KEY)).status_code == 403
+    assert client.put(path, json=payload, headers=headers()).status_code == 400
+
+    updated = client.put(path, json=payload, headers=headers(idempotency_key=key))
+    assert updated.status_code == 200
+    assert updated.json()["version"] == 1
+    assert updated.json()["incident_token_limit"] == 9_223_372_036_854_775_807
+    assert updated.json()["monthly_usd_limit"] == "0.000000000001"
+
+    replay = client.put(path, json=payload, headers=headers(idempotency_key=key))
+    assert replay.status_code == 200
+    assert replay.json() == updated.json()
+
+    conflict = client.put(
+        path,
+        json={**payload, "monthly_usd_limit": "1"},
+        headers=headers(idempotency_key=key),
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "idempotency_conflict"
+
+    stale = client.put(
+        path,
+        json={**payload, "monthly_usd_limit": "1"},
+        headers=headers(idempotency_key="consumption-policy-write-0002"),
+    )
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "status_conflict"
+
+    zero = client.put(
+        path,
+        json={"expected_version": 1, "incident_token_limit": 0, "monthly_usd_limit": "0"},
+        headers=headers(idempotency_key="consumption-policy-write-0003"),
+    )
+    assert zero.status_code == 200
+    assert zero.json()["incident_token_limit"] == 0
+    assert zero.json()["monthly_usd_limit"] == "0"
+
+    unset = client.put(
+        path,
+        json={"expected_version": 2, "incident_token_limit": None, "monthly_usd_limit": None},
+        headers=headers(idempotency_key="consumption-policy-write-0004"),
+    )
+    assert unset.status_code == 200
+    assert unset.json()["version"] == 3
+    assert unset.json()["incident_token_limit"] is None
+    assert unset.json()["monthly_usd_limit"] is None
+    assert client.get(path, headers=headers()).json() == unset.json()
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"expected_version": 0, "incident_token_limit": -1, "monthly_usd_limit": None},
+        {
+            "expected_version": 0,
+            "incident_token_limit": 9_223_372_036_854_775_808,
+            "monthly_usd_limit": None,
+        },
+        {"expected_version": 0, "incident_token_limit": None, "monthly_usd_limit": 1},
+        {"expected_version": 0, "incident_token_limit": None, "monthly_usd_limit": "-1"},
+        {
+            "expected_version": 0,
+            "incident_token_limit": None,
+            "monthly_usd_limit": "1.0000000000001",
+        },
+        {
+            "expected_version": 0,
+            "incident_token_limit": None,
+            "monthly_usd_limit": "100000000000000000000",
+        },
+        {"incident_token_limit": None, "monthly_usd_limit": None},
+        {
+            "expected_version": 0,
+            "incident_token_limit": None,
+            "monthly_usd_limit": None,
+            "unexpected": True,
+        },
+    ],
+)
+def test_consumption_policy_put_rejects_invalid_payloads_without_mutation(
+    client: TestClient, payload: dict[str, object]
+) -> None:
+    before = client.get("/v1/consumption-limits", headers=headers()).json()
+    response = client.put(
+        "/v1/consumption-limits",
+        json=payload,
+        headers=headers(idempotency_key="consumption-policy-invalid-0001"),
+    )
+    assert response.status_code == 422
+    policy = client.get("/v1/consumption-limits", headers=headers()).json()
+    assert policy == before
+
+
+def test_consumption_policy_put_audits_writes_replays_and_denials(client: TestClient) -> None:
+    from sre_agent.governance.dto import AuditEvent
+
+    path = "/v1/consumption-limits"
+    version = client.get(path, headers=headers()).json()["version"]
+    payload = {"expected_version": version, "incident_token_limit": 17, "monthly_usd_limit": "1"}
+    key = "consumption-policy-audit-success"
+    with psycopg.connect(DATABASE_URL) as connection:
+        before = connection.execute(
+            "SELECT count(*) FROM audit_events WHERE operation='consumption_limits.replace'"
+        ).fetchone()[0]
+    write = client.put(path, json=payload, headers=headers(idempotency_key=key))
+    replay = client.put(path, json=payload, headers=headers(idempotency_key=key))
+    denied = client.put(path, json=payload, headers=headers(RESTRICTED_KEY, key))
+    assert write.status_code == replay.status_code == 200
+    assert replay.json() == write.json()
+    assert denied.status_code == 403
+    with psycopg.connect(DATABASE_URL) as connection:
+        events = connection.execute(
+            "SELECT to_jsonb(a) FROM audit_events a WHERE operation='consumption_limits.replace' "
+            "ORDER BY occurred_at, event_id"
+        ).fetchall()
+    assert len(events) == before + 3
+    for (event,), status, decision in zip(
+        events[-3:], [200, 200, 403], ["allow", "allow", "deny"], strict=False
+    ):
+        AuditEvent.model_validate_json(json.dumps(event))
+        assert (event["action"], event["response_status"]) == ("admin.write", status)
+        assert event["policy_decision"]["decision"] == decision
+        assert event["identity"]["principal_ref"]["algorithm"] == "hmac-sha-256"
+        assert event["content_state"] == "absent"
+        assert event["consumption"] is None and event["untrusted_input"] is None
+        assert ADMIN_KEY not in json.dumps(event) and RESTRICTED_KEY not in json.dumps(event)
+
+
+@pytest.mark.parametrize("scenario", ["write", "replay", "denied"])
+def test_consumption_policy_put_audit_failure_rolls_back(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, scenario: str
+) -> None:
+    from sre_agent.gateway.responses import PostgresAuditStore
+
+    path = "/v1/consumption-limits"
+    payload = {
+        "expected_version": client.get(path, headers=headers()).json()["version"],
+        "incident_token_limit": 19,
+        "monthly_usd_limit": "2",
+    }
+    key = f"consumption-policy-failed-audit-{scenario}"
+    if scenario == "replay":
+        assert (
+            client.put(path, json=payload, headers=headers(idempotency_key=key)).status_code == 200
+        )
+
+    def snapshot():
+        with psycopg.connect(DATABASE_URL) as connection:
+            return (
+                connection.execute(
+                    "SELECT to_jsonb(p) FROM consumption_limit_policies p"
+                ).fetchall(),
+                connection.execute(
+                    "SELECT to_jsonb(i) FROM idempotency_records i ORDER BY scope,key_digest"
+                ).fetchall(),
+                connection.execute("SELECT count(*) FROM audit_events").fetchone(),
+            )
+
+    original = PostgresAuditStore.append_in_transaction
+
+    async def unavailable(self, event, session=None):
+        if session is not None:
+            await original(self, event, session)
+        raise RuntimeError("private audit storage details")
+
+    before = snapshot()
+    monkeypatch.setattr(PostgresAuditStore, "append", unavailable)
+    monkeypatch.setattr(PostgresAuditStore, "append_in_transaction", unavailable)
+    response = client.put(
+        path,
+        json=payload,
+        headers=headers(RESTRICTED_KEY if scenario == "denied" else ADMIN_KEY, key),
+    )
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "audit_unavailable"
+    assert response.json()["retryable"] is True
+    assert "private audit storage details" not in response.text
+    assert snapshot() == before
 
 
 def test_all_eight_routes_with_replays_expiry_and_revocation(
