@@ -243,13 +243,19 @@ def project_detail(
     if severity is not None and severity not in SEVERITIES:
         raise UnsupportedWorkflowDataError("stored incident carries an unknown severity")
     impact = state.get("impact")
+    alert = state.get("alert")
+    if isinstance(alert, dict) and {"service", "summary", "source"}.isdisjoint(alert):
+        # Triage declare persists no alert context (alert_id lives on the
+        # triage decision, not here); explicit absence, never invented data.
+        # Corrupt fragments that claim those keys still fail closed below.
+        alert = None
     return {
         "incident_id": record.incident_id,
         "workflow_version": workflow.version,
         "state": state.get("state"),
         "severity": severity,
         "impact": impact if isinstance(impact, str) else None,
-        "alert": project_alert(state.get("alert")),
+        "alert": project_alert(alert) if alert is not None else None,
         "approvals": project_approvals(state),
         "version": record.version,
         "updated_at": utc_iso(record.updated_at),
