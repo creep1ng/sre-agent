@@ -263,6 +263,7 @@ def _postgres_schema():
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
             "bok_collection_versions, "

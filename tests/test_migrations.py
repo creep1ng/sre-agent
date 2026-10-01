@@ -18,6 +18,7 @@ DATABASE_URL = os.environ.get(
 def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
@@ -79,6 +80,7 @@ def test_repeated_head_has_expected_domain_tables() -> None:
         "bok_documents",
         "bok_collection_versions",
         "credentials",
+        "consumption_reservations",
         "consumption_limit_policies",
         "grants",
         "idempotency_records",
@@ -629,7 +631,7 @@ def test_consumption_sql_audit_evidence_blocks_lossy_downgrade() -> None:
         command.downgrade(config, "20260926_14")
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261001_02",
+            "20260929_17",
         )
         assert connection.execute("SELECT count(*) FROM consumption_limit_policies").fetchone() == (
             1,
@@ -661,5 +663,5 @@ def test_consumption_put_binding_persists_and_blocks_lossy_downgrade() -> None:
             "FROM idempotency_records WHERE principal_id='policy-schema-admin'"
         ).fetchone() == ("PUT", 1, "1")
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261001_02",
+            "20260929_17",
         )

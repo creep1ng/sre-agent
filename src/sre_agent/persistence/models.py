@@ -1,5 +1,6 @@
 from functools import partial
 
+import sqlalchemy as sa
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -23,6 +24,11 @@ required = partial(mapped_column, nullable=False)
 
 class Base(DeclarativeBase):
     pass
+
+
+IncidentIdReference = sa.Table(
+    "incidents", sa.MetaData(), sa.Column("incident_id", String(64)), schema="incident"
+)
 
 
 class PrincipalRow(Base):
@@ -354,6 +360,62 @@ class ConsumptionLimitPolicyRow(Base):
     incident_token_limit = mapped_column(BigInteger, nullable=True)
     monthly_usd_limit = mapped_column(Numeric(32, 12), nullable=True)
     updated_at = required(DateTime(timezone=True))
+
+
+class ConsumptionReservationRow(Base):
+    """Metadata-only exposure retained for admission and later settlement."""
+
+    __tablename__ = "consumption_reservations"
+    __table_args__ = (
+        CK("policy_version >= 0", name="ck_consumption_reservation_version"),
+        CK("length(model) > 0", name="ck_consumption_reservation_model"),
+        CK("length(provider) > 0", name="ck_consumption_reservation_provider"),
+        CK(
+            "period_start = date_trunc('month', period_start AT TIME ZONE 'UTC') "
+            "AT TIME ZONE 'UTC'",
+            name="ck_consumption_reservation_period_utc_month",
+        ),
+        CK(
+            "token_exposure IS NULL OR token_exposure >= 0",
+            name="ck_consumption_reservation_tokens",
+        ),
+        CK(
+            "usd_exposure IS NULL OR usd_exposure >= 0",
+            name="ck_consumption_reservation_usd",
+        ),
+        CK(
+            "settled_tokens IS NULL OR settled_tokens >= 0",
+            name="ck_consumption_reservation_settled_tokens",
+        ),
+        CK(
+            "settled_usd_cost IS NULL OR settled_usd_cost >= 0",
+            name="ck_consumption_reservation_settled_usd",
+        ),
+        CK("state IN ('reserved','settled','released')", name="ck_consumption_reservation_state"),
+        ForeignKeyConstraint(
+            ["incident_id"],
+            [IncidentIdReference.c.incident_id],
+            name="fk_consumption_reservation_incident",
+        ),
+        sa.Index("ix_consumption_reservations_period_incident", "period_start", "incident_id"),
+        sa.Index(
+            "ix_consumption_reservations_period_workspace",
+            "period_start",
+            postgresql_where=sa.text("incident_id IS NULL"),
+        ),
+    )
+    reservation_id = mapped_column(String(64), primary_key=True)
+    incident_id = mapped_column(String(64), nullable=True)
+    period_start = required(DateTime(timezone=True))
+    policy_version = required(BigInteger)
+    model = required(String(200))
+    provider = required(String(100))
+    token_exposure = mapped_column(BigInteger, nullable=True)
+    usd_exposure = mapped_column(Numeric(56, 36), nullable=True)
+    settled_tokens = mapped_column(BigInteger, nullable=True)
+    settled_usd_cost = mapped_column(Numeric(56, 36), nullable=True)
+    state = required(String(16))
+    created_at = required(DateTime(timezone=True))
 
 
 class AuditEventRow(Base):
