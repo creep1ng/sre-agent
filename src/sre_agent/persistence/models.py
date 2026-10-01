@@ -1,11 +1,22 @@
 from functools import partial
 
 import sqlalchemy as sa
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy import CheckConstraint as CK
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 from sqlalchemy.sql import func
+from sqlalchemy.sql import text as sql_text
 from sqlalchemy.sql.schema import ForeignKeyConstraint, UniqueConstraint
 
 required = partial(mapped_column, nullable=False)
@@ -179,6 +190,107 @@ class MCPToolRow(Base):
     updated_at = required(DateTime(timezone=True))
 
 
+class SkillVersionRow(Base):
+    """Owner-authoritative immutable instruction content for one Skill version."""
+
+    __tablename__ = "skill_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["resource_type", "resource_id"],
+            ["resources.resource_type", "resources.resource_id"],
+        ),
+        CK("resource_type = 'skill'", name="ck_skill_versions_resource_type"),
+        CK("resource_id = skill_id || '@' || version", name="ck_skill_versions_resource_id"),
+        CK(
+            "skill_id ~ '^[a-z][a-z0-9-]{2,62}[a-z0-9]$'",
+            name="ck_skill_versions_skill_id",
+        ),
+        CK(
+            "version ~ '^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$'",
+            name="ck_skill_versions_version",
+        ),
+        CK("content_sha256 ~ '^[0-9a-f]{64}$'", name="ck_skill_versions_hash"),
+    )
+    skill_id = mapped_column(String(64), primary_key=True)
+    version = mapped_column(String(32), primary_key=True)
+    resource_type = required(String(32))
+    resource_id = required(String(200))
+    owner_id = required(String(64))
+    manifest = required(JSONB)
+    content_sha256 = required(String(64))
+    created_at = required(DateTime(timezone=True), server_default=func.now())
+
+
+class BoKCollectionVersionRow(Base):
+    """BoK-owner authority for one immutable corpus version."""
+
+    __tablename__ = "bok_collection_versions"
+    __table_args__ = (
+        CK(
+            "status IN ('indexing','ready','active','inactive','revoked')",
+            name="ck_bok_versions_status",
+        ),
+        CK("visibility IN ('public','private','hidden')", name="ck_bok_versions_visibility"),
+        CK("updated_at >= created_at", name="ck_bok_versions_lifecycle"),
+    )
+    collection_id = mapped_column(String(100), primary_key=True)
+    version = mapped_column(String(64), primary_key=True)
+    owner_id = required(String(64))
+    status = required(String(16))
+    manifest_sha256 = required(String(64))
+    display_name = required(String(200))
+    description = required(String(500))
+    visibility = required(String(16))
+    created_at = required(DateTime(timezone=True))
+    updated_at = required(DateTime(timezone=True))
+
+
+class BoKDocumentRow(Base):
+    """Document content owned by a specific BoK collection version."""
+
+    __tablename__ = "bok_documents"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["collection_id", "version"],
+            ["bok_collection_versions.collection_id", "bok_collection_versions.version"],
+            name="fk_bok_documents_collection_version",
+            ondelete="CASCADE",
+        ),
+    )
+    collection_id = mapped_column(String(100), primary_key=True)
+    version = mapped_column(String(64), primary_key=True)
+    document_id = mapped_column(String(100), primary_key=True)
+    title = required(String(300))
+    source_ref = required(String(500))
+    content_sha256 = required(String(64))
+
+
+class BoKSectionChunkRow(Base):
+    """Immutable chunk body with document/section provenance."""
+
+    __tablename__ = "bok_section_chunks"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["collection_id", "version", "document_id"],
+            ["bok_documents.collection_id", "bok_documents.version", "bok_documents.document_id"],
+            name="fk_bok_chunks_document_version",
+            ondelete="CASCADE",
+        ),
+        CK("chunk_index >= 0", name="ck_bok_chunks_index"),
+        Index(
+            "ix_bok_section_chunks_english_fts",
+            sql_text("to_tsvector('english', content)"),
+            postgresql_using="gin",
+        ),
+    )
+    collection_id = mapped_column(String(100), primary_key=True)
+    version = mapped_column(String(64), primary_key=True)
+    document_id = mapped_column(String(100), primary_key=True)
+    section_id = mapped_column(String(100), primary_key=True)
+    chunk_index = mapped_column(Integer, primary_key=True)
+    content = required(Text())
+
+
 class GrantRow(Base):
     __tablename__ = "grants"
     __table_args__ = (
@@ -317,9 +429,8 @@ class AuditEventRow(Base):
             "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
             "'grants.create','grants.list','grants.revoke',"
             "'aliases.create','aliases.list','aliases.get',"
-            "'aliases.assignment.replace','aliases.status.replace',"
-            "'catalog.create','catalog.list','catalog.read','consumption_limits.get',"
-            "'consumption_limits.replace')",
+            "'aliases.assignment.replace','aliases.status.replace','catalog.create',"
+            "'catalog.list','catalog.read','bok.search','bok.read','consumption_limits.get','consumption_limits.replace')",
             name="ck_audit_events_operation",
         ),
         CK(
@@ -337,7 +448,8 @@ class AuditEventRow(Base):
             "reason_code IS NULL OR reason_code IN ('audit_unavailable','authentication_failed',"
             "'contract_validation_failed','grant_matched','no_matching_grant','redaction_failed',"
             "'redaction_uncertain','routing_unavailable','upstream_failed','upstream_invalid',"
-            "'upstream_unavailable','resource_not_found','status_conflict')",
+            "'upstream_unavailable','resource_not_found','status_conflict',"
+            "'index_unavailable','storage_unavailable')",
             name="ck_audit_events_reason_code",
         ),
         CK(
