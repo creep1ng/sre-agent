@@ -55,7 +55,8 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
@@ -828,7 +829,7 @@ def test_persisted_bok_audit_blocks_lossy_downgrade(client):
         # The blocked downgrade leaves the schema on the union head with the BoK
         # evidence that made it lossy still present.
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260930_19",
+            "20261001_01",
         )
         assert connection.execute(
             "SELECT count(*) FROM audit_events WHERE operation='bok.search'"

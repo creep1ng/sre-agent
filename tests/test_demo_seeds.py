@@ -34,7 +34,8 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_10_test CASCADE")
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_12_test CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
             "resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, "
@@ -235,7 +236,7 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260930_19"
+    assert version == "20261001_01"
     assert admin_resources == 5
     assert admin_grants == 9
     assert projection == [
