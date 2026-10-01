@@ -1,0 +1,3 @@
+operation|evidence_rows|requests|incident_refs|consumption_variants
+responses.create|4|2|3|2
+(1 row)

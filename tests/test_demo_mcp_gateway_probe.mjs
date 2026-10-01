@@ -79,7 +79,7 @@ test("discovery CLI validates allowed and server-restricted HTTP responses witho
     assert.deepEqual(calls, ["GET /v1/mcp/discovery", "GET /v1/mcp/discovery"]);
     t.diagnostic(`Controlled discovery report: ${JSON.stringify(observed)}`);
 
-    const beforeRootSlash = calls.length;
+const beforeRootSlash = calls.length;
     const rootSlash = await runCli(`${url}/`);
     assert.equal(rootSlash.status, 0, rootSlash.stderr);
     assert.equal(report(rootSlash).status, "pass");
