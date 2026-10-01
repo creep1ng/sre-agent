@@ -32,27 +32,31 @@ properties:
     maxLength: 2000
     default: null
   alert:
-    type: object
-    additionalProperties: false
-    required: [alert_id, service, severity, status, observed_at, summary, source]
-    properties:
-      alert_id:
-        type: string
-        pattern: '^[a-z][a-z0-9_-]{2,63}$'
-      service: { type: string, minLength: 1, maxLength: 200 }
-      severity: { enum: [sev1, sev2, sev3, sev4] }
-      status: { enum: [new, triaged, dismissed, linked] }
-      observed_at: { type: string, format: date-time }
-      summary: { type: string, minLength: 1, maxLength: 2000 }
-      source: { type: string, minLength: 1, maxLength: 200 }
-      origin:
-        type: object
+    description: Canonical alert fragment, or null when the declaring flow
+      persisted no alert context (triage declare carries only alert_id).
+    anyOf:
+      - type: "null"
+      - type: object
         additionalProperties: false
+        required: [alert_id, service, severity, status, observed_at, summary, source]
         properties:
-          signal: { type: string, maxLength: 200 }
-          condition: { type: string, maxLength: 500 }
-          detector: { type: string, maxLength: 200 }
+          alert_id:
+            type: string
+            pattern: '^[a-z][a-z0-9_-]{2,63}$'
+          service: { type: string, minLength: 1, maxLength: 200 }
+          severity: { enum: [sev1, sev2, sev3, sev4] }
+          status: { enum: [new, triaged, dismissed, linked] }
           observed_at: { type: string, format: date-time }
+          summary: { type: string, minLength: 1, maxLength: 2000 }
+          source: { type: string, minLength: 1, maxLength: 200 }
+          origin:
+            type: object
+            additionalProperties: false
+            properties:
+              signal: { type: string, maxLength: 200 }
+              condition: { type: string, maxLength: 500 }
+              detector: { type: string, maxLength: 200 }
+              observed_at: { type: string, format: date-time }
   approvals:
     type: array
     default: []
