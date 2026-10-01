@@ -1,7 +1,8 @@
-"""Pure incident-token cap contracts; failure modes precede implementation."""
+"""Pure consumption cap contracts; failure modes precede implementation."""
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 
@@ -43,6 +44,7 @@ def calculate(
     selected: EndpointCatalogSnapshot,
     *,
     incident_remaining: int | None = None,
+    monthly_remaining: Decimal | None = None,
     provider: str = "OpenAI",
     now: datetime = NOW,
 ):
@@ -50,6 +52,7 @@ def calculate(
         selected,
         provider=provider,
         incident_tokens_remaining=incident_remaining,
+        monthly_usd_remaining=monthly_remaining,
         now=now,
     )
 
@@ -137,3 +140,126 @@ def test_stale_ambiguous_missing_or_mismatched_endpoint_denies() -> None:
 def test_naive_calculation_time_denies() -> None:
     with pytest.raises(AffordabilityDenied):
         calculate(snapshot(endpoint()), now=datetime(2026, 9, 28))
+
+
+def test_monthly_balance_caps_output_after_input_and_request_cost() -> None:
+    selected = snapshot(
+        endpoint(
+            prompt_price=Decimal("0.05"),
+            completion_price=Decimal("0.10"),
+            request_price=Decimal("0.20"),
+        )
+    )
+    result = calculate(selected, incident_remaining=100, monthly_remaining=Decimal("1.01"))
+    assert result.max_output_tokens == 3
+    assert result.conservative_input_cost_usd == Decimal("0.50")
+    assert result.request_fee_usd == Decimal("0.20")
+
+
+def test_monthly_budget_combines_with_endpoint_and_incident_ceilings() -> None:
+    selected = snapshot(
+        endpoint(
+            prompt_price=Decimal("0.05"),
+            completion_price=Decimal("0.10"),
+            request_price=Decimal("0.20"),
+        )
+    )
+    assert (
+        calculate(
+            selected, incident_remaining=12, monthly_remaining=Decimal("10")
+        ).max_output_tokens
+        == 2
+    )
+    assert (
+        calculate(
+            snapshot(replace(selected.endpoints[0], max_completion_tokens=2)),
+            monthly_remaining=Decimal("10"),
+        ).max_output_tokens
+        == 2
+    )
+
+
+def test_unset_monthly_budget_does_not_require_price_metadata() -> None:
+    result = calculate(snapshot(endpoint()))
+    assert result.max_output_tokens == 100
+    assert result.conservative_input_cost_usd is None
+    assert result.request_fee_usd is None
+
+
+@pytest.mark.parametrize("field", ["prompt_price", "completion_price", "request_price"])
+def test_monthly_budget_requires_every_explicit_price_component(field: str) -> None:
+    prices = {
+        "prompt_price": Decimal("0.05"),
+        "completion_price": Decimal("0.10"),
+        "request_price": Decimal("0.20"),
+    }
+    prices[field] = None
+    selected = snapshot(endpoint(**prices))
+    with pytest.raises(AffordabilityDenied):
+        calculate(selected, monthly_remaining=Decimal("10"))
+
+
+@pytest.mark.parametrize(
+    "bad_price",
+    [Decimal("-0.01"), Decimal("NaN"), Decimal("Infinity"), "0.01", 0.01],
+)
+def test_monthly_budget_rejects_malformed_or_inexact_prices(bad_price: object) -> None:
+    selected = snapshot(
+        endpoint(
+            prompt_price=Decimal("0.05"),
+            completion_price=bad_price,
+            request_price=Decimal("0.20"),
+        )
+    )
+    with pytest.raises(AffordabilityDenied):
+        calculate(selected, monthly_remaining=Decimal("10"))
+
+
+@pytest.mark.parametrize(
+    "balance",
+    [Decimal("-1"), Decimal("NaN"), Decimal("Infinity"), 0.5, "1.00"],
+)
+def test_invalid_monthly_balance_denies(balance: object) -> None:
+    with pytest.raises(AffordabilityDenied):
+        calculate(snapshot(endpoint()), monthly_remaining=balance)
+
+
+def test_monthly_zero_is_active_but_zero_prices_are_affordable() -> None:
+    selected = snapshot(
+        endpoint(
+            prompt_price=Decimal("0"),
+            completion_price=Decimal("0"),
+            request_price=Decimal("0"),
+        )
+    )
+    assert calculate(selected, monthly_remaining=Decimal("0")).max_output_tokens == 100
+
+
+def test_decimal_budget_rounds_down_exactly() -> None:
+    selected = snapshot(
+        endpoint(
+            max_prompt_tokens=1,
+            prompt_price=Decimal("0"),
+            completion_price=Decimal("0.0000000000000000000000000000000000003"),
+            request_price=Decimal("0"),
+        )
+    )
+    assert (
+        calculate(
+            selected,
+            monthly_remaining=Decimal("0.0000000000000000000000000000000000007"),
+        ).max_output_tokens
+        == 2
+    )
+
+
+def test_monthly_budget_must_cover_conservative_input_and_request_fee() -> None:
+    selected = snapshot(
+        endpoint(
+            prompt_price=Decimal("0.05"),
+            completion_price=Decimal("0.10"),
+            request_price=Decimal("0.20"),
+        )
+    )
+    with pytest.raises(AffordabilityDenied):
+        calculate(selected, monthly_remaining=Decimal("0.69"))
