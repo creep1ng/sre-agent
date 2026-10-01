@@ -74,14 +74,15 @@ def grant_revocation_admin() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status) "
-            "VALUES ('administrative_control', 'grants', 'active')"
+            "VALUES ('administrative_control', 'grants', 'active') ON CONFLICT DO NOTHING"
         )
         connection.execute(
             "INSERT INTO grants "
             "(grant_id, principal_id, action, resource_type, resource_id, effect, status, "
             "created_at) VALUES "
             "('grant-lifecycle-proof-admin', 'admin-human', 'admin.write', "
-            "'administrative_control', 'grants', 'allow', 'active', now())"
+            "'administrative_control', 'grants', 'allow', 'active', now()) "
+            "ON CONFLICT DO NOTHING"
         )
 
 
