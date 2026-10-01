@@ -106,6 +106,11 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "consumption_limits",
     },
+    ("PUT", "/v1/consumption-limits"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "consumption_limits",
+    },
     ("POST", "/v1/bok/collections/{collection_id}/versions/{version}/search"): {
         "action": "bok.search",
         "resource_type": "bok_collection",
