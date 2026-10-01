@@ -65,12 +65,13 @@ def test_example_skills_publish_activate_and_resolve_with_direct_authority() -> 
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status) "
-            "VALUES ('administrative_control', 'grants', 'active')"
+            "VALUES ('administrative_control', 'grants', 'active') ON CONFLICT DO NOTHING"
         )
         connection.execute(
             "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
             "effect, status, created_at) VALUES ('grant-demo-admin-grants', 'admin-human', "
-            "'admin.write', 'administrative_control', 'grants', 'allow', 'active', now())"
+            "'admin.write', 'administrative_control', 'grants', 'allow', 'active', now()) "
+            "ON CONFLICT DO NOTHING"
         )
 
     app = create_application(Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY))
