@@ -41,8 +41,16 @@ Future LLM, MCP, skill, and knowledge consumers MUST enter through a declared go
 3. Use an exact existing grant; do not infer roles from principal names or client input.
 4. Record the terminal audit event before releasing an allowed result, and keep denied effects at zero.
 
-MCP, skill, and knowledge runtimes remain future-only until their runtime boundaries exist. This rule adds no
-endpoint, grant model, provisioning path, schema, seed, migration, or lifecycle behavior.
+MCP and knowledge execution runtimes remain future-only until their runtime boundaries exist. The
+administrative read path returns a persisted exact Skill version under the catalog grant, but does
+not execute it. Administrators can activate or deactivate one exact version with an optimistic
+`expected_updated_at` check. The separate content GET is `/v1/skills/{skill_id}/{version}/resolve`.
+It requires direct active `invoke` grants for the exact root and every pinned dependency before
+reading each version. Success returns the root and all direct dependencies atomically; an unavailable
+dependency or any nested dependency produces the same non-disclosing 404. Status and grants are
+rechecked on every request, and the exact URL keeps resume pinned to its original versions. The
+request-correlated audit records metadata only; no implicit latest-version selection or content cache
+is used.
 
 ## Release metadata
 
