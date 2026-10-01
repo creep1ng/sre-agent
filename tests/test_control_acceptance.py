@@ -20,6 +20,7 @@ from sqlalchemy.exc import StatementError
 from sre_agent.application import create_application
 from sre_agent.control.service import RotationIssuanceFailure
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
+from sre_agent.governance.dto import SkillManifest
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import (
     AuditRepository,
@@ -27,6 +28,7 @@ from sre_agent.persistence.repositories import (
     GrantRepository,
     PrincipalRepository,
     ResourceRepository,
+    SkillVersionRepository,
 )
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
@@ -59,7 +61,9 @@ def migrated_acceptance_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS consumption_limit_policies, audit_events, grants, credentials, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, "
             "resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
@@ -143,6 +147,54 @@ def audit_row(request_id: str) -> tuple[object, ...]:
         ).fetchone()
     assert row is not None
     return row
+
+
+def test_skill_version_read_is_limited_to_catalog_admin(
+    client: TestClient,
+) -> None:
+    version = "1" * 28 + ".0.0"
+
+    async def publish() -> None:
+        database = Database(DATABASE_URL)
+        try:
+            async with database.sessions() as session:
+                await SkillVersionRepository(session).publish(
+                    skill_id="readable-skill",
+                    version=version,
+                    owner_id="skill-owner",
+                    manifest=SkillManifest(
+                        display_name="Readable Skill",
+                        description="A persisted test instruction.",
+                        instructions="Use the runbook and verify the outcome.",
+                        dependencies=[],
+                    ),
+                    content_sha256="a" * 64,
+                )
+                await session.commit()
+        finally:
+            await database.dispose()
+
+    asyncio.run(publish())
+
+    response = client.get(f"/v1/skills/readable-skill/{version}", headers=headers())
+
+    assert response.status_code == 200
+    assert response.json()["skill_id"] == "readable-skill"
+    assert response.json()["version"] == version
+    assert response.json()["manifest"]["instructions"] == (
+        "Use the runbook and verify the outcome."
+    )
+    denied = client.get(f"/v1/skills/readable-skill/{version}", headers=headers(RESTRICTED_KEY))
+    assert denied.status_code == 403
+
+    invalid = client.get(f"/v1/skills/readable-skill/1{version}", headers=headers())
+    assert invalid.status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT response_status, reason_code FROM audit_events "
+            "WHERE correlation->>'request_id'=%s",
+            (invalid.json()["request_id"],),
+        ).fetchone() == (422, "contract_validation_failed")
 
 
 def credential_count(principal_id: str) -> int:
@@ -803,13 +855,14 @@ def test_grant_revocation_is_authorized_convergent_audited_and_immediately_effec
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status) "
-            "VALUES ('administrative_control', 'grants', 'active')"
+            "VALUES ('administrative_control', 'grants', 'active') ON CONFLICT DO NOTHING"
         )
         connection.execute(
             "INSERT INTO grants (grant_id, principal_id, action, resource_type, resource_id, "
             "effect, status, created_at) VALUES "
             "('grant-admin-human-admin-write-grants', 'admin-human', 'admin.write', "
-            "'administrative_control', 'grants', 'allow', 'active', now())"
+            "'administrative_control', 'grants', 'allow', 'active', now()) "
+            "ON CONFLICT DO NOTHING"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, model_alias_id, alias, "

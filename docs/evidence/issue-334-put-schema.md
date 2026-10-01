@@ -1,6 +1,6 @@
 # Consumption-policy PUT schema prerequisite
 
-This unit prepares unpublished migration `20260929_16` for the later protected PUT
+This unit prepares unpublished migration `20261001_02` (rebased from `20260929_16` during the #441 main integration; BoK already owns that identifier) for the later protected PUT
 endpoint. It expands the method constraint for idempotency bindings and adds the
 `consumption_limits.replace` audit vocabulary while preserving earlier operations.
 
