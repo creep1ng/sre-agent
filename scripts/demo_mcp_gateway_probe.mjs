@@ -17,8 +17,8 @@ const LOG_QUERY = {
 function validGatewayUrl(value) {
   try {
     const url = new URL(value);
-    return (url.protocol === "http:" || url.protocol === "https:") && url.pathname === "/" &&
-      !url.username && !url.password && !url.search && !url.hash
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username && !url.password && !url.search && !url.hash && url.pathname === "/"
       ? url.origin
       : null;
   } catch {

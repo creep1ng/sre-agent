@@ -1,10 +1,22 @@
 from functools import partial
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+import sqlalchemy as sa
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy import CheckConstraint as CK
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, mapped_column
 from sqlalchemy.sql import func
+from sqlalchemy.sql import text as sql_text
 from sqlalchemy.sql.schema import ForeignKeyConstraint, UniqueConstraint
 
 required = partial(mapped_column, nullable=False)
@@ -12,6 +24,11 @@ required = partial(mapped_column, nullable=False)
 
 class Base(DeclarativeBase):
     pass
+
+
+IncidentIdReference = sa.Table(
+    "incidents", sa.MetaData(), sa.Column("incident_id", String(64)), schema="incident"
+)
 
 
 class PrincipalRow(Base):
@@ -173,6 +190,107 @@ class MCPToolRow(Base):
     updated_at = required(DateTime(timezone=True))
 
 
+class SkillVersionRow(Base):
+    """Owner-authoritative immutable instruction content for one Skill version."""
+
+    __tablename__ = "skill_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["resource_type", "resource_id"],
+            ["resources.resource_type", "resources.resource_id"],
+        ),
+        CK("resource_type = 'skill'", name="ck_skill_versions_resource_type"),
+        CK("resource_id = skill_id || '@' || version", name="ck_skill_versions_resource_id"),
+        CK(
+            "skill_id ~ '^[a-z][a-z0-9-]{2,62}[a-z0-9]$'",
+            name="ck_skill_versions_skill_id",
+        ),
+        CK(
+            "version ~ '^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$'",
+            name="ck_skill_versions_version",
+        ),
+        CK("content_sha256 ~ '^[0-9a-f]{64}$'", name="ck_skill_versions_hash"),
+    )
+    skill_id = mapped_column(String(64), primary_key=True)
+    version = mapped_column(String(32), primary_key=True)
+    resource_type = required(String(32))
+    resource_id = required(String(200))
+    owner_id = required(String(64))
+    manifest = required(JSONB)
+    content_sha256 = required(String(64))
+    created_at = required(DateTime(timezone=True), server_default=func.now())
+
+
+class BoKCollectionVersionRow(Base):
+    """BoK-owner authority for one immutable corpus version."""
+
+    __tablename__ = "bok_collection_versions"
+    __table_args__ = (
+        CK(
+            "status IN ('indexing','ready','active','inactive','revoked')",
+            name="ck_bok_versions_status",
+        ),
+        CK("visibility IN ('public','private','hidden')", name="ck_bok_versions_visibility"),
+        CK("updated_at >= created_at", name="ck_bok_versions_lifecycle"),
+    )
+    collection_id = mapped_column(String(100), primary_key=True)
+    version = mapped_column(String(64), primary_key=True)
+    owner_id = required(String(64))
+    status = required(String(16))
+    manifest_sha256 = required(String(64))
+    display_name = required(String(200))
+    description = required(String(500))
+    visibility = required(String(16))
+    created_at = required(DateTime(timezone=True))
+    updated_at = required(DateTime(timezone=True))
+
+
+class BoKDocumentRow(Base):
+    """Document content owned by a specific BoK collection version."""
+
+    __tablename__ = "bok_documents"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["collection_id", "version"],
+            ["bok_collection_versions.collection_id", "bok_collection_versions.version"],
+            name="fk_bok_documents_collection_version",
+            ondelete="CASCADE",
+        ),
+    )
+    collection_id = mapped_column(String(100), primary_key=True)
+    version = mapped_column(String(64), primary_key=True)
+    document_id = mapped_column(String(100), primary_key=True)
+    title = required(String(300))
+    source_ref = required(String(500))
+    content_sha256 = required(String(64))
+
+
+class BoKSectionChunkRow(Base):
+    """Immutable chunk body with document/section provenance."""
+
+    __tablename__ = "bok_section_chunks"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["collection_id", "version", "document_id"],
+            ["bok_documents.collection_id", "bok_documents.version", "bok_documents.document_id"],
+            name="fk_bok_chunks_document_version",
+            ondelete="CASCADE",
+        ),
+        CK("chunk_index >= 0", name="ck_bok_chunks_index"),
+        Index(
+            "ix_bok_section_chunks_english_fts",
+            sql_text("to_tsvector('english', content)"),
+            postgresql_using="gin",
+        ),
+    )
+    collection_id = mapped_column(String(100), primary_key=True)
+    version = mapped_column(String(64), primary_key=True)
+    document_id = mapped_column(String(100), primary_key=True)
+    section_id = mapped_column(String(100), primary_key=True)
+    chunk_index = mapped_column(Integer, primary_key=True)
+    content = required(Text())
+
+
 class GrantRow(Base):
     __tablename__ = "grants"
     __table_args__ = (
@@ -197,11 +315,11 @@ class GrantRow(Base):
 
 
 class IdempotencyRecordRow(Base):
-    """Scoped POST binding: replay on same hash, conflict on different hash."""
+    """Scoped request binding: replay on same hash, conflict on different hash."""
 
     __tablename__ = "idempotency_records"
     __table_args__ = (
-        CK("method = 'POST'", name="ck_idempotency_method"),
+        CK("method IN ('POST','PUT')", name="ck_idempotency_method"),
         CK(
             "binding IN ('at_least_24h','principal_lifetime')",
             name="ck_idempotency_binding",
@@ -221,6 +339,85 @@ class IdempotencyRecordRow(Base):
     transition_count = required(Integer)
 
 
+class ConsumptionLimitPolicyRow(Base):
+    """Versioned singleton policy for incident and workspace consumption limits."""
+
+    __tablename__ = "consumption_limit_policies"
+    __table_args__ = (
+        CK("policy_id = 1", name="ck_consumption_policy_singleton"),
+        CK("version >= 0", name="ck_consumption_policy_version"),
+        CK(
+            "incident_token_limit IS NULL OR incident_token_limit >= 0",
+            name="ck_consumption_policy_incident_limit",
+        ),
+        CK(
+            "monthly_usd_limit IS NULL OR monthly_usd_limit >= 0",
+            name="ck_consumption_policy_monthly_limit",
+        ),
+    )
+    policy_id = mapped_column(Integer, primary_key=True)
+    version = required(BigInteger)
+    incident_token_limit = mapped_column(BigInteger, nullable=True)
+    monthly_usd_limit = mapped_column(Numeric(32, 12), nullable=True)
+    updated_at = required(DateTime(timezone=True))
+
+
+class ConsumptionReservationRow(Base):
+    """Metadata-only exposure retained for admission and later settlement."""
+
+    __tablename__ = "consumption_reservations"
+    __table_args__ = (
+        CK("policy_version >= 0", name="ck_consumption_reservation_version"),
+        CK("length(model) > 0", name="ck_consumption_reservation_model"),
+        CK("length(provider) > 0", name="ck_consumption_reservation_provider"),
+        CK(
+            "period_start = date_trunc('month', period_start AT TIME ZONE 'UTC') "
+            "AT TIME ZONE 'UTC'",
+            name="ck_consumption_reservation_period_utc_month",
+        ),
+        CK(
+            "token_exposure IS NULL OR token_exposure >= 0",
+            name="ck_consumption_reservation_tokens",
+        ),
+        CK(
+            "usd_exposure IS NULL OR usd_exposure >= 0",
+            name="ck_consumption_reservation_usd",
+        ),
+        CK(
+            "settled_tokens IS NULL OR settled_tokens >= 0",
+            name="ck_consumption_reservation_settled_tokens",
+        ),
+        CK(
+            "settled_usd_cost IS NULL OR settled_usd_cost >= 0",
+            name="ck_consumption_reservation_settled_usd",
+        ),
+        CK("state IN ('reserved','settled','released')", name="ck_consumption_reservation_state"),
+        ForeignKeyConstraint(
+            ["incident_id"],
+            [IncidentIdReference.c.incident_id],
+            name="fk_consumption_reservation_incident",
+        ),
+        sa.Index("ix_consumption_reservations_period_incident", "period_start", "incident_id"),
+        sa.Index(
+            "ix_consumption_reservations_period_workspace",
+            "period_start",
+            postgresql_where=sa.text("incident_id IS NULL"),
+        ),
+    )
+    reservation_id = mapped_column(String(64), primary_key=True)
+    incident_id = mapped_column(String(64), nullable=True)
+    period_start = required(DateTime(timezone=True))
+    policy_version = required(BigInteger)
+    model = required(String(200))
+    provider = required(String(100))
+    token_exposure = mapped_column(BigInteger, nullable=True)
+    usd_exposure = mapped_column(Numeric(56, 36), nullable=True)
+    settled_tokens = mapped_column(BigInteger, nullable=True)
+    settled_usd_cost = mapped_column(Numeric(56, 36), nullable=True)
+    state = required(String(16))
+    created_at = required(DateTime(timezone=True))
+
+
 class AuditEventRow(Base):
     __tablename__ = "audit_events"
     __table_args__ = (
@@ -232,7 +429,8 @@ class AuditEventRow(Base):
             "'credentials.issue','credentials.list','credentials.revoke','credentials.rotate',"
             "'grants.create','grants.list','grants.revoke',"
             "'aliases.create','aliases.list','aliases.get',"
-            "'aliases.assignment.replace','aliases.status.replace')",
+            "'aliases.assignment.replace','aliases.status.replace','catalog.create',"
+            "'catalog.list','catalog.read','bok.search','bok.read','consumption_limits.get','consumption_limits.replace')",
             name="ck_audit_events_operation",
         ),
         CK(
@@ -250,7 +448,10 @@ class AuditEventRow(Base):
             "reason_code IS NULL OR reason_code IN ('audit_unavailable','authentication_failed',"
             "'contract_validation_failed','grant_matched','no_matching_grant','redaction_failed',"
             "'redaction_uncertain','routing_unavailable','upstream_failed','upstream_invalid',"
-            "'upstream_unavailable','resource_not_found','status_conflict')",
+            "'upstream_unavailable','resource_not_found','status_conflict',"
+            "'incident_limit_exceeded','monthly_limit_exceeded',"
+            "'consumption_bounds_unavailable','policy_unavailable',"
+            "'index_unavailable','storage_unavailable')",
             name="ck_audit_events_reason_code",
         ),
         CK(
