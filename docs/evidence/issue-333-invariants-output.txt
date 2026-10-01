@@ -1,0 +1,35 @@
+✔ usage proposal registers without relaxing object closure (47.270179ms)
+✔ usage invariant: billed (25.997204ms)
+✔ usage invariant: billed-zero (16.749217ms)
+✔ usage invariant: incompatible-prices (29.701618ms)
+✔ usage invariant: missing-currency (26.991034ms)
+✔ usage invariant: missing-precision (16.258614ms)
+✔ usage invariant: missing-metadata (18.852334ms)
+✔ usage invariant: null-with-currency (14.671927ms)
+✔ usage invariant: null-with-precision (17.322192ms)
+✔ usage invariant: null-with-metadata (15.33709ms)
+✔ usage invariant: empty (17.156059ms)
+✔ usage invariant: complete (25.98578ms)
+✔ usage invariant: partial-known-incomplete (13.998828ms)
+✔ usage invariant: partial-only-incomplete (13.81584ms)
+✔ usage invariant: partial-known-unknown (20.480514ms)
+✔ usage invariant: partial-incomplete-unknown (21.048189ms)
+✔ usage invariant: unknown-only (25.561026ms)
+✔ usage invariant: complete-with-unknown (22.272684ms)
+✔ usage invariant: complete-with-incomplete (19.591404ms)
+✔ usage invariant: unknown-with-known (17.974423ms)
+✔ usage invariant: unknown-with-incomplete (13.489503ms)
+✔ usage invariant: unknown-empty (15.630823ms)
+✔ usage invariant: partial-empty (12.837436ms)
+✔ usage invariant: partial-only-known (17.227307ms)
+✔ usage invariant: partial-only-unknown (13.225664ms)
+✔ usage invariant: undercount (21.354865ms)
+✔ usage invariant: overcount (19.163383ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 771.215828

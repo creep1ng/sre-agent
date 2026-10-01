@@ -9,15 +9,18 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, Response
 from jsonschema import Draft202012Validator
+from pydantic import ValidationError
 
 from sre_agent.control import scopes
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.control.service import (
     CONTROL_OPERATIONS,
     ControlService,
+    SkillPublishRequest,
     _key_digest,
     _payload_sha256,
     _public_principal,
@@ -153,6 +156,10 @@ def test_control_scopes_cover_all_routes_exactly_once() -> None:
         ("POST", "/v1/catalog/resources"),
         ("GET", "/v1/catalog/resources"),
         ("GET", "/v1/catalog/resources/{type}/{id}"),
+        ("POST", "/v1/skills/versions"),
+        ("GET", "/v1/skills/{skill_id}/{version}"),
+        ("PUT", "/v1/skills/{skill_id}/{version}/status"),
+        ("GET", "/v1/skills/{skill_id}/{version}/status"),
     }
     assert len({*CONTROL_SCOPES.values()}) == 11
     assert scopes.CONTROL_SCOPES is CONTROL_SCOPES
@@ -201,6 +208,14 @@ def test_control_operations_match_scopes() -> None:
     assert CONTROL_OPERATIONS[("POST", "/v1/catalog/resources")][0] == "catalog.create"
     assert CONTROL_OPERATIONS[("GET", "/v1/catalog/resources")][0] == "catalog.list"
     assert CONTROL_OPERATIONS[("GET", "/v1/catalog/resources/{type}/{id}")][0] == "catalog.read"
+    assert CONTROL_OPERATIONS[("POST", "/v1/skills/versions")][0] == "catalog.create"
+    assert CONTROL_OPERATIONS[("GET", "/v1/skills/{skill_id}/{version}")][0] == "catalog.read"
+    assert CONTROL_OPERATIONS[("PUT", "/v1/skills/{skill_id}/{version}/status")][0] == (
+        "catalog.status.replace"
+    )
+    assert CONTROL_OPERATIONS[("GET", "/v1/skills/{skill_id}/{version}/status")][0] == (
+        "catalog.read"
+    )
 
 
 def test_control_projector_rejects_llm_routing_evidence() -> None:
@@ -375,6 +390,9 @@ def test_router_exposes_all_control_routes() -> None:
         "/v1/model-aliases/{alias_id}/status",
         "/v1/catalog/resources",
         "/v1/catalog/resources/{resource_type}/{id}",
+        "/v1/skills/versions",
+        "/v1/skills/{skill_id}/{version}",
+        "/v1/skills/{skill_id}/{version}/status",
     }
 
     async def exercise() -> tuple[httpx.Response, httpx.Response, httpx.Response, httpx.Response]:
@@ -625,3 +643,22 @@ def test_principal_operations_use_shared_governed_authorization_before_effects(
     assert effects.await_count == 1
     assert audit.events[-1].policy_decision is not None
     assert audit.events[-1].policy_decision.grant_ref is not None
+
+
+def test_skill_publication_request_enforces_storage_version_bound() -> None:
+    request = SkillPublishRequest(
+        skill_id="bounded-skill",
+        version="1" * 28 + ".0.0",
+        owner_id="skill-owner",
+        manifest={
+            "display_name": "Bounded",
+            "description": "Instructions only.",
+            "instructions": "Verify the incident.",
+            "dependencies": [],
+        },
+    )
+    assert len(request.version) == 32
+    with pytest.raises(ValidationError):
+        SkillPublishRequest.model_validate(
+            {**request.model_dump(), "version": "1" + request.version}
+        )

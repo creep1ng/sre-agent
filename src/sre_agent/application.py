@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from pathlib import Path
 
 from sre_agent import control, harness, incident
+from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
@@ -26,6 +27,7 @@ from sre_agent.control.consumption_limits import (
 )
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
+from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
@@ -93,6 +95,9 @@ def create_application(
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+        bok_service = BoKRetrievalService(database.sessions, store, projector)
+        application.state.bok_service = bok_service
+        application.include_router(bok_router(bok_service))
         application.include_router(
             usage_router(
                 UsageReadProjection(
@@ -107,6 +112,9 @@ def create_application(
         )
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))
+        )
+        application.include_router(
+            skill_resolution_router(SkillResolutionService(database.sessions, store, projector))
         )
     if provider is not None and runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
