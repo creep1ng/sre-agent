@@ -19,7 +19,7 @@ def integrated_upgrade():
     script = ScriptDirectory.from_config(config)
     destination = context.get_context().opts.get("destination_rev")
     target = script.as_revision_number(destination) if destination else None
-    if target != "20260929_17":
+    if target != "20260929_18":
         return None
     current = set(context.get_context().get_current_heads())
     ancestors = {revision.revision for revision in script.iterate_revisions(target, "base")}
@@ -30,9 +30,9 @@ def integrated_upgrade():
     # a superset of every ancestor vocabulary, so no existing row can violate it and it is
     # always validated. Keying on the union text keeps an ancestor that already declares the
     # full vocabulary on the validating path.
-    # Head 20260929_17 only adds reservation tables and leaves the operation
-    # vocabulary untouched, so the union is read from 20261001_02, the nearest
-    # ancestor that declares it.
+    # Heads 20260929_17 and 20260929_18 only add reservation tables and the
+    # reason vocabulary, leaving the operation vocabulary untouched, so the
+    # union is read from 20261001_02, the nearest ancestor that declares it.
     union = script.get_revision("20261001_02").module.NEW_OPERATION
     legacy_checks = {
         script.get_revision(revision).module.NEW_OPERATION

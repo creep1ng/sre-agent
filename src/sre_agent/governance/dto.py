@@ -34,6 +34,10 @@ ReasonCode = Literal[
     "upstream_failed",
     "upstream_invalid",
     "upstream_unavailable",
+    "incident_limit_exceeded",
+    "monthly_limit_exceeded",
+    "consumption_bounds_unavailable",
+    "policy_unavailable",
     "index_unavailable",
     "storage_unavailable",
 ]

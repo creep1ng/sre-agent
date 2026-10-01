@@ -4,6 +4,7 @@
 import httpx
 from fastapi import FastAPI
 from pathlib import Path
+from typing import Any
 
 from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
@@ -45,6 +46,7 @@ def create_application(
     llm_provider: LLMProvider | None = None,
     audit_store: AuditStore | None = None,
     mcp_client: MCPUpstreamClient | None = None,
+    endpoint_catalog: Any = None,
 ) -> FastAPI:
     runtime_settings = settings or Settings.from_environment()
     probe = readiness_probe or health.postgres_readiness_probe(runtime_settings.database_url)
@@ -52,7 +54,6 @@ def create_application(
     shared_provider_client = None
     shared_mcp_client = None
     shared_endpoint_catalog_client = None
-    endpoint_catalog = None
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
         shared_provider_client = provider_client or httpx.AsyncClient(
@@ -62,7 +63,7 @@ def create_application(
         provider = OpenRouterProvider(
             shared_provider_client, api_key=runtime_settings.openrouter_api_key
         )
-    if runtime_settings.openrouter_management_key:
+    if endpoint_catalog is None and runtime_settings.openrouter_management_key:
         shared_endpoint_catalog_client = httpx.AsyncClient(
             base_url="https://openrouter.ai",
             timeout=runtime_settings.openrouter_timeout_seconds,
@@ -131,7 +132,7 @@ def create_application(
         )
     if provider is not None and runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
-        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()))  # noqa: E501  # fmt: skip
+        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()), endpoint_catalog=endpoint_catalog or application.state.endpoint_catalog)  # noqa: E501  # fmt: skip
         application.include_router(responses_router(service))
     configured_mcp_client = mcp_client
     if configured_mcp_client is None and runtime_settings.grafana_mcp_endpoint:

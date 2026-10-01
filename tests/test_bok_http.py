@@ -830,7 +830,7 @@ def test_persisted_bok_audit_blocks_lossy_downgrade(client):
         # The blocked downgrade leaves the schema on the union head with the BoK
         # evidence that made it lossy still present.
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260929_17",
+            "20260929_18",
         )
         assert connection.execute(
             "SELECT count(*) FROM audit_events WHERE operation='bok.search'"
