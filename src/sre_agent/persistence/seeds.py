@@ -38,6 +38,7 @@ ADMIN_RESOURCES = (
     ("administrative_control", "credentials"),
     ("administrative_control", "model_aliases"),
     ("administrative_control", "usage"),
+    ("administrative_control", "catalog"),
 )
 ADMIN_GRANTS = (
     ("grant-admin-human-admin-read-principals", "admin-human", "admin.read"),
@@ -47,6 +48,8 @@ ADMIN_GRANTS = (
     ("grant-admin-human-admin-read-model-aliases", "admin-human", "admin.read"),
     ("grant-admin-human-admin-write-model-aliases", "admin-human", "admin.write"),
     ("grant-admin-human-admin-read-usage", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-read-catalog", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-catalog", "admin-human", "admin.write"),
 )
 KEY_ENV = (
     "ADMIN_HUMAN_API_KEY",
@@ -448,7 +451,7 @@ async def _seed_session(
         len(grants),
         len(admin_resources),
         len(admin_grants),
-    ) != (4, 4, 2, 2, 4, 7):
+    ) != (4, 4, 2, 2, 5, 9):
         raise SeedConflict("seed_state_conflict: incomplete_seed_graph")
     by_principal = {row.principal_id: row for row in principals}
     by_credential = {row.principal_id: row for row in credentials}

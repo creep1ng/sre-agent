@@ -49,8 +49,8 @@ def governed_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
-            "audit_events, grants, credentials, resources, "
-            "mcp_tools, mcp_servers, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -184,6 +184,31 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "catalog",
     },
+    ("POST", "/v1/skills/versions"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/skills/{skill_id}/{version}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/skills/{skill_id}/{version}/resolve"): {
+        "action": "invoke",
+        "resource_type": "skill",
+        "resource_id": "path.skill_id@path.version",
+    },
+    ("PUT", "/v1/skills/{skill_id}/{version}/status"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/skills/{skill_id}/{version}/status"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
     ("GET", "/v1/usage/consumption"): {
         "action": "admin.read",
         "resource_type": "administrative_control",
@@ -203,7 +228,9 @@ def test_current_governed_operations_have_one_declared_contract() -> None:
         scheme = document["components"]["securitySchemes"][next(iter(schemes[0]))]
         assert scheme["type"] == "http" and scheme["scheme"] == "bearer"
         assert operation["x-governed-scope"] == expected_scope
-        assert {"401", "403"} <= set(operation["responses"])
+        assert "401" in operation["responses"]
+        expected_denial = "404" if path.endswith("/resolve") else "403"
+        assert expected_denial in operation["responses"]
 
 
 def _record_principal_effects(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
@@ -359,10 +386,14 @@ def test_future_consumer_guidance_is_documentation_only() -> None:
 
     assert "Future LLM, MCP, skill, and knowledge consumers" in guidance
     assert "authorize_governed_access" in guidance
-    assert "MCP, skill, and knowledge runtimes remain future-only" in guidance
-    assert "adds no endpoint, grant model, provisioning path" in " ".join(guidance.split())
-    assert not {
-        path
-        for path in _application().openapi()["paths"]
-        if any(term in path.lower() for term in ("mcp", "skill", "knowledge"))
+    assert "MCP and knowledge execution runtimes remain future-only" in guidance
+    assert (
+        "administrative read path returns a persisted exact Skill version under the catalog grant"
+        in " ".join(guidance.split())
+    )
+    assert {path for path in _application().openapi()["paths"] if "skill" in path.lower()} == {
+        "/v1/skills/versions",
+        "/v1/skills/{skill_id}/{version}",
+        "/v1/skills/{skill_id}/{version}/resolve",
+        "/v1/skills/{skill_id}/{version}/status",
     }

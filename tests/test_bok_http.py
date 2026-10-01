@@ -56,7 +56,7 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
-            "audit_events, grants, credentials, resources, mcp_tools, mcp_servers, "
+            "audit_events, skill_versions, grants, credentials, resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -816,11 +816,19 @@ def test_persisted_bok_audit_blocks_lossy_downgrade(client):
     assert response.status_code == 200
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    with pytest.raises(RuntimeError, match="cannot downgrade while BoK audit evidence exists"):
+    # BoK evidence still blocks its own lossy downgrade; when the Skills slice also
+    # holds immutable versions its guard fires first on the shared chain.
+    guard = (
+        "cannot downgrade while BoK audit evidence exists"
+        "|cannot downgrade while immutable Skill versions exist"
+    )
+    with pytest.raises(RuntimeError, match=guard):
         command.downgrade(config, "20260929_15")
     with psycopg.connect(DATABASE_URL) as connection:
+        # The blocked downgrade leaves the schema on the union head with the BoK
+        # evidence that made it lossy still present.
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260929_16",
+            "20260930_19",
         )
         assert connection.execute(
             "SELECT count(*) FROM audit_events WHERE operation='bok.search'"

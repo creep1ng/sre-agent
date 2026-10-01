@@ -41,7 +41,8 @@ def run_start_database() -> None:
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
-            "audit_events, grants, credentials, resources, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
             "mcp_tools, mcp_servers, principals, idempotency_records CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")

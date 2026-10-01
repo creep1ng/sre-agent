@@ -35,8 +35,10 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_12_test CASCADE")
         connection.execute(
             "DROP TABLE IF EXISTS bok_section_chunks, bok_documents, bok_collection_versions, "
-            "audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
+            "principals, idempotency_records, "
+            "alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -103,9 +105,9 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         ).fetchone()
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 6, 9]
-    assert admin_resources == 4
-    assert admin_grants == 7
+    assert counts == [4, 4, 7, 11]
+    assert admin_resources == 5
+    assert admin_grants == 9
     assert usage_resource == ("active",)
     assert usage_read_grant == (
         "admin-human",
@@ -158,9 +160,9 @@ async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
     await database.dispose()
-    assert counts == [4, 4, 6, 9]
-    assert admin_resources == 4
-    assert admin_grants == 7
+    assert counts == [4, 4, 7, 11]
+    assert admin_resources == 5
+    assert admin_grants == 9
 
 
 @pytest.mark.asyncio
@@ -174,7 +176,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             connection.execute(
                 "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
             ).fetchone()[0]
-            == 4
+            == 5
         )
 
     database = Database(DATABASE_URL)
@@ -191,7 +193,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
         ).fetchone()
     assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
-    assert counts == (7, 9)
+    assert counts == (9, 11)
 
 
 @pytest.mark.asyncio
@@ -233,9 +235,9 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260929_16"
-    assert admin_resources == 4
-    assert admin_grants == 7
+    assert version == "20260930_19"
+    assert admin_resources == 5
+    assert admin_grants == 9
     assert projection == [
         (
             "remediation-agent",
