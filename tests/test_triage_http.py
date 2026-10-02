@@ -33,9 +33,11 @@ def triage_http_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "alert_triage, principals, idempotency_records, mcp_tools, mcp_servers, "
-            "alembic_version CASCADE"
+            "DROP TABLE IF EXISTS consumption_reservations, consumption_limit_policies, "
+            "bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
+            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
