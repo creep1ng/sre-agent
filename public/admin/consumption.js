@@ -96,6 +96,7 @@ function clearResult() {
 }
 
 function setActiveFilter(name) {
+  sessionGeneration += 1;
   activeFilter = name;
   for (const [key, filter] of Object.entries(filters)) {
     const selected = key === name;
@@ -109,7 +110,7 @@ function setActiveFilter(name) {
   announce(`Filter: ${name}. Previous input and result cleared.`);
 }
 
-function renderSummary(payload, selectorValue) {
+function renderSummary(payload, requestFilter, selectorValue) {
   const totals = payload?.totals ?? {};
   const cost = totals.cost ?? {};
   const coverage = payload?.coverage ?? {};
@@ -131,7 +132,12 @@ function renderSummary(payload, selectorValue) {
   fields.coverage.textContent =
     `${status} — known ${textOf(coverage.known)}, incomplete ${textOf(coverage.incomplete)}, unknown ${textOf(coverage.unknown)}`;
   scopeNote.hidden = !(payload?.request_count === 0 && coverage.status === "complete");
-  if (activeFilter === "month") {
+  const authoritativeMonth =
+    payload?.filter && typeof payload.filter.month === "string" ? payload.filter.month : null;
+  if (authoritativeMonth !== null) {
+    monthValue.textContent = authoritativeMonth;
+    monthNote.hidden = false;
+  } else if (requestFilter === "month") {
     monthValue.textContent = selectorValue;
     monthNote.hidden = false;
   } else {
@@ -160,6 +166,10 @@ sessionForm.addEventListener("submit", (event) => {
   }
   credentialStore.set(value);
   apiKeyInput.value = "";
+  sessionGeneration += 1;
+  hideError();
+  clearResult();
+  page.dataset.state = "idle";
   announce("Session set. Choose a filter and load consumption.");
 });
 
@@ -184,7 +194,8 @@ queryForm.addEventListener("submit", async (event) => {
   statusLine.textContent = "Loading consumption…";
   page.dataset.state = "loading";
   announce("Loading consumption.");
-  const value = filters[activeFilter].input.value.trim();
+  const requestFilter = activeFilter;
+  const value = filters[requestFilter].input.value.trim();
   if (!value) {
     if (generation !== sessionGeneration) return;
     loadingState.hidden = true;
@@ -195,14 +206,14 @@ queryForm.addEventListener("submit", async (event) => {
   }
   try {
     const selector =
-      activeFilter === "request"
+      requestFilter === "request"
         ? { requestId: value }
-        : activeFilter === "incident"
+        : requestFilter === "incident"
           ? { incidentId: value }
           : { month: value };
     const payload = await controlApi.readUsageConsumption(selector);
     if (generation !== sessionGeneration) return;
-    renderSummary(payload, value);
+    renderSummary(payload, requestFilter, value);
   } catch (error) {
     if (generation !== sessionGeneration) return;
     loadingState.hidden = true;
