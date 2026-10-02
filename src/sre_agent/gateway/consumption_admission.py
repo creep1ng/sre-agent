@@ -75,8 +75,11 @@ class ConsumptionAdmissionService:
             version, incident_limit, monthly_limit = policy
             if incident_limit is None and monthly_limit is None:
                 return AdmissionResult(True, None, int(version), None, None, False)
-            fetch = catalog.fetch  # type: ignore[attr-defined]
             try:
+                # An active limit needs endpoint bounds, so an unconfigured or
+                # unusable catalog must fail closed here instead of letting the
+                # caller reach the provider with no reservation.
+                fetch = catalog.fetch  # type: ignore[attr-defined]
                 snapshot = await fetch(model)
                 # The catalog is fetched after the admission clock is read, so a
                 # live snapshot is observed slightly later than `now`. Judge
