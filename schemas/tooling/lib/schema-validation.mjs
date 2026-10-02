@@ -88,9 +88,14 @@ function catalogLifecycleCaseSemanticsValid(value) {
   if (value.operation === "reconciliation") return request.prior_state === "conflict" && request.reset_requested === true && request.state_before === "conflict" && request.payload_matches_binding && request.version_matches && request.authorization_before === "allowed" && request.authorization_after === "allowed" && request.drift_detected && phase === "authenticate/authorize/startup/drift_detected/reconcile_authorize/reset" && expected.status === 201 && expected.transition_count === 1 && !expected.upstream_called && !expected.snapshot_allowed && expected.state_after === "restored" && expected.stable_replay && expected.later_request_status === null && !expected.later_upstream_called && expected.upstream_denied_reason === "none" && expected.repair_performed;
   return false;
 }
+function usageReadSemanticsValid(value) {
+  const coverage = value?.coverage;
+  return Boolean(coverage && coverage.known + coverage.incomplete + coverage.unknown === value.request_count);
+}
 function semanticFixtureValid(fixture) {
   const name = /^urn:sre-agent:schema:([a-z-]+):/.exec(fixture.target)?.[1];
   if (name === "consumption") return consumptionSemanticsValid(fixture.data);
+  if (name === "usage-read") return usageReadSemanticsValid(fixture.data);
   if (name === "idempotency-record") return idempotencyRetentionValid(fixture.data);
   if (name === "responses-http-case") return responsesHttpCaseValid(fixture.data);
   if (name === "openrouter-metadata-case") return openRouterMetadataValid(fixture.data);

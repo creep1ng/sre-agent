@@ -1,6 +1,16 @@
 """Administrative control-plane authorization scopes for issue #147."""
 
 CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
+    ("GET", "/v1/consumption-limits"): (
+        "admin.read",
+        "administrative_control",
+        "consumption_limits",
+    ),
+    ("PUT", "/v1/consumption-limits"): (
+        "admin.write",
+        "administrative_control",
+        "consumption_limits",
+    ),
     ("POST", "/v1/principals"): (
         "admin.write",
         "administrative_control",
@@ -93,6 +103,26 @@ CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
     ),
     ("GET", "/v1/catalog/resources/{type}/{id}"): (
         "admin.read",
+        "administrative_control",
+        "catalog",
+    ),
+    ("POST", "/v1/skills/versions"): (
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
+    ("GET", "/v1/skills/{skill_id}/{version}"): (
+        "admin.read",
+        "administrative_control",
+        "catalog",
+    ),
+    ("PUT", "/v1/skills/{skill_id}/{version}/status"): (
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
+    ("GET", "/v1/skills/{skill_id}/{version}/status"): (
+        "admin.write",
         "administrative_control",
         "catalog",
     ),

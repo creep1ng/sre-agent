@@ -24,9 +24,14 @@ NOW = datetime(2026, 9, 21, 12, tzinfo=UTC)
 def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
+            "principals, idempotency_records, "
+            "alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
