@@ -174,14 +174,21 @@ def ca_database() -> Database:
 @pytest.fixture(autouse=True)
 def clean_consumption_state() -> None:
     """Audit history is append-only, so only mutable admission state is reset."""
+    reset = (
+        "DELETE FROM consumption_reservations",
+        "DELETE FROM idempotency_records",
+        "UPDATE consumption_limit_policies SET version=0, incident_token_limit=NULL, "
+        "monthly_usd_limit=NULL WHERE policy_id=1",
+    )
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DELETE FROM consumption_reservations")
-        connection.execute("DELETE FROM idempotency_records")
-        connection.execute(
-            "UPDATE consumption_limit_policies SET version=0, incident_token_limit=NULL, "
-            "monthly_usd_limit=NULL WHERE policy_id=1"
-        )
+        for statement in reset:
+            connection.execute(statement)
     yield
+    # Resetting on the way out keeps an active limit from leaking into whichever
+    # suite runs next against the same database.
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        for statement in reset:
+            connection.execute(statement)
 
 
 def seed_incident(incident_id: str) -> None:
@@ -224,8 +231,11 @@ def audited(request_id: str) -> str:
         ).fetchone()[0]
 
 
+DEFAULT_CATALOG = Catalog(snapshot(endpoint()))
+
+
 class Gateway:
-    def __init__(self, provider: Provider, catalog: Catalog | None = None) -> None:
+    def __init__(self, provider: Provider, catalog: Catalog | None = DEFAULT_CATALOG) -> None:
         global counter
         counter += 1
         self.key = f"issue334-ca-policy-write-{counter:04d}"
@@ -233,7 +243,7 @@ class Gateway:
         self.application = create_application(
             settings,
             llm_provider=provider,
-            endpoint_catalog=catalog or Catalog(snapshot(endpoint())),
+            endpoint_catalog=catalog,
         )
 
     def put_policy(self, incident: int | None, monthly: str | None) -> dict:
@@ -436,3 +446,24 @@ def test_ca8_equality_zero_unset_and_hot_policy_change(
     unset = gateway.respond(body=BODY | {"incident_id": "ca8-incident"})
     assert unset.status_code == 200
     assert unset.json()["metadata"]["consumption"]["availability"] == "complete"
+
+
+def test_ca9_active_limit_without_a_catalog_fails_closed_before_the_provider(
+    ca_database: Database,
+) -> None:
+    """An active provider with no endpoint catalog must not skip admission."""
+    provider = Provider(exact_usage(1))
+    uncatalogued = Gateway(provider, None)
+    uncatalogued.put_policy(None, "10.00")
+    denied = uncatalogued.respond()
+    assert denied.status_code == 429
+    assert audited(denied.json()["request_id"]) == "consumption_bounds_unavailable"
+    assert provider.requests == []
+    assert reservations() == []
+    # With no active limit there is nothing to bound, so a missing catalog must
+    # not stand between the caller and the provider.
+    uncatalogued.put_policy(None, None)
+    allowed = uncatalogued.respond()
+    assert allowed.status_code == 200
+    assert len(provider.requests) == 1
+    assert allowed.json()["metadata"]["consumption"]["availability"] == "complete"
