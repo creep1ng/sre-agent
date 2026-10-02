@@ -1,19 +1,86 @@
-.model-aliases__layout {
+.model-aliases__shell {
   display: grid;
   gap: var(--ma-space-6);
-  align-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
 }
 
-@media (min-width: 64rem) {
-  .model-aliases__layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.model-aliases__content {
+  display: grid;
+  gap: var(--ma-space-6);
+  min-width: 0;
 }
 
-@media (min-width: 80rem) {
-  .model-aliases__layout {
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
-  }
+.model-aliases__nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ma-space-2);
+}
+
+.model-aliases__nav-link {
+  display: block;
+  padding: var(--ma-space-2) var(--ma-space-4);
+  border-radius: var(--ma-radius-sm);
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+a.model-aliases__nav-link:hover {
+  color: var(--ma-color-text-primary);
+  text-decoration: underline;
+}
+
+.model-aliases__nav-link.is-current {
+  background: var(--ma-color-bg-subtle);
+  color: var(--ma-color-text-primary);
+}
+
+.model-aliases__nav-link.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.model-aliases__resources {
+  border-top: 1px solid var(--ma-color-border-subtle);
+  padding-top: var(--ma-space-4);
+}
+
+.model-aliases__resources .principals__subtitle {
+  max-width: 60ch;
+}
+
+.model-aliases__layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ma-space-6);
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.model-aliases__list {
+  flex: 1 1 30rem;
+  min-width: 0;
+}
+
+.model-aliases__list th {
+  position: relative;
+}
+
+.model-aliases__panel {
+  flex: 0 1 24rem;
+  min-width: min(100%, 20rem);
+  position: sticky;
+  top: var(--ma-space-4);
+  max-height: calc(100dvh - var(--ma-space-8));
+  overflow-y: auto;
+  border-left: 3px solid var(--ma-color-border-brand);
+  box-shadow: var(--ma-shadow-md);
 }
 
 .ma-detail-list {
@@ -36,4 +103,44 @@
   display: grid;
   gap: var(--ma-space-4);
   margin-top: var(--ma-space-4);
+}
+
+@media (min-width: 48rem) {
+  .model-aliases__shell {
+    grid-template-columns: 12rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .model-aliases__nav {
+    position: sticky;
+    top: var(--ma-space-4);
+  }
+
+  .model-aliases__nav-list {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 48rem) {
+  .model-aliases__layout {
+    display: block;
+  }
+
+  .model-aliases__list {
+    min-width: 0;
+  }
+
+  .model-aliases__panel {
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    top: auto;
+    max-height: 88dvh;
+    overflow-y: auto;
+    z-index: 50;
+    border-left: 0;
+    border-top: 3px solid var(--ma-color-border-brand);
+    border-radius: var(--ma-radius-lg) var(--ma-radius-lg) 0 0;
+  }
 }

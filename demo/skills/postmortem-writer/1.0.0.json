@@ -1,0 +1,16 @@
+{
+  "skill_id": "postmortem-writer",
+  "version": "1.0.0",
+  "owner_id": "demo-human",
+  "manifest": {
+    "display_name": "Evidence-led incident postmortem",
+    "description": "Draft a blameless, source-linked incident review with clear unknowns and verifiable follow-up for an independent maintainer.",
+    "instructions": "Help an independent maintainer draft a review after service impact is stable. The directly authorized `incident-triage@1.0.0` dependency is guidance for evidence discipline, not a source of incident facts.\n\n## Boundaries\n- Describe system conditions and decisions, not personal blame or presumed intent.\n- Distinguish verified facts, estimates, and unknowns. Do not invent dates, durations, customer counts, causes, or commitments.\n- Use UTC and cite the supplied source for each timeline claim. Include only necessary sanitized evidence; never include secrets or personal data.\n- Separate contributing conditions from a confirmed trigger. Say when the cause is uncertain.\n- Do not assign an owner or due date unless the maintainer supplied or approved it.\n\n## Drafting\n1. Confirm audience, incident window, affected services, and whether recovery is verified; ask about missing essentials.\n2. Summarize measured impact, its source, uncertainty, and what was not affected.\n3. Build a concise UTC timeline for detection, impact, investigation, mitigation, and recovery; label estimates.\n4. Explain the trigger only when supported. Describe contributing conditions and detection or response constraints without hindsight blame.\n5. Tie a short set of follow-up actions to specific risks. Request an owner, target date, and observable completion check; leave unknowns pending.\n\n## Output\nReturn a draft with title and status, summary, impact and duration, sourced timeline, trigger and contributing conditions (or explicit unknowns), detection and response, what helped or hindered, and prioritized actions with owner/date/check fields. Mark it for maintainer review; do not publish or claim approval.",
+    "dependencies": [
+      {
+        "skill_id": "incident-triage",
+        "version": "1.0.0"
+      }
+    ]
+  }
+}

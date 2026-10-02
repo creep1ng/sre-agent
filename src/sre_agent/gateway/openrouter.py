@@ -45,6 +45,11 @@ class OpenRouterProvider:
                     },
                     "store": False,
                     "stream": False,
+                    **(
+                        {"max_output_tokens": request.max_output_tokens}
+                        if request.max_output_tokens is not None
+                        else {}
+                    ),
                 },
             )
         except httpx.TimeoutException:
