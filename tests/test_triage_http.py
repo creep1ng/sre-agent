@@ -296,3 +296,69 @@ def test_storage_outage_is_503() -> None:
     assert response.status_code == 503
     assert response.json()["error"]["code"] == "storage_unavailable"
     assert response.headers["Retry-After"] == "5"
+
+
+def _get(client: TestClient, alert_id: str, bearer: str | None):
+    headers = {} if bearer is None else {"Authorization": bearer}
+    return client.get(f"/v1/alerts/{alert_id}/triage", headers=headers)
+
+
+def test_triage_state_reads_back_dismiss() -> None:
+    client = _client()
+    posted = _post(
+        client,
+        "al-read-dismiss",
+        _cmd("triage_dismiss", reason=REASON),
+        "k-read-dismiss-1234567",
+        BEARERS["op"],
+    )
+    assert posted.status_code == 200
+    read = _get(client, "al-read-dismiss", BEARERS["op"])
+    assert read.status_code == 200
+    body = read.json()
+    assert STATE_VALIDATOR.is_valid(body), body
+    assert (body["status"], body["reason"]) == ("dismissed", REASON)
+    assert (body["actor"], body["expected_version"]) == ("op-human", 1)
+    assert body["incident_id"] is None
+    assert _get(client, "al-read-dismiss", BEARERS["op"]).json() == body
+
+
+def test_triage_state_carries_declared_incident() -> None:
+    client = _client()
+    posted = _post(
+        client,
+        "al-read-declare",
+        _cmd("triage_declare", reason=REASON, severity="sev2"),
+        "k-read-declare-1234567",
+        BEARERS["op"],
+    )
+    assert posted.status_code == 201
+    body = _get(client, "al-read-declare", BEARERS["op"]).json()
+    assert STATE_VALIDATOR.is_valid(body), body
+    assert body["status"] == "declared"
+    assert body["incident_id"] == posted.json()["incident_id"]
+
+
+def test_triage_state_unknown_is_404() -> None:
+    response = _get(_client(), "al-read-ghost-one", BEARERS["op"])
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "triage_not_found"
+
+
+def test_triage_state_denials() -> None:
+    client = _client()
+    missing = _get(client, "al-read-dismiss", None)
+    assert missing.status_code == 401
+    assert missing.headers["WWW-Authenticate"] == "Bearer"
+    forbidden = _get(client, "al-read-ghost-two", BEARERS["bystander"])
+    assert forbidden.status_code == 403
+    assert "al-read-ghost-two" not in forbidden.text
+    bad = _get(client, "BAD ID!", BEARERS["op"])
+    assert bad.status_code == 400
+    down = _get(
+        _client("postgresql://postgres:postgres@127.0.0.1:1/postgres"),
+        "al-read-dismiss",
+        BEARERS["op"],
+    )
+    assert down.status_code == 503
+    assert down.headers["Retry-After"] == "5"

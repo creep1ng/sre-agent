@@ -276,6 +276,39 @@ class TriageService:
             await idem.set_response_payload(scope=scope, key_digest=digest, response_payload=result)
             return TriageResult(replayed=False, http_status=created, **result)
 
+    async def read_state(self, principal: Principal, *, alert_id: str) -> dict[str, Any]:
+        """Authoritative triage-state read (contract getAlertTriage).
+
+        Holding any triage command grant authorizes the read; unknown alerts
+        404. Single SELECT, no mutation, no existence leakage (403 first).
+        """
+        async with self._database.transaction() as session:
+            for action in ACTIONS.values():
+                try:
+                    await self._authorize(session, principal, action)
+                except TriageError:
+                    continue
+                break
+            else:
+                raise TriageError(403, "not_authorized")
+            try:
+                current = await TriageRepository(session).get(alert_id)
+            except Exception as error:
+                raise TriageError(503, "storage_unavailable") from error
+        if current is None:
+            raise TriageError(404, "triage_not_found")
+        decided = current.get("decided_at")
+        iso = decided.isoformat() if isinstance(decided, datetime) else str(decided)
+        return {
+            "alert_id": alert_id,
+            "status": current.get("status"),
+            "incident_id": current.get("incident_id"),
+            "expected_version": current.get("expected_version"),
+            "reason": current.get("reason"),
+            "actor": current.get("actor"),
+            "decided_at": iso,
+        }
+
     async def _transition(
         self,
         session: Any,

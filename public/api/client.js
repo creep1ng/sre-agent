@@ -266,6 +266,9 @@ export function createAdministrativeApiClient({
         headers: mutationHeaders(idempotencyKey),
       });
     },
+    getTriageState(alertId) {
+      return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage`);
+    },
     getIncidentTimeline(incidentId, { runId, after, limit } = {}) {
       const params = new URLSearchParams();
       if (runId) params.set("run_id", runId);

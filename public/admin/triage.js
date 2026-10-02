@@ -23,6 +23,7 @@ const stateLine = document.getElementById("triage-state");
 const resultSummary = document.getElementById("result-summary");
 const resultOperation = document.getElementById("result-operation");
 const resultStatus = document.getElementById("result-status");
+const resultReason = document.getElementById("result-reason");
 const resultIncident = document.getElementById("result-incident");
 const resultVersion = document.getElementById("result-version");
 const resultActor = document.getElementById("result-actor");
@@ -44,13 +45,15 @@ function newCommandKey() {
   return `triage-${[...bytes].map((x) => x.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function describeError(error) {
+function describeError(error, scope = "command") {
   if (error?.kind === "network")
     return ["API unavailable", "The triage API could not be reached. Check the stack and retry."];
   if (error?.kind === "authentication")
     return ["Authentication required", "Provide a valid API key. Nothing else is confirmed."];
   if (error?.kind === "authorization")
-    return ["Access unavailable", "The command cannot be confirmed for this identity."];
+    return scope === "read"
+      ? ["Access unavailable", "This identity cannot read triage state."]
+      : ["Access unavailable", "The command cannot be confirmed for this identity."];
   if (error?.kind === "not_found")
     return ["Not found", "Unknown alert or target incident. Nothing was changed."];
   if (error?.kind === "conflict")
@@ -64,8 +67,8 @@ function describeError(error) {
   return ["Request failed", error?.message ?? "Unexpected error."];
 }
 
-function showError(error) {
-  const [title, detail] = describeError(error);
+function showError(error, scope = "command") {
+  const [title, detail] = describeError(error, scope);
   errorTitle.textContent = title;
   errorDetail.textContent = detail;
   errorBox.hidden = false;
@@ -77,9 +80,10 @@ function hideError() {
   errorDetail.textContent = "";
 }
 
-function setResult(operation, item) {
+function setResult(operation, item, source = "live") {
   resultOperation.textContent = operation;
   resultStatus.textContent = text(item.status) || "—";
+  resultReason.textContent = text(item.reason) || "—";
   const incident = text(item.incident_id);
   resultIncident.replaceChildren();
   if (incident === "") {
@@ -94,10 +98,17 @@ function setResult(operation, item) {
   resultActor.textContent = text(item.actor) || "—";
   resultDecided.textContent = text(item.decided_at) || "—";
   versionInput.value = item.expected_version === undefined ? versionInput.value : String(item.expected_version);
-  resultSummary.textContent =
-    `${operation} applied: ${text(item.status)}` + (incident === "" ? "." : `, incident ${incident}.`);
-  stateLine.textContent =
-    `Alert ${alertInput.value.trim()} is ${text(item.status)} (version ${String(item.expected_version)}).`;
+  if (source === "recovered") {
+    resultSummary.textContent =
+      `Recovered from backend: ${text(item.status)}` + (incident === "" ? "." : `, incident ${incident}.`);
+    stateLine.textContent =
+      `Alert ${alertInput.value.trim()} is ${text(item.status)} (version ${String(item.expected_version)}), read from the API.`;
+  } else {
+    resultSummary.textContent =
+      `${operation} applied: ${text(item.status)}` + (incident === "" ? "." : `, incident ${incident}.`);
+    stateLine.textContent =
+      `Alert ${alertInput.value.trim()} is ${text(item.status)} (version ${String(item.expected_version)}).`;
+  }
   announce(resultSummary.textContent);
 }
 
@@ -163,6 +174,9 @@ async function sendCommand() {
     if (generation !== sessionGeneration) return;
     page.dataset.state = "ready";
     setResult(operation, item ?? {});
+    const url = new URL(window.location.href);
+    url.searchParams.set("alert_id", alertId);
+    window.history.replaceState(null, "", url);
   } catch (error) {
     if (generation !== sessionGeneration) return;
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
@@ -182,6 +196,39 @@ operationInput.addEventListener("change", () => {
   hideError();
 });
 
+async function recoverDecision(alertId) {
+  if (!/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) {
+    showError({ kind: "validation", message: "Enter an alert identifier." }, "read");
+    return;
+  }
+  const generation = sessionGeneration;
+  commandInFlight = true;
+  submitButton.disabled = true;
+  hideError();
+  page.dataset.state = "loading";
+  announce("Recovering the persisted decision from the API.");
+  try {
+    const item = await controlApi.getTriageState(alertId);
+    if (generation !== sessionGeneration) return;
+    page.dataset.state = "ready";
+    setResult(item.status ?? "read", item ?? {}, "recovered");
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    if (error?.kind === "not_found" && error?.code === "triage_not_found") {
+      page.dataset.state = "ready";
+      resultSummary.textContent = "No recorded decision for this alert.";
+      stateLine.textContent = `Alert ${alertId} has no recorded decision yet.`;
+      announce(resultSummary.textContent);
+      return;
+    }
+    page.dataset.state = error?.kind === "network" ? "offline" : "error";
+    showError(error, "read");
+  } finally {
+    commandInFlight = false;
+    submitButton.disabled = false;
+  }
+}
+
 sessionForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const value = apiKeyInput.value.trim();
@@ -197,6 +244,8 @@ sessionForm.addEventListener("submit", (event) => {
   page.dataset.state = "idle";
   stateLine.textContent = "Connected. Enter an alert and send a command.";
   announce("Session set.");
+  const alertId = alertInput.value.trim();
+  if (alertId !== "") recoverDecision(alertId);
 });
 
 disconnectButton.addEventListener("click", () => {
@@ -207,7 +256,13 @@ disconnectButton.addEventListener("click", () => {
   hideError();
   page.dataset.state = "idle";
   clearResult();
+  const url = new URL(window.location.href);
+  url.searchParams.delete("alert_id");
+  window.history.replaceState(null, "", url);
   announce("Session cleared.");
 });
+
+const initialAlertId = new URL(window.location.href).searchParams.get("alert_id") ?? "";
+if (/^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId)) alertInput.value = initialAlertId;
 
 page.dataset.state = "idle";

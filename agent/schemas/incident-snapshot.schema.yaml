@@ -33,7 +33,7 @@ properties:
     minimum: 0
     description: Highest run event sequence covered by this snapshot.
   incident:
-    $ref: 'urn:sre-agent:schema:incident-detail:1.0.0'
+    $ref: 'urn:sre-agent:schema:incident-detail:1.1.0'
   run:
     type: object
     additionalProperties: false
