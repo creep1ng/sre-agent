@@ -13,7 +13,7 @@ from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import CredentialRepository
-from sre_agent.triage.service import TriageError, TriageService
+from sre_agent.triage.service import ID_PATTERN, TriageError, TriageService
 
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 RETRY_AFTER_SECONDS = "5"
@@ -126,15 +126,41 @@ class TriageHttpService:
                 "status": result.status,
                 "incident_id": result.incident_id,
                 "expected_version": result.expected_version,
+                "reason": raw.get("reason"),
                 "actor": result.actor,
                 "decided_at": result.decided_at,
             },
             status_code=result.http_status,
         )
 
+    async def get_state(self, alert_id: str, authorization: str | None) -> JSONResponse:
+        """Contract getAlertTriage: current triage state, no mutation."""
+        request_id = uuid4()
+        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+            return self._error(request_id, 400, "invalid_command")
+        try:
+            context = await self._authenticate(authorization)
+        except Exception:
+            return self._error(request_id, 503, "storage_unavailable")
+        if context is None:
+            return self._error(
+                request_id, 401, "authentication_failed", headers={"WWW-Authenticate": "Bearer"}
+            )
+        try:
+            read = await self._service.read_state(context.principal, alert_id=alert_id)
+        except TriageError as error:
+            return self._error(request_id, error.http_status, error.code)
+        except Exception:
+            return self._error(request_id, 503, "storage_unavailable")
+        return JSONResponse(read, status_code=200)
+
 
 def triage_router(service: TriageHttpService) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/v1/alerts/{alert_id}/triage")
+    async def get_state(alert_id: str, request: Request) -> JSONResponse:
+        return await service.get_state(alert_id, request.headers.get("authorization"))
 
     @router.post("/v1/alerts/{alert_id}/triage/commands")
     async def post_command(alert_id: str, request: Request) -> JSONResponse:
