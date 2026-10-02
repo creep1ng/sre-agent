@@ -436,3 +436,34 @@ def test_ca8_equality_zero_unset_and_hot_policy_change(
     unset = gateway.respond(body=BODY | {"incident_id": "ca8-incident"})
     assert unset.status_code == 200
     assert unset.json()["metadata"]["consumption"]["availability"] == "complete"
+
+
+def test_ca10_monthly_budget_counts_reservations_booked_to_any_incident(
+    ca_database: Database,
+) -> None:
+    """One incident's reservation must reduce what another incident may spend."""
+    seed_incident("ca10-first")
+    seed_incident("ca10-second")
+    # Absent consumption leaves the reservation outstanding, so the only thing
+    # that can hold the second incident back is the monthly sum itself.
+    provider = Provider(None, block=threading.Event())
+    gateway = Gateway(provider)
+    budget = legacy_month_usd() + REQUEST_FEE + COMPLETION_PRICE
+    gateway.put_policy(None, f"{budget:.12f}")
+    statuses: list[int] = []
+
+    def attempt(incident_id: str) -> None:
+        statuses.append(gateway.respond(body=BODY | {"incident_id": incident_id}).status_code)
+
+    inflight = threading.Thread(target=attempt, args=("ca10-first",))
+    inflight.start()
+    while not reservations():
+        pass
+    denied = gateway.respond(body=BODY | {"incident_id": "ca10-second"})
+    provider.block.set()
+    inflight.join()
+    assert denied.status_code == 429
+    assert audited(denied.json()["request_id"]) == "monthly_limit_exceeded"
+    assert statuses == [200]
+    assert [row[0] for row in reservations()] == ["ca10-first"]
+    assert provider.requests[0].max_output_tokens == 1

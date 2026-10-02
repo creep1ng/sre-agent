@@ -200,8 +200,10 @@ class ConsumptionAdmissionService:
     ) -> int | None:
         if limit is None or incident_id is None:
             return None
-        settled = await self._sum(session, "settled_tokens", incident_id, period, True)
-        outstanding = await self._sum(session, "token_exposure", incident_id, period, False)
+        settled = await self._incident_sum(session, "settled_tokens", incident_id, period, True)
+        outstanding = await self._incident_sum(
+            session, "token_exposure", incident_id, period, False
+        )
         return int(limit) - int(settled) - int(outstanding)
 
     async def _monthly_remaining(
@@ -210,30 +212,40 @@ class ConsumptionAdmissionService:
         if limit is None:
             return None
         _, legacy_usd = await self._legacy_usage(session, period, following)
-        settled = await self._sum(session, "settled_usd_cost", None, period, True)
-        outstanding = await self._sum(session, "usd_exposure", None, period, False)
+        # The monthly allowance belongs to the workspace, not to one incident.
+        # Exposure booked against any incident is already spent from this month,
+        # so summing only the incident-less rows would let a second incident
+        # admit against money the first one had already reserved.
+        settled = await self._period_sum(session, "settled_usd_cost", period, True)
+        outstanding = await self._period_sum(session, "usd_exposure", period, False)
         return Decimal(str(limit)) - legacy_usd - _decimal(settled) - _decimal(outstanding)
 
-    async def _sum(
-        self,
-        session: object,
-        column: str,
-        incident_id: str | None,
-        period: datetime,
-        settled: bool,
+    async def _incident_sum(
+        self, session: object, column: str, incident_id: str, period: datetime, settled: bool
     ) -> object:
-        rows = await session.execute(  # type: ignore[union-attr]
-            text(
-                f"SELECT COALESCE(SUM({column}), 0) FROM consumption_reservations "
-                "WHERE incident_id IS NOT DISTINCT FROM :incident "
-                "AND period_start = :period AND state = :state"
-            ),
+        return await self._sum(
+            session,
+            f"SELECT COALESCE(SUM({column}), 0) FROM consumption_reservations "
+            "WHERE incident_id = :incident AND period_start = :period AND state = :state",
             {
                 "incident": incident_id,
                 "period": period,
-                "state": "settled" if settled else "reserved",
+                "state": _reservation_state(settled),
             },
         )
+
+    async def _period_sum(
+        self, session: object, column: str, period: datetime, settled: bool
+    ) -> object:
+        return await self._sum(
+            session,
+            f"SELECT COALESCE(SUM({column}), 0) FROM consumption_reservations "
+            "WHERE period_start = :period AND state = :state",
+            {"period": period, "state": _reservation_state(settled)},
+        )
+
+    async def _sum(self, session: object, statement: str, parameters: dict) -> object:
+        rows = await session.execute(text(statement), parameters)  # type: ignore[union-attr]
         return rows.scalar()
 
     async def _legacy_usage(
@@ -254,6 +266,10 @@ class ConsumptionAdmissionService:
         )
         tokens, usd = result.all()[0]
         return int(tokens), Decimal(str(usd))
+
+
+def _reservation_state(settled: bool) -> str:
+    return "settled" if settled else "reserved"
 
 
 def _decimal(value: object) -> Decimal:
