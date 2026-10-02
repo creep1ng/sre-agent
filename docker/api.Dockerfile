@@ -36,6 +36,7 @@ RUN apt-get update \
     && uv sync --locked --extra dev
 
 COPY tests ./tests
+COPY demo ./demo
 COPY scripts ./scripts
 COPY schemas ./schemas
 COPY public ./public

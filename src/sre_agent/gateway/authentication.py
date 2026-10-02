@@ -42,11 +42,25 @@ async def authorize_governed_access(
 ) -> tuple[PrincipalContext, AuthorizationEvaluation]:
     """Authenticate a bearer credential and evaluate a server-owned governed scope."""
     context = await _authorization_context(sessions, authorization)
+    evaluation = await authorize_governed_access_for_context(
+        sessions, context, action, resource_type, resource_id
+    )
+    return context, evaluation
+
+
+async def authorize_governed_access_for_context(
+    sessions: Any,
+    context: PrincipalContext,
+    action: str,
+    resource_type: str,
+    resource_id: str,
+) -> AuthorizationEvaluation:
+    """Evaluate an additional scope for an already-authenticated request principal."""
     async with sessions() as session:
         evaluation = await AuthorizationDecisionEngine(
             OwnerResourceFactReader(session), GrantRepository(session)
         ).evaluate(context.principal, action, resource_type, resource_id)
-    return context, evaluation
+    return evaluation
 
 
 async def _authorization_context(sessions: Any, authorization: str | None) -> PrincipalContext:
