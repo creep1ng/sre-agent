@@ -247,26 +247,27 @@ class ResponsesService:  # noqa: E305
                                       alias=request.model, decision=decision,
                                       reason="routing_unavailable", retryable=True,
                                       identifiers=identifiers)
-        admission = None
-        if self.endpoint_catalog is not None:
-            service = self.admission or ConsumptionAdmissionService(self.sessions)
-            admission = await service.admit(
-                incident_id=identifiers.get("incident_id"), model=request.model,
-                provider=assignment.inference_provider, catalog=self.endpoint_catalog,
-                now=datetime.now(UTC),
-            )
-            if not admission.allowed:
-                status = 503 if admission.retryable else 429
-                return await self._finish(request_id, started, status, "authorization",
-                                          context=context, alias=request.model, decision=decision,
-                                          reason=admission.denial_reason or "consumption_bounds_unavailable",
-                                          retryable=status in {429, 503, 504}, identifiers=identifiers)
+        # Admission is unconditional: it is what enforces an active limit and
+        # reserves the exposure. Gating it on catalog configuration let an
+        # active provider with no catalog reach the provider unchecked.
+        service = self.admission or ConsumptionAdmissionService(self.sessions)
+        admission = await service.admit(
+            incident_id=identifiers.get("incident_id"), model=request.model,
+            provider=assignment.inference_provider, catalog=self.endpoint_catalog,
+            now=datetime.now(UTC),
+        )
+        if not admission.allowed:
+            status = 503 if admission.retryable else 429
+            return await self._finish(request_id, started, status, "authorization",
+                                      context=context, alias=request.model, decision=decision,
+                                      reason=admission.denial_reason or "consumption_bounds_unavailable",
+                                      retryable=status in {429, 503, 504}, identifiers=identifiers)
         try:
             provider_request = ProviderRequest(
                 input=request.input,
                 model=assignment.concrete_model,
                 provider=assignment.inference_provider,
-                max_output_tokens=admission.max_output_tokens if admission else None,
+                max_output_tokens=admission.max_output_tokens,
             )
         except ValidationError:
             # Persisted routing data can outlive provider identifier rules. Do
@@ -278,7 +279,7 @@ class ResponsesService:  # noqa: E305
         try:
             result = await self.provider.create(provider_request)
             consumption = result.consumption or _empty_consumption("absent")
-            await self._settle_exact(admission.reservation_id if admission else None, consumption)
+            await self._settle_exact(admission.reservation_id, consumption)
             payload = {"id": result.response_id, "object": "response", "status": "completed", "model": result.model, "output": [{"type": "message", "role": "assistant",
                        "content": [{"type": "output_text", "text": result.text}]}],
                        "request_id": str(request_id), "metadata": {"requested_model_alias": request.model,
@@ -293,7 +294,7 @@ class ResponsesService:  # noqa: E305
                                     "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
                                     "evidence_invalid": (502, "upstream_invalid", "provider_evidence_invalid")}.get(
                                         failure.kind, (502, "upstream_invalid", "upstream_invalid_response"))
-            await self._settle_exact(admission.reservation_id if admission else None,
+            await self._settle_exact(admission.reservation_id,
                                      failure.consumption or _empty_consumption("unavailable"))
             return await self._finish(request_id, started, status, "upstream", context=context,
                                       alias=request.model, decision=decision, assignment=assignment,
