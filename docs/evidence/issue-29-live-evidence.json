@@ -531,7 +531,7 @@
     "restricted_metadata_absent": "Checks restricted tool ID, display name, and description are absent from partial and empty response bodies.",
     "error_code_observed": "Null on expected 200 success cases; negative cases retain the exact observed public error codes in cases."
   },
-  "size_exception": "User explicitly accepted the stack size exception on 2026-10-03; no size/approval labels were applied automatically. This is not human evidence acceptance or merge authorization.",
+  "size_exception": "User explicitly accepted the stack size exception on 2026-10-03; no size/approval labels applied automatically. The user separately authorized integration after evidence collection, subject to human evidence review and existing checks/protections.",
   "legacy_screenshots": [
     {
       "file": "docs/evidence/issue-29-pr365-live-discovery.png",

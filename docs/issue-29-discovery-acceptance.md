@@ -131,3 +131,21 @@ ORDER BY occurred_at, event_id;
 The 38 live replay checks are not the existing pytest suite. No hosted CI or
 independent human acceptance is implied by these local results. Do not mark #29
 complete or integrate until the human review and repository checks permit it.
+
+## Exact foundation candidate browser evidence
+
+- PR365: [actual discovery response](evidence/issue-29-pr365-current.png),
+  [provenance](evidence/issue-29-pr365-current.provenance.json). Executed at
+  `b8eb3267eff76673adf00e7ffb006e03f576627a`, HTTP200/two tools, separate
+  request `dffded0d-fc40-4d1a-be39-249bfb6fa4ac` on2026-10-03T17:37:48.980Z.
+- PR366: [actual OpenAPI response](evidence/issue-29-pr366-current.png),
+  [provenance](evidence/issue-29-pr366-current.provenance.json). Executed at
+  `15eb71c60f30e7d009d688e54576b0030a6f1d10`, GET/openapi.json HTTP200 at
+  2026-10-03T17:41:49.255Z; required body, typed oneOf and both request examples
+  inspected. This is schema evidence, not execution of illustrative requests.
+
+Both were actual Chromium renders in separately scoped isolated Compose projects.
+Their response dates do not replace exact capture times or SHA provenance. These
+requests do not belong to the PR368 replay's request IDs or bounded audit window.
+Browser reproduction is versioned in the PR368 descendant; human review remains
+pending, and no illustrative OpenAPI example is presented as live tool success.
