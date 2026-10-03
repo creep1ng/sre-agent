@@ -90,10 +90,11 @@ equivalent read-only inspection is:
 SELECT occurred_at, correlation->>'request_id' AS request_id,
        response_status, operation, action, stage, outcome, reason_code,
        policy_decision->>'decision' AS decision, content_state,
-       redacted_content IS NULL AS no_content,
-       untrusted_input IS NULL AS no_untrusted_input
+       COALESCE(jsonb_typeof(redacted_content), 'null') = 'null' AS no_content,
+       COALESCE(jsonb_typeof(untrusted_input), 'null') = 'null' AS no_untrusted_input
 FROM audit_events
-WHERE occurred_at >= TIMESTAMPTZ '2026-10-03T01:24:20.826998Z'
+WHERE operation IN ('mcp.discovery', 'mcp.invoke')
+  AND occurred_at >= TIMESTAMPTZ '2026-10-03T01:24:20.826998Z'
   AND occurred_at <  TIMESTAMPTZ '2026-10-03T01:24:22.309602Z'
   AND correlation->>'request_id' = ANY(ARRAY[
     '122590cc-53ac-4649-a1a0-1dda4b8c2fbe', '767633b3-15cb-4c51-8d24-89c60e7b9181',
