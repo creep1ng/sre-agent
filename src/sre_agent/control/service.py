@@ -1529,6 +1529,36 @@ class ControlService:  # noqa: E305
         payload_hash = _payload_sha256(body.model_dump(mode="json"))
         try:
             async with self.sessions() as session, session.begin():
+                principal = await PrincipalRepository(session).get(body.principal_id)
+                if principal is None or principal.status != "active":
+                    return await self._finish(
+                        request_id,
+                        started,
+                        404,
+                        "authorization",
+                        operation,
+                        action,
+                        error_code="resource_not_found",
+                        context=context,
+                        resource_ref=("administrative_control", "grants"),
+                        decision=evaluation.decision,
+                    )
+                fact = await ResourceRepository(session).authorization_view(
+                    body.resource.resource_type, body.resource.resource_id
+                )
+                if fact is None or fact.status != "active":
+                    return await self._finish(
+                        request_id,
+                        started,
+                        404,
+                        "authorization",
+                        operation,
+                        action,
+                        error_code="resource_not_found",
+                        context=context,
+                        resource_ref=("administrative_control", "grants"),
+                        decision=evaluation.decision,
+                    )
                 binding = await IdempotencyRepository(session).claim_or_replay(
                     scope=binding_scope,
                     key_digest=_key_digest(idempotency_key or ""),
