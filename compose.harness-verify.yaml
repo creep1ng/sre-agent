@@ -1,0 +1,19 @@
+# Overlay for docs/harness-gateway.md: verify the harness against the gateway
+# from inside the Compose network, under a project name of its own.
+#
+# The live-smoke client receives the two extra gateway credentials that the
+# rejection steps need, interpolated from the same env file as everything else.
+# The provider key never reaches it. Host ports are reset so this project cannot
+# collide with another stack on the same machine: every step runs in the network.
+services:
+  db:
+    ports: !reset []
+  api:
+    ports: !reset []
+  web:
+    ports: !reset []
+  live-smoke:
+    environment:
+      INVESTIGATOR_GATEWAY_URL: http://api:8000
+      RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
