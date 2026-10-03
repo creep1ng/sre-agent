@@ -367,6 +367,13 @@ credential, and grant rows are left intact for the audit trail; do not delete th
 The artifact excludes API keys and response bodies and is written only to the
 ignored capture directory.
 
+A counter reset does not clear the gateway's in-memory MCP session. Before each
+full replay, restart **only this isolated project's API** so the first diagnostic
+is genuinely cold. This preserves database rows and volumes. A reused gateway can
+correctly issue only `tools/call` on its first diagnostic; the cold-handshake
+assertion then fails and must not be reported as passed. Wait for API health after
+the restart; no invocation probes may precede the replay.
+
 Run after the API and relay are ready. Build the project `python-checks` image
 with the same checkout (or use its already built project image), then run the
 versioned script in the API container's network namespace. The API container is
@@ -377,6 +384,8 @@ directory is the only writable mount:
 
 ```sh
 compose build python-checks
+compose restart api
+compose up --no-build -d --wait --wait-timeout 90 api
 export TESTED_SHA="$(git rev-parse HEAD)"
 export CAPTURE_DIR="$DEMO_STATE_DIR/captures"
 mkdir -p "$CAPTURE_DIR"
