@@ -21,6 +21,36 @@ const emptyTitle = document.getElementById("list-empty-title");
 const emptyDetail = document.getElementById("list-empty-detail");
 const countLine = document.getElementById("grant-count");
 const rowsBody = document.getElementById("grant-rows");
+const createButton = document.getElementById("create-grant-button");
+const createDialog = document.getElementById("create-dialog");
+const createForm = document.getElementById("create-form");
+const createGrantId = document.getElementById("create-grant-id");
+const createPrincipal = document.getElementById("create-principal");
+const createAction = document.getElementById("create-action");
+const createResource = document.getElementById("create-resource");
+const createSubmit = document.getElementById("create-submit");
+const createCancel = document.getElementById("create-cancel");
+const createErrorBox = document.getElementById("create-error");
+const createErrorTitle = document.getElementById("create-error-title");
+const createErrorDetail = document.getElementById("create-error-detail");
+
+// Action selector is a frontend-only guide from the audit action vocabulary;
+// the backend keeps free-form exact-match actions, so no contract is invented.
+const GRANT_ACTIONS = new Set(["authenticate", "export", "invoke", "persist", "read_metadata", "redact", "admin.read", "admin.write"]);
+const GRANT_ID_RE = /^[a-z][a-z0-9_-]{2,63}$/;
+let pendingIdempotencyKey = null;
+let pendingCreateBodyKey = null;
+let createInFlight = false;
+
+function newIdempotencyKey() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `grant-create-${[...bytes].map((item) => item.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function createBodyKey(body) {
+  return `${body.grant_id}\n${body.principal_id}\n${body.action}\n${body.resource.resource_type}\n${body.resource.resource_id}`;
+}
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
@@ -42,6 +72,98 @@ function describeError(error) {
   if (error?.kind === "api" && error?.code === "validation_error")
     return ["Invalid grant filter", "Select exactly one valid Principal or Resource."];
   return ["Request failed", error?.message ?? "Unexpected error."];
+}
+
+function hideCreateError() {
+  createErrorBox.hidden = true;
+  createErrorTitle.textContent = "";
+  createErrorDetail.textContent = "";
+}
+
+function describeCreateError(error) {
+  if (error?.kind === "validation")
+    return ["Invalid grant", error?.message ?? "Check the highlighted fields. Nothing was created."];
+  // Create 404 names the outcome per the published contract; reads keep reveal-nothing copy.
+  if (error?.kind === "not_found")
+    return ["Reference not found (404)", "The Principal or Resource is absent or inactive. Nothing was created."];
+  if (error?.kind === "conflict")
+    return ["Grant already exists (409 duplicate)", "An active grant already covers this Principal, action and Resource. Nothing was duplicated."];
+  if (error?.kind === "api" && error?.code === "validation_error")
+    return ["Invalid grant shape (422)", "The grant shape was rejected. Check the highlighted fields. Nothing was created."];
+  if (error?.kind === "api" && error?.code === "invalid_idempotency_key")
+    return ["Request failed", "The retry token was rejected. Refresh and retry; nothing was overwritten."];
+  if (error?.kind === "api" || error?.kind === "invalid_response")
+    return ["Request failed", error?.message ?? "Unexpected error. Nothing was created."];
+  return describeError(error);
+}
+
+function showCreateError(error) {
+  const [title, detail] = describeCreateError(error);
+  createErrorTitle.textContent = title;
+  createErrorDetail.textContent = detail;
+  createErrorBox.hidden = false;
+  announce(`${title}. ${detail}`);
+}
+
+function resetCreateOptions() {
+  resetOptions(createPrincipal, "Select an active principal…");
+  resetOptions(createResource, "Select an active resource…");
+  createAction.value = "invoke";
+}
+
+function closeCreateDialog() {
+  pendingIdempotencyKey = null;
+  pendingCreateBodyKey = null;
+  if (createDialog?.open) createDialog.close();
+}
+
+function validateCreateFields() {
+  const grantId = createGrantId.value.trim();
+  const principalId = createPrincipal.value;
+  const action = createAction.value;
+  const selectedResource = createResource.selectedOptions[0];
+  const problems = [];
+  const idOk = GRANT_ID_RE.test(grantId);
+  const principalOk = principalId.length > 0;
+  const actionOk = GRANT_ACTIONS.has(action);
+  let resourceType = text(selectedResource?.dataset.resourceType);
+  let resourceId = text(selectedResource?.dataset.resourceId);
+  if (!resourceType || !resourceId) {
+    const raw = createResource.value;
+    const slash = raw.indexOf("/");
+    if (slash > 0) {
+      resourceType = raw.slice(0, slash);
+      resourceId = raw.slice(slash + 1);
+    }
+  }
+  const resourceOk = resourceType.length > 0 && resourceId.length > 0;
+  createGrantId.setAttribute("aria-invalid", String(!idOk));
+  createPrincipal.setAttribute("aria-invalid", String(!principalOk));
+  createAction.setAttribute("aria-invalid", String(!actionOk));
+  createResource.setAttribute("aria-invalid", String(!resourceOk));
+  if (!idOk) problems.push("grant ID");
+  if (!principalOk) problems.push("principal");
+  if (!actionOk) problems.push("action");
+  if (!resourceOk) problems.push("resource");
+  if (problems.length > 0) {
+    return {
+      ok: false,
+      error: {
+        kind: "validation",
+        message: `Check the highlighted fields (${problems.join(", ")}). Nothing was created.`,
+      },
+    };
+  }
+  return {
+    ok: true,
+    body: {
+      grant_id: grantId,
+      principal_id: principalId,
+      action,
+      resource: { resource_type: resourceType, resource_id: resourceId },
+      effect: "allow",
+    },
+  };
 }
 
 function hideError() {
@@ -161,6 +283,9 @@ async function loadFilterSources() {
   hideError();
   clearGrantRows();
   showInitialHint();
+  closeCreateDialog();
+  resetCreateOptions();
+  createButton.disabled = true;
   resourceNote.hidden = true;
   resourceNote.textContent = "";
   resetOptions(principalFilter, "Select a principal…");
@@ -194,6 +319,13 @@ async function loadFilterSources() {
     // principal stays a query filter candidate for history reads.
     if (item.status === "active") option.dataset.creationCandidate = "true";
     principalFilter.append(option);
+    // Create offers active principals only; history reads keep everyone.
+    if (item.status === "active") {
+      const createOption = document.createElement("option");
+      createOption.value = option.value;
+      createOption.textContent = option.textContent;
+      createPrincipal.append(createOption);
+    }
   }
   principalFilter.disabled = false;
   if (!catalog.ok) {
@@ -210,8 +342,18 @@ async function loadFilterSources() {
       const displayName = text(item.discoverability?.display_name);
       option.textContent = `${displayName || resourceId} · ${resourceType}/${resourceId} · ${text(item.status)}`;
       resourceFilter.append(option);
+      // Create offers active resources only, grants catalog included.
+      // Assignment-plane fields are never read here.
+      if (item.status !== "active") continue;
+      const createOption = document.createElement("option");
+      createOption.value = `${resourceType}/${resourceId}`;
+      createOption.dataset.resourceType = resourceType;
+      createOption.dataset.resourceId = resourceId;
+      createOption.textContent = `${displayName || resourceId} · ${resourceType}/${resourceId}`;
+      createResource.append(createOption);
     }
     resourceFilter.disabled = false;
+    createButton.disabled = false;
   }
   page.dataset.state = "filters";
   countLine.textContent = "Not loaded.";
@@ -244,6 +386,82 @@ resourceFilter.addEventListener("change", () => {
   loadGrants({ resourceId: resourceFilter.value });
 });
 
+createButton.addEventListener("click", () => {
+  hideCreateError();
+  createGrantId.removeAttribute("aria-invalid");
+  createPrincipal.removeAttribute("aria-invalid");
+  createAction.removeAttribute("aria-invalid");
+  createResource.removeAttribute("aria-invalid");
+  if (!createInFlight) {
+    pendingIdempotencyKey = null;
+    pendingCreateBodyKey = null;
+    createSubmit.disabled = false;
+    if (createCancel) createCancel.disabled = false;
+  }
+  if (!createDialog.open) {
+    if (typeof createDialog.showModal === "function") createDialog.showModal();
+    else createDialog.setAttribute("open", "");
+  }
+  createGrantId.focus();
+});
+
+createDialog.addEventListener("cancel", (event) => {
+  if (createInFlight) event.preventDefault();
+});
+
+createCancel.addEventListener("click", () => {
+  if (createInFlight) return;
+  createDialog.close();
+});
+
+createForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (createInFlight) return;
+  if (createSubmit.disabled) return;
+  hideCreateError();
+  const checked = validateCreateFields();
+  if (!checked.ok) {
+    showCreateError(checked.error);
+    return;
+  }
+  const generation = sessionGeneration;
+  const bodyKey = createBodyKey(checked.body);
+  if (pendingIdempotencyKey === null || pendingCreateBodyKey !== bodyKey) {
+    pendingIdempotencyKey = newIdempotencyKey();
+    pendingCreateBodyKey = bodyKey;
+  }
+  const idempotencyKey = pendingIdempotencyKey;
+  createInFlight = true;
+  createSubmit.disabled = true;
+  if (createCancel) createCancel.disabled = true;
+  try {
+    // Real POST only; no optimistic insert. Body uses contract names verbatim.
+    const created = await controlApi.createGrant(checked.body, idempotencyKey);
+    if (generation !== sessionGeneration) return;
+    const createdId = text(created?.grant_id) || checked.body.grant_id;
+    createDialog.close();
+    createForm.reset();
+    pendingIdempotencyKey = null;
+    pendingCreateBodyKey = null;
+    // POST alone never proves success; only the authoritative refresh does.
+    principalFilter.value = checked.body.principal_id;
+    resourceFilter.value = "";
+    const refreshed = await loadGrants({ principalId: checked.body.principal_id });
+    if (refreshed) {
+      const countText = countLine.textContent === "Not loaded." ? "" : ` ${countLine.textContent}`;
+      announce(`Grant ${createdId} ready (201 created or stable replay).${countText}`);
+    }
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    // Keep form data; same token only for the same exact payload.
+    showCreateError(error);
+  } finally {
+    createInFlight = false;
+    if (createSubmit) createSubmit.disabled = false;
+    if (createCancel) createCancel.disabled = false;
+  }
+});
+
 sessionForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const value = apiKeyInput.value.trim();
@@ -263,6 +481,9 @@ disconnectButton.addEventListener("click", () => {
   credentialStore.clear();
   clearGrantRows();
   hideError();
+  closeCreateDialog();
+  resetCreateOptions();
+  createButton.disabled = true;
   resourceNote.hidden = true;
   resourceNote.textContent = "";
   resetOptions(principalFilter, "Select a principal…");

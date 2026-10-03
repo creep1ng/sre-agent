@@ -59,7 +59,7 @@
             <p class="ma-panel__description">Select exactly one filter. Principal and Resource are mutually exclusive.</p>
           </div>
           <div class="ma-button-row">
-            <button id="create-grant-button" class="ma-button ma-button--primary ma-button--small" type="button" disabled title="Grant creation arrives in a later slice.">Create grant</button>
+            <button id="create-grant-button" class="ma-button ma-button--primary ma-button--small" type="button" disabled>Create grant</button>
           </div>
         </div>
         <div class="ma-panel__body">
@@ -101,6 +101,53 @@
           </div>
         </div>
       </section>
+      <dialog id="create-dialog" class="principals__dialog" aria-labelledby="create-title">
+        <form id="create-form" class="principals__create-form" novalidate>
+          <h2 id="create-title" class="ma-panel__title">Create grant</h2>
+          <p class="ma-panel__description">Creates a real Principal, action and Resource grant via <span class="ma-mono">POST /v1/grants</span>. Nothing is added until the API confirms.</p>
+          <div id="create-error" class="ma-alert" data-tone="critical" hidden>
+            <div>
+              <p id="create-error-title" class="ma-alert__title">Request failed</p>
+              <p id="create-error-detail" class="ma-alert__detail"></p>
+            </div>
+          </div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="create-grant-id">Grant ID</label>
+            <input class="ma-input ma-mono" id="create-grant-id" name="grant-id" type="text" autocomplete="off" spellcheck="false" required maxlength="64" placeholder="grant-incident-harness-invoke-triage-agent" aria-describedby="create-grant-id-hint" />
+            <p id="create-grant-id-hint" class="ma-field__hint">Lowercase, 3 to 64 chars: start a to z, then a to z 0 to 9 _ -.</p>
+          </div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="create-principal">Principal (active only)</label>
+            <select class="ma-select" id="create-principal" name="principal" required>
+              <option value="">Select an active principal…</option>
+            </select>
+          </div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="create-action">Action</label>
+            <select class="ma-select" id="create-action" name="action" required>
+              <option value="authenticate">authenticate</option>
+              <option value="export">export</option>
+              <option value="invoke" selected>invoke</option>
+              <option value="persist">persist</option>
+              <option value="read_metadata">read_metadata</option>
+              <option value="redact">redact</option>
+              <option value="admin.read">admin.read</option>
+              <option value="admin.write">admin.write</option>
+            </select>
+          </div>
+          <div class="ma-field">
+            <label class="ma-field__label" for="create-resource">Resource (active only)</label>
+            <select class="ma-select" id="create-resource" name="resource" required>
+              <option value="">Select an active resource…</option>
+            </select>
+            <p class="ma-field__hint">Authorization only. Model assignment fields are never shown here.</p>
+          </div>
+          <div class="ma-button-row">
+            <button id="create-submit" class="ma-button ma-button--primary" type="submit">Create</button>
+            <button id="create-cancel" class="ma-button ma-button--secondary" type="button" value="cancel" formnovalidate>Cancel</button>
+          </div>
+        </form>
+      </dialog>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
     </main>
     <script type="module" src="/public/admin/grants.js"></script>
