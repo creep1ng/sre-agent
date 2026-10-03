@@ -49,3 +49,9 @@ def test_ui_maps_real_triage_outage_code() -> None:
     assert '"storage_unavailable"' in JAVASCRIPT
     assert '"audit_unavailable"' not in JAVASCRIPT
     assert 'operationInput.addEventListener("change"' in JAVASCRIPT
+
+
+def test_ui_computes_no_thresholds_or_detection() -> None:
+    lowered = JAVASCRIPT.lower()
+    for fragment in ("threshold", "anomal", "detect", "mitigat", "umbral"):
+        assert fragment not in lowered
