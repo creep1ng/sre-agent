@@ -30,6 +30,7 @@ from sre_agent.control.consumption_limits import (
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
+from sre_agent.gateway.triage import TriageHttpService, triage_router
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
@@ -106,6 +107,7 @@ def create_application(
             )
         )
     )
+    application.include_router(triage_router(TriageHttpService(database, workflow)))
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
