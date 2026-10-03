@@ -95,10 +95,14 @@ python scripts/demo_env.py verify
 > demonstration only. PR evidence must follow `docs/pr-evidence.md` and use
 > containerized `docker compose` or `docker run` commands.
 
+Keep the exported project-scoped `DEMO_STATE_DIR` from setup for every later
+`compose` command. Do not override it with `.demo-state`: the required token
+file lives in `.demo-state/$ISSUE29_PROJECT/grafana-mcp.env`.
+
 Run the repository's deterministic checks first and retain their exit status:
 
 ```sh
-DEMO_STATE_DIR="$PWD/.demo-state" compose --profile checks \
+compose --profile checks \
   run --build --rm python-checks pytest -q \
   tests/test_mcp_contract.py tests/test_mcp_discovery.py \
   tests/test_mcp_owner.py tests/test_mcp_seed.py tests/test_mcp_overlay.py
@@ -168,7 +172,7 @@ insert those rows manually, because the resource and grant identifiers are
 primary keys and a manual insert now fails with a duplicate-key error:
 
 ```sh
-DEMO_STATE_DIR="$PWD/.demo-state" compose exec -T db \
+compose exec -T db \
   sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'
 SELECT count(*) AS seeded_administrative_grant_rows
   FROM grants
@@ -368,14 +372,20 @@ The artifact excludes API keys and response bodies and is written only to the
 ignored capture directory.
 
 A counter reset does not clear the gateway's in-memory MCP session. Before each
-full replay, restart **only this isolated project's API** so the first diagnostic
+full replay, recreate **this isolated project's API** so the first diagnostic
 is genuinely cold. This preserves database rows and volumes. A reused gateway can
 correctly issue only `tools/call` on its first diagnostic; the cold-handshake
 assertion then fails and must not be reported as passed. Wait for API health after
-the restart; no invocation probes may precede the replay.
+recreation; no invocation probes may precede the replay. `compose restart api`
+is sufficient only for another cold replay of the same verified image. It does
+not rebuild source or apply configuration changes after changing commits.
 
-Run after the API and relay are ready. Build the project `python-checks` image
-with the same checkout (or use its already built project image), then run the
+Run after initial setup. Rebuild the API and checks images from the selected
+checkout, then recreate the isolated stack and wait for API health. The `up`
+command also rebuilds the migration/seed dependencies; existing database volumes
+are retained. Do not use `--no-build` or merely restart an old API when changing
+commits. Verify that the running API uses the newly built immutable image ID
+before assigning `TESTED_SHA`, then run the
 versioned script in the API container's network namespace. The API container is
 attached to both project-scoped `runtime` and `mcp-boundary` networks; this
 one-shot container therefore reaches `api`, `db`, and the counter without
@@ -383,13 +393,20 @@ publishing another port. The source is bind-mounted read-only; the host capture
 directory is the only writable mount:
 
 ```sh
-compose build python-checks
-compose restart api
-compose up --no-build -d --wait --wait-timeout 90 api
-export TESTED_SHA="$(git rev-parse HEAD)"
+export SRE_AGENT_BUILD_REVISION="$(git rev-parse HEAD)"
+compose build api python-checks
+compose up --build --force-recreate -d --wait --wait-timeout 90 \
+  mcp-seed api mcp-upstream grafana-mcp
+API_CONTAINER="$(compose ps -q api)"
+API_IMAGE_ID="$(docker inspect --format '{{.Image}}' "$API_CONTAINER")"
+BUILT_API_IMAGE_ID="$(docker image inspect --format '{{.Id}}' \
+  "${ISSUE29_PROJECT}-api-runtime:local")"
+test "$API_IMAGE_ID" = "$BUILT_API_IMAGE_ID" || {
+  echo "API image mismatch; stop without capturing evidence" >&2; exit 1;
+}
+export TESTED_SHA="$SRE_AGENT_BUILD_REVISION"
 export CAPTURE_DIR="$DEMO_STATE_DIR/captures"
 mkdir -p "$CAPTURE_DIR"
-API_CONTAINER="$(compose ps -q api)"
 CHECKS_IMAGE="${ISSUE29_PROJECT}-python-checks:latest"
 docker run --rm --user "$(id -u):$(id -g)" \
   --network "container:$API_CONTAINER" --env-file .env --env-file .env.worktree \
@@ -398,6 +415,11 @@ docker run --rm --user "$(id -u):$(id -g)" \
   -v "$CAPTURE_DIR:/capture" "$CHECKS_IMAGE" \
   python /app/scripts/issue29_capture.py
 ```
+
+Retain `API_IMAGE_ID` with the checkout SHA and build commands as runtime
+provenance (image IDs contain no credentials). Do not change checkouts between
+building and capturing; if any build, health, or image check fails, stop instead
+of attributing evidence to the new SHA.
 
 Review `.demo-state/$ISSUE29_PROJECT/captures/live-replay.json` for the exact
 `tested_sha`, timestamps, observed HTTP statuses/error codes, method counts, and
