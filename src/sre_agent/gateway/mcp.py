@@ -181,6 +181,44 @@ class ElasticsearchResult(BaseModel):
     warnings: list[Annotated[str, Field(max_length=500)]] = Field(max_length=16)
 
 
+class MCPDiscoveryServerResponse(BaseModel):
+    resource_type: str
+    server_id: str
+    display_name: str
+    description: str
+    visibility: str
+    tags: list[str]
+
+
+class MCPDiscoveryToolResponse(BaseModel):
+    resource_type: str
+    tool_id: str
+    server_id: str
+    display_name: str
+    description: str
+    visibility: str
+    tags: list[str]
+    action: str
+
+
+class MCPDiscoveryResponse(BaseModel):
+    request_id: UUID
+    contract_version: str
+    server: MCPDiscoveryServerResponse
+    tools: list[MCPDiscoveryToolResponse]
+
+
+class MCPErrorDetail(BaseModel):
+    code: str
+    message: str
+
+
+class MCPErrorResponse(BaseModel):
+    error: MCPErrorDetail
+    request_id: UUID
+    retryable: bool
+
+
 class MCPAuditRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -221,7 +259,7 @@ class MCPGatewayService:
         self.projector = projector
         self.owner_repository_factory = owner_repository_factory
 
-    async def discovery(self, authorization: str | None) -> JSONResponse:
+    async def discovery(self, authorization: str | None, query: str = "") -> JSONResponse:
         request_id = str(uuid4())
         started = monotonic()
         try:
@@ -239,15 +277,74 @@ class MCPGatewayService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         if evaluation.decision.decision != "allow":
-            return self._unavailable(request_id)
-        server, tools = await self._active_contract()
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._unavailable(request_id),
+                operation="mcp.discovery",
+                stage="authorization",
+                context=context,
+                evaluation=evaluation,
+            )
+        if query:
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._error(request_id, 422, "contract_validation_failed", False),
+                operation="mcp.discovery",
+                stage="response",
+                context=context,
+                evaluation=evaluation,
+                reason="contract_validation_failed",
+            )
+        visible_ids: list[str] = []
+        for tool_id in MCP_TOOL_IDS:
+            try:
+                tool_context, tool_evaluation = await authorize_governed_access(
+                    self.sessions, authorization, "mcp.invoke", "mcp_tool", tool_id
+                )
+            except AuthenticationFailed:
+                return JSONResponse(
+                    {
+                        "error": {
+                            "code": "authentication_failed",
+                            "message": "Authentication failed.",
+                        },
+                        "request_id": request_id,
+                        "retryable": False,
+                    },
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if tool_context.principal.principal_id != context.principal.principal_id:
+                return await self._audited(
+                    UUID(request_id),
+                    started,
+                    self._unavailable(request_id),
+                    operation="mcp.discovery",
+                    stage="response",
+                    context=context,
+                    evaluation=evaluation,
+                )
+            if tool_evaluation.decision.decision == "allow":
+                visible_ids.append(tool_id)
+        server, tools = await self._active_contract(visible_ids=visible_ids)
         if server is None or tools is None:
-            return self._unavailable(request_id)
+            return await self._audited(
+                UUID(request_id),
+                started,
+                self._unavailable(request_id),
+                operation="mcp.discovery",
+                stage="response",
+                context=context,
+                evaluation=evaluation,
+            )
         return await self._audited(
             UUID(request_id),
             started,
             JSONResponse(
                 {
+                    "request_id": request_id,
                     "contract_version": MCP_CONTRACT_VERSION,
                     "server": {
                         "resource_type": "mcp_server",
@@ -374,7 +471,7 @@ class MCPGatewayService:
             )
 
     async def _active_contract(
-        self, tool_id: str | None = None
+        self, tool_id: str | None = None, *, visible_ids: list[str] | None = None
     ) -> tuple[MCPServer | None, list[MCPTool] | None]:
         try:
             async with self.sessions() as session:
@@ -401,7 +498,7 @@ class MCPGatewayService:
                         return server, None
                     return server, [tool]
                 tools: list[MCPTool] = []
-                for tool_id in MCP_TOOL_IDS:
+                for tool_id in visible_ids if visible_ids is not None else MCP_TOOL_IDS:
                     tool = await owner.get_tool(tool_id)
                     if (
                         tool is None
@@ -412,6 +509,8 @@ class MCPGatewayService:
                         or tool.tool_id != tool_id
                         or tool.upstream_name != tool.tool_id
                     ):
+                        if visible_ids is not None:
+                            continue
                         return server, None
                     tools.append(tool)
                 return server, tools
@@ -572,15 +671,98 @@ class MCPGatewayService:
         return response
 
 
+def _error_documentation(code: str, status: int) -> dict[str, Any]:
+    message = code.replace("_", " ").capitalize() + "."
+    return {
+        "model": MCPErrorResponse,
+        "description": message,
+        "content": {
+            "application/json": {
+                "examples": {
+                    code: {
+                        "summary": message,
+                        "value": {
+                            "error": {"code": code, "message": message},
+                            "request_id": "00000000-0000-4000-8000-000000000001",
+                            "retryable": status in {503, 504},
+                        },
+                    }
+                }
+            }
+        },
+    }
+
+
 def mcp_router(service: MCPGatewayService) -> APIRouter:
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
 
+    example_server = {
+        "resource_type": "mcp_server",
+        "server_id": MCP_SERVER_ID,
+        "display_name": "Grafana MCP",
+        "description": "Governed Grafana read-only MCP.",
+        "visibility": "private",
+        "tags": ["grafana", "mcp"],
+    }
+    example_tools = [
+        {
+            "resource_type": "mcp_tool",
+            "tool_id": tool_id,
+            "server_id": MCP_SERVER_ID,
+            "display_name": display_name,
+            "description": description,
+            "visibility": "private",
+            "tags": tags,
+            "action": "mcp.invoke",
+        }
+        for tool_id, display_name, description, tags in (
+            (
+                "query_prometheus",
+                "Query Prometheus",
+                "Read Prometheus metrics.",
+                ["grafana", "prometheus"],
+            ),
+            (
+                "query_elasticsearch",
+                "Query Elasticsearch",
+                "Read Elasticsearch logs.",
+                ["grafana", "elasticsearch"],
+            ),
+        )
+    ]
+    example_discovery = {
+        "request_id": "00000000-0000-4000-8000-000000000001",
+        "contract_version": MCP_CONTRACT_VERSION,
+        "server": example_server,
+        "tools": example_tools,
+    }
+
     @router.get(
         "/v1/mcp/discovery",
+        response_model=MCPDiscoveryResponse,
         responses={
-            401: {"description": "Authentication failed."},
-            403: {"description": "Resource unavailable."},
+            200: {
+                "description": "Only tools directly invokable by this Principal are visible.",
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "full": {
+                                "summary": "Illustrative full visibility",
+                                "value": example_discovery,
+                            },
+                            "empty": {
+                                "summary": "Authorized server with no visible tools",
+                                "value": {**example_discovery, "tools": []},
+                            },
+                        }
+                    }
+                },
+            },
+            401: _error_documentation("authentication_failed", 401),
+            403: _error_documentation("resource_unavailable", 403),
+            422: _error_documentation("contract_validation_failed", 422),
+            503: _error_documentation("audit_unavailable", 503),
         },
         openapi_extra={
             "x-governed-scope": {
@@ -594,17 +776,80 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
         request: Request,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
     ) -> JSONResponse:
-        return await service.discovery(request.headers.get("authorization"))
+        return await service.discovery(request.headers.get("authorization"), request.url.query)
 
     @router.post(
         "/v1/mcp/tools/{tool_id}",
-        responses={403: {"description": "Resource unavailable."}},
+        response_model=PrometheusResult | ElasticsearchResult,
+        responses={
+            200: {
+                "description": "Tool result from the configured Grafana MCP upstream.",
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "prometheus": {
+                                "summary": "Illustrative Prometheus result, not live data",
+                                "value": {"result_type": "vector", "result": [], "warnings": []},
+                            },
+                            "elasticsearch": {
+                                "summary": "Illustrative Elasticsearch result, not live data",
+                                "value": {"total": 0, "documents": [], "warnings": []},
+                            },
+                        }
+                    }
+                },
+            },
+            401: _error_documentation("authentication_failed", 401),
+            403: _error_documentation("resource_unavailable", 403),
+            422: _error_documentation("contract_validation_failed", 422),
+            502: _error_documentation("upstream_invalid", 502),
+            503: _error_documentation("upstream_unavailable", 503),
+            504: _error_documentation("upstream_timeout", 504),
+        },
         openapi_extra={
             "x-governed-scope": {
                 "action": "mcp.invoke",
                 "resource_type": "mcp_tool",
                 "resource_id": "path.tool_id",
-            }
+            },
+            "requestBody": {
+                "required": True,
+                "description": (
+                    "Select the JSON example matching tool_id. Authorization precedes validation."
+                ),
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "oneOf": [
+                                PrometheusQuery.model_json_schema(),
+                                ElasticsearchQuery.model_json_schema(),
+                            ]
+                        },
+                        "examples": {
+                            "query_prometheus": {
+                                "summary": "Prometheus instant query",
+                                "value": {
+                                    "datasource_uid": "webstore-metrics",
+                                    "expr": "up",
+                                    "query_type": "instant",
+                                    "end_time": "now",
+                                },
+                            },
+                            "query_elasticsearch": {
+                                "summary": "Elasticsearch log query",
+                                "value": {
+                                    "datasource_uid": "webstore-logs",
+                                    "index": "otel-logs-*",
+                                    "query": "resource.service.name:checkout",
+                                    "start_time": "now-2m",
+                                    "end_time": "now",
+                                    "limit": 100,
+                                },
+                            },
+                        },
+                    }
+                },
+            },
         },
     )
     async def invoke(

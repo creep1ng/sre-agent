@@ -1,0 +1,12 @@
+{
+  "tested_sha": "15eb71c60f30e7d009d688e54576b0030a6f1d10",
+  "captured_at_utc": "2026-10-03T17:44:58.731Z",
+  "request_id": null,
+  "response_date": "Sat, 03 Oct 2026 17:44:57 GMT",
+  "status": 200,
+  "request_url": "GET /openapi.json",
+  "surface": "real browser rendering of the actual FastAPI OpenAPI response; checks required MCP body, typed oneOf and request examples; no example invocation executed",
+  "file": "docs/evidence/issue-29-pr366-current.png",
+  "sanitized": true,
+  "relation_to_replay": "Independent exact-foundation-candidate capture; not a request or window from the PR368 replay."
+}
