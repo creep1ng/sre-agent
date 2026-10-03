@@ -19,7 +19,7 @@ GREEN and refactor. No post-hoc unit tests. Existing checks: containerized pytes
 ## Checklist / acceptance / checks
 - [x] T1: Version controlled real stack and failure injection, isolated networks,
   pinned images, scoped token; observed Compose/build/health/image identity.
-- [ ] T2: E2E CA1–CA5 matrix: deterministic 200 + exactly one tools/call;
+- [x] T2: E2E CA1–CA5 matrix: deterministic 200 + exactly one tools/call;
   safe no-grant/nonvisible/401 with zero upstream calls; 422/timeout/failure;
   known ID allowed/denied before discovery; per-case counter deltas and bounded
   metadata-only audit (no MCP row for 401). Fix only observed defects if needed.
@@ -36,4 +36,6 @@ Real RED: 2026-10-03 22:39:25..22:40:08 UTC, main4a4515b: 200/vector1,
 forwarded call1; 403/401/422 zero; 504/503/502 safe injected faults. Missing
 public success correlation requires additive header; JSON null harness check corrected.
 User chose exactly two PRs: infrastructure/control → acceptance (no size exception).
-Next: verify committed candidates and bounded evidence; no merge/close authority.
+GREEN be42244: 10 real cases passed, 9 bounded metadata-only rows, 401 zero.
+PR477 draft published (395 lines); current full checks and contracts running.
+Next: screenshot, checks and dependent PR; human review and 422 CA4 reading pending.
