@@ -55,6 +55,34 @@
       "grant_rows": 0,
       "idempotency_bindings": 0,
       "status": 409
+    },
+    {
+      "case": "replay principal setup create",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "stable replay after principal deactivated",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "replay resource setup create",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "stable replay after resource deactivated",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
     }
   ],
   "issue": 423
