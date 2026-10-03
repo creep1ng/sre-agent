@@ -1,237 +1,523 @@
 {
-  "artifact_status": "historical; provenance incomplete; not evidence for current candidate",
-  "tested_sha": null,
-  "captured_at_utc": null,
-  "environment": null,
-  "capture_window_utc": null,
+  "tested_sha": "5cc9a17aff9cdef56c5ae57f51b98efeae91901d",
+  "started_at": "2026-10-03T01:24:19.733029+00:00",
+  "surface": "real isolated HTTP gateway, API-key auth, PostgreSQL, pinned MCP boundary",
   "sanitized": true,
-  "surface_claimed": "real gateway, PostgreSQL audit sink, counted MCP boundary; not independently reproducible from this artifact",
-  "synthetic_principals": [
-    "issue29-empty-v3final",
-    "issue29-partial-v3final"
-  ],
-  "counter_semantics": {
-    "status": "claimed/inferred from artifact labels; relay source unavailable, so exact counting semantics are unverified",
-    "total_http_requests": "historical label says total HTTP requests at the boundary; aggregation and inclusion rules unknown",
-    "mcp_methods": "historical label reports observed MCP methods; parsing, batch, notification and handshake counting rules unknown"
-  },
-  "discovery_cases": {
-    "ca1_full": {
-      "status": 200,
-      "request_id": "56fd27b7-f4fb-407f-bffd-1cce90088cd4",
+  "provider_calls": "none; Grafana backend query success not claimed",
+  "cases": {
+    "full": {
+      "request_id": "122590cc-53ac-4649-a1a0-1dda4b8c2fbe",
+      "http_status": 200,
+      "error_code": null,
+      "observed_at": "2026-10-03T01:24:21.076857+00:00",
       "tool_ids": [
         "query_prometheus",
         "query_elasticsearch"
       ],
-      "server_id": "grafana-mcp",
-      "visibility": "private",
-      "metadata": "all published fields present"
+      "metadata_fields_present": true,
+      "restricted_metadata_absent": false
     },
-    "ca2_partial": {
-      "status": 200,
-      "request_id": "35d4b91c-4407-42b2-a913-2ab4d87fcaa5",
+    "partial": {
+      "request_id": "767633b3-15cb-4c51-8d24-89c60e7b9181",
+      "http_status": 200,
+      "error_code": null,
+      "observed_at": "2026-10-03T01:24:21.270547+00:00",
       "tool_ids": [
         "query_prometheus"
       ],
-      "restricted_tool_id_in_body": false,
-      "restricted_tool_name_in_body": false
+      "metadata_fields_present": true,
+      "restricted_metadata_absent": true
     },
-    "ca3_empty": {
-      "status": 200,
-      "request_id": "417649d4-9822-486b-84a7-96a95e417617",
+    "empty": {
+      "request_id": "f10fc6b4-1084-4246-a946-f6e5768ce870",
+      "http_status": 200,
+      "error_code": null,
+      "observed_at": "2026-10-03T01:24:21.465083+00:00",
       "tool_ids": [],
-      "restricted_tool_id_in_body": false,
-      "restricted_tool_name_in_body": false
+      "metadata_fields_present": true,
+      "restricted_metadata_absent": true
     },
-    "ca4_no_discovery_grant": {
-      "status": 403,
-      "error_code_observed": null,
-      "error_code_expected": "resource_unavailable",
-      "request_id": "9e9af57b-fc12-4f89-bfa7-aeee38e019dc"
+    "denied": {
+      "request_id": "fe64c1e6-033a-4657-9b2e-c3afa3debdd5",
+      "http_status": 403,
+      "error_code": "resource_unavailable",
+      "observed_at": "2026-10-03T01:24:21.542930+00:00"
     },
-    "ca4_unknown_credential": {
-      "status": 401,
-      "error_code_observed": null,
-      "error_code_expected": "authentication_failed",
-      "request_id": "37629542-b840-4978-b1c3-e57c13769a30",
-      "mcp_audit_row_expected": false
+    "unknown_key": {
+      "request_id": "12492297-4042-4691-bf6e-e3c3f7dd19df",
+      "http_status": 401,
+      "error_code": "authentication_failed",
+      "observed_at": "2026-10-03T01:24:21.547396+00:00"
     },
-    "ca4_no_credential": {
-      "status": 401,
-      "error_code_observed": null,
-      "error_code_expected": "authentication_failed",
-      "request_id": "abd62d55-c550-4569-9abc-301ae385cb6b",
-      "mcp_audit_row_expected": false
+    "no_key": {
+      "request_id": "18b35b83-5b73-45e5-8004-16abf6ea085c",
+      "http_status": 401,
+      "error_code": "authentication_failed",
+      "observed_at": "2026-10-03T01:24:21.548985+00:00"
     },
-    "ca4_invalid_query": {
-      "status": 422,
-      "error_code_observed": null,
-      "error_code_expected": "contract_validation_failed",
-      "request_id": "2a6a310a-2f80-4802-ac07-ed1fc6b611fa"
+    "invalid_query": {
+      "request_id": "b9ef1644-4730-4ef0-834b-c38fe339b11e",
+      "http_status": 422,
+      "error_code": "contract_validation_failed",
+      "observed_at": "2026-10-03T01:24:21.625897+00:00"
     },
-    "ca4_denied_invoke": {
-      "status": 403,
-      "error_code_observed": null,
-      "error_code_expected": "resource_unavailable",
-      "request_id": "29fc67f2-df87-4d69-804d-7eb7891f22c8"
+    "denied_invoke": {
+      "request_id": "d9e94462-8255-4abf-afe3-4566894e5f5f",
+      "http_status": 403,
+      "error_code": "resource_unavailable",
+      "observed_at": "2026-10-03T01:24:21.692474+00:00"
+    },
+    "cold_invoke_control": {
+      "request_id": "9313c2fc-1776-4dbb-95bd-41b1fa1b67e9",
+      "http_status": 502,
+      "error_code": "upstream_invalid",
+      "observed_at": "2026-10-03T01:24:22.186702+00:00"
+    },
+    "warm_invoke_control": {
+      "request_id": "611b46d5-9f2d-40f6-8588-c2ce13a2b4b5",
+      "http_status": 502,
+      "error_code": "upstream_invalid",
+      "observed_at": "2026-10-03T01:24:22.308284+00:00"
     }
   },
-  "historical_boundary_counts": {
-    "discovery_before": {
+  "counter": {
+    "reset_before_discovery": {
+      "reset_epoch": 1,
+      "reset_at_utc": "2026-10-03T01:24:20.826Z",
+      "captured_at_utc": "2026-10-03T01:24:20.826Z",
       "total_http_requests": 0,
+      "upstream_attempts": 0,
+      "upstream_failures": 0,
       "mcp_methods": {}
     },
-    "discovery_after": {
+    "before_discovery": {
+      "reset_epoch": 1,
+      "reset_at_utc": "2026-10-03T01:24:20.826Z",
+      "captured_at_utc": "2026-10-03T01:24:20.827Z",
       "total_http_requests": 0,
+      "upstream_attempts": 0,
+      "upstream_failures": 0,
       "mcp_methods": {}
     },
-    "discovery_window_and_probe_count": null,
-    "positive_boundary_control": {
+    "after_discovery": {
+      "reset_epoch": 1,
+      "reset_at_utc": "2026-10-03T01:24:20.826Z",
+      "captured_at_utc": "2026-10-03T01:24:21.693Z",
+      "total_http_requests": 0,
+      "upstream_attempts": 0,
+      "upstream_failures": 0,
+      "mcp_methods": {}
+    },
+    "after_cold_control": {
+      "reset_epoch": 1,
+      "reset_at_utc": "2026-10-03T01:24:20.826Z",
+      "captured_at_utc": "2026-10-03T01:24:22.187Z",
+      "total_http_requests": 3,
+      "upstream_attempts": 3,
+      "upstream_failures": 0,
+      "mcp_methods": {
+        "initialize": 1,
+        "notifications/initialized": 1,
+        "tools/call": 1
+      }
+    },
+    "reset_before_warm_control": {
+      "reset_epoch": 2,
+      "reset_at_utc": "2026-10-03T01:24:22.188Z",
+      "captured_at_utc": "2026-10-03T01:24:22.188Z",
+      "total_http_requests": 0,
+      "upstream_attempts": 0,
+      "upstream_failures": 0,
+      "mcp_methods": {}
+    },
+    "after_warm_control": {
+      "reset_epoch": 2,
+      "reset_at_utc": "2026-10-03T01:24:22.188Z",
+      "captured_at_utc": "2026-10-03T01:24:22.309Z",
       "total_http_requests": 1,
+      "upstream_attempts": 1,
+      "upstream_failures": 0,
       "mcp_methods": {
         "tools/call": 1
-      },
-      "initialize": null,
-      "notifications/initialized": null,
-      "request_id": "ebfa6efa-aed4-4656-9140-06db5283e055",
-      "gateway_status": 502,
-      "error_code_observed": "upstream_invalid",
-      "meaning": "boundary crossing only; tool execution failed"
+      }
     }
   },
-  "selected_discovery_audit_rows": [
+  "checks": [
     {
-      "request_id": "56fd27b7-f4fb-407f-bffd-1cce90088cd4",
-      "status": 200,
+      "check": "full tested SHA supplied",
+      "passed": true
+    },
+    {
+      "check": "synthetic setup /v1/principals",
+      "passed": true
+    },
+    {
+      "check": "synthetic setup /v1/principals/i29-partial-89df9d41/credentials",
+      "passed": true
+    },
+    {
+      "check": "synthetic setup /v1/grants",
+      "passed": true
+    },
+    {
+      "check": "synthetic setup /v1/grants",
+      "passed": true
+    },
+    {
+      "check": "synthetic setup /v1/principals",
+      "passed": true
+    },
+    {
+      "check": "synthetic setup /v1/principals/i29-empty-89df9d41/credentials",
+      "passed": true
+    },
+    {
+      "check": "synthetic setup /v1/grants",
+      "passed": true
+    },
+    {
+      "check": "full status/code",
+      "passed": true
+    },
+    {
+      "check": "partial status/code",
+      "passed": true
+    },
+    {
+      "check": "empty status/code",
+      "passed": true
+    },
+    {
+      "check": "denied status/code",
+      "passed": true
+    },
+    {
+      "check": "unknown_key status/code",
+      "passed": true
+    },
+    {
+      "check": "no_key status/code",
+      "passed": true
+    },
+    {
+      "check": "invalid_query status/code",
+      "passed": true
+    },
+    {
+      "check": "full visibility",
+      "passed": true
+    },
+    {
+      "check": "partial hides metadata",
+      "passed": true
+    },
+    {
+      "check": "empty hides metadata",
+      "passed": true
+    },
+    {
+      "check": "published metadata",
+      "passed": true
+    },
+    {
+      "check": "denied invoke",
+      "passed": true
+    },
+    {
+      "check": "zero discovery/denial boundary calls",
+      "passed": true
+    },
+    {
+      "check": "cold control upstream rejection, not success",
+      "passed": true
+    },
+    {
+      "check": "cold handshake separate from tools call",
+      "passed": true
+    },
+    {
+      "check": "warm control upstream rejection, not success",
+      "passed": true
+    },
+    {
+      "check": "warm epoch one tools call, no handshake",
+      "passed": true
+    },
+    {
+      "check": "scoped five discovery and three invoke rows",
+      "passed": true
+    },
+    {
+      "check": "full audit correlation",
+      "passed": true
+    },
+    {
+      "check": "partial audit correlation",
+      "passed": true
+    },
+    {
+      "check": "empty audit correlation",
+      "passed": true
+    },
+    {
+      "check": "denied audit correlation",
+      "passed": true
+    },
+    {
+      "check": "unknown_key audit correlation",
+      "passed": true
+    },
+    {
+      "check": "no_key audit correlation",
+      "passed": true
+    },
+    {
+      "check": "invalid_query audit correlation",
+      "passed": true
+    },
+    {
+      "check": "denied_invoke audit correlation",
+      "passed": true
+    },
+    {
+      "check": "cold_invoke_control audit correlation",
+      "passed": true
+    },
+    {
+      "check": "warm_invoke_control audit correlation",
+      "passed": true
+    },
+    {
+      "check": "metadata-only HMAC audit",
+      "passed": true
+    },
+    {
+      "check": "artifact secret exclusion",
+      "passed": true
+    }
+  ],
+  "discovery_window_start": "2026-10-03T01:24:20.826998+00:00",
+  "discovery_window_end": "2026-10-03T01:24:21.693705+00:00",
+  "capture_window_end": "2026-10-03T01:24:22.309602+00:00",
+  "audit": [
+    {
+      "request_id": "122590cc-53ac-4649-a1a0-1dda4b8c2fbe",
+      "occurred_at": "2026-10-03 01:24:21.064457+00:00",
+      "response_status": 200,
       "operation": "mcp.discovery",
       "action": "read_metadata",
       "stage": "response",
       "outcome": "success",
       "decision": "allow",
-      "principal_ref_present": true,
+      "reason_code": null,
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
       "content_state": "absent",
-      "redacted_content_null": true,
-      "identity_key_count": 5
+      "no_content": true,
+      "no_untrusted_input": true
     },
     {
-      "request_id": "35d4b91c-4407-42b2-a913-2ab4d87fcaa5",
-      "status": 200,
+      "request_id": "767633b3-15cb-4c51-8d24-89c60e7b9181",
+      "occurred_at": "2026-10-03 01:24:21.259185+00:00",
+      "response_status": 200,
       "operation": "mcp.discovery",
       "action": "read_metadata",
       "stage": "response",
       "outcome": "success",
       "decision": "allow",
-      "principal_ref_present": true,
+      "reason_code": null,
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
       "content_state": "absent",
-      "redacted_content_null": true,
-      "identity_key_count": 5
+      "no_content": true,
+      "no_untrusted_input": true
     },
     {
-      "request_id": "417649d4-9822-486b-84a7-96a95e417617",
-      "status": 200,
+      "request_id": "f10fc6b4-1084-4246-a946-f6e5768ce870",
+      "occurred_at": "2026-10-03 01:24:21.448349+00:00",
+      "response_status": 200,
       "operation": "mcp.discovery",
       "action": "read_metadata",
       "stage": "response",
       "outcome": "success",
       "decision": "allow",
-      "principal_ref_present": true,
+      "reason_code": null,
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
       "content_state": "absent",
-      "redacted_content_null": true,
-      "identity_key_count": 5
+      "no_content": true,
+      "no_untrusted_input": true
     },
     {
-      "request_id": "9e9af57b-fc12-4f89-bfa7-aeee38e019dc",
-      "status": 403,
+      "request_id": "fe64c1e6-033a-4657-9b2e-c3afa3debdd5",
+      "occurred_at": "2026-10-03 01:24:21.533446+00:00",
+      "response_status": 403,
       "operation": "mcp.discovery",
       "action": "read_metadata",
       "stage": "authorization",
       "outcome": "denied",
       "decision": "deny",
-      "principal_ref_present": true,
+      "reason_code": "no_matching_grant",
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
       "content_state": "absent",
-      "redacted_content_null": true,
-      "identity_key_count": 5
+      "no_content": true,
+      "no_untrusted_input": true
     },
     {
-      "request_id": "2a6a310a-2f80-4802-ac07-ed1fc6b611fa",
-      "status": 422,
+      "request_id": "b9ef1644-4730-4ef0-834b-c38fe339b11e",
+      "occurred_at": "2026-10-03 01:24:21.616413+00:00",
+      "response_status": 422,
       "operation": "mcp.discovery",
       "action": "read_metadata",
       "stage": "response",
       "outcome": "error",
       "decision": "allow",
-      "principal_ref_present": true,
+      "reason_code": "contract_validation_failed",
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
       "content_state": "absent",
-      "redacted_content_null": true,
-      "identity_key_count": 5
-    }
-  ],
-  "selected_invoke_audit_rows": [
+      "no_content": true,
+      "no_untrusted_input": true
+    },
     {
-      "request_id": "ebfa6efa-aed4-4656-9140-06db5283e055",
-      "status": 502,
+      "request_id": "d9e94462-8255-4abf-afe3-4566894e5f5f",
+      "occurred_at": "2026-10-03 01:24:21.683992+00:00",
+      "response_status": 403,
+      "operation": "mcp.invoke",
+      "action": "invoke",
+      "stage": "authorization",
+      "outcome": "denied",
+      "decision": "deny",
+      "reason_code": "no_matching_grant",
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
+      "content_state": "absent",
+      "no_content": true,
+      "no_untrusted_input": true
+    },
+    {
+      "request_id": "9313c2fc-1776-4dbb-95bd-41b1fa1b67e9",
+      "occurred_at": "2026-10-03 01:24:22.173071+00:00",
+      "response_status": 502,
       "operation": "mcp.invoke",
       "action": "invoke",
       "stage": "upstream",
       "outcome": "error",
       "decision": "allow",
-      "content_state": "absent"
+      "reason_code": "upstream_invalid",
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
+      "content_state": "absent",
+      "no_content": true,
+      "no_untrusted_input": true
     },
     {
-      "request_id": "29fc67f2-df87-4d69-804d-7eb7891f22c8",
-      "status": 403,
+      "request_id": "611b46d5-9f2d-40f6-8588-c2ce13a2b4b5",
+      "occurred_at": "2026-10-03 01:24:22.299505+00:00",
+      "response_status": 502,
       "operation": "mcp.invoke",
       "action": "invoke",
-      "stage": "authorization",
-      "outcome": "denied",
-      "decision": "deny",
-      "content_state": "absent"
+      "stage": "upstream",
+      "outcome": "error",
+      "decision": "allow",
+      "reason_code": "upstream_invalid",
+      "has_principal_hmac": true,
+      "has_resource_hmac": true,
+      "content_state": "absent",
+      "no_content": true,
+      "no_untrusted_input": true
     }
   ],
-  "discarded_as_case_evidence": {
-    "historical_global_discovery_count": 50,
-    "reason": "not filtered to request IDs and capture window"
+  "result": "passed",
+  "ended_at": "2026-10-03T01:24:22.330506+00:00",
+  "artifact_status": "new sanitized isolated replay; historical capture preserved separately",
+  "evidence_kind": "controlled integration: real HTTP API-key authentication, gateway, PostgreSQL audit sink, and pinned MCP binary; Grafana backend URL intentionally inert; no Grafana query success or tool execution success claimed",
+  "archive_of_previous_historical_artifact": {
+    "commit": "f3116b69909a482a76e91512135535632bca49fd",
+    "matrix_path": "docs/issue-29-discovery-acceptance.md",
+    "json_path": "docs/evidence/issue-29-live-evidence.json",
+    "note": "immutable prior commit retains the unproven historical capture and its limitations; its dates/results are not reassigned to this replay"
   },
-  "historical_screenshots": {
-    "status": "exists; distinct request, not correlated to this JSON",
-    "visible_request_id": "1b090d22-115d-471d-9c17-a4fc44fcddbe",
-    "visible_http_date": "Thu, 01 Oct 2026 23:32:46 GMT",
-    "tested_sha": null,
-    "run_window": null
+  "capture_window_utc": {
+    "discovery_and_denial_start": "2026-10-03T01:24:20.826998+00:00",
+    "discovery_and_denial_end": "2026-10-03T01:24:21.693705+00:00",
+    "all_probe_and_audit_end": "2026-10-03T01:24:22.309602+00:00"
   },
-  "historical_unmatched_invoke_audit_rows": {
-    "status": "three rows preserved from old output; no request IDs linked to a recorded case and no time-window query proof",
-    "rows": [
-      {
-        "request_id": "13d0dc3e-77bf-41ea-86f8-c507a41c3e28",
-        "status": 502,
-        "operation": "mcp.invoke",
-        "action": "invoke",
-        "stage": "upstream",
-        "outcome": "error",
-        "decision": "allow",
-        "content_state": "absent"
-      },
-      {
-        "request_id": "9b476979-d030-4b1d-bfad-1b9cd34c9f2e",
-        "status": 403,
-        "operation": "mcp.invoke",
-        "action": "invoke",
-        "stage": "authorization",
-        "outcome": "denied",
-        "decision": "deny",
-        "content_state": "absent"
-      },
-      {
-        "request_id": "5feb10b9-0fcd-47a2-be16-c80b35376b0c",
-        "status": 502,
-        "operation": "mcp.invoke",
-        "action": "invoke",
-        "stage": "upstream",
-        "outcome": "error",
-        "decision": "allow",
-        "content_state": "absent"
-      }
-    ]
+  "counter_semantics": {
+    "source": "scripts/issue29_counting_relay.py in tested PR368 candidate; Git blob fb523fbce3a3f4217aa20b9f785134568fb7a809",
+    "total_http_requests": "increments once for each inbound forwarded boundary HTTP request; GET /__count and POST /__count/reset control endpoints are handled before increment and excluded",
+    "upstream_attempts": "increments with total_http_requests immediately before forwarding each boundary request; it counts attempts, not successful MCP tools",
+    "upstream_failures": "increments only if the relay HTTP client raises an exception; an upstream HTTP 502 response is not counted as a transport failure",
+    "mcp_methods": "counts recognized JSON-RPC method values initialize, notifications/initialized, and tools/call from a JSON object or array of objects; unknown string methods map to other; notification/control routes do not count as MCP methods"
+  },
+  "versioned_reproduction": {
+    "available_in": "PR368 descendant at tested commit 5cc9a17aff9cdef56c5ae57f51b98efeae91901d; these instrument files are not present in PR367 commit f3116b69909a482a76e91512135535632bca49fd",
+    "capture_script": "scripts/issue29_capture.py (read-only bind mount in recorded run); Git blob 591a163891f24ded017ad1646af302bbce9c0d95",
+    "startup_command": "DEMO_STATE_DIR=\"$PWD/.demo-state\" docker compose --env-file .env -p i29reconcile368 -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml up --no-build -d --wait --wait-timeout 90 mcp-seed api mcp-upstream grafana-mcp",
+    "startup_result": "exit 0; services healthy",
+    "capture_command_record": "TESTED_SHA=\"$(git rev-parse HEAD)\"; docker run --rm --user \"$(id -u):$(id -g)\" --network container:i29reconcile368-api-1 --env-file .env -e TESTED_SHA=\"$TESTED_SHA\" -v \"$PWD/scripts/issue29_capture.py:/app/scripts/issue29_capture.py:ro\" -v \"$CAPTURE_DIR:/capture\" i29reconcile367-python-checks:latest python /app/scripts/issue29_capture.py .",
+    "capture_command_note": "Equivalent published form substitutes CAPTURE_DIR for the private local output path. The actual .env contents are excluded. TESTED_SHA resolved to the exact value above.",
+    "result": "exit 0; 38 checks passed; artifact generated from sanitized selected fields"
+  },
+  "environment": {
+    "capture_date_utc": "2026-10-03",
+    "compose_project": "i29reconcile368",
+    "docker_engine": "29.8.1",
+    "docker_compose": "5.5.1",
+    "python": "3.12.14",
+    "httpx": "0.28.1",
+    "fastapi": "0.115.12",
+    "postgresql": "17.4",
+    "runtime_image": "i29reconcile368-api-runtime:local",
+    "runtime_image_id": "sha256:df681be1c2cf4dc76bf91ebab2b1818932430f045f50d33d3452b5b68f5960fe",
+    "runtime_build_source_sha": "d484d3a8dd094d3c198a789c5f071be0d27be343",
+    "capture_tested_sha": "5cc9a17aff9cdef56c5ae57f51b98efeae91901d",
+    "runtime_code_diff_build_to_tested": "empty for src,migrations,pyproject.toml,uv.lock,compose.yaml,compose.mcp.yaml,docker/api.Dockerfile",
+    "runner_image": "i29reconcile367-python-checks:latest",
+    "runner_image_id": "sha256:fea8efcbad053a9b140029a578c4aeb6ae44755ee7aad05f787ee285800c8eae",
+    "runner_note": "cached isolated checks image; tested instrument and capture script bind-mounted read-only from exact candidate",
+    "upstream_image": "grafana/mcp-grafana:1.3.0@sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e",
+    "grafana_backend": "intentionally inert localhost:1; no backend query success claimed",
+    "relay_git_blob": "fb523fbce3a3f4217aa20b9f785134568fb7a809",
+    "capture_git_blob": "591a163891f24ded017ad1646af302bbce9c0d95",
+    "credential_provenance": "fresh private synthetic local credentials and API-provisioned principals; no ambient credentials reused; no key values retained"
+  },
+  "runtime_applicability": {
+    "tested_sha_is_pr368_descendant_of_pr367_evidence_commit": "f3116b69909a482a76e91512135535632bca49fd",
+    "runtime_image_built_from_sha": "d484d3a8dd094d3c198a789c5f071be0d27be343",
+    "runtime_code_diff_to_tested_sha": "empty for src,migrations,pyproject.toml,uv.lock,compose.yaml,compose.mcp.yaml,docker/api.Dockerfile",
+    "interpretation": "The replay ran on PR368 descendant 5cc9, not PR367 commit f311. Listed runtime source, migration, contract/dependency and compose inputs match the runtime build source d484; intervening PR368-only test-stage Docker COPY/demo-overlay changes do not alter the running API image. This supports behavior applicability, not a claim that PR367 itself was live-tested; a human reviewer must confirm.",
+    "human_confirmation_required": true,
+    "runtime_paths_unchanged_between_pr367_commit_and_tested_sha": [
+      "src/",
+      "migrations/",
+      "schemas/ (contracts)",
+      "pyproject.toml",
+      "uv.lock",
+      "compose.yaml",
+      "compose.mcp.yaml"
+    ],
+    "pr368_changes_between_pr367_commit_and_tested_sha": {
+      "docker/api.Dockerfile": "adds compose.demo.yaml to the checks-image COPY list; does not alter the already-built API runtime image",
+      "compose.demo.yaml": "test/demo overlay adjustment, not MCP API runtime configuration",
+      "compose.issue29-counter.yaml": "isolated counter demo overlay, not an API implementation change"
+    },
+    "verified_local_diff": "Compared f3116b69909a482a76e91512135535632bca49fd to 5cc9a17aff9cdef56c5ae57f51b98efeae91901d; no changed files under src/, migrations/, schemas/, pyproject.toml, uv.lock, compose.yaml, or compose.mcp.yaml. docker/api.Dockerfile differs only by the checks-image COPY addition described above."
+  },
+  "screenshot_status": {
+    "new_capture": "not produced; screenshot capture was blocked by local disk capacity; no fabricated replacement is attached",
+    "legacy_capture": "prior PNGs remain historical; their visible request IDs/date stamps do not match this replay and tested SHA provenance is unknown",
+    "known_prior_png_request_id": "1b090d22-115d-471d-9c17-a4fc44fcddbe",
+    "known_prior_png_http_date": "Thu, 01 Oct 2026 23:32:46 GMT"
+  },
+  "controlled_checks": {
+    "status": "separate from this live replay; no existing pytest suite result is inferred from the 38 replay checks",
+    "candidate_suite_command": "docker compose --project-name i29reconcile368 --profile checks run --build --rm python-checks pytest -q tests/test_mcp_contract.py tests/test_mcp_discovery.py tests/test_mcp_owner.py tests/test_mcp_seed.py",
+    "candidate_suite_result": "not run as part of this capture; run separately if required"
+  },
+  "field_notes": {
+    "metadata_fields_present": "Recorded replay check uses all(...) over returned tools; it is vacuously true for CA3 empty because there are no tool objects. CA3 evidence is the empty tools array and restricted metadata absence, not field presence on a nonexistent object.",
+    "restricted_metadata_absent": "Checks restricted tool ID, display name, and description are absent from the partial and empty discovery response bodies."
   }
 }
