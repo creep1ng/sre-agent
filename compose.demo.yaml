@@ -65,7 +65,11 @@ services:
   jaeger: {ports: !reset []}
   opensearch: {ports: !reset []}
   otel-collector: {ports: !reset []}
-  payment: {ports: !reset []}
+  payment:
+    ports: !reset []
+    # Node auto-instrumentation also runs in the upstream healthcheck process.
+    healthcheck:
+      timeout: 20s
   product-catalog: {ports: !reset []}
   quote: {ports: !reset []}
   recommendation: {ports: !reset []}
