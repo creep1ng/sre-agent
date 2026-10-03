@@ -1,77 +1,112 @@
 # Authorized MCP discovery: issue #29 evidence
 
-Discovery requires a direct `mcp.discovery` grant on `grafana-mcp`; the response
-contains active tools with a direct `mcp.invoke` grant for that Principal. It
-does not enumerate upstream tools.
+Discovery requires a direct `mcp.discovery` grant on `grafana-mcp`; it reveals
+active tools with a direct `mcp.invoke` grant for that same Principal. It does
+not enumerate upstream tools.
 
-## Evidence status and surfaces
+## Current replay and provenance
 
-[`issue-29-live-evidence.json`](evidence/issue-29-live-evidence.json) is a
-sanitized historical capture. Its literal tested commit, UTC capture date,
-environment identity and capture-window bounds were not retained. Do not
-attribute it to a PR SHA or claim it was captured on this candidate. Request IDs
-and statuses are preserved as historical observations. The checked-in screenshot
-shows a different partial-discovery request
-(`1b090d22-115d-471d-9c17-a4fc44fcddbe`) and one HTTP `Date` value
-(`Thu, 01 Oct 2026 23:32:46 GMT`); it is not the JSON request and does not
-establish a run window or tested SHA. Missing raw response proof means negative
-public error codes are unverified. `expected_error_code` denotes contract
-expectation only.
-The old global audit `COUNT=50` is discarded, not case evidence.
+[`issue-29-live-evidence.json`](evidence/issue-29-live-evidence.json) records a
+sanitized, isolated replay. It was executed at PR368 descendant SHA
+`5cc9a17aff9cdef56c5ae57f51b98efeae91901d`, not on PR367's documentation commit
+`f3116b69909a482a76e91512135535632bca49fd`. The prior historical matrix and
+JSON remain available unchanged at that immutable commit:
+`git show f3116b69909a482a76e91512135535632bca49fd:docs/issue-29-discovery-acceptance.md`
+and `git show f3116b69909a482a76e91512135535632bca49fd:docs/evidence/issue-29-live-evidence.json`.
+The replay environment reports no runtime-code/config diff between its image
+build source `d484d3a8dd094d3c198a789c5f071be0d27be343` and tested SHA `5cc9` for
+`src`, migrations, contracts/dependencies, Compose inputs and `docker/api.Dockerfile`.
+PR368's intervening test-stage Docker `COPY` and demo-overlay changes do not
+alter the API runtime image. This supports applicability to PR367 but is not a
+claim that PR367 itself was live-tested; human review must confirm applicability.
 
-The five selected discovery audit rows are the three 200s, 403 and 422 listed
-in JSON, each correlated by request ID. They do not substantiate ten requests
-or two runs. A 401 rejected before entering MCP intentionally has no MCP audit
-row. Historical capture claims zero relay HTTP requests around discovery, but
-its bounds are unknown; it is not a reproducible zero-call proof. The artifact
-reports one `tools/call` for the separate positive control, but the relay source
-is unavailable and the counter's exact parsing/counting rules are unverified.
-The gateway returned HTTP 502
-`upstream_invalid`: this demonstrates a request crossed the governed boundary,
-not successful tool execution. No `initialize` or
-`notifications/initialized` handshake count is recorded. Discovery does not
-cover invocation correctness.
+The primary surface is controlled integration: real HTTP API-key auth and
+gateway, PostgreSQL audit sink, and pinned MCP binary. Grafana's backend URL was
+intentionally inert (`localhost:1`); no Grafana query or successful tool
+execution is claimed. The 38 capture checks passed. Existing pytest checks are
+separate and were not run by this replay.
 
-| CA | Scenario / historical observed result | Audit evidence | Status |
+## CA → evidence → commit
+
+| CA | Observed result | Request ID(s) | Evidence / status |
 | --- | --- | --- | --- |
-| CA1 | Full Principal: 200; both tools and published metadata | request `56fd27b7-f4fb-407f-bffd-1cce90088cd4`; metadata-only response row | historical, provenance incomplete |
-| CA2 | Partial Principal: 200; only `query_prometheus`; restricted ID/name absent | `35d4b91c-4407-42b2-a913-2ab4d87fcaa5`; metadata-only response row | historical, provenance incomplete |
-| CA3 | Discovery-only Principal: 200, empty tools | `417649d4-9822-486b-84a7-96a95e417617`; metadata-only response row | historical, provenance incomplete |
-| CA4 | No credential / unknown key: 401 each; error code unverified | `abd62d55-c550-4569-9abc-301ae385cb6b` / `37629542-b840-4978-b1c3-e57c13769a30`; no MCP row expected | historical; code unverified |
-| CA4 | No discovery grant: 403; code unverified | `9e9af57b-fc12-4f89-bfa7-aeee38e019dc`; denied metadata row | historical; code unverified |
-| CA4 | Unknown query: 422; code unverified | `2a6a310a-2f80-4802-ac07-ed1fc6b611fa`; response error row | historical; code unverified |
-| CA4 | Invoke without grant: 403; code unverified | `29fc67f2-df87-4d69-804d-7eb7891f22c8`; denied invoke row | historical; code unverified |
-| CA5 | Five selected discovery IDs above correlate to metadata-only rows | identity/resource references present; `content_state=absent`; no content | historical; bounded query below required to reproduce |
+| CA1 full visibility | 200; `query_prometheus`, `query_elasticsearch`; published metadata present | `122590cc-53ac-4649-a1a0-1dda4b8c2fbe` | Live controlled integration; audit row correlated in bounded capture; tested `5cc9a17…` |
+| CA2 partial visibility | 200; only `query_prometheus`; restricted ID/name/description absent | `767633b3-15cb-4c51-8d24-89c60e7b9181` | Live controlled integration; audit row correlated; tested `5cc9a17…` |
+| CA3 empty visibility | 200; `tools: []`; restricted metadata absent | `f10fc6b4-1084-4246-a946-f6e5768ce870` | Live controlled integration; audit row correlated; tested `5cc9a17…` |
+| CA4 no discovery grant | 403 `resource_unavailable` | `fe64c1e6-033a-4657-9b2e-c3afa3debdd5` | Denied audit row; tested `5cc9a17…` |
+| CA4 unknown key / missing key | 401 `authentication_failed` each | `12492297-4042-4691-bf6e-e3c3f7dd19df` / `18b35b83-5b73-45e5-8004-16abf6ea085c` | Rejected before MCP; no audit row is expected or required; tested `5cc9a17…` |
+| CA4 invalid query | 422 `contract_validation_failed` | `b9ef1644-4730-4ef0-834b-c38fe339b11e` | Response audit row; tested `5cc9a17…` |
+| CA4 invoke without grant | 403 `resource_unavailable` | `d9e94462-8255-4abf-afe3-4566894e5f5f` | Denied invoke audit row; tested `5cc9a17…` |
+| CA5 metadata-only audit and discovery boundary | Five discovery rows (full, partial, empty, denied, invalid query); HMAC references present, content absent, no untrusted input; counter stayed zero through discovery and denial | Five discovery IDs above; 401 IDs intentionally have no rows | Eight bounded rows total: five discovery plus denied invoke and two controls; window and all selected rows are in JSON; tested `5cc9a17…` |
+| Invocation boundary control (outside discovery success) | Cold 502 `upstream_invalid`; 3 HTTP crossings/methods: initialize 1, notifications/initialized 1, tools/call 1. Warm 502 `upstream_invalid`; 1 crossing, tools/call 1. Neither ran successfully. | `9313c2fc-1776-4dbb-95bd-41b1fa1b67e9` / `611b46d5-9f2d-40f6-8588-c2ce13a2b4b5` | Each error has an upstream-stage audit row; demonstrates boundary/handshake counts, not tool success; tested `5cc9a17…` |
 
-Controlled tests use doubles; they can prove policy branches and zero upstream
-calls by construction, not live behavior. PostgreSQL integration proves sink
-persistence for its own test requests, not this historical capture. A live
-walkthrough is required for real gateway, audit and relay assertions. The
-current artifact is not enough to mark any live CA complete.
+The seven discovery GETs and denied invocation produced zero boundary requests.
+Two 401s correctly have no MCP rows because they fail before the MCP service.
+The audit query window is `[2026-10-03T01:24:20.826998Z,
+2026-10-03T01:24:22.309602Z)` and filters the ten probe `request_id`s; it returns
+exactly eight rows. These are not a global database count. Full selected audit
+fields and exact times are recorded in the JSON artifact.
 
-## Reproduce a bounded audit capture
+The replay resets the counter before discovery and before the warm control.
+`total_http_requests` counts forwarded relay requests, excluding counter control
+endpoints; `upstream_attempts` increments before forwarding; `upstream_failures`
+counts relay-client exceptions only, not an HTTP 502 returned by the upstream.
+`mcp_methods` counts recognized JSON-RPC method values in object or batch bodies
+(`initialize`, `notifications/initialized`, `tools/call`); unknown methods map
+to `other`. The versioned source and blob are recorded in JSON and live in the
+PR368 descendant, not in the PR367 tree.
 
-For a new capture, record the tested full SHA, UTC environment/date, and UTC
-window `[start,end)` immediately around probes. Put the observed request IDs in
-`request_ids.txt` (one UUID per line); use only a dedicated isolated database.
-This read-only query requires both request-ID and time bounds; empty IDs return
-no rows. It does not backfill historical window values:
+## Capture record and repeatability
+
+The run started `2026-10-03T01:24:19.733029Z` and ended
+`2026-10-03T01:24:22.330506Z`. Environment versions, image IDs, pinned MCP image,
+runtime build source and sanitized command record are in the JSON. Actual stack
+startup returned exit 0; the recorded capture command returned exit 0 with 38
+checks. Command record uses `.env` by path only; never publish or print its
+contents. The capture script and counter are versioned in PR368; they are not
+present in PR367 and are not falsely presented as runnable from this tree.
+
+The old PNG(s) are historical: their visible request IDs/date stamps do not
+match this replay, and their tested-SHA provenance is unknown. A current
+screenshot was not produced because local disk capacity blocked capture; no
+replacement is fabricated. Screenshot evidence and independent human review
+remain pending. The issue remains open.
+
+## Separate controlled checks and bounded audit query
+
+Mocks/doubles can prove policy branches by construction; PostgreSQL integration
+can prove persistence for its own test requests. Neither is the live replay.
+For the separate existing pytest suite, the containerized command is:
 
 ```sh
-psql "$DATABASE_URL" -v start="$CAPTURE_START_UTC" -v end="$CAPTURE_END_UTC" \
-  -v ids="$(paste -sd, request_ids.txt)" <<'SQL'
-SELECT occurred_at, correlation->>'request_id' AS request_id, response_status,
-       operation, action, stage, outcome, reason_code, content_state,
-       (redacted_content IS NULL) AS no_content
-FROM audit_events
-WHERE occurred_at >= :'start'::timestamptz AND occurred_at < :'end'::timestamptz
-  AND correlation->>'request_id' = ANY(string_to_array(:'ids', ','))
-ORDER BY occurred_at, event_id;
-SQL
+docker compose --project-name i29reconcile368 --profile checks run --build --rm python-checks pytest -q tests/test_mcp_contract.py tests/test_mcp_discovery.py tests/test_mcp_owner.py tests/test_mcp_seed.py
 ```
 
-For each case retain sanitized status, public error code (or explicitly
-`unverified`), request ID, UTC window, selected audit fields and relay counter
-before/after. Never retain credentials, headers, bodies, query results or raw
-logs. Do not close #29 until every required CA is demonstrated at a named,
-tested candidate and independently reviewed.
+That suite was not run in this capture and is not marked passed here. The replay
+script's PostgreSQL query uses both a UTC window and selected request IDs. An
+equivalent read-only inspection is:
+
+```sql
+SELECT occurred_at, correlation->>'request_id' AS request_id,
+       response_status, operation, action, stage, outcome, reason_code,
+       policy_decision->>'decision' AS decision, content_state,
+       COALESCE(jsonb_typeof(redacted_content), 'null') = 'null' AS no_content,
+       COALESCE(jsonb_typeof(untrusted_input), 'null') = 'null' AS no_untrusted_input
+FROM audit_events
+WHERE operation IN ('mcp.discovery', 'mcp.invoke')
+  AND occurred_at >= TIMESTAMPTZ '2026-10-03T01:24:20.826998Z'
+  AND occurred_at <  TIMESTAMPTZ '2026-10-03T01:24:22.309602Z'
+  AND correlation->>'request_id' = ANY(ARRAY[
+    '122590cc-53ac-4649-a1a0-1dda4b8c2fbe', '767633b3-15cb-4c51-8d24-89c60e7b9181',
+    'f10fc6b4-1084-4246-a946-f6e5768ce870', 'fe64c1e6-033a-4657-9b2e-c3afa3debdd5',
+    '12492297-4042-4691-bf6e-e3c3f7dd19df', '18b35b83-5b73-45e5-8004-16abf6ea085c',
+    'b9ef1644-4730-4ef0-834b-c38fe339b11e', 'd9e94462-8255-4abf-afe3-4566894e5f5f',
+    '9313c2fc-1776-4dbb-95bd-41b1fa1b67e9', '611b46d5-9f2d-40f6-8588-c2ce13a2b4b5'
+  ])
+ORDER BY occurred_at, event_id;
+```
+
+Do not close #29 until remaining screenshots, applicability confirmation,
+size disposition, and ordinary independent human review are resolved. This
+local work does not publish or update any PR/issue; remote publication requires
+separate explicit authorization.
