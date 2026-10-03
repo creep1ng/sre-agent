@@ -382,6 +382,39 @@ class IdempotencyRepository:
             replayed=True,
         )
 
+    async def peek(
+        self,
+        *,
+        scope: str,
+        key_digest: str,
+        payload_sha256: str,
+        now: datetime | None = None,
+    ) -> IdempotencyBinding | None:
+        """Read-only replay check: same hash replays, other hash conflicts.
+
+        Returns None when no unexpired binding exists, without creating one,
+        so genuinely-new requests can still be validated before any claim.
+        Expired rows are treated as absent; claim_or_replay reaps them.
+        """
+        created_at = now or datetime.now(UTC)
+        row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
+        if row is None:
+            return None
+        if row.expires_at is not None and row.expires_at <= created_at:
+            return None
+        if row.payload_sha256 != payload_sha256:
+            raise IdempotencyConflictError(scope)
+        stored = row.outcome
+        return IdempotencyBinding(
+            outcome=IdempotencyOutcome(
+                response_status=stored["response_status"],
+                resource_id=stored["resource_id"],
+                replayed=True,
+                response_payload=dict(stored.get("response_payload", {})),
+            ),
+            replayed=True,
+        )
+
     async def set_response_payload(
         self,
         *,
