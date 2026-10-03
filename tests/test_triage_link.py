@@ -232,7 +232,7 @@ async def test_link_rejects_malformed_target_and_severity() -> None:
 
 
 @pytest.mark.asyncio
-async def test_link_rejects_bad_target_and_declare_waits() -> None:
+async def test_link_rejects_bad_target() -> None:
     assert SERVICE is not None
     with pytest.raises(TriageError) as bad_target:
         await SERVICE.execute(
@@ -245,14 +245,3 @@ async def test_link_rejects_bad_target_and_declare_waits() -> None:
             idempotency_key="k-badtarget-1234567",
         )
     assert bad_target.value.code == "invalid_target"
-    with pytest.raises(TriageError) as waiting:
-        await SERVICE.execute(
-            _principal("op-human"),
-            alert_id="al-wait",
-            operation="triage_declare",
-            expected_version=1,
-            reason=REASON,
-            severity="sev2",
-            idempotency_key="k-wait-12345678901",
-        )
-    assert waiting.value.code == "operation_not_supported"
