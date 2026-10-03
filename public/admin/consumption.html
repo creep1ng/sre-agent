@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Read-only consumption surface for midnight.agent." />
+    <title>Consumption · midnight.agent</title>
+    <link rel="icon" href="/public/favicon.svg" />
+    <link rel="stylesheet" href="/styles/design-system.css" />
+    <link rel="stylesheet" href="/styles/principals.css" />
+    <link rel="stylesheet" href="/styles/model-aliases.css" />
+  </head>
+  <body>
+    <a class="ma-skip-link" href="#consumption-result">Skip to consumption summary</a>
+    <header class="principals__topbar">
+      <a class="principals__brand" href="/" aria-label="midnight.agent — home">
+        <img class="principals__mark" src="/public/midnight-agent-mark.svg" alt="" width="28" height="28" />
+        <span class="ma-display">midnight.agent</span>
+      </a>
+      <span class="principals__context">Control plane / Audit &amp; consumption</span>
+    </header>
+    <main id="consumption-page" class="principals" data-state="idle">
+      <header class="principals__heading">
+        <div>
+          <p class="ma-eyebrow">Administration</p>
+          <h1 class="principals__title">Consumption</h1>
+          <p class="principals__subtitle">Read-only persisted consumption. The server defines grouping and totals; this surface formats them.</p>
+        </div>
+      </header>
+      <div class="model-aliases__shell">
+        <nav class="model-aliases__nav" aria-label="Control plane">
+          <ul class="model-aliases__nav-list">
+            <li><a class="model-aliases__nav-link" href="/public/admin/principals.html">Principals</a></li>
+            <li><a class="model-aliases__nav-link" href="/public/admin/model-aliases.html">Resources &amp; aliases</a></li>
+            <li><span class="model-aliases__nav-link is-disabled" aria-disabled="true" title="Not available in this build">Grants</span></li>
+            <li><a class="model-aliases__nav-link is-current" href="/public/admin/consumption.html" aria-current="page">Consumption</a></li>
+            <li><span class="model-aliases__nav-link is-disabled" aria-disabled="true" title="Not available in this build">Audit</span></li>
+          </ul>
+        </nav>
+        <div class="model-aliases__content">
+      <section class="ma-panel principals__session" aria-labelledby="session-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="session-title" class="ma-panel__title">API session</h2>
+          <p class="ma-panel__description">Bearer credential is kept in memory only and cleared on reload.</p>
+        </div></div>
+        <div class="ma-panel__body"><form id="session-form" class="principals__form" autocomplete="off">
+          <div class="ma-field">
+            <label class="ma-field__label" for="api-key">API key</label>
+            <input class="ma-input ma-mono" id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sre_…" />
+          </div>
+          <div class="ma-button-row">
+            <button id="connect-button" class="ma-button ma-button--primary" type="submit">Connect</button>
+            <button id="disconnect-button" class="ma-button ma-button--secondary" type="button">Clear session</button>
+          </div>
+        </form></div>
+      </section>
+      <div id="page-error" class="ma-alert" data-tone="critical" hidden><div>
+        <p id="page-error-title" class="ma-alert__title">Request failed</p>
+        <p id="page-error-detail" class="ma-alert__detail"></p>
+      </div></div>
+      <section class="ma-panel" aria-labelledby="query-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="query-title" class="ma-panel__title">Consumption query</h2>
+          <p class="ma-panel__description">Exactly one filter is active. Audit detail is unavailable in this build.</p>
+        </div></div>
+        <div class="ma-panel__body"><form id="query-form" autocomplete="off">
+          <div class="ma-button-row" role="group" aria-label="Consumption filter">
+            <button id="filter-request" class="ma-button ma-button--secondary ma-button--small" type="button" aria-pressed="true">Request</button>
+            <button id="filter-incident" class="ma-button ma-button--secondary ma-button--small" type="button" aria-pressed="false">Incident</button>
+            <button id="filter-month" class="ma-button ma-button--secondary ma-button--small" type="button" aria-pressed="false">Month</button>
+          </div>
+          <div class="ma-field" id="field-request">
+            <label class="ma-field__label" for="request-id">Request ID (UUID)</label>
+            <input class="ma-input ma-mono" id="request-id" name="request-id" type="text" autocomplete="off" spellcheck="false" placeholder="123e4567-e89b-12d3-a456-426614174000" />
+          </div>
+          <div class="ma-field" id="field-incident" hidden>
+            <label class="ma-field__label" for="incident-id">Incident ID</label>
+            <input class="ma-input ma-mono" id="incident-id" name="incident-id" type="text" autocomplete="off" spellcheck="false" maxlength="128" placeholder="incident-a" />
+          </div>
+          <div class="ma-field" id="field-month" hidden>
+            <label class="ma-field__label" for="consumption-month">Month (UTC)</label>
+            <input class="ma-input ma-mono" id="consumption-month" name="consumption-month" type="month" />
+          </div>
+          <div class="ma-button-row">
+            <button id="query-submit" class="ma-button ma-button--primary ma-button--small" type="submit">Load consumption</button>
+          </div>
+        </form></div>
+      </section>
+      <section id="consumption-result" class="ma-panel" aria-labelledby="result-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="result-title" class="ma-panel__title">Summary</h2>
+          <p id="result-status" class="ma-panel__description" aria-live="polite">Choose a filter and load consumption.</p>
+        </div></div>
+        <div class="ma-panel__body">
+          <div id="result-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading consumption…</div>
+          <p id="result-scope-note" class="ma-panel__description" hidden>No consumption evidence in this scope.</p>
+          <dl id="result-list" class="ma-detail-list" hidden>
+            <dt>Request count</dt><dd id="summary-request-count" class="ma-mono">—</dd>
+            <dt>Incident runs</dt><dd id="summary-incident-runs" class="ma-mono">—</dd>
+            <dt>Input tokens</dt><dd id="summary-input-tokens" class="ma-mono">—</dd>
+            <dt>Output tokens</dt><dd id="summary-output-tokens" class="ma-mono">—</dd>
+            <dt>Total tokens</dt><dd id="summary-total-tokens" class="ma-mono">—</dd>
+            <dt>Billed cost</dt><dd id="summary-cost" class="ma-mono">—</dd>
+            <dt>Price versions</dt><dd id="summary-cost-provenance" class="ma-mono">—</dd>
+            <dt>Coverage</dt><dd id="summary-coverage" class="ma-mono">—</dd>
+          </dl>
+          <p id="result-month-note" class="ma-panel__description" hidden>UTC calendar month: <span id="summary-month" class="ma-mono"></span>. Backend-defined UTC calendar month.</p>
+        </div>
+      </section>
+      <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/public/admin/consumption.js"></script>
+  </body>
+</html>
