@@ -26,8 +26,16 @@ def test_postmortem_invents_no_backend_or_close() -> None:
         "close_incident",
         "/postmortems",
         "localStorage",
+        "sessionStorage",
         "expected_version",
         "fetch(",
     ):
         assert forbidden not in JAVASCRIPT, forbidden
         assert forbidden not in HTML, forbidden
+
+
+def test_postmortem_provenance_and_review_are_session_only() -> None:
+    for block in ("provenance-list", "run-select", "review-form", "review-saved"):
+        assert block in HTML or block in JAVASCRIPT
+    assert "restricted_note" in JAVASCRIPT
+    assert "MARKER-RESTRICTED" in JAVASCRIPT

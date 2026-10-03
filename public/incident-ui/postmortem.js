@@ -17,12 +17,14 @@ const PRESENTATION_FIXTURE = Object.freeze({
   root_cause: null,
   resolution: null,
   lessons: [],
+  restricted_note: "MARKER-RESTRICTED",
 });
 
+// restricted_note existe solo para probar que jamás llega al DOM.
 const UNKNOWN = "Desconocido (no registrado)";
 const PENDING = "Pendiente";
 
-const state = { incidentId: null, generation: 0 };
+const state = { incidentId: null, runId: null, generation: 0 };
 
 const nodes = {};
 const credentialStore = createMemoryCredentialStore();
@@ -38,7 +40,9 @@ function cacheNodes() {
     "credential-input", "credential-error", "error-missing-id", "error-401",
     "error-403", "error-404", "error-503", "context-section", "fact-incident",
     "fact-state", "fact-artifact", "fixture-banner",
-    "artifact-section", "artifact-sections",
+    "artifact-section", "artifact-sections", "provenance-section", "run-select",
+    "provenance-list", "review-section", "review-form", "review-note",
+    "review-saved",
     "refresh-button", "forget-credential",
   ].forEach((id) => {
     nodes[id] = byId(id);
@@ -48,7 +52,8 @@ function cacheNodes() {
 function hideAll() {
   [
     "loading-state", "credential-section", "error-missing-id", "error-401",
-    "error-403", "error-404", "error-503", "context-section", "artifact-section",
+    "error-403", "error-404", "error-503", "context-section",
+    "artifact-section", "provenance-section", "review-section",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
@@ -72,6 +77,13 @@ function showKind(error) {
   return "503";
 }
 
+function latestRunId(detail) {
+  const runs = Array.isArray(detail.runs) ? detail.runs : [];
+  if (runs.length === 0) return null;
+  const runId = runs[runs.length - 1].run_id;
+  return typeof runId === "string" ? runId : null;
+}
+
 function sectionRow(title, value) {
   const wrapper = document.createElement("div");
   const term = document.createElement("dt");
@@ -82,8 +94,7 @@ function sectionRow(title, value) {
   return wrapper;
 }
 
-function renderArtifact(detail) {
-  const draft = PRESENTATION_FIXTURE;
+function renderArtifact(detail) {  const draft = PRESENTATION_FIXTURE;
   nodes["fact-incident"].textContent = state.incidentId;
   nodes["fact-state"].textContent = detail.state;
   nodes["fact-artifact"].textContent = `${draft.postmortem_id} · ${draft.status} · sin versionado contractual`;
@@ -106,6 +117,41 @@ function renderArtifact(detail) {
   nodes["artifact-section"].hidden = false;
 }
 
+function renderRuns(detail, activeRunId) {
+  const runs = Array.isArray(detail.runs) ? detail.runs : [];
+  const select = nodes["run-select"];
+  select.replaceChildren();
+  runs.forEach((run) => {
+    if (!run || typeof run.run_id !== "string") return;
+    const option = document.createElement("option");
+    option.value = run.run_id;
+    option.textContent = `${run.run_id} · ${run.current_state ?? "—"}`;
+    select.append(option);
+  });
+  if (activeRunId !== null) select.value = activeRunId;
+}
+
+function renderProvenance(events, runId) {
+  const list = nodes["provenance-list"];
+  list.replaceChildren();
+  events.forEach((event) => {
+    const item = document.createElement("li");
+    const summary = document.createElement("strong");
+    summary.textContent = event.summary ?? "Evento registrado.";
+    const meta = document.createElement("span");
+    meta.className = "war-room__event-meta";
+    meta.textContent = `run ${runId} · seq ${event.sequence} · registro, no ejecucion confirmada`;
+    item.append(summary, meta);
+    list.append(item);
+  });
+  nodes["provenance-section"].hidden = false;
+}
+
+async function loadTimeline(runId) {
+  const page = await client.getIncidentTimeline(state.incidentId, { runId, limit: 50 });
+  renderProvenance(page.events ?? [], runId);
+}
+
 async function loadAll() {
   const generation = (state.generation += 1);
   hideAll();
@@ -115,6 +161,17 @@ async function loadAll() {
     const detail = await client.getIncident(state.incidentId);
     if (generation !== state.generation) return;
     renderArtifact(detail);
+    const runId = state.runId ?? latestRunId(detail);
+    if (runId === null) {
+      renderRuns(detail, null);
+    } else {
+      state.runId = runId;
+      renderRuns(detail, runId);
+      await loadTimeline(runId);
+    }
+    if (generation !== state.generation) return;
+    nodes["review-saved"].hidden = true;
+    nodes["review-section"].hidden = false;
     nodes["loading-state"].hidden = true;
     nodes["refresh-button"].hidden = false;
     nodes["forget-credential"].hidden = false;
@@ -123,6 +180,18 @@ async function loadAll() {
     if (generation !== state.generation) return;
     showError(showKind(error));
   }
+}
+
+function selectRun(event) {
+  const runId = event.target.value;
+  if (!runId || runId === state.runId) return;
+  state.runId = runId;
+  loadTimeline(runId).catch((error) => showError(showKind(error)));
+}
+
+function saveNote(event) {
+  event.preventDefault();
+  nodes["review-saved"].hidden = nodes["review-note"].value.trim() === "";
 }
 
 function submitCredential(event) {
@@ -142,6 +211,7 @@ function submitCredential(event) {
 
 function forgetCredential() {
   state.generation += 1;
+  state.runId = null;
   credentialStore.clear();
   hideAll();
   nodes["credential-section"].hidden = false;
@@ -153,6 +223,8 @@ document.addEventListener("DOMContentLoaded", () => {
   nodes["refresh-button"].addEventListener("click", loadAll);
   nodes["forget-credential"].addEventListener("click", forgetCredential);
   nodes["credential-form"].addEventListener("submit", submitCredential);
+  nodes["run-select"].addEventListener("change", selectRun);
+  nodes["review-form"].addEventListener("submit", saveNote);
   state.incidentId = new URLSearchParams(window.location.search).get("incident_id");
   if (!state.incidentId) {
     hideAll();
