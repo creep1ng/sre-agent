@@ -17,7 +17,7 @@ Write failure assertions first; observe real E2E RED before runtime fixes, then
 GREEN and refactor. No post-hoc unit tests. Existing checks: containerized pytest.
 
 ## Checklist / acceptance / checks
-- [ ] T1: Version controlled real stack and failure injection, isolated networks,
+- [x] T1: Version controlled real stack and failure injection, isolated networks,
   pinned images, scoped token; observed Compose/build/health/image identity.
 - [ ] T2: E2E CA1–CA5 matrix: deterministic 200 + exactly one tools/call;
   safe no-grant/nonvisible/401 with zero upstream calls; 422/timeout/failure;
