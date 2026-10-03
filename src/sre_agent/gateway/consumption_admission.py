@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
@@ -47,6 +47,7 @@ class ConsumptionAdmissionService:
         provider: str,
         catalog: object,
         now: datetime,
+        request_id: UUID | None = None,
     ) -> AdmissionResult:
         if now.tzinfo is None or now.utcoffset() is None:
             return AdmissionResult(False, None, 0, None, "consumption_bounds_unavailable", False)
@@ -141,7 +142,9 @@ class ConsumptionAdmissionService:
                 + (envelope.request_fee_usd or Decimal(0))
                 + Decimal(envelope.max_output_tokens) * (endpoint.completion_price or Decimal(0))
             )
-            reservation_id = uuid4().hex
+            # Share the server-generated request identity with audit, without
+            # adding a second correlation field or changing historical rows.
+            reservation_id = str(request_id) if request_id is not None else uuid4().hex
             await ConsumptionReservationRepository(session).create(
                 reservation_id,
                 incident_id=incident_id,
@@ -203,8 +206,10 @@ class ConsumptionAdmissionService:
     ) -> int | None:
         if limit is None or incident_id is None:
             return None
-        settled = await self._sum(session, "settled_tokens", incident_id, period, True)
-        outstanding = await self._sum(session, "token_exposure", incident_id, period, False)
+        settled = await self._incident_sum(session, "settled_tokens", incident_id, period, True)
+        outstanding = await self._incident_sum(
+            session, "token_exposure", incident_id, period, False
+        )
         return int(limit) - int(settled) - int(outstanding)
 
     async def _monthly_remaining(
@@ -213,35 +218,48 @@ class ConsumptionAdmissionService:
         if limit is None:
             return None
         _, legacy_usd = await self._legacy_usage(session, period, following)
-        settled = await self._sum(session, "settled_usd_cost", None, period, True)
-        outstanding = await self._sum(session, "usd_exposure", None, period, False)
+        # The monthly allowance belongs to the workspace, not to one incident.
+        # Exposure booked against any incident is already spent from this month,
+        # so summing only the incident-less rows would let a second incident
+        # admit against money the first one had already reserved.
+        settled = await self._period_sum(session, "settled_usd_cost", period, True)
+        outstanding = await self._period_sum(session, "usd_exposure", period, False)
         return Decimal(str(limit)) - legacy_usd - _decimal(settled) - _decimal(outstanding)
 
-    async def _sum(
-        self,
-        session: object,
-        column: str,
-        incident_id: str | None,
-        period: datetime,
-        settled: bool,
+    async def _incident_sum(
+        self, session: object, column: str, incident_id: str, period: datetime, settled: bool
     ) -> object:
-        rows = await session.execute(  # type: ignore[union-attr]
-            text(
-                f"SELECT COALESCE(SUM({column}), 0) FROM consumption_reservations "
-                "WHERE incident_id IS NOT DISTINCT FROM :incident "
-                "AND period_start = :period AND state = :state"
-            ),
+        return await self._sum(
+            session,
+            f"SELECT COALESCE(SUM({column}), 0) FROM consumption_reservations "
+            "WHERE incident_id = :incident AND period_start = :period AND state = :state",
             {
                 "incident": incident_id,
                 "period": period,
-                "state": "settled" if settled else "reserved",
+                "state": _reservation_state(settled),
             },
         )
+
+    async def _period_sum(
+        self, session: object, column: str, period: datetime, settled: bool
+    ) -> object:
+        return await self._sum(
+            session,
+            f"SELECT COALESCE(SUM({column}), 0) FROM consumption_reservations "
+            "WHERE period_start = :period AND state = :state",
+            {"period": period, "state": _reservation_state(settled)},
+        )
+
+    async def _sum(self, session: object, statement: str, parameters: dict) -> object:
+        rows = await session.execute(text(statement), parameters)  # type: ignore[union-attr]
         return rows.scalar()
 
     async def _legacy_usage(
         self, session: object, period: datetime, following: datetime
     ) -> tuple[int, Decimal]:
+        # Monetary reservations own their usage, including uncertain settlement.
+        # Audit remains the fallback when no reservation accounts for the USD.
+        # Do not constrain the match by month: a response may cross its boundary.
         result = await session.execute(  # type: ignore[union-attr]
             text(
                 "SELECT COALESCE(SUM((c->>'total_tokens')::bigint), 0), "
@@ -251,12 +269,20 @@ class ConsumptionAdmissionService:
                 "AND stage = 'response' AND outcome = 'success' "
                 "AND occurred_at >= :start AND occurred_at < :end "
                 "AND (consumption->>'availability') = 'complete' "
+                "AND NOT EXISTS (SELECT 1 FROM consumption_reservations r "
+                "WHERE r.reservation_id = audit_events.correlation->>'request_id' "
+                "AND ((r.state = 'reserved' AND r.usd_exposure IS NOT NULL) "
+                "OR (r.state = 'settled' AND r.settled_usd_cost IS NOT NULL))) "
                 "ORDER BY correlation->>'request_id', occurred_at DESC) t"
             ),
             {"start": period, "end": following},
         )
         tokens, usd = result.all()[0]
         return int(tokens), Decimal(str(usd))
+
+
+def _reservation_state(settled: bool) -> str:
+    return "settled" if settled else "reserved"
 
 
 def _decimal(value: object) -> Decimal:

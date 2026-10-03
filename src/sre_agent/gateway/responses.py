@@ -255,6 +255,7 @@ class ResponsesService:  # noqa: E305
             incident_id=identifiers.get("incident_id"), model=request.model,
             provider=assignment.inference_provider, catalog=self.endpoint_catalog,
             now=datetime.now(UTC),
+            request_id=request_id,
         )
         if not admission.allowed:
             status = 503 if admission.retryable else 429
