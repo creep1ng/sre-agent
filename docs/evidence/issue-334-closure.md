@@ -42,7 +42,12 @@ CA9/CA10 are supplementary tests, not new issue criteria. Pure calculator/unit t
 
 ## Verification record
 
-Pending execution and exact tested SHA. RED on unmodified base: CA5 failed because persisted policy_ref was null; preliminary monthly scenario passed. Fresh final results, environment, screenshot and candidate identity will be recorded after checks.
+Tested source SHA: `6e2d95b3eb2c6d09c683c9bd4b1552a00f4271ee`. Final evidence-only changes do not alter source, tests, schemas or dependencies; human freshness confirmation remains required.
+Environment: Docker 29.8.1 / Compose 5.5.1, Python 3.12.14, pytest 8.3.5, PostgreSQL 17.4, Chromium 153.0.8010.12. Checks image `sha256:ad6c808c86284c454072cf1d12981bd337cc63f133bb35d09b1cea218dd30c41` was built from base with locked dependencies; local checks mount exact candidate source/tests read-only. Owner UID and `--no-cache` were used only for formatting. `uv.lock` SHA-256: `783c78b44e4ab07091d0ee1d44a693b77f1ec0fdc94f9aa3c0e212cd34dc878b`.
+RED: CA5 failed on persisted null policy_ref; both final CA8 variants reached null-policy-reference schema failure after period/cost assertions passed. An authoring cap mismatch and reused fixture period were corrected before source changes; an initial formatter-cache permission failure was corrected without changing permissions or dependencies.
+GREEN: 19 acceptance cases passed in 122.24s. CA5 HTTP 200/429 preserves refs for versions 1/2 in SQL and repository recovery. UTC crossing: January exact settled USD 0.1 (or retained unknown USD 0.3), February settled USD 0.4; original version 1, new version 2; old/new output caps 1/2; final 429 before provider. A USD 0.2 remainder cannot fund the USD 0.3 minimum bounded request, so rejection is not a claim of zero monetary remainder. Four #468 coexistence variants each produced 200/200/429; other #467/#468 checks also passed.
+Actual [stdout](issue-334-closure.txt) and [Chromium screenshot](issue-334-closure.png), captured 2026-10-03T21:58:23.407Z. PNG SHA-256: `2196e88ff23807a387071acb89ff4008ab198377137a41b2eb762daa74924be8`. The capture shows actual selected test stdout, not a product UI or live-provider claim.
+Full Python checks and contract tooling are running; declarative incident, authorization, run, query and CI validators passed. Hosted CI and human review remain pending.
 
 ## Acceptance and rollback
 
