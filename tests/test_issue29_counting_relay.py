@@ -68,14 +68,9 @@ def _start_relay(upstream: str) -> tuple[subprocess.Popen[str], int]:
     while time.monotonic() < deadline:
         if process.poll() is not None:
             output = process.communicate()[0]
-            raise AssertionError(
-                f"relay exited before ready ({process.returncode}): {output}"
-            )
+            raise AssertionError(f"relay exited before ready ({process.returncode}): {output}")
         try:
-            if (
-                httpx.get(f"http://127.0.0.1:{port}/__count", timeout=0.2).status_code
-                == 200
-            ):
+            if httpx.get(f"http://127.0.0.1:{port}/__count", timeout=0.2).status_code == 200:
                 return process, port
         except httpx.HTTPError:
             time.sleep(0.05)

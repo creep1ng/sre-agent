@@ -41,8 +41,7 @@ class Counts:
             messages = value if isinstance(value, list) else [value]
             methods = [
                 item["method"]
-                if item["method"]
-                in {"initialize", "notifications/initialized", "tools/call"}
+                if item["method"] in {"initialize", "notifications/initialized", "tools/call"}
                 else "other"
                 for item in messages
                 if isinstance(item, dict) and isinstance(item.get("method"), str)
@@ -73,9 +72,7 @@ class Counts:
 
 
 COUNTS = Counts()
-UPSTREAM = os.environ.get("ISSUE29_UPSTREAM_URL", "http://mcp-upstream:8000").rstrip(
-    "/"
-)
+UPSTREAM = os.environ.get("ISSUE29_UPSTREAM_URL", "http://mcp-upstream:8000").rstrip("/")
 TIMEOUT = float(os.environ.get("ISSUE29_TIMEOUT_SECONDS", "120"))
 HOP_BY_HOP = {
     "connection",

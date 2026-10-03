@@ -16,3 +16,5 @@
 **/*.pyc
 schemas/tooling/node_modules
 schemas/tooling/.tmp
+
+.demo-state/

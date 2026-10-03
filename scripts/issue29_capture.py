@@ -89,17 +89,14 @@ def probe(name, path, key=None, payload=None):
             "Query Elasticsearch",
             "Read Elasticsearch logs.",
         )
-        item["restricted_metadata_absent"] = all(
-            value not in response.text for value in hidden
-        )
+        item["restricted_metadata_absent"] = all(value not in response.text for value in hidden)
     out["cases"][name] = item
     return item
 
 
 try:
     check(
-        len(out["tested_sha"]) == 40
-        and all(c in "0123456789abcdef" for c in out["tested_sha"]),
+        len(out["tested_sha"]) == 40 and all(c in "0123456789abcdef" for c in out["tested_sha"]),
         "full tested SHA supplied",
     )
     admin = os.environ["ADMIN_HUMAN_API_KEY"]
@@ -157,9 +154,7 @@ try:
         ("invalid_query", full, 422, "contract_validation_failed"),
     ]
     for name, key, status, error in specs:
-        path = "/v1/mcp/discovery" + (
-            "?unexpected=1" if name == "invalid_query" else ""
-        )
+        path = "/v1/mcp/discovery" + ("?unexpected=1" if name == "invalid_query" else "")
         item = probe(name, path, key)
         check(
             item["http_status"] == status and item["error_code"] == error,
@@ -180,10 +175,7 @@ try:
         "empty hides metadata",
     )
     check(
-        all(
-            out["cases"][name]["metadata_fields_present"]
-            for name in ("full", "partial", "empty")
-        ),
+        all(out["cases"][name]["metadata_fields_present"] for name in ("full", "partial", "empty")),
         "published metadata",
     )
     payload = {
@@ -293,9 +285,7 @@ finally:
             "checks": [{"check": "artifact secret exclusion", "passed": False}],
         }
     Path("/capture").mkdir(parents=True, exist_ok=True)
-    Path("/capture/live-replay.json").write_text(
-        json.dumps(out, indent=2, default=str) + "\n"
-    )
+    Path("/capture/live-replay.json").write_text(json.dumps(out, indent=2, default=str) + "\n")
     print(
         json.dumps(
             {
