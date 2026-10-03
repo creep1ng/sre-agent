@@ -404,6 +404,29 @@ Review `.demo-state/$ISSUE29_PROJECT/captures/live-replay.json` for the exact
 sanitized correlated audit rows. Keep failed/skipped outcomes failed; do not turn
 the diagnostic 502 into an accepted invocation.
 
+### Real browser evidence (separate request)
+
+The repository-versioned `scripts/issue29_capture_browser.cjs` uses Playwright from
+`docker/e2e.Dockerfile` (pinned Playwright 1.63.0 base and npm lockfile). It navigates
+to the actual FastAPI discovery endpoint, checks HTTP200/two tools, refuses to
+capture a visible API key or Bearer header, and restricts authenticated browser
+requests to the isolated API host. It writes a real PNG plus separate request-ID,
+SHA and UTC provenance; no generated image or Swagger example substitutes for it.
+The screenshot is a separate GET from the replay: do not assign its ID to replay
+rows or include it in that earlier audit/count window. Manually inspect before
+publication; a text scan does not certify a PNG.
+
+```sh
+docker build -f docker/e2e.Dockerfile -t "${ISSUE29_PROJECT}-evidence-browser:local" .
+docker run --rm --user "$(id -u):$(id -g)" \
+  --network "${ISSUE29_PROJECT}_runtime" --env-file .env --env-file .env.worktree \
+  -e TESTED_SHA="$TESTED_SHA" \
+  -v "$PWD/scripts/issue29_capture_browser.cjs:/e2e/capture-browser.cjs:ro" \
+  -v "$CAPTURE_DIR:/capture" "${ISSUE29_PROJECT}-evidence-browser:local" \
+  node /e2e/capture-browser.cjs
+```
+
+
 The failure-scenario functional check is versioned at
 `tests/test_issue29_counting_relay.py`; it starts the real relay subprocess and a
 local HTTP stub, verifies pass-through status/body/headers and method classification,
