@@ -412,6 +412,15 @@ to the actual FastAPI discovery endpoint, checks HTTP200/two tools, refuses to
 capture a visible API key or Bearer header, and restricts authenticated browser
 requests to the isolated API host. It writes a real PNG plus separate request-ID,
 SHA and UTC provenance; no generated image or Swagger example substitutes for it.
+For the #366 contract surface, `scripts/issue29_capture_openapi_browser.cjs`
+uses the same browser runner and isolated network/configuration. Mount that script
+instead at `/e2e/capture-browser.cjs` to capture the actual GET `/openapi.json`,
+assert its required invocation body/two typed variants/request examples and render
+the real document. It does not submit any illustrative request or invoke a tool.
+Record the API candidate's actual SHA, not the instrument checkout's SHA if they
+are different trees. The browser instrument is a repeat companion from #368;
+its later versioning does not retroactively change earlier capture provenance.
+
 The screenshot is a separate GET from the replay: do not assign its ID to replay
 rows or include it in that earlier audit/count window. Manually inspect before
 publication; a text scan does not certify a PNG.
