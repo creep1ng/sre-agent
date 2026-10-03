@@ -11,18 +11,22 @@ sanitized historical capture. Its literal tested commit, UTC capture date,
 environment identity and capture-window bounds were not retained. Do not
 attribute it to a PR SHA or claim it was captured on this candidate. Request IDs
 and statuses are preserved as historical observations. The checked-in screenshot
-shows a different partial-discovery request (`1b090d22-115d-471d-9c17-a4fc44fcddbe`)
-and one HTTP `Date` value (`Thu, 01 Oct 2026 23:32:46 GMT`); it is not the JSON
-request and does not establish a run window or tested SHA. Missing raw response proof means negative public error
-codes are unverified. `expected_error_code` denotes contract expectation only.
+shows a different partial-discovery request
+(`1b090d22-115d-471d-9c17-a4fc44fcddbe`) and one HTTP `Date` value
+(`Thu, 01 Oct 2026 23:32:46 GMT`); it is not the JSON request and does not
+establish a run window or tested SHA. Missing raw response proof means negative
+public error codes are unverified. `expected_error_code` denotes contract
+expectation only.
 The old global audit `COUNT=50` is discarded, not case evidence.
 
 The five selected discovery audit rows are the three 200s, 403 and 422 listed
 in JSON, each correlated by request ID. They do not substantiate ten requests
 or two runs. A 401 rejected before entering MCP intentionally has no MCP audit
 row. Historical capture claims zero relay HTTP requests around discovery, but
-its bounds are unknown; it is not a reproducible zero-call proof. The separate
-positive control counted one parsed `tools/call` and returned HTTP 502
+its bounds are unknown; it is not a reproducible zero-call proof. The artifact
+reports one `tools/call` for the separate positive control, but the relay source
+is unavailable and the counter's exact parsing/counting rules are unverified.
+The gateway returned HTTP 502
 `upstream_invalid`: this demonstrates a request crossed the governed boundary,
 not successful tool execution. No `initialize` or
 `notifications/initialized` handshake count is recorded. Discovery does not
