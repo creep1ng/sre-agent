@@ -1,0 +1,11 @@
+{
+  "tested_sha": "b8eb3267eff76673adf00e7ffb006e03f576627a",
+  "captured_at_utc": "2026-10-03T17:37:48.980Z",
+  "request_id": "dffded0d-fc40-4d1a-be39-249bfb6fa4ac",
+  "response_date": "Sat, 03 Oct 2026 17:37:48 GMT",
+  "status": 200,
+  "surface": "real browser rendering of actual FastAPI discovery JSON in Chromium native compact viewer; not Swagger examples",
+  "file": "docs/evidence/issue-29-pr365-current.png",
+  "sanitized": true,
+  "relation_to_replay": "Independent exact-foundation-candidate capture; not a request or window from the PR368 replay."
+}

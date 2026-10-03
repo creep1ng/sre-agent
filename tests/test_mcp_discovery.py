@@ -286,6 +286,41 @@ async def test_denied_discovery_is_audited_without_owner_or_upstream(
 
 
 @pytest.mark.asyncio
+async def test_rejected_credential_discovery_writes_no_audit_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 401 is decided before the MCP sink, so it must leave no audit row.
+
+    The documented boundary is that authentication rejects before the request
+    reaches the sink. Attaching a real recorder here is the only way a
+    regression that starts auditing 401s would be visible.
+    """
+    owner = MemoryOwner()
+    client = RecordingClient()
+    audit = RecordingAudit()
+
+    async def fail(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:
+        raise AuthenticationFailed
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", fail)
+    service = mcp.MCPGatewayService(
+        MemorySessions(owner),
+        client,
+        audit=audit,
+        projector=AuditProjector(b"mcp-audit-key"),
+        owner_repository_factory=lambda session: session,
+    )
+    response = await service.discovery("Bearer sre_unknown_0123456789abcdefghij")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert json.loads(response.body)["error"]["code"] == "authentication_failed"
+    assert owner.reads == []
+    assert client.calls == []
+    assert audit.events == []
+
+
+@pytest.mark.asyncio
 async def test_denied_discovery_fails_closed_when_audit_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -689,6 +724,30 @@ async def test_http_discovery_returns_401_without_credentials(
 
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.asyncio
+async def test_http_discovery_authenticates_before_validating_the_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Authorization precedes validation, so an unknown query is still a 401."""
+    audit = RecordingAudit()
+    service, _ = _service(
+        monkeypatch, MemoryOwner(), audit=audit, projector=AuditProjector(b"mcp-audit-key")
+    )
+
+    async def fail(*_args: Any) -> Any:
+        raise AuthenticationFailed
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", fail)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_route_app(service)), base_url="http://test"
+    ) as client:
+        response = await client.get("/v1/mcp/discovery?unexpected=1")
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "authentication_failed"
+    assert audit.events == []
 
 
 @pytest.mark.asyncio
