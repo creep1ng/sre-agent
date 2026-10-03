@@ -3,7 +3,11 @@
 Containerized E2E: exercises POST /v1/grants against real FastAPI + PostgreSQL
 with missing/inactive principals and resources, records real HTTP statuses,
 error codes, GrantRow counts (zero-mutation proof) and idempotency-record
-counts (no binding consumed on rejection). Prints ONLY the JSON transcript.
+counts (no binding consumed on rejection). Also traverses the stable-replay
+path: create a grant, deactivate its principal/resource, then retry the same
+key/body within retention and expect the registered 201 replay (not 404),
+plus a distinct new-tuple duplicate expecting 409. Prints ONLY the JSON
+transcript.
 """
 
 import asyncio
@@ -59,6 +63,8 @@ def sql_setup() -> None:
             (f"{NS}-active-human", "active"),
             (f"{NS}-inactive-human", "inactive"),
             (f"{NS}-restricted", "active"),
+            (f"{NS}-replay-human", "active"),
+            (f"{NS}-replay-human-2", "active"),
         ):
             connection.execute(
                 "INSERT INTO principals (principal_id, kind, display_name, status, "
@@ -68,6 +74,8 @@ def sql_setup() -> None:
         for resource_id, status in (
             (f"{NS}-active-model", "active"),
             (f"{NS}-inactive-model", "inactive"),
+            (f"{NS}-replay-model", "active"),
+            (f"{NS}-replay-model-2", "active"),
         ):
             connection.execute(
                 "INSERT INTO resources (resource_type, resource_id, status, "
@@ -125,6 +133,22 @@ def grant_body(grant_id: str, principal_id: str, resource_id: str, action: str) 
         "resource": {"resource_type": "llm_model", "resource_id": resource_id},
         "effect": "allow",
     }
+
+
+def deactivate_principal(principal_id: str) -> None:
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE principals SET status = 'inactive' WHERE principal_id = %s",
+            (principal_id,),
+        )
+
+
+def deactivate_resource(resource_id: str) -> None:
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE resources SET status = 'inactive' WHERE resource_id = %s",
+            (resource_id,),
+        )
 
 
 def main() -> None:
@@ -245,6 +269,44 @@ def main() -> None:
                 "invoke.valid",
             ),
             fresh_key(),
+            admin_key,
+        )
+    )
+    replay_principal = grant_body(
+        f"{NS}-g-replay-p",
+        f"{NS}-replay-human",
+        f"{NS}-replay-model",
+        "invoke.replay",
+    )
+    replay_principal_key = fresh_key()
+    cases.append(
+        attempt("replay principal setup create", replay_principal, replay_principal_key, admin_key)
+    )
+    deactivate_principal(f"{NS}-replay-human")
+    cases.append(
+        attempt(
+            "stable replay after principal deactivated",
+            replay_principal,
+            replay_principal_key,
+            admin_key,
+        )
+    )
+    replay_resource = grant_body(
+        f"{NS}-g-replay-r",
+        f"{NS}-replay-human-2",
+        f"{NS}-replay-model-2",
+        "invoke.replay",
+    )
+    replay_resource_key = fresh_key()
+    cases.append(
+        attempt("replay resource setup create", replay_resource, replay_resource_key, admin_key)
+    )
+    deactivate_resource(f"{NS}-replay-model-2")
+    cases.append(
+        attempt(
+            "stable replay after resource deactivated",
+            replay_resource,
+            replay_resource_key,
             admin_key,
         )
     )

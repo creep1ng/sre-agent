@@ -1529,6 +1529,23 @@ class ControlService:  # noqa: E305
         payload_hash = _payload_sha256(body.model_dump(mode="json"))
         try:
             async with self.sessions() as session, session.begin():
+                prior = await IdempotencyRepository(session).peek(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=payload_hash,
+                )
+                if prior is not None:
+                    try:
+                        payload = Grant.model_validate_json(
+                            _canonical_payload(prior.outcome.response_payload)
+                        ).model_dump(mode="json")
+                    except ValidationError:
+                        raise IdempotencyConflictError(binding_scope) from None
+                    return Response(
+                        content=_canonical_payload(payload),
+                        status_code=prior.outcome.response_status,
+                        media_type="application/json",
+                    )
                 principal = await PrincipalRepository(session).get(body.principal_id)
                 if principal is None or principal.status != "active":
                     return await self._finish(
@@ -3463,6 +3480,7 @@ def control_router(service: ControlService) -> APIRouter:
             400: {"model": ErrorEnvelope},
             401: {"model": ErrorEnvelope},
             403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
             409: {"model": ErrorEnvelope},
             422: {"model": ErrorEnvelope},
             503: {"model": ErrorEnvelope},
