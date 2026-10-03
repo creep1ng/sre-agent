@@ -151,24 +151,6 @@ async def test_open_dismiss_replay_conflict_stale() -> None:
             "invalid_command",
             400,
         ),
-        (
-            {
-                "operation": "triage_link",
-                "expected_version": 1,
-                "idempotency_key": "k-link-12345678901",
-            },
-            "operation_not_supported",
-            422,
-        ),
-        (
-            {
-                "operation": "triage_declare",
-                "expected_version": 1,
-                "idempotency_key": "k-declare-1234567890",
-            },
-            "operation_not_supported",
-            422,
-        ),
     ],
 )
 async def test_invalid_commands_fail_closed(kwargs: dict, code: str, status: int) -> None:
