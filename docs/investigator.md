@@ -35,6 +35,15 @@ Each run ends with one `terminated_reason` of `run-state`:
 The limits (6 steps, 45 s per gateway call, 10 s per tool, one retry of each kind) are
 fixed in the change's `design.md`.
 
+## Skills
+
+A request can pin exact Skill versions in `skills` (issue #32). The harness resolves them
+through `GET /v1/skills/{skill_id}/{version}/resolve` with the same key, never from the
+checkout, and again before every model call, without cache. The result lists each version with
+its digest, dependencies and resolution request id, which names its `skills.resolve` audit
+event; resuming passes the digest back. A 404 ends the run as `denied`, two gateway failures
+as `upstream_unavailable`, another body or digest as `needs_human`. A Skill grants no tools.
+
 ## Deterministic demonstration
 
 `scripts/investigator_demo.py` runs six scenarios against a local demo gateway. The stub
