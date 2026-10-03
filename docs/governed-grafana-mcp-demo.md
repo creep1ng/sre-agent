@@ -53,6 +53,7 @@ python scripts/bootstrap-worktree.py
 # Grafana or promise a successful tools/call.
 export ISSUE29_PROJECT="issue29-counter-$(date +%s)"
 export DEMO_STATE_DIR="$PWD/.demo-state/$ISSUE29_PROJECT"
+umask 077
 mkdir -p "$DEMO_STATE_DIR"
 python -c "import secrets,pathlib,os;pathlib.Path(os.environ['DEMO_STATE_DIR'],'grafana-mcp.env').write_text('MCP_GRAFANA_SERVER_TOKEN='+secrets.token_hex(24)+'\n',encoding='utf-8',newline='\n')"
 test -s "$DEMO_STATE_DIR/grafana-mcp.env"
@@ -76,6 +77,16 @@ check, not a manual timing assumption.
 For discovery-only checks, the token file created in the start procedure is
 sufficient; the project-scoped overlay does not use the legacy global
 `sre-mcp-boundary`.
+
+The full OpenTelemetry demo is optional and outside this counter acceptance
+path. If separately needed, run its existing setup only on a disposable,
+isolated Docker daemon because it uses fixed container names; it is not a source
+of live-query claims for the inert counter overlay:
+
+```sh
+python scripts/demo_env.py up
+python scripts/demo_env.py verify
+```
 
 ## Sanitized CA1–CA5 capture
 
@@ -343,6 +354,46 @@ a warm invocation may show one HTTP request with only `tools/call`. Do not assum
 either: record the actual snapshot and session state. A 502 `upstream_invalid` is
 not a successful invocation and is outside CA1–CA5; if the counter increments,
 it proves boundary crossing only.
+
+The acceptance replay is versioned at `scripts/issue29_capture.py`. It sends
+real HTTP through this isolated gateway, provisions uniquely named synthetic
+partial/empty principals, checks full/partial/empty visibility and denial/error
+statuses, captures metadata-only PostgreSQL rows with the observed request IDs and
+UTC window, and brackets discovery/denial plus cold/warm invocation diagnostics
+with the counter. The configured backend is deliberately unreachable at loopback
+port 1: a `502 upstream_invalid` is expected diagnostic evidence, never a
+successful tool execution. It makes no provider or paid call. Synthetic principal,
+credential, and grant rows are left intact for the audit trail; do not delete them.
+The artifact excludes API keys and response bodies and is written only to the
+ignored capture directory.
+
+Run after the API and relay are ready. Build the project `python-checks` image
+with the same checkout (or use its already built project image), then run the
+versioned script in the API container's network namespace. The API container is
+attached to both project-scoped `runtime` and `mcp-boundary` networks; this
+one-shot container therefore reaches `api`, `db`, and the counter without
+publishing another port. The source is bind-mounted read-only; the host capture
+directory is the only writable mount:
+
+```sh
+compose build python-checks
+export TESTED_SHA="$(git rev-parse HEAD)"
+export CAPTURE_DIR="$DEMO_STATE_DIR/captures"
+mkdir -p "$CAPTURE_DIR"
+API_CONTAINER="$(compose ps -q api)"
+CHECKS_IMAGE="${ISSUE29_PROJECT}-python-checks:latest"
+docker run --rm --user "$(id -u):$(id -g)" \
+  --network "container:$API_CONTAINER" --env-file .env --env-file .env.worktree \
+  -e TESTED_SHA="$TESTED_SHA" \
+  -v "$PWD/scripts/issue29_capture.py:/app/scripts/issue29_capture.py:ro" \
+  -v "$CAPTURE_DIR:/capture" "$CHECKS_IMAGE" \
+  python /app/scripts/issue29_capture.py
+```
+
+Review `.demo-state/$ISSUE29_PROJECT/captures/live-replay.json` for the exact
+`tested_sha`, timestamps, observed HTTP statuses/error codes, method counts, and
+sanitized correlated audit rows. Keep failed/skipped outcomes failed; do not turn
+the diagnostic 502 into an accepted invocation.
 
 The failure-scenario functional check is versioned at
 `tests/test_issue29_counting_relay.py`; it starts the real relay subprocess and a
