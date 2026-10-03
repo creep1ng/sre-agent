@@ -498,3 +498,127 @@ def test_ca10_monthly_budget_counts_reservations_booked_to_any_incident(
     assert statuses == [200]
     assert [row[0] for row in reservations()] == ["ca10-first"]
     assert provider.requests[0].max_output_tokens == 1
+
+
+@pytest.mark.parametrize("with_incident", [False, True])
+@pytest.mark.parametrize("settlement_fails", [False, True])
+def test_ca6_monthly_usage_counts_each_request_once_with_legacy_history(
+    ca_database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+    with_incident: bool,
+    settlement_fails: bool,
+) -> None:
+    """Legacy audit, settled usage and uncertain reservations share one allowance."""
+    from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
+
+    body = BODY
+    if with_incident:
+        incident = f"ca6-dedup-{int(settlement_fails)}"
+        seed_incident(incident)
+        body = BODY | {"incident_id": incident}
+    # Write real audit-only history while limits are unset.
+    usage = exact_usage(1).model_copy(update={"billed_usd": "0.300"})
+    provider = Provider(usage)
+    catalog = Catalog(snapshot(endpoint(max_completion_tokens=1)))
+    gateway = Gateway(provider, catalog)
+    before = legacy_month_usd()
+    assert gateway.respond(body=body).status_code == 200
+    assert reservations() == []
+    assert legacy_month_usd() == before + Decimal("0.3")
+    gateway.put_policy(None, f"{before + Decimal('0.9'):.12f}")
+
+    if settlement_fails:
+
+        async def fail_settlement(self, **kwargs):
+            raise RuntimeError("controlled settlement failure")
+
+        monkeypatch.setattr(ConsumptionAdmissionService, "settle", fail_settlement)
+
+    first = gateway.respond(body=body)
+    assert first.status_code == 200
+    assert first.json()["metadata"]["consumption"]["availability"] == "complete"
+    assert legacy_month_usd() == before + Decimal("0.6")
+    row = reservations()[0]
+    assert row[3] == ("reserved" if settlement_fails else "settled")
+    assert row[2] == Decimal("0.3")
+    assert row[5] == (None if settlement_fails else Decimal("0.3"))
+
+    # A fresh service must see exactly 0.30 remaining, even with both sources.
+    # Unknown consumption keeps this last 0.30 reserved across the workspace.
+    unknown_provider = Provider(None)
+    restarted = Gateway(unknown_provider, catalog)
+    second = restarted.respond()
+    assert second.status_code == 200
+    assert reservations()[-1][3] == "reserved"
+    denied = restarted.respond(body=body)
+    assert denied.status_code == 429
+    assert audited(denied.json()["request_id"]) == "monthly_limit_exceeded"
+    assert len(provider.requests) == 2
+    assert len(unknown_provider.requests) == 1
+    print(
+        json.dumps(
+            {
+                "with_incident": with_incident,
+                "settlement_fails": settlement_fails,
+                "complete_status": first.status_code,
+                "remaining_request_status": second.status_code,
+                "exhausted_status": denied.status_code,
+                "reservation_states": [item[3] for item in reservations()],
+                "settled_usd": str(row[5]),
+                "outstanding_usd": str(reservations()[-1][2]),
+            }
+        )
+    )
+
+
+def test_ca6_settled_cost_counts_even_when_audit_write_fails(
+    ca_database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sre_agent.gateway.responses import PostgresAuditStore
+
+    seed_incident("ca6-audit-failure")
+    body = BODY | {"incident_id": "ca6-audit-failure"}
+    provider = Provider(exact_usage(1).model_copy(update={"billed_usd": "0.300"}))
+    gateway = Gateway(provider, Catalog(snapshot(endpoint(max_completion_tokens=1))))
+    before = legacy_month_usd()
+    gateway.put_policy(None, f"{before + Decimal('0.6'):.12f}")
+
+    async def fail_audit(self, event):
+        raise RuntimeError("controlled audit failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(PostgresAuditStore, "append", fail_audit)
+        assert gateway.respond(body=body).status_code == 503
+    assert reservations()[0][3:6:2] == ("settled", Decimal("0.3"))
+    assert legacy_month_usd() == before
+    assert gateway.respond(body=body).status_code == 200
+    assert gateway.respond(body=body).status_code == 429
+    assert len(provider.requests) == 2
+
+
+def test_ca6_audit_fallback_counts_when_reservation_has_no_usd_exposure(
+    ca_database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
+
+    seed_incident("ca6-token-only")
+    provider = Provider(exact_usage(1).model_copy(update={"billed_usd": "0.300"}))
+    gateway = Gateway(provider, Catalog(snapshot(endpoint(max_completion_tokens=1))))
+    before = legacy_month_usd()
+    gateway.put_policy(100, None)
+
+    async def fail_settlement(self, **kwargs):
+        raise RuntimeError("controlled settlement failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(ConsumptionAdmissionService, "settle", fail_settlement)
+        assert gateway.respond(body=BODY | {"incident_id": "ca6-token-only"}).status_code == 200
+    assert reservations()[0][2:4] == (None, "reserved")
+    assert legacy_month_usd() == before + Decimal("0.3")
+    gateway.put_policy(None, f"{before + Decimal('0.5'):.12f}")
+    denied = gateway.respond()
+    assert denied.status_code == 429
+    assert audited(denied.json()["request_id"]) == "monthly_limit_exceeded"
+    assert len(provider.requests) == 1

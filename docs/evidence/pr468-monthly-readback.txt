@@ -1,0 +1,6 @@
+{"with_incident": false, "settlement_fails": false, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["settled", "reserved"], "settled_usd": "0.300000000000000000000000000000000000", "outstanding_usd": "0.300000000000000000000000000000000000"}
+.{"with_incident": true, "settlement_fails": false, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["settled", "reserved"], "settled_usd": "0.300000000000000000000000000000000000", "outstanding_usd": "0.300000000000000000000000000000000000"}
+.{"with_incident": false, "settlement_fails": true, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["reserved", "reserved"], "settled_usd": "None", "outstanding_usd": "0.300000000000000000000000000000000000"}
+.{"with_incident": true, "settlement_fails": true, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["reserved", "reserved"], "settled_usd": "None", "outstanding_usd": "0.300000000000000000000000000000000000"}
+...
+6 passed, 10 deselected in 5.35s

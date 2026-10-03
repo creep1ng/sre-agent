@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
@@ -47,6 +47,7 @@ class ConsumptionAdmissionService:
         provider: str,
         catalog: object,
         now: datetime,
+        request_id: UUID | None = None,
     ) -> AdmissionResult:
         if now.tzinfo is None or now.utcoffset() is None:
             return AdmissionResult(False, None, 0, None, "consumption_bounds_unavailable", False)
@@ -141,7 +142,9 @@ class ConsumptionAdmissionService:
                 + (envelope.request_fee_usd or Decimal(0))
                 + Decimal(envelope.max_output_tokens) * (endpoint.completion_price or Decimal(0))
             )
-            reservation_id = uuid4().hex
+            # Share the server-generated request identity with audit, without
+            # adding a second correlation field or changing historical rows.
+            reservation_id = str(request_id) if request_id is not None else uuid4().hex
             await ConsumptionReservationRepository(session).create(
                 reservation_id,
                 incident_id=incident_id,
@@ -254,6 +257,9 @@ class ConsumptionAdmissionService:
     async def _legacy_usage(
         self, session: object, period: datetime, following: datetime
     ) -> tuple[int, Decimal]:
+        # Monetary reservations own their usage, including uncertain settlement.
+        # Audit remains the fallback when no reservation accounts for the USD.
+        # Do not constrain the match by month: a response may cross its boundary.
         result = await session.execute(  # type: ignore[union-attr]
             text(
                 "SELECT COALESCE(SUM((c->>'total_tokens')::bigint), 0), "
@@ -263,6 +269,10 @@ class ConsumptionAdmissionService:
                 "AND stage = 'response' AND outcome = 'success' "
                 "AND occurred_at >= :start AND occurred_at < :end "
                 "AND (consumption->>'availability') = 'complete' "
+                "AND NOT EXISTS (SELECT 1 FROM consumption_reservations r "
+                "WHERE r.reservation_id = audit_events.correlation->>'request_id' "
+                "AND ((r.state = 'reserved' AND r.usd_exposure IS NOT NULL) "
+                "OR (r.state = 'settled' AND r.settled_usd_cost IS NOT NULL))) "
                 "ORDER BY correlation->>'request_id', occurred_at DESC) t"
             ),
             {"start": period, "end": following},
