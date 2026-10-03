@@ -262,7 +262,11 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, status, "authorization",
                                       context=context, alias=request.model, decision=decision,
                                       reason=admission.denial_reason or "consumption_bounds_unavailable",
-                                      retryable=status in {429, 503, 504}, identifiers=identifiers)
+                                      retryable=status in {429, 503, 504}, identifiers=identifiers,
+                                      consumption_policy_version=(
+                                          None if admission.denial_reason == "policy_unavailable"
+                                          else admission.policy_version
+                                      ))
         try:
             provider_request = ProviderRequest(
                 input=request.input,
@@ -276,7 +280,8 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, 503, "routing", context=context,
                                       alias=request.model, decision=decision,
                                       reason="routing_unavailable", retryable=True,
-                                      identifiers=identifiers)
+                                      identifiers=identifiers,
+                                      consumption_policy_version=admission.policy_version)
         try:
             result = await self.provider.create(provider_request)
             consumption = result.consumption or _empty_consumption("absent")
@@ -289,7 +294,8 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, 200, "response", payload=payload,
                                       context=context, alias=request.model, decision=decision,
                                       assignment=assignment, identifiers=identifiers,
-                                      consumption=consumption)
+                                      consumption=consumption,
+                                      consumption_policy_version=admission.policy_version)
         except ProviderFailure as failure:
             status, reason, code = {"timeout": (504, "upstream_failed", "upstream_timeout"),
                                     "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
@@ -301,7 +307,8 @@ class ResponsesService:  # noqa: E305
                                       alias=request.model, decision=decision, assignment=assignment,
                                       reason=reason, retryable=status in {503, 504}, identifiers=identifiers,
                                       error_code=code, retry_after=failure.retry_after,
-                                      consumption=failure.consumption or _empty_consumption("unavailable"))
+                                      consumption=failure.consumption or _empty_consumption("unavailable"),
+                                      consumption_policy_version=admission.policy_version)
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, consumption: Consumption | None = None,
