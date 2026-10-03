@@ -80,12 +80,20 @@ function hideError() {
 function setResult(operation, item) {
   resultOperation.textContent = operation;
   resultStatus.textContent = text(item.status) || "—";
-  resultIncident.textContent = text(item.incident_id) || "—";
+  const incident = text(item.incident_id);
+  resultIncident.replaceChildren();
+  if (incident === "") {
+    resultIncident.textContent = "—";
+  } else {
+    const link = document.createElement("a");
+    link.href = `/public/incident-ui/war-room.html?incident_id=${encodeURIComponent(incident)}`;
+    link.textContent = incident;
+    resultIncident.appendChild(link);
+  }
   resultVersion.textContent = item.expected_version === undefined ? "—" : String(item.expected_version);
   resultActor.textContent = text(item.actor) || "—";
   resultDecided.textContent = text(item.decided_at) || "—";
   versionInput.value = item.expected_version === undefined ? versionInput.value : String(item.expected_version);
-  const incident = text(item.incident_id);
   resultSummary.textContent =
     `${operation} applied: ${text(item.status)}` + (incident === "" ? "." : `, incident ${incident}.`);
   stateLine.textContent =

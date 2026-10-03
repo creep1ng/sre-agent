@@ -312,7 +312,7 @@ class TriageService:
             return None
         now = datetime.now(UTC)
         incident_id = f"inc-{digest[:32]}"
-        run_id = f"run-{digest[:32]}"
+        run_id = f"run_{digest[:32]}"
         units = _SessionUnits(session)
         incident_state = {
             "workflow_id": self._workflow.workflow_id,
