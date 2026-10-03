@@ -42,3 +42,5 @@ default Docker allocator choose.
 Containerized local verification only. No hosted CI, no human approval, no live
 provider or catalog request. Synthetic credentials and deterministic doubles.
 Sanitized: yes.
+
+For the current closure gaps, confirmed in-flight semantics and additional #467/#468 regressions, see [issue-334-closure.md](issue-334-closure.md). The original matrix below is historical evidence, not a claim that rollover or public audit HTTP readback was demonstrated.
