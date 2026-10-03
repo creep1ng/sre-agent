@@ -1,31 +1,34 @@
 # Governed Grafana MCP demo runbook
 
-This runbook starts the local gateway only after this checkout's pinned demo
-has created its internal boundary and caller-token file. It describes how to
-collect evidence; it does not claim that a live walkthrough ran for this change.
+This runbook starts the local gateway behind a versioned, project-scoped counter
+and describes how to collect evidence; it does not claim that a live walkthrough
+ran for this change.
 
 ## Quick path
 
-1. Use an isolated Docker daemon with no existing `otel-demo`, `grafana-mcp`,
-   or `sre-mcp-boundary` resources. The demo uses global container and network
-   names; never reuse or remove another contributor's stack.
-2. Prepare this checkout's local `.env` and worktree ports, then start
-   `scripts/demo_env.py up`. It creates `.demo-state/grafana-mcp.env` and the
-   Docker network `sre-mcp-boundary`.
-3. Start this checkout with `compose.yaml` plus `compose.mcp.yaml`. The
-   `mcp-seed` service waits for the normal seed, and `api` waits for
-   `mcp-seed` to complete successfully.
+1. Use a unique Compose project name and an isolated Docker daemon. The counter
+   overlay creates its own project-scoped boundary network and has no host-published
+   MCP port; never reuse or remove another contributor's resources.
+2. Prepare this checkout's local `.env` and worktree ports. For a query that
+   requires a functioning Grafana backend, use the separately governed demo
+   setup. For discovery and boundary diagnostics, a fresh caller-token file is
+   enough; no full demo or paid call is required.
+3. Start this checkout with `compose.yaml`, `compose.mcp.yaml`, and
+   `compose.issue29-counter.yaml`. The `mcp-seed` service waits for the normal
+   seed, and `api` waits for `mcp-seed` to complete successfully.
 4. Capture only sanitized status codes, governed IDs, public error codes, and
    metadata-only audit fields. Never attach tokens, authorization headers,
    raw upstream logs, or query results.
 
-The upstream `demo/digests.lock` must pin Grafana MCP to
-`grafana/mcp-grafana:1.3.0@sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e`.
-The overlay deliberately does not redefine or weaken that upstream image pin.
+The upstream `demo/digests.lock` pins Grafana MCP to
+`grafana/mcp-grafana:1.3.0@sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e`;
+the counter overlay uses the exact same digest.
 
 ## Prerequisites
 
-- Docker and Docker Compose 2.24 or newer (the upstream overlay uses `!reset`).
+- Docker and Docker Compose 2.24 or newer (the demo overlay uses `!reset`).
+  The counter uses the API runtime image and its locked `httpx` dependency; no
+  host relay install is needed.
 - A working local `.env` for this repository with four distinct, non-placeholder
   `sre_` API keys, non-placeholder model/provider identifiers, and a random
   `AUDIT_HMAC_KEY`. Keep `OPENROUTER_API_KEY` empty for discovery-only checks.
@@ -46,41 +49,33 @@ The overlay deliberately does not redefine or weaken that upstream image pin.
 ```sh
 python scripts/bootstrap-worktree.py
 # Edit the ignored .env and replace every placeholder before starting Compose.
-python scripts/demo_env.py up
-python scripts/demo_env.py verify
-DEMO_STATE_DIR="$PWD/.demo-state"
+# This overlay is for discovery/boundary diagnostics only; it does not start
+# Grafana or promise a successful tools/call.
+export ISSUE29_PROJECT="issue29-counter-$(date +%s)"
+export DEMO_STATE_DIR="$PWD/.demo-state/$ISSUE29_PROJECT"
+mkdir -p "$DEMO_STATE_DIR"
+python -c "import secrets,pathlib,os;pathlib.Path(os.environ['DEMO_STATE_DIR'],'grafana-mcp.env').write_text('MCP_GRAFANA_SERVER_TOKEN='+secrets.token_hex(24)+'\n',encoding='utf-8',newline='\n')"
 test -s "$DEMO_STATE_DIR/grafana-mcp.env"
-docker network inspect sre-mcp-boundary >/dev/null
-
-DEMO_STATE_DIR="$DEMO_STATE_DIR" docker compose \
+compose() { docker compose -p "$ISSUE29_PROJECT" \
   --env-file .env --env-file .env.worktree \
-  -f compose.yaml -f compose.mcp.yaml \
-  up -d --build mcp-seed api
+  -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml "$@"; }
+# Keep this terminal/session open for the later compose() commands.
+compose up -d --build mcp-seed api mcp-upstream grafana-mcp
 
 API_PORT="$(sed -n 's/^API_PORT=//p' .env.worktree)"
 API_BASE_URL="http://127.0.0.1:$API_PORT"
 curl --fail --silent "$API_BASE_URL/health/ready" >/dev/null
 ```
 
-The overlay fixes the upstream URL at `http://grafana-mcp:8000/mcp` and reads
-the generated token file through `env_file`. Do not start `api` with only
-`compose.yaml`: that bypasses the governed MCP bootstrap. Compose dependency
-ordering is part of the check, not a manual timing assumption.
+The gateway keeps `http://grafana-mcp:8000/mcp`; the overlay's relay then
+forwards to pinned service `mcp-upstream`. The generated token is private and
+loaded through `env_file`. Do not start `api` with only `compose.yaml`: that
+bypasses the governed MCP bootstrap. Compose dependency ordering is part of the
+check, not a manual timing assumption.
 
-For a discovery-only walkthrough, the full OpenTelemetry demo is unnecessary
-because discovery performs no upstream call. Create the two prerequisites the
-overlay needs, then use the same Compose command:
-
-```sh
-mkdir -p .demo-state
-python -c "import secrets,pathlib;pathlib.Path('.demo-state/grafana-mcp.env').write_text('MCP_GRAFANA_SERVER_TOKEN='+secrets.token_hex(24)+'\n',encoding='utf-8',newline='\n')"
-docker network create --internal sre-mcp-boundary
-```
-
-Generate that token with a fresh random value. Never reuse or print an existing
-one, and never commit `.demo-state/`. This path proves the gateway and its
-audit boundary; run `scripts/demo_env.py up` as well when a probe has to reach
-Grafana.
+For discovery-only checks, the token file created in the start procedure is
+sufficient; the project-scoped overlay does not use the legacy global
+`sre-mcp-boundary`.
 
 ## Sanitized CA1–CA5 capture
 
@@ -92,9 +87,7 @@ Grafana.
 Run the repository's deterministic checks first and retain their exit status:
 
 ```sh
-DEMO_STATE_DIR="$PWD/.demo-state" docker compose \
-  --env-file .env --env-file .env.worktree \
-  -f compose.yaml -f compose.mcp.yaml --profile checks \
+DEMO_STATE_DIR="$PWD/.demo-state" compose --profile checks \
   run --build --rm python-checks pytest -q \
   tests/test_mcp_contract.py tests/test_mcp_discovery.py \
   tests/test_mcp_owner.py tests/test_mcp_seed.py tests/test_mcp_overlay.py
@@ -164,9 +157,7 @@ insert those rows manually, because the resource and grant identifiers are
 primary keys and a manual insert now fails with a duplicate-key error:
 
 ```sh
-DEMO_STATE_DIR="$PWD/.demo-state" docker compose \
-  --env-file .env --env-file .env.worktree \
-  -f compose.yaml -f compose.mcp.yaml exec -T db \
+DEMO_STATE_DIR="$PWD/.demo-state" compose exec -T db \
   sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'
 SELECT count(*) AS seeded_administrative_grant_rows
   FROM grants
@@ -246,14 +237,21 @@ curl -sS -o "$MCP_CAPTURE_DIR/invalid-query.json" -w '%{http_code}\n' \
 jq '{error_code: .error.code, request_id}' "$MCP_CAPTURE_DIR/invalid-query.json"
 ```
 
-For CA5, match each public `request_id` to PostgreSQL audit metadata, not raw
-payloads:
+For CA5, match actual public `request_id` values to PostgreSQL metadata, not
+raw payloads. Set these from the sanitized capture (do not substitute example or
+historical IDs); the UTC window is the exact discovery capture window:
 
 ```sh
-DEMO_STATE_DIR="$PWD/.demo-state" docker compose \
-  --env-file .env --env-file .env.worktree \
-  -f compose.yaml -f compose.mcp.yaml exec -T db \
-  sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' <<'SQL'
+: "${DISCOVERY_REQUEST_IDS:?Set comma-separated request IDs observed in this run}"
+: "${CAPTURE_START_UTC:?Set actual capture start time in UTC}"
+: "${CAPTURE_END_UTC:?Set actual capture end time in UTC}"
+compose exec -T \
+  -e DISCOVERY_REQUEST_IDS="$DISCOVERY_REQUEST_IDS" \
+  -e CAPTURE_START_UTC="$CAPTURE_START_UTC" \
+  -e CAPTURE_END_UTC="$CAPTURE_END_UTC" db \
+  sh -c 'exec psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+    -v ON_ERROR_STOP=1 -v request_ids="$DISCOVERY_REQUEST_IDS" \
+    -v capture_start="$CAPTURE_START_UTC" -v capture_end="$CAPTURE_END_UTC"' <<'SQL'
 SELECT correlation->>'request_id' AS request_id, response_status,
        action, stage, outcome, policy_decision->>'decision' AS decision,
        resource->>'resource_type' AS resource_type,
@@ -262,99 +260,113 @@ SELECT correlation->>'request_id' AS request_id, response_status,
        COALESCE(jsonb_typeof(redacted_content), 'null') = 'null' AS no_content
 FROM audit_events
 WHERE operation = 'mcp.discovery'
-ORDER BY occurred_at DESC LIMIT 20;
+  AND correlation->>'request_id' = ANY(string_to_array(:'request_ids', ','))
+  AND occurred_at >= :'capture_start'::timestamptz
+  AND occurred_at < :'capture_end'::timestamptz
+ORDER BY occurred_at;
 SQL
 ```
 
 Authentication failures return before the MCP audit sink and have no
-`mcp.discovery` audit row. For authenticated success, empty and denial, require the matching
-request ID, a HMAC Principal reference, the expected decision/status, and
-`content_state='absent'` with no redacted content. Publish only these selected
-fields. This query does not prove the upstream call count; obtain a separate
-real Grafana MCP/boundary counter for the same request window before claiming
-live CA5.
+`mcp.discovery` audit row. For authenticated success, empty, and denial, require
+the matching request ID, a HMAC Principal reference, the expected decision/status,
+and `content_state='absent'` with no redacted content. Publish only these selected
+fields. CA5 is the metadata-only audit/discovery evidence; a successful tool
+execution is not a CA5 prerequisite.
 
 Record the observed HTTP status and public error code for denied, invalid,
-timeout, and upstream-failure scenarios. CA3/CA5 also require an instrumented
-upstream or boundary counter proving zero upstream calls for the denied request
-and exactly one `tools/call` for the allowed request. A status code alone is not
-that proof. Capture only method/path/count and metadata-only audit fields; do
-not use raw container logs as evidence.
+timeout, and upstream-failure scenarios. Use the versioned counter below to show
+zero boundary requests for a denied request and distinguish one attempted
+`tools/call` from successful tool execution. A status code alone proves neither.
+Capture only aggregate counts and metadata-only audit fields; do not use raw
+container logs as evidence.
 
-## Count the MCP boundary
+## Count the MCP boundary (versioned instrument)
 
-An HTTP status cannot show whether the gateway crossed the boundary. Put a
-counting relay on the address `compose.mcp.yaml` already configures,
-`http://grafana-mcp:8000/mcp`, forwarding to the pinned image, and read the
-counter before and after the probes. The relay counts requests and MCP methods
-only: it stores no body, no header value and no result, so it can be published
-as evidence.
+`compose.issue29-counter.yaml` replaces the external `sre-mcp-boundary` in
+`compose.mcp.yaml` with `<Compose project>-mcp-boundary`; no `container_name`, MCP
+host port, external relay file, or shared boundary network is used. The relay
+script is mounted read-only into the API runtime image. `httpx` comes from the
+existing locked application dependencies (`uv.lock`). The real Grafana MCP image
+is pinned to `demo/digests.lock`; the relay targets `mcp-upstream:8000`, so its
+HTTP client rewrites `Host` to the allowed upstream host. The gateway still calls
+`grafana-mcp:8000` and requires no endpoint change.
 
-The relay is an instrument, not a repository change. Keep it outside the
-checkout and mount it read-only. Give the real pinned image the upstream name
-and let the relay take the `grafana-mcp` container name, so the gateway needs no
-configuration change:
+The in-network `GET /__count` snapshot has a reset epoch, reset/capture UTC
+timestamps, `total_http_requests`, `upstream_attempts`, `upstream_failures`, and
+the `mcp_methods` map. Counts are aggregates only: bodies, headers, results,
+paths, and request IDs are neither retained nor logged. Each non-control HTTP request increments the request and attempt counts once,
+even if the relay cannot forward it and returns safe
+`502 {"error":"upstream_unavailable"}`. `upstream_failures` means relay-level
+forwarding exceptions only; an HTTP error status returned by MCP is preserved
+and does not by itself increment that field. JSON-RPC methods are
+counted per message; a batch may contain several. Only `initialize`,
+`notifications/initialized`, and `tools/call` have named buckets; all other method
+names go to `other` so arbitrary content cannot leak into the snapshot. A request
+with both `initialize` and `notifications/initialized` is a handshake, distinct
+from a subsequent `tools/call`; counters report observed messages only. GET
+`/__count` and POST `/__count/reset` are not counted. This is boundary metadata,
+not tool-success evidence or a PostgreSQL audit record.
 
-```yaml
-services:
-  mcp-upstream:
-    image: grafana/mcp-grafana:1.3.0@sha256:5114852743e450fe5186b6c1712419843eb4bd295e47e64c452c3aa0fab3c42e
-    container_name: mcp-grafana-upstream
-    command: ["--transport=streamable-http", "--address=0.0.0.0:8000",
-              "--allowed-hosts=mcp-grafana-upstream:8000", "--disable-write",
-              "--enabled-tools=prometheus,elasticsearch,datasource"]
-    env_file: ["./grafana-mcp.env"]
-    networks: [boundary]
-  boundary-counter:
-    image: <the api image built from this checkout>
-    container_name: grafana-mcp          # the governed boundary address
-    command: ["python", "/instrument/counting_relay.py"]
-    volumes: ["./counting_relay.py:/instrument/counting_relay.py:ro"]
-    networks: [boundary]
-networks:
-  boundary: {name: sre-mcp-boundary, external: true}
-```
+This isolated project starts the pinned MCP service with `GRAFANA_URL` set to
+loopback port 1; it does not provision or connect to a Grafana datasource
+backend. Keep the generated token private. No
+external MCP service or paid call is needed for discovery-only zero-crossing. An
+invocation diagnostic is outside CA1–CA5 and is not required to succeed. If it
+returns `502 upstream_invalid`, report the actual error and the counter evidence;
+that proves only that the tool request crossed the gateway/upstream boundary, not
+that the tool executed successfully.
 
-The relay forwards each request unchanged, adds the JSON-RPC `method` name to a
-counter, and answers `GET /__count` with totals and `POST /__count/reset` to zero
-them. Read the counter through a throwaway container on the same network, which
-needs no published port:
-
-```sh
-read_counter() {
-  docker run --rm --network sre-mcp-boundary <the api image> \
-    python -c "import httpx;print(httpx.get('http://grafana-mcp:8000/__count',timeout=15).text)"
-}
-reset_counter() {
-  docker run --rm --network sre-mcp-boundary <the api image> \
-    python -c "import httpx;httpx.post('http://grafana-mcp:8000/__count/reset',timeout=15)"
-}
-```
-
-Bracket the discovery probes with `reset_counter` and `read_counter`. Both
-readings must show zero total requests, because discovery decides before
-execution. Then prove the instrument is not simply idle: one granted
-`POST /v1/mcp/tools/query_prometheus` must move the counter to exactly one
-`tools/call`. Without that positive control a zero reading proves nothing.
-
-Discovery needs no upstream at all, so the CA1-CA5 walkthrough can run with
-`compose.yaml` plus `compose.mcp.yaml` only. Bring up the full pinned demo
-through `scripts/demo_env.py` when a probe genuinely has to reach Grafana.
-
-## Stop and status
+Reset immediately before the capture window, then take start/end snapshots from
+the relay container. Keep the timestamps, tested SHA, environment, and sanitized
+counter snapshots together with the request IDs and bounded PostgreSQL audit
+query. Only publish the selected aggregate fields; never publish the token,
+authorization headers, raw responses, or raw logs.
 
 ```sh
-DEMO_STATE_DIR="$DEMO_STATE_DIR" docker compose \
-  --env-file .env --env-file .env.worktree \
-  -f compose.yaml -f compose.mcp.yaml down
-python scripts/demo_env.py down
+counter() { compose exec -T grafana-mcp python -c \
+  'import httpx,json; print(json.dumps(httpx.get("http://127.0.0.1:8000/__count",timeout=5).json(),sort_keys=True))'; }
+reset_counter() { compose exec -T grafana-mcp python -c \
+  'import httpx; r=httpx.post("http://127.0.0.1:8000/__count/reset",timeout=5); r.raise_for_status()'; }
+reset_counter
+counter  # capture window start (zero required before discovery)
+# Run the documented API probes now, then capture the end:
+counter
 ```
 
-**CA5 evidence boundary:** This runbook is an operator procedure, not evidence
-that a live run occurred for any particular commit. A live CA5 pass requires a
-real Grafana MCP `tools/call` counter and metadata-only PostgreSQL audit capture
-showing zero upstream calls for denied requests and exactly one for an allowed
-request. An HTTP 200 response or deterministic test results alone do not prove
-CA5. Record the exact tested commit with the sanitized counter and audit
-evidence; evidence from an earlier candidate does not automatically prove a
-later one.
+For discovery, the start and end `total_http_requests`/`upstream_attempts` must both
+remain zero. Keep invocation diagnostics in a separate capture window. A cold
+first tool request may include the two observed handshake HTTP messages
+(`initialize` and `notifications/initialized`) plus `tools/call` (three HTTP
+requests); after the client session is already initialized, a reset followed by
+a warm invocation may show one HTTP request with only `tools/call`. Do not assume
+either: record the actual snapshot and session state. A 502 `upstream_invalid` is
+not a successful invocation and is outside CA1–CA5; if the counter increments,
+it proves boundary crossing only.
+
+The failure-scenario functional check is versioned at
+`tests/test_issue29_counting_relay.py`; it starts the real relay subprocess and a
+local HTTP stub, verifies pass-through status/body/headers and method classification,
+checks a refused-upstream safe 502 and ensures counters/control operations behave
+as documented. Run it with the repository's isolated checks DB:
+
+```sh
+compose --profile checks run --build --rm python-checks pytest -q tests/test_issue29_counting_relay.py
+```
+
+## Stop safely
+
+Stop only this isolated Compose project; this retains its containers and named
+volumes and does not touch a separate demo project:
+
+```sh
+compose stop
+```
+
+**CA5 evidence boundary:** This is a procedure, not evidence that a live run
+occurred for a particular commit. CA5 is evidenced by bounded, correlated,
+metadata-only audit/discovery observations; discovery must show zero upstream
+requests in its separate counter window. An invocation diagnostic is not a CA5
+requirement, and a 502 is not success. Record the exact tested commit with
+sanitized captures; evidence from an earlier candidate does not automatically
+prove a later one.
