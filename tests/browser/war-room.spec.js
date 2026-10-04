@@ -94,7 +94,7 @@ test("labels execution state per contractual event kind", async ({ page }) => {
 
   const items = page.locator(".war-room__event");
   await expect(items).toHaveCount(4);
-  await expect(items.nth(0)).toContainText("Executed");
+  await expect(items.nth(0)).toContainText("Comando registrado");
   await expect(items.nth(0)).toContainText("demo-human");
   await expect(items.nth(1)).toContainText("Proposed · Not executed");
   await expect(items.nth(2)).toContainText("Blocked · Denied");
