@@ -129,6 +129,39 @@ test("hides restricted content and escapes untrusted records", async ({ page }) 
   expect(body).not.toContain("MARKER-RESTRICTED");
 });
 
+test("drops a late timeline reply for a deselected run", async ({ page }) => {
+  let releaseRun1;
+  const gate = new Promise((resolve) => {
+    releaseRun1 = resolve;
+  });
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/timeline")) {
+      const runId = url.searchParams.get("run_id") ?? "run_demo0002";
+      if (runId === "run_demo0001") await gate;
+      const payload = timelineFor(runId === "run_demo0001" ? "Alpha" : "Beta");
+      return route.fulfill({ json: payload });
+    }
+    return route.fulfill({ json: detailTwoRuns() });
+  });
+  await page.goto(`/public/incident-ui/postmortem.html?incident_id=${INCIDENT}`);
+  await page.locator("#credential-input").fill("sre_demo_token_demo_0001");
+  await page.locator("#credential-form button[type=submit]").click();
+  await expect(page.locator("#provenance-list")).toContainText("run run_demo0002");
+  await page.locator("#run-select").selectOption("run_demo0001");
+  const run2reply = page.waitForResponse(
+    (response) =>
+      response.url().includes("/timeline") && response.url().includes("run_demo0002"),
+  );
+  await page.locator("#run-select").selectOption("run_demo0002");
+  await run2reply;
+  releaseRun1();
+  await page.waitForTimeout(300);
+  const body = (await page.locator("#provenance-list").textContent()) ?? "";
+  expect(body).toContain("run run_demo0002");
+  expect(body).not.toContain("Alpha record");
+});
+
 test("keeps review session-only without persistence or close", async ({ page }) => {
   await openProvenance(page);
   await expect(page.locator("#review-section")).toBeVisible();

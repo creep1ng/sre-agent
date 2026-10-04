@@ -148,7 +148,16 @@ function renderProvenance(events, runId) {
 }
 
 async function loadTimeline(runId) {
-  const page = await client.getIncidentTimeline(state.incidentId, { runId, limit: 50 });
+  const generation = state.generation;
+  let page;
+  try {
+    page = await client.getIncidentTimeline(state.incidentId, { runId, limit: 50 });
+  } catch (error) {
+    if (generation !== state.generation || runId !== state.runId) return;
+    throw error;
+  }
+  // A late reply for a deselected run never mutates the current view.
+  if (generation !== state.generation || runId !== state.runId) return;
   renderProvenance(page.events ?? [], runId);
 }
 
