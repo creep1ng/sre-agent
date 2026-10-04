@@ -54,7 +54,7 @@ class ResolvedSkill:
 
 
 class SkillSource(Protocol):
-    """Raises GatewayError: `denied` for 401 and for the producer's non-enumerable 404."""
+    """Raises GatewayError: `denied` for 401, 403 and the producer's non-enumerable 404."""
 
     async def resolve(self, skill_id: str, version: str) -> ResolvedSkill: ...
 

@@ -138,6 +138,20 @@ def test_a_transient_revalidation_is_retried_with_its_model_call() -> None:
     assert (result.status, len(gateway.calls), len(source.calls)) == ("completed", 1, 3)
 
 
+def test_a_skill_resolution_that_times_out_is_retried_once_then_unavailable() -> None:
+    class Hanging(Skills):
+        async def resolve(self, skill_id: str, version: str) -> ResolvedSkill:
+            self.calls.append(f"{skill_id}@{version}")
+            await asyncio.sleep(5)
+            return TRIAGE
+
+    gateway, source = ScriptedGateway(HYPOTHESIS), Hanging(TRIAGE)
+    request, limits = request_for([PIN]), Limits(gateway_timeout_seconds=0.05)
+    result = asyncio.run(investigate(request, gateway, Provider(), limits, ids(), skills=source))
+
+    assert (result.status, gateway.calls, len(source.calls)) == ("upstream_unavailable", [], 2)
+
+
 def test_resuming_asks_only_for_the_recorded_version_and_digest() -> None:
     gateway, source = ScriptedGateway(HYPOTHESIS), Skills(TRIAGE)
     result = run(gateway, source, [{**PIN, "content_sha256": "a" * 64}])
