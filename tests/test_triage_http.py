@@ -47,6 +47,7 @@ def triage_http_database() -> None:
         connection.execute(
             "INSERT INTO principals VALUES "
             "('op-human','human','Operator','active',now(),now()),"
+            "('reader-human','human','Reader','active',now(),now()),"
             "('bystander-human','human','Bystander','active',now(),now())"
         )
         connection.execute(
@@ -67,6 +68,7 @@ def triage_http_database() -> None:
         async with database.transaction() as session:
             creds = CredentialRepository(session)
             issued_op = await creds.issue("op-human")
+            issued_reader = await creds.issue("reader-human")
             issued_by = await creds.issue("bystander-human")
             grants = GrantRepository(session)
             for index, action in enumerate(
@@ -79,7 +81,15 @@ def triage_http_database() -> None:
                     "incident_workflow",
                     "incident-response",
                 )
+            await grants.create(
+                "grant-reader-human-0",
+                "reader-human",
+                "alert.read",
+                "incident_workflow",
+                "incident-response",
+            )
         BEARERS["op"] = f"Bearer {issued_op.key}"
+        BEARERS["reader"] = f"Bearer {issued_reader.key}"
         BEARERS["bystander"] = f"Bearer {issued_by.key}"
 
     asyncio.run(_setup())
@@ -313,14 +323,26 @@ def test_triage_state_reads_back_dismiss() -> None:
         BEARERS["op"],
     )
     assert posted.status_code == 200
-    read = _get(client, "al-read-dismiss", BEARERS["op"])
+    read = _get(client, "al-read-dismiss", BEARERS["reader"])
     assert read.status_code == 200
     body = read.json()
     assert STATE_VALIDATOR.is_valid(body), body
     assert (body["status"], body["reason"]) == ("dismissed", REASON)
     assert (body["actor"], body["expected_version"]) == ("op-human", 1)
     assert body["incident_id"] is None
-    assert _get(client, "al-read-dismiss", BEARERS["op"]).json() == body
+    assert _get(client, "al-read-dismiss", BEARERS["reader"]).json() == body
+
+
+def test_triage_state_command_only_is_403() -> None:
+    """The contractual read grant alone authorizes the read (P1 guard)."""
+    client = _client()
+    existing = _get(client, "al-read-dismiss", BEARERS["op"])
+    assert existing.status_code == 403
+    assert existing.json()["error"]["code"] == "not_authorized"
+    assert "dismissed" not in existing.text
+    missing = _get(client, "al-read-ghost-three", BEARERS["op"])
+    assert missing.status_code == 403
+    assert "al-read-ghost-three" not in missing.text
 
 
 def test_triage_state_carries_declared_incident() -> None:
@@ -333,14 +355,14 @@ def test_triage_state_carries_declared_incident() -> None:
         BEARERS["op"],
     )
     assert posted.status_code == 201
-    body = _get(client, "al-read-declare", BEARERS["op"]).json()
+    body = _get(client, "al-read-declare", BEARERS["reader"]).json()
     assert STATE_VALIDATOR.is_valid(body), body
     assert body["status"] == "declared"
     assert body["incident_id"] == posted.json()["incident_id"]
 
 
 def test_triage_state_unknown_is_404() -> None:
-    response = _get(_client(), "al-read-ghost-one", BEARERS["op"])
+    response = _get(_client(), "al-read-ghost-one", BEARERS["reader"])
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "triage_not_found"
 
