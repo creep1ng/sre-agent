@@ -108,8 +108,7 @@ def main() -> None:
         listed = client.get(f"/v1/grants?principal_id={HUMAN}&limit=100", headers=auth)
         items = listed.json().get("items", [])
         kept = any(
-            item.get("grant_id") == GRANT_ID and item.get("status") == "revoked"
-            for item in items
+            item.get("grant_id") == GRANT_ID and item.get("status") == "revoked" for item in items
         )
         cases.append(
             {"case": "read lifecycle kept", "status": listed.status_code, "row_kept": kept}
@@ -117,8 +116,13 @@ def main() -> None:
         again = client.delete(f"/v1/grants/{GRANT_ID}", headers=auth)
         cases.append({"case": "double revoke converges", "status": again.status_code})
         unknown = client.delete(f"/v1/grants/{NS}-no-such", headers=auth)
-        cases.append({"case": "revoke unknown grant", "status": unknown.status_code,
-                      "error_code": unknown.json().get("error", {}).get("code")})
+        cases.append(
+            {
+                "case": "revoke unknown grant",
+                "status": unknown.status_code,
+                "error_code": unknown.json().get("error", {}).get("code"),
+            }
+        )
     with psycopg.connect(DATABASE_URL) as connection:
         rows = connection.execute(
             "SELECT count(*) FROM grants WHERE grant_id = %s", (GRANT_ID,)
