@@ -53,6 +53,7 @@ from sre_agent.triage.store import TriageRepository
 
 WORKFLOW_TYPE = "incident_workflow"
 WORKFLOW_ID = "incident-response"
+READ_ACTION = "alert.read"
 SEVERITIES = ("sev1", "sev2", "sev3", "sev4")
 ACTIONS = {
     "open_triage": "alert.triage",
@@ -279,18 +280,12 @@ class TriageService:
     async def read_state(self, principal: Principal, *, alert_id: str) -> dict[str, Any]:
         """Authoritative triage-state read (contract getAlertTriage).
 
-        Holding any triage command grant authorizes the read; unknown alerts
-        404. Single SELECT, no mutation, no existence leakage (403 first).
+        Only the contractual read grant authorizes the read; command grants
+        alone are denied, unknown alerts 404. Single SELECT, no mutation,
+        no existence leakage (403 first).
         """
         async with self._database.transaction() as session:
-            for action in ACTIONS.values():
-                try:
-                    await self._authorize(session, principal, action)
-                except TriageError:
-                    continue
-                break
-            else:
-                raise TriageError(403, "not_authorized")
+            await self._authorize(session, principal, READ_ACTION)
             try:
                 current = await TriageRepository(session).get(alert_id)
             except Exception as error:
