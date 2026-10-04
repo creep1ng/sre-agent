@@ -22,6 +22,20 @@
       "status": 422
     },
     {
+      "case": "dotted invoke refinement is rejected",
+      "error_code": "validation_error",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 422
+    },
+    {
+      "case": "dotted run refinement is rejected",
+      "error_code": "validation_error",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 422
+    },
+    {
       "case": "inactive resource plus bad action orders 404 first",
       "error_code": "resource_not_found",
       "grant_rows": 0,
@@ -36,7 +50,7 @@
       "status": 403
     },
     {
-      "case": "admitted hierarchical refinement creates",
+      "case": "admitted bare invoke creates",
       "error_code": null,
       "grant_rows": 1,
       "idempotency_bindings": 1,
