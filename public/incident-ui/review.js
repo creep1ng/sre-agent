@@ -17,7 +17,7 @@ const REVIEW_ACTIONS = Object.freeze({
   }),
 });
 
-const state = { incidentId: null, runId: null, pending: null, idempotencyKey: null, generation: 0 };
+const state = { incidentId: null, runId: null, pending: null, idempotencyKey: null, generation: 0, draftComments: {} };
 
 const nodes = {};
 const credentialStore = createMemoryCredentialStore();
@@ -103,10 +103,11 @@ function renderActions(actions) {
 }
 
 function openDecision(action) {
+  if (state.pending) state.draftComments[state.pending.command] = nodes["decision-comment"].value;
   state.pending = action;
   state.idempotencyKey = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-review`;
   nodes["decision-title"].textContent = action.label;
-  nodes["decision-comment"].value = "";
+  nodes["decision-comment"].value = state.draftComments[action.command] ?? "";
   nodes["decision-key"].textContent = state.idempotencyKey;
   nodes["decision-submit"].disabled = false;
   nodes["receipt-section"].hidden = true;
@@ -160,6 +161,7 @@ async function submitDecision(event) {
   event.preventDefault();
   const action = state.pending;
   if (!action || nodes["decision-submit"].disabled) return;
+  state.draftComments[action.command] = nodes["decision-comment"].value;
   nodes["decision-submit"].disabled = true;
   try {
     const response = await client.sendRunCommand(
@@ -197,6 +199,7 @@ function submitCredential(event) {
 function forgetCredential() {
   state.generation += 1;
   state.pending = null;
+  state.draftComments = {};
   state.idempotencyKey = null;
   credentialStore.clear();
   hideAll();

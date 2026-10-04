@@ -169,6 +169,31 @@ test("recovers from a 409 conflict keeping the written reason", async ({ page })
   await expect(page.locator("#decision-comment")).toHaveValue("Needs a second flag check.");
 });
 
+test("restores the typed reason when reopening the same action after refresh", async ({ page }) => {
+  await openReview(page);
+  await mockCommands(page, async () => ({
+    status: 409,
+    json: { error: { code: "command_not_permitted", message: "not permitted" } },
+  }));
+  await decide(page, "reject_mitigation", "Needs a second flag check.");
+
+  await expect(page.locator("#error-409")).toBeVisible();
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#actions-list button")).toHaveCount(3);
+  await page.locator('#actions-list button[data-command="reject_mitigation"]').click();
+  await expect(page.locator("#decision-comment")).toHaveValue("Needs a second flag check.");
+});
+
+test("keeps drafts isolated per action", async ({ page }) => {
+  await openReview(page);
+  await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
+  await page.locator("#decision-comment").fill("Approve reason.");
+  await page.locator('#actions-list button[data-command="reject_mitigation"]').click();
+  await expect(page.locator("#decision-comment")).toHaveValue("");
+  await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
+  await expect(page.locator("#decision-comment")).toHaveValue("Approve reason.");
+});
+
 test("exposes no close controls and no editable authority", async ({ page }) => {
   await openReview(page);
 
