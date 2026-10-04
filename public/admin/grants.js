@@ -33,6 +33,14 @@ const createCancel = document.getElementById("create-cancel");
 const createErrorBox = document.getElementById("create-error");
 const createErrorTitle = document.getElementById("create-error-title");
 const createErrorDetail = document.getElementById("create-error-detail");
+const revokeDialog = document.getElementById("revoke-dialog");
+const revokeForm = document.getElementById("revoke-form");
+const revokeDetail = document.getElementById("revoke-detail");
+const revokeError = document.getElementById("revoke-error");
+const revokeErrorTitle = document.getElementById("revoke-error-title");
+const revokeErrorDetail = document.getElementById("revoke-error-detail");
+const revokeSubmit = document.getElementById("revoke-submit");
+const revokeCancel = document.getElementById("revoke-cancel");
 
 // Action selector is a frontend-only guide from the audit action vocabulary;
 // the backend keeps free-form exact-match actions, so no contract is invented.
@@ -56,6 +64,10 @@ const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 let sessionGeneration = 0;
 let queryVersion = 0;
+let currentFilter = null;
+let currentItems = [];
+let pendingRevoke = null;
+let revokeInFlight = false;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const announce = (message) => {
@@ -166,6 +178,45 @@ function validateCreateFields() {
   };
 }
 
+// Revoke errors keep the 401/403 contract of the list surface: credential
+// and authorization failures preserve their dedicated titles, while a
+// missing grant id is reported contractually without revealing anything else.
+function describeRevokeError(error) {
+  if (error?.kind === "network")
+    return ["API unavailable", "The control-plane API could not be reached. The grant was not revoked."];
+  if (error?.kind === "authentication")
+    return ["Authentication required", "Provide a valid API key. The grant was not revoked."];
+  if (error?.kind === "authorization")
+    return ["Access unavailable", "The grant cannot be revoked for this identity. Nothing else is revealed."];
+  if (error?.kind === "not_found")
+    return ["Grant not found", "The grant is no longer listed. Refresh the list; nothing was revoked."];
+  if (error?.kind === "api" && error?.code === "validation_error")
+    return ["Invalid grant", "The grant identifier is not a valid grant reference. Nothing was revoked."];
+  return ["Request failed", error?.message ?? "Unexpected error. Nothing was revoked."];
+}
+
+function hideRevokeError() {
+  revokeError.hidden = true;
+  revokeErrorTitle.textContent = "Request failed";
+  revokeErrorDetail.textContent = "";
+}
+
+function showRevokeError(error) {
+  const [title, detail] = describeRevokeError(error);
+  revokeErrorTitle.textContent = title;
+  revokeErrorDetail.textContent = detail;
+  revokeError.hidden = false;
+  announce(`${title}. ${detail}`);
+}
+
+function closeRevokeDialog() {
+  pendingRevoke = null;
+  hideRevokeError();
+  if (revokeDialog?.open) revokeDialog.close();
+  if (!revokeInFlight && revokeSubmit) revokeSubmit.disabled = false;
+  if (revokeCancel) revokeCancel.disabled = false;
+}
+
 function hideError() {
   errorBox.hidden = true;
   errorDetail.textContent = "";
@@ -212,12 +263,13 @@ function statusBadge(status) {
 function renderRows(items) {
   clearGrantRows();
   for (const item of items) {
+    const grantId = text(item.grant_id);
     const row = document.createElement("tr");
-    row.dataset.grantRow = text(item.grant_id);
+    row.dataset.grantRow = grantId;
     const idCell = document.createElement("td");
     const idCode = document.createElement("code");
     idCode.className = "ma-mono";
-    idCode.textContent = text(item.grant_id);
+    idCode.textContent = grantId;
     idCell.append(idCode);
     const principalCell = document.createElement("td");
     principalCell.className = "ma-mono";
@@ -229,15 +281,49 @@ function renderRows(items) {
     resourceCell.textContent = `${text(item.resource?.resource_type)}/${text(item.resource?.resource_id)}`;
     const statusCell = document.createElement("td");
     statusCell.append(statusBadge(item.status));
-    row.append(idCell, principalCell, actionCell, resourceCell, statusCell);
+    const revokeCell = document.createElement("td");
+    const revokeButton = document.createElement("button");
+    revokeButton.className = "ma-button ma-button--secondary ma-button--small";
+    revokeButton.type = "button";
+    revokeButton.dataset.grantRevoke = grantId;
+    revokeButton.textContent = "Revoke";
+    revokeButton.setAttribute("aria-label", `Revoke grant ${grantId}`);
+    revokeCell.append(revokeButton);
+    row.append(idCell, principalCell, actionCell, resourceCell, statusCell, revokeCell);
     rowsBody.append(row);
   }
+}
+
+function openRevokeDialog(grantId) {
+  if (revokeInFlight) return;
+  const known = currentItems.find((entry) => text(entry.grant_id) === grantId);
+  const status = text(known?.status);
+  hideRevokeError();
+  if (revokeSubmit) revokeSubmit.disabled = false;
+  if (revokeCancel) revokeCancel.disabled = false;
+  if (status !== "" && status !== "active") {
+    // CA2: an already-revoked (or otherwise inactive) grant converges
+    // without a DELETE. The contractual outcome is stated, the row stays.
+    pendingRevoke = null;
+    revokeDetail.textContent =
+      `Grant ${grantId} is already ${status}. ` +
+      "The revoked lifecycle state is kept for traceability; no further action is needed.";
+    if (revokeSubmit) revokeSubmit.disabled = true;
+    announce(revokeDetail.textContent);
+  } else {
+    pendingRevoke = { grantId };
+    revokeDetail.textContent =
+      `Revoke grant ${grantId}? ` +
+      "The grant converges to revoked and stays listed for traceability.";
+  }
+  revokeDialog.showModal();
 }
 
 async function loadGrants(filter) {
   const generation = sessionGeneration;
   const version = (queryVersion += 1);
   hideError();
+  closeRevokeDialog();
   page.dataset.state = "loading";
   loadingState.hidden = false;
   listWrap.hidden = true;
@@ -249,6 +335,7 @@ async function loadGrants(filter) {
     if (generation !== sessionGeneration || version !== queryVersion) return false;
     const items = Array.isArray(payload?.items) ? payload.items : [];
     loadingState.hidden = true;
+    currentItems = items;
     if (items.length === 0) {
       page.dataset.state = "empty";
       clearGrantRows();
@@ -270,6 +357,7 @@ async function loadGrants(filter) {
     if (generation !== sessionGeneration || version !== queryVersion) return false;
     loadingState.hidden = true;
     clearGrantRows();
+    currentItems = [];
     showInitialHint();
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     showError(error);
@@ -281,7 +369,10 @@ async function loadFilterSources() {
   const generation = (sessionGeneration += 1);
   queryVersion += 1;
   hideError();
+  closeRevokeDialog();
   clearGrantRows();
+  currentItems = [];
+  currentFilter = null;
   showInitialHint();
   closeCreateDialog();
   resetCreateOptions();
@@ -364,26 +455,84 @@ principalFilter.addEventListener("change", () => {
   if (!principalFilter.value) {
     queryVersion += 1;
     hideError();
+    closeRevokeDialog();
     clearGrantRows();
+    currentItems = [];
+    currentFilter = null;
     showInitialHint();
     page.dataset.state = "filters";
     return;
   }
   resourceFilter.value = "";
-  loadGrants({ principalId: principalFilter.value });
+  currentFilter = { principalId: principalFilter.value };
+  loadGrants(currentFilter);
 });
 
 resourceFilter.addEventListener("change", () => {
   if (!resourceFilter.value) {
     queryVersion += 1;
     hideError();
+    closeRevokeDialog();
     clearGrantRows();
+    currentItems = [];
+    currentFilter = null;
     showInitialHint();
     page.dataset.state = "filters";
     return;
   }
   principalFilter.value = "";
-  loadGrants({ resourceId: resourceFilter.value });
+  currentFilter = { resourceId: resourceFilter.value };
+  loadGrants(currentFilter);
+});
+
+rowsBody.addEventListener("click", (event) => {
+  const button = event.target?.closest?.("[data-grant-revoke]");
+  if (!button || !rowsBody.contains(button)) return;
+  const grantId = button.dataset.grantRevoke;
+  if (!grantId) return;
+  openRevokeDialog(grantId);
+});
+
+revokeDialog.addEventListener("cancel", (event) => {
+  if (revokeInFlight) event.preventDefault();
+});
+
+revokeCancel.addEventListener("click", () => {
+  if (revokeInFlight) return;
+  closeRevokeDialog();
+});
+
+revokeForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (revokeInFlight) return;
+  if (revokeSubmit.disabled) return;
+  if (!pendingRevoke) return;
+  hideRevokeError();
+  const generation = sessionGeneration;
+  const { grantId } = pendingRevoke;
+  revokeInFlight = true;
+  revokeSubmit.disabled = true;
+  if (revokeCancel) revokeCancel.disabled = true;
+  try {
+    await controlApi.revokeGrant(grantId);
+    if (generation !== sessionGeneration) return;
+    closeRevokeDialog();
+    // CA2: revoke changes lifecycle without deleting traceability. The
+    // list is refreshed in place (no harness restart) and the revoked row
+    // stays rendered with its revoked badge. The outcome is announced after
+    // the refresh so it remains the latest live-region message.
+    const refreshed = currentFilter ? await loadGrants(currentFilter) : true;
+    if (generation !== sessionGeneration) return;
+    if (refreshed) announce(`Grant ${grantId} revoked. The revoked row is kept for traceability.`);  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    showRevokeError(error);
+  } finally {
+    revokeInFlight = false;
+    if (revokeDialog?.open) {
+      if (revokeSubmit) revokeSubmit.disabled = !pendingRevoke;
+      if (revokeCancel) revokeCancel.disabled = false;
+    }
+  }
 });
 
 createButton.addEventListener("click", () => {
@@ -480,8 +629,11 @@ disconnectButton.addEventListener("click", () => {
   queryVersion += 1;
   credentialStore.clear();
   clearGrantRows();
+  currentItems = [];
+  currentFilter = null;
   hideError();
   closeCreateDialog();
+  closeRevokeDialog();
   resetCreateOptions();
   createButton.disabled = true;
   resourceNote.hidden = true;

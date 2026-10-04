@@ -91,7 +91,7 @@
           <div id="list-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading grants…</div>
           <div class="ma-table-wrap" id="list-wrap" hidden>
             <table class="ma-table principals__table">
-              <thead><tr><th scope="col">Grant ID</th><th scope="col">Principal</th><th scope="col">Action</th><th scope="col">Resource</th><th scope="col">Status</th></tr></thead>
+              <thead><tr><th scope="col">Grant ID</th><th scope="col">Principal</th><th scope="col">Action</th><th scope="col">Resource</th><th scope="col">Status</th><th scope="col">Revoke</th></tr></thead>
               <tbody id="grant-rows"></tbody>
             </table>
           </div>
@@ -149,6 +149,17 @@
         </form>
       </dialog>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
+      <dialog id="revoke-dialog" class="principals__dialog" aria-labelledby="revoke-title">
+        <form id="revoke-form" class="principals__create-form" novalidate>
+          <h2 id="revoke-title" class="ma-panel__title">Revoke grant</h2>
+          <p id="revoke-detail" class="ma-panel__description"></p>
+          <div id="revoke-error" class="ma-alert" data-tone="critical" hidden><div><p id="revoke-error-title" class="ma-alert__title">Request failed</p><p id="revoke-error-detail" class="ma-alert__detail"></p></div></div>
+          <div class="ma-button-row">
+            <button id="revoke-submit" class="ma-button ma-button--primary" type="submit">Revoke grant</button>
+            <button id="revoke-cancel" class="ma-button ma-button--secondary" type="button" value="cancel" formnovalidate>Cancel</button>
+          </div>
+        </form>
+      </dialog>
     </main>
     <script type="module" src="/public/admin/grants.js"></script>
   </body>
