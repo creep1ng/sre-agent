@@ -24,7 +24,7 @@ const PRESENTATION_FIXTURE = Object.freeze({
 const UNKNOWN = "Desconocido (no registrado)";
 const PENDING = "Pendiente";
 
-const state = { incidentId: null, runId: null, generation: 0 };
+const state = { incidentId: null, runId: null, generation: 0, timelineSeq: 0 };
 
 const nodes = {};
 const credentialStore = createMemoryCredentialStore();
@@ -149,15 +149,18 @@ function renderProvenance(events, runId) {
 
 async function loadTimeline(runId) {
   const generation = state.generation;
+  const request = (state.timelineSeq += 1);
   let page;
   try {
     page = await client.getIncidentTimeline(state.incidentId, { runId, limit: 50 });
   } catch (error) {
-    if (generation !== state.generation || runId !== state.runId) return;
+    if (generation !== state.generation || request !== state.timelineSeq || runId !== state.runId) return;
     throw error;
   }
-  // A late reply for a deselected run never mutates the current view.
-  if (generation !== state.generation || runId !== state.runId) return;
+  // A late reply, even for the currently selected run, never mutates the
+  // view unless it is still the latest request: reselecting a run starts a
+  // new request that supersedes any earlier one for the same run.
+  if (generation !== state.generation || request !== state.timelineSeq || runId !== state.runId) return;
   renderProvenance(page.events ?? [], runId);
 }
 
