@@ -37,12 +37,12 @@ fixed in the change's `design.md`.
 
 ## Skills
 
-A request can pin exact Skill versions in `skills` (issue #32). The harness resolves them
-through `GET /v1/skills/{skill_id}/{version}/resolve` with the same key, never from the
-checkout, and again before every model call, without cache. The result lists each version with
-its digest, dependencies and resolution request id, which names its `skills.resolve` audit
-event; resuming passes the digest back. A 404 ends the run as `denied`, two gateway failures
-as `upstream_unavailable`, another body or digest as `needs_human`. A Skill grants no tools.
+A request pins exact Skill versions in `skills` (issue #32). The harness resolves them through
+`GET /v1/skills/{skill_id}/{version}/resolve` with the same key, never from the checkout, and again
+before every model call and retry, without cache. The result lists each version with its digest,
+dependencies and resolution request id, naming its `skills.resolve` audit event; resuming passes the
+digest back. 401, 403 and 404 end the run as `denied`; a 5xx, network error or timeout, retried
+once, as `upstream_unavailable`; another body or digest as `needs_human`. Skills grant no tools.
 
 ## Deterministic demonstration
 

@@ -71,25 +71,27 @@ def test_the_client_resolves_the_exact_version_with_the_principal_key_only() -> 
     [
         (404, {"error": {"code": "resource_not_found"}}, "denied"),
         (401, {"error": {"code": "authentication_failed"}}, "denied"),
+        (403, {"error": {"code": "resource_unavailable"}}, "denied"),
         (503, {"error": {"code": "audit_unavailable"}}, "transient"),
         (422, {"error": {"code": "contract_validation_failed"}}, "rejected"),
         (200, {"skill": "not a record"}, "rejected"),
         (200, body({**ROOT, "version": "2.0.0"}), "rejected"),
         (200, body(ROOT, DEPENDENCY, DEPENDENCY), "rejected"),
         (200, body(ROOT, NESTED), "rejected"),
-        (None, {}, "transient"),
+        (None, httpx.ConnectError, "transient"),
+        (None, httpx.ReadTimeout, "transient"),
     ],
     ids=(
-        "missing unauthenticated unavailable invalid malformed other-version "
-        "extra-dependency nested-dependency unreachable"
+        "missing unauthenticated forbidden unavailable invalid malformed other-version "
+        "extra-dependency nested-dependency unreachable timeout"
     ).split(),
 )
 def test_the_client_refuses_anything_but_the_version_and_dependencies_it_pinned(
-    status: int | None, served: dict[str, Any], kind: str
+    status: int | None, served: Any, kind: str
 ) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if status is None:
-            raise httpx.ConnectError("gateway down", request=request)
+            raise served("gateway down", request=request)
         return httpx.Response(status, json=served)
 
     with pytest.raises(GatewayError) as raised:

@@ -81,10 +81,9 @@ class _Resolution(BaseModel):
 
 
 def _skill(item: _SkillVersion, request_id: UUID, *dependencies: ResolvedSkill) -> ResolvedSkill:
-    manifest = item.manifest
     return ResolvedSkill(
-        item.skill_id, item.version, item.content_sha256, manifest.display_name,
-        manifest.instructions, dependencies, request_id,
+        item.skill_id, item.version, item.content_sha256, item.manifest.display_name,
+        item.manifest.instructions, dependencies, request_id,
     )  # fmt: skip
 
 
