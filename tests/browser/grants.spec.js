@@ -250,6 +250,89 @@ test("absence is an explicit deny and failures clear stale rows", async ({ page 
   expect(await page.locator("#grant-rows").textContent()).not.toContain(stale);
 });
 
+test("revoke asks for confirmation, revokes, and keeps the revoked row", async ({ page }) => {
+  const deleteUrls = [];
+  let grantReads = 0;
+  await page.route("**/api/v1/principals?limit=100", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(principalsPayload()) }),
+  );
+  await page.route("**/api/v1/grants**", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deleteUrls.push(route.request().url());
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    grantReads += 1;
+    const status = grantReads <= 1 ? "active" : "revoked";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(grantPayload([grantItem({ status })])),
+    });
+  });
+  await page.fill("#api-key", "sre_s1_placeholder_key_for_seam_fulfillment");
+  await page.click("#connect-button");
+  await expect(page.locator("#principal-filter option[value='admin-human']")).toHaveCount(1);
+  await page.selectOption("#principal-filter", "admin-human");
+  const row = page.locator("[data-grant-row='grant-admin-human-admin-read-principals']");
+  await expect(row).toContainText("active");
+  await expect(row.locator("[data-grant-revoke]")).toBeVisible();
+  expect(deleteUrls).toEqual([]);
+  await row.locator("[data-grant-revoke]").click();
+  await expect(page.locator("#revoke-dialog")).toBeVisible();
+  await expect(page.locator("#revoke-detail")).toContainText("grant-admin-human-admin-read-principals");
+  expect(deleteUrls).toEqual([]);
+  if (process.env.GRANTS_REVOKE_CONFIRM_CAPTURE) {
+    await page.screenshot({ path: process.env.GRANTS_REVOKE_CONFIRM_CAPTURE, fullPage: true });
+  }
+  await page.locator("#revoke-submit").click();
+  expect(deleteUrls).toHaveLength(1);
+  expect(deleteUrls[0]).toContain("/api/v1/grants/grant-admin-human-admin-read-principals");
+  await expect(page.locator("#revoke-dialog")).toBeHidden();
+  // CA2: revoke changes lifecycle without deleting traceability — the row
+  // stays rendered and now carries the revoked state after list refresh.
+  await expect(row).toContainText("revoked");
+  await expect(row).toHaveCount(1);
+  await expect(page.locator("#live-region")).toContainText("revoked");
+  expect(await storageContents(page)).toEqual({ local: {}, session: {} });
+  if (process.env.GRANTS_REVOKE_CAPTURE) {
+    await page.screenshot({ path: process.env.GRANTS_REVOKE_CAPTURE, fullPage: true });
+  }
+});
+
+test("revoking an already-revoked grant states the contract without calling the API", async ({ page }) => {
+  const deleteUrls = [];
+  await page.route("**/api/v1/principals?limit=100", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(principalsPayload()) }),
+  );
+  await page.route("**/api/v1/grants**", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deleteUrls.push(route.request().url());
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(grantPayload([grantItem({ status: "revoked" })])),
+    });
+  });
+  await page.fill("#api-key", "sre_s1_placeholder_key_for_seam_fulfillment");
+  await page.click("#connect-button");
+  await expect(page.locator("#principal-filter option[value='admin-human']")).toHaveCount(1);
+  await page.selectOption("#principal-filter", "admin-human");
+  const row = page.locator("[data-grant-row='grant-admin-human-admin-read-principals']");
+  await expect(row).toContainText("revoked");
+  await row.locator("[data-grant-revoke]").click();
+  await expect(page.locator("#revoke-dialog")).toBeVisible();
+  await expect(page.locator("#revoke-detail")).toContainText("already revoked");
+  await expect(page.locator("#revoke-submit")).toBeDisabled();
+  expect(deleteUrls).toEqual([]);
+  await page.locator("#revoke-cancel").click();
+  await expect(page.locator("#revoke-dialog")).toBeHidden();
+  await expect(row).toHaveCount(1);
+});
+
 test("restricted identity and invalid keys see no rows", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
   await page.fill("#api-key", "sre_admn_0123456789abcdefghij");
