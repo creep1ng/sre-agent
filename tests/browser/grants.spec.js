@@ -463,3 +463,69 @@ test("duplicate grant keeps the dialog with 409 wording and adds no row", async 
   await expect(page.locator("#create-grant-id")).toHaveValue("grant-admin-human-admin-read-grants");
   await expect(page.locator("[data-grant-row]")).toHaveCount(0);
 });
+
+test("create then revoke keeps the same filter and the revoked row", async ({ page }) => {
+  await page.route("**/api/v1/principals?limit=100", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(principalsPayload()) }),
+  );
+  await page.route("**/api/v1/catalog/resources**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalogPayload()) }),
+  );
+  const deleteUrls = [];
+  let createdSeen = false;
+  let revokedSeen = false;
+  const integratedGrant = () =>
+    grantItem({
+      grant_id: "grant-incident-harness-invoke-triage-agent",
+      principal_id: "incident-harness",
+      action: "invoke",
+      resource: { resource_type: "llm_model", resource_id: "triage-agent" },
+      status: revokedSeen ? "revoked" : "active",
+    });
+  await page.route("**/api/v1/grants**", async (route) => {
+    if (route.request().method() === "POST") {
+      createdSeen = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(integratedGrant()) });
+      return;
+    }
+    if (route.request().method() === "DELETE") {
+      deleteUrls.push(route.request().url());
+      revokedSeen = true;
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(grantPayload(createdSeen ? [integratedGrant()] : [])),
+    });
+  });
+  await page.fill("#api-key", "sre_s1_placeholder_key_for_seam_fulfillment");
+  await page.click("#connect-button");
+  await expect(page.locator("#create-grant-button")).toBeEnabled();
+  await page.click("#create-grant-button");
+  await page.fill("#create-grant-id", "grant-incident-harness-invoke-triage-agent");
+  await page.selectOption("#create-principal", "incident-harness");
+  await page.selectOption("#create-action", "invoke");
+  await page.selectOption("#create-resource", "llm_model/triage-agent");
+  await page.click("#create-submit");
+  const row = page.locator("[data-grant-row='grant-incident-harness-invoke-triage-agent']");
+  await expect(row).toContainText("active");
+  await expect(page.locator("#principal-filter")).toHaveValue("incident-harness");
+  await expect(page.locator("#resource-filter")).toHaveValue("");
+  await row.locator("[data-grant-revoke]").click();
+  await expect(page.locator("#revoke-dialog")).toBeVisible();
+  await page.locator("#revoke-submit").click();
+  expect(deleteUrls).toHaveLength(1);
+  await expect(page.locator("#revoke-dialog")).toBeHidden();
+  // currentFilter kept: the revoke refresh reuses the create filter,
+  // so the same row stays listed with the revoked badge.
+  await expect(row).toContainText("revoked");
+  await expect(row).toHaveCount(1);
+  await expect(page.locator("#principal-filter")).toHaveValue("incident-harness");
+  await expect(page.locator("#resource-filter")).toHaveValue("");
+  await expect(page.locator("#live-region")).toContainText("revoked");
+  if (process.env.GRANTS_INTEGRATED_CAPTURE) {
+    await page.screenshot({ path: process.env.GRANTS_INTEGRATED_CAPTURE, fullPage: true });
+  }
+});

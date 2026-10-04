@@ -593,9 +593,11 @@ createForm.addEventListener("submit", async (event) => {
     pendingIdempotencyKey = null;
     pendingCreateBodyKey = null;
     // POST alone never proves success; only the authoritative refresh does.
+    // Keep the live filter in sync so a later revoke refreshes the same view.
     principalFilter.value = checked.body.principal_id;
     resourceFilter.value = "";
-    const refreshed = await loadGrants({ principalId: checked.body.principal_id });
+    currentFilter = { principalId: checked.body.principal_id };
+    const refreshed = await loadGrants(currentFilter);
     if (refreshed) {
       const countText = countLine.textContent === "Not loaded." ? "" : ` ${countLine.textContent}`;
       announce(`Grant ${createdId} ready (201 created or stable replay).${countText}`);
