@@ -162,6 +162,51 @@ test("drops a late timeline reply for a deselected run", async ({ page }) => {
   expect(body).not.toContain("Alpha record");
 });
 
+test("drops a stale first reply after reselecting the same run", async ({ page }) => {
+  let releaseFirst;
+  const gate = new Promise((resolve) => {
+    releaseFirst = resolve;
+  });
+  let run1calls = 0;
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/timeline")) {
+      const runId = url.searchParams.get("run_id") ?? "run_demo0002";
+      if (runId === "run_demo0001") {
+        run1calls += 1;
+        const marker = run1calls === 1 ? "Alpha stale." : "Alpha current.";
+        if (run1calls === 1) await gate;
+        return route.fulfill({ json: timelineFor(marker) });
+      }
+      return route.fulfill({ json: timelineFor("Beta") });
+    }
+    return route.fulfill({ json: detailTwoRuns() });
+  });
+  await page.goto(`/public/incident-ui/postmortem.html?incident_id=${INCIDENT}`);
+  await page.locator("#credential-input").fill("sre_demo_token_demo_0001");
+  await page.locator("#credential-form button[type=submit]").click();
+  await expect(page.locator("#provenance-list")).toContainText("run run_demo0002");
+  await page.locator("#run-select").selectOption("run_demo0001");
+  const run2reply = page.waitForResponse(
+    (response) =>
+      response.url().includes("/timeline") && response.url().includes("run_demo0002"),
+  );
+  await page.locator("#run-select").selectOption("run_demo0002");
+  await run2reply;
+  const run1again = page.waitForResponse(
+    (response) =>
+      response.url().includes("/timeline") && response.url().includes("run_demo0001"),
+  );
+  await page.locator("#run-select").selectOption("run_demo0001");
+  await run1again;
+  await expect(page.locator("#provenance-list")).toContainText("Alpha current.");
+  releaseFirst();
+  await page.waitForTimeout(300);
+  const body = (await page.locator("#provenance-list").textContent()) ?? "";
+  expect(body).toContain("Alpha current.");
+  expect(body).not.toContain("Alpha stale.");
+});
+
 test("keeps review session-only without persistence or close", async ({ page }) => {
   await openProvenance(page);
   await expect(page.locator("#review-section")).toBeVisible();
