@@ -23,10 +23,11 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
+from sre_agent.gateway.incidents import StateReadRaceError
 from sre_agent.incident.runtime import ActorReference, IncidentCommand, IncidentRuntime
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
+from sre_agent.persistence.incidents import PostgresEventRepository, PostgresIncidentUnitOfWork
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
 from sre_agent.settings import Settings
 
@@ -42,6 +43,7 @@ INCIDENT_ID = "inc-a3-http-start"
 OTHER_INCIDENT_ID = "inc-a3-http-neighbour"
 KEY_INCIDENTS = {8: "inc-a3-http-key-008", 128: "inc-a3-http-key-128", 200: "inc-a3-http-key-200"}
 CURSOR_INCIDENT_ID = "inc-a3-http-cursor"
+RACE_INCIDENT_ID = "inc-a3-http-race"
 # The range the contract admits, end to end: the store holds the longest key it
 # allows, so the boundary has no reason to narrow it.
 CONTRACT_MAX_KEY = "k" * 200
@@ -139,6 +141,7 @@ def authorized_database() -> None:
             for identifier in KEY_INCIDENTS.values():
                 await work.incidents.add(identifier, _base_state(), now=NOW)
             await work.incidents.add(CURSOR_INCIDENT_ID, _base_state(), now=NOW)
+            await work.incidents.add(RACE_INCIDENT_ID, _base_state(), now=NOW)
         BEARERS["demo"] = f"Bearer {demo.key}"
         BEARERS["bystander"] = f"Bearer {bystander.key}"
 
@@ -282,6 +285,29 @@ def test_every_key_length_the_contract_admits_opens_a_run() -> None:
     assert [row[0] for row in stored] == [8, 128, 200]
 
 
+async def _declare(incident_id: str, run_id: str, command_id: str) -> int:
+    """Commit a run's `triage_declare` in a unit of work of its own; its last event."""
+
+    database = Database(DATABASE_URL)
+    workflow = load_incident_workflow(REPOSITORY_ROOT / "agent/workflows/incident-response.yaml")
+    command = IncidentCommand(
+        command_id=command_id,
+        incident_id=incident_id,
+        run_id=run_id,
+        transition_id="triage_declare",
+        actor="human",
+        actor_reference=ActorReference(principal_id="demo-human"),
+        outcome="declare",
+        inputs={"severity": "sev2"},
+    )
+    try:
+        runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
+        result = await runtime.execute(command)
+    finally:
+        await database.dispose()
+    return max(event.sequence for event in result.events)
+
+
 def test_resuming_reports_a_cursor_for_the_state_it_returns() -> None:
     """Snapshots lag behind the run, so the cursor cannot come from the snapshot.
 
@@ -295,32 +321,11 @@ def test_resuming_reports_a_cursor_for_the_state_it_returns() -> None:
     run_id = opened.json()["run_id"]
     assert opened.json()["cursor"] == "seq:0"
 
-    async def _advance() -> tuple[int, int]:
-        database = Database(DATABASE_URL)
-        workflow = load_incident_workflow(
-            REPOSITORY_ROOT / "agent/workflows/incident-response.yaml"
-        )
-        runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
-        await runtime.execute(
-            IncidentCommand(
-                command_id="cursor-second-transition",
-                incident_id=CURSOR_INCIDENT_ID,
-                run_id=run_id,
-                transition_id="triage_declare",
-                actor="human",
-                actor_reference=ActorReference(principal_id="demo-human"),
-                outcome="declare",
-                inputs={"severity": "sev2"},
-            )
-        )
-        async with PostgresIncidentUnitOfWork(database) as work:
-            events = await work.events.list_after(run_id, sequence=-1, limit=50)
-            snapshot = await work.snapshots.latest(run_id)
-        await database.dispose()
-        assert snapshot is not None
-        return max(event.sequence for event in events), snapshot.event_sequence
-
-    last_event, covered_by_snapshot = asyncio.run(_advance())
+    last_event = asyncio.run(_declare(CURSOR_INCIDENT_ID, run_id, "cursor-second-transition"))
+    with psycopg.connect(DATABASE_URL) as connection:
+        [covered_by_snapshot] = connection.execute(
+            "SELECT max(event_sequence) FROM incident.snapshots WHERE run_id = %s", (run_id,)
+        ).fetchone()
     assert last_event > covered_by_snapshot, "the second transition must not take a new snapshot"
 
     resumed = _start(
@@ -331,3 +336,52 @@ def test_resuming_reports_a_cursor_for_the_state_it_returns() -> None:
     assert resumed.status_code == 200
     assert resumed.json()["current_state"] == "active"
     assert resumed.json()["cursor"] == f"seq:{last_event}"
+
+
+def test_a_transition_landing_mid_resume_is_read_again_and_never_paired_wrong(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The case left open on #411: a transition commits between reading a run and its events.
+
+    Paired from two read points, the resume would answer the state before the transition
+    with the cursor after it, and a consumer continuing from that cursor would never see
+    the transition. The run is read again, so the state and the cursor both include it.
+    """
+
+    opened = _start("key-race-0000001", incident=RACE_INCIDENT_ID)
+    assert (opened.status_code, opened.json()["current_state"]) == (201, "triage")
+    run_id = opened.json()["run_id"]
+    read_events = PostgresEventRepository.list_after
+    landed: list[int] = []
+
+    async def list_after(self: Any, run: str, **arguments: Any) -> Any:
+        # The resume has already read the run: the transition commits right now.
+        if run == run_id and not landed:
+            landed.append(await _declare(RACE_INCIDENT_ID, run_id, "race-declare-000001"))
+        return await read_events(self, run, **arguments)
+
+    monkeypatch.setattr(PostgresEventRepository, "list_after", list_after)
+    resumed = _start(
+        "key-race-0000002", body=_body(resume_from_run_id=run_id), incident=RACE_INCIDENT_ID
+    )
+
+    assert resumed.status_code == 200
+    assert (resumed.json()["current_state"], resumed.json()["cursor"]) == (
+        "active",
+        f"seq:{landed[0]}",
+    )
+
+
+def test_a_resume_that_keeps_racing_is_503_and_retryable(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def racing(work: Any, run_id: str) -> None:
+        raise StateReadRaceError(run_id)
+
+    monkeypatch.setattr("sre_agent.gateway.runs.consistent_run_state", racing)
+    response = _start(
+        "key-race-0000003",
+        body=_body(resume_from_run_id="run_keepsracing1"),
+        incident=RACE_INCIDENT_ID,
+    )
+
+    assert (response.status_code, response.json()["error"]["code"]) == (503, "storage_unavailable")
+    assert (response.headers["Retry-After"], response.json()["retryable"]) == ("5", True)

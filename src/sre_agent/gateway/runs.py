@@ -22,6 +22,7 @@ from sre_agent.gateway.incidents import (
     RETRY_AFTER_SECONDS,
     WORKFLOW_RESOURCE_TYPE,
     IncidentWorkflowResourceReader,
+    consistent_run_state,
 )
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
@@ -228,19 +229,14 @@ class RunStartService:
                 incident = await work.incidents.get(incident_id)
                 if incident is None:
                     return self._error(request_id, 404)
-                run = await work.runs.get(run_id)
-                if run is None or run.incident_id != incident_id:
-                    return self._error(request_id, 404, RUN_NOT_FOUND)
-                snapshot = await work.snapshots.latest(run_id)
-                # The state comes from the run record, which reflects every
-                # committed transition; snapshots are taken periodically, so the
-                # last one can lag behind it. Reading the events after the
-                # snapshot gives a cursor for the state actually returned, and a
-                # consumer that continues from it never re-applies what it can
-                # already see.
-                covered = snapshot.event_sequence if snapshot is not None else -1
-                later = await work.events.list_after(run_id, sequence=covered)
-                sequence = later[-1].sequence if later else covered
+                # The state and its cursor come from one read point, as in the
+                # run reads: a transition that lands between reading the run and
+                # its events is read again, never returned as an old state with
+                # a newer cursor. A read that keeps racing is a retryable 503.
+                found = await consistent_run_state(work, run_id)
+            if found is None or found[0].incident_id != incident_id:
+                return self._error(request_id, 404, RUN_NOT_FOUND)
+            run, sequence = found
         except Exception:
             return self._error(request_id, 503)
         try:
