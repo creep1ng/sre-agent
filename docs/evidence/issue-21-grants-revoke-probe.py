@@ -111,7 +111,9 @@ def main() -> None:
             item.get("grant_id") == GRANT_ID and item.get("status") == "revoked"
             for item in items
         )
-        cases.append({"case": "read lifecycle kept", "status": listed.status_code, "row_kept": kept})
+        cases.append(
+            {"case": "read lifecycle kept", "status": listed.status_code, "row_kept": kept}
+        )
         again = client.delete(f"/v1/grants/{GRANT_ID}", headers=auth)
         cases.append({"case": "double revoke converges", "status": again.status_code})
         unknown = client.delete(f"/v1/grants/{NS}-no-such", headers=auth)
