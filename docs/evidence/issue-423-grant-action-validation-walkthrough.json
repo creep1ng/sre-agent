@@ -1,0 +1,75 @@
+{
+  "cases": [
+    {
+      "case": "unknown action root",
+      "error_code": "validation_error",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 422
+    },
+    {
+      "case": "cross-type action over llm_model",
+      "error_code": "validation_error",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 422
+    },
+    {
+      "case": "cross-type contract action over llm_model",
+      "error_code": "validation_error",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 422
+    },
+    {
+      "case": "inactive resource plus bad action orders 404 first",
+      "error_code": "resource_not_found",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 404
+    },
+    {
+      "case": "restricted caller plus bad action stays 403",
+      "error_code": "resource_unavailable",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 403
+    },
+    {
+      "case": "admitted hierarchical refinement creates",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "stable replay of admitted create",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "new-tuple duplicate with admitted action",
+      "error_code": "idempotency_conflict",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 409
+    },
+    {
+      "case": "corrected retry of rejected grant_id with fresh key",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "admitted control-plane action creates",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    }
+  ],
+  "issue": 423
+}
