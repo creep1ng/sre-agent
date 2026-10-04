@@ -1,16 +1,16 @@
 """Issue #423 CA3 walkthrough probe: admitted-action validation evidence.
 
 Containerized E2E: exercises POST /v1/grants against real FastAPI + PostgreSQL
-with non-admitted actions (unknown root, cross-type), ordering probes (bad
-action behind inactive resource stays 404, behind a denied caller stays 403),
-an admitted hierarchical refinement (201), its stable same-key replay (201 via
-the peek path, which precedes the new-only action guard), a new-tuple
-duplicate with an admitted action (409, unchanged), a corrected retry of a
-rejected grant_id with a fresh key (201, proving no binding was consumed on
-reject), and an admitted control-plane action (201). Records real HTTP
-statuses, error codes, GrantRow counts (zero-mutation proof) and
-idempotency-record counts (no binding consumed on rejection). Prints ONLY the
-JSON transcript.
+with non-admitted actions (unknown root, cross-type, dotted invoke refinement,
+dotted run refinement), ordering probes (bad action behind inactive resource
+stays 404, behind a denied caller stays 403), an admitted bare invoke (201),
+its stable same-key replay (201 via the peek path, which precedes the new-only
+action guard), a new-tuple duplicate with an admitted action (409, unchanged),
+a corrected retry of a rejected grant_id with a fresh key (201, proving no
+binding was consumed on reject), and an admitted control-plane action (201).
+Records real HTTP statuses, error codes, GrantRow counts (zero-mutation proof)
+and idempotency-record counts (no binding consumed on rejection). Prints ONLY
+the JSON transcript.
 """
 
 import asyncio
@@ -93,6 +93,19 @@ def sql_setup() -> None:
                     resource_id,
                 ),
             )
+        connection.execute(
+            "INSERT INTO resources (resource_type, resource_id, status, "
+            "owner_id, source, source_ref, display_name, visibility, "
+            "description, tags) VALUES ('incident_workflow', %s, 'active', "
+            "%s, 'incident_workflow', %s, %s, 'private', '', '[]') "
+            "ON CONFLICT DO NOTHING",
+            (
+                f"{NS}-workflow",
+                f"{NS}-owner",
+                f"{NS}-workflow@1.0.0",
+                f"{NS}-workflow",
+            ),
+        )
 
 
 async def mint_keys() -> tuple[str, str]:
@@ -212,6 +225,34 @@ def main() -> None:
     )
     cases.append(
         attempt(
+            "dotted invoke refinement is rejected",
+            grant_body(
+                f"{NS}-g-invoke-delete",
+                f"{NS}-active-human",
+                "llm_model",
+                f"{NS}-active-model",
+                "invoke.delete",
+            ),
+            fresh_key(),
+            admin_key,
+        )
+    )
+    cases.append(
+        attempt(
+            "dotted run refinement is rejected",
+            grant_body(
+                f"{NS}-g-run-unpublished",
+                f"{NS}-active-human",
+                "incident_workflow",
+                f"{NS}-workflow",
+                "run.start.unpublished",
+            ),
+            fresh_key(),
+            admin_key,
+        )
+    )
+    cases.append(
+        attempt(
             "inactive resource plus bad action orders 404 first",
             grant_body(
                 f"{NS}-g-ordering",
@@ -243,10 +284,10 @@ def main() -> None:
         f"{NS}-active-human",
         "llm_model",
         f"{NS}-active-model",
-        "invoke.valid",
+        "invoke",
     )
     valid_key = fresh_key()
-    cases.append(attempt("admitted hierarchical refinement creates", valid, valid_key, admin_key))
+    cases.append(attempt("admitted bare invoke creates", valid, valid_key, admin_key))
     with TestClient(app, raise_server_exceptions=False) as client:
         replay = client.post(
             "/v1/grants",
@@ -274,7 +315,7 @@ def main() -> None:
                 f"{NS}-active-human",
                 "llm_model",
                 f"{NS}-active-model",
-                "invoke.valid",
+                "invoke",
             ),
             fresh_key(),
             admin_key,
@@ -288,7 +329,7 @@ def main() -> None:
                 f"{NS}-active-human",
                 "llm_model",
                 f"{NS}-active-model",
-                "invoke.fixed",
+                "admin.read",
             ),
             fresh_key(),
             admin_key,

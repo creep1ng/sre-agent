@@ -328,16 +328,17 @@ class GrantCreate(BaseModel):
     effect: Literal["allow"]
 
 
-# Admitted grant actions per resource contract (#423 CA3). Roots come from the
-# resource-catalog owner/state/action matrix (schemas/releases/*/conformance/
-# resource-catalog-matrix.yaml) plus the vocabularies the runtime actually
-# evaluates: bare "invoke" on skill (gateway/skills.py), admin.read/admin.write
-# over administrative_control (CONTROL_SCOPES), and the run.* actions over
-# incident_workflow (agent/api/authorization.v1.yaml). A dotted refinement of
-# an admitted root (e.g. "invoke.<suffix>") stays admitted so existing
-# exact-match fixtures keep working; anything else is rejected without
-# mutation. This is a pure lookup: it never touches a repository, so a denied
-# caller still receives 403 before any target access.
+# Admitted grant actions per resource contract (#423 CA3). Exact membership in
+# the per-type sets below: the resource-catalog owner/state/action matrix
+# (schemas/releases/*/conformance/resource-catalog-matrix.yaml) plus the
+# vocabularies the runtime actually evaluates: bare "invoke" on skill
+# (gateway/skills.py) alongside skill.invoke, admin.read/admin.write over
+# administrative_control (CONTROL_SCOPES), and the five run.* actions over
+# incident_workflow (agent/api/authorization.v1.yaml). Dotted refinements such
+# as "invoke.delete" or "run.start.unpublished" are absent from those closed
+# contracts and the engine matches grant.action exactly, so they are rejected
+# without mutation. This is a pure lookup: it never touches a repository, so a
+# denied caller still receives 403 before any target access.
 GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
     "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
     "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
@@ -352,10 +353,7 @@ GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
 
 
 def _grant_action_admitted(resource_type: str, action: str) -> bool:
-    return any(
-        action == admitted or action.startswith(f"{admitted}.")
-        for admitted in GRANT_ADMITTED_ACTIONS.get(resource_type, frozenset())
-    )
+    return action in GRANT_ADMITTED_ACTIONS.get(resource_type, frozenset())
 
 
 class GrantListResponse(BaseModel):
