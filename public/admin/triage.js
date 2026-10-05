@@ -115,6 +115,7 @@ function setResult(operation, item, source = "live") {
 function clearResult() {
   resultOperation.textContent = "—";
   resultStatus.textContent = "—";
+  resultReason.textContent = "—";
   resultIncident.textContent = "—";
   resultVersion.textContent = "—";
   resultActor.textContent = "—";
@@ -122,6 +123,10 @@ function clearResult() {
   resultSummary.textContent = "No command sent yet.";
   stateLine.textContent = "Connect to begin.";
   versionInput.value = "1";
+  alertInput.value = "";
+  reasonInput.value = "";
+  targetInput.value = "";
+  severityInput.value = "";
 }
 
 const OPERATION_FIELDS = Object.freeze({
@@ -239,7 +244,10 @@ sessionForm.addEventListener("submit", (event) => {
   credentialStore.set(value);
   apiKeyInput.value = "";
   sessionGeneration += 1;
+  const deepLinkAlertId = pendingDeepLinkAlertId;
+  pendingDeepLinkAlertId = "";
   clearResult();
+  if (deepLinkAlertId !== "") alertInput.value = deepLinkAlertId;
   hideError();
   page.dataset.state = "idle";
   stateLine.textContent = "Connected. Enter an alert and send a command.";
@@ -264,5 +272,6 @@ disconnectButton.addEventListener("click", () => {
 
 const initialAlertId = new URL(window.location.href).searchParams.get("alert_id") ?? "";
 if (/^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId)) alertInput.value = initialAlertId;
+let pendingDeepLinkAlertId = /^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId) ? initialAlertId : "";
 
 page.dataset.state = "idle";

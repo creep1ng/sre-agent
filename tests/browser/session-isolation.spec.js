@@ -30,6 +30,7 @@ async function dismiss(page, alertId, reason) {
 async function expectNeutralPanel(page, stateLine = "Connect to begin.") {
   await expect(page.locator("#result-operation")).toHaveText("—");
   await expect(page.locator("#result-status")).toHaveText("—");
+  await expect(page.locator("#result-reason")).toHaveText("—");
   await expect(page.locator("#result-incident")).toHaveText("—");
   await expect(page.locator("#result-version")).toHaveText("—");
   await expect(page.locator("#result-actor")).toHaveText("—");
@@ -75,4 +76,65 @@ test("a fresh valid identity still renders its own decision", async ({ page }) =
   await expect(page.locator("#result-status")).toHaveText("dismissed");
   await expect(page.locator("#result-actor")).not.toHaveText("—");
   await expect(page.locator("#result-summary")).toContainText("dismissed");
+});
+
+async function expectPristineForm(page) {
+  await expect(page.locator("#command-reason")).toHaveValue("");
+  await expect(page.locator("#alert-id")).toHaveValue("");
+  await expect(page.locator("#command-target")).toHaveValue("");
+  await expect(page.locator("#command-severity")).toHaveValue("");
+}
+
+test("clear and switch reset the reusable command form", async ({ page }) => {
+  const { full, grantless } = journeyKeys();
+  const stamp = Date.now().toString(36);
+  await connect(page, full);
+  await page.locator("#alert-id").fill(`al-c3e-form-${stamp}`);
+  await page.locator("#command-operation").selectOption("triage_declare");
+  await page.locator("#command-reason").fill("C3e form reset proof.");
+  await page.locator("#command-severity").selectOption("sev2");
+  await page.locator("#command-target").fill("inc-c3e-form");
+  await page.locator("#submit-button").click();
+  await expect(page.locator("#result-status")).toHaveText("declared");
+  await page.locator("#disconnect-button").click();
+  await expectNeutralPanel(page);
+  await expectPristineForm(page);
+  await page.locator("#api-key").fill(full);
+  await page.locator("#connect-button").click();
+  await page.locator("#alert-id").fill(`al-c3e-form-b-${stamp}`);
+  await page.locator("#command-operation").selectOption("triage_declare");
+  await page.locator("#command-reason").fill("C3e form second proof.");
+  await page.locator("#command-severity").selectOption("sev3");
+  await page.locator("#command-target").fill("inc-c3e-form-b");
+  await page.locator("#submit-button").click();
+  await expect(page.locator("#result-status")).toHaveText("declared");
+  await switchCredential(page, grantless);
+  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expectPristineForm(page);
+  await dismiss(page, `al-c3e-form-c-${stamp}`, "C3e grantless probe.");
+  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expect(page.locator("#command-reason")).toHaveValue("C3e grantless probe.");
+});
+
+test("first connect from a deep link recovers without inheriting form state", async ({ page }) => {
+  const { full, grantless } = journeyKeys();
+  const stamp = Date.now().toString(36);
+  const alertId = `al-c3e-deeplink-${stamp}`;
+  await connect(page, full);
+  await dismiss(page, alertId, "C3e deep-link seed reason.");
+  await expect(page.locator("#result-status")).toHaveText("dismissed");
+  await page.goto(`${BASE}/public/admin/triage.html?alert_id=${alertId}`);
+  await expect(page.locator("#alert-id")).toHaveValue(alertId);
+  await page.locator("#api-key").fill(full);
+  await page.locator("#connect-button").click();
+  await expect(page.locator("#result-status")).toHaveText("dismissed");
+  await expect(page.locator("#result-summary")).toContainText("Recovered from backend");
+  await expect(page.locator("#result-reason")).toHaveText("C3e deep-link seed reason.");
+  await expect(page.locator("#command-reason")).toHaveValue("");
+  await expect(page.locator("#command-target")).toHaveValue("");
+  await expect(page.locator("#command-severity")).toHaveValue("");
+  await switchCredential(page, grantless);
+  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expectPristineForm(page);
 });
