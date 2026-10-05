@@ -93,6 +93,18 @@ function setResult(operation, item) {
   announce(resultSummary.textContent);
 }
 
+function clearResult() {
+  resultOperation.textContent = "—";
+  resultStatus.textContent = "—";
+  resultIncident.textContent = "—";
+  resultVersion.textContent = "—";
+  resultActor.textContent = "—";
+  resultDecided.textContent = "—";
+  resultSummary.textContent = "No command sent yet.";
+  stateLine.textContent = "Connect to begin.";
+  versionInput.value = "1";
+}
+
 const OPERATION_FIELDS = Object.freeze({
   open_triage: Object.freeze([]),
   triage_dismiss: Object.freeze(["reason"]),
@@ -171,6 +183,8 @@ sessionForm.addEventListener("submit", (event) => {
   }
   credentialStore.set(value);
   apiKeyInput.value = "";
+  sessionGeneration += 1;
+  clearResult();
   hideError();
   page.dataset.state = "idle";
   stateLine.textContent = "Connected. Enter an alert and send a command.";
@@ -184,8 +198,7 @@ disconnectButton.addEventListener("click", () => {
   submitButton.disabled = false;
   hideError();
   page.dataset.state = "idle";
-  stateLine.textContent = "Connect to begin.";
-  resultSummary.textContent = "No command sent yet.";
+  clearResult();
   announce("Session cleared.");
 });
 
