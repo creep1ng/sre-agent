@@ -264,6 +264,7 @@ disconnectButton.addEventListener("click", () => {
   hideError();
   page.dataset.state = "idle";
   clearResult();
+  pendingDeepLinkAlertId = "";
   const url = new URL(window.location.href);
   url.searchParams.delete("alert_id");
   window.history.replaceState(null, "", url);

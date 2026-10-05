@@ -138,3 +138,23 @@ test("first connect from a deep link recovers without inheriting form state", as
   await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
   await expectPristineForm(page);
 });
+
+test("clear before first connect cancels the deep-link recovery", async ({ page }) => {
+  const { full } = journeyKeys();
+  const stamp = Date.now().toString(36);
+  const alertId = `al-c3e-deeplink-clear-${stamp}`;
+  await connect(page, full);
+  await dismiss(page, alertId, "C3e deep-link clear seed reason.");
+  await expect(page.locator("#result-status")).toHaveText("dismissed");
+  await page.goto(`${BASE}/public/admin/triage.html?alert_id=${alertId}`);
+  await expect(page.locator("#alert-id")).toHaveValue(alertId);
+  await page.locator("#disconnect-button").click();
+  await expectNeutralPanel(page);
+  await expectPristineForm(page);
+  await page.locator("#api-key").fill(full);
+  await page.locator("#connect-button").click();
+  await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "idle");
+  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expectPristineForm(page);
+  await expect(page.locator("#result-summary")).toHaveText("No command sent yet.");
+});
