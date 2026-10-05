@@ -19,13 +19,13 @@ GREEN and refactor. No post-hoc unit tests. Existing checks: containerized pytes
 ## Checklist / acceptance / checks
 - [x] T1: Version controlled real stack and failure injection, isolated networks,
   pinned images, scoped token; observed Compose/build/health/image identity.
-- [ ] T2: E2E CA1–CA5 matrix: deterministic 200 + exactly one tools/call;
+- [x] T2: E2E CA1–CA5 matrix: deterministic 200 + exactly one tools/call;
   safe no-grant/nonvisible/401 with zero upstream calls; 422/timeout/failure;
   known ID allowed/denied before discovery; per-case counter deltas and bounded
   metadata-only audit (no MCP row for 401). Fix only observed defects if needed.
 - [ ] T3: Execute exact documented recipe on committed candidate, mandatory
   checks, real screenshot, sanitized compact evidence and provenance.
-- [ ] T4: Focused PR to main with real evidence, current base/tested SHA,
+- [x] T4: Focused PR to main with real evidence, current base/tested SHA,
   line-size accounting and pending human/hosted checks; do not merge/close #30.
 
 ## Progress / evidence / next step
@@ -36,4 +36,9 @@ Real RED: 2026-10-03 22:39:25..22:40:08 UTC, main4a4515b: 200/vector1,
 forwarded call1; 403/401/422 zero; 504/503/502 safe injected faults. Missing
 public success correlation requires additive header; JSON null harness check corrected.
 User chose exactly two PRs: infrastructure/control → acceptance (no size exception).
-Next: verify committed candidates and bounded evidence; no merge/close authority.
+GREEN be42244: 10 real cases passed, 9 bounded metadata-only rows, 401 zero.
+PR477 and stacked PR478 drafts published; metadata readback valid, both <=400 lines.
+Local checks: 1477 passed, 1 skipped, 3 relay readiness failures; targeted 2 passed/1 failed.
+Separate Alembic and declarative checks passed; hosted unit passed on 3bebe70.
+Main advanced to 9781ee7 (grant validation, contract2.6); tested HEAD remains explicit.
+Next: finish contract checks, resolve local readiness and obtain human/422 CA4 review.
