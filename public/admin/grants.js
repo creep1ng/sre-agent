@@ -43,8 +43,24 @@ const revokeSubmit = document.getElementById("revoke-submit");
 const revokeCancel = document.getElementById("revoke-cancel");
 
 // Action selector is a frontend-only guide from the audit action vocabulary;
-// the backend keeps free-form exact-match actions, so no contract is invented.
+// the backend admits only exact per-type actions (#480 matrix), so unknown
+// selections fail closed with 422 and nothing is created.
 const GRANT_ACTIONS = new Set(["authenticate", "export", "invoke", "persist", "read_metadata", "redact", "admin.read", "admin.write"]);
+// Seeded administrative-control resources (mirrors seeds.ADMIN_RESOURCES).
+// The catalog never enumerates administrative_control by design
+// (CatalogRepository.CATALOG_TYPES excludes it), so the catalog response alone
+// can never offer admin.read/admin.write targets. The control plane still
+// governs these seeded resources — surfaced read-only through listGrants rows
+// — so the create form offers this same authoritative set as manual options.
+const ADMIN_RESOURCE_OPTIONS = [
+  ["administrative_control", "principals"],
+  ["administrative_control", "credentials"],
+  ["administrative_control", "model_aliases"],
+  ["administrative_control", "usage"],
+  ["administrative_control", "consumption_limits"],
+  ["administrative_control", "catalog"],
+  ["administrative_control", "grants"],
+];
 const GRANT_ID_RE = /^[a-z][a-z0-9_-]{2,63}$/;
 let pendingIdempotencyKey = null;
 let pendingCreateBodyKey = null;
@@ -433,7 +449,9 @@ async function loadFilterSources() {
       const displayName = text(item.discoverability?.display_name);
       option.textContent = `${displayName || resourceId} · ${resourceType}/${resourceId} · ${text(item.status)}`;
       resourceFilter.append(option);
-      // Create offers active resources only, grants catalog included.
+      // Create offers active catalog resources only. Catalog actives never
+      // include administrative_control (excluded by design), so the seeded
+      // admin resources are appended below as explicit manual options.
       // Assignment-plane fields are never read here.
       if (item.status !== "active") continue;
       const createOption = document.createElement("option");
@@ -442,6 +460,18 @@ async function loadFilterSources() {
       createOption.dataset.resourceId = resourceId;
       createOption.textContent = `${displayName || resourceId} · ${resourceType}/${resourceId}`;
       createResource.append(createOption);
+    }
+    // The catalog cannot yield administrative_control entries, yet the page
+    // offers admin.read/admin.write grants: offer the seeded admin resources
+    // the control plane governs (same set listGrants rows surface read-only).
+    for (const [adminType, adminId] of ADMIN_RESOURCE_OPTIONS) {
+      const adminOption = document.createElement("option");
+      adminOption.value = `${adminType}/${adminId}`;
+      adminOption.dataset.resourceType = adminType;
+      adminOption.dataset.resourceId = adminId;
+      adminOption.dataset.manualSource = "seeded-admin-resource";
+      adminOption.textContent = `${adminId} · ${adminType}/${adminId}`;
+      createResource.append(adminOption);
     }
     resourceFilter.disabled = false;
     createButton.disabled = false;

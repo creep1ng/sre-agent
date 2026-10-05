@@ -46,6 +46,10 @@ function principalsPayload() {
 }
 
 function catalogPayload() {
+  // Real contract shape: the catalog never enumerates administrative_control
+  // (CatalogRepository.CATALOG_TYPES excludes it), so this fixture contains
+  // only catalog types. Seeded admin resources reach the create form through
+  // the page's manual seeded-admin options, asserted below.
   return {
     items: [
       {
@@ -62,15 +66,6 @@ function catalogPayload() {
         discoverability: { display_name: "Triage agent", visibility: "private", description: "", tags: [] },
       },
       {
-        resource_type: "administrative_control",
-        resource_id: "grants",
-        owner_id: "admin-human",
-        status: "active",
-        source: "admin",
-        source_ref: "grants",
-        discoverability: { display_name: "Grants", visibility: "private", description: "", tags: [] },
-      },
-      {
         resource_type: "llm_model",
         resource_id: "retired-model",
         owner_id: "triage-agent",
@@ -84,6 +79,16 @@ function catalogPayload() {
     truncated: false,
   };
 }
+
+const SEEDED_ADMIN_RESOURCE_VALUES = [
+  "administrative_control/principals",
+  "administrative_control/credentials",
+  "administrative_control/model_aliases",
+  "administrative_control/usage",
+  "administrative_control/consumption_limits",
+  "administrative_control/catalog",
+  "administrative_control/grants",
+];
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
@@ -419,7 +424,15 @@ test("create flow posts a real grant body, announces 201 and refreshes without r
   await expect(page.locator("#create-principal option[value='incident-harness']")).toHaveCount(1);
   await expect(page.locator("#create-principal option[value='retired-harness']")).toHaveCount(0);
   await expect(page.locator("#create-resource option[value='llm_model/triage-agent']")).toHaveCount(1);
-  await expect(page.locator("#create-resource option[value='administrative_control/grants']")).toHaveCount(1);
+  // The fulfilled catalog carries no administrative_control entry (real
+  // contract shape), so the catalog-driven resource filter cannot offer it…
+  await expect(page.locator("#resource-filter option[value='grants']")).toHaveCount(0);
+  // …while the create form still offers every seeded admin resource through
+  // its manual seeded-admin options.
+  for (const value of SEEDED_ADMIN_RESOURCE_VALUES) {
+    await expect(page.locator(`#create-resource option[value='${value}']`)).toHaveCount(1);
+  }
+  await expect(page.locator("#create-resource option[value='administrative_control/grants'][data-manual-source='seeded-admin-resource']")).toHaveCount(1);
   await expect(page.locator("#create-resource option[value='llm_model/retired-model']")).toHaveCount(0);
   await expect(page.locator("#create-action option")).toHaveCount(8);
   await page.click("#create-grant-button");
@@ -456,6 +469,8 @@ test("duplicate grant keeps the dialog with 409 wording and adds no row", async 
   await page.fill("#create-grant-id", "grant-admin-human-admin-read-grants");
   await page.selectOption("#create-principal", "admin-human");
   await page.selectOption("#create-action", "admin.read");
+  // administrative_control/grants comes from the manual seeded-admin options
+  // (the catalog fixture carries no administrative_control entry).
   await page.selectOption("#create-resource", "administrative_control/grants");
   await page.click("#create-submit");
   await expect(page.locator("#create-error-title")).toHaveText("Grant already exists (409 duplicate)");
@@ -465,6 +480,10 @@ test("duplicate grant keeps the dialog with 409 wording and adds no row", async 
 });
 
 test("create then revoke keeps the same filter and the revoked row", async ({ page }) => {
+  // Seam-level create→revoke continuity only: the HTTP seam is fulfilled, so
+  // the real authorization-boundary allow/deny proof lives in
+  // docs/evidence/issue-21-grants-integrated-probe.py (grantee credential
+  // through GET /v1/principals, 200 before revoke, 403 after).
   await page.route("**/api/v1/principals?limit=100", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(principalsPayload()) }),
   );
