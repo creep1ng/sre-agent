@@ -10,12 +10,16 @@ a corrected retry of a rejected grant_id with a fresh key (201, proving no
 binding was consumed on reject), and an admitted control-plane action (201).
 Records real HTTP statuses, error codes, GrantRow counts (zero-mutation proof)
 and idempotency-record counts (no binding consumed on rejection). Prints ONLY
-the JSON transcript.
+the JSON transcript to stdout. CA8 automatic asserts then verify every case
+(status plus grant_rows plus bindings plus error_code) against the admitted-
+action contract, report the summary to stderr, and exit non-zero on ANY
+violation so the run FAILS instead of merely recording.
 """
 
 import asyncio
 import json
 import os
+import sys
 import uuid
 
 import psycopg
@@ -349,7 +353,96 @@ def main() -> None:
             admin_key,
         )
     )
-    print(json.dumps({"issue": 423, "cases": cases}, indent=2, sort_keys=True))
+    print(json.dumps({"issue": 423, "cases": cases}, indent=2, sort_keys=True), flush=True)
+    assert_transcript(cases)
+
+
+def assert_transcript(cases: list) -> None:
+    """CA8 automatic asserts: fail the run (non-zero exit) on ANY violation.
+
+    Each expectation checks real endpoint state: HTTP status plus GrantRow
+    count plus idempotency-binding count plus the error envelope code.
+    Non-admitted actions must be rejected with 422 validation_error and zero
+    rows plus zero bindings; admitted creates must persist exactly one row
+    with one binding; the same-key replay must stay stable; the new-tuple
+    duplicate must stay 409. Summary goes to stderr so stdout stays pure
+    JSON for transcript regeneration.
+    """
+    expected = {
+        # Non-admitted actions: rejected before claim, nothing persisted.
+        "unknown action root": (422, "validation_error", 0, 0),
+        "cross-type action over llm_model": (422, "validation_error", 0, 0),
+        "cross-type contract action over llm_model": (422, "validation_error", 0, 0),
+        "dotted invoke refinement is rejected": (422, "validation_error", 0, 0),
+        "dotted run refinement is rejected": (422, "validation_error", 0, 0),
+        # Ordering probes: 404 before 422, 403 before lookup.
+        "inactive resource plus bad action orders 404 first": (
+            404,
+            "resource_not_found",
+            0,
+            0,
+        ),
+        "restricted caller plus bad action stays 403": (
+            403,
+            "resource_unavailable",
+            0,
+            0,
+        ),
+        # Admitted actions: created with one row and one binding.
+        "admitted bare invoke creates": (201, None, 1, 1),
+        "stable replay of admitted create": (201, None, 1, 1),
+        # New-tuple duplicate keeps the published conflict envelope.
+        "new-tuple duplicate with admitted action": (
+            409,
+            "idempotency_conflict",
+            0,
+            0,
+        ),
+        # Corrected retry with a fresh key succeeds: rejection consumed nothing.
+        "corrected retry of rejected grant_id with fresh key": (201, None, 1, 1),
+        "admitted control-plane action creates": (201, None, 1, 1),
+    }
+    by_name = {case["case"]: case for case in cases}
+    failures = []
+    for name, (want_status, want_code, want_rows, want_bindings) in expected.items():
+        actual = by_name.get(name)
+        if actual is None:
+            failures.append(f"case {name!r}: missing from transcript")
+            continue
+        for field, want in (
+            ("status", want_status),
+            ("error_code", want_code),
+            ("grant_rows", want_rows),
+            ("idempotency_bindings", want_bindings),
+        ):
+            if actual.get(field) != want:
+                failures.append(
+                    f"case {name!r}: expected {field}={want!r} "
+                    f"actual {field}={actual.get(field)!r} "
+                    f"(status={actual.get('status')!r} "
+                    f"error_code={actual.get('error_code')!r} "
+                    f"grant_rows={actual.get('grant_rows')!r} "
+                    f"bindings={actual.get('idempotency_bindings')!r})"
+                )
+    failed_names = {failure.split(":")[0] for failure in failures}
+    passed_cases = len(expected) - len(failed_names)
+    print(
+        f"CA8 asserts: {passed_cases}/{len(expected)} cases passed, {len(failures)} violation(s)",
+        file=sys.stderr,
+    )
+    for failure in failures:
+        print(f"CA8 violation: {failure}", file=sys.stderr)
+    if failures or len(cases) != len(expected):
+        print(
+            f"CA8 result: FAIL ({len(failures)} violation(s); "
+            f"transcript cases={len(cases)} expected={len(expected)})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(
+        f"CA8 result: PASS (all {len(expected)} cases match the admitted-action contract)",
+        file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":
