@@ -18,9 +18,8 @@ DATABASE_URL = os.environ.get(
 )
 
 
-def test_readiness_requires_incident_workflow_catalog_migration() -> None:
-    assert REQUIRED_SCHEMA_VERSION == "20260929_18"
-    assert REQUIRED_SCHEMA_VERSION == "20260929_18"
+def test_readiness_requires_the_command_id_width_migration() -> None:
+    assert REQUIRED_SCHEMA_VERSION == "20260928_14"
 
 
 @pytest.fixture(scope="module")
@@ -44,7 +43,7 @@ def migrated_database() -> None:
 def test_readiness_accepts_database_at_current_migration_head() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         version = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    assert version == "20260929_18"
+    assert version == "20260928_14"
 
     client = TestClient(
         create_application(
@@ -76,7 +75,7 @@ def test_readiness_rejects_previous_database_migration_head() -> None:
         assert response.json() == {"status": "unavailable", "dependency": "postgresql"}
     finally:
         with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-            connection.execute("UPDATE alembic_version SET version_num = '20261001_02'")
+            connection.execute("UPDATE alembic_version SET version_num = '20260928_14'")
 
 
 def test_liveness_does_not_call_readiness_dependency() -> None:
