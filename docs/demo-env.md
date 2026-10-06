@@ -6,9 +6,9 @@ it. Issue: #186.
 
 ## Prerequisites
 
-- Docker Engine with Compose 2.24 or later, **running**. The overlay uses the
-  `!reset` tag, and every operation probes the daemon first and stops with a
-  readable message if it is unreachable.
+- Docker Engine with Compose 2.24.4 or later, **running**. The overlay uses the
+  `!reset` and `!override` tags, and every operation probes the daemon first
+  and stops with a readable message if it is unreachable.
 - 4 CPUs, 4 GB of free memory, 15 GB of free disk. Observed on a reference host:
   2.8 GB of memory and 8.7 GB of images.
 - Host ports 8090 and 9090 free on `127.0.0.1`. Both are published on the

@@ -1,6 +1,6 @@
 # External composition overlay for the pinned OpenTelemetry Demo.
 # Passed last, so its values win. See demo/manifest.yaml for the environment.
-# Uses the !reset tag, so it requires Docker Compose 2.24 or later.
+# Uses !reset and !override, so it requires Docker Compose 2.24.4 or later.
 #
 # Upstream mounts ./src/flagd, inside its own checkout, as the flagd config
 # directory. Injecting a failure by editing that file would modify the demo,

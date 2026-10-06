@@ -84,6 +84,7 @@ def test_demo_payment_healthcheck_allows_instrumented_node_startup() -> None:
         pass
 
     DemoLoader.add_constructor("!reset", lambda loader, node: loader.construct_sequence(node))
+    DemoLoader.add_constructor("!override", lambda loader, node: loader.construct_sequence(node))
     demo_overlay = yaml.load((ROOT / "compose.demo.yaml").read_text(), Loader=DemoLoader)
     payment = demo_overlay["services"]["payment"]
 

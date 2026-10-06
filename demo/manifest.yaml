@@ -112,7 +112,7 @@ flag_baseline:
   all_other_flags: "off"
 
 host_requirements:
-  compose_minimum: "2.24"  # compose.demo.yaml uses the !reset tag
+  compose_minimum: "2.24.4"  # compose.demo.yaml uses !reset and !override
   cpus_minimum: 4
   memory_minimum_mb: 4096
   disk_minimum_gb: 15
