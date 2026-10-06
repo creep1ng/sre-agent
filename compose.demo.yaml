@@ -1,6 +1,6 @@
 # External composition overlay for the pinned OpenTelemetry Demo.
 # Passed last, so its values win. See demo/manifest.yaml for the environment.
-# Uses the !reset tag, so it requires Docker Compose 2.24 or later.
+# Uses !reset and !override, so it requires Docker Compose 2.24.4 or later.
 #
 # Upstream mounts ./src/flagd, inside its own checkout, as the flagd config
 # directory. Injecting a failure by editing that file would modify the demo,
@@ -52,6 +52,19 @@ services:
         condition: service_started
     restart: unless-stopped
     networks: [default, mcp-boundary]
+
+  # The two declared ports, bound to the loopback interface. Upstream publishes
+  # them on every interface, which put Grafana's anonymous Admin session and the
+  # Envoy admin interface on whatever network the host is attached to. The admin
+  # interface is no longer published at all: no acceptance criterion uses it and
+  # it can drain or stop the proxy.
+  frontend-proxy:
+    ports: !override
+      - "127.0.0.1:${ENVOY_PORT}:${ENVOY_PORT}"
+
+  prometheus:
+    ports: !override
+      - "127.0.0.1:${PROMETHEUS_PORT}:${PROMETHEUS_PORT}"
 
   ad: {ports: !reset []}
   astronomy-db: {ports: !reset []}

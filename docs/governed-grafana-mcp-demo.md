@@ -26,7 +26,8 @@ the counter overlay uses the exact same digest.
 
 ## Prerequisites
 
-- Docker and Docker Compose 2.24 or newer (the demo overlay uses `!reset`).
+- Docker and Docker Compose 2.24.4 or newer (the demo overlay uses `!reset`
+  and `!override`).
   The counter uses the API runtime image and its locked `httpx` dependency; no
   host relay install is needed.
 - A working local `.env` for this repository with four distinct, non-placeholder
