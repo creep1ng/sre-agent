@@ -170,6 +170,13 @@ test("denied producer and forged origins leave no UI decision", async ({ page, r
     reason: "External producers cannot declare incidents.",
     severity: "sev2",
     impact: "Operator-established impact is required for manual declaration.",
+    alert_context: {
+      service: "checkout-api",
+      summary: "Payment attempts return errors.",
+      observed_at: "2026-10-07T17:30:00Z",
+      source: "operator-confirmed test report",
+      severity: "sev4",
+    },
   });
   expect(agentDeclare.status()).toBe(403);
 
