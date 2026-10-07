@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -158,10 +159,17 @@ class DemoController:
         )
 
     def down(self) -> None:
-        status = self.aws.instance_status()
-        if status is None:
-            return
-        self._scheduler_preflight()
-        # Keep Scheduler's safety net through its deadline; termination may be
-        # accepted asynchronously, and deleting first would remove the fallback.
-        self.aws.terminate_instance(instance_id=status["instance_id"])
+        with _host_lock(self.config.lock_path):
+            # EC2 can temporarily omit a just-launched instance from DescribeInstances.
+            # Retry a missing result before accepting an idempotent absent-session no-op.
+            for attempt in range(5):
+                status = self.aws.instance_status()
+                if status is not None:
+                    break
+                if attempt == 4:
+                    return
+                time.sleep(2 ** (attempt + 1))
+            self._scheduler_preflight()
+            # Keep Scheduler's safety net through its deadline; termination may be
+            # accepted asynchronously, and deleting first would remove the fallback.
+            self.aws.terminate_instance(instance_id=status["instance_id"])

@@ -51,6 +51,11 @@ RDD: disabled by the global setting; ordinary policy applies.
 - [x] **OTEL-PR-9** Close #494 acceptance gaps found in post-publication audit:
   `up` reuses a live scheduled session, and `down` is idempotent when absent;
   observe failing behavior checks before the fix and repeat focused Docker checks.
+- [ ] **OTEL-PR-10** Address PR #513 review finding: a first empty EC2 lookup
+  during `down` must not signal success if a just-launched shared instance
+  becomes visible on retry. Observe RED before implementation; keep retries
+  bounded and preserve the absent-session no-op; repeat exact-SHA Docker checks,
+  refresh PR evidence and respond to the review comment.
 
 ## Acceptance and progress
 
@@ -81,3 +86,14 @@ into the checks image after hosted unit tests found a missing template; the
 fix was merge-forwarded through PR #513 without force-push. Live AWS
 provisioning, Scheduler firing, SSM forwarding and billing controls are
 not validated in this publication session; the issue remains open.
+
+Review finding in #513 (discussion_r4207554947): EC2 `DescribeInstances`
+is eventually consistent, so the first empty lookup after launch is not
+reliable evidence of absence. The two updated behavior checks were RED against
+the prior controller (`2 failed` because only one lookup occurred). `down` now
+uses the same host lock as `up` and retries absent lookups with 2/4/8/16-second
+backoff before returning an absent-session no-op. Offline Docker reported 60
+focused tests passed and Ruff lint passed; formatting identified one spacing
+correction, which was applied. Final exact-SHA Docker verification and PR
+evidence refresh remain pending. Repeated empty responses are still not a
+mathematical proof of absence; Scheduler and guest deadline remain fallbacks.
