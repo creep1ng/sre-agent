@@ -221,7 +221,7 @@ RDD off/global: disabled/unmanaged; ordinary human evidence gate remains.
   actual candidate checks must prove persistence/release gate and contracts2.7.
 - [x] T19 Regenerate HTTP/SQL/browser evidence with exact candidate source hashes,
   helper-produced sql.correlation, no mixed parent/child candidate claims.
-- [ ] T20 Validate integrated candidate, map CA/gaps and publish explicit technical
+- [x] T20 Validate integrated candidate, map CA/gaps and publish explicit technical
   acceptance only if supported. Independent human acceptance remains pending.
 
 Checks/progress: live issue/Project/stack/comment read; initial sandbox GitHub
@@ -247,3 +247,10 @@ T19 complete: regenerated HTTP/SQL +allow/denyconnected+mock404/503/truncation
 Queryfaultremoved/tableverifiedrestored; scopedDockerdownexit0, volume retained.
 ParentfullPython1567passed1liveproviderskipped691.34s andprechecks pass.
 T20 localtechnicalacceptance recorded, publicationpending; nohumanacceptance.
+
+T20 published: sixopenPRs497→498→499→500→501→502 (sizes225/310/134/228/269/376).
+Explicittechnicalacceptance: issue25comment6037782058, PR378comment6037782499.
+Initialpr-governancefailed: strictDeliveryroute/Security values includedexplanation;
+body-onlyrepair preserved explanation elsewhere,497governanceSUCCESSobserved.
+Hostedcontracts/otherchecksstillpending; independenthumanacceptance/integration
+remainnextsteps. Nooriginalstackrewrites, merge, thread dismissal orissueclosure.
