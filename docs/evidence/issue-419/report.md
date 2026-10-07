@@ -1,10 +1,10 @@
 # Issue 419 — authenticated identity evidence
 
-> **Historical evidence — superseded candidate.** `replay.json` and `review-receipt.png` describe the former combined #488 candidate and are preserved for provenance. The refreshed evidence below is bound to the local #489 candidate source SHA `aac524061716635339a91e2f84d8ebf00ce58249`; it is not evidence of hosted CI, human review, PR integration, or issue closure. The historical sections below remain only as provenance.
+> **Historical media.** `replay.json` and `review-receipt.png` describe a former combined candidate and are preserved for provenance; they are not current packaged UI evidence. The refreshed `current-*` artifacts below are bound to the local #489 candidate source SHA `aac524061716635339a91e2f84d8ebf00ce58249`. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof. No hosted CI, human review, PR integration, or issue closure is claimed.
 
 ## Final local #489 candidate (2026-10-07)
 
-The local candidate is branch `work/issue-489`, source commit `aac524061716635339a91e2f84d8ebf00ce58249` (`fix(ui): prevent refresh during pending command`), based on combined local merge `5f36349f67bc2bbef58f2889f54c2eab658f081a`. That merge combines the unchanged local #488 backend candidate `06fb91efccae99e23d8c5fd9f693c7270de11418` and #416 frontend candidate `161258165a0cd29e2243efae85cf8fb1fe71363c`, both descended from main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`. The sibling branch heads were not modified. The #489-only Refresh-lock source/test change was transplanted from the immutable original range `81796a1803f470eb22b8d02c3294c6423db598f8..87878e6365a9a039194bc4ba0b30ee52f7a2ed9f` (source commit `fa4c0d46e70ecf9a354da50ea2ec35514f34526d`); no other behavior was added. The selected two-file transplant patch is byte-for-byte identical to the corresponding paths in that original range (patch SHA-256 `a5433005540330433783494565ee5a578107cf32f9a2af790c4c3d2c5649c6ef`).
+The local candidate is branch `work/issue-489`, source commit `aac524061716635339a91e2f84d8ebf00ce58249` (`fix(ui): prevent refresh during pending command`), based on combined local merge `5f36349f67bc2bbef58f2889f54c2eab658f081a`. That merge combines the tested #488 backend source candidate `06fb91efccae99e23d8c5fd9f693c7270de11418` and #416 frontend candidate `161258165a0cd29e2243efae85cf8fb1fe71363c`, both descended from main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`. The corrected backend evidence commit `79a377b10d33ee9c78bc09fca0504df05604bb48` is now merged into this branch as documentation/history only; it does not change the tested source or tests. The #416 sibling head was not modified. The #489-only Refresh-lock source/test change was transplanted from the immutable original range `81796a1803f470eb22b8d02c3294c6423db598f8..87878e6365a9a039194bc4ba0b30ee52f7a2ed9f` (source commit `fa4c0d46e70ecf9a354da50ea2ec35514f34526d`); no other behavior was added. The selected two-file transplant patch is byte-for-byte identical to the corresponding paths in that original range (patch SHA-256 `a5433005540330433783494565ee5a578107cf32f9a2af790c4c3d2c5649c6ef`).
 
 The parent reports a fresh #416 review at `161258165a0cd29e2243efae85cf8fb1fe71363c` with P2 comment `4207229849` requesting this pending-command Refresh lock. The combined #489 candidate addresses that finding in `public/incident-ui/review.js` (`setSubmitting` disables Refresh; `loadAll` returns while submitting; `submissionComplete` prevents a second action after acceptance) and `tests/browser/review.spec.js` (the request is held pending while the test asserts Refresh remains disabled and exactly one command is sent). This is code-level remediation on combined #489, not a claim that standalone #416 contains the fix or that the review thread has been replied to/resolved; the parent owns those review operations.
 
@@ -57,7 +57,28 @@ This is local candidate evidence only. It does not establish the subsequent PR b
 
 ## Former local backend candidate — historical (2026-10-07)
 
-The candidate mounts `GET /v1/whoami` on the application and returns only the authenticated principal identifier through the existing bearer-authentication boundary. The endpoint has focused HTTP/OpenAPI coverage. Strict TDD observed 9 failures / 19 deselected before the endpoint existed; after implementation, the focused backend suite passed 92 tests and the full checks service passed 1,574 tests with 1 skipped (the existing opt-in live OpenRouter check). These are local code-test results, not hosted CI, packaged UI proof, or final #419 acceptance. Exact backend candidate commands and boundaries are recorded in [the committed backend candidate evidence above](#final-local-489-candidate-2026-10-07); these older result counts remain historical evidence only.
+The candidate mounts `GET /v1/whoami` on the application and returns only the authenticated principal identifier through the existing bearer-authentication boundary. The endpoint has focused HTTP/OpenAPI coverage. Strict TDD observed 9 failures / 19 deselected before the endpoint existed; after implementation, the focused backend suite passed 92 tests and the full checks service passed 1,574 tests with 1 skipped (the existing opt-in live OpenRouter check). These are local code-test results, not hosted CI, packaged UI proof, or final #419 acceptance. Exact backend candidate commands and boundaries are recorded in the [backend candidate verification section](#backend-candidate-verification-for-488-source-tested); these older result counts remain historical evidence only.
+
+## Backend candidate verification for #488 (source-tested)
+
+The backend candidate tested here was `06fb91efccae99e23d8c5fd9f693c7270de11418`, based directly on main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`; source commit `a1b61838cee7624c1ef05abb406fc80069bc9cbe` contains its implementation. The corrected backend docs/evidence head was `79a377b10d33ee9c78bc09fca0504df05604bb48`, merged into the final local #489 branch without changing source or tests. The implementation is limited to `src/sre_agent/gateway/identity.py`, `src/sre_agent/application.py`, and `tests/test_incident_command_http.py` (132 additions / 2 deletions). It mounts and documents `GET /v1/whoami`, which returns only the authenticated principal ID through the existing bearer-authentication boundary and does not require `admin.read`.
+
+### Verification
+
+- Strict-TDD RED: **9 failures / 19 deselected** before the endpoint existed.
+- Focused backend tests: **92 passed**.
+
+  ```sh
+  docker compose --env-file .env.example -p issue419identity --profile checks run --build --rm python-checks pytest -q tests/test_authentication.py tests/test_incident_command_http.py tests/test_incident_run_http.py tests/test_run_api_contract.py tests/test_incident_workflow_provisioning.py
+  ```
+
+- Full checks: **1,574 passed, 1 skipped** (opt-in live OpenRouter smoke), exit 0.
+
+  ```sh
+  docker compose --env-file .env.example -p issue419identity --profile checks run --build --rm python-checks
+  ```
+
+These are local backend results, not hosted CI results. The #488 report does not claim a fresh standalone UI screenshot or packaged UI/API replay; the focused #416 browser suite uses a mock HTTP seam. The fresh packaged UI/API replay and `current-*` screenshot above are bound to #489 source `aac524061716635339a91e2f84d8ebf00ce58249`, not to the backend-only candidate.
 
 ---
 
