@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -115,6 +116,62 @@ async def _add_incident(incident_id: str, state: str) -> None:
         await database.dispose()
 
 
+def _install_link_gate(connection: psycopg.Connection) -> None:
+    """Pause a real link after eligibility was checked, inside its DB write."""
+    connection.execute(
+        """
+        CREATE OR REPLACE FUNCTION triage_test_link_gate() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.status = 'linked' THEN
+            PERFORM pg_advisory_xact_lock(hashtext(NEW.alert_id));
+          END IF;
+          RETURN NEW;
+        END;
+        $$
+        """
+    )
+    connection.execute("DROP TRIGGER IF EXISTS triage_test_link_gate ON alert_triage")
+    connection.execute(
+        """CREATE TRIGGER triage_test_link_gate BEFORE UPDATE ON alert_triage
+           FOR EACH ROW EXECUTE FUNCTION triage_test_link_gate()"""
+    )
+    connection.commit()
+
+
+def _wait_for_lock_wait(query_fragments: tuple[str, ...], timeout: float = 5) -> str:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        with psycopg.connect(DATABASE_URL) as connection:
+            row = connection.execute(
+                """SELECT query FROM pg_stat_activity
+                   WHERE datname=current_database() AND state='active'
+                     AND wait_event_type='Lock' AND query LIKE ANY(%s)
+                   LIMIT 1""",
+                ([f"%{fragment}%" for fragment in query_fragments],),
+            ).fetchone()
+        if row is not None:
+            return row[0]
+        time.sleep(0.01)
+    raise AssertionError(f"timed out waiting for PostgreSQL lock on {query_fragments!r}")
+
+
+def _close_incident(incident_id: str) -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE incident.incidents SET state=jsonb_build_object('state','closed') "
+            "WHERE incident_id=%s",
+            (incident_id,),
+        )
+
+
+def _remove_link_gate(connection: psycopg.Connection, alert_id: str) -> None:
+    connection.execute("DROP TRIGGER IF EXISTS triage_test_link_gate ON alert_triage")
+    connection.execute("DROP FUNCTION IF EXISTS triage_test_link_gate()")
+    connection.execute("SELECT pg_advisory_unlock(hashtext(%s))", (alert_id,))
+    connection.commit()
+
+
 @pytest.mark.asyncio
 async def test_link_and_destination_eligibility() -> None:
     assert SERVICE is not None
@@ -160,6 +217,28 @@ async def test_link_and_destination_eligibility() -> None:
             idempotency_key="k-badlink-123456789",
         )
     assert ineligible.value.code == "destination_ineligible"
+    await _add_incident("inc-closed", "closed")
+    await SERVICE.execute(
+        me,
+        alert_id="al-already-closed",
+        operation="open_triage",
+        expected_version=1,
+        idempotency_key="k-already-closed-open-1",
+    )
+    with pytest.raises(TriageError) as already_closed:
+        await SERVICE.execute(
+            me,
+            alert_id="al-already-closed",
+            operation="triage_link",
+            expected_version=1,
+            reason=REASON,
+            target_incident_id="inc-closed",
+            idempotency_key="k-already-closed-link-1",
+        )
+    assert (already_closed.value.http_status, already_closed.value.code) == (
+        409,
+        "destination_ineligible",
+    )
     with pytest.raises(TriageError) as missing:
         await SERVICE.execute(
             me,
@@ -245,3 +324,108 @@ async def test_link_rejects_bad_target() -> None:
             idempotency_key="k-badtarget-1234567",
         )
     assert bad_target.value.code == "invalid_target"
+
+
+@pytest.mark.asyncio
+async def test_close_wins_before_link_rejects_after_waiting_for_target_row() -> None:
+    """A close committed while link waits must be visible to eligibility."""
+    assert SERVICE is not None
+    await _add_incident("inc-close-wins", "active")
+    await SERVICE.execute(
+        _principal("op-human"),
+        alert_id="al-close-wins",
+        operation="open_triage",
+        expected_version=1,
+        idempotency_key="k-close-wins-open-1234",
+    )
+    gate = psycopg.connect(DATABASE_URL, autocommit=True)
+    gate.execute("SELECT pg_advisory_lock(hashtext(%s))", ("al-close-wins",))
+    _install_link_gate(gate)
+    closer = psycopg.connect(DATABASE_URL)
+    closer.execute(
+        "UPDATE incident.incidents SET state=jsonb_build_object('state','closed') "
+        "WHERE incident_id='inc-close-wins'"
+    )
+    linker = asyncio.create_task(
+        SERVICE.execute(
+            _principal("op-human"),
+            alert_id="al-close-wins",
+            operation="triage_link",
+            expected_version=1,
+            reason=REASON,
+            target_incident_id="inc-close-wins",
+            idempotency_key="k-close-wins-link-1234",
+        )
+    )
+    try:
+        # Plain MVCC SELECT doesn't wait for the uncommitted closer; it reaches
+        # the trigger and allows the close to commit before the link write.
+        await asyncio.to_thread(_wait_for_lock_wait, ("incident.incidents", "UPDATE alert_triage"))
+        closer.commit()
+        gate.execute("SELECT pg_advisory_unlock(hashtext(%s))", ("al-close-wins",))
+        with pytest.raises(TriageError) as error:
+            await asyncio.wait_for(linker, timeout=5)
+        assert (error.value.http_status, error.value.code) == (409, "destination_ineligible")
+    finally:
+        if not linker.done():
+            gate.execute("SELECT pg_advisory_unlock(hashtext(%s))", ("al-close-wins",))
+        # Roll back the paused close before joining the linker or dropping the
+        # trigger; otherwise cleanup DDL can wait on its row lock indefinitely.
+        closer.close()
+        if not linker.done():
+            linker.cancel()
+        try:
+            await asyncio.wait_for(asyncio.gather(linker, return_exceptions=True), timeout=5)
+        finally:
+            _remove_link_gate(gate, "al-close-wins")
+            gate.close()
+
+
+@pytest.mark.asyncio
+async def test_link_wins_before_close_serializes_eligibility_and_link() -> None:
+    """Once link locks an eligible target, concurrent close follows it."""
+    assert SERVICE is not None
+    await _add_incident("inc-link-wins", "active")
+    await SERVICE.execute(
+        _principal("op-human"),
+        alert_id="al-link-wins",
+        operation="open_triage",
+        expected_version=1,
+        idempotency_key="k-link-wins-open-1234",
+    )
+    gate = psycopg.connect(DATABASE_URL, autocommit=True)
+    gate.execute("SELECT pg_advisory_lock(hashtext(%s))", ("al-link-wins",))
+    _install_link_gate(gate)
+    linker = asyncio.create_task(
+        SERVICE.execute(
+            _principal("op-human"),
+            alert_id="al-link-wins",
+            operation="triage_link",
+            expected_version=1,
+            reason=REASON,
+            target_incident_id="inc-link-wins",
+            idempotency_key="k-link-wins-link-1234",
+        )
+    )
+    closer = None
+    try:
+        await asyncio.to_thread(_wait_for_lock_wait, ("UPDATE alert_triage",))
+        closer = asyncio.create_task(asyncio.to_thread(_close_incident, "inc-link-wins"))
+        # The close is performed on another connection. It must block on the
+        # row lock held by SELECT FOR UPDATE until the link transaction commits.
+        await asyncio.to_thread(_wait_for_lock_wait, ("UPDATE incident.incidents",))
+        gate.execute("SELECT pg_advisory_unlock(hashtext(%s))", ("al-link-wins",))
+        linked = await asyncio.wait_for(linker, timeout=5)
+        await asyncio.wait_for(closer, timeout=5)
+        assert (linked.status, linked.incident_id) == ("linked", "inc-link-wins")
+    finally:
+        if not linker.done():
+            gate.execute("SELECT pg_advisory_unlock(hashtext(%s))", ("al-link-wins",))
+            linker.cancel()
+        try:
+            await asyncio.wait_for(asyncio.gather(linker, return_exceptions=True), timeout=5)
+        finally:
+            if closer is not None:
+                await asyncio.wait_for(asyncio.gather(closer, return_exceptions=True), timeout=5)
+            _remove_link_gate(gate, "al-link-wins")
+            gate.close()
