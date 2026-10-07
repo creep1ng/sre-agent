@@ -156,6 +156,27 @@ class TriageHttpService:
             return self._error(request_id, 503, "storage_unavailable")
         return JSONResponse(read, status_code=200)
 
+    async def get_context(self, alert_id: str, authorization: str | None) -> JSONResponse:
+        """Return advisory state and domain-authorized next actions."""
+        request_id = uuid4()
+        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+            return self._error(request_id, 400, "invalid_command")
+        try:
+            context = await self._authenticate(authorization)
+        except Exception:
+            return self._error(request_id, 503, "storage_unavailable")
+        if context is None:
+            return self._error(
+                request_id, 401, "authentication_failed", headers={"WWW-Authenticate": "Bearer"}
+            )
+        try:
+            projection = await self._service.read_context(context.principal, alert_id=alert_id)
+        except TriageError as error:
+            return self._error(request_id, error.http_status, error.code)
+        except Exception:
+            return self._error(request_id, 503, "storage_unavailable")
+        return JSONResponse(projection, status_code=200)
+
 
 def triage_router(service: TriageHttpService) -> APIRouter:
     router = APIRouter()
@@ -163,6 +184,10 @@ def triage_router(service: TriageHttpService) -> APIRouter:
     @router.get("/v1/alerts/{alert_id}/triage")
     async def get_state(alert_id: str, request: Request) -> JSONResponse:
         return await service.get_state(alert_id, request.headers.get("authorization"))
+
+    @router.get("/v1/alerts/{alert_id}/triage/context")
+    async def get_context(alert_id: str, request: Request) -> JSONResponse:
+        return await service.get_context(alert_id, request.headers.get("authorization"))
 
     @router.post("/v1/alerts/{alert_id}/triage/commands")
     async def post_command(alert_id: str, request: Request) -> JSONResponse:
