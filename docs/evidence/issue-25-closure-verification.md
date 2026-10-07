@@ -100,6 +100,17 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --e
 docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/capture_issue25_correlation.mjs:/e2e/capture.mjs:ro" -v "$PWD/public/admin/audit-events.js:/candidate/audit-events.js:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e node /e2e/capture.mjs
 ```
 
+## Detail error recovery screenshot
+`issue-25-detail-recovery.png` is an actual Chromium screenshot at the end of the
+existing mock journey: detailA404/503 survives list refresh, then detailB200 clears
+the retained banner. It is not a connected API claim. The container derives only
+screenshot/output settings from the committed production config; traces remain off
+and the test/source files are unchanged. The focused journey passed in3.3s.
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'node --input-type=module -e '\''import config from "./playwright.production.config.js"; import {writeFileSync} from "node:fs"; config.use.screenshot="on"; config.outputDir="/tmp/detail-recovery"; config.testDir="/e2e/tests/browser"; writeFileSync("/tmp/issue25-evidence.config.mjs", "export default "+JSON.stringify(config));'\'' && npx playwright test --config=/tmp/issue25-evidence.config.mjs -g "clears a retained detail error when a later detail request succeeds" && find /tmp/detail-recovery -name test-finished-1.png -exec cp {} /evidence/issue-25-detail-recovery.png \;'
+```
+
 ## Connected query-fault reproduction
 Only run on this fresh synthetic stack. The browser runs in the existing Playwright
 image. A separate controller in the existing Python checks image waits for the
