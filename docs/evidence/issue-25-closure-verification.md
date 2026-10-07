@@ -1,31 +1,43 @@
 # Issue 25 integrated closure-gap verification
 
 ## Candidate and scope
-The tested joint source candidate is `a59256c73413e249f763c29f87404abdc1c0f07d`:
-PR378 → PR379 → PR385 → PR386 → PR490 → PR491 → PR497–502, followed by four
-bounded fresh-review correction units and merged current main
-`a3541a96d83364a126ceff418ed3cbf7dbdc2d82` (human incident command API).
+The tested joint candidate is `791ce48e0bcd9496caf29f33df527166902bfadc`.
+Its runtime/helper/UI source is `25b48de45d0b25afb619a29e817ea51cfb5e9076`;
+the descendant changes only the existing governed-route test inventory. Runtime,
+helper, UI and Compose files are byte-identical between these SHAs. Captures
+truthfully retain deployed build revision25b48, not an invented791ce revision.
+This includes PR378 → PR379 → PR385 → PR386 → PR490 → PR491 → PR497–502,
+PR514–517, three bounded post-review corrections (125/400/10 lines), and current
+main `c2074fd8cb90840bc1a747dfe5ad1ad332d9ee03` (authenticated identity API).
 Immutable contract2.7.0 and all earlier releases are preserved.
-Evidence/tracking-only commits do not replace the tested source identity.
-Every refreshed capture below is from this joint candidate, **not** evidence that
-an earlier parent independently implements descendants' functions.
-Runtime source manifest SHA-256: `a8c0d106c83ba8c405a5ff0d7e9ae467611537b210f66bb8ae798a7be21bb937`.
-The manifest hashes sorted `src/**/*.py` paths, NUL, file hash, and newline;
-the host, HTTP helper image and running API all matched it independently.
+Evidence/tracking-only commits do not replace the tested identity. This is joint
+candidate proof, not proof that an earlier parent independently implements children.
+Runtime source manifest SHA-256:
+`33640bab0e5b655d4e52481bd17b1ef339932f6b2d1f3e7fd2721a339f3e4463`.
+The manifest hashes sorted paths relative to `src/`, NUL, file hash and newline;
+the host, verified HTTP helper image and running API matched independently.
 HTTP helper SHA-256: `ae55d8a4d6fa802ff3793697e567b7d2a4766e98595fce25d617bf44b60069b6`.
+Terminal helper SHA-256: `483aceb37dfabc82d9e294f3c86641c1ade65cb20a86bf400d829acdbb135dd6`.
 Browser artifacts record served UI SHA-256
 `0ccffe4504867c90dc103ea4ed97a108be14446ebfe526131c10dd1c75a45e2b`.
-The allow producer sends controlled contract-valid incident/run/task IDs and
-requires all three independently computed HMAC references in both SQL and HTTP.
-Raw IDs are not emitted in the captured projection.
+The allow producer requires three independently computed populated HMAC refs in
+actual SQL and HTTP; raw controlled incident/run/task IDs are not emitted.
 
-Live Projects #8 lists #25 as Done; the issue was human-closed at
-2026-10-07T03:24:35Z, but the runtime stack remains open and unmerged.
-Pagination remains explicitly deferred to #470; it is not accepted as delivered.
-Scope is the five requested closure gaps. The active goal authorizes conditional
-PR merges, not protection bypass or treating the closed issue as proof of delivery.
-Route: delegated direct. AGENTS failure-first policy, no verified strict-TDD toggle.
-RDD: disabled/unmanaged (global off); independent human acceptance remains required.
+Full checks used the verified25b48 image plus only
+`tests/test_governed_authorization.py` from791ce mounted read-only. This exactly
+matches the tested candidate's source/test tree; it is not a claim the image was
+rebuilt after the fixture-only commit. The build recipe below rebuilds that tree.
+An interrupted build initially left an8f51 helper image: independent hashes found
+the mismatch, rejected that temporary HTTP capture, and regenerated it after a
+successful source-verified build. No provenance fields were manually repaired.
+
+Live Projects #8 lists #25 as Done; it was human-closed at2026-10-07T03:24:35Z,
+but the runtime stack remains unmerged. Pagination is explicitly deferred to#470,
+not delivered. User acceptance of PR518ee827/sourcea592 was conditional and does
+not establish freshness acceptance for this new candidate.
+Route: delegated direct; AGENTS failure-first policy, no verified strict-TDD toggle.
+RDD: disabled/unmanaged. New exact-head review, CI and human freshness remain gates;
+no protection bypass or issue closure is authorized by this technical verdict.
 
 ## Criteria and evidence
 | Criterion | Observed proof / boundary |
@@ -51,14 +63,14 @@ database or query-only append-success proof; the HTTP boundary suite covers that
 ## Verification
 - Fresh-review UI failure-first: retained banner remained after a later successful
   detail; corrected scenario passes for both404 and503. Parent complete browser
-  suite on the integrated API/UI:12 passed in39.7s.
+  suite on the integrated API/UI:12 passed in18.3s.
 - Prior all-null correlation assertion failed; refreshed helper requires populated
   incident/run/task HMAC refs and passed actual producer/SQL checks. Producer
   statuses200/403/401/422/503 persist one row; append-failure503 persists zero.
-- Fresh full Python and prechecks: 1590 passed,1 skipped in461.53s;
+- Fresh full Python and prechecks: 1607 passed,1 skipped in310.49s;
   Ruff/format/lock/import boundaries/mypy and Alembic check passed. The skip is
   the opt-in live OpenRouter case..
-- Fresh terminal boundary and SQL capture: 9 passed in8.34s; actual helper
+- Fresh terminal boundary and SQL capture: 13 passed in7.93s; actual helper
   emitted11 JSONL records on the integrated image and isolated PostgreSQL..
   Typed mutation probes accept only exact1→0/1→2 row-count failures after valid
   HTTP envelopes and all SQL rows are checked; wrong statuses/malformed rows
@@ -72,20 +84,29 @@ database or query-only append-success proof; the HTTP boundary suite covers that
   `issue-25-query-restoration.txt` (`t|t`). No manually invented JSON fields.
 - Fresh connected allow/deny navigation remains200→403→200; metadata/detail
   captures, mock404/503/truncation and real fault are explicitly distinguished.
-- Full precheck first stopped at RuffUP012 in the helper; mechanical encoding
+- Earlier a592 precheck stopped at RuffUP012 in the helper; mechanical encoding
   correction was made before restarting. No failed run is presented as a pass.
 - Previous e1847 Python1567/1skip and browser11 results are historical only.
-  Existing compact/braced UUID parser permissiveness was not expanded.
+  Canonical UUID validation now rejects noncanonical forms outside the valid legacy language.
 - Exact-credential/private-marker artifact scans passed; real screenshots are
   manually inspected. Hosted CI, human acceptance and merge remain separate gates;
   no live-provider, killed-DB or offline demonstration is inferred.
+
+Post-review checks rejected a valid list envelope for detail reads and mutation
+probes before classifying row counts. Runtime OpenAPI now describes the released
+filters/path/bearer/success/error/governed scope. Digit-leading compact, braced and
+URN UUID forms return422 with one validation terminal; valid legacy compact IDs
+retain authorized404 lookup. The initial full run had1606pass/1skip/1fail because
+the existing governed-operation inventory lacked the two newly documented routes;
+its assertions were preserved and the inventory adapted before the full GREEN.
+Old8f51/first25b48 build jobs were interrupted(exit130), not counted as passes.
 
 ## Environment and safe reproduction
 Git/Docker host; Python3.12.14, PostgreSQL17.4 pinned digest and Playwright1.63.0
 images/lockfiles from the tested source. Prepare ignored mode600 `.env.worktree`
 from `.env.example`: DB `audit25_closure`, user `sre_agent`, URL host `db`, fresh
 synthetic keys/HMAC, `lab/model` + `lab`, no external keys, contract2.7.0,
-build revision equal to the tested SHA. Never print/source/upload this file.
+build revision25b48de45d0b25afb619a29e817ea51cfb5e9076 (the deployed runtime source). Never print/source/upload this file.
 Use a fresh Compose project; choose an unused `ISSUE25_EVIDENCE_SUBNET` when needed.
 Existing services only; combine the no-host-port overlay with the small IPAM overlay.
 The terminal helper resets only disposable `python_checks`, never the evidence DB.
@@ -105,7 +126,7 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --e
 existing mock journey: detailA404/503 survives list refresh, then detailB200 clears
 the retained banner. It is not a connected API claim. The container derives only
 screenshot/output settings from the committed production config; traces remain off
-and the test/source files are unchanged. The focused journey passed in3.3s.
+and the test/source files are unchanged. The focused journey passed in4.9s.
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'node --input-type=module -e '\''import config from "./playwright.production.config.js"; import {writeFileSync} from "node:fs"; config.use.screenshot="on"; config.outputDir="/tmp/detail-recovery"; config.testDir="/e2e/tests/browser"; writeFileSync("/tmp/issue25-evidence.config.mjs", "export default "+JSON.stringify(config));'\'' && npx playwright test --config=/tmp/issue25-evidence.config.mjs -g "clears a retained detail error when a later detail request succeeds" && find /tmp/detail-recovery -name test-finished-1.png -exec cp {} /evidence/issue-25-detail-recovery.png \;'
@@ -138,16 +159,16 @@ checks and restores the table after the rename; the saved SQL readback is `t|t`
 only when the original table exists and the temporary fault name is absent.
 
 ## Technical acceptance
-I explicitly accept the five requested closure corrections on exact joint source
-`a59256c73413e249f763c29f87404abdc1c0f07d`, based on independent complete Docker
+I explicitly accept the five requested closure corrections on exact joint candidate
+`791ce48e0bcd9496caf29f33df527166902bfadc`, based on independent complete Docker
 checks, actual populated HTTP/SQL correlation, terminal persistence/release-gate
-invariants and inspected real browser captures. This supersedes provisional e1847
-technical acceptance for the current delivery candidate, not its historic facts.
+invariants and inspected real browser captures. This supersedes provisional e1847/a592
+local technical acceptance for the current delivery candidate, not its historic facts.
 CA1 acceptance covers bounded filtering and truthful truncation; stable pagination
 remains explicitly deferred to #470, not delivered. This is local technical
 acceptance, not independent human acceptance, hosted CI or a merge approval.
 Fresh GitHub Codex review and ordinary human freshness acceptance remain pending.
 The user approved a size exception only for final atomic integration; each fresh
-correction PR remains below400 changed lines. No protection or review bypass.
+correction PR remains at most400 changed lines. No protection or review bypass.
 Rollback: revert the bounded runtime/UI changes; immutable releases untouched.
 Sanitized: yes. Captures contain synthetic metadata, no raw producer content or keys.
