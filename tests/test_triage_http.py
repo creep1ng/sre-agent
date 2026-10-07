@@ -50,7 +50,8 @@ def triage_http_database() -> None:
             "('op-human','human','Operator','active',now(),now()),"
             "('reader-human','human','Reader','active',now(),now()),"
             "('bystander-human','human','Bystander','active',now(),now()),"
-            "('producer-agent','agent','External producer','active',now(),now())"
+            "('producer-agent','agent','External producer','active',now(),now()),"
+            "('producer-limited','agent','Limited producer','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at,"
@@ -73,6 +74,7 @@ def triage_http_database() -> None:
             issued_reader = await creds.issue("reader-human")
             issued_by = await creds.issue("bystander-human")
             issued_agent = await creds.issue("producer-agent")
+            issued_limited = await creds.issue("producer-limited")
             grants = GrantRepository(session)
             for index, action in enumerate(
                 ("alert.triage", "alert.dismiss", "alert.associate", "run.read", "incident.declare")
@@ -92,7 +94,13 @@ def triage_http_database() -> None:
                 "incident-response",
             )
             for index, action in enumerate(
-                ("alert.dismiss", "alert.associate", "run.read", "incident.declare")
+                (
+                    "alert.triage",
+                    "alert.dismiss",
+                    "alert.associate",
+                    "run.read",
+                    "incident.declare",
+                )
             ):
                 await grants.create(
                     f"grant-producer-agent-{index}",
@@ -101,10 +109,19 @@ def triage_http_database() -> None:
                     "incident_workflow",
                     "incident-response",
                 )
+            for index, action in enumerate(("alert.dismiss", "run.read")):
+                await grants.create(
+                    f"grant-producer-limited-{index}",
+                    "producer-limited",
+                    action,
+                    "incident_workflow",
+                    "incident-response",
+                )
         BEARERS["op"] = f"Bearer {issued_op.key}"
         BEARERS["reader"] = f"Bearer {issued_reader.key}"
         BEARERS["bystander"] = f"Bearer {issued_by.key}"
         BEARERS["agent"] = f"Bearer {issued_agent.key}"
+        BEARERS["limited_agent"] = f"Bearer {issued_limited.key}"
 
     asyncio.run(_setup())
     asyncio.run(database.dispose())
@@ -210,11 +227,16 @@ def test_declare_persists_operator_impact_through_http_state_event_and_replay() 
     first = _post(client, alert_id, body, "k-impact-http-123456", BEARERS["op"])
     assert first.status_code == 201
     result = first.json()
+    assert (result["decision_origin"], result["responsible_system"]) == ("manual", None)
     assert _incident_count() == before + 1
 
     state = _get(client, alert_id, BEARERS["reader"])
     assert state.status_code == 200
     assert state.json()["incident_id"] == result["incident_id"]
+    assert (state.json()["decision_origin"], state.json()["responsible_system"]) == (
+        "manual",
+        None,
+    )
     detail = client.get(
         f"/v1/incidents/{result['incident_id']}", headers={"Authorization": BEARERS["op"]}
     )
@@ -373,11 +395,7 @@ def test_declared_alert_keeps_existing_fresh_declare_conflict() -> None:
 @pytest.mark.parametrize(
     ("operation", "body"),
     [
-        ("triage_dismiss", {"reason": REASON}),
-        (
-            "triage_link",
-            {"reason": REASON, "target_incident_id": "inc-http-target"},
-        ),
+        ("open_triage", {}),
         ("triage_declare", {"reason": REASON, "severity": "sev2"}),
     ],
 )
@@ -405,6 +423,127 @@ def test_agent_grants_cannot_authorize_human_only_terminal_triage(
     assert _count_rows("alert_triage") == triage_before
     assert _count_rows("incident.run_events") == events_before
     assert _get(client, alert_id, BEARERS["reader"]).status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("operation", "body", "expected_incident_id"),
+    [
+        ("triage_dismiss", {"reason": REASON}, None),
+        (
+            "triage_link",
+            {"reason": REASON, "target_incident_id": "inc-http-target"},
+            "inc-http-target",
+        ),
+    ],
+)
+def test_authorized_external_producer_decision_persists_and_replays_provenance(
+    operation: str, body: dict, expected_incident_id: str | None
+) -> None:
+    client = _client()
+    alert_id = f"al-external-{operation.removeprefix('triage_')}"
+    key = f"k-external-{operation.removeprefix('triage_')}-123456789"
+    incidents_before = _incident_count()
+    events_before = _count_rows("incident.run_events")
+    response = _post(client, alert_id, _cmd(operation, **body), key, BEARERS["agent"])
+
+    assert response.status_code == 200, response.text
+    first = response.json()
+    assert (first["decision_origin"], first["responsible_system"]) == (
+        "external_automatic",
+        "producer-agent",
+    )
+    assert first["incident_id"] == expected_incident_id
+    state = _get(client, alert_id, BEARERS["reader"])
+    assert state.status_code == 200
+    assert state.json() == first
+    replay = _post(client, alert_id, _cmd(operation, **body), key, BEARERS["agent"])
+    assert replay.status_code == 200
+    assert replay.json() == first
+    assert _incident_count() == incidents_before
+    assert _count_rows("incident.run_events") == events_before
+
+
+def test_external_producer_without_exact_association_grant_has_no_effect() -> None:
+    client, alert_id = _client(), "al-external-no-associate"
+    before = (_incident_count(), _count_rows("alert_triage"), _count_rows("incident.run_events"))
+    response = _post(
+        client,
+        alert_id,
+        _cmd("triage_link", reason=REASON, target_incident_id="inc-http-target"),
+        "k-external-no-associate-12345",
+        BEARERS["limited_agent"],
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "not_authorized"
+    assert (
+        _incident_count(),
+        _count_rows("alert_triage"),
+        _count_rows("incident.run_events"),
+    ) == before
+    assert _get(client, alert_id, BEARERS["reader"]).status_code == 404
+
+
+def test_request_cannot_forge_decision_origin_or_responsible_system() -> None:
+    client, alert_id = _client(), "al-forged-origin"
+    before = (_incident_count(), _count_rows("alert_triage"), _count_rows("incident.run_events"))
+    response = _post(
+        client,
+        alert_id,
+        _cmd(
+            "triage_dismiss",
+            reason=REASON,
+            decision_origin="manual",
+            responsible_system="forged-system",
+        ),
+        "k-forged-origin-12345678",
+        BEARERS["agent"],
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert (
+        _incident_count(),
+        _count_rows("alert_triage"),
+        _count_rows("incident.run_events"),
+    ) == before
+    assert _get(client, alert_id, BEARERS["reader"]).status_code == 404
+
+
+def test_legacy_state_and_replay_report_unknown_without_actor_inference() -> None:
+    client = _client()
+    legacy_alert_id = "al-legacy-producer"
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO alert_triage (alert_id,status,incident_id,expected_version,reason,"
+            "severity,actor,decided_at) VALUES "
+            "(%s,'dismissed',NULL,1,%s,NULL,'producer-agent',now())",
+            (legacy_alert_id, REASON),
+        )
+    legacy = _get(client, legacy_alert_id, BEARERS["reader"])
+    assert legacy.status_code == 200
+    assert (
+        legacy.json()["actor"],
+        legacy.json()["decision_origin"],
+        legacy.json()["responsible_system"],
+    ) == ("producer-agent", "unknown", None)
+
+    alert_id, key = "al-legacy-replay", "k-legacy-replay-123456789"
+    body = _cmd("triage_dismiss", reason=REASON)
+    first = _post(client, alert_id, body, key, BEARERS["agent"])
+    assert first.status_code == 200
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE idempotency_records SET outcome=jsonb_set(outcome,'{response_payload}',"
+            "(outcome->'response_payload')-'decision_origin'-'responsible_system') "
+            "WHERE scope=%s",
+            (f"triage:{alert_id}",),
+        )
+    replay = _post(client, alert_id, body, key, BEARERS["agent"])
+    assert replay.status_code == 200
+    assert (
+        replay.json()["actor"],
+        replay.json()["decision_origin"],
+        replay.json()["responsible_system"],
+    ) == ("producer-agent", "unknown", None)
 
 
 def test_unauthenticated_is_401() -> None:
@@ -564,6 +703,7 @@ def test_triage_state_reads_back_dismiss() -> None:
     assert STATE_VALIDATOR.is_valid(body), body
     assert (body["status"], body["reason"]) == ("dismissed", REASON)
     assert (body["actor"], body["expected_version"]) == ("op-human", 1)
+    assert (body["decision_origin"], body["responsible_system"]) == ("manual", None)
     assert body["incident_id"] is None
     assert _get(client, "al-read-dismiss", BEARERS["reader"]).json() == body
 

@@ -166,3 +166,23 @@ docker compose --env-file <private-local-checks-env> -p triage23reviewchecks -f 
 ```
 
 This storage unit has not yet had a fresh Composebuild independently rerun. Actual observed run used matching cached dependencies with read-only current source. No HTTP response fields or external decision authority/UI were changed in this unit, so **CA6 remains pending**, not accepted by migration alone. Rollback is refused when it would erase known provenance; legacy-only rows may downgrade.
+
+## Verified external producer HTTP decisions and explicit provenance
+
+The existing command API now accepts an authenticated agent only for exact-granted dismiss/link (plus run.read for link). Backend persists external_automatic and responsible_system from authenticated producer ID; human decisions persist manual/null. Agent open/declare remain denied even with action grants. Request-supplied origin/system claims are rejected by the closed body schema. Legacy GET/idempotent replay remains unknown/null, never inferred from historical actor. API source3.0.0/state schema2.0.0 reflects the breaking strict response shape; command2.0.0 and immutable published snapshots are untouched. Incident workflow/runtime actor policy is unchanged: these are alert-adapter dispositions, not run transitions.
+
+Parent genuine baseline-overlay RED:**5failed3passed16.88s**. Final current full triage/runtime GREEN:**85passed51.65s**, no skips. First parent overlay used incorrect before-copy paths and continued against current code (7passed29deselected27.42s); it is **invalid RED**, retained as setup failure. Corrected fail-fast copy paths, matching baseline source hashes and pytest configuration before the valid repetition. Worker observed RED5failed3passed7.51s, focused36passed14.76s, full85passed27.88s; initial RuffE501 failed then line-wrap refactor passed. No failed log was discarded.
+
+Parent real separate producer container called live HTTP: old loaded API403operator_required; after quiescent restart and explicit readiness200, the same request returned200 with external_automatic and producer-e2e. Actual authenticated GET displays persisted provenance:
+
+![Actual FastAPI external decision read](issue-23-external-api.png)
+
+Inspected real screenshot: synthetic response only, no authorization headers/credentials. Source service SHA256 `ebf000ff2a9ab2868eb0ca851f27e262ea969c74969f94dcd4c3b836964884dc`. Logs `/tmp/triage23-review/t23-11/parent-{red-final,green-full,live-http-red,live-http-green,api-readiness}.log`. Browser database migration separately preserved206 real synthetic legacy rows exactly and classified all as unknown/null. Producer credentials stayed in a private owner-only file; initial private-directory permission failure occurred before writes and was corrected by hostUID, not relaxed permissions.
+
+Containerized full triage/runtime reproduction uses the same isolated prerequisites described above:
+
+```sh
+docker compose --env-file <private-local-checks-env> -p triage23reviewchecks -f compose.yaml -f <owned-network-override> --profile checks run --build --rm python-checks pytest -p no:cacheprovider -q tests/test_triage_commands.py tests/test_triage_contract.py tests/test_triage_declare.py tests/test_triage_http.py tests/test_triage_link.py tests/test_triage_store.py tests/test_triage_ui.py tests/test_incident_runtime.py
+```
+
+This new unit has not yet had a fresh Composebuild independently rerun. Matching cached dependencies/read-only source supplied the observed result. UI origin labels and complete durable setup package remain pending; do not claim fullCA6/fullissue acceptance from HTTP proof alone. Rollback removes external dismiss/link authority and provenance response while stored origin remains preserved by the separate migration.

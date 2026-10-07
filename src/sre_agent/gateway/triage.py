@@ -32,7 +32,7 @@ ALLOWED_KEYS = {
 MESSAGES = {
     400: "Malformed command envelope.",
     401: "Missing or invalid bearer credential.",
-    403: "Authenticated without the command action.",
+    403: "Missing the required action grant or human operator identity.",
     404: "Unknown alert or target incident.",
     409: "Stale expected_version or duplicate declare.",
     422: "Closed payload or reason rule violated.",
@@ -129,6 +129,8 @@ class TriageHttpService:
                 "reason": raw.get("reason"),
                 "actor": result.actor,
                 "decided_at": result.decided_at,
+                "decision_origin": result.decision_origin,
+                "responsible_system": result.responsible_system,
             },
             status_code=result.http_status,
         )
