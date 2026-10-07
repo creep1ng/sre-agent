@@ -236,6 +236,40 @@ def test_a_disposition_without_its_branch_is_refused() -> None:
                     _command("inc-b1-triage", run_id, "propose_disposition", disposition="declare")
                 )
             )
+        missing = object()
+        invalid_impacts = (
+            ("missing", missing),
+            ("null", None),
+            ("number", 7),
+            ("boolean", True),
+            ("array", []),
+            ("blank", " \t\n "),
+            ("too-long", "x" * 2001),
+        )
+        for label, impact in invalid_impacts:
+            inputs = {"severity": "sev2"}
+            if impact is not missing:
+                inputs["impact"] = impact
+            with pytest.raises(PreconditionFailedError, match="impact"):
+                await engine.execute(
+                    resolve(
+                        _command(
+                            "inc-b1-triage",
+                            run_id,
+                            "propose_disposition",
+                            command_id=f"cmd-b1-declare-invalid-{label}",
+                            disposition="declare",
+                            inputs=inputs,
+                        )
+                    )
+                )
+        async with PostgresIncidentUnitOfWork(database) as work:
+            unchanged = await work.incidents.get("inc-b1-triage")
+            events = await work.events.list_after(run_id, sequence=-1, limit=10)
+        assert unchanged is not None
+        assert unchanged.state["state"] == "triage"
+        assert unchanged.state.get("impact") is None
+        assert list(events) == []
         result = await engine.execute(
             resolve(
                 _command(
@@ -244,12 +278,23 @@ def test_a_disposition_without_its_branch_is_refused() -> None:
                     "propose_disposition",
                     command_id="cmd-b1-declare-ok",
                     disposition="declare",
-                    inputs={"severity": "sev2"},
+                    inputs={
+                        "severity": "sev2",
+                        "impact": "Operators report that checkout cannot process payments.",
+                    },
                 )
             )
         )
         assert result.incident.state["state"] == "active"
         assert result.incident.state["severity"] == "sev2"
+        assert (
+            result.incident.state["impact"]
+            == "Operators report that checkout cannot process payments."
+        )
+        assert (
+            result.events[-1].payload["incident_state"]["impact"]
+            == "Operators report that checkout cannot process payments."
+        )
         await database.dispose()
 
     asyncio.run(scenario())

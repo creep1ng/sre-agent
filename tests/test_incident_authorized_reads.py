@@ -62,7 +62,10 @@ COMMANDS = (
         actor="human",
         actor_reference=ActorReference(principal_id="demo-human", display_name="Demo human"),
         outcome="declare",
-        inputs={"severity": "sev2"},
+        inputs={
+            "severity": "sev2",
+            "impact": "Customers could not complete checkout.",
+        },
     ),
     IncidentCommand(
         command_id="cmd_a3_investigate",
