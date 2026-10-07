@@ -22,6 +22,8 @@ test("captures real packaged identity and command attribution proof", async ({ p
     const body = await response.json();
     expect(response.status()).toBe(200);
     expect(body).toEqual({ principal_id: expected });
+    expect(response.headers()["cache-control"]?.split(",").map((directive) =>
+      directive.trim().toLowerCase())).toContain("no-store");
     identities[label] = {
       status: response.status(),
       body,
@@ -42,6 +44,7 @@ test("captures real packaged identity and command attribution proof", async ({ p
 
   const openapiResponse = await request.get("/api/openapi.json");
   const openapi = await openapiResponse.json();
+  expect(openapi.info["x-sre-agent-build-revision"]).toBe(SOURCE_SHA);
   const whoamiOperation = openapi.paths["/v1/whoami"].get;
   const responseSchema = whoamiOperation.responses["200"].content["application/json"].schema;
   const responseModel = openapi.components.schemas[responseSchema.$ref.split("/").at(-1)];

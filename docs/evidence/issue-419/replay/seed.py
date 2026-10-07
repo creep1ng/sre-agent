@@ -1,8 +1,8 @@
 import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from os import environ
+from pathlib import Path
 
 import yaml
 
@@ -26,6 +26,7 @@ SCENARIOS = (
     ("inc-issue419-final-browser", "run_incissue419finalbrowser"),
     ("inc-issue419-final-mismatch", "run_incissue419finalmismatch"),
 )
+
 
 async def main() -> None:
     database = Database(environ["DATABASE_URL"])
@@ -54,6 +55,7 @@ async def main() -> None:
                 )
     finally:
         await database.dispose()
+
 
 asyncio.run(main())
 print("seeded two synthetic incidents/runs using the existing tracked fixture pattern")
