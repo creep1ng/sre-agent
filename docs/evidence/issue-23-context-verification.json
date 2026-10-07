@@ -18,7 +18,7 @@
     "selected_suites": 9
   },
   "full_backend": {
-    "status": "repeat_pending",
+    "status": "passed",
     "failed_checkpoint": {
       "passed": 1761,
       "skipped": 1,
@@ -31,6 +31,16 @@
       "passed": 13,
       "duration_seconds": 9.12,
       "exit_code": 0
+    },
+    "final": {
+      "passed": 1774,
+      "skipped": 1,
+      "errors": 0,
+      "duration_seconds": 396.19,
+      "exit_code": 0,
+      "skip": "Opt-in live OpenRouter provider check",
+      "prechecks": "passed",
+      "alembic_check": "No new upgrade operations detected."
     }
   },
   "screenshots": {
@@ -46,7 +56,7 @@
   "limitations": [
     "Synthetic operator/alert fixtures, not live alert-provider ingestion.",
     "No external mitigation executor or exactly-once external claim.",
-    "Complete current-source checks, exact-head Codex/CI, human acceptance and merge still pending."
+    "Exact-head Codex/hosted CI, human acceptance and merge remain pending."
   ],
   "security": {
     "generated_credentials_in_scanned_text": false,

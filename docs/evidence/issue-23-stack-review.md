@@ -395,7 +395,12 @@ The complete current source check first produced1761passed,1live-provider
 skip,13auditfixture-errors419.39s. Its guarded test reset omitted alert_triage
 while resetting migrations, causing DuplicateTable. Only that existing reset
 was corrected; all13existingcases passed9.12s/Ruff/format. The complete current
-repeat is pending; scoped/browser passes are not a complete suite pass.
+source/test repeat passed1774tests with1opt-inlive-providerSkip in396.19s,
+exit0; defaultprechecks andAlembic(no newupgradeoperations) passed.
+Testedsource1bd8ebc9ba7a7899c0903df7393b66eb9bda1997 has the same production
+bytes as the54-casebrowserrun; its additional3lines only fix the existing
+Python audit test reset. The checksimage froze reconciledadbb sources and
+mounted all current src/tests/agent/public bytes read-only for this exact run.
 
 ### Original issue330 boundary
 
@@ -405,7 +410,8 @@ CA1 to test_incident_run_http/test_incident_restart_reads, CA2 to start/command
 replay and runtime concurrency, CA3 to cross-scope401/403/404, CA4 to human
 approval/attribution/artifact state, CA5 to gateway-to-IncidentRuntime and its
 unit of work, and CA7 to test_incident_workflow_provisioning plus HTTP grants.
-Source presence alone is not a fresh pass: current full execution is required.
+Those suites were executed by the current1774-passfullrun; this is current
+local evidence, not hosted CI or full external-effect acceptance.
 The restart proof rereads an existing durable run rather than one combined
 HTTP-start-and-restart sequence. For CA6, this runtime performs no external
 mitigation effects; no external exactly-once guarantee is asserted. A future
