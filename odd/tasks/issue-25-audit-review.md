@@ -254,3 +254,57 @@ Initialpr-governancefailed: strictDeliveryroute/Security values includedexplanat
 body-onlyrepair preserved explanation elsewhere,497governanceSUCCESSobserved.
 Hostedcontracts/otherchecksstillpending; independenthumanacceptance/integration
 remainnextsteps. Nooriginalstackrewrites, merge, thread dismissal orissueclosure.
+
+## Fresh review continuation
+Live #25 was already closed by creep1ng at 2026-10-07T03:24:35Z; Project Done
+is not proof of integrated delivery. Earlier open-state statements were inaccurate.
+The active goal authorizes Projects, GitHub Codex reviews and conditional merges;
+ordinary human evidence/review and size gates still apply. No bypass authorized.
+Prior source e1847 acceptance is provisional pending the new exact-head findings.
+- [x] T21 Replace terminal-reference tautologies with observed expected metadata;
+  prove missing identity/resource cannot pass (PR498 comment4206776809).
+- [x] T22 Clear retained detail error only after a later successful detail fetch;
+  preauthor browser journey, observe RED/GREEN (PR499 comment4206790465).
+- [x] T23 Exercise populated controlled correlation refs and restrict mutation
+  probe catches to exact row-count failures; reject wrong status/malformed rows
+  (PR500 comment4206804260; PR501 comment4206792111).
+- [x] T24 Guarantee bounded query-fault restoration on capture failure/timeout;
+  verify existing host UID command rather than blindly changing it (PR502).
+- [ ] T25 Reverify actual corrected joint candidate, refresh sanitized artifacts,
+  request exact-head Codex review, reconcile human review and integration gates.
+T19/T20 evidence remains historical, not acceptance of the forthcoming candidate.
+Next: failure-first bounded corrections; separate <=400-line follow-up PR units.
+
+T22 observed focusedPlaywright RED stale visiblebanner, GREEN1passed2.7s and
+retention/successpair2passed8.7s. UI34addedlines; fulljointbrowsercheck pending.
+
+T22 parent independent fullPlaywright12passed15.1s on correctedservedUI.
+T24 Docker-only orchestration EXIT/signal cleanup verified after injected failure
+(exit1) and boundedtimeout(exit124): both restoredtable/faultremoved SQL t/t.
+Existing marker-writing commands already had hostUID; no speculative UID fix.
+
+User explicitly approved an exception ONLY for final atomic integration to main,
+not correctionPRunits (>400 still forbidden there). Fresh review/evidence required
+before merge; no protection bypass or independenthumanacceptance inferred.
+
+T24 reopened: host-shell cleanup proof passed, but contributor recipe must start
+containers on every command. Replace orchestration with a bounded controller inside
+existing python-checks image (no Docker socket); preserve the tested cleanup intent.
+
+T21/T23 parent9pytestpassed8.80s + actualterminal11JSONrecords; typedprobes
+acceptonly1→0/1→2 countfault afterHTTP/rowvalidation. Expectedseededidentity/
+resourceHMAC verified on403/404/503. Worker nonnullcorrelation RED/GREEN verified
+three independentlyexpectedrefs inSQL/HTTP; freshversionedcapture stillpending.
+Parentfirstformatcheckfailedhelper; formattedinDocker, lint/format andrerunpass.
+Success200doesnotexposereadrequestID: validatevalidenvelope andcorrelateactualSQL.
+
+T25 live integration base advanced to a3541a96d83364a126ceff418ed3cbf7dbdc2d82
+(human incident commands API). After bounded sourceunits, merge currentmain only
+on finalintegration branch; preserve both API and audit router/tests. Rebuild and
+revalidate exactunion; previous sourcehash/testcounts are historical, not unionproof.
+
+T24 finalcontainercontroller observed oldunprotectedRED (tablemissing/faultpresent),
+readonly-markerfailure +done-timeout +browser-failedmarker allnonzeroandrestored;
+realconnectedbrowser success503/0stalerows/0details andverifiedrestoration.
+ControllerarmscleanupbeforeDDL, validatesrestricteddb, noDockersocket/newservice.
+Docker-only recipe updated; finalRuffpassed. Parentfreshunioncapture stillpending.

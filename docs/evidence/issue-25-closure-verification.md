@@ -11,9 +11,11 @@ Runtime source manifest SHA-256: `13a2b1fb891a93835205cf81fd8c2ab2e4889a39522906
 The manifest hashes sorted `src/**/*.py` paths, NUL, file hash, and newline.
 The HTTP helper also records its own hash; browser captures record served UI hash.
 
-Live Projects #8 lists #25 as Done, but the issue and stack are still open.
+Live Projects #8 lists #25 as Done; the issue was human-closed at
+2026-10-07T03:24:35Z, but the runtime stack remains open and unmerged.
 Pagination remains explicitly deferred to #470; it is not accepted as delivered.
-Scope is the five requested closure gaps; no merge or issue closure is authorized.
+Scope is the five requested closure gaps. The active goal authorizes conditional
+PR merges, not protection bypass or treating the closed issue as proof of delivery.
 Route: delegated direct. AGENTS failure-first policy, no verified strict-TDD toggle.
 RDD: disabled/unmanaged (global off); independent human acceptance remains required.
 
@@ -76,27 +78,39 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --e
 ```
 
 ## Connected query-fault reproduction
-Only run on this fresh synthetic stack. Clear old rendezvous markers first. Start
-the browser command in the background; it proves prior rows/details and writes
-ready. Wait for ready before renaming; always restore the table even on failure.
-Do not leave the lab fault active. The active/done markers are transient, not evidence.
+Only run on this fresh synthetic stack. The browser runs in the existing Playwright
+image. A separate controller in the existing Python checks image waits for the
+connected browser's precondition, renames only `public.audit_events`, activates the
+browser fault, and restores/verifies the table in `finally` after success, capture
+failure, marker-write failure, or bounded timeout. It accepts only the isolated
+database host `db` and database `audit25_closure`; it has no Docker socket or new
+service. The browser's own query-failure wait is bounded at90seconds; controller
+marker waits default to120seconds. Do not terminate the controller or stop the
+Docker daemon while the fault is active; external process interruptions do not
+guarantee cleanup. The marker-writing browser/controller containers use the host UID
+and GID so the host can inspect and remove their files.
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'rm -f /evidence/query-fault-ready.json /evidence/query-fault-active /evidence/query-fault-done'
-docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/capture_issue25_query_failure.mjs:/e2e/capture.mjs:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e node /e2e/capture.mjs &
-docker run --rm -v "$PWD/docs/evidence:/evidence:ro" audit25-closure-e2e sh -c 'n=0; until test -f /evidence/query-fault-ready.json; do n=$((n+1)); test "$n" -lt 60 || exit 1; sleep 1; done'
-docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml exec -T db psql -U sre_agent -d audit25_closure -v ON_ERROR_STOP=1 -c 'ALTER TABLE audit_events RENAME TO audit_events_issue25_fault'
-docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'touch /evidence/query-fault-active; n=0; until test -f /evidence/query-fault-done; do n=$((n+1)); test "$n" -lt 60 || exit 1; sleep 1; done'
-docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml exec -T db psql -U sre_agent -d audit25_closure -v ON_ERROR_STOP=1 -c 'ALTER TABLE audit_events_issue25_fault RENAME TO audit_events'
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'rm -f /evidence/query-fault-ready.json /evidence/query-fault-active /evidence/query-fault-done /evidence/issue-25-query-failure-failed.json'
+docker run --rm --detach --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/capture_issue25_query_failure.mjs:/e2e/capture.mjs:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e node /e2e/capture.mjs
+docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/control_issue25_query_fault.py:/app/scripts/control_issue25_query_fault.py:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-python-checks:latest python /app/scripts/control_issue25_query_fault.py
+docker run --rm --network audit25-closure_runtime --env-file .env.worktree audit25-closure-python-checks:latest python -c 'from sre_agent.settings import Settings; import os,psycopg; s=Settings.from_environment({k:v for k,v in os.environ.items() if not k.startswith("OPENROUTER")}); c=psycopg.connect(s.database_url); print("table_flags="+str(c.execute("SELECT to_regclass(%s) IS NOT NULL,to_regclass(%s) IS NULL",("public.audit_events","public.audit_events_issue25_fault")).fetchone())); c.close()'
 docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml --profile checks --profile e2e down
 ```
 
+The controller exits nonzero for a failed browser capture or a timeout, but still
+checks and restores the table after the rename; the readback prints `(True, True)`
+only when the original table exists and the temporary fault name is absent.
+
 ## Technical acceptance
-I explicitly accept the five requested closure corrections on the tested joint
+Historical local technical acceptance covered the five requested corrections on
 source candidate `e1847a66554285c4e0400728fdc5c2bc46515ea8`, based on independent
 Docker verification, HTTP/SQL invariants and inspected real browser captures.
 CA1 is accepted only for bounded filtering and truthful truncation; #470 remains
 deferred. This is local technical acceptance, not independent human acceptance,
 hosted CI, merge permission, issue closure or delivery of stable pagination.
+Fresh Codex findings on PR498–502 qualify this historical acceptance. The next
+corrected candidate requires new behavioral checks, populated correlation evidence
+and capture-failure restoration verification before renewed explicit acceptance.
 Rollback: revert the bounded follow-up commits; immutable contract releases untouched.
 Sanitized: yes. Only synthetic metadata and actual browser captures may be published.
