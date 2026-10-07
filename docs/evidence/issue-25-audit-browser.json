@@ -1,0 +1,1 @@
+{"connected":{"request_id":"c8b10043-4055-4e78-b190-205fb430830c","rows":1,"detail_status":200},"detail_error":{"evidence_kind":"mock","injected_status":404,"alert_visible":false},"truncation":{"evidence_kind":"mock","truncated":true,"displayed_count":"1 audit event."}}
