@@ -40,7 +40,7 @@ RDD: disabled by the global setting; ordinary policy applies.
   fail-closed identity and secret handling checks.
 - [x] **OTEL-PR-5** Publish the pinned guest bootstrap and cost/deadline
   primitives with applicable checks.
-- [ ] **OTEL-PR-6** Publish the AWS adapter in cohesive, independently checked
+- [x] **OTEL-PR-6** Publish the AWS adapter in cohesive, independently checked
   slices (identity/network/cost, then lifecycle/SSM/Scheduler).
 - [ ] **OTEL-PR-7** Publish the session controller and CLI in cohesive slices,
   demonstrating shared reuse, bounded extension, SSM-only access, and cleanup.
@@ -74,4 +74,7 @@ deadline primitives at 290 changed lines; networkless Docker confirmed Bash synt
 expiry-before-network ordering, and 8019-byte user-data at
 `fdf8d014ab86450af6dab9623cae07f39771fc6a`. PR #507 published
 identity/network/SSM adapter foundation with synthetic identity checks and
-Ruff pass at `142cced5ebe3ed55eafa3c0e53783d8f1832182f`.
+Ruff pass at `142cced5ebe3ed55eafa3c0e53783d8f1832182f`. PR #508 published
+the compute/Scheduler adapter and shared controller at 316 changed lines;
+synthetic Docker checks confirmed two-hour schedule, down termination, and
+budget refusal at `63677a401361ecfaec99bec8da532851ecaddc00`.
