@@ -46,7 +46,7 @@ RDD: disabled by the global setting; ordinary policy applies.
   slices (identity/network/cost, then lifecycle/SSM/Scheduler).
 - [x] **OTEL-PR-7** Publish the session controller and CLI in cohesive slices,
   demonstrating shared reuse, bounded extension, SSM-only access, and cleanup.
-- [ ] **OTEL-PR-8** Publish sanitized operator documentation, full
+- [x] **OTEL-PR-8** Publish sanitized operator documentation, full
   containerized verification, and final #494 criterion mapping.
 - [x] **OTEL-PR-9** Close #494 acceptance gaps found in post-publication audit:
   `up` reuses a live scheduled session, and `down` is idempotent when absent;
@@ -66,14 +66,18 @@ Docker reproduction and no live-AWS claim. All observed PR diffs are under
 400 additions plus deletions against their current base. PR #504 fixed the
 CI pytest import path after the hosted unit job failed collection; the fix
 was merge-forwarded without force-pushing through PR #512. Original behavior
-source and tests stayed unchanged during propagation. Feature branch `codex/otel-demo-ec2/13-shared-reuse` verifies shared reuse
-and idempotent teardown. Two new
+source and tests stayed unchanged during propagation. PR #513 on `codex/otel-demo-ec2/13-shared-reuse` verifies shared reuse
+and idempotent teardown. An exact-checkout networkless Docker run passed
+59 focused tests and Ruff across 17 files with no PYTHONPATH override or
+infra mount after the inherited CI fixes. #494 criterion mapping is recorded
+at https://github.com/creep1ng/sre-agent/issues/494#issuecomment-6039022455. Two new
 acceptance checks were observed RED before the fix; at source SHA
 `641a713`, exact-checkout networkless Docker reported 59 focused passes and
 Ruff passed 17 files without a PYTHONPATH override.
 
-Next: map #494 criteria back to the stack, verify current hosted CI and
-governance statuses, mirror this tracker to Engram, and request independent
-human review. Live AWS
+Next: verify current hosted CI and governance statuses, mirror this tracker
+to Engram, and request independent human review. PR #505 also copied infra
+into the checks image after hosted unit tests found a missing template; the
+fix was merge-forwarded through PR #513 without force-push. Live AWS
 provisioning, Scheduler firing, SSM forwarding and billing controls are
 not validated in this publication session; the issue remains open.
