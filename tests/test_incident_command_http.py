@@ -31,6 +31,7 @@ import yaml
 from alembic import command as alembic
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from sre_agent.application import create_application
 from sre_agent.persistence.database import Database
@@ -91,7 +92,10 @@ def authorized_database() -> None:
             "('demo-human','human','Demo operator','active',now(),now()),"
             "('sender-human','human','Sender only','active',now(),now()),"
             "('bystander-human','human','Bystander','active',now(),now()),"
-            "('approving-harness','agent','Misconfigured harness','active',now(),now())"
+            "('approving-harness','agent','Misconfigured harness','active',now(),now()),"
+            "('whoami-expired','human','Expired whoami','active',now(),now()),"
+            "('whoami-revoked','human','Revoked whoami','active',now(),now()),"
+            "('whoami-inactive','human','Inactive whoami','inactive',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at) VALUES "
@@ -104,8 +108,29 @@ def authorized_database() -> None:
         async with database.transaction() as session:
             credentials = CredentialRepository(session)
             admin = await credentials.issue("admin-human")
-            for name in ("demo-human", "sender-human", "bystander-human", "approving-harness"):
+            for name in (
+                "demo-human",
+                "sender-human",
+                "bystander-human",
+                "approving-harness",
+                "whoami-expired",
+                "whoami-revoked",
+                "whoami-inactive",
+            ):
                 BEARERS[name] = f"Bearer {(await credentials.issue(name)).key}"
+            await session.execute(
+                text(
+                    "UPDATE credentials SET created_at = now() - interval '2 seconds', "
+                    "expires_at = now() - interval '1 second' "
+                    "WHERE principal_id = 'whoami-expired'"
+                )
+            )
+            await session.execute(
+                text(
+                    "UPDATE credentials SET status = 'revoked', revoked_at = created_at "
+                    "WHERE principal_id = 'whoami-revoked'"
+                )
+            )
             grants = GrantRepository(session)
             for resource in ("catalog", "grants"):
                 await grants.create(
@@ -210,6 +235,62 @@ def _send(
         json=body,
         headers=headers,
     )
+
+
+def _whoami(bearer: str | None = "demo-human") -> Any:
+    headers = {} if bearer is None else {"Authorization": BEARERS.get(bearer, bearer)}
+    client = TestClient(create_application(Settings(DATABASE_URL)))
+    return client.get("/v1/whoami", headers=headers)
+
+
+@pytest.mark.parametrize("principal", ["demo-human", "sender-human"])
+def test_whoami_returns_only_the_authenticated_principal_without_caching(principal: str) -> None:
+    response = _whoami(principal)
+    assert response.status_code == 200
+    assert response.json() == {"principal_id": principal}
+    assert response.headers["cache-control"] == "no-store"
+    assert "credential" not in response.text
+
+
+@pytest.mark.parametrize(
+    "bearer",
+    [
+        None,
+        "Bearer nope",
+        "Bearer sre_unkn_0123456789abcdefghijklmnop",
+        "whoami-revoked",
+        "whoami-expired",
+        "whoami-inactive",
+    ],
+)
+def test_whoami_rejects_unusable_credentials_uniformly(bearer: str | None) -> None:
+    response = _whoami(bearer)
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert response.json()["error"] == {
+        "code": "authentication_failed",
+        "message": "Authentication failed.",
+    }
+    assert response.json()["retryable"] is False
+    assert set(response.json()) == {"error", "request_id", "retryable"}
+    assert len(response.json()["request_id"]) == 36
+    assert bearer is None or bearer not in response.text
+
+
+def test_whoami_is_mounted_and_documents_bearer_authentication() -> None:
+    client = TestClient(create_application(Settings(DATABASE_URL)))
+    operation = client.get("/openapi.json").json()["paths"]["/v1/whoami"]["get"]
+    assert operation["security"] == [{"HTTPBearer": []}]
+    assert client.get("/openapi.json").json()["components"]["securitySchemes"]["HTTPBearer"] == {
+        "type": "http",
+        "scheme": "bearer",
+    }
+    assert "401" in operation["responses"]
+    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    model_name = schema["$ref"].rsplit("/", 1)[-1]
+    model = client.get("/openapi.json").json()["components"]["schemas"][model_name]
+    assert set(model["properties"]) == {"principal_id"}
+    assert "Cache-Control" in operation["responses"]["200"]["headers"]
 
 
 def _state(incident_id: str) -> str:
