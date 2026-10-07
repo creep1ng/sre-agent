@@ -122,9 +122,9 @@ def authorized_database() -> None:
         ).catalog_status == 201
         async with database.transaction() as session:
             grants = GrantRepository(session)
+            # Provisioning now creates the demo-human command grants. Keep only the
+            # sender and misconfigured-agent grants this HTTP suite needs.
             for principal, action in (
-                ("demo-human", "run.command"),
-                ("demo-human", "run.approve"),
                 ("sender-human", "run.command"),
                 # A misconfiguration the route must survive: an agent holding the
                 # human gate. Provisioning never grants it (B2).
