@@ -49,6 +49,12 @@ def migrate_with_legacy_row() -> None:
             ("al-t23-legacy", "Historical decision before provenance tracking.", "producer-e2e"),
         )
     command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute(
+            "INSERT INTO incident.incidents (incident_id,state,version,created_at,updated_at) "
+            "VALUES (%s,jsonb_build_object('state','active'),0,now(),now())",
+            ("inc-0000-t23-linkable",),
+        )
 
 
 async def seed() -> None:
@@ -94,7 +100,7 @@ async def seed() -> None:
     }
     KEY_FILE.write_text("".join(f"{name}={value}\n" for name, value in values.items()))
     KEY_FILE.chmod(0o600)
-    print("Seeded six synthetic principals and a pre-provenance legacy decision.")
+    print("Seeded six synthetic principals, one active link target, and a pre-provenance legacy decision.")
 
 
 if __name__ == "__main__":
