@@ -252,6 +252,11 @@ WINDOW_QS = "from=2026-09-20T00:00:00Z&to=2026-09-21T00:00:00Z"
 def test_unauthenticated_and_forbidden() -> None:
     client = _client()
     assert client.get(f"/v1/audit-events?{WINDOW_QS}").status_code == 401
+    canonical_request_id = str(UUID(int=0xC0000000000000000000000000000000 + 52)).upper()
+    assert (
+        client.get("/v1/audit-events", params={"request_id": canonical_request_id}).status_code
+        == 401
+    )
     bad = client.get(f"/v1/audit-events?{WINDOW_QS}", headers={"Authorization": "Bearer not-a-key"})
     assert bad.status_code == 401
     assert bad.headers["WWW-Authenticate"] == "Bearer"
@@ -259,6 +264,14 @@ def test_unauthenticated_and_forbidden() -> None:
         f"/v1/audit-events?{WINDOW_QS}", headers={"Authorization": BEARERS["bystander"]}
     )
     assert denied.status_code == 403
+    assert (
+        client.get(
+            "/v1/audit-events",
+            params={"request_id": canonical_request_id},
+            headers={"Authorization": BEARERS["bystander"]},
+        ).status_code
+        == 403
+    )
     assert "grant_matched" not in denied.text
 
 
@@ -325,6 +338,12 @@ def test_list_filters_default_limit_and_empty() -> None:
         headers=headers,
     ).json()
     assert len(requested["items"]) == 1
+    requested_uppercase = client.get(
+        "/v1/audit-events",
+        params={"request_id": str(UUID(int=0xC0000000000000000000000000000000 + 52)).upper()},
+        headers=headers,
+    ).json()
+    assert len(requested_uppercase["items"]) == 1
     empty = client.get(
         "/v1/audit-events?from=2026-09-22T00:00:00Z&to=2026-09-22T01:00:00Z", headers=headers
     ).json()
@@ -450,6 +469,26 @@ def _assert_terminal_validation_record(response, status: int, stage: str) -> Non
 def test_noncanonical_uuid_path_forms_are_audited_validation_errors(event_id: str) -> None:
     response = _client().get(
         f"/v1/audit-events/{event_id}", headers={"Authorization": BEARERS["admin"]}
+    )
+    assert response.status_code == 422, response.text
+    _assert_terminal_validation_record(response, 422, "validation")
+
+
+@pytest.mark.parametrize(
+    "request_id",
+    (
+        "3f2504e04f8911d39a0c0305e82c3301",
+        "{3f2504e0-4f89-11d3-9a0c-0305e82c3301}",
+        "urn:uuid:3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    ),
+)
+def test_noncanonical_request_id_forms_are_audited_validation_errors(
+    request_id: str,
+) -> None:
+    response = _client().get(
+        "/v1/audit-events",
+        params={"request_id": request_id},
+        headers={"Authorization": BEARERS["admin"]},
     )
     assert response.status_code == 422, response.text
     _assert_terminal_validation_record(response, 422, "validation")
