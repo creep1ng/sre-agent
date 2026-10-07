@@ -1,0 +1,62 @@
+{
+  "source_sha": "1bd8ebc9ba7a7899c0903df7393b66eb9bda1997",
+  "main_base_sha": "3adf9a66f4b08290fb2e6aaa873b49d669b6bb46",
+  "evidence_kind": "controlled integration",
+  "scoped_backend": {
+    "passed": 97,
+    "duration_seconds": 50.75,
+    "exit_code": 0
+  },
+  "browser": {
+    "startTime": "2026-10-07T22:12:13.618Z",
+    "duration": 139364.341,
+    "expected": 54,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0,
+    "exit_code": 0,
+    "selected_suites": 9
+  },
+  "full_backend": {
+    "status": "repeat_pending",
+    "failed_checkpoint": {
+      "passed": 1761,
+      "skipped": 1,
+      "errors": 13,
+      "duration_seconds": 419.39,
+      "exit_code": 1,
+      "root_cause": "Existing audit terminal fixture dropped alembic_version but not alert_triage; DuplicateTable during migration."
+    },
+    "existing_fixture_green": {
+      "passed": 13,
+      "duration_seconds": 9.12,
+      "exit_code": 0
+    }
+  },
+  "screenshots": {
+    "issue-23-integrated-dismiss.png": "13ba70d3b573bf4ec1fb2a361ee60a53e078ebf82fb70828b5575a69fd2d10ca",
+    "issue-23-integrated-link.png": "0677358c5d6f84018bfe6e43b0f1129982850d3ed6f550aee64caf87a1ccd886",
+    "issue-23-integrated-declare.png": "2ac24128d72608eca886b18db7f28335c878a698f6e6464f5da870fe0e8ee779",
+    "issue-23-integrated-eligible.png": "6d0472ce3a3b00232809be9042dbd6410c3ec1d244ef3f1237873fe2c62e370d",
+    "issue-23-integrated-origin.png": "162cbc3e7b05cf6ce4ded062a6d6e6ffadcaa61f66a8a528320debdaa508bedf",
+    "issue-23-integrated-recovery.png": "6ceb14f7cdf16d8d6f1e4a02331fcfa8530c2e912bd52fe30a8af554e4cc8b5e",
+    "issue-23-integrated-denial.png": "233d5811f1367b7ed9ccda2140eab22379978a30ebf4d84e846586639733bd55",
+    "issue-23-declaration-context.png": "7079554741cc5a53324023206a8a07bdb79b6850f1fc2f8546fa36f0190ca551"
+  },
+  "limitations": [
+    "Synthetic operator/alert fixtures, not live alert-provider ingestion.",
+    "No external mitigation executor or exactly-once external claim.",
+    "Complete current-source checks, exact-head Codex/CI, human acceptance and merge still pending."
+  ],
+  "security": {
+    "generated_credentials_in_scanned_text": false,
+    "screenshots_individually_inspected": 8,
+    "credential_input_empty": true
+  },
+  "failed_checkpoints": [
+    "Missing context frozen backend: actual201 vs422, 1failed67deselected8.62s.",
+    "Initial backend context run47failed37passed30.15s.",
+    "First backend GREEN96passed1stale-fixture-failed48.71s; existing fixture adapted.",
+    "First browser full52passed2existing-fixture-failed142.574s; existingfixtures adapted."
+  ]
+}
