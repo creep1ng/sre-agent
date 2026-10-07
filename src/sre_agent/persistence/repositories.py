@@ -369,7 +369,7 @@ class IdempotencyRepository:
             row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
             if row is None:
                 raise RuntimeError("idempotency claim was not retained")
-        if row.payload_sha256 != payload_sha256:
+        if row.principal_id != principal_id or row.payload_sha256 != payload_sha256:
             raise IdempotencyConflictError(scope)
         stored = row.outcome
         return IdempotencyBinding(

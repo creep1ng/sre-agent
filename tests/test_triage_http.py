@@ -528,6 +528,91 @@ def test_authorized_external_producer_decision_persists_and_replays_provenance(
     assert _count_rows("incident.run_events") == events_before
 
 
+@pytest.mark.parametrize(
+    ("operation", "owner", "other", "expected_actor", "origin", "responsible_system"),
+    [
+        ("triage_dismiss", "op", "agent", "op-human", "manual", None),
+        (
+            "triage_dismiss",
+            "agent",
+            "op",
+            "producer-agent",
+            "external_automatic",
+            "producer-agent",
+        ),
+        ("triage_declare", "op", "context_human", "op-human", "manual", None),
+    ],
+)
+def test_idempotency_binding_is_owned_by_the_original_principal(
+    operation: str,
+    owner: str,
+    other: str,
+    expected_actor: str,
+    origin: str,
+    responsible_system: str | None,
+) -> None:
+    client = _client()
+    alert_id = f"al-owner-bound-{operation}-{owner}-{other}"
+    key = f"k-owner-bound-{operation}-{owner}-{other}-123456789"
+    if operation == "triage_declare":
+        body = _cmd(operation, reason=REASON, severity="sev2")
+    else:
+        body = _cmd(operation, reason=REASON)
+
+    def database_snapshot() -> tuple[object, ...]:
+        with psycopg.connect(DATABASE_URL) as connection:
+            triage = connection.execute(
+                "SELECT status, incident_id, expected_version, actor, decision_origin, "
+                "responsible_system FROM alert_triage WHERE alert_id=%s",
+                (alert_id,),
+            ).fetchone()
+            binding = connection.execute(
+                "SELECT principal_id, payload_sha256, outcome, transition_count "
+                "FROM idempotency_records WHERE scope=%s",
+                (f"triage:{alert_id}",),
+            ).fetchone()
+            event_count = connection.execute("SELECT count(*) FROM incident.run_events").fetchone()[
+                0
+            ]
+            incident_count = connection.execute(
+                "SELECT count(*) FROM incident.incidents"
+            ).fetchone()[0]
+        return triage, binding, event_count, incident_count
+
+    first = _post(client, alert_id, body, key, BEARERS[owner])
+    assert first.status_code == (201 if operation == "triage_declare" else 200), first.text
+    original = first.json()
+    assert (original["actor"], original["decision_origin"], original["responsible_system"]) == (
+        expected_actor,
+        origin,
+        responsible_system,
+    )
+    after_first = database_snapshot()
+    assert after_first[0][3:] == (expected_actor, origin, responsible_system)
+    assert after_first[1][0] == expected_actor
+    stored_outcome = after_first[1][2]["response_payload"]
+    assert (
+        stored_outcome["actor"],
+        stored_outcome["decision_origin"],
+        stored_outcome["responsible_system"],
+    ) == (
+        expected_actor,
+        origin,
+        responsible_system,
+    )
+    assert stored_outcome["incident_id"] == original["incident_id"]
+
+    foreign_replay = _post(client, alert_id, body, key, BEARERS[other])
+    assert foreign_replay.status_code == 409, foreign_replay.text
+    assert foreign_replay.json()["error"]["code"] == "idempotency_conflict"
+    assert database_snapshot() == after_first
+
+    owner_replay = _post(client, alert_id, body, key, BEARERS[owner])
+    assert owner_replay.status_code == first.status_code
+    assert owner_replay.json() == original
+    assert database_snapshot() == after_first
+
+
 def test_external_producer_without_exact_association_grant_has_no_effect() -> None:
     client, alert_id = _client(), "al-external-no-associate"
     before = (_incident_count(), _count_rows("alert_triage"), _count_rows("incident.run_events"))
