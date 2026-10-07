@@ -20,12 +20,15 @@ def main() -> None:
         "POSTGRES_USER=sre_agent",
         f"POSTGRES_PASSWORD={password}",
         f"DATABASE_URL=postgresql://sre_agent:{password}@db:5432/sre_agent",
-        *(f"{name}=sre_{secrets.token_urlsafe(32)}" for name in (
-            "ADMIN_HUMAN_API_KEY",
-            "DEMO_HUMAN_API_KEY",
-            "INCIDENT_HARNESS_API_KEY",
-            "RESTRICTED_HARNESS_API_KEY",
-        )),
+        *(
+            f"{name}=sre_{secrets.token_urlsafe(32)}"
+            for name in (
+                "ADMIN_HUMAN_API_KEY",
+                "DEMO_HUMAN_API_KEY",
+                "INCIDENT_HARNESS_API_KEY",
+                "RESTRICTED_HARNESS_API_KEY",
+            )
+        ),
         "TRIAGE_AGENT_MODEL=openai/gpt-4o-mini",
         "TRIAGE_AGENT_PROVIDER=openai",
         "REMEDIATION_AGENT_MODEL=anthropic/claude-3.5-haiku",
