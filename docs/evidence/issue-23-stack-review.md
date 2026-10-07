@@ -1,6 +1,20 @@
 # Issue #23 triage stack review
 
-Status: local code review and CA1–CA6 verification complete; **issue #23 is not accepted**. This is a local review, not a published PR, merge authorization or human acceptance. RDD: disabled/unmanaged.
+Status: publication and current-main integration review in progress. The user authorized publication, Codex GitHub review, necessary corrections and merge when ready, plus a size exception ONLY for the final atomic main PR. Issue #23 is not yet accepted or closed. RDD: disabled/unmanaged. Historical local evidence below is preserved, not substituted for fresh integration checks.
+
+## Current-main publication checkpoint (2026-10-07)
+
+Sixteen bounded dependent correction drafts are published as PRs #524–#539; each has a manual Codex GitHub review request. Hosted review/check completion is evaluated separately from requesting it. The original eleven branches remain untouched; no known-broken original slice was merged into main.
+
+Integration base: `31b4d2f8ba3dc292ea9bce59c069ffa21ebfc02f`. Production/browser-tested source: `0d55880bf63d5c4c4e52872b534ce9151244a4dc`; current test-fixture candidate: `5d342c9017e20fd927796d65e299a37358e782f9`. A fresh isolated production package passed **54 tests, zero skipped/failed/flaky, 187.926 seconds, exit0**. Seven new screenshots were individually inspected and are credential-free; generated private keys were absent from four inspected text artifacts. [Dismiss](issue-23-integrated-dismiss.png), [link](issue-23-integrated-link.png), [declare](issue-23-integrated-declare.png), [eligible selection](issue-23-integrated-eligible.png), [external origin](issue-23-integrated-origin.png), [stale recovery](issue-23-integrated-recovery.png), [denied context](issue-23-integrated-denial.png).
+
+The fresh merge first failed during seed because main and triage have sibling Alembic heads `20260928_14` and `20261006_01`. Two populated-history cases were authored before the specific correction; frozen production RED: **2 failed, 5.87 seconds**. A forward no-op merge revision `20261007_01` preserves both parents/data and establishes one required readiness head. The independent integration audit found no concrete P0/P1 in the merge seams; it is not external Codex or human acceptance.
+
+Full integrated checks then observed **1623 passed, 1 skipped, 1 failed, 39 setup errors, 465.78 seconds**, not a passing result. The 39 errors came from existing incident HTTP fixtures omitting the new `alert_triage` table during reset; the textual UI check mistook the contracted `"mitigating"` state for a mitigation evaluator. Only those existing fixtures/check were corrected, preserving assertions and product code. A fresh full repetition is pending. The successful browser run is not relabeled as a run on the later test-only commit: runtime, UI, browser tests and package bytes are unchanged.
+
+Known nonblocking P2 limitations: denied-context target status can retain loading copy; readiness reads one Alembic row and could miss an extra manually introduced head. The supported populated-history tests establish a sole merge head; no supported rollout producing that extra state was demonstrated. No threshold/origin inference or automatic declaration is introduced. Final hosted checks, external reviews, exact-candidate human acceptance and merge remain pending.
+
+Normal Git publication repeatedly returned a repository-specific Internal Server Error; no global outage is claimed. The standard official Git REST API using the same authorized gh session published exact blob/tree/commit identities, verified against local hashes, without changing credentials, protections or using forced updates. No memory writes were made: runtime registration remains unavailable.
 
 ## Final local verdict (2026-10-07)
 
