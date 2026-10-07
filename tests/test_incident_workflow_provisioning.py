@@ -45,6 +45,14 @@ SUBJECT = Principal(
     created_at=NOW,
     updated_at=NOW,
 )
+HARNESS = Principal(
+    principal_id="incident-harness",
+    kind="agent",
+    display_name="Incident harness",
+    status="active",
+    created_at=NOW,
+    updated_at=NOW,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -75,7 +83,8 @@ def admin_bearer() -> str:
         connection.execute(
             "INSERT INTO principals VALUES "
             "('admin-human','human','Admin','active',now(),now()),"
-            "('demo-human','human','Demo','active',now(),now())"
+            "('demo-human','human','Demo','active',now(),now()),"
+            "('incident-harness','agent','Incident harness','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at) VALUES "
@@ -110,13 +119,18 @@ async def _provision_then_revoke_run_read(bearer: str) -> None:
     try:
         service = build_service(database, b"0" * 32)
         result = await provision(service, bearer)
-        assert (result.run_read_active, result.run_start_active) == (True, True)
+        assert (
+            result.run_read_active,
+            result.run_start_active,
+            result.run_command_active,
+            result.run_approve_active,
+        ) == (True, True, True, True)
         assert await revoke_run_read(service, bearer) == 204
     finally:
         await database.dispose()
 
 
-async def _decision(action: str = "run.read") -> str:
+async def _decision(action: str = "run.read", subject: Principal = SUBJECT) -> str:
     database = Database(DATABASE_URL)
     try:
         async with database.transaction() as session:
@@ -124,7 +138,7 @@ async def _decision(action: str = "run.read") -> str:
                 ResourceRepository(session), GrantRepository(session)
             )
             evaluation = await engine.evaluate(
-                SUBJECT, action, "incident_workflow", "incident-response"
+                subject, action, "incident_workflow", "incident-response"
             )
             if evaluation.decision.decision == "allow":
                 return "allow"
@@ -182,4 +196,32 @@ async def test_run_start_is_granted_and_revoked_apart_from_run_read(admin_bearer
     await _provision_then_revoke_run_read(admin_bearer)
     assert await _decision("run.read") == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
     assert await _decision("run.start") == "allow"
-    assert await _decision("run.command") == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    assert (
+        await _decision("run.start", HARNESS)
+        == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_harness_can_never_approve_what_it_proposed(admin_bearer: str) -> None:
+    """The operator sends commands and approves; the agent does neither.
+
+    Provisioning both actions for one principal is not the risk; provisioning
+    either of them for the harness is. An agent that could approve its own
+    mitigation would make the human gate decorative, so the decision is asserted
+    for the harness too, on the state this case provisions through the governed
+    path itself.
+    """
+
+    await _provision_then_revoke_run_read(admin_bearer)
+    assert await _decision("run.command") == "allow"
+    assert await _decision("run.approve") == "allow"
+    assert (
+        await _decision("run.command", HARNESS)
+        == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    )
+    assert (
+        await _decision("run.approve", HARNESS)
+        == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    )
+    assert await _decision("run.read") == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
