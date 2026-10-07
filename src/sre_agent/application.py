@@ -31,6 +31,8 @@ from sre_agent.control.consumption_limits import (
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
+from sre_agent.gateway.runs import RunStartService, runs_router
+from sre_agent.incident.runtime import IncidentRuntime
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
@@ -104,6 +106,16 @@ def create_application(
         incident_router(
             IncidentQueryService(
                 database.sessions, workflow, lambda: PostgresIncidentUnitOfWork(database)
+            )
+        )
+    )
+    application.include_router(
+        runs_router(
+            RunStartService(
+                database.sessions,
+                workflow,
+                IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database)),
+                lambda: PostgresIncidentUnitOfWork(database),
             )
         )
     )

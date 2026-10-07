@@ -1104,7 +1104,7 @@ def test_grant_create_is_closed_idempotent_owned_and_metadata_only(
     body = {
         "grant_id": "grant-t2-created",
         "principal_id": "t2-list-human",
-        "action": "invoke.t2",
+        "action": "invoke",
         "resource": {"resource_type": "llm_model", "resource_id": "t2-model"},
         "effect": "allow",
     }
@@ -1119,7 +1119,7 @@ def test_grant_create_is_closed_idempotent_owned_and_metadata_only(
     replay = client.post("/v1/grants", json=body, headers=request_headers)
     conflict = client.post(
         "/v1/grants",
-        json={**body, "action": "invoke.changed"},
+        json={**body, "action": "admin.read"},
         headers=request_headers,
     )
     rejected_secret = client.post(
@@ -1170,7 +1170,7 @@ def test_grant_create_replays_original_response_after_grant_mutation(client: Tes
     body = {
         "grant_id": "grant-t2-stable-replay",
         "principal_id": "t2-list-human",
-        "action": "invoke.stable",
+        "action": "admin.write",
         "resource": {"resource_type": "llm_model", "resource_id": "t2-model"},
         "effect": "allow",
     }
@@ -1280,7 +1280,7 @@ def test_grant_create_and_audit_roll_back_together() -> None:
     body = {
         "grant_id": "grant-t2-audit-rollback",
         "principal_id": "t2-list-human",
-        "action": "invoke.rollback",
+        "action": "admin.read",
         "resource": {"resource_type": "llm_model", "resource_id": "t2-model"},
         "effect": "allow",
     }

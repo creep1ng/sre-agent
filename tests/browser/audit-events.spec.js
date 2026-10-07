@@ -54,7 +54,10 @@ test("renders a list with only contract parameters and reports empty results", a
   await expect(page.locator("[data-event-row='evt-alpha-01']")).toContainText("2026-09-20");
   expect(observed.searchParams.get("decision")).toBe("allow");
   expect(observed.searchParams.get("limit")).toBe("100");
-  for (const forbidden of ["page", "offset", "continuation_token", "next", "content", "include_content"])
+  for (const forbidden of [
+    "page", "offset", "continuation_token", "next", "content", "include_content",
+    "raw_content", "redacted_content", "prompt", "input", "output", "response_body",
+  ])
     expect(observed.searchParams.has(forbidden)).toBe(false);
   expect(observed.search).not.toContain("cursor");
   items = [];
@@ -78,6 +81,21 @@ test("renders authentication, authorization, validation and outage failures dist
 });
 
 test("opens metadata-only detail and reports a missing event as not found", async ({ page }) => {
+  const privateMarkers = [
+    "ISSUE25_PRIVATE_RAW_CONTENT_93b2",
+    "ISSUE25_PRIVATE_REDACTED_CONTENT_93b2",
+    "ISSUE25_PRIVATE_PROMPT_93b2",
+    "ISSUE25_PRIVATE_OUTPUT_93b2",
+    "ISSUE25_PRIVATE_TOOL_SCHEMA_93b2",
+  ];
+  const observedRequests = [];
+  page.on("request", (request) => {
+    observedRequests.push({
+      url: request.url(),
+      headers: request.headers(),
+      body: request.postData() ?? "",
+    });
+  });
   await page.route((url) => url.pathname.startsWith(LIST_PATH), (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === LIST_PATH)
@@ -88,7 +106,9 @@ test("opens metadata-only detail and reports a missing event as not found", asyn
         routing: { router: "openrouter",
           model_ref: { algorithm: "hmac-sha-256", key_version: 1, digest: "a".repeat(64) },
           provider_ref: { algorithm: "hmac-sha-256", key_version: 1, digest: "b".repeat(64) } },
-        redacted_content: "MARKER-EXCLUDED-CONTENT", tool_schema_version: "MARKER-EXCLUDED-VERSION" })));
+        content: privateMarkers[0], raw_content: privateMarkers[0],
+        redacted_content: privateMarkers[1], prompt: privateMarkers[2],
+        output: privateMarkers[3], tool_schema_version: privateMarkers[4] })));
     return route.fulfill(json(404, "{}"));
   });
   await page.fill("#filter-principal-id", "admin-human");
@@ -104,12 +124,18 @@ test("opens metadata-only detail and reports a missing event as not found", asyn
   await expect(detail).toContainText("openrouter");
   await expect(detail).toContainText("a".repeat(64));
   await expect(detail).toContainText("b".repeat(64));
+  await page.click("#apply-button");
   const bodyText = await page.locator("body").innerText();
-  expect(bodyText).not.toContain("MARKER-EXCLUDED-CONTENT");
-  expect(bodyText).not.toContain("MARKER-EXCLUDED-VERSION");
-  const source = await page.evaluate(() => fetch("/public/admin/audit-events.js").then((r) => r.text()));
-  expect(source).not.toContain("redacted_content");
-  expect(source).not.toContain("tool_schema_version");
+  const storage = await page.evaluate(() => JSON.stringify({
+    local: Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]),
+    session: Object.keys(sessionStorage).map((key) => [key, sessionStorage.getItem(key)]),
+  }));
+  const requestText = JSON.stringify(observedRequests);
+  for (const marker of privateMarkers) {
+    expect(bodyText).not.toContain(marker);
+    expect(storage).not.toContain(marker);
+    expect(requestText).not.toContain(marker);
+  }
   await page.click("[data-expand-event='evt-gone-01']");
   await expect(page.locator("#page-error-title")).toHaveText("Audit event not found");
 });

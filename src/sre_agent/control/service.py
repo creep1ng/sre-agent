@@ -328,6 +328,34 @@ class GrantCreate(BaseModel):
     effect: Literal["allow"]
 
 
+# Admitted grant actions per resource contract (#423 CA3). Exact membership in
+# the per-type sets below: the resource-catalog owner/state/action matrix
+# (schemas/releases/*/conformance/resource-catalog-matrix.yaml) plus the
+# vocabularies the runtime actually evaluates: bare "invoke" on skill
+# (gateway/skills.py) alongside skill.invoke, admin.read/admin.write over
+# administrative_control (CONTROL_SCOPES), and the five run.* actions over
+# incident_workflow (agent/api/authorization.v1.yaml). Dotted refinements such
+# as "invoke.delete" or "run.start.unpublished" are absent from those closed
+# contracts and the engine matches grant.action exactly, so they are rejected
+# without mutation. This is a pure lookup: it never touches a repository, so a
+# denied caller still receives 403 before any target access.
+GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
+    "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
+    "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
+    "mcp_tool": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
+    "skill": frozenset({"admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"}),
+    "bok_collection": frozenset({"admin.write", "bok.discovery", "bok.search", "bok.read"}),
+    "incident_workflow": frozenset(
+        {"run.start", "run.read", "run.command", "run.approve", "run.read_context"}
+    ),
+    "administrative_control": frozenset({"admin.read", "admin.write"}),
+}
+
+
+def _grant_action_admitted(resource_type: str, action: str) -> bool:
+    return action in GRANT_ADMITTED_ACTIONS.get(resource_type, frozenset())
+
+
 class GrantListResponse(BaseModel):
     items: list[Grant]
     limit: int
@@ -1529,6 +1557,63 @@ class ControlService:  # noqa: E305
         payload_hash = _payload_sha256(body.model_dump(mode="json"))
         try:
             async with self.sessions() as session, session.begin():
+                prior = await IdempotencyRepository(session).peek(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=payload_hash,
+                )
+                if prior is not None:
+                    try:
+                        payload = Grant.model_validate_json(
+                            _canonical_payload(prior.outcome.response_payload)
+                        ).model_dump(mode="json")
+                    except ValidationError:
+                        raise IdempotencyConflictError(binding_scope) from None
+                    return Response(
+                        content=_canonical_payload(payload),
+                        status_code=prior.outcome.response_status,
+                        media_type="application/json",
+                    )
+                principal = await PrincipalRepository(session).get(body.principal_id)
+                if principal is None or principal.status != "active":
+                    return await self._finish(
+                        request_id,
+                        started,
+                        404,
+                        "authorization",
+                        operation,
+                        action,
+                        error_code="resource_not_found",
+                        context=context,
+                        resource_ref=("administrative_control", "grants"),
+                        decision=evaluation.decision,
+                    )
+                fact = await ResourceRepository(session).authorization_view(
+                    body.resource.resource_type, body.resource.resource_id
+                )
+                if fact is None or fact.status != "active":
+                    return await self._finish(
+                        request_id,
+                        started,
+                        404,
+                        "authorization",
+                        operation,
+                        action,
+                        error_code="resource_not_found",
+                        context=context,
+                        resource_ref=("administrative_control", "grants"),
+                        decision=evaluation.decision,
+                    )
+                if not _grant_action_admitted(body.resource.resource_type, body.action):
+                    return await self._finish(
+                        request_id,
+                        started,
+                        422,
+                        "validation",
+                        operation,
+                        action,
+                        error_code="validation_error",
+                    )
                 binding = await IdempotencyRepository(session).claim_or_replay(
                     scope=binding_scope,
                     key_digest=_key_digest(idempotency_key or ""),
@@ -3433,6 +3518,7 @@ def control_router(service: ControlService) -> APIRouter:
             400: {"model": ErrorEnvelope},
             401: {"model": ErrorEnvelope},
             403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
             409: {"model": ErrorEnvelope},
             422: {"model": ErrorEnvelope},
             503: {"model": ErrorEnvelope},
