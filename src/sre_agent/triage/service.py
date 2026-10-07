@@ -241,8 +241,24 @@ class TriageService:
                 current is not None and current["expected_version"] != expected_version
             ):
                 raise TriageError(409, "stale_version")
-            if operation == "triage_declare" and (current or {}).get("status") == "declared":
-                raise TriageError(409, "already_declared")
+            current_status = (current or {}).get("status")
+            if current_status in {"dismissed", "linked", "declared"}:
+                if operation == "triage_declare" and current_status == "declared":
+                    raise TriageError(409, "already_declared")
+                if operation == "triage_link":
+                    # Keep the established destination error when a target has
+                    # since become ineligible; this check performs no writes.
+                    await self._transition(
+                        session,
+                        operation,
+                        alert_id,
+                        digest,
+                        principal,
+                        severity,
+                        impact,
+                        target_incident_id,
+                    )
+                raise TriageError(409, "terminal_decision")
             incident_id = await self._transition(
                 session,
                 operation,

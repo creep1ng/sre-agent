@@ -179,6 +179,91 @@ def test_declare_replay_returns_original_without_second_incident() -> None:
     assert _incident_count() == before + 1
 
 
+@pytest.mark.parametrize(
+    ("seed_operation", "seed_body", "rewrite_operation", "rewrite_body", "terminal_status"),
+    [
+        (
+            "triage_declare",
+            {"reason": REASON, "severity": "sev2"},
+            "triage_dismiss",
+            {"reason": REASON},
+            "declared",
+        ),
+        (
+            "triage_dismiss",
+            {"reason": REASON},
+            "triage_declare",
+            {"reason": REASON, "severity": "sev2"},
+            "dismissed",
+        ),
+        (
+            "triage_link",
+            {"reason": REASON, "target_incident_id": "inc-http-target"},
+            "triage_declare",
+            {"reason": REASON, "severity": "sev2"},
+            "linked",
+        ),
+    ],
+)
+def test_terminal_decision_cannot_be_rewritten(
+    seed_operation: str,
+    seed_body: dict,
+    rewrite_operation: str,
+    rewrite_body: dict,
+    terminal_status: str,
+) -> None:
+    client, alert_id = _client(), f"al-terminal-{terminal_status}"
+    seed_key = f"k-terminal-seed-{terminal_status}-123"
+    seed = _post(client, alert_id, _cmd(seed_operation, **seed_body), seed_key, BEARERS["op"])
+    assert seed.status_code == (201 if seed_operation == "triage_declare" else 200)
+    before_rewrite = _incident_count()
+
+    rewrite = _post(
+        client,
+        alert_id,
+        _cmd(rewrite_operation, version=seed.json()["expected_version"], **rewrite_body),
+        f"k-terminal-rewrite-{terminal_status}-123",
+        BEARERS["op"],
+    )
+
+    assert rewrite.status_code == 409
+    assert rewrite.json()["error"]["code"] == "terminal_decision"
+    assert _incident_count() == before_rewrite
+    state = _get(client, alert_id, BEARERS["reader"])
+    assert state.status_code == 200
+    assert (state.json()["status"], state.json()["expected_version"]) == (
+        terminal_status,
+        seed.json()["expected_version"],
+    )
+    assert state.json()["incident_id"] == seed.json()["incident_id"]
+
+    if seed_operation == "triage_declare":
+        replay = _post(client, alert_id, _cmd(seed_operation, **seed_body), seed_key, BEARERS["op"])
+        assert replay.status_code == 201
+        assert replay.json() == seed.json()
+
+
+def test_declared_alert_keeps_existing_fresh_declare_conflict() -> None:
+    client, alert_id = _client(), "al-terminal-double-declare"
+    first = _post(
+        client,
+        alert_id,
+        _cmd("triage_declare", reason=REASON, severity="sev2"),
+        "k-terminal-first-12345",
+        BEARERS["op"],
+    )
+    assert first.status_code == 201
+    duplicate = _post(
+        client,
+        alert_id,
+        _cmd("triage_declare", reason=REASON, severity="sev2"),
+        "k-terminal-next-123456",
+        BEARERS["op"],
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "already_declared"
+
+
 def test_unauthenticated_is_401() -> None:
     client = _client()
     body = _cmd("open_triage")

@@ -41,13 +41,13 @@ Live hosted checks were successful for all eleven PRs at inspection; this is sep
 | CA1 durable dismiss, actor/time/reload | Real dismiss/recovery journeys and SQL readback pass | Bind final correction candidate and durable reproduction |
 | CA2 eligible target list and rejection by ID | Backend sequential rejection exists; no list handler or selection UI | Implement contracted listing; verify link-versus-close race and real selection |
 | CA3 declare ID, severity/impact/event/reload | Real declaration/reload and SQL event/ID/severity proof | Impact is explicitly unresolved in contract and null in runtime; product decision required |
-| CA4 no duplicate key effects; conflict refresh/context | Existing backend idempotency/CAS checks pass | Authorized GET recovery now passes real browser proof; terminal rewrite still permits duplicate incidents and remains pending |
+| CA4 no duplicate key effects; conflict refresh/context | Existing backend idempotency/CAS checks pass | Authorized GET recovery now passes real browser proof; terminal rewrite is now rejected with identity/replay preserved; full criterion matrix remains pending |
 | CA5 403/missing policy/evaluation failure without false success | Real grantless 403 and absent persisted decision pass | Demonstrate missing-policy/evaluation-failure paths; do not invent an evaluator |
 | CA6 manual versus external automatic distinction | No browser anomaly/threshold evaluator; actor displayed | No decision-origin projection or external automatic evidence; authoritative contract required |
 
 Two further explicit integration requirements remain unmet: `public/incident-ui/alerts.js` only emits an unconsumed `midnight:triage-requested` event; no inbox→triage navigation exists. The triage UI hardcodes every operation instead of consuming domain-provided permitted actions. The direct-URL browser journeys above do not prove inbox journeys. Alert source metadata is not automatic decision origin.
 
-Additional **P1 confirmed through real HTTP**, still pending correction: one synthetic alert received `triage_declare` 201/version1, then `triage_dismiss` 200/version2/incident_id null, then `triage_declare` 201/version3 with a *different* incident ID. The current guard rejects repeated declare only while the status is still declared; another command can erase that guard and canonical association. Captured safe output: `/tmp/triage23-review/terminal-probe.log`. Workflow triage decisions have terminal destinations; the browser must not invent another state machine to cover this service failure.
+Additional **P1 confirmed through real HTTP**, corrected below: one synthetic alert received `triage_declare` 201/version1, then `triage_dismiss` 200/version2/incident_id null, then `triage_declare` 201/version3 with a *different* incident ID. The current guard rejects repeated declare only while the status is still declared; another command can erase that guard and canonical association. Captured safe output: `/tmp/triage23-review/terminal-probe.log`. Workflow triage decisions have terminal destinations; the browser must not invent another state machine to cover this service failure.
 
 ## Corrected P1: link versus concurrent close
 
@@ -84,3 +84,23 @@ Worker observed RED before recovery and generation fixes, then GREEN23passed. Pa
 ![Real conflict recovery before explicit retry](issue-23-conflict-recovery.png)
 
 The screenshot was inspected: synthetic identifiers/reason, credential field empty, conflict notice and API version2 with draft intact. Reproduction setup is still temporary; T23-5 must package seeds/config and bind the final candidate before acceptance. Rollback: revert the UI recovery/generation correction; authoritative recovery and switched-session command availability are then lost.
+
+## Corrected P1: terminal identity rewrite
+
+Fresh commands can no longer overwrite dismissed/linked/declared triage decisions. The guard follows authorization, idempotent replay and version checking; original replay results are preserved. Existing `already_declared` and target `destination_ineligible` errors remain compatible. Previously declare→dismiss→declare erased the canonical association and created a second incident.
+
+Real HTTP/PostgreSQL behavior cases were written first. Parent independent RED with prior service: **3 failed / 1 passed in 6.47s**. Corrected final complete Python triage suite: **54 passed in 14.41s**; Ruff check/format and whitespace checks pass. Parent first format check failed for the new HTTP test; it was formatted and the final complete run succeeded. Worker initial RED command used an incorrect Alembic working directory and yielded spurious 503s; that attempt is not behavior RED evidence.
+
+Service SHA256 `3776bcc947ef2c70537dc5a855bead077debf60b4e3d084bb55dc739e66c9fd9`; HTTP test SHA256 `8638909af5dc8e8e572a21e15091e5bcd0e9d0ce25b83fd129a8fced817c996b`. Parent logs `/tmp/triage23-review/t23-7/parent-red.log` and `parent-green-final.log`. Containerized reproduction uses the same dedicated checks setup described above:
+
+```sh
+docker compose -p triage23reviewchecks --profile checks run --build --rm python-checks pytest -p no:cacheprovider -q tests/test_triage_http.py
+```
+
+Expected:16 HTTP checks pass, including terminal rejection, unchanged authoritative state/incident count and original declare replay. The parent observed these inside the54-check complete run with the candidate mounted read-only and matching cached dependencies. A fresh actual Compose candidate build, with only the owned external-network override previously described, also passed **16 HTTP checks in10.17s**, checks image config `sha256:6d6ee9bcf7112399fe9f8be76cd00a4bfc01f8d73cc9aa242b00c11eca990cff`. Log `/tmp/triage23-review/t23-7/parent-compose.log`. Rollback: revert the guard; terminal rewriting and duplicate declarations become possible again. No historical data was rewritten.
+
+## Remaining authority and acceptance boundaries
+
+Final scoped gh reread confirms issue23 OPEN/ProjectTodo and PR485 head `df17a07edb8259671763f1ba9e8cfa4e763365bf` unchanged. The issue expressly excludes new backend endpoints within a UI-only HU and leaves the HTTP/rubric owner decision open. The absent eligible-list implementation, inbox handoff and domain action projection are unmet requirements, not permission to silently invent missing APIs. CA3 impact and CA6 external automatic decision origin require authoritative definitions. No threshold detector, evaluator, impact policy or automatic-origin mapping was invented. Full issue23 acceptance, missing-policy/evaluation-failure proof, durable setup packaging and human acceptance remain pending.
+
+Final browser rerun after loading the terminal guard: the first attempt immediately after API restart produced **1 failed /33passed** (grantless command showed Request failed rather than403). Exact transport cause was not captured; do not silently classify or discard that failure. After independently confirming API readiness200, the unchanged candidate repeated **34/34 passed in1.1m**, no skips (21real,13mocked). Logs `/tmp/triage23-review/t23-7/parent-final-browser.log` and `parent-final-browser-ready.log`. This is a successful second observation, not proof that the first failure never occurred.
