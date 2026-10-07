@@ -294,6 +294,8 @@ class AuditReadsService:
                 return None
             parsed["decision"] = value
         if (value := raw.get("request_id")) is not None:
+            if re.fullmatch(CANONICAL_UUID_PATTERN, str(value)) is None:
+                return None
             try:
                 parsed["request_id"] = str(UUID(str(value)))
             except ValueError:
