@@ -38,7 +38,7 @@ RDD: disabled by the global setting; ordinary policy applies.
   infrastructure slices, preserving least-privilege references.
 - [x] **OTEL-PR-4** Publish the account bootstrap/profile lifecycle with
   fail-closed identity and secret handling checks.
-- [ ] **OTEL-PR-5** Publish the pinned guest bootstrap and cost/deadline
+- [x] **OTEL-PR-5** Publish the pinned guest bootstrap and cost/deadline
   primitives with applicable checks.
 - [ ] **OTEL-PR-6** Publish the AWS adapter in cohesive, independently checked
   slices (identity/network/cost, then lifecycle/SSM/Scheduler).
@@ -69,4 +69,7 @@ remain pending in the next slice. PR #504 published nine
 bootstrap fake-runner scenarios at 330 changed lines; pytest and Ruff passed
 at `c12407efe5578ab70c0773f0d17bfb90285bd57b`. PR #505 published
 policy-template checks at 239 changed lines; 17 offline pytest checks passed at
-`9265b864c501190d90c2e438774fa0312d7afa84`.
+`9265b864c501190d90c2e438774fa0312d7afa84`. PR #506 published guest
+deadline primitives at 290 changed lines; networkless Docker confirmed Bash syntax,
+expiry-before-network ordering, and 8019-byte user-data at
+`fdf8d014ab86450af6dab9623cae07f39771fc6a`.
