@@ -5,6 +5,13 @@ const WEB = process.env.E2E_BASE_URL ?? "http://web";
 const API = process.env.E2E_API_BASE_URL ?? "http://api:8000";
 const ELIGIBLE_PATH = /\/api\/v1\/alerts\/[^/]+\/triage\/eligible-incidents$/;
 const LINK_TARGET = "inc-0000-t23-linkable";
+const DECLARATION_CONTEXT = {
+  service: "checkout-api",
+  summary: "Payment attempts return errors.",
+  observed_at: "2026-10-07T17:30:00Z",
+  source: "operator-confirmed monitoring report",
+  severity: "sev2",
+};
 const INBOX_JOURNEYS = [
   {
     name: "dismiss",
@@ -106,6 +113,12 @@ test.describe("real inbox-to-triage operator journeys", () => {
       if (journey.operation === "triage_declare") {
         await page.locator("#command-severity").selectOption(journey.severity);
         await page.locator("#command-impact").fill(journey.impact);
+        await page.locator("#alert-context-service").fill(DECLARATION_CONTEXT.service);
+        await page.locator("#alert-context-summary").fill(DECLARATION_CONTEXT.summary);
+        await page.locator("#alert-context-observed-at").fill(DECLARATION_CONTEXT.observed_at);
+        await page.locator("#alert-context-source").fill(DECLARATION_CONTEXT.source);
+        await page.locator("#alert-context-severity").selectOption(DECLARATION_CONTEXT.severity);
+        await page.locator("#alert-context-confirmed").check();
       }
       await expect(page.locator("#api-key")).toHaveValue("");
       await page.locator("#submit-button").click();

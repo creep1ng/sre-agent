@@ -4,6 +4,13 @@ const COMMANDS_PATH = "/api/v1/alerts/al-journey-01/triage/commands";
 const CONTEXT_PATH = "/api/v1/alerts/al-journey-01/triage/context";
 const ELIGIBLE_PATH = "/api/v1/alerts/al-journey-01/triage/eligible-incidents";
 const ALL_ACTIONS = ["open_triage", "triage_dismiss", "triage_link", "triage_declare"];
+const DECLARATION_CONTEXT = {
+  service: "checkout-api",
+  summary: "Payment attempts return errors.",
+  observed_at: "2026-10-07T17:30:00Z",
+  source: "operator-confirmed monitoring report",
+  severity: "sev4",
+};
 
 function stateResult(status, incident = null) {
   return {
@@ -27,7 +34,12 @@ async function send(page, operation, configure = {}) {
   await expect(page.locator("#command-operation")).toBeEnabled();
   await page.selectOption("#command-operation", operation);
   for (const [selector, value] of Object.entries(configure)) {
-    if (selector === "#command-severity" || selector === "#command-target") {
+    if (selector === "#alert-context-confirmed") {
+      await page.locator(selector).check();
+    } else if (
+      selector === "#command-severity" || selector === "#command-target" ||
+      selector === "#alert-context-severity"
+    ) {
       await expect(page.locator(`${selector} option[value=\"${value}\"]`)).toHaveCount(1);
       await page.selectOption(selector, value);
     }
@@ -139,10 +151,17 @@ test("sends the operator impact exactly with declaration and shows the created i
   const impact = "  Checkout stopped accepting payments for new orders.  ";
   await send(page, "triage_declare", {
     "#command-reason": "Declaring.", "#command-severity": "sev2", "#command-impact": impact,
+    "#alert-context-service": DECLARATION_CONTEXT.service,
+    "#alert-context-summary": DECLARATION_CONTEXT.summary,
+    "#alert-context-observed-at": DECLARATION_CONTEXT.observed_at,
+    "#alert-context-source": DECLARATION_CONTEXT.source,
+    "#alert-context-severity": DECLARATION_CONTEXT.severity,
+    "#alert-context-confirmed": "yes",
   });
   const body = await observed.postDataJSON();
   expect(body).toEqual({
     operation: "triage_declare", expected_version: 1, reason: "Declaring.", severity: "sev2", impact,
+    alert_context: DECLARATION_CONTEXT,
   });
   expect(body).not.toHaveProperty("actor");
   const key = observed.headers()["idempotency-key"];
@@ -164,6 +183,12 @@ test("rejects a declaration without operator impact before sending", async ({ pa
   await page.selectOption("#command-operation", "triage_declare");
   await page.fill("#command-reason", "Declaring.");
   await page.selectOption("#command-severity", "sev2");
+  await page.locator("#alert-context-service").fill(DECLARATION_CONTEXT.service);
+  await page.locator("#alert-context-summary").fill(DECLARATION_CONTEXT.summary);
+  await page.locator("#alert-context-observed-at").fill(DECLARATION_CONTEXT.observed_at);
+  await page.locator("#alert-context-source").fill(DECLARATION_CONTEXT.source);
+  await page.locator("#alert-context-severity").selectOption(DECLARATION_CONTEXT.severity);
+  await page.locator("#alert-context-confirmed").check();
   for (const value of ["", "   "]) {
     await page.fill("#command-impact", value);
     await page.click("#submit-button");
@@ -193,6 +218,12 @@ test("renders a missing severity as an invalid request", async ({ page }) => {
   await page.fill("#alert-id", "al-journey-01");
   await send(page, "triage_declare", {
     "#command-reason": "Declaring.", "#command-impact": "Checkout stopped accepting payments.",
+    "#alert-context-service": DECLARATION_CONTEXT.service,
+    "#alert-context-summary": DECLARATION_CONTEXT.summary,
+    "#alert-context-observed-at": DECLARATION_CONTEXT.observed_at,
+    "#alert-context-source": DECLARATION_CONTEXT.source,
+    "#alert-context-severity": DECLARATION_CONTEXT.severity,
+    "#alert-context-confirmed": "yes",
   });
   await expect(page.locator("#page-error-title")).toHaveText("Invalid request");
 });
@@ -216,10 +247,16 @@ test("switching operations drops stale fields before sending", async ({ page }) 
   await send(page, "triage_declare", {
     "#command-reason": "Declaring.", "#command-severity": "sev2",
     "#command-impact": "Checkout stopped accepting payments.",
+    "#alert-context-service": DECLARATION_CONTEXT.service,
+    "#alert-context-summary": DECLARATION_CONTEXT.summary,
+    "#alert-context-observed-at": DECLARATION_CONTEXT.observed_at,
+    "#alert-context-source": DECLARATION_CONTEXT.source,
+    "#alert-context-severity": DECLARATION_CONTEXT.severity,
+    "#alert-context-confirmed": "yes",
   });
   expect(seen[1]).toEqual({
     operation: "triage_declare", expected_version: 2, reason: "Declaring.", severity: "sev2",
-    impact: "Checkout stopped accepting payments.",
+    impact: "Checkout stopped accepting payments.", alert_context: DECLARATION_CONTEXT,
   });
   expect(seen[1]).not.toHaveProperty("target_incident_id");
 });

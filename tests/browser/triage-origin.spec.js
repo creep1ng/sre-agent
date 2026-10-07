@@ -116,6 +116,12 @@ test("manual declaration remains manual and has no responsible external system",
   await page.locator("#command-reason").fill("Operator declares after assessing impact.");
   await page.locator("#command-severity").selectOption("sev2");
   await page.locator("#command-impact").fill("New customer payments cannot be processed.");
+  await page.locator("#alert-context-service").fill("checkout-api");
+  await page.locator("#alert-context-summary").fill("Payment attempts return errors.");
+  await page.locator("#alert-context-observed-at").fill("2026-10-07T17:30:00Z");
+  await page.locator("#alert-context-source").fill("operator-confirmed monitoring report");
+  await page.locator("#alert-context-severity").selectOption("sev2");
+  await page.locator("#alert-context-confirmed").check();
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
   await expect(page.locator("#result-origin")).toHaveText("Manual");

@@ -87,7 +87,7 @@ test("wrong credential blocks the recovery read without data", async ({ page }) 
   await expect(page.locator("#result-status")).toHaveText("—");
 });
 
-test("declared incident explains the absent alert context", async ({ page }) => {
+test("declared incident shows operator-confirmed alert context", async ({ page }) => {
   const key = journeyKey("E2E_TRIAGE_API_KEY");
   const alertId = `al-ca1-warroom-${SUFFIX}`;
   await connectTriage(page, key);
@@ -97,11 +97,19 @@ test("declared incident explains the absent alert context", async ({ page }) => 
   await page.locator("#command-reason").fill("CA1 null-alert proof.");
   await page.locator("#command-severity").selectOption("sev2");
   await page.locator("#command-impact").fill("The affected service cannot process new payments.");
+  await page.locator("#alert-context-service").fill("payments-api");
+  await page.locator("#alert-context-summary").fill("New payment attempts return errors.");
+  await page.locator("#alert-context-observed-at").fill("2026-10-07T17:30:00Z");
+  await page.locator("#alert-context-source").fill("operator-confirmed monitoring report");
+  await page.locator("#alert-context-severity").selectOption("sev2");
+  await page.locator("#alert-context-confirmed").check();
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
   const incidentId = await page.locator("#result-incident").textContent();
   await page.goto(`${BASE}/public/incident-ui/war-room.html?incident_id=${incidentId.trim()}`);
   await page.locator("#credential-input").fill(key);
   await page.locator("#credential-form button[type=submit]").click();
-  await expect(page.locator("#fact-alert")).toHaveText("Declarado por triage sin contexto de alerta.");
+  await expect(page.locator("#fact-alert")).toHaveText(
+    "payments-api · sev2 · New payment attempts return errors.",
+  );
 });

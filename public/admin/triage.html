@@ -75,6 +75,29 @@
           </select></div>
           <div class="ma-field"><label class="ma-field__label" for="command-impact">Impact (declare only)</label>
           <textarea class="ma-input" id="command-impact" name="impact" rows="3" maxlength="2000" aria-required="false" placeholder="Describe the consequence of the incident."></textarea></div>
+          <fieldset id="alert-context-fields" class="principals__form" hidden>
+            <legend class="ma-field__label">Alert context (declaration only)</legend>
+            <p class="ma-panel__description">Enter or confirm the actual alert details. Do not infer missing values.</p>
+            <div class="ma-field"><label class="ma-field__label" for="alert-context-service">Alert service</label>
+            <input class="ma-input" id="alert-context-service" name="alert_context_service" type="text" autocomplete="off" maxlength="200" /></div>
+            <div class="ma-field"><label class="ma-field__label" for="alert-context-summary">Alert summary</label>
+            <textarea class="ma-input" id="alert-context-summary" name="alert_context_summary" rows="3" maxlength="2000"></textarea></div>
+            <div class="ma-field"><label class="ma-field__label" for="alert-context-observed-at">Observed at (RFC 3339 with timezone)</label>
+            <input class="ma-input ma-mono" id="alert-context-observed-at" name="alert_context_observed_at" type="text" autocomplete="off" maxlength="64" placeholder="2026-10-07T17:30:00Z" /></div>
+            <div class="ma-field"><label class="ma-field__label" for="alert-context-source">Alert source</label>
+            <input class="ma-input" id="alert-context-source" name="alert_context_source" type="text" autocomplete="off" maxlength="200" /></div>
+            <div class="ma-field"><label class="ma-field__label" for="alert-context-severity">Alert severity</label>
+            <select class="ma-select" id="alert-context-severity" name="alert_context_severity">
+              <option value="" selected>Select alert severity…</option>
+              <option value="sev1">sev1</option>
+              <option value="sev2">sev2</option>
+              <option value="sev3">sev3</option>
+              <option value="sev4">sev4</option>
+            </select></div>
+            <div class="ma-field"><label class="ma-field__label" for="alert-context-confirmed">Operator confirmation</label>
+            <input id="alert-context-confirmed" name="alert_context_confirmed" type="checkbox" />
+            <span>I confirm these are the actual alert details, not inferred values.</span></div>
+          </fieldset>
           <div class="ma-button-row">
             <button id="submit-button" class="ma-button ma-button--primary" type="submit" disabled>Send command</button>
           </div>
