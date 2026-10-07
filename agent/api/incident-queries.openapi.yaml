@@ -30,7 +30,7 @@ paths:
           description: Incident detail
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:incident-detail:1.0.0' }
+              schema: { $ref: 'urn:sre-agent:schema:incident-detail:1.1.0' }
               examples:
                 current: { $ref: './examples/queries/detail.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }

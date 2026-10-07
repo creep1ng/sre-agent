@@ -66,7 +66,7 @@ def admission_database() -> Database:
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, "
             "bok_documents, bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
             "mcp_tools, mcp_servers, principals, idempotency_records, "
             "alembic_version CASCADE"
         )

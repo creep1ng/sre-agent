@@ -18,7 +18,7 @@ import validate_incident_queries as gate  # noqa: E402
 
 SCHEMA_DIR = Path("agent/schemas")
 SNAPSHOT_ID = "urn:sre-agent:schema:incident-snapshot:1.0.0"
-DETAIL_ID = "urn:sre-agent:schema:incident-detail:1.0.0"
+DETAIL_ID = "urn:sre-agent:schema:incident-detail:1.1.0"
 
 
 def _load(name: str) -> dict:

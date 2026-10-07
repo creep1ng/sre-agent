@@ -12,7 +12,7 @@ ROOT = Path(__file__).parents[1]
 OPENAPI = yaml.safe_load((ROOT / "agent/api/triage.openapi.yaml").read_text())
 SCHEMAS = {
     name: yaml.safe_load((ROOT / f"agent/schemas/{name}.schema.yaml").read_text())
-    for name in ("triage-state", "triage-command")
+    for name in ("triage-state", "triage-command", "triage-context")
 }
 ENVELOPE = json.loads(
     (ROOT / "schemas/releases/2.0.0/json-schema/http/error-envelope.schema.json").read_text()
@@ -55,10 +55,21 @@ def test_contract_schemas_and_paths() -> None:
         "/v1/alerts/{alert_id}/triage",
         "/v1/alerts/{alert_id}/triage/eligible-incidents",
         "/v1/alerts/{alert_id}/triage/commands",
+        "/v1/alerts/{alert_id}/triage/context",
     } <= set(OPENAPI["paths"])
+    context = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/context"]["get"]
+    assert context["operationId"] == "getAlertTriageContext"
+    assert context["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "urn:sre-agent:schema:triage-context:1.0.0"
+    )
     post = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/commands"]["post"]
     headers = {p["name"] for p in post["parameters"] if "name" in p}
     assert "Idempotency-Key" in headers
+    assert OPENAPI["info"]["version"] == "3.2.0"
+    assert SCHEMAS["triage-state"]["$id"] == "urn:sre-agent:schema:triage-state:2.0.0"
+    assert post["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
+        "urn:sre-agent:schema:triage-command:2.0.0"
+    )
     key = next(p for p in post["parameters"] if p.get("name") == "Idempotency-Key")
     assert key["required"] is True and key["in"] == "header"
     assert set(post["responses"]) == {
@@ -72,6 +83,12 @@ def test_contract_schemas_and_paths() -> None:
         "422",
         "503",
     }
+    eligible = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/eligible-incidents"]["get"]
+    assert eligible["operationId"] == "listEligibleIncidents"
+    assert set(eligible["responses"]) == {"200", "400", "401", "403", "503"}
+    eligible_schema = eligible["responses"]["200"]["content"]["application/json"]["schema"]
+    assert eligible_schema == {"$ref": "#/components/schemas/EligibleIncidents"}
+    assert OPENAPI["info"]["version"] == "3.2.0"
 
 
 def test_contract_refs_resolve() -> None:
@@ -97,7 +114,7 @@ def test_command_payloads_are_closed_per_operation() -> None:
         assert by_op[operation]["required"] == (
             ["operation", "expected_version"]
             if operation == "open_triage"
-            else ["operation", "expected_version", "reason", "severity"]
+            else ["operation", "expected_version", "reason", "severity", "impact"]
             if operation == "triage_declare"
             else ["operation", "expected_version", "reason", "target_incident_id"]
             if operation == "triage_link"
@@ -109,24 +126,107 @@ def test_command_payloads_are_closed_per_operation() -> None:
         "sev3",
         "sev4",
     ]
+    assert by_op["triage_declare"]["properties"]["impact"] == {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000,
+        "pattern": "\\S",
+        "description": "Operator-stated consequence of the incident.",
+    }
     validator = Draft202012Validator(SCHEMAS["triage-command"])
-    request = {"operation": "triage_declare", "expected_version": 1, "reason": "test"}
+    request = {
+        "operation": "triage_declare",
+        "expected_version": 1,
+        "reason": "test",
+        "impact": "Customers could not complete checkout.",
+    }
     suggested = "sev2"
     cases = [
         ({}, False),
         ({"severity": "critical"}, False),
         ({"severity": "sev1"}, True),
         ({"severity": "sev1", "suggested_severity": suggested}, False),
+        ({"impact": None}, False),
+        ({"severity": "sev1", "impact": "x" * 2000}, True),
+        ({"severity": "sev1", "impact": "x" * 2001}, False),
     ]
     assert "sev1" != suggested
     for addition, valid in cases:
         assert validator.is_valid(request | addition) is valid
     assert "actor" not in by_op["triage_declare"]["properties"]
+    assert "decision_origin" not in by_op["triage_declare"]["properties"]
+    assert "responsible_system" not in by_op["triage_declare"]["properties"]
     assert by_op["triage_dismiss"]["properties"]["reason"] == {
         "type": "string",
         "minLength": 1,
         "maxLength": 1000,
     }
+
+
+def test_state_schema_requires_backend_validated_provenance() -> None:
+    schema = SCHEMAS["triage-state"]
+    assert {"decision_origin", "responsible_system"} <= set(schema["required"])
+    assert schema["properties"]["decision_origin"]["enum"] == [
+        "manual",
+        "external_automatic",
+        "unknown",
+    ]
+    assert schema["properties"]["responsible_system"] == {
+        "type": ["string", "null"],
+        "maxLength": 64,
+    }
+    validator = Draft202012Validator(schema)
+    base = {
+        "alert_id": "al-contract-origin",
+        "status": "dismissed",
+        "incident_id": None,
+        "expected_version": 1,
+        "decision_origin": "manual",
+        "responsible_system": None,
+    }
+    assert validator.is_valid(base)
+    assert validator.is_valid(base | {"decision_origin": "unknown"})
+    assert validator.is_valid(
+        base | {"decision_origin": "external_automatic", "responsible_system": "producer-a"}
+    )
+    assert not validator.is_valid(base | {"decision_origin": "browser_claimed"})
+    assert not validator.is_valid(
+        base | {"decision_origin": "external_automatic", "responsible_system": None}
+    )
+    assert not validator.is_valid(base | {"unexpected": True})
+
+
+def test_context_contract_is_closed_and_supports_null_or_authoritative_state() -> None:
+    schema = SCHEMAS["triage-context"]
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["alert_id", "triage_state", "allowed_actions"]
+    assert schema["properties"]["allowed_actions"]["uniqueItems"] is True
+    assert schema["properties"]["allowed_actions"]["items"]["enum"] == [
+        "open_triage",
+        "triage_dismiss",
+        "triage_link",
+        "triage_declare",
+    ]
+    registry = Registry().with_resources(
+        [(item["$id"], Resource.from_contents(item)) for item in SCHEMAS.values()]
+    )
+    validator = Draft202012Validator(schema, registry=registry)
+    null_context = {"alert_id": "al-context-contract", "triage_state": None, "allowed_actions": []}
+    state = {
+        "alert_id": "al-context-contract",
+        "status": "dismissed",
+        "incident_id": None,
+        "expected_version": 2,
+        "decision_origin": "manual",
+        "responsible_system": None,
+    }
+    assert validator.is_valid(null_context)
+    assert validator.is_valid(
+        null_context | {"triage_state": state, "allowed_actions": ["triage_dismiss"]}
+    )
+    assert not validator.is_valid(null_context | {"allowed_actions": ["open_triage"] * 2})
+    assert not validator.is_valid(null_context | {"allowed_actions": ["invented_action"]})
+    assert not validator.is_valid(null_context | {"unexpected": True})
 
 
 def test_eligible_states_exclude_terminal() -> None:
@@ -142,9 +242,9 @@ def test_contract_examples_validate() -> None:
         [(sid, Resource.from_contents(s)) for sid, s in by_id.items()]
     )
     cases = {
-        "triage-open.json": "urn:sre-agent:schema:triage-state:1.0.0",
-        "command-request.json": "urn:sre-agent:schema:triage-command:1.0.0",
-        "command-declare.json": "urn:sre-agent:schema:triage-state:1.0.0",
+        "triage-open.json": "urn:sre-agent:schema:triage-state:2.0.0",
+        "command-request.json": "urn:sre-agent:schema:triage-command:2.0.0",
+        "command-declare.json": "urn:sre-agent:schema:triage-state:2.0.0",
         "error-409.json": "urn:sre-agent:schema:error-envelope:2.0.0",
     }
     errors: list[str] = []

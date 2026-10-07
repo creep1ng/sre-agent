@@ -262,6 +262,22 @@ export function createAdministrativeApiClient({
     getWhoAmI() {
       return request("/v1/whoami");
     },
+    postTriageCommand(alertId, body, idempotencyKey) {
+      return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage/commands`, {
+        method: "POST",
+        body,
+        headers: mutationHeaders(idempotencyKey),
+      });
+    },
+    getTriageState(alertId) {
+      return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage`);
+    },
+    getTriageContext(alertId) {
+      return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage/context`);
+    },
+    getEligibleIncidents(alertId) {
+      return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage/eligible-incidents`);
+    },
     getIncidentTimeline(incidentId, { runId, after, limit } = {}) {
       const params = new URLSearchParams();
       if (runId) params.set("run_id", runId);

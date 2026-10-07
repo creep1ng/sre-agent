@@ -116,7 +116,8 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
     after = snapshot()
     assert after["rows"] == before["rows"]
     assert after["grants"] == before["grants"]
-    assert after["heads"] == [("20260928_14",)]
+    assert after["heads"] == [("20261006_01",)]
+
     # Each revision guards only the evidence it owns. Leaving the slice that introduced
     # the persisted operation is lossy and must be refused, while rolling back past a
     # sibling slice that does not own it must keep every row intact.
@@ -146,3 +147,53 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
         f"legacy={legacy} fault={fault} rows={len(after['rows'])} "
         f"grants={len(after['grants'])} heads={after['heads']} validated={validated}"
     )
+
+
+def test_populated_legacy_triage_row_upgrades_as_unknown_without_actor_inference():
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP SCHEMA public CASCADE")
+        connection.execute("CREATE SCHEMA public AUTHORIZATION pg_database_owner")
+        connection.execute("GRANT USAGE ON SCHEMA public TO PUBLIC")
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "20260923_13")
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO alert_triage (alert_id, status, incident_id, expected_version,"
+            " reason, severity, actor, decided_at) VALUES ('al-legacy-origin', 'declared',"
+            " 'inc-legacy-origin', 3, 'legacy decision', 'sev2', 'producer-agent', now())"
+        )
+        legacy = connection.execute(
+            "SELECT alert_id, status, incident_id, expected_version, reason, severity,"
+            " actor, decided_at FROM alert_triage WHERE alert_id='al-legacy-origin'"
+        ).fetchone()
+
+    command.upgrade(config, "head")
+    command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL) as connection:
+        current = connection.execute(
+            "SELECT alert_id, status, incident_id, expected_version, reason, severity,"
+            " actor, decided_at, decision_origin, responsible_system FROM alert_triage "
+            "WHERE alert_id='al-legacy-origin'"
+        ).fetchone()
+        head = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+    assert current[:8] == legacy
+    assert current[8:] == ("unknown", None)
+    assert head == ("20261006_01",)
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE alert_triage SET decision_origin='manual' WHERE alert_id='al-legacy-origin'"
+        )
+    with pytest.raises(RuntimeError, match="cannot downgrade while provenance data exists"):
+        command.downgrade(config, "20260923_13")
+    with psycopg.connect(DATABASE_URL) as connection:
+        kept = connection.execute(
+            "SELECT decision_origin, responsible_system FROM alert_triage "
+            "WHERE alert_id='al-legacy-origin'"
+        ).fetchone()
+        head = connection.execute("SELECT version_num FROM alembic_version").fetchone()
+    assert kept == ("manual", None)
+    assert head == ("20261006_01",)

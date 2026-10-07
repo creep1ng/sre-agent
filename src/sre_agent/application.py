@@ -33,6 +33,7 @@ from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
 from sre_agent.gateway.runs import RunCommandService, RunStartService, commands_router, runs_router  # noqa: E501  # fmt: skip
 from sre_agent.incident.runtime import IncidentRuntime
+from sre_agent.gateway.triage import TriageHttpService, triage_router
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
@@ -124,6 +125,7 @@ def create_application(
     application.include_router(
         commands_router(RunCommandService(database.sessions, workflow, incident_runtime))
     )
+    application.include_router(triage_router(TriageHttpService(database, workflow)))
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())

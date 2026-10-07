@@ -5,7 +5,8 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Self
 
-from sqlalchemy import text
+from sqlalchemy import String, bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.incident.persistence import (
@@ -133,6 +134,23 @@ class PostgresIncidentRepository:
             .one()
         )
         return _incident(row)
+
+    async def list_eligible(self, states: Sequence[str]) -> tuple[dict[str, str], ...]:
+        rows = (
+            (
+                await self._session.execute(
+                    text("""SELECT incident_id, state->>'state' AS state
+                FROM incident.incidents
+                WHERE state->>'state' = ANY(:states)
+                ORDER BY incident_id ASC
+                LIMIT 100""").bindparams(bindparam("states", type_=ARRAY(String()))),
+                    {"states": list(states)},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return tuple({"incident_id": row["incident_id"], "state": row["state"]} for row in rows)
 
 
 class PostgresRunRepository:

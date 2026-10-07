@@ -47,7 +47,7 @@ def test_example_skills_publish_activate_and_resolve_with_direct_authority() -> 
             "DROP TABLE IF EXISTS consumption_reservations, consumption_limit_policies, "
             "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
             "mcp_tools, mcp_servers, principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")

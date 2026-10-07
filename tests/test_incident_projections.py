@@ -59,6 +59,12 @@ def test_detail_projection_validates_stored_data() -> None:
         project_detail(_record(alert=bad), [], WORKFLOW)
 
 
+def test_detail_projection_tolerates_absent_alert_context() -> None:
+    assert project_detail(_record(alert=None), [], WORKFLOW)["alert"] is None
+    assert project_detail(_record(alert={"status": "triaged"}), [], WORKFLOW)["alert"] is None
+    assert project_detail(_record(), [], WORKFLOW)["alert"]["alert_id"] == "alt-payment-error-rate"
+
+
 def test_snapshot_projection_carries_coverage() -> None:
     snapshot = SnapshotRecord(
         "snap_demo0001",

@@ -63,6 +63,7 @@ function cacheNodes() {
     "fact-severity",
     "fact-impact",
     "fact-snapshot",
+    "fact-alert",
     "approvals-empty",
     "approvals-list",
     "timeline-section",
@@ -203,6 +204,14 @@ function renderSummary(detail, snapshot) {
       `v${snapshot.version} (seq ${snapshot.event_sequence})`;
   } else {
     nodes["fact-snapshot"].textContent = "Sin snapshot todavía";
+  }
+  const alert = detail.alert;
+  if (alert !== null && typeof alert === "object") {
+    nodes["fact-alert"].textContent =
+      `${alert.service ?? "—"} · ${alert.severity ?? "—"} · ${alert.summary ?? "—"}`;
+  } else {
+    nodes["fact-alert"].textContent =
+      "Declarado por triage sin contexto de alerta.";
   }
 
   nodes["approvals-list"].replaceChildren();

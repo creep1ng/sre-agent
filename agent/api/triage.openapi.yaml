@@ -1,23 +1,37 @@
 openapi: 3.1.0
 info:
   title: SRE Agent Alert Triage API
-  version: 1.0.0
+  version: 3.2.0
   description: >-
     Alert triage commands and reads (TRIAGE, issue #23) over the stable
     incident_workflow/incident-response resource. Reads need alert.read;
     open_triage needs alert.triage, triage_dismiss alert.dismiss, triage_link
     alert.associate, triage_declare incident.declare; link destinations also
-    need run.read. Commands carry Idempotency-Key and expected_version;
+    need run.read. Human principals may use all operations. Agent principals may
+    use only triage_dismiss and triage_link with the exact action grant (and
+    run.read for link); open_triage and triage_declare remain human-only.
+    These external decisions are applied by the pre-incident triage adapter,
+    which writes alert_triage and does not execute IncidentRuntime transitions;
+    incident-response workflow 1.0.0 and direct run-command actor policy are
+    unchanged. Commands carry Idempotency-Key and expected_version;
     retries return the original result after authn/authz. The server sets
-    actor/timestamp; browsers never supply an authoritative actor. Eligible
+    actor/timestamp and provenance; request bodies cannot assert origin or
+    responsible system. Human decisions are manual. Authorized agent dismiss
+    or link decisions are external_automatic and identify the authenticated
+    producer principal as responsible_system. Legacy decisions without
+    verifiable provenance are unknown with null responsible_system. The
+    additive triage context read returns persisted state or null plus current
+    domain-authorized actions; null does not assert alert-inventory existence,
+    and commands always revalidate grants. Eligible
     destinations are active, investigating, mitigating, verifying (resolved,
     postmortem, closed excluded, re-evaluated inside the operation).
     Dismissed/linked answer 200, declare answers 201 once, races answer 409.
     The mapped alert severity is a suggestion; triage_declare requires the
     operator's explicit choice, which may match or override it. Current state
-    retains the latest reason, actor, time and incident ID, not full history.
-    No severity rubric or impact assignment is defined here; impact remains
-    unresolved under issue #23.
+    retains the latest reason, actor, time, incident ID, decision_origin and
+    responsible_system, not full history.
+    Declare requires the operator's nonblank incident impact (the consequence
+    of the incident), up to 2000 characters; no impact rubric is computed.
     No generic comments: the triage reason is not a comment system.
 servers: [{ url: / }]
 security: [{ bearerAuth: [] }]
@@ -33,7 +47,7 @@ paths:
           description: Current triage state
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:triage-state:1.0.0' }
+              schema: { $ref: 'urn:sre-agent:schema:triage-state:2.0.0' }
               examples:
                 current: { $ref: './examples/triage/triage-open.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -41,9 +55,29 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
+  /v1/alerts/{alert_id}/triage/context:
+    get:
+      operationId: getAlertTriageContext
+      parameters:
+        - { name: alert_id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+      responses:
+        '200':
+          description: Persisted triage state and currently authorized next actions; null state does not establish inventory existence
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:triage-context:1.0.0' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
   /v1/alerts/{alert_id}/triage/eligible-incidents:
     get:
       operationId: listEligibleIncidents
+      description: >-
+        Accepts any syntactically valid alert ID without checking alert inventory or requiring a
+        stored triage decision. Returns at most 100 existing incidents in link-eligible states,
+        ordered by incident_id ascending; an empty list does not assert that the alert exists.
       parameters:
         - { name: alert_id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
       responses:
@@ -52,9 +86,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EligibleIncidents' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
   /v1/alerts/{alert_id}/triage/commands:
@@ -67,7 +101,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: 'urn:sre-agent:schema:triage-command:1.0.0' }
+            schema: { $ref: 'urn:sre-agent:schema:triage-command:2.0.0' }
             examples:
               declare: { $ref: './examples/triage/command-request.json' }
       responses:
@@ -75,12 +109,12 @@ paths:
           description: open/dismiss/link applied (or idempotent replay)
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:triage-state:1.0.0' }
+              schema: { $ref: 'urn:sre-agent:schema:triage-state:2.0.0' }
         '201':
           description: declare created the incident exactly once
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:triage-state:1.0.0' }
+              schema: { $ref: 'urn:sre-agent:schema:triage-state:2.0.0' }
               examples:
                 current: { $ref: './examples/triage/command-declare.json' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -112,13 +146,13 @@ components:
               state: { enum: [active, investigating, mitigating, verifying] }
   responses:
     BadRequest:
-      description: Malformed command envelope
+      description: Malformed identifier or command envelope
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
     Unauthorized:
       description: Missing or invalid bearer credential
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
     Forbidden:
-      description: Authenticated without the command action
+      description: Missing required action grant or human operator identity
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
     NotFound:
       description: Unknown alert or target incident

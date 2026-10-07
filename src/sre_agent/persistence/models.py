@@ -504,3 +504,47 @@ class AuditEventRow(Base):
     ordinary_result = required(String(16))
     exporter_result = required(String(16))
     correction_of_event_id = mapped_column(String(40), nullable=True)
+
+
+class AlertTriageRow(Base):
+    __tablename__ = "alert_triage"
+    __table_args__ = (
+        CK(
+            "status IN ('open','dismissed','linked','declared')",
+            name="ck_alert_triage_status",
+        ),
+        CK(
+            "severity IS NULL OR severity IN ('sev1','sev2','sev3','sev4')",
+            name="ck_alert_triage_severity",
+        ),
+        CK(
+            "(status='linked' AND incident_id IS NOT NULL) OR "
+            "(status='declared' AND incident_id IS NOT NULL) OR "
+            "(status IN ('open','dismissed') AND incident_id IS NULL)",
+            name="ck_alert_triage_linkage",
+        ),
+        CK(
+            "(status='declared' AND severity IS NOT NULL) OR status <> 'declared'",
+            name="ck_alert_triage_declare_severity",
+        ),
+        CK(
+            "decision_origin IN ('manual','external_automatic','unknown')",
+            name="ck_alert_triage_decision_origin",
+        ),
+        CK(
+            "(decision_origin = 'external_automatic' AND responsible_system IS NOT NULL "
+            "AND responsible_system ~ '[^[:space:]]') OR "
+            "(decision_origin IN ('manual','unknown') AND responsible_system IS NULL)",
+            name="ck_alert_triage_provenance_pair",
+        ),
+    )
+    alert_id = mapped_column(String(64), primary_key=True)
+    status = required(String(16))
+    incident_id = mapped_column(String(64), nullable=True)
+    expected_version = required(Integer)
+    reason = mapped_column(String(1000), nullable=True)
+    severity = mapped_column(String(8), nullable=True)
+    actor = required(String(64))
+    decided_at = required(DateTime(timezone=True))
+    decision_origin = required(String(32), server_default=sql_text("'unknown'"))
+    responsible_system = mapped_column(String(64), nullable=True)
