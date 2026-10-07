@@ -1,9 +1,10 @@
 {
-  "summary": "Declare request with concurrency token and reason.",
+  "summary": "Declare request with operator impact and concurrency token.",
   "value": {
     "operation": "triage_declare",
     "expected_version": 1,
     "reason": "Sustained 5xx spike on checkout, declaring incident.",
-    "severity": "sev1"
+    "severity": "sev1",
+    "impact": "Checkout requests failed for customers."
   }
 }

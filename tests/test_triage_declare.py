@@ -22,6 +22,7 @@ DATABASE_URL = os.environ.get(
 )
 NOW = datetime(2026, 9, 23, tzinfo=UTC)
 REASON = "Sustained 5xx spike on checkout."
+IMPACT = "Checkout requests failed for customers."
 SERVICE: TriageService | None = None
 
 
@@ -112,6 +113,7 @@ async def _row(table: str, where: str, params: dict) -> dict:
 async def _declare(alert_id: str, key: str, principal: Principal | None = None, **kwargs):
     assert SERVICE is not None
     kwargs.setdefault("severity", "sev2")
+    kwargs.setdefault("impact", IMPACT)
     return await SERVICE.execute(
         principal or _principal("op-human"),
         alert_id=alert_id,
@@ -135,7 +137,7 @@ async def test_declare_creates_exactly_one_incident() -> None:
     assert await _count("incident.runs", "WHERE incident_id=:id", params) == 1
     stored = await _row("incident.incidents", "WHERE incident_id=:id", params)
     assert stored["state"]["state"] == "active"
-    assert (stored["state"]["severity"], stored["state"]["impact"]) == ("sev2", None)
+    assert (stored["state"]["severity"], stored["state"]["impact"]) == ("sev2", IMPACT)
     triage = await _row("alert_triage", "WHERE alert_id='al-declare'", {})
     assert (triage["status"], triage["severity"], triage["actor"]) == (
         "declared",
@@ -155,23 +157,33 @@ async def test_declare_accepts_every_contract_severity(severity: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_declare_rejects_missing_invalid_severity_and_impact() -> None:
-    before = await _count("incident.incidents")
+async def test_declare_rejects_invalid_severity_and_missing_impact_without_persisting() -> None:
+    before = {
+        table: await _count(table)
+        for table in ("incident.incidents", "alert_triage", "incident.run_events")
+    }
     cases = [
         ("al-nosev", {"severity": None}, "k-nosev-12345678901", "invalid_severity"),
         ("al-sev9", {"severity": "sev9"}, "k-sev9-123456789012", "invalid_severity"),
-        (
-            "al-impact",
-            {"severity": "sev2", "impact": "checkout down"},
-            "k-impact-1234567890",
-            "invalid_impact",
-        ),
+        ("al-impact-missing", {"impact": None}, "k-impact-missing-123", "invalid_impact"),
+        ("al-impact-empty", {"impact": ""}, "k-impact-empty-1234", "invalid_impact"),
+        ("al-impact-space", {"impact": " \t\n "}, "k-impact-space-123", "invalid_impact"),
+        ("al-impact-long", {"impact": "x" * 2001}, "k-impact-long-1234", "invalid_impact"),
     ]
     for alert_id, extra, key, code in cases:
         with pytest.raises(TriageError) as error:
             await _declare(alert_id, key, **extra)
         assert (error.value.http_status, error.value.code) == (422, code)
-    assert await _count("incident.incidents") == before
+    for table, count in before.items():
+        assert await _count(table) == count
+
+
+@pytest.mark.asyncio
+async def test_declare_accepts_exact_2000_character_operator_impact() -> None:
+    impact = "x" * 2000
+    declared = await _declare("al-impact-max", "k-impact-max-123456", impact=impact)
+    stored = await _row("incident.incidents", "WHERE incident_id=:id", {"id": declared.incident_id})
+    assert stored["state"]["impact"] == impact
 
 
 @pytest.mark.asyncio
@@ -211,6 +223,7 @@ async def test_declare_rejects_stale_version_without_side_effects() -> None:
             expected_version=2,
             reason=REASON,
             severity="sev2",
+            impact=IMPACT,
             idempotency_key="k-stale-12345678901",
         )
     assert (stale.value.http_status, stale.value.code) == (409, "stale_version")

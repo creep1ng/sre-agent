@@ -170,11 +170,11 @@ class TriageService:
             raise TriageError(422, "invalid_target")
         if operation == "triage_link" and severity is not None and severity not in SEVERITIES:
             raise TriageError(422, "invalid_severity")
-        # Declare: severity sev1..sev4 required; any impact is 422 (schema-closed).
+        # Declaration impact is the operator-stated incident consequence.
         if operation == "triage_declare":
             if severity not in SEVERITIES:
                 raise TriageError(422, "invalid_severity")
-            if impact is not None:
+            if not isinstance(impact, str) or not impact.strip() or len(impact) > 2000:
                 raise TriageError(422, "invalid_impact")
 
     async def execute(
@@ -241,8 +241,24 @@ class TriageService:
                 current is not None and current["expected_version"] != expected_version
             ):
                 raise TriageError(409, "stale_version")
-            if operation == "triage_declare" and (current or {}).get("status") == "declared":
-                raise TriageError(409, "already_declared")
+            current_status = (current or {}).get("status")
+            if current_status in {"dismissed", "linked", "declared"}:
+                if operation == "triage_declare" and current_status == "declared":
+                    raise TriageError(409, "already_declared")
+                if operation == "triage_link":
+                    # Keep the established destination error when a target has
+                    # since become ineligible; this check performs no writes.
+                    await self._transition(
+                        session,
+                        operation,
+                        alert_id,
+                        digest,
+                        principal,
+                        severity,
+                        impact,
+                        target_incident_id,
+                    )
+                raise TriageError(409, "terminal_decision")
             incident_id = await self._transition(
                 session,
                 operation,
@@ -383,7 +399,7 @@ class TriageService:
                 principal_id=principal.principal_id,
                 display_name=principal.display_name,
             ),
-            inputs={"severity": severity},
+            inputs={"severity": severity, "impact": impact},
         )
         try:
             await runtime.execute(command)

@@ -380,15 +380,21 @@ async def test_declaration_from_contract_fixture_emits_schema_valid_identity(wor
     state = yaml.safe_load(INITIAL_STATE_PATH.read_text())
     state["state"] = "triage"
     store = MemoryStore("triage", state_document=state)
+    impact = "Customers could not complete checkout."
 
     result = await runtime(workflow, store).execute(
-        command("triage_declare", outcome="declare", inputs={"severity": "sev2"})
+        command(
+            "triage_declare",
+            outcome="declare",
+            inputs={"severity": "sev2", "impact": impact},
+        )
     )
 
     schema = yaml.safe_load(STATE_SCHEMA_PATH.read_text())
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     assert result.incident.state["incident_id"] == "inc_test"
     assert result.incident.state["state"] == "active"
+    assert result.incident.state["impact"] == impact
     assert result.incident.state["alert"]["status"] == "triaged"
     assert list(validator.iter_errors(result.incident.state)) == []
 

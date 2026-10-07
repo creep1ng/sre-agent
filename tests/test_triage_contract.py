@@ -59,6 +59,10 @@ def test_contract_schemas_and_paths() -> None:
     post = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/commands"]["post"]
     headers = {p["name"] for p in post["parameters"] if "name" in p}
     assert "Idempotency-Key" in headers
+    assert OPENAPI["info"]["version"] == "2.0.0"
+    assert post["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
+        "urn:sre-agent:schema:triage-command:2.0.0"
+    )
     key = next(p for p in post["parameters"] if p.get("name") == "Idempotency-Key")
     assert key["required"] is True and key["in"] == "header"
     assert set(post["responses"]) == {
@@ -97,7 +101,7 @@ def test_command_payloads_are_closed_per_operation() -> None:
         assert by_op[operation]["required"] == (
             ["operation", "expected_version"]
             if operation == "open_triage"
-            else ["operation", "expected_version", "reason", "severity"]
+            else ["operation", "expected_version", "reason", "severity", "impact"]
             if operation == "triage_declare"
             else ["operation", "expected_version", "reason", "target_incident_id"]
             if operation == "triage_link"
@@ -109,14 +113,29 @@ def test_command_payloads_are_closed_per_operation() -> None:
         "sev3",
         "sev4",
     ]
+    assert by_op["triage_declare"]["properties"]["impact"] == {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000,
+        "pattern": "\\S",
+        "description": "Operator-stated consequence of the incident.",
+    }
     validator = Draft202012Validator(SCHEMAS["triage-command"])
-    request = {"operation": "triage_declare", "expected_version": 1, "reason": "test"}
+    request = {
+        "operation": "triage_declare",
+        "expected_version": 1,
+        "reason": "test",
+        "impact": "Customers could not complete checkout.",
+    }
     suggested = "sev2"
     cases = [
         ({}, False),
         ({"severity": "critical"}, False),
         ({"severity": "sev1"}, True),
         ({"severity": "sev1", "suggested_severity": suggested}, False),
+        ({"impact": None}, False),
+        ({"severity": "sev1", "impact": "x" * 2000}, True),
+        ({"severity": "sev1", "impact": "x" * 2001}, False),
     ]
     assert "sev1" != suggested
     for addition, valid in cases:
@@ -143,7 +162,7 @@ def test_contract_examples_validate() -> None:
     )
     cases = {
         "triage-open.json": "urn:sre-agent:schema:triage-state:1.0.0",
-        "command-request.json": "urn:sre-agent:schema:triage-command:1.0.0",
+        "command-request.json": "urn:sre-agent:schema:triage-command:2.0.0",
         "command-declare.json": "urn:sre-agent:schema:triage-state:1.0.0",
         "error-409.json": "urn:sre-agent:schema:error-envelope:2.0.0",
     }
