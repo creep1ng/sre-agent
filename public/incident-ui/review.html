@@ -63,6 +63,10 @@
       <div id="error-404" class="ma-alert" data-tone="warning" hidden>
         <p class="ma-alert__title">Incidente o run no encontrado</p>
       </div>
+      <div id="error-409" class="ma-alert" data-tone="warning" hidden>
+        <p class="ma-alert__title">Conflicto: el run cambió</p>
+        <p class="ma-alert__detail">Actualiza y revisa el estado contractual antes de reintentar.</p>
+      </div>
       <div id="error-503" class="ma-alert" data-tone="critical" hidden>
         <p class="ma-alert__title">Backend no disponible</p>
       </div>
@@ -80,6 +84,25 @@
         <div class="ma-panel__body">
           <ul id="actions-list" class="war-room__events"></ul>
           <p id="actions-empty" class="ma-muted" hidden>Este estado no admite revisión de mitigación.</p>
+        </div>
+      </section>
+      <section id="decision-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title" id="decision-title">Decisión</h2></div>
+        <form id="decision-form" class="ma-panel__body war-room__form">
+          <p class="ma-muted">Actor: humano · identidad resuelta por el servidor desde la credencial.</p>
+          <label class="ma-field" for="decision-comment">
+            <span class="ma-field__label">Motivo (opcional, máx. 2000)</span>
+            <textarea id="decision-comment" class="ma-input" maxlength="2000" rows="3"></textarea>
+          </label>
+          <p class="ma-muted">Clave de idempotencia: <code id="decision-key"></code></p>
+          <button class="ma-button ma-button--primary" type="submit" id="decision-submit">Confirmar decisión</button>
+        </form>
+      </section>
+      <section id="receipt-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Confirmación del backend</h2></div>
+        <div class="ma-panel__body">
+          <p id="receipt-line" aria-live="polite"></p>
+          <p class="ma-muted">Aprobada no significa aplicada: la ejecución se confirma solo con un evento autoritativo.</p>
         </div>
       </section>
     </main>
