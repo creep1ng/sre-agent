@@ -1,0 +1,54 @@
+{
+  "tested_sha": "a14a0fe5e37b3da27f7fad14e5d69d9bcb2fffeb",
+  "runtime_sha256": "447a15925c1844a268c13e371ef95c9cbf900542d6777ae87aa5c9d90833f4ac",
+  "integration_main_sha": "31b4d2f8ba3dc292ea9bce59c069ffa21ebfc02f",
+  "preserved_later_main_sha": "9c5c1765e4c39538609ad8e3d55009dfaee1b155",
+  "backend": {
+    "passed": 1663,
+    "skipped": 1,
+    "skip_reason": "opt-in live OpenRouter",
+    "seconds": 429.74,
+    "exit_code": 0
+  },
+  "browser": {
+    "passed": 54,
+    "skipped": 0,
+    "failed": 0,
+    "flaky": 0,
+    "seconds": 133.660577,
+    "exit_code": 0
+  },
+  "core_related": {
+    "passed": 35,
+    "seconds": 18.12,
+    "exit_code": 0
+  },
+  "screenshots": {
+    "docs/evidence/issue-23-integrated-denial.png": "c5318c6bdf599cb52fe7be12f0508e2540231916522d5bd401ceb3c2df411e17",
+    "docs/evidence/issue-23-integrated-recovery.png": "a90a91731b5398027358259812f3cdf0d5837c7c8a2cce4ab974c10546836515",
+    "docs/evidence/issue-23-integrated-origin.png": "c5e3705d20692c28ee9fbc4961415dae40f1d2ba07fdb03247b759dd4d650a3a",
+    "docs/evidence/issue-23-integrated-eligible.png": "7381c0acdc3d007fe29074c329b54f5b7f7b517d31a4dcf80484c758a6f7ac61",
+    "docs/evidence/issue-23-integrated-declare.png": "5cb76791ecdf93147ea8c4f052451e584bedcc1ea506f2039c210f377f69f0a1",
+    "docs/evidence/issue-23-integrated-link.png": "8281f81d6215c1d8efcab36d749b0165199fae78590264af5f51a4163f22c701",
+    "docs/evidence/issue-23-integrated-dismiss.png": "ac9eac295602d38996f9d5d3330e80741cf87df9ba529db6bf243abe93e1659f"
+  },
+  "limitations": [
+    "Synthetic static inbox, not live provider ingestion",
+    "Screenshot does not show persisted incident impact; PostgreSQL assertions do",
+    "Full current test candidate repeat, final GitHub review and human acceptance pending"
+  ],
+  "static": {
+    "passed": 80,
+    "skipped": 80,
+    "failed": 0,
+    "duration_reported": "2.3m",
+    "exit_code": 0,
+    "skip_reason": "Existing seed-dependent integration tests discovered by static suite"
+  },
+  "mechanical_correction_sha": "8e1a06984040463c6e8a98e22b99ef04a7a83a25",
+  "current_ui_module": {
+    "passed": 7,
+    "seconds": 0.23,
+    "exit_code": 0
+  }
+}
