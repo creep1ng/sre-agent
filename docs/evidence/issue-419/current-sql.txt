@@ -1,0 +1,24 @@
+AUTHORIZATION GRANTS (synthetic stack)
+admin-human|admin.read|administrative_control|grants|allow|active
+admin-human|admin.read|administrative_control|principals|allow|active
+admin-human|admin.read|administrative_control|credentials|allow|active
+admin-human|admin.read|administrative_control|model_aliases|allow|active
+admin-human|admin.read|administrative_control|usage|allow|active
+admin-human|admin.read|administrative_control|consumption_limits|allow|active
+admin-human|admin.read|administrative_control|catalog|allow|active
+admin-human|admin.write|administrative_control|grants|allow|active
+admin-human|admin.write|administrative_control|model_aliases|allow|active
+admin-human|admin.write|administrative_control|principals|allow|active
+admin-human|admin.write|administrative_control|consumption_limits|allow|active
+admin-human|admin.write|administrative_control|credentials|allow|active
+admin-human|admin.write|administrative_control|catalog|allow|active
+demo-human|run.approve|incident_workflow|incident-response|allow|active
+demo-human|run.command|incident_workflow|incident-response|allow|active
+demo-human|run.read|incident_workflow|incident-response|allow|active
+demo-human|run.start|incident_workflow|incident-response|allow|active
+incident-harness|invoke|llm_model|remediation-agent|allow|active
+incident-harness|invoke|llm_model|triage-agent|allow|active
+
+PERSISTED INCIDENT DECISIONS (synthetic stack)
+inc-issue419-final-browser|run_incissue419finalbrowser|1|[{"actor": "human", "reason": "accepted named transition mitigating -> verifying", "comment": "Verified by the authenticated operator.", "outcome": "approve", "approval": {"approved": true, "recorded_at": "2026-10-07T12:59:55.412372+00:00", "actor_reference": {"display_name": null, "principal_id": "demo-human", "reference_version": "1.0.0"}}, "decided_at": "2026-10-07T12:59:55.412372+00:00", "workflow_id": "incident-response", "transition_id": "apply_mitigation", "decision_point": "mitigation_approval", "actor_reference": {"display_name": null, "principal_id": "demo-human", "reference_version": "1.0.0"}, "workflow_version": "1.0.0"}]
+inc-issue419-final-mismatch|run_incissue419finalmismatch|0|[null]
