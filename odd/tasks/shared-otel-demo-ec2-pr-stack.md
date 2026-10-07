@@ -72,4 +72,6 @@ policy-template checks at 239 changed lines; 17 offline pytest checks passed at
 `9265b864c501190d90c2e438774fa0312d7afa84`. PR #506 published guest
 deadline primitives at 290 changed lines; networkless Docker confirmed Bash syntax,
 expiry-before-network ordering, and 8019-byte user-data at
-`fdf8d014ab86450af6dab9623cae07f39771fc6a`.
+`fdf8d014ab86450af6dab9623cae07f39771fc6a`. PR #507 published
+identity/network/SSM adapter foundation with synthetic identity checks and
+Ruff pass at `142cced5ebe3ed55eafa3c0e53783d8f1832182f`.
