@@ -31,7 +31,6 @@ def _runtime_document() -> dict[str, Any]:
         {
             "DATABASE_URL": "postgresql://unused",
             "AUDIT_HMAC_KEY": "openapi-test-hmac-key",
-            "SRE_AGENT_CONTRACT_VERSION": "2.7.0",
         }
     )
     return create_application(settings).openapi()
@@ -102,6 +101,7 @@ def _parameters(
 
 def test_runtime_audit_openapi_matches_published_27_contract() -> None:
     runtime, canonical = _runtime_document(), _canonical_document()
+    assert runtime["info"]["x-sre-agent-contract-version"] == canonical["info"]["version"]
     assert (
         runtime["components"]["securitySchemes"]["bearerAuth"]
         == canonical["components"]["securitySchemes"]["bearerAuth"]
