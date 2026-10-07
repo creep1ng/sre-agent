@@ -35,7 +35,7 @@ Focused browser review suite:
 docker compose --env-file .env.example -p issue419final --profile e2e run --build --rm --no-deps -v "$PWD:/workspace:ro" -v /tmp/playwright-issue419-review.config.js:/e2e/playwright-review.config.js:ro e2e npx playwright test --config=/e2e/playwright-review.config.js
 ```
 
-Reproduction command for the packaged replay (the observed run mounted `/tmp/issue419-final-replay.spec.js` and `/tmp/playwright-issue419-final.config.js`; the retained `work/` copies below are byte-identical. The helper and output mount are local-only scratch; `/tmp/issue419finalreplay.env` contains synthetic credentials and is not committed):
+Reproduction command for the packaged replay (the observed run mounted `/tmp/issue419-final-replay.spec.js` and `/tmp/playwright-issue419-final.config.js`; the retained `work/` copies below are byte-identical. These exact container commands document the local run; they are not turnkey from a GitHub checkout because the referenced helper files, output mount, and `/tmp/issue419finalreplay.env` are local-only and uncommitted. No reusable replay harness is included. The environment contains only synthetic credentials and is not committed):
 
 ```sh
 docker compose --env-file /tmp/issue419finalreplay.env -p issue419finalreplay -f compose.yaml -f compose.e2e.yaml --profile e2e run --build --rm --no-deps -v "$PWD/work/issue-419-final-evidence/replay.spec.js:/e2e/tests/browser/issue419-final-replay.spec.js:ro" -v "$PWD/work/issue-419-final-evidence/playwright.config.js:/e2e/playwright-review.config.js:ro" -v "$PWD/work/issue-419-final-evidence:/evidence" e2e npx playwright test --config=/e2e/playwright-review.config.js
@@ -57,7 +57,7 @@ This is local candidate evidence only. It does not establish the subsequent PR b
 
 ## Former local backend candidate — historical (2026-10-07)
 
-The candidate mounts `GET /v1/whoami` on the application and returns only the authenticated principal identifier through the existing bearer-authentication boundary. The endpoint has focused HTTP/OpenAPI coverage. Strict TDD observed 9 failures / 19 deselected before the endpoint existed; after implementation, the focused backend suite passed 92 tests and the full checks service passed 1,574 tests with 1 skipped (the existing opt-in live OpenRouter check). These are local code-test results, not hosted CI, packaged UI proof, or final #419 acceptance. See the repository task record `odd/tasks/issue-419-chain-integration.md` for exact reproduction commands and candidate boundaries.
+The candidate mounts `GET /v1/whoami` on the application and returns only the authenticated principal identifier through the existing bearer-authentication boundary. The endpoint has focused HTTP/OpenAPI coverage. Strict TDD observed 9 failures / 19 deselected before the endpoint existed; after implementation, the focused backend suite passed 92 tests and the full checks service passed 1,574 tests with 1 skipped (the existing opt-in live OpenRouter check). These are local code-test results, not hosted CI, packaged UI proof, or final #419 acceptance. Exact backend candidate commands and boundaries are recorded in [the committed backend candidate evidence above](#final-local-489-candidate-2026-10-07); these older result counts remain historical evidence only.
 
 ---
 
