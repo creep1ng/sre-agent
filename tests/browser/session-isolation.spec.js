@@ -83,6 +83,7 @@ async function expectPristineForm(page) {
   await expect(page.locator("#alert-id")).toHaveValue("");
   await expect(page.locator("#command-target")).toHaveValue("");
   await expect(page.locator("#command-severity")).toHaveValue("");
+  await expect(page.locator("#command-impact")).toHaveValue("");
 }
 
 test("clear and switch reset the reusable command form", async ({ page }) => {
@@ -93,6 +94,7 @@ test("clear and switch reset the reusable command form", async ({ page }) => {
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("C3e form reset proof.");
   await page.locator("#command-severity").selectOption("sev2");
+  await page.locator("#command-impact").fill("C3e form impact proof.");
   await page.locator("#command-target").fill("inc-c3e-form");
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
@@ -105,6 +107,7 @@ test("clear and switch reset the reusable command form", async ({ page }) => {
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("C3e form second proof.");
   await page.locator("#command-severity").selectOption("sev3");
+  await page.locator("#command-impact").fill("Second declaration impact proof.");
   await page.locator("#command-target").fill("inc-c3e-form-b");
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");

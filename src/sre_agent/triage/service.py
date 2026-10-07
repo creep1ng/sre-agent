@@ -216,6 +216,10 @@ class TriageService:
             await self._authorize(session, principal, ACTIONS[operation])
             if operation == "triage_link":
                 await self._authorize(session, principal, "run.read")
+            if operation in {"triage_dismiss", "triage_link", "triage_declare"} and (
+                principal.kind != "human"
+            ):
+                raise TriageError(403, "operator_required")
             idem = IdempotencyRepository(session)
             try:
                 binding = await idem.claim_or_replay(

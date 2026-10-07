@@ -49,7 +49,8 @@ def triage_http_database() -> None:
             "INSERT INTO principals VALUES "
             "('op-human','human','Operator','active',now(),now()),"
             "('reader-human','human','Reader','active',now(),now()),"
-            "('bystander-human','human','Bystander','active',now(),now())"
+            "('bystander-human','human','Bystander','active',now(),now()),"
+            "('producer-agent','agent','External producer','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at,"
@@ -71,6 +72,7 @@ def triage_http_database() -> None:
             issued_op = await creds.issue("op-human")
             issued_reader = await creds.issue("reader-human")
             issued_by = await creds.issue("bystander-human")
+            issued_agent = await creds.issue("producer-agent")
             grants = GrantRepository(session)
             for index, action in enumerate(
                 ("alert.triage", "alert.dismiss", "alert.associate", "run.read", "incident.declare")
@@ -89,9 +91,20 @@ def triage_http_database() -> None:
                 "incident_workflow",
                 "incident-response",
             )
+            for index, action in enumerate(
+                ("alert.dismiss", "alert.associate", "run.read", "incident.declare")
+            ):
+                await grants.create(
+                    f"grant-producer-agent-{index}",
+                    "producer-agent",
+                    action,
+                    "incident_workflow",
+                    "incident-response",
+                )
         BEARERS["op"] = f"Bearer {issued_op.key}"
         BEARERS["reader"] = f"Bearer {issued_reader.key}"
         BEARERS["bystander"] = f"Bearer {issued_by.key}"
+        BEARERS["agent"] = f"Bearer {issued_agent.key}"
 
     asyncio.run(_setup())
     asyncio.run(database.dispose())
@@ -355,6 +368,43 @@ def test_declared_alert_keeps_existing_fresh_declare_conflict() -> None:
     )
     assert duplicate.status_code == 409
     assert duplicate.json()["error"]["code"] == "already_declared"
+
+
+@pytest.mark.parametrize(
+    ("operation", "body"),
+    [
+        ("triage_dismiss", {"reason": REASON}),
+        (
+            "triage_link",
+            {"reason": REASON, "target_incident_id": "inc-http-target"},
+        ),
+        ("triage_declare", {"reason": REASON, "severity": "sev2"}),
+    ],
+)
+def test_agent_grants_cannot_authorize_human_only_terminal_triage(
+    operation: str, body: dict
+) -> None:
+    """Action grants do not turn an agent credential into a human operator."""
+    client = _client()
+    alert_id = f"al-agent-{operation.removeprefix('triage_')}"
+    incidents_before = _incident_count()
+    triage_before = _count_rows("alert_triage")
+    events_before = _count_rows("incident.run_events")
+
+    response = _post(
+        client,
+        alert_id,
+        _cmd(operation, **body),
+        f"k-agent-{operation.removeprefix('triage_')}-123456789",
+        BEARERS["agent"],
+    )
+
+    assert response.status_code == 403, response.text
+    assert response.json()["error"]["code"] == "operator_required"
+    assert _incident_count() == incidents_before
+    assert _count_rows("alert_triage") == triage_before
+    assert _count_rows("incident.run_events") == events_before
+    assert _get(client, alert_id, BEARERS["reader"]).status_code == 404
 
 
 def test_unauthenticated_is_401() -> None:

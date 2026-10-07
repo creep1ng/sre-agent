@@ -22,11 +22,17 @@ def test_client_posts_commands_with_idempotency_key() -> None:
     assert "Idempotency-Key" in CLIENT
 
 
-def test_ui_has_no_impact_actor_or_timestamp_inputs() -> None:
-    for field in ('name="impact"', 'name="actor"', 'name="timestamp"'):
+def test_ui_collects_operator_impact_but_not_actor_or_timestamp() -> None:
+    assert 'id="command-impact"' in HTML
+    assert 'name="impact"' in HTML
+    assert 'maxlength="2000"' in HTML
+    assert 'name="actor"' not in HTML
+    assert 'name="timestamp"' not in HTML
+    for field in ('name="actor"', 'name="timestamp"'):
         assert field not in HTML
-    for fragment in ('"impact"', "'impact", "body.actor", "body.timestamp"):
+    for fragment in ("body.actor", "body.timestamp"):
         assert fragment not in JAVASCRIPT
+    assert "body.impact = impact" in JAVASCRIPT
 
 
 def test_ui_builds_a_fresh_command_key_per_submit() -> None:
@@ -42,7 +48,7 @@ def test_ui_sends_only_selected_operation_fields() -> None:
     assert "open_triage: Object.freeze([])" in JAVASCRIPT
     assert 'triage_dismiss: Object.freeze(["reason"])' in JAVASCRIPT
     assert 'triage_link: Object.freeze(["reason", "target_incident_id"])' in JAVASCRIPT
-    assert 'triage_declare: Object.freeze(["reason", "severity"])' in JAVASCRIPT
+    assert 'triage_declare: Object.freeze(["reason", "severity", "impact"])' in JAVASCRIPT
 
 
 def test_ui_maps_real_triage_outage_code() -> None:
