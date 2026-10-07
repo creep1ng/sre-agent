@@ -511,3 +511,75 @@ manuallyinspected; privateconfig/credentialmarkerscanspass. Preparedboundedsourc
 511fc41→e23ece52, newevidence936fc190over522 (includesrequiredsourceancestry,
 no unrelatedmainfiles); unpublished. Reportlocaltechnicalacceptance5ac renewed,
 NOT freshhumanreceipt/GitHubCodex/CIapproval; T25/T7/T8 stillpending.
+
+Publication verified: PR547head511fc41lines/base544,548heade23ece52/base547,
+549head936fc190/base522; allnativeattachments547/548/549succeeded. Earlier542/543/544
+nativeattachmentretryalso nowconfirmed. Atomicfinal518head8c06bffacb6e78d5410e94aa598fee54c8e97d16
+base4e3 size4976(alladditions+deletions), final-onlyuserexception. Allbounded
+headsancestorsfinal, finalsrc/tests/public/scripts/configidenticaltested5ac.
+ActualremotebodytrustedstaticvalidatorDocker/networknoneGREEN[] exit0.
+Exact8cCodexrequested6042753256. UserfreshhumanacceptedEXACT8c/source5ac
+(1613Python/14browser,UUID/navfixes,pagination470deferred), CONDITIONALLY
+no unresolvedCodexfindings +ALLchecksPASS; receipt6042778973. No transfer
+tofuturehead; no remotemergeyet. This localtaskappendisnotpushed, soacceptedhead
+remains8c unchanged. T25/T7/T8 remainpendingactualreview/CI/conditionalmerge.
+
+Fresh exact8cCodexreview5445675670 (17:07:52Z) has two NEW P2findings:
+- [x] T37 Normalize accepted canonical UUID event IDs before case-sensitive
+  VARCHAR lookup (4209709009). Preauthor realpersisted uppercaseUUID detail200
+  +terminalmetadata; preserve legacyIDcase/authorizationorder; REDthenGREEN.
+- [x] T38 Reject forbidden content-retrieval parameters on detail reads
+  (4209709019). Preauthor known-ID+raw/redacted-content422 withonevalidation
+  terminal, no sensitivepayload; retainauth/grantorder; REDthenGREEN beforefix.
+- [x] T39 Investigate hosted static-web FAILURE job112911847073/run37656076374
+  on8c; readactualfailurelogs, reproducebeforeboundedfix. No guess/retrybypass.
+Human8cconditionalreceipt remains recorded butconditionsNOTmet; no merge.
+Anynewsourceheadrequiresfreshactualproof/review/CI/humanfreshness, notreceipttransfer.
+
+T39 rootcauseactualhostedoldexistingexpectationdisabledAudit&consumption;
+DockerfocusedRED1fail thenunchangedscenarioexpectationadapted4add1del, GREEN1/2.5s.
+Committedea15c9c918b2707545a8b04702960688c778cd84; bounded7447c4591a150b52485e5345f3f8c8a7852bfc0a
+5lines over548, unpublished. Fullstaticselection againstNGINX71pass60skip3fail1.3m
+notCIequivalent(CSP); staticHTTPnonloopback73pass60skip1fail1.6m usesinsecureorigin
+no crypto.randomUUID→fallbackkeyviolatesoldUUIDexpectation; no producttestweakening.
+ActualCI-equivalentstaticHTTPloopbackDocker74passed60skipped1.5m exit0; server
+existingpythonimage/read-onlypublicassets/no.envGit/nohostports, runnerexistinge2e
+sharesnetworknamespace for127.0.0.1:4173, traceoff, automaticservercleanupobserved.
+T37/T38workerRED4fail28pass51.58s; initialpreauthoredsuccesshelperincorrectly
+expectedresponse terminalrequestID unavailableon200. Parentapprovedcorrection
+ONLYalreadyauthoredscenario viaSQLbefore/afterrowIDs andexpectedmetadata, no new
+scenarioaftercode. PreservevalidationstagewithoutsubjectperDTO663+, no newexception
+orrelabelauthorization; parentretractedunverifiedauthcontextforwardingassumption.
+FinalworkersourceGREEN pending; no newjointfull/runtimecaptures/remotepush/acceptance.
+
+T37/T38 sourceverified andcommittedf24befc4bb0d029fa1248888e7ab154c32a9e67a
+79add3del82lines2files; standalonee64a9fb9d0a5b292bb616e59ba2ab2f3e7bb4535 over547.
+Worker32GREEN16.66s thenformatterpermissionfailed; parentinterruptedslowwriter
+afterstatushandoff(no activechecksDBcontainer), hostUIDformatterleftfileunchanged,
+Ruffcheck/formatPASS andindependent32GREEN18.34s. No sourcechangeafterobservedGREEN.
+CanonicalUUIDONLYnormalizebeforelookup; legacyIDsunchanged. Forbiddencontentkeys
+reject422validationafterauth/grant, no subjects perreleasedDTO; no newexception.
+Mainadvanced9d6ed3da8f22132561635de9a429989d21773724 (#550 credential-resetlock);
+cleanlocalunion1cacab56 preservesall. Bounded82detail/5sidebarheadancestrymerged
+intofinald0f5a35f80d9a0c8e0fc1b027a0baa60ffb28ecb, byteidenticalruntime/tests/public
+/scripts/configtof24(gitdiffexit0). Ignoredsyntheticbuildrevisionf24/mode600safe.
+NewactualjointfullPython13535, runtimebuild+auditbrowser53946, wholecurrentstatic
+loopbackbrowser20805 running; no newfullGREEN/capturefreshness/localtechnical
+acceptance claimed. Currentremote518still8c qualified; allnewunitsunpublished.
+
+Current exactf24 verification completed: defaultfullDocker1616passed/1opt-inlive
+OpenRouterSkipped392.02s, prechecks/AlembicPASSexit0; independent32scoped18.34s,
+rebuiltAPI/web/e2e auditbrowser14passed19.5s. Main9d fullstaticCI-equivalentloopback
+136scenarios76passed60skipped1.8m/exit0, automaticservercleanupobserved. Fresh
+HTTP/API/hosthash946c1fdf477ce5255e69e9efee6d5acece79c19b73d670ed047b99d56f953106
+matches. NativeAPIcompleteenvelope/detail34operationschema validationPASS.
+Actualrunningdetail5JSONL: uppercasepersistedUUID200/exact1authorizationterminal,
+4contentkeys422/exact1validationterminal/no subjects orcontent. FirstadhocSQLreader
+KeyError usedwrongrootrequestID; correctednestedcorrelationreader, reranall5 actual
+HTTP/SQL, no API change ormanualartifactrepair. Freshterminal13passed8.99s/11actual
+JSONL; connectedallowdeny200403200/3nonnullHMACrefs; realqueryfault200503clears
+1row/detailto0/0, restoredt|t. Nav1passed3.2s/mockrecovery1passed3.1s capturesfresh.
+Parentmanuallyinspectedall9PNGs; privatevalue13textartifacts/syntheticmarkerscansPASS.
+InitialDockerdefaultUIDprivateenvscanpermissionfailure correctedhostUID/mode600
+unchanged. Sourcefinald0treeidenticalf24. Reportrefresh/boundedpublication/newexact
+Codex/ALLCI/freshhumanreceipt/ordinaryconditionalmerge remainpending; NO merge.
