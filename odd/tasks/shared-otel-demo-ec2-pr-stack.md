@@ -80,8 +80,8 @@ acceptance checks were observed RED before the fix; at source SHA
 `641a713`, exact-checkout networkless Docker reported 59 focused passes and
 Ruff passed 17 files without a PYTHONPATH override.
 
-Next: verify current hosted CI and governance statuses, mirror this tracker
-to Engram, and request independent human review. PR #505 also copied infra
+Next: obtain independent human review and, with separate authorization, live
+AWS validation. PR #505 also copied infra
 into the checks image after hosted unit tests found a missing template; the
 fix was merge-forwarded through PR #513 without force-push. Live AWS
 provisioning, Scheduler firing, SSM forwarding and billing controls are
@@ -96,7 +96,7 @@ backoff before returning an absent-session no-op. Exact behavior-source SHA
 `c58b70314c509d385994f6e2e28e9b072bcad033` passed 60 focused tests,
 Ruff lint and format in networkless Docker; three named teardown checks also
 passed. A real screenshot was inspected and committed; PR #513 evidence was
-refreshed, validated with the local governance parser (174 changed lines,
+refreshed, validated with the local governance parser (under 400 changed lines,
 no metadata errors), and the reviewer comment was answered at
 https://github.com/creep1ng/sre-agent/pull/513#discussion_r4207780039.
 Repeated empty responses are still not proof of absence; Scheduler and guest
