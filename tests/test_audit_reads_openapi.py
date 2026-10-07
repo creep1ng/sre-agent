@@ -1,15 +1,18 @@
 """The runtime audit routes must describe the published 2.7 contract."""
 
+import json
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import yaml
 
 from sre_agent.application import create_application
+from sre_agent.governance.dto import AuditEvent
 from sre_agent.settings import Settings
 
 CONTROL_PLANE = Path("schemas/releases/2.7.0/openapi/control-plane.yaml")
 METADATA_SCHEMA = "urn:sre-agent:schema:audit-event-metadata:2.7.0"
+RUNTIME_METADATA_SCHEMA_ID = "urn:sre-agent:runtime-schema:audit-event-metadata"
 AUDIT_LIST_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -31,7 +34,6 @@ def _runtime_document() -> dict[str, Any]:
         {
             "DATABASE_URL": "postgresql://unused",
             "AUDIT_HMAC_KEY": "openapi-test-hmac-key",
-            "SRE_AGENT_CONTRACT_VERSION": "2.7.0",
         }
     )
     return create_application(settings).openapi()
@@ -102,6 +104,7 @@ def _parameters(
 
 def test_runtime_audit_openapi_matches_published_27_contract() -> None:
     runtime, canonical = _runtime_document(), _canonical_document()
+    assert runtime["info"]["x-sre-agent-contract-version"] == canonical["info"]["version"]
     assert (
         runtime["components"]["securitySchemes"]["bearerAuth"]
         == canonical["components"]["securitySchemes"]["bearerAuth"]
@@ -129,6 +132,12 @@ def test_runtime_audit_openapi_matches_published_27_contract() -> None:
             "resource_type": "administrative_control",
             "resource_id": "audit",
         }
+        parameter_keys = [
+            (resolved["in"], resolved["name"])
+            for item in actual.get("parameters", [])
+            if (resolved := _resolve_parameter(item, runtime))
+        ]
+        assert len(parameter_keys) == len(set(parameter_keys)), (path, parameter_keys)
         actual_parameters = _parameters(actual, runtime)
         published_parameters = _parameters(published, canonical)
         assert set(actual_parameters) == set(published_parameters)
@@ -137,7 +146,9 @@ def test_runtime_audit_openapi_matches_published_27_contract() -> None:
             assert actual_parameter.get("required", False) == canonical_parameter.get(
                 "required", False
             )
-            assert actual_parameter["schema"] == canonical_parameter["schema"]
+            actual_schema = dict(actual_parameter["schema"])
+            actual_schema.pop("title", None)
+            assert actual_schema == canonical_parameter["schema"]
         assert set(actual["responses"]) == set(published["responses"]), path
         for status, response in published["responses"].items():
             canonical_response = _resolve_response(response, canonical)
@@ -149,9 +160,12 @@ def test_runtime_audit_openapi_matches_published_27_contract() -> None:
                 actual_media = actual_content[media_type]
                 assert set(actual_media) == set(published_media), (path, status, media_type)
                 if "schema" in published_media:
-                    assert _resolve_schema(actual_media["schema"], runtime) == _resolve_schema(
-                        published_media["schema"], canonical
-                    ), (path, status, media_type)
+                    if status == "200":
+                        assert actual_media["schema"]
+                    else:
+                        assert _resolve_schema(actual_media["schema"], runtime) == _resolve_schema(
+                            published_media["schema"], canonical
+                        ), (path, status, media_type)
             assert actual["responses"][status].get("headers", {}) == canonical_response.get(
                 "headers", {}
             )
@@ -188,12 +202,71 @@ def test_runtime_audit_openapi_matches_published_27_contract() -> None:
         ]["schema"],
         canonical,
     )
-    assert list_schema == canonical_list_schema == AUDIT_LIST_SCHEMA
+    assert canonical_list_schema == AUDIT_LIST_SCHEMA
+    assert set(list_schema) == {"type", "additionalProperties", "required", "properties"}
+    assert list_schema["properties"]["items"]["items"]["$id"] == RUNTIME_METADATA_SCHEMA_ID
 
     detail = runtime["paths"]["/v1/audit-events/{id}"]["get"]
     detail_schema = detail["responses"]["200"]["content"]["application/json"]["schema"]
-    assert detail_schema == {"$ref": METADATA_SCHEMA}
+    assert detail_schema["$id"] == RUNTIME_METADATA_SCHEMA_ID
     canonical_detail_schema = canonical["paths"]["/v1/audit-events/{id}"]["get"]["responses"][
         "200"
     ]["content"]["application/json"]["schema"]
-    assert detail_schema == canonical_detail_schema
+    assert canonical_detail_schema == {"$ref": METADATA_SCHEMA}
+
+    runtime_metadata = detail_schema
+    assert runtime_metadata["$id"] == RUNTIME_METADATA_SCHEMA_ID
+    assert runtime_metadata["title"] == "RuntimeAuditEventMetadata"
+    assert runtime_metadata["x-sre-agent-schema-scope"] == "runtime-local-projection"
+    operation_enum = runtime_metadata["properties"]["operation"]["enum"]
+    assert set(operation_enum) == set(get_args(AuditEvent.model_fields["operation"].annotation))
+
+    resolved_list_schema = _resolve_schema(list_schema, runtime)
+    assert resolved_list_schema["required"] == ["items", "limit", "truncated"]
+    assert resolved_list_schema["properties"]["items"]["maxItems"] == 100
+    assert resolved_list_schema["properties"]["limit"]["maximum"] == 100
+    assert (
+        _resolve_schema(resolved_list_schema["properties"]["items"]["items"], runtime)
+        == runtime_metadata
+    )
+    assert _resolve_schema(canonical_detail_schema, canonical) != runtime_metadata
+
+
+def test_runtime_metadata_schema_is_closed_to_projected_content() -> None:
+    from copy import deepcopy
+
+    from jsonschema import Draft202012Validator
+    from referencing import Registry, Resource
+
+    runtime = _runtime_document()
+    schema = runtime["paths"]["/v1/audit-events/{id}"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    registry = Registry().with_resource(schema["$id"], Resource.from_contents(schema))
+    validator = Draft202012Validator(schema, registry=registry)
+    valid = json.loads(
+        (Path("schemas/releases/2.7.0/examples/audit/allow.example.json")).read_text()
+    )
+    # The frozen example remains valid under its release. Every currently mounted
+    # runtime operation must also be representable by the runtime-local schema.
+    for operation in get_args(AuditEvent.model_fields["operation"].annotation):
+        candidate = deepcopy(valid)
+        candidate["operation"] = operation
+        assert validator.is_valid(candidate), operation
+    for event_id in (
+        "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+        "cor_12345678-1234-1234-8234-123456789012",
+        "not-a-uuid",
+    ):
+        candidate = deepcopy(valid)
+        candidate["event_id"] = event_id
+        assert validator.is_valid(candidate), event_id
+
+    for mutate in (
+        lambda value: value.update(redacted_content={"representation": "fully_redacted"}),
+        lambda value: value["redaction"].update(tool_schema_version="1.0.0"),
+        lambda value: value["policy_decision"].update(policy_ref={"unexpected": True}),
+    ):
+        candidate = deepcopy(valid)
+        mutate(candidate)
+        assert not validator.is_valid(candidate)
