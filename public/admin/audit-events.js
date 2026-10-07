@@ -22,6 +22,7 @@ const expanded = new Set();
 let currentItems = [];
 let currentFilters = {};
 let sessionGeneration = 0;
+const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const announce = (message) => {
@@ -89,6 +90,15 @@ function detailRow(item) {
     list.append(el("dt", null, term), el("dd", "ma-mono", value));
   }
   panel.append(list);
+  const rawRequestId = item.correlation?.request_id;
+  if (typeof rawRequestId === "string" && canonicalUuid.test(rawRequestId)) {
+    const requestId = rawRequestId.toLowerCase();
+    const href = new URL("/public/admin/audit-events.html", window.location.origin);
+    href.searchParams.set("request_id", requestId);
+    const link = el("a", "ma-button ma-button--secondary ma-button--small", "View correlated events");
+    link.href = href.pathname + href.search;
+    panel.append(link);
+  }
   cell.append(panel);
   detail.append(cell);
   return detail;
@@ -228,3 +238,23 @@ disconnectButton.addEventListener("click", () => {
 });
 
 page.dataset.state = "idle";
+
+function initializeRequestIdFilter() {
+  const params = new URLSearchParams(window.location.search);
+  const requestIds = params.getAll("request_id");
+  if (window.location.search === "") return;
+
+  const rawRequestId = requestIds.length === 1 && canonicalUuid.test(requestIds[0]) ? requestIds[0] : null;
+  const requestId = rawRequestId?.toLowerCase() ?? null;
+  if (requestId) document.getElementById("filter-request-id").value = requestId;
+
+  // Keep only the one supported metadata filter in the address bar; never retain
+  // accidental credentials, redirect targets, or arbitrary query state.
+  const cleanUrl = new URL(window.location.pathname, window.location.origin);
+  if (requestId) cleanUrl.searchParams.set("request_id", requestId);
+  window.history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search);
+  if (requestIds.length > 0 && !requestId)
+    showError({ kind: "validation", message: "The request ID link is invalid. Enter a valid request ID and apply filters." });
+}
+
+initializeRequestIdFilter();

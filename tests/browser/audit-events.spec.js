@@ -129,3 +129,86 @@ test("lists through the connected API with contract parameters", async ({ page }
   expect(observed.searchParams.get("limit")).toBe("100");
   expect(observed.search).not.toContain("cursor");
 });
+
+test("offers a same-origin correlation link and requires a new authenticated session", async ({ page }) => {
+  const requestId = "c8b10043-4055-4e78-b190-205fb430830c";
+  let listRequests = 0;
+  await page.route((url) => url.pathname.startsWith(LIST_PATH), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === LIST_PATH) {
+      listRequests += 1;
+      return route.fulfill(json(200, JSON.stringify({ items: [eventItem("evt-correlated-01")] })));
+    }
+    return route.fulfill(json(200, JSON.stringify({ ...eventItem("evt-correlated-01"),
+      correlation: { request_id: requestId } })));
+  });
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await page.click("[data-expand-event='evt-correlated-01']");
+  const link = page.getByRole("link", { name: "View correlated events" });
+  await expect(link).toHaveAttribute("href", `/public/admin/audit-events.html?request_id=${requestId}`);
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`/public/admin/audit-events\\.html\\?request_id=${requestId}$`));
+  await expect(page.locator("#filter-request-id")).toHaveValue(requestId);
+  await expect(page.locator("#api-key")).toHaveValue("");
+  expect(listRequests).toBe(1);
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "idle");
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "ready");
+  expect(listRequests).toBe(2);
+});
+
+test("does not turn malformed or duplicate URL request IDs into queries", async ({ page }) => {
+  let listRequests = 0;
+  await page.route((url) => url.pathname === LIST_PATH, (route) => {
+    listRequests += 1;
+    return route.fulfill(json(200, JSON.stringify({ items: [] })));
+  });
+  await page.goto("/public/admin/audit-events.html?request_id=not-a-uuid&request_id=00000000-0000-4000-8000-000000000000");
+  await expect(page).toHaveURL(/\/public\/admin\/audit-events\.html$/);
+  await expect(page.locator("#filter-request-id")).toHaveValue("");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "idle");
+  expect(listRequests).toBe(0);
+  await expect(page.locator("#page-error")).toBeVisible();
+});
+
+test("accepts canonical UUID variants supported by the API and normalizes link values", async ({ page }) => {
+  let listRequests = 0;
+  await page.route((url) => url.pathname === LIST_PATH, (route) => {
+    listRequests += 1;
+    return route.fulfill(json(200, JSON.stringify({ items: [] })));
+  });
+  await page.goto("/public/admin/audit-events.html?request_id=00000000-0000-0000-0000-000000000000");
+  await expect(page.locator("#filter-request-id")).toHaveValue("00000000-0000-0000-0000-000000000000");
+  expect(listRequests).toBe(0);
+  await page.goto("/public/admin/audit-events.html?request_id=C0000000-0000-4000-8000-000000000005");
+  await expect(page.locator("#filter-request-id")).toHaveValue("c0000000-0000-4000-8000-000000000005");
+  await expect(page).toHaveURL(/request_id=c0000000-0000-4000-8000-000000000005$/);
+  expect(listRequests).toBe(0);
+});
+
+test("never links to untrusted correlation values or adopts unrelated URL parameters", async ({ page }) => {
+  const malicious = "https://attacker.example/?request_id=00000000-0000-4000-8000-000000000000";
+  await page.route((url) => url.pathname.startsWith(LIST_PATH), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === LIST_PATH)
+      return route.fulfill(json(200, JSON.stringify({ items: [eventItem("evt-untrusted-01")] })));
+    return route.fulfill(json(200, JSON.stringify({ ...eventItem("evt-untrusted-01"),
+      correlation: { request_id: malicious, event_id: "00000000-0000-4000-8000-000000000000" } })));
+  });
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await page.click("[data-expand-event='evt-untrusted-01']");
+  await expect(page.getByRole("link", { name: "View correlated events" })).toHaveCount(0);
+  await page.goto("/public/admin/audit-events.html?request_id=00000000-0000-4000-8000-000000000000&api_key=sre_admn_secret&destination=https%3A%2F%2Fattacker.example");
+  await expect(page).toHaveURL(/\/public\/admin\/audit-events\.html\?request_id=00000000-0000-4000-8000-000000000000$/);
+  await expect(page.locator("#filter-request-id")).toHaveValue("00000000-0000-4000-8000-000000000000");
+  await expect(page.locator("#api-key")).toHaveValue("");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "idle");
+  await page.route((url) => url.pathname === LIST_PATH, (route) => route.fulfill(json(403, "{}")));
+  await page.fill("#api-key", "sre_user_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expect(page.locator("[data-event-row]")).toHaveCount(0);
+});
