@@ -359,6 +359,14 @@ def test_detail_metadata_conforms_and_404() -> None:
     event_id = client.get(f"/v1/audit-events?{WINDOW_QS}", headers=headers).json()["items"][0][
         "event_id"
     ]
+    assert client.get(f"/v1/audit-events/{event_id}").status_code == 401
+    assert (
+        client.get(
+            f"/v1/audit-events/{event_id}?raw_content=true",
+            headers={"Authorization": BEARERS["bystander"]},
+        ).status_code
+        == 403
+    )
     detail = client.get(f"/v1/audit-events/{event_id}", headers=headers)
     assert detail.status_code == 200
     assert list(_metadata_validator().iter_errors(detail.json())) == []
@@ -374,6 +382,37 @@ def test_detail_metadata_conforms_and_404() -> None:
     assert legacy_missing.status_code == 404
     _assert_terminal_validation_record(legacy_missing, 404, "authorization")
     assert client.get("/v1/audit-events/NOPE!", headers=headers).status_code == 422
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        prior_terminal_ids = {
+            row[0]
+            for row in connection.execute(
+                "SELECT event_id::text FROM audit_events "
+                "WHERE operation='audit.project' AND action='read_metadata'"
+            ).fetchall()
+        }
+    uppercase_uuid = client.get(f"/v1/audit-events/{DIGIT_EVENT_ID.upper()}", headers=headers)
+    assert uppercase_uuid.status_code == 200, uppercase_uuid.text
+    assert uppercase_uuid.json()["event_id"] == DIGIT_EVENT_ID
+    assert list(_metadata_validator().iter_errors(uppercase_uuid.json())) == []
+    assert "redacted_content" not in uppercase_uuid.text
+    with psycopg.connect(DATABASE_URL) as connection:
+        terminal_records = {
+            event_id: row
+            for event_id, row in connection.execute(
+                "SELECT event_id::text, to_jsonb(a) FROM audit_events a "
+                "WHERE operation='audit.project' AND action='read_metadata'"
+            ).fetchall()
+        }
+    new_terminal_ids = set(terminal_records) - prior_terminal_ids
+    assert len(new_terminal_ids) == 1
+    terminal = terminal_records[next(iter(new_terminal_ids))]
+    assert terminal["response_status"] == 200
+    assert terminal["stage"] == "authorization"
+    assert terminal["content_state"] == "absent"
+    assert terminal["identity"]["principal_ref"] == _ref("principal", "admin-human")
+    assert terminal["resource"]["resource_type"] == "administrative_control"
+    assert terminal["resource"]["resource_ref"] == _ref("resource", "administrative_control/audit")
 
 
 def test_mounted_operations_validate_in_list_and_detail_metadata() -> None:
@@ -491,6 +530,20 @@ def test_noncanonical_request_id_forms_are_audited_validation_errors(
         headers={"Authorization": BEARERS["admin"]},
     )
     assert response.status_code == 422, response.text
+    _assert_terminal_validation_record(response, 422, "validation")
+
+
+@pytest.mark.parametrize("parameter", ("content", "raw_content", "redacted_content"))
+def test_detail_content_parameters_are_rejected_and_audited(parameter: str) -> None:
+    response = _client().get(
+        f"/v1/audit-events/{DIGIT_EVENT_ID}",
+        params={parameter: "true"},
+        headers={"Authorization": BEARERS["admin"]},
+    )
+    assert response.status_code == 422, response.text
+    assert "redacted_content" not in response.text
+    assert "raw_content" not in response.text
+    assert "content" not in response.text
     _assert_terminal_validation_record(response, 422, "validation")
 
 

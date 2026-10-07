@@ -402,7 +402,12 @@ class AuditReadsService:
             },
         )
 
-    async def get_event(self, event_id: str, authorization: str | None) -> JSONResponse:
+    async def get_event(
+        self,
+        event_id: str,
+        authorization: str | None,
+        query_params: dict[str, Any] | None = None,
+    ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         if not _valid_event_id(event_id):
             return await self._finish(
@@ -429,9 +434,25 @@ class AuditReadsService:
                 evaluation=evaluation,
                 headers={"WWW-Authenticate": "Bearer"} if auth_status == 401 else None,
             )
+        if any(
+            key in (query_params or {})
+            for key in ("content", "raw_content", "redacted_content", "include_content")
+        ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                error_code="validation_error",
+            )
+        lookup_id = (
+            str(UUID(event_id))
+            if re.fullmatch(CANONICAL_UUID_PATTERN, event_id) is not None
+            else event_id
+        )
         try:
             async with self.sessions() as session:
-                row = await session.get(AuditEventRow, event_id)
+                row = await session.get(AuditEventRow, lookup_id)
                 event = None
                 if row is not None:
                     from sre_agent.persistence.projections import project_audit_event
@@ -540,6 +561,8 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
         request: Request,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
     ) -> JSONResponse:
-        return await service.get_event(id, request.headers.get("authorization"))
+        return await service.get_event(
+            id, request.headers.get("authorization"), dict(request.query_params)
+        )
 
     return router
