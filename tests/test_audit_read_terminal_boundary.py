@@ -403,6 +403,7 @@ def test_terminal_capture_mutation_probe_classifies_only_row_count_failures(
         Response(),
         set(),
         expected_status=200,
+        expected_envelope="list",
         expected_rows=actual_rows,
     )
 
@@ -427,6 +428,7 @@ def test_terminal_capture_mutation_probe_does_not_mask_wrong_http_status(
             Response(),
             set(),
             expected_status=200,
+            expected_envelope="list",
             expected_rows=0,
         )
 
@@ -451,5 +453,77 @@ def test_terminal_capture_mutation_probe_does_not_mask_malformed_row(
             Response(),
             set(),
             expected_status=200,
+            expected_envelope="list",
             expected_rows=2,
+        )
+
+
+@pytest.mark.parametrize(
+    ("expected_envelope", "body"),
+    [
+        ("list", {"event_id": "target-event", "correlation": {"request_id": "source-request"}}),
+        ("detail", {"items": [], "limit": 50, "truncated": False}),
+    ],
+)
+def test_terminal_capture_requires_the_callers_success_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+    expected_envelope: str,
+    body: dict[str, Any],
+) -> None:
+    capture = _terminal_capture_module()
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, Any]:
+            return body
+
+    monkeypatch.setattr(capture, "new_projections", lambda _previous: [])
+
+    with pytest.raises(AssertionError, match=f"expected {expected_envelope} success envelope"):
+        capture.report(
+            "wrong_route_envelope",
+            Response(),
+            set(),
+            expected_status=200,
+            expected_envelope=expected_envelope,
+        )
+
+
+@pytest.mark.parametrize("actual_rows", [0, 2])
+def test_terminal_capture_detail_mutation_probe_rejects_list_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+    actual_rows: int,
+) -> None:
+    capture = _terminal_capture_module()
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, Any]:
+            return {"items": [], "limit": 50, "truncated": False}
+
+    rows = [
+        {
+            "correlation": {"request_id": "request-1"},
+            "response_status": 200,
+            "operation": "audit.project",
+            "action": "read_metadata",
+            "content_state": "absent",
+            "redacted_content": None,
+        }
+        for _ in range(actual_rows)
+    ]
+    monkeypatch.setattr(capture, "new_projections", lambda _previous: rows)
+
+    with pytest.raises(AssertionError, match="expected detail success envelope"):
+        capture.expect_mutation_probe_rejection(
+            "wrong_route_mutation",
+            Response(),
+            set(),
+            expected_status=200,
+            expected_envelope="detail",
+            expected_rows=actual_rows,
         )
