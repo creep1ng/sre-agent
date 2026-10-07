@@ -77,4 +77,7 @@ identity/network/SSM adapter foundation with synthetic identity checks and
 Ruff pass at `142cced5ebe3ed55eafa3c0e53783d8f1832182f`. PR #508 published
 the compute/Scheduler adapter and shared controller at 316 changed lines;
 synthetic Docker checks confirmed two-hour schedule, down termination, and
-budget refusal at `63677a401361ecfaec99bec8da532851ecaddc00`.
+budget refusal at `63677a401361ecfaec99bec8da532851ecaddc00`. PR #509 published
+the directly executable CLI, preauthored entrypoint E2E, and sanitized
+worktree guide at 316 changed lines; Docker reported one E2E pass at
+`bc6920391615025754dcd6c534e35fc085ab04ef`.
