@@ -86,6 +86,10 @@ operation it verifies STS account and exact IAM user identity against
 `OTEL_DEMO_EXPECTED_ACCOUNT_ID`. Every AWS CLI call is pinned to profile
 `otel-demo` and `us-east-1`.
 
+`up` returns the existing active shared instance when its Scheduler deadline is
+verified, rather than launching another one. Repeating `down` after the instance
+is absent is a no-op.
+
 The initial lifetime is two hours. Extensions are bounded by twelve hours from
 the original launch. `connect` opens only a local SSM port-forward; select a
 different local port for each agent using the shared instance concurrently.

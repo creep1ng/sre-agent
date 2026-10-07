@@ -46,6 +46,9 @@ RDD: disabled by the global setting; ordinary policy applies.
   demonstrating shared reuse, bounded extension, SSM-only access, and cleanup.
 - [ ] **OTEL-PR-8** Publish sanitized operator documentation, full
   containerized verification, and final #494 criterion mapping.
+- [ ] **OTEL-PR-9** Close #494 acceptance gaps found in post-publication audit:
+  `up` reuses a live scheduled session, and `down` is idempotent when absent;
+  observe failing behavior checks before the fix and repeat focused Docker checks.
 
 ## Acceptance and progress
 
@@ -84,4 +87,10 @@ worktree guide at 316 changed lines; Docker reported one E2E pass at
 nine preauthored AWS identity/network behavior tests at 328 changed lines; Docker
 reported nine passes at `e2320203922a53cded89e3da69430fffb75b8309`. PR #511 published
 twelve preauthored cost/deadline checks at 232 changed lines; 22 cumulative
-launcher/CLI checks passed at `825131c0feab63326a1a4390cba582c272c8ce40`.
+launcher/CLI checks passed at `825131c0feab63326a1a4390cba582c272c8ce40`. PR #512 published
+the final eighteen preauthored lifecycle scenarios; 57 focused tests and Ruff
+passed offline at source SHA `e4739ae90e8c073e107d3e843afe2c22658a86b7`.
+GitHub CI then exposed a pytest import-path mismatch; PR #504 added root to
+`pythonpath` with a no-override Docker pass, and that fix was merge-forwarded
+through PR #512. Acceptance audit found `up` reuse and absent `down` gaps,
+tracked as OTEL-PR-9. Hosted CI and human review remain pending.

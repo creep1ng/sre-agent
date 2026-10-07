@@ -126,6 +126,28 @@ class OTelEc2Tests(unittest.TestCase):
         )
         self.assertNotIn("for file in compose.yaml compose.observability.yaml .env", user_data)
 
+    def test_up_reuses_existing_scheduled_session_without_new_launch(self) -> None:
+        aws = FakeAws()
+        aws.current_instance["launched"] = True
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        result = controller.up(now=datetime(2026, 9, 28, 13, 0, tzinfo=UTC))
+
+        self.assertEqual(result["instance_id"], "i-123")
+        names = [name for name, _, _ in aws.calls]
+        self.assertIn("termination_deadline", names)
+        self.assertNotIn("month_to_date_cost", names)
+        self.assertNotIn("run_instance", names)
+
+    def test_down_is_noop_when_shared_session_is_absent(self) -> None:
+        aws = FakeAws()
+        aws.current_instance = None
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        controller.down()
+
+        self.assertNotIn("terminate_instance", [name for name, _, _ in aws.calls])
+
     def test_up_requires_scheduler_before_instance_launch(self) -> None:
         aws = FakeAws(scheduler_ready=False)
         controller = DemoController(aws=aws, config=DemoConfig())
@@ -272,7 +294,7 @@ class OTelEc2Tests(unittest.TestCase):
         controller.down()
 
         names = [name for name, _, _ in aws.calls]
-        self.assertEqual(names, ["scheduler_ready", "instance_status", "terminate_instance"])
+        self.assertEqual(names, ["instance_status", "scheduler_ready", "terminate_instance"])
         self.assertNotIn("delete_schedule", names)
 
     def test_ssm_wait_retries_only_invocation_does_not_exist(self) -> None:
