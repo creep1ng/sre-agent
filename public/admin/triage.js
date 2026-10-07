@@ -29,6 +29,8 @@ const resultIncident = document.getElementById("result-incident");
 const resultVersion = document.getElementById("result-version");
 const resultActor = document.getElementById("result-actor");
 const resultDecided = document.getElementById("result-decided");
+const resultOrigin = document.getElementById("result-origin");
+const resultResponsibleSystem = document.getElementById("result-responsible-system");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
@@ -36,6 +38,11 @@ let sessionGeneration = 0;
 let commandInFlight = false;
 
 const text = (value) => (typeof value === "string" ? value : "");
+const DECISION_ORIGIN_LABELS = Object.freeze({
+  manual: "Manual",
+  external_automatic: "External automatic",
+  unknown: "Unknown (legacy)",
+});
 const announce = (message) => {
   liveRegion.textContent = message;
 };
@@ -94,6 +101,8 @@ function clearResultDisplay(summary) {
   resultVersion.textContent = "—";
   resultActor.textContent = "—";
   resultDecided.textContent = "—";
+  resultOrigin.textContent = "—";
+  resultResponsibleSystem.textContent = "—";
   resultSummary.textContent = summary;
 }
 
@@ -114,6 +123,13 @@ function setResult(operation, item, source = "live") {
   resultVersion.textContent = item.expected_version === undefined ? "—" : String(item.expected_version);
   resultActor.textContent = text(item.actor) || "—";
   resultDecided.textContent = text(item.decided_at) || "—";
+  const origin = text(item.decision_origin);
+  resultOrigin.textContent = DECISION_ORIGIN_LABELS[origin] ?? "—";
+  const responsibleSystem = text(item.responsible_system);
+  resultResponsibleSystem.textContent =
+    origin === "external_automatic" && responsibleSystem.trim() !== ""
+      ? responsibleSystem
+      : "—";
   versionInput.value = item.expected_version === undefined ? versionInput.value : String(item.expected_version);
   if (source === "recovered") {
     resultSummary.textContent =

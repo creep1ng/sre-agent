@@ -186,3 +186,17 @@ docker compose --env-file <private-local-checks-env> -p triage23reviewchecks -f 
 ```
 
 This new unit has not yet had a fresh Composebuild independently rerun. Matching cached dependencies/read-only source supplied the observed result. UI origin labels and complete durable setup package remain pending; do not claim fullCA6/fullissue acceptance from HTTP proof alone. Rollback removes external dismiss/link authority and provenance response while stored origin remains preserved by the separate migration.
+
+## Fresh committed backend Compose verification
+
+The parent archived exact backend commit `bbf5c974a93366c5a4410510e616d4e092852078` before the UI writer changed the shared checkout. An actual fresh `docker compose ... --profile checks run --build --rm python-checks` executed all `tests/test_triage*.py`, incident runtime, skill migration compatibility, migrations, health, incident persistence, demo seeds, consumption persistence and BOK HTTP modules. **179 passed in 145.21s**, exit0; image `sha256:754ffbad94fb5c6c19a1ef12bb7bf17a73ad0864156413a7f574c8ad57fd9f9a`. Unique log `/tmp/triage23-review/t23-11/parent-compose-bbf5c97.log`. This resolves the earlier pending fresh-build check for T23-11/T23-13. It proves that backend commit, not a future UI/package candidate, hosted CI or full issue acceptance.
+
+## Verified UI decision provenance
+
+T23-14 displays backend origin as Manual / External automatic / Unknown (legacy), and the external responsible-system ID only when explicitly provided. It neither classifies actors nor calculates thresholds. Missing provenance remains unavailable. Session disconnect/switch clears provenance.
+
+Parent independent prior-UI RED: **1 failed**, missing `#result-origin`, after real producer POST200 and external provenance assertions succeeded. Current seven suites: **40 passed in1.7m**, exit0, no skips (25 real integration journeys,15 route-mocked checks). Worker independently observed40passed2.0m. The real external journey uses producer HTTP POST, operator UI GET, reload and disconnect; manual declaration, genuine migrated legacy row and forged/unauthorized requests also pass. Logs `/tmp/triage23-review/t23-14/parent-{red,green}.log`.
+
+![Actual external decision read by operator](issue-23-external-origin.png)
+
+Parent inspected this genuine browser screenshot: synthetic alert/system/reason and empty credential field. Source JS SHA256 `9e2d03b4cefee9b3db696558669f3c38c04efbe7879e455f34e5d2b9366c895a`; HTML `7f73a5aeb5d48e4cea4802574a4de127684ae9db204607dc1b2d1013b8c33247`; origin spec `015ec541d3a0ac00995fd339b588ba6f6e1b1d4a07764e350fefce39b518b9cb`. This is local candidate proof, not hosted CI/human acceptance. Containerized fixture packaging, inbox routing, eligible list and domain action projection remain pending. External link has PostgreSQL/TestClient behavior evidence but no dedicated producer network/browser case yet. Rollback: revert UI provenance display; server storage/authority remains unchanged.

@@ -64,6 +64,8 @@ test("sends open_triage without reason and syncs state", async ({ page }) => {
   await send(page, "open_triage");
   expect(await observed.postDataJSON()).toEqual({ operation: "open_triage", expected_version: 1 });
   await expect(page.locator("#result-status")).toHaveText("open");
+  await expect(page.locator("#result-origin")).toHaveText("—");
+  await expect(page.locator("#result-responsible-system")).toHaveText("—");
   await expect(page.locator("#expected-version")).toHaveValue("2");
   await expect(page.locator("#triage-state")).toContainText("al-journey-01 is open (version 2).");
 });
