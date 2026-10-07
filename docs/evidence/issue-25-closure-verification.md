@@ -1,21 +1,25 @@
 # Issue 25 integrated closure-gap verification
 
 ## Candidate and scope
-The tested joint candidate is `791ce48e0bcd9496caf29f33df527166902bfadc`.
-Its runtime/helper/UI source is `25b48de45d0b25afb619a29e817ea51cfb5e9076`;
-the descendant changes only the existing governed-route test inventory. Runtime,
-helper, UI and Compose files are byte-identical between these SHAs. Captures
-truthfully retain deployed build revision25b48, not an invented791ce revision.
+The tested joint candidate is `13fc4ba1854ee75923a02da94311995e5d569c0e`.
+Runtime/helper/UI source is`e0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3`; the tested descendant changes only
+the existing usage-publication expectations. Runtime files are byte-identical,
+and captures truthfully retain deployed build revisione0fa793. This includes current main
+`31b4d2f8ba3dc292ea9bce59c069ffa21ebfc02f` (identity and incident mitigation UI).
 This includes PR378 → PR379 → PR385 → PR386 → PR490 → PR491 → PR497–502,
-PR514–517, three bounded post-review corrections (125/400/10 lines), and current
-main `c2074fd8cb90840bc1a747dfe5ad1ad332d9ee03` (authenticated identity API).
-Immutable contract2.7.0 and all earlier releases are preserved.
-Evidence/tracking-only commits do not replace the tested identity. This is joint
-candidate proof, not proof that an earlier parent independently implements children.
+PR514–517 and bounded post-review corrections (125/400/10/27/12/251 lines).
+Immutable contract2.7.0 and all earlier releases are preserved. The default runtime
+and safe example configuration activate2.7.0. Audit success payloads explicitly
+advertise a runtime-local projection schema, not the narrower frozen2.7 metadata URN.
+It derives all34 operations from the current DTO, retains accepted UUID/legacy IDs,
+and excludes redacted content, redaction tool version and policy reference.
+Evidence/tracking-only carriers are not independently tested joint source trees.
+Use the deterministic Git setup below before Docker builds, including when starting
+from a stacked evidence PR whose base does not contain the current-main union.
 Runtime source manifest SHA-256:
-`33640bab0e5b655d4e52481bd17b1ef339932f6b2d1f3e7fd2721a339f3e4463`.
+`b06fe806a4fec61d1ebca70f47e23220142091d05679704ba3cdb3d14e8d7fca`.
 The manifest hashes sorted paths relative to `src/`, NUL, file hash and newline;
-the host, verified HTTP helper image and running API matched independently.
+the host, current mounted HTTP helper source and rebuilt running API matched.
 HTTP helper SHA-256: `ae55d8a4d6fa802ff3793697e567b7d2a4766e98595fce25d617bf44b60069b6`.
 Terminal helper SHA-256: `483aceb37dfabc82d9e294f3c86641c1ade65cb20a86bf400d829acdbb135dd6`.
 Browser artifacts record served UI SHA-256
@@ -23,10 +27,14 @@ Browser artifacts record served UI SHA-256
 The allow producer requires three independently computed populated HMAC refs in
 actual SQL and HTTP; raw controlled incident/run/task IDs are not emitted.
 
-Full checks used the verified25b48 image plus only
-`tests/test_governed_authorization.py` from791ce mounted read-only. This exactly
-matches the tested candidate's source/test tree; it is not a claim the image was
-rebuilt after the fixture-only commit. The build recipe below rebuilds that tree.
+Full checks used the previously verified25b48 dependency image with current
+`src/`, `tests/`, `public/`, `docs/` and `.env.example` mounted read-only;
+Ruff cache used writable`/tmp`. Runtime/API/web were rebuilt from runtime source
+`e0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3`, byte-identical to the tested descendant.
+The HTTP/terminal helper processes also mounted current`src/` read-only. No image
+label or environment revision alone is treated as proof of executable source.
+The Docker reproduction below rebuilds the exact tested tree instead of reusing
+that dependency image. This is not an own-head execution claim for earlier units.
 An interrupted build initially left an8f51 helper image: independent hashes found
 the mismatch, rejected that temporary HTTP capture, and regenerated it after a
 successful source-verified build. No provenance fields were manually repaired.
@@ -63,14 +71,14 @@ database or query-only append-success proof; the HTTP boundary suite covers that
 ## Verification
 - Fresh-review UI failure-first: retained banner remained after a later successful
   detail; corrected scenario passes for both404 and503. Parent complete browser
-  suite on the integrated API/UI:12 passed in18.3s.
+  suite on the integrated API/UI:12 passed in22.0s.
 - Prior all-null correlation assertion failed; refreshed helper requires populated
   incident/run/task HMAC refs and passed actual producer/SQL checks. Producer
   statuses200/403/401/422/503 persist one row; append-failure503 persists zero.
-- Fresh full Python and prechecks: 1607 passed,1 skipped in310.49s;
+- Fresh full Python and prechecks: 1610 passed,1 skipped in286.94s;
   Ruff/format/lock/import boundaries/mypy and Alembic check passed. The skip is
   the opt-in live OpenRouter case..
-- Fresh terminal boundary and SQL capture: 13 passed in7.93s; actual helper
+- Fresh terminal boundary and SQL capture: 13 passed in9.42s; actual helper
   emitted11 JSONL records on the integrated image and isolated PostgreSQL..
   Typed mutation probes accept only exact1→0/1→2 row-count failures after valid
   HTTP envelopes and all SQL rows are checked; wrong statuses/malformed rows
@@ -92,6 +100,20 @@ database or query-only append-success proof; the HTTP boundary suite covers that
   manually inspected. Hosted CI, human acceptance and merge remain separate gates;
   no live-provider, killed-DB or offline demonstration is inferred.
 
+Native path uniqueness failed before the fix (1 failed in4.63s) and now passes;
+actual running OpenAPI has exactly one canonical`id` path parameter. Default-contract
+checks failed2/4 before activating2.7; scoped4GREEN8.64s preserves explicit overrides.
+Real persisted out-of-snapshot operations failed3/13 before the local projection
+schema. Parent scoped16GREEN12.75s includes runtime HTTP/OpenAPI/default metadata.
+The actual current API's complete list envelope and detail validate against the
+advertised local schemas; raw`issue-25-runtime-openapi.json` is unmodified HTTP output.
+Initial full runtimee0 run had1609pass/1skip/1fail399.66s: usage publication
+pinned2.6. The existing scenario's version/URN expectations were adapted to2.7
+without weakening selector/security/schema/inventory assertions (2GREEN5.77s),
+then the exact descendant full suite passed. No failed run is a fullGREEN.
+Initial scoped root format stopped at cache permission before pytest; cache-only
+`/tmp` correction passed. Worker first lint failed before formatting; not a pass.
+
 Post-review checks rejected a valid list envelope for detail reads and mutation
 probes before classifying row counts. Runtime OpenAPI now describes the released
 filters/path/bearer/success/error/governed scope. Digit-leading compact, braced and
@@ -102,11 +124,26 @@ its assertions were preserved and the inventory adapted before the full GREEN.
 Old8f51/first25b48 build jobs were interrupted(exit130), not counted as passes.
 
 ## Environment and safe reproduction
+Host Git preparation is mandatory before any Docker command below. These are
+repository setup operations, not host test/tool execution. The immutable tested
+commit is an ancestor of the published final integration branch; no PR head or
+floating main is substituted. From the repository, fetch and select it explicitly:
+
+```console
+git fetch https://github.com/creep1ng/sre-agent.git codex/issue-25-final-integration
+git worktree add --detach /tmp/issue25-proof-13fc4ba 13fc4ba1854ee75923a02da94311995e5d569c0e
+cd /tmp/issue25-proof-13fc4ba
+git rev-parse HEAD
+```
+
+Require exactly`13fc4ba1854ee75923a02da94311995e5d569c0e` before preparing ignored configuration.
+Do not copy an environment file containing someone else's credentials.
+
 Git/Docker host; Python3.12.14, PostgreSQL17.4 pinned digest and Playwright1.63.0
 images/lockfiles from the tested source. Prepare ignored mode600 `.env.worktree`
 from `.env.example`: DB `audit25_closure`, user `sre_agent`, URL host `db`, fresh
 synthetic keys/HMAC, `lab/model` + `lab`, no external keys, contract2.7.0,
-build revision25b48de45d0b25afb619a29e817ea51cfb5e9076 (the deployed runtime source). Never print/source/upload this file.
+build revisione0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3 (the deployed runtime source, byte-identical to the tested descendant). Never print/source/upload this file.
 Use a fresh Compose project; choose an unused `ISSUE25_EVIDENCE_SUBNET` when needed.
 Existing services only; combine the no-host-port overlay with the small IPAM overlay.
 The terminal helper resets only disposable `python_checks`, never the evidence DB.
@@ -116,9 +153,47 @@ docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f co
 docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml --profile checks run --build --rm python-checks
 docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml --profile e2e run --build --rm e2e npx playwright test --config=playwright.production.config.js tests/browser/audit-events.spec.js
 docker run --rm --network audit25-closure_runtime --env-file .env.worktree audit25-closure-python-checks python scripts/verify_issue25_audit.py > docs/evidence/issue-25-audit-http.json
+docker run --rm --network audit25-closure_runtime audit25-closure-python-checks python -c 'import httpx; r=httpx.get("http://api:8000/openapi.json"); r.raise_for_status(); print(r.text,end="")' > docs/evidence/issue-25-runtime-openapi.json
 docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml --profile checks run --rm python-checks sh -c 'pytest -q tests/test_audit_read_terminal_boundary.py && python scripts/capture_issue25_audit_terminal.py'
 docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/capture_issue25_audit.mjs:/e2e/capture.mjs:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e node /e2e/capture.mjs
 docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/capture_issue25_correlation.mjs:/e2e/capture.mjs:ro" -v "$PWD/public/admin/audit-events.js:/candidate/audit-events.js:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e node /e2e/capture.mjs
+```
+
+## Native schema behavior reproduction
+The following runs the independently observed complete-envelope check against the
+rebuilt API after the producer helper. It reads only the synthetic allow request;
+credentials come from the ignored environment and are never printed.
+
+```sh
+docker run --rm -i --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/docs/evidence:/evidence:ro" audit25-closure-python-checks python - <<'PY'
+import json, os
+import httpx
+from jsonschema import Draft202012Validator, FormatChecker
+with open('/evidence/issue-25-audit-http.json') as f:
+    evidence=json.load(f)
+request_id=next(case['request_id'] for case in evidence['cases'] if case['name']=='allow')
+with httpx.Client(base_url='http://api:8000', headers={'Authorization':'Bearer '+os.environ['ADMIN_HUMAN_API_KEY']}) as client:
+    document=client.get('/openapi.json').json()
+    assert document['info']['x-sre-agent-build-revision']=='e0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3'
+    assert document['info']['x-sre-agent-contract-version']=='2.7.0'
+    listing=document['paths']['/v1/audit-events']['get']
+    detail=document['paths']['/v1/audit-events/{id}']['get']
+    params=detail['parameters']; assert len(params)==1 and params[0]['name']=='id' and params[0]['in']=='path'
+    list_schema=listing['responses']['200']['content']['application/json']['schema']
+    detail_schema=detail['responses']['200']['content']['application/json']['schema']
+    assert list_schema['properties']['items']['items']==detail_schema
+    assert detail_schema['$id']=='urn:sre-agent:runtime-schema:audit-event-metadata'
+    assert len(detail_schema['properties']['operation']['enum'])==34
+    response=client.get('/v1/audit-events',params={'request_id':request_id})
+    assert response.status_code==200
+    payload=response.json(); Draft202012Validator(list_schema,format_checker=FormatChecker()).validate(payload)
+    assert len(payload['items'])==1
+    response=client.get('/v1/audit-events/'+payload['items'][0]['event_id'])
+    assert response.status_code==200
+    Draft202012Validator(detail_schema,format_checker=FormatChecker()).validate(response.json())
+    assert response.json()==payload['items'][0]
+print('Actual current API: contract2.7/sourcee0fa793, unique path, 34-operation local schema; complete list and detail validate.')
+PY
 ```
 
 ## Detail error recovery screenshot
@@ -126,7 +201,7 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --e
 existing mock journey: detailA404/503 survives list refresh, then detailB200 clears
 the retained banner. It is not a connected API claim. The container derives only
 screenshot/output settings from the committed production config; traces remain off
-and the test/source files are unchanged. The focused journey passed in4.9s.
+and the test/source files are unchanged. The focused journey passed in7.0s.
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'node --input-type=module -e '\''import config from "./playwright.production.config.js"; import {writeFileSync} from "node:fs"; config.use.screenshot="on"; config.outputDir="/tmp/detail-recovery"; config.testDir="/e2e/tests/browser"; writeFileSync("/tmp/issue25-evidence.config.mjs", "export default "+JSON.stringify(config));'\'' && npx playwright test --config=/tmp/issue25-evidence.config.mjs -g "clears a retained detail error when a later detail request succeeds" && find /tmp/detail-recovery -name test-finished-1.png -exec cp {} /evidence/issue-25-detail-recovery.png \;'
@@ -159,16 +234,19 @@ checks and restores the table after the rename; the saved SQL readback is `t|t`
 only when the original table exists and the temporary fault name is absent.
 
 ## Technical acceptance
-I explicitly accept the five requested closure corrections on exact joint candidate
-`791ce48e0bcd9496caf29f33df527166902bfadc`, based on independent complete Docker
-checks, actual populated HTTP/SQL correlation, terminal persistence/release-gate
-invariants and inspected real browser captures. This supersedes provisional e1847/a592
-local technical acceptance for the current delivery candidate, not its historic facts.
-CA1 acceptance covers bounded filtering and truthful truncation; stable pagination
-remains explicitly deferred to #470, not delivered. This is local technical
-acceptance, not independent human acceptance, hosted CI or a merge approval.
-Fresh GitHub Codex review and ordinary human freshness acceptance remain pending.
-The user approved a size exception only for final atomic integration; each fresh
-correction PR remains at most400 changed lines. No protection or review bypass.
-Rollback: revert the bounded runtime/UI changes; immutable releases untouched.
-Sanitized: yes. Captures contain synthetic metadata, no raw producer content or keys.
+I explicitly accept the five requested closure corrections on exact joint source
+`13fc4ba1854ee75923a02da94311995e5d569c0e`, based on the complete Docker checks, actual HTTP/SQL persistence,
+source-matched inspected captures and native runtime OpenAPI/schema verification.
+Earlier791/e1847/a592 acceptance is qualified by the subsequently corrected findings;
+its historical checks are not inflated into current proof. The runtime-local schema
+is an explicit implementation extension, not a claim that the frozen2.7 operation
+enum covers every persisted event. No operations are hidden or rewritten.
+CA1 covers bounded filtering and truthful truncation; stable pagination remains
+explicitly deferred to#470. This is local technical acceptance, not independent
+human acceptance, hosted CI or merge approval. Fresh exact-head GitHub Codex review,
+all hosted checks and human freshness acceptance remain pending. User's previous
+receipt covered onlyee827/sourcea592 with those conditions; it does not transfer.
+Final atomic integration alone has the user-approved size exception; every fresh
+correction remains at most400 changed lines. No protection or review bypass.
+Rollback: revert bounded runtime/UI corrections; immutable releases untouched.
+Sanitized: yes. Controlled metadata only, no raw producer content or credentials.
