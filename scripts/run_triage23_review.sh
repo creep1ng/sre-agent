@@ -37,7 +37,7 @@ echo "Building pinned repository services. Logs: $RUN_DIR/build.log"
 "${COMPOSE[@]}" run --build --rm --user "$(id -u):$(id -g)" seed 2>&1 | tee "$RUN_DIR/seed.log"
 test "$(stat -c '%a' "$ARTIFACTS/credentials.env")" = 600
 "${COMPOSE[@]}" up -d api web 2>&1 | tee "$RUN_DIR/services.log"
-echo "Running all eight selected suites (46 tests) with one worker; logs: $RUN_DIR/browser.log"
+echo "Running all nine selected suites (54 tests) with one worker; logs: $RUN_DIR/browser.log"
 set +e
 "${COMPOSE[@]}" run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp e2e sh /run/triage23-browser.sh \
   > "$RUN_DIR/browser.log" 2>&1
@@ -45,4 +45,4 @@ rc=$?
 set -e
 if (( rc != 0 )); then cat "$RUN_DIR/browser.log" >&2; exit "$rc"; fi
 cat "$RUN_DIR/browser.log"
-echo "Real screenshots: $ARTIFACTS/external-origin.png, $ARTIFACTS/recovery.png, $ARTIFACTS/c3a-session-isolation.png, $ARTIFACTS/c3e-ca5-forbidden.png"
+echo "Real screenshots and three inbox decision videos are under $ARTIFACTS (triage-eligible after-command and after-reload screenshots; test-results videos)."

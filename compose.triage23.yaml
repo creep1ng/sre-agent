@@ -79,6 +79,7 @@ services:
       E2E_API_BASE_URL: http://api:8000
       T23_14_ARTIFACT_DIR: /artifacts
       T23_2_ARTIFACT_DIR: /artifacts
+      T23_18_ARTIFACT_DIR: /artifacts
     volumes:
       - ${T23_ARTIFACTS_DIR:?set a private artifact directory}:/artifacts
       - ${T23_ARTIFACTS_DIR:?set a private artifact directory}:/e2e/docs/evidence
