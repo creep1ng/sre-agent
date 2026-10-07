@@ -1,6 +1,7 @@
 """Admin audit reads over the published 2.3.0 contract (issue #25, chain B2b)."""
 
 import re
+from copy import deepcopy
 from datetime import datetime
 from time import monotonic
 from typing import Annotated, Any
@@ -12,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
-from sre_agent.governance.dto import PrincipalContext
+from sre_agent.governance.dto import AuditEvent, PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.models import AuditEventRow
 from sre_agent.persistence.repositories import (
@@ -53,6 +54,35 @@ AUDIT_EVENT_ID_SCHEMA = {
         },
     ]
 }
+RUNTIME_METADATA_SCHEMA_ID = "urn:sre-agent:runtime-schema:audit-event-metadata"
+RUNTIME_METADATA_SCHEMA = "RuntimeAuditEventMetadata"
+
+
+def _runtime_metadata_schema() -> dict[str, Any]:
+    """Describe the actual runtime projection without changing frozen releases."""
+    schema = AuditEvent.model_json_schema(ref_template="#/$defs/{model}")
+    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    schema["$id"] = RUNTIME_METADATA_SCHEMA_ID
+    schema["title"] = RUNTIME_METADATA_SCHEMA
+    schema["x-sre-agent-schema-scope"] = "runtime-local-projection"
+    schema["properties"]["event_id"] = deepcopy(AUDIT_EVENT_ID_SCHEMA)
+    schema["properties"].pop("redacted_content", None)
+    if "redacted_content" in schema.get("required", []):
+        schema["required"].remove("redacted_content")
+    for definition, field in (
+        ("Redaction", "tool_schema_version"),
+        ("AllowDecisionEvidence", "policy_ref"),
+        ("DenyDecisionEvidence", "policy_ref"),
+    ):
+        nested = schema.get("$defs", {}).get(definition)
+        if nested is not None:
+            nested.get("properties", {}).pop(field, None)
+            if field in nested.get("required", []):
+                nested["required"].remove(field)
+    return schema
+
+
+RUNTIME_METADATA_SCHEMA_VALUE = _runtime_metadata_schema()
 AUDIT_LIST_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -61,7 +91,7 @@ AUDIT_LIST_SCHEMA = {
         "items": {
             "type": "array",
             "maxItems": MAX_LIMIT,
-            "items": {"$ref": "urn:sre-agent:schema:audit-event-metadata:2.7.0"},
+            "items": deepcopy(RUNTIME_METADATA_SCHEMA_VALUE),
         },
         "limit": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT},
         "truncated": {"type": "boolean"},
@@ -495,9 +525,7 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
             200: {
                 "description": "Metadata-only AuditEvent projection",
                 "content": {
-                    "application/json": {
-                        "schema": {"$ref": "urn:sre-agent:schema:audit-event-metadata:2.7.0"}
-                    }
+                    "application/json": {"schema": deepcopy(RUNTIME_METADATA_SCHEMA_VALUE)}
                 },
             },
         },

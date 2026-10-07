@@ -2,8 +2,10 @@
 
 import json
 import os
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -16,7 +18,7 @@ from referencing import Registry, Resource
 
 from sre_agent.application import create_application
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.audit_reads import AuditReadsService, _valid_event_id
+from sre_agent.gateway.audit_reads import AuditReadsService, _valid_event_id, project_metadata
 from sre_agent.gateway.responses import PostgresAuditStore
 from sre_agent.governance.dto import AuditEvent
 from sre_agent.persistence.database import Database
@@ -178,6 +180,72 @@ def _metadata_validator():
     )
 
 
+def _resolve_openapi_schema(schema: Any, document: dict[str, Any]) -> Any:
+    if isinstance(schema, list):
+        return [_resolve_openapi_schema(value, document) for value in schema]
+    if not isinstance(schema, dict):
+        return schema
+    reference = schema.get("$ref")
+    if reference is not None:
+        prefix = "#/components/schemas/"
+        if not reference.startswith(prefix):
+            return schema
+        target = deepcopy(document["components"]["schemas"][reference.removeprefix(prefix)])
+        target.update({key: value for key, value in schema.items() if key != "$ref"})
+        return _resolve_openapi_schema(target, document)
+    return {
+        key: _resolve_openapi_schema(value, document) if isinstance(value, dict | list) else value
+        for key, value in schema.items()
+    }
+
+
+def _runtime_audit_metadata_validator(client: TestClient):
+    document = client.get("/openapi.json").json()
+    detail = document["paths"]["/v1/audit-events/{id}"]["get"]
+    schema = detail["responses"]["200"]["content"]["application/json"]["schema"]
+    reference = schema.get("$ref")
+    if reference is not None and reference.startswith("urn:"):
+        schemas = {}
+        for path in (ROOT / "schemas/releases/2.7.0/json-schema").rglob("*.schema.json"):
+            value = json.loads(path.read_text())
+            schemas[value["$id"]] = value
+        registry = Registry().with_resources(
+            [(schema_id, Resource.from_contents(value)) for schema_id, value in schemas.items()]
+        )
+        return Draft202012Validator(
+            schemas[reference], registry=registry, format_checker=FormatChecker()
+        )
+    resolved = _resolve_openapi_schema(schema, document)
+    return Draft202012Validator(resolved, format_checker=FormatChecker())
+
+
+def make_non_llm_event(number: int, operation: str) -> AuditEvent:
+    event = make_event(number, hours=5 + number % 15)
+    values = event.model_dump(mode="python")
+    values["operation"] = operation
+    values["model_alias_ref"] = None
+    values["action"] = {
+        "bok.search": "read_metadata",
+        "bok.read": "read_metadata",
+        "catalog.status.replace": "admin.write",
+        "skills.resolve": "invoke",
+        "consumption_limits.get": "admin.read",
+        "consumption_limits.replace": "admin.write",
+    }[operation]
+    resource_type = (
+        "bok_collection"
+        if operation.startswith("bok.")
+        else ("skill" if operation == "skills.resolve" else "administrative_control")
+    )
+    values["resource"] = {
+        "resource_type": resource_type,
+        "resource_ref": _ref("resource", f"{resource_type}/metadata-schema-{number}"),
+    }
+    values["routing"] = None
+    values["consumption"] = None
+    return AuditEvent.model_validate(values)
+
+
 WINDOW_QS = "from=2026-09-20T00:00:00Z&to=2026-09-21T00:00:00Z"
 
 
@@ -287,6 +355,70 @@ def test_detail_metadata_conforms_and_404() -> None:
     assert legacy_missing.status_code == 404
     _assert_terminal_validation_record(legacy_missing, 404, "authorization")
     assert client.get("/v1/audit-events/NOPE!", headers=headers).status_code == 422
+
+
+def test_mounted_operations_validate_in_list_and_detail_metadata() -> None:
+    import asyncio
+
+    operations = (
+        "bok.search",
+        "bok.read",
+        "catalog.status.replace",
+        "skills.resolve",
+        "consumption_limits.get",
+        "consumption_limits.replace",
+    )
+    events = [
+        make_non_llm_event(201 + index, operation) for index, operation in enumerate(operations)
+    ]
+    database = Database(DATABASE_URL)
+
+    async def append_mounted_operations() -> None:
+        async with database.transaction() as session:
+            repository = AuditRepository(session)
+            for event in events:
+                await repository.append(event)
+
+    asyncio.run(append_mounted_operations())
+    asyncio.run(database.dispose())
+
+    client = _client()
+    validator = _runtime_audit_metadata_validator(client)
+    headers = {"Authorization": BEARERS["admin"]}
+    listed = client.get(f"/v1/audit-events?{WINDOW_QS}", headers=headers)
+    assert listed.status_code == 200, listed.text
+    by_id = {item["event_id"]: item for item in listed.json()["items"]}
+    for event in events:
+        event_id = str(event.event_id)
+        assert event_id in by_id
+        assert by_id[event_id]["operation"] == event.operation
+        validator.validate(by_id[event_id])
+
+        detail = client.get(f"/v1/audit-events/{event_id}", headers=headers)
+        assert detail.status_code == 200, detail.text
+        assert detail.json()["operation"] == event.operation
+        validator.validate(detail.json())
+
+    # Both event-ID forms accepted by the route remain represented by the
+    # runtime-local schema; the published examples remain unchanged.
+    projected = project_metadata(events[0].model_dump(mode="json"))
+    validator.validate(projected)
+    for event_id in (DIGIT_EVENT_ID, "cor_12345678-1234-1234-8234-123456789012"):
+        candidate = {**projected, "event_id": event_id}
+        assert _valid_event_id(event_id)
+        validator.validate(candidate)
+
+    for forbidden in (
+        {"redacted_content": {"representation": "fully_redacted"}},
+        {"redaction": {**projected["redaction"], "tool_schema_version": "1.0.0"}},
+        {
+            "policy_decision": {
+                **projected["policy_decision"],
+                "policy_ref": {"algorithm": "hmac-sha-256"},
+            }
+        },
+    ):
+        assert not validator.is_valid({**projected, **forbidden})
 
 
 def _assert_terminal_validation_record(response, status: int, stage: str) -> None:
