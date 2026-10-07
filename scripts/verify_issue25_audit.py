@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import sys
@@ -17,6 +18,11 @@ from fastapi.testclient import TestClient
 
 ROOT = "/app"
 CORRELATION_FIELDS = ("incident_ref", "run_ref", "task_ref", "trace_ref")
+CONTROLLED_CORRELATION_IDS = {
+    "incident_id": "inc_issue25audit",
+    "run_id": "run_issue25audit",
+    "task_id": "task_issue25audit",
+}
 
 
 class Provider:
@@ -130,6 +136,15 @@ def http_correlation(item, request_id):
     return safe_correlation(normalized, request_id)
 
 
+def expected_reference(key, field, identifier):
+    payload = f"sre-audit-v1\0{field}\0{identifier}".encode()
+    return {
+        "algorithm": "hmac-sha-256",
+        "digest": hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest(),
+        "key_version": 1,
+    }
+
+
 def application_source_sha256():
     source_root = Path(ROOT) / "src"
     entries = []
@@ -170,7 +185,7 @@ def main():
     provider = Provider()
     with TestClient(create_application(settings, llm_provider=provider)) as client:
         scenarios = (
-            ("allow", env.get("INCIDENT_HARNESS_API_KEY"), {}, 200),
+            ("allow", env.get("INCIDENT_HARNESS_API_KEY"), CONTROLLED_CORRELATION_IDS, 200),
             ("deny", env["RESTRICTED_HARNESS_API_KEY"], {}, 403),
             ("auth401", None, {}, 401),
             ("invalid422", env.get("INCIDENT_HARNESS_API_KEY"), {"input": ""}, 422),
@@ -198,6 +213,25 @@ def main():
             sql_correlation = safe_correlation(rows[0][3], request_id)
             if http_correlation(item, request_id) != sql_correlation:
                 raise RuntimeError("HTTP/SQL correlation mismatch: " + name)
+            if name == "allow":
+                expected_refs = {
+                    field.removesuffix("_id") + "_ref": expected_reference(
+                        settings.audit_hmac_key, field, identifier
+                    )
+                    for field, identifier in CONTROLLED_CORRELATION_IDS.items()
+                }
+                projections = (
+                    ("SQL", sql_correlation),
+                    ("HTTP", http_correlation(item, request_id)),
+                )
+                for projection_name, projection in projections:
+                    if any(
+                        projection.get(field) != reference
+                        for field, reference in expected_refs.items()
+                    ):
+                        raise RuntimeError(
+                            f"populated {projection_name} correlation mismatch: {name}"
+                        )
             cases.append(
                 {
                     "name": name,
