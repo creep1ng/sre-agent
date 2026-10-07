@@ -323,7 +323,7 @@ class TriageService:
                     await session.execute(
                         text(
                             "SELECT state->>'state' AS state FROM incident.incidents"
-                            " WHERE incident_id=:incident_id"
+                            " WHERE incident_id=:incident_id FOR UPDATE"
                         ),
                         {"incident_id": target_incident_id},
                     )
