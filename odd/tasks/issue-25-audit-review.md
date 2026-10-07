@@ -583,3 +583,49 @@ Parentmanuallyinspectedall9PNGs; privatevalue13textartifacts/syntheticmarkerscan
 InitialDockerdefaultUIDprivateenvscanpermissionfailure correctedhostUID/mode600
 unchanged. Sourcefinald0treeidenticalf24. Reportrefresh/boundedpublication/newexact
 Codex/ALLCI/freshhumanreceipt/ordinaryconditionalmerge remainpending; NO merge.
+
+Published fresh boundedunits551detail82/e64over547,552sidebar5/7447over548,
+553freshproof302/b644over549; allnativeattachmentsconfirmed. Currentfinal518
+head1be80efeee25563da9f54db97c1f0058f5f28105/base9d6ed3 size5278 final-onlyexception;
+source/test/public/script/configbytesidenticalactuallytested/deployedf24.
+Reportcurrenttechnicalacceptancef24renewed, historical5ac labelednotcurrent;
+parentcorrectedworkerunexecutedstaticrecipe to actualoriginalconfig/rootassets
+loopbacktopologybeforepublication. Actualremotebody trustedDocker/networknone
+validatorGREEN[]exit0. ExactheadCodexrequested6043851594. LiveProjects25CLOSED/Done
+is humanstate, not proofintegration. NewallCI/Codex/humanfreshreceipt pending.
+No merge oroldreceipttransfer. This taskappendnotpushed: finalhead stays1be80.
+
+Fresh exact1beCodexreview5446408317 at18:10:09Z newP2comment4210324797:
+- [x] T40 Enforce published RFC3339 syntax for from/to before broad Python ISO
+  parsing. Preauthor actual authorized HTTP422+exactonevalidationterminal for
+  basic/week/date-only/missing-zone forms alongside validdecisionfilter; preserve
+  validextendedUTC/offset/fraction forms and auth/grantordering. ObserveREDbefore
+  boundedsourcefix; exactDockerGREEN, currentunion/provenance/reviewCIhumanagain.
+Currentlocaltechnicalacceptancef24qualified; NO merge/freshhumanreceipttransfer.
+Hosted1beunitSUCCESS; contracts/staticpending atlastsnapshot, notallchecksPASS.
+
+T40 failurefirstfinalRED9failed51passed24.02s before86linefix. Initialpre-source
+helpergeneralizednosubjectvalidation toauthorization404 (10fails) correctedbefore
+source, finalREDgenuine. Worker60GREEN27.35s/Ruffformat/diffcheckPASS,28preauthored
+cases include24malformed from/to+4legal UTC/offset/fraction/lowercaset/zforms.
+Parentreviewed/committed731ec67304e05a9f981e945599696a34921a1d2e (84add2del);
+boundedchild2a5c8a5over551,86lines, unpublished. OnlyASCIIextendedsyntax before
+calendarparse, RFC3339§5.6lowercaset/z normalized, offsetrangesexplicit; unchanged
+leap-seconddatetime limitation, no snapshot/DTOexception/dependencychange.
+Finalancestry5541290 sourceidentical731; fullDocker42474/runtimebrowser65246/
+static79778 running, actualHTTP/native/detail/timecaptures starting. No newfull
+GREEN/currenttechnicalacceptance/remoteheadupdate claimed yet; NO merge.
+
+Current731 fullDocker1644passed1opt-inliveOpenRouterSkip448.88s/prechecksAlembicPASS
+exit0; rebuiltAPIaudit14passed37.7s; fullstatic76pass60skip2.1m/exit0cleanup.
+Freshhost/API/helperhash9ec98adb3e3b245591727fbefb55f64de81a01a2652cee957946868c55cbce0a
+matches; nativecomplete34oplist/detailschemaPASS; realdetail5+time12JSONL exactly
+1terminal/status/stage/safemetadataeach. Initialdetaildelta overlappedbrowserread
+writers, exactoneassertionfailed, partialcapture rejected thenall5+12rerunsequentially;
+no manualfieldrepair. Freshterminal13passed9.10s+11actualJSONL; connectedallowdeny
+200403200/3nonnullHMACrefs; realfault200503clear1/1→0/0visibleerror restoredt|t.
+Freshnav1/5s/mockrecovery1/5.6s; all9PNGsparentinspected;14textprivatevalue/markerscans
+PASS. Updatedreportexact731 localtechnicalacceptance; immutableleap-seconddatetime
+limitationunchanged; RFC3339primarysourcecited. Newboundedproofover553 prepared
+240lines incl86source/12timeJSONL, publication/newreviewALLCIhuman gatespending.
+NO merge; old1behostedallchecksSUCCESSdoesnoteraseRFC3339Codexfinding.
