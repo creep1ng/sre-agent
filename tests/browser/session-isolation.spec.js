@@ -35,6 +35,8 @@ async function expectNeutralPanel(page, stateLine = "Connect to begin.") {
   await expect(page.locator("#result-version")).toHaveText("—");
   await expect(page.locator("#result-actor")).toHaveText("—");
   await expect(page.locator("#result-decided")).toHaveText("—");
+  await expect(page.locator("#result-origin")).toHaveText("—");
+  await expect(page.locator("#result-responsible-system")).toHaveText("—");
   await expect(page.locator("#result-summary")).toHaveText("No command sent yet.");
   await expect(page.locator("#triage-state")).toHaveText(stateLine);
   await expect(page.locator("#expected-version")).toHaveValue("1");

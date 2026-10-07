@@ -89,6 +89,7 @@ test("stale command reads the winning version before explicit resubmission", asy
   await expect(page.locator("#page-error-title")).toHaveText("Conflict");
   await expectRecoveryRead(page, beforeStaleSubmit);
   await expect(page.locator("#result-status")).toHaveText("open");
+  await expect(page.locator("#result-origin")).toHaveText("Manual");
   await expect(page.locator("#result-version")).toHaveText("2");
   await expect(page.locator("#expected-version")).toHaveValue("2");
   await expect(page.locator("#result-summary")).toContainText("Recovered from backend");
@@ -191,6 +192,8 @@ test("failed recovery read keeps conflict and never invents current state", asyn
     "Current state could not be verified; no command was confirmed.",
   );
   await expect(page.locator("#result-status")).toHaveText("—");
+  await expect(page.locator("#result-origin")).toHaveText("—");
+  await expect(page.locator("#result-responsible-system")).toHaveText("—");
   await expect(page.locator("#result-version")).toHaveText("—");
   await expect(page.locator("#expected-version")).toHaveValue("1");
   await expect(page.locator("#alert-id")).toHaveValue(id);
