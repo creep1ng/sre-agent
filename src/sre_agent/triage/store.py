@@ -36,6 +36,8 @@ class TriageRepository:
         severity: str | None,
         actor: str,
         decided_at: datetime,
+        decision_origin: str = "unknown",
+        responsible_system: str | None = None,
     ) -> Any | None:
         params = {
             "alert_id": alert_id,
@@ -45,15 +47,19 @@ class TriageRepository:
             "severity": severity,
             "actor": actor,
             "decided_at": decided_at,
+            "decision_origin": decision_origin,
+            "responsible_system": responsible_system,
             "expected_version": expected_version,
         }
         if expected_version is None:
             result = await self._session.execute(
                 text(
                     "INSERT INTO alert_triage (alert_id, status, incident_id,"
-                    " expected_version, reason, severity, actor, decided_at)"
+                    " expected_version, reason, severity, actor, decided_at,"
+                    " decision_origin, responsible_system)"
                     " VALUES (:alert_id, :status, :incident_id, 1, :reason,"
-                    " :severity, :actor, :decided_at) ON CONFLICT DO NOTHING"
+                    " :severity, :actor, :decided_at, :decision_origin,"
+                    " :responsible_system) ON CONFLICT DO NOTHING"
                 ),
                 params,
             )
@@ -62,7 +68,9 @@ class TriageRepository:
                 text(
                     "UPDATE alert_triage SET status=:status, incident_id=:incident_id,"
                     " expected_version=expected_version+1, reason=:reason,"
-                    " severity=:severity, actor=:actor, decided_at=:decided_at"
+                    " severity=:severity, actor=:actor, decided_at=:decided_at,"
+                    " decision_origin=:decision_origin,"
+                    " responsible_system=:responsible_system"
                     " WHERE alert_id=:alert_id AND expected_version=:expected_version"
                 ),
                 params,

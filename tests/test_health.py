@@ -19,7 +19,7 @@ DATABASE_URL = os.environ.get(
 
 
 def test_readiness_requires_incident_workflow_catalog_migration() -> None:
-    assert REQUIRED_SCHEMA_VERSION == "20260923_13"
+    assert REQUIRED_SCHEMA_VERSION == "20261006_01"
 
 
 @pytest.fixture(scope="module")
@@ -43,7 +43,7 @@ def migrated_database() -> None:
 def test_readiness_accepts_database_at_current_migration_head() -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         version = connection.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-    assert version == "20260923_13"
+    assert version == "20261006_01"
 
     client = TestClient(
         create_application(
