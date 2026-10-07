@@ -80,4 +80,6 @@ synthetic Docker checks confirmed two-hour schedule, down termination, and
 budget refusal at `63677a401361ecfaec99bec8da532851ecaddc00`. PR #509 published
 the directly executable CLI, preauthored entrypoint E2E, and sanitized
 worktree guide at 316 changed lines; Docker reported one E2E pass at
-`bc6920391615025754dcd6c534e35fc085ab04ef`.
+`bc6920391615025754dcd6c534e35fc085ab04ef`. PR #510 published
+nine preauthored AWS identity/network behavior tests at 328 changed lines; Docker
+reported nine passes at `e2320203922a53cded89e3da69430fffb75b8309`.
