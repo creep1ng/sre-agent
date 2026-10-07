@@ -47,7 +47,14 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-review_runtime --en
 docker compose -p audit25-review --env-file .env.worktree -f compose.yaml -f compose.e2e.yaml --profile checks --profile e2e down
 ```
 
-## Remaining acceptance gaps
+## Remaining findings and acceptance gaps
+
+Two runtime P1s remain outside this navigation UI: #378 still lacks terminal
+audit records for audit-read outcomes, and the separate legacy event-ID lookup
+path still needs its governed-404 compatibility follow-up. These captures do not
+exercise either behavior. The separate contract PR #493 (`c76476c`) corrected the
+additive contract-ID union and received Codex no issues, but its full checks remain
+pending.
 
 P2 truncation notice and hidden 404 remain. Missing-filter interactions with
 forbidden query keys, real database outage, browser-offline behavior, live
