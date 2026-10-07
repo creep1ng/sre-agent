@@ -495,6 +495,74 @@ def _assert_terminal_validation_record(response, status: int, stage: str) -> Non
     assert row["stage"] == stage
     assert row["content_state"] == "absent"
     assert row["correlation"]["request_id"] == request_id
+    assert row["redacted_content"] is None
+    if stage == "validation":
+        assert all(row.get(key) is None for key in ("identity", "resource", "policy_decision"))
+
+
+@pytest.mark.parametrize("field", ("from", "to"))
+@pytest.mark.parametrize(
+    "timestamp",
+    (
+        "20260920T000000Z",
+        "2026-W38-7T00:00:00Z",
+        "2026-09-20",
+        "2026-09-20T00:00:00",
+        "2026-09-20T00:00Z",
+        "2026-09-20T00:00:00,1Z",
+        "2026-09-20T00:00:00+0000",
+        "2026-09-20T00:00:00+00:00:30",
+        "2026-02-30T00:00:00Z",
+        "2026-09-20T24:00:00Z",
+        "2026-09-20T00:00:00+00:60",
+        "2026-09-20T00:00:00+24:00",
+    ),
+    ids=(
+        "basic-date-time",
+        "week-date",
+        "date-only",
+        "missing-zone",
+        "missing-seconds",
+        "comma-fraction",
+        "offset-without-colon",
+        "offset-seconds",
+        "invalid-calendar-date",
+        "invalid-hour",
+        "offset-minute-overflow",
+        "offset-hour-overflow",
+    ),
+)
+def test_non_rfc3339_time_filter_is_audited_validation_error(field, timestamp) -> None:
+    params = {
+        "decision": "deny",
+        "from": "2026-09-20T00:00:00Z",
+        "to": "2026-09-21T00:00:00Z",
+    }
+    params[field] = timestamp
+    response = _client().get(
+        "/v1/audit-events", params=params, headers={"Authorization": BEARERS["admin"]}
+    )
+    assert response.status_code == 422, response.text
+    _assert_terminal_validation_record(response, 422, "validation")
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    (
+        ("2026-09-20T00:00:00Z", "2026-09-21T00:00:00Z"),
+        ("2026-09-20T00:00:00-04:00", "2026-09-21T00:00:00+02:00"),
+        ("2026-09-20T00:00:00.123Z", "2026-09-21T00:00:00.123456Z"),
+        ("2026-09-20t00:00:00z", "2026-09-21t00:00:00z"),
+    ),
+)
+def test_rfc3339_time_filter_forms_remain_accepted(start, end) -> None:
+    response = _client().get(
+        "/v1/audit-events",
+        params={"decision": "deny", "from": start, "to": end},
+        headers={"Authorization": BEARERS["admin"]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["truncated"] is False
 
 
 @pytest.mark.parametrize(
