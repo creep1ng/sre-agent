@@ -73,6 +73,11 @@ TERMINAL_STATES = {"dismissed", "linked", "declared"}
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ELIGIBLE = {"active", "investigating", "mitigating", "verifying"}
 ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
+RFC3339_PATTERN = (
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?"
+    r"(?:Z|[+-]\d{2}:\d{2})$"
+)
+ALERT_CONTEXT_KEYS = frozenset({"service", "summary", "observed_at", "source", "severity"})
 
 
 class TriageError(Exception):
@@ -183,6 +188,7 @@ class TriageService:
         severity: Any,
         impact: Any,
         target: Any,
+        alert_context: Any,
         key: str,
     ) -> None:
         if (
@@ -213,6 +219,29 @@ class TriageService:
                 raise TriageError(422, "invalid_severity")
             if not isinstance(impact, str) or not impact.strip() or len(impact) > 2000:
                 raise TriageError(422, "invalid_impact")
+            self._check_alert_context(alert_context)
+        elif alert_context is not None:
+            raise TriageError(422, "invalid_alert_context")
+
+    @staticmethod
+    def _check_alert_context(value: Any) -> None:
+        if not isinstance(value, dict) or set(value) != ALERT_CONTEXT_KEYS:
+            raise TriageError(422, "invalid_alert_context")
+        for field, maximum in (("service", 200), ("summary", 2000), ("source", 200)):
+            item = value[field]
+            if not isinstance(item, str) or not item.strip() or len(item) > maximum:
+                raise TriageError(422, "invalid_alert_context")
+        if value["severity"] not in SEVERITIES:
+            raise TriageError(422, "invalid_alert_context")
+        observed_at = value["observed_at"]
+        if not isinstance(observed_at, str) or not re.fullmatch(RFC3339_PATTERN, observed_at):
+            raise TriageError(422, "invalid_alert_context")
+        try:
+            parsed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise TriageError(422, "invalid_alert_context") from None
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise TriageError(422, "invalid_alert_context")
 
     async def execute(
         self,
@@ -224,6 +253,7 @@ class TriageService:
         reason: str | None = None,
         severity: str | None = None,
         impact: str | None = None,
+        alert_context: dict[str, Any] | None = None,
         target_incident_id: str | None = None,
         idempotency_key: str,
     ) -> TriageResult:
@@ -235,6 +265,7 @@ class TriageService:
             severity,
             impact,
             target_incident_id,
+            alert_context,
             idempotency_key,
         )
         payload = {
@@ -246,6 +277,10 @@ class TriageService:
             "impact": impact,
             "target_incident_id": target_incident_id,
         }
+        # Preserve historical hashes for non-declaration requests; a declaration
+        # binds its complete operator-confirmed source context into idempotency.
+        if alert_context is not None:
+            payload["alert_context"] = alert_context
         scope = f"triage:{alert_id}"
         digest = _digest(idempotency_key)
         created = 201 if operation == "triage_declare" else 200
@@ -303,6 +338,7 @@ class TriageService:
                         principal,
                         severity,
                         impact,
+                        alert_context,
                         target_incident_id,
                     )
                 raise TriageError(409, "terminal_decision")
@@ -314,6 +350,7 @@ class TriageService:
                 principal,
                 severity,
                 impact,
+                alert_context,
                 target_incident_id,
             )
             persisted = await repository.write(
@@ -417,6 +454,7 @@ class TriageService:
         principal: Principal,
         severity: str | None,
         impact: str | None,
+        alert_context: dict[str, Any] | None,
         target_incident_id: str | None,
     ) -> str | None:
         if operation == "triage_link":
@@ -452,7 +490,7 @@ class TriageService:
             "state": "triage",
             "severity": None,
             "impact": None,
-            "alert": {},
+            "alert": {"alert_id": alert_id, **(alert_context or {})},
             "hypotheses": [],
             "evidence": [],
             "mitigation_strategy": None,

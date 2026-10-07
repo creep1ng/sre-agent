@@ -5,6 +5,13 @@
     "expected_version": 1,
     "reason": "Sustained 5xx spike on checkout, declaring incident.",
     "severity": "sev1",
-    "impact": "Checkout requests failed for customers."
+    "impact": "Checkout requests failed for customers.",
+    "alert_context": {
+      "service": "checkout",
+      "summary": "Elevated checkout failure rate observed.",
+      "observed_at": "2026-10-07T10:30:00Z",
+      "source": "operator-confirmed-monitoring",
+      "severity": "sev2"
+    }
   }
 }

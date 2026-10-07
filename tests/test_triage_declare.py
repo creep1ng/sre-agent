@@ -23,6 +23,13 @@ DATABASE_URL = os.environ.get(
 NOW = datetime(2026, 9, 23, tzinfo=UTC)
 REASON = "Sustained 5xx spike on checkout."
 IMPACT = "Checkout requests failed for customers."
+ALERT_CONTEXT = {
+    "service": "checkout",
+    "summary": "Elevated checkout failures were observed.",
+    "observed_at": "2026-10-07T10:30:00-05:00",
+    "source": "operator-confirmed-monitoring",
+    "severity": "sev2",
+}
 SERVICE: TriageService | None = None
 
 
@@ -114,6 +121,7 @@ async def _declare(alert_id: str, key: str, principal: Principal | None = None, 
     assert SERVICE is not None
     kwargs.setdefault("severity", "sev2")
     kwargs.setdefault("impact", IMPACT)
+    kwargs.setdefault("alert_context", dict(ALERT_CONTEXT))
     return await SERVICE.execute(
         principal or _principal("op-human"),
         alert_id=alert_id,
@@ -224,6 +232,7 @@ async def test_declare_rejects_stale_version_without_side_effects() -> None:
             reason=REASON,
             severity="sev2",
             impact=IMPACT,
+            alert_context=dict(ALERT_CONTEXT),
             idempotency_key="k-stale-12345678901",
         )
     assert (stale.value.http_status, stale.value.code) == (409, "stale_version")

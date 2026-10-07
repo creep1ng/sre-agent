@@ -12,10 +12,11 @@ import yaml
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 from psycopg import sql
 
 from sre_agent.application import create_application
+from sre_agent.investigator.contract import InvestigationRequest
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
 from sre_agent.settings import Settings
@@ -25,10 +26,21 @@ DATABASE_URL = os.environ.get(
 )
 REASON = "Sustained 5xx spike on checkout."
 IMPACT = "Checkout requests failed for customers."
+ALERT_CONTEXT = {
+    "service": "checkout",
+    "summary": "Elevated checkout failures were observed.",
+    "observed_at": "2026-10-07T10:30:00-05:00",
+    "source": "operator-confirmed-monitoring",
+    "severity": "sev2",
+}
 BEARERS: dict[str, str] = {}
 ROOT = Path(__file__).parents[1]
 STATE_VALIDATOR = Draft202012Validator(
     yaml.safe_load((ROOT / "agent" / "schemas" / "triage-state.schema.yaml").read_text())
+)
+INCIDENT_STATE_VALIDATOR = Draft202012Validator(
+    yaml.safe_load((ROOT / "agent" / "schemas" / "incident-state.schema.yaml").read_text()),
+    format_checker=FormatChecker(),
 )
 
 
@@ -199,6 +211,7 @@ def _client(url: str = DATABASE_URL) -> TestClient:
 def _cmd(operation: str, version: int = 1, **kwargs) -> dict:
     if operation == "triage_declare":
         kwargs.setdefault("impact", IMPACT)
+        kwargs.setdefault("alert_context", dict(ALERT_CONTEXT))
     return {"operation": operation, "expected_version": version, **kwargs}
 
 
@@ -287,7 +300,9 @@ def test_declare_persists_operator_impact_through_http_state_event_and_replay() 
     prefix = "Customer checkout remained unavailable. "
     impact = prefix + "x" * (2000 - len(prefix))
     assert len(impact) == 2000
-    body = _cmd("triage_declare", reason=REASON, severity="sev2", impact=impact)
+    # Incident severity is the operator's decision and remains separate from
+    # the confirmed severity of the source alert.
+    body = _cmd("triage_declare", reason=REASON, severity="sev1", impact=impact)
     before = _incident_count()
     first = _post(client, alert_id, body, "k-impact-http-123456", BEARERS["op"])
     assert first.status_code == 201
@@ -310,20 +325,50 @@ def test_declare_persists_operator_impact_through_http_state_event_and_replay() 
 
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         incident = connection.execute(
-            "SELECT state->>'impact' FROM incident.incidents WHERE incident_id=%s",
+            "SELECT state FROM incident.incidents WHERE incident_id=%s",
             (result["incident_id"],),
         ).fetchone()
         event = connection.execute(
-            "SELECT payload->'incident_state'->>'impact' FROM incident.run_events "
+            "SELECT payload->'incident_state' FROM incident.run_events "
             "WHERE incident_id=%s ORDER BY sequence LIMIT 1",
             (result["incident_id"],),
         ).fetchone()
+        snapshot = connection.execute(
+            "SELECT incident_state FROM incident.snapshots WHERE incident_id=%s "
+            "ORDER BY version LIMIT 1",
+            (result["incident_id"],),
+        ).fetchone()
+        run_id = connection.execute(
+            "SELECT run_id FROM incident.runs WHERE incident_id=%s", (result["incident_id"],)
+        ).fetchone()[0]
         event_count = connection.execute(
             "SELECT count(*) FROM incident.run_events WHERE incident_id=%s",
             (result["incident_id"],),
         ).fetchone()[0]
-    assert incident == (impact,)
-    assert event == (impact,)
+    assert incident[0]["impact"] == impact
+    assert event[0]["impact"] == impact
+    assert snapshot is not None
+    for aggregate in (incident[0], event[0], snapshot[0]):
+        assert aggregate["alert"] == {
+            "alert_id": alert_id,
+            **ALERT_CONTEXT,
+            "status": "triaged",
+        }
+        assert INCIDENT_STATE_VALIDATOR.is_valid(aggregate), aggregate
+        assert aggregate["severity"] == "sev1"
+        assert aggregate["alert"]["severity"] == "sev2"
+        InvestigationRequest.model_validate(
+            {
+                "incident_id": result["incident_id"],
+                "run_id": run_id,
+                "objective": "investigate",
+                "context": {
+                    "incident_id": result["incident_id"],
+                    "state": "investigating",
+                    "alert": aggregate["alert"],
+                },
+            }
+        )
     assert event_count == 1
 
     replay = _post(client, alert_id, body, "k-impact-http-123456", BEARERS["op"])
@@ -802,6 +847,20 @@ def test_status_table() -> None:
         ("ahk", sev9, "k-sev9-12345678901", None, 422, "invalid_severity"),
         ("ahs", _cmd("triage_declare", version=2, **dec), "k-stale-12345678901", None, 409, S),
         (
+            "al-no-context",
+            {
+                "operation": "triage_declare",
+                "expected_version": 1,
+                "reason": REASON,
+                "severity": "sev2",
+                "impact": IMPACT,
+            },
+            "k-alert-context-missing-123",
+            None,
+            422,
+            "invalid_alert_context",
+        ),
+        (
             "ahi",
             _cmd("triage_declare", **(dec | {"impact": ""})),
             "k-impact-123456789",
@@ -816,6 +875,142 @@ def test_status_table() -> None:
         response = _post(client, alert_id, body, key, bearer, raw=raw)
         assert response.status_code == status, (alert_id, body)
         assert response.json()["error"]["code"] == code, (alert_id, body)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("service", ""),
+        ("service", ["checkout"]),
+        ("service", "x" * 201),
+        ("summary", " \t "),
+        ("summary", 42),
+        ("summary", "x" * 2001),
+        ("observed_at", "not-a-date"),
+        ("observed_at", "2026-10-07T10:30:00"),
+        ("observed_at", None),
+        ("source", ""),
+        ("source", ["monitor"]),
+        ("source", "x" * 201),
+        ("severity", "critical"),
+        ("severity", None),
+    ],
+    ids=[
+        "blank-service",
+        "wrong-type-service",
+        "long-service",
+        "blank-summary",
+        "wrong-type-summary",
+        "long-summary",
+        "invalid-date",
+        "naive-date",
+        "missing-date",
+        "blank-source",
+        "wrong-type-source",
+        "long-source",
+        "unknown-severity",
+        "null-severity",
+    ],
+)
+def test_declare_rejects_invalid_alert_context_without_persisting(field, value) -> None:
+    client = _client()
+    alert_id = f"al-invalid-context-{field.replace('_', '-')}-{len(str(value))}"
+    body = _cmd("triage_declare", reason=REASON, severity="sev3")
+    body["alert_context"][field] = value
+    before = _triage_write_counts(alert_id)
+    response = _post(
+        client,
+        alert_id,
+        body,
+        f"k-invalid-context-{field}-{len(str(value))}-123456",
+        BEARERS["op"],
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "invalid_alert_context"
+    assert _triage_write_counts(alert_id) == before
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing-field", "wrong-container"], ids=["missing-field", "wrong-container"]
+)
+def test_declare_rejects_incomplete_alert_context_without_persisting(mutation: str) -> None:
+    alert_id = f"al-invalid-context-{mutation}"
+    body = _cmd("triage_declare", reason=REASON, severity="sev3")
+    if mutation == "missing-field":
+        del body["alert_context"]["summary"]
+    else:
+        body["alert_context"] = [ALERT_CONTEXT]
+    before = _triage_write_counts(alert_id)
+    response = _post(
+        _client(), alert_id, body, f"k-invalid-context-{mutation}-123456", BEARERS["op"]
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "invalid_alert_context"
+    assert _triage_write_counts(alert_id) == before
+
+
+def test_declare_rejects_extra_alert_context_property_without_persisting() -> None:
+    alert_id = "al-invalid-context-extra"
+    body = _cmd("triage_declare", reason=REASON, severity="sev3")
+    body["alert_context"]["detector_guess"] = "critical"
+    before = _triage_write_counts(alert_id)
+    response = _post(_client(), alert_id, body, "k-invalid-context-extra-123456", BEARERS["op"])
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "invalid_alert_context"
+    assert _triage_write_counts(alert_id) == before
+
+
+def test_declare_requires_alert_context_without_persisting() -> None:
+    alert_id = "al-missing-alert-context-no-write"
+    body = {
+        "operation": "triage_declare",
+        "expected_version": 1,
+        "reason": REASON,
+        "severity": "sev2",
+        "impact": IMPACT,
+    }
+    before = _triage_write_counts(alert_id)
+    response = _post(_client(), alert_id, body, "k-missing-alert-context-123456", BEARERS["op"])
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "invalid_alert_context"
+    assert _triage_write_counts(alert_id) == before
+
+
+def test_changed_alert_context_with_same_idempotency_key_conflicts_without_mutation() -> None:
+    client, alert_id = _client(), "al-context-idempotency-binding"
+    key = "k-context-idempotency-binding-123456"
+    body = _cmd("triage_declare", reason=REASON, severity="sev1")
+    first = _post(client, alert_id, body, key, BEARERS["op"])
+    assert first.status_code == 201, first.text
+    after_first = _triage_write_counts(alert_id)
+    changed = _cmd("triage_declare", reason=REASON, severity="sev1")
+    changed["alert_context"]["summary"] = "A different operator-confirmed alert summary."
+    replay = _post(client, alert_id, changed, key, BEARERS["op"])
+    assert replay.status_code == 409, replay.text
+    assert replay.json()["error"]["code"] == "idempotency_conflict"
+    assert _triage_write_counts(alert_id) == after_first
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        state = connection.execute(
+            "SELECT state->'alert' FROM incident.incidents WHERE incident_id=%s",
+            (first.json()["incident_id"],),
+        ).fetchone()[0]
+    assert state["summary"] == ALERT_CONTEXT["summary"]
+
+
+def _triage_write_counts(alert_id: str) -> tuple[int, int, int, int, int]:
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        return (
+            connection.execute(
+                "SELECT count(*) FROM alert_triage WHERE alert_id=%s", (alert_id,)
+            ).fetchone()[0],
+            connection.execute("SELECT count(*) FROM incident.incidents").fetchone()[0],
+            connection.execute("SELECT count(*) FROM incident.run_events").fetchone()[0],
+            connection.execute("SELECT count(*) FROM incident.snapshots").fetchone()[0],
+            connection.execute(
+                "SELECT count(*) FROM idempotency_records WHERE scope=%s",
+                (f"triage:{alert_id}",),
+            ).fetchone()[0],
+        )
 
 
 def test_storage_outage_is_503() -> None:
