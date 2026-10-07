@@ -22,8 +22,10 @@ const expanded = new Set();
 let currentItems = [];
 let currentFilters = {};
 let sessionGeneration = 0;
+const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const text = (value) => (typeof value === "string" ? value : "");
+const refDigest = (value) => (value && typeof value === "object" ? text(value.digest) : "");
 const announce = (message) => {
   liveRegion.textContent = message;
 };
@@ -68,6 +70,7 @@ function detailRow(item) {
   const resource = item.resource && typeof item.resource === "object" ? item.resource : {};
   const decision = item.policy_decision && typeof item.policy_decision === "object" ? item.policy_decision : {};
   const routing = item.routing && typeof item.routing === "object" ? item.routing : null;
+  const correlation = item.correlation && typeof item.correlation === "object" ? item.correlation : {};
   const rows = [["Event", eventId], ["Occurred", text(item.occurred_at)], ["Operation", text(item.operation)],
     ["Outcome", text(item.outcome)],
     ["Response status", item.response_status === undefined ? "" : String(item.response_status)],
@@ -77,7 +80,10 @@ function detailRow(item) {
     ["Resource type", text(resource.resource_type)], ["Resource reference", text(resource.resource_ref?.digest)],
     ["Model alias reference", text(item.model_alias_ref?.digest)], ["Router", routing === null ? "" : text(routing.router)],
     ["Model reference", text(routing?.model_ref?.digest)], ["Provider reference", text(routing?.provider_ref?.digest)],
-    ["Policy decision", text(decision.decision)], ["Content state", text(item.content_state)]];
+    ["Policy decision", text(decision.decision)], ["Content state", text(item.content_state)],
+    ["Request ID", text(correlation.request_id)], ["Incident reference", refDigest(correlation.incident_ref)],
+    ["Run reference", refDigest(correlation.run_ref)], ["Task reference", refDigest(correlation.task_ref)],
+    ["Trace reference", refDigest(correlation.trace_ref)]];
   const detail = el("tr", "principals__detail-row");
   detail.dataset.eventDetail = eventId;
   const cell = el("td");
@@ -89,6 +95,15 @@ function detailRow(item) {
     list.append(el("dt", null, term), el("dd", "ma-mono", value));
   }
   panel.append(list);
+  const rawRequestId = correlation.request_id;
+  if (typeof rawRequestId === "string" && canonicalUuid.test(rawRequestId)) {
+    const requestId = rawRequestId.toLowerCase();
+    const href = new URL("/public/admin/audit-events.html", window.location.origin);
+    href.searchParams.set("request_id", requestId);
+    const link = el("a", "ma-button ma-button--secondary ma-button--small", "View correlated events");
+    link.href = href.pathname + href.search;
+    panel.append(link);
+  }
   cell.append(panel);
   detail.append(cell);
   return detail;
@@ -228,3 +243,23 @@ disconnectButton.addEventListener("click", () => {
 });
 
 page.dataset.state = "idle";
+
+function initializeRequestIdFilter() {
+  const params = new URLSearchParams(window.location.search);
+  const requestIds = params.getAll("request_id");
+  if (window.location.search === "") return;
+
+  const rawRequestId = requestIds.length === 1 && canonicalUuid.test(requestIds[0]) ? requestIds[0] : null;
+  const requestId = rawRequestId?.toLowerCase() ?? null;
+  if (requestId) document.getElementById("filter-request-id").value = requestId;
+
+  // Keep only the one supported metadata filter in the address bar; never retain
+  // accidental credentials, redirect targets, or arbitrary query state.
+  const cleanUrl = new URL(window.location.pathname, window.location.origin);
+  if (requestId) cleanUrl.searchParams.set("request_id", requestId);
+  window.history.replaceState(null, "", cleanUrl.pathname + cleanUrl.search);
+  if (requestIds.length > 0 && !requestId)
+    showError({ kind: "validation", message: "The request ID link is invalid. Enter a valid request ID and apply filters." });
+}
+
+initializeRequestIdFilter();
