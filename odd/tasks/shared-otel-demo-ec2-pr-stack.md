@@ -32,7 +32,7 @@ RDD: disabled by the global setting; ordinary policy applies.
 
 - [ ] **OTEL-PR-1** Isolate/sanitize the candidate and define stable module and
   stack boundaries; confirm each proposed PR diff is at most 400 lines.
-- [ ] **OTEL-PR-2** Publish independently valid IAM/network infrastructure
+- [x] **OTEL-PR-2** Publish independently valid IAM/network infrastructure
   slice with scoped operator access and containerized structural checks.
 - [ ] **OTEL-PR-3** Publish the Scheduler/instance and monthly-budget
   infrastructure slices, preserving least-privilege references.
@@ -58,4 +58,7 @@ close #494 only when all criteria and independent human review are satisfied.
 Current progress: issue #494 created and added to GitHub Project #8; source
 candidate located and base `ef5ba500e673160aa73d92fffc61ee452c284bc6`
 fetched. No PR branch pushed yet. Next: sanitize and split in this isolated
-clone, then verify each candidate before publication.
+clone, then verify each candidate before publication. PR #495 published the
+operator template at 350 changed lines; offline container YAML parse passed at
+`698630568b9c5b6acc50e7f3ad1bce71ed5427a3`. Human review and AWS
+validation remain pending.

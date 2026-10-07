@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Monthly account budget and launch deny action for the OTel Demo operator.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Description: Required recipient for monthly account budget notifications.
+    AllowedPattern: .+@.+\..+
+    ConstraintDescription: Provide a valid email address for budget alerts.
+
+Resources:
+  OTelDemoMonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: otel-demo-monthly-account-budget
+        BudgetLimit:
+          Amount: 10
+          Unit: USD
+        TimeUnit: MONTHLY
+        BudgetType: COST
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address:
+                Ref: AlertEmail
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address:
+                Ref: AlertEmail
+  OTelDemoRunInstancesDenyPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: OTelDemoRunInstancesDeny
+      Description: Applied by the monthly budget action to block further EC2 launches.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Action: ec2:RunInstances
+            Resource: '*'
+  OTelDemoBudgetActionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: OTelDemoBudgetActionExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: budgets.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Ref: AWS::AccountId
+              ArnLike:
+                aws:SourceArn:
+                  Fn::Sub: arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/otel-demo-monthly-account-budget
+      Policies:
+        - PolicyName: AttachOnlyOTelDemoLaunchDeny
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:AttachUserPolicy
+                  - iam:DetachUserPolicy
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:user/OTelDemoOperator
+                Condition:
+                  ArnEquals:
+                    iam:PolicyARN:
+                      Ref: OTelDemoRunInstancesDenyPolicy
+  OTelDemoMonthlyBudgetAction:
+    Type: AWS::Budgets::BudgetsAction
+    DependsOn: OTelDemoMonthlyBudget
+    Properties:
+      ActionThreshold:
+        Type: PERCENTAGE
+        Value: 100
+      ActionType: APPLY_IAM_POLICY
+      ApprovalModel: AUTOMATIC
+      BudgetName: otel-demo-monthly-account-budget
+      Definition:
+        IamActionDefinition:
+          PolicyArn:
+            Ref: OTelDemoRunInstancesDenyPolicy
+          Users:
+            - OTelDemoOperator
+      ExecutionRoleArn:
+        Fn::GetAtt:
+          - OTelDemoBudgetActionExecutionRole
+          - Arn
+      NotificationType: ACTUAL
+      Subscribers:
+        - Address:
+            Ref: AlertEmail
+          Type: EMAIL
+
+Outputs:
+  BudgetName:
+    Value: otel-demo-monthly-account-budget
