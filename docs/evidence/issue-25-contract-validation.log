@@ -1,0 +1,20 @@
+TAP version 13
+# Subtest: 2.7 audit event IDs are disjoint canonical UUID or correlation IDs with formats on and off
+ok 1 - 2.7 audit event IDs are disjoint canonical UUID or correlation IDs with formats on and off
+  ---
+  duration_ms: 461.141468
+  ...
+# Subtest: 2.7 broadens only the audit detail parameter and preserves the 2.6 grant 404
+ok 2 - 2.7 broadens only the audit detail parameter and preserves the 2.6 grant 404
+  ---
+  duration_ms: 322.386622
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1360.000278
