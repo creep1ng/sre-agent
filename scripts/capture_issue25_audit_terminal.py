@@ -2,6 +2,7 @@
 
 import json
 import os
+from typing import Literal
 from uuid import uuid4
 
 import psycopg
@@ -46,6 +47,7 @@ def report(
     previous_ids: set[str],
     *,
     expected_status: int,
+    expected_envelope: Literal["error", "list", "detail"],
     persisted: bool = True,
 ) -> dict:
     body = response.json()
@@ -56,20 +58,33 @@ def report(
     if not isinstance(body, dict):
         raise AssertionError(f"{label}: expected a JSON object response")
     request_id = body.get("request_id")
-    if response.status_code == 200:
-        list_response = (
-            set(body) == {"items", "limit", "truncated"}
+    if expected_envelope == "list":
+        valid_envelope = (
+            response.status_code == 200
+            and set(body) == {"items", "limit", "truncated"}
             and isinstance(body["items"], list)
             and isinstance(body["limit"], int)
             and isinstance(body["truncated"], bool)
         )
-        detail_response = (
-            isinstance(body.get("event_id"), str)
+    elif expected_envelope == "detail":
+        valid_envelope = (
+            response.status_code == 200
+            and isinstance(body.get("event_id"), str)
+            and bool(body["event_id"].strip())
             and isinstance(body.get("correlation"), dict)
             and isinstance(body["correlation"].get("request_id"), str)
+            and bool(body["correlation"]["request_id"].strip())
         )
-        if not (list_response or detail_response):
-            raise AssertionError(f"{label}: malformed successful response envelope")
+    else:
+        valid_envelope = (
+            response.status_code >= 400
+            and isinstance(body.get("error"), dict)
+            and isinstance(body["error"].get("code"), str)
+            and isinstance(body["error"].get("message"), str)
+        )
+    if not valid_envelope:
+        raise AssertionError(f"{label}: expected {expected_envelope} success envelope")
+    if expected_envelope != "error":
         if request_id is not None and (not isinstance(request_id, str) or not request_id.strip()):
             raise AssertionError(f"{label}: response request ID is malformed")
     elif not isinstance(request_id, str) or not request_id.strip():
@@ -136,10 +151,17 @@ def expect_mutation_probe_rejection(
     previous_ids: set[str],
     *,
     expected_status: int,
+    expected_envelope: Literal["list", "detail"],
     expected_rows: int,
 ) -> None:
     try:
-        report(label, response, previous_ids, expected_status=expected_status)
+        report(
+            label,
+            response,
+            previous_ids,
+            expected_status=expected_status,
+            expected_envelope=expected_envelope,
+        )
     except AuditRowCountMismatch as error:
         if error.expected != 1 or error.actual != expected_rows:
             raise AssertionError(
@@ -184,7 +206,7 @@ def main() -> None:
             f"/v1/audit-events?request_id={producer[0]}",
             headers={"Authorization": f"Bearer {ADMIN_KEY}"},
         )
-        report("list_200", listing, before, expected_status=200)
+        report("list_200", listing, before, expected_status=200, expected_envelope="list")
         source_event = next(
             item for item in listing.json()["items"] if item["event_id"] == str(producer[1])
         )
@@ -193,7 +215,7 @@ def main() -> None:
             f"/v1/audit-events/{source_event['event_id']}",
             headers={"Authorization": f"Bearer {ADMIN_KEY}"},
         )
-        report("detail_200", detail, before, expected_status=200)
+        report("detail_200", detail, before, expected_status=200, expected_envelope="detail")
         if "redacted_content" in listing.text or "redacted_content" in detail.text:
             raise AssertionError("HTTP response exposed the redacted-content field")
         print(json.dumps({"case": "response_content_absent", "actual": True}))
@@ -208,7 +230,7 @@ def main() -> None:
             headers = {"Authorization": f"Bearer {key}"} if key else {}
             before = projection_snapshot()
             response = client.get(path, headers=headers)
-            report(label, response, before, expected_status=status)
+            report(label, response, before, expected_status=status, expected_envelope="error")
 
         database = app.state.database
 
@@ -226,7 +248,9 @@ def main() -> None:
             )
         finally:
             event.remove(database.engine.sync_engine, "before_cursor_execute", fail_detail_query)
-        report("query_failure_503", response, before, expected_status=503)
+        report(
+            "query_failure_503", response, before, expected_status=503, expected_envelope="error"
+        )
 
     class RejectingAudit:
         async def append(self, audit_event: object) -> None:
@@ -249,6 +273,7 @@ def main() -> None:
         response,
         before,
         expected_status=503,
+        expected_envelope="error",
         persisted=False,
     )
 
@@ -273,6 +298,7 @@ def main() -> None:
         response,
         before,
         expected_status=200,
+        expected_envelope="detail",
         expected_rows=0,
     )
 
@@ -306,6 +332,7 @@ def main() -> None:
         response,
         before,
         expected_status=200,
+        expected_envelope="detail",
         expected_rows=2,
     )
 
