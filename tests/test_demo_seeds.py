@@ -33,9 +33,14 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_10_test CASCADE")
         connection.execute("DROP SCHEMA IF EXISTS seed_upgrade_09_12_test CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
+            "principals, idempotency_records, "
+            "alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -92,11 +97,28 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         admin_grants = connection.execute(
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
+        usage_resource = connection.execute(
+            "SELECT status FROM resources "
+            "WHERE resource_type='administrative_control' AND resource_id='usage'"
+        ).fetchone()
+        usage_read_grant = connection.execute(
+            "SELECT principal_id, action, resource_type, resource_id, effect, status "
+            "FROM grants WHERE grant_id='grant-admin-human-admin-read-usage'"
+        ).fetchone()
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 5, 8]
-    assert admin_resources == 3
-    assert admin_grants == 6
+    assert counts == [4, 4, 9, 15]
+    assert admin_resources == 7
+    assert admin_grants == 13
+    assert usage_resource == ("active",)
+    assert usage_read_grant == (
+        "admin-human",
+        "admin.read",
+        "administrative_control",
+        "usage",
+        "allow",
+        "active",
+    )
     assert before == after
     by_id = dict(before)
     seeded_principals = (
@@ -140,9 +162,9 @@ async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
     await database.dispose()
-    assert counts == [4, 4, 5, 8]
-    assert admin_resources == 3
-    assert admin_grants == 6
+    assert counts == [4, 4, 9, 15]
+    assert admin_resources == 7
+    assert admin_grants == 13
 
 
 @pytest.mark.asyncio
@@ -156,7 +178,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             connection.execute(
                 "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
             ).fetchone()[0]
-            == 3
+            == 7
         )
 
     database = Database(DATABASE_URL)
@@ -173,7 +195,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
         ).fetchone()
     assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
-    assert counts == (6, 8)
+    assert counts == (13, 15)
 
 
 @pytest.mark.asyncio
@@ -215,9 +237,9 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260922_12"
-    assert admin_resources == 3
-    assert admin_grants == 6
+    assert version == "20260928_14"
+    assert admin_resources == 7
+    assert admin_grants == 13
     assert projection == [
         (
             "remediation-agent",

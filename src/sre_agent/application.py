@@ -4,14 +4,18 @@
 import httpx
 from fastapi import FastAPI
 from pathlib import Path
+from typing import Any
 
 from sre_agent import control, harness, incident
+from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.openrouter import OpenRouterProvider
+from sre_agent.gateway.endpoint_catalog import OpenRouterEndpointCatalog
 from sre_agent.gateway.providers import LLMProvider
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.usage import UsageReadProjection, usage_router
 from sre_agent.gateway.mcp import (
     GrafanaMCPClient,
     MCPGatewayService,
@@ -19,8 +23,15 @@ from sre_agent.gateway.mcp import (
     mcp_router,
 )
 from sre_agent.control.service import ControlService, control_router
+from sre_agent.control.consumption_limits import (
+    ConsumptionLimitPolicyService,
+    consumption_limits_router,
+)
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
+from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
+from sre_agent.gateway.runs import RunCommandService, RunStartService, commands_router, runs_router  # noqa: E501  # fmt: skip
+from sre_agent.incident.runtime import IncidentRuntime
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
@@ -37,12 +48,14 @@ def create_application(
     llm_provider: LLMProvider | None = None,
     audit_store: AuditStore | None = None,
     mcp_client: MCPUpstreamClient | None = None,
+    endpoint_catalog: Any = None,
 ) -> FastAPI:
     runtime_settings = settings or Settings.from_environment()
     probe = readiness_probe or health.postgres_readiness_probe(runtime_settings.database_url)
     database = Database(runtime_settings.database_url)
     shared_provider_client = None
     shared_mcp_client = None
+    shared_endpoint_catalog_client = None
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
         shared_provider_client = provider_client or httpx.AsyncClient(
@@ -51,6 +64,15 @@ def create_application(
         )
         provider = OpenRouterProvider(
             shared_provider_client, api_key=runtime_settings.openrouter_api_key
+        )
+    if endpoint_catalog is None and runtime_settings.openrouter_management_key:
+        shared_endpoint_catalog_client = httpx.AsyncClient(
+            base_url="https://openrouter.ai",
+            timeout=runtime_settings.openrouter_timeout_seconds,
+        )
+        endpoint_catalog = OpenRouterEndpointCatalog(
+            shared_endpoint_catalog_client,
+            management_key=runtime_settings.openrouter_management_key,
         )
 
     release_metadata = runtime_settings.release_metadata
@@ -77,6 +99,7 @@ def create_application(
     application.state.session_provider = database.sessions
     application.state.database = database
     application.state.llm_provider = provider
+    application.state.endpoint_catalog = endpoint_catalog
     workflow = load_incident_workflow(INCIDENT_WORKFLOW_PATH)
     application.include_router(
         incident_router(
@@ -85,15 +108,47 @@ def create_application(
             )
         )
     )
+    incident_runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
+    application.include_router(
+        runs_router(
+            RunStartService(
+                database.sessions,
+                workflow,
+                incident_runtime,
+                lambda: PostgresIncidentUnitOfWork(database),
+            )
+        )
+    )
+    application.include_router(
+        commands_router(RunCommandService(database.sessions, workflow, incident_runtime))
+    )
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
+        bok_service = BoKRetrievalService(database.sessions, store, projector)
+        application.state.bok_service = bok_service
+        application.include_router(bok_router(bok_service))
+        application.include_router(
+            usage_router(
+                UsageReadProjection(
+                    database.sessions, runtime_settings.audit_hmac_key.encode(), store
+                )
+            )
+        )
+        application.include_router(
+            consumption_limits_router(
+                ConsumptionLimitPolicyService(database.sessions, store, projector)
+            )
+        )
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))
         )
+        application.include_router(
+            skill_resolution_router(SkillResolutionService(database.sessions, store, projector))
+        )
     if provider is not None and runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
-        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()))  # noqa: E501  # fmt: skip
+        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()), endpoint_catalog=endpoint_catalog or application.state.endpoint_catalog)  # noqa: E501  # fmt: skip
         application.include_router(responses_router(service))
     configured_mcp_client = mcp_client
     if configured_mcp_client is None and runtime_settings.grafana_mcp_endpoint:
@@ -122,6 +177,8 @@ def create_application(
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:
         application.add_event_handler("shutdown", shared_provider_client.aclose)
+    if shared_endpoint_catalog_client is not None:
+        application.add_event_handler("shutdown", shared_endpoint_catalog_client.aclose)
     if shared_mcp_client is not None:
         application.add_event_handler("shutdown", shared_mcp_client.aclose)
     return application

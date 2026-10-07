@@ -84,17 +84,53 @@ class IncidentContext(_Projection):
     evidence: list[EvidenceContext] = Field(default_factory=list)
 
 
+SkillId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
+SkillVersion = Annotated[
+    str, Field(max_length=32, pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+]
+Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
+class SkillPin(_Strict):
+    """An exact Skill version for a run (issue #32).
+
+    A run that has already resolved it carries its digest, and resuming must find the same.
+    """
+
+    skill_id: SkillId
+    version: SkillVersion
+    content_sha256: Digest | None = None
+
+
+class PinnedSkill(_Strict):
+    """What a run used: the exact version, its digest, its authorized direct dependencies and
+    the request id of the resolution, which names that resolution's audit event."""
+
+    skill_id: SkillId
+    version: SkillVersion
+    content_sha256: Digest
+    dependencies: list[SkillPin]
+    request_id: UUID
+
+
 class InvestigationRequest(_Strict):
     incident_id: IncidentId
     run_id: Annotated[str, Field(pattern=r"^run_[a-z0-9]{8,32}$")]
     objective: Objective
     context: IncidentContext
     authorized_capabilities: list[Capability] = Field(default_factory=list)
+    skills: Annotated[list[SkillPin], Field(max_length=8)] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _context_incident_matches_request(self) -> InvestigationRequest:
         if self.context.incident_id != self.incident_id:
             raise ValueError("context incident_id must match request incident_id")
+        return self
+
+    @model_validator(mode="after")
+    def _one_version_per_skill(self) -> InvestigationRequest:
+        if len({pin.skill_id for pin in self.skills}) != len(self.skills):
+            raise ValueError("a run pins one version of each Skill")
         return self
 
     def authorizes_tool(self, tool: str) -> bool:
@@ -233,6 +269,7 @@ class InvestigationResult(_Strict):
     detail: Annotated[str, Field(max_length=500)] | None = None
     evidence: list[CollectedEvidence] = Field(default_factory=list)
     turns: list[Turn] = Field(default_factory=list)
+    skills: list[PinnedSkill] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _status_matches_outcome(self) -> InvestigationResult:

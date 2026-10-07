@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Administrative model alias list for midnight.agent." />
-    <title>Model aliases · midnight.agent</title>
+    <meta name="description" content="Resources and model aliases surface for midnight.agent." />
+    <title>Resources &amp; aliases · midnight.agent</title>
     <link rel="icon" href="/public/favicon.svg" />
     <link rel="stylesheet" href="/styles/design-system.css" />
     <link rel="stylesheet" href="/styles/principals.css" />
@@ -17,16 +17,26 @@
         <img class="principals__mark" src="/public/midnight-agent-mark.svg" alt="" width="28" height="28" />
         <span class="ma-display">midnight.agent</span>
       </a>
-      <span class="principals__context">Control plane / Model aliases</span>
+      <span class="principals__context">Control plane / Resources &amp; aliases</span>
     </header>
     <main id="model-aliases-page" class="principals" data-state="idle">
       <header class="principals__heading">
         <div>
           <p class="ma-eyebrow">Administration</p>
-          <h1 class="principals__title">Model aliases</h1>
+          <h1 class="principals__title">Resources &amp; aliases</h1>
           <p class="principals__subtitle">Inspect the logical model aliases through the real control-plane API.</p>
         </div>
       </header>
+      <div class="model-aliases__shell">
+        <nav class="model-aliases__nav" aria-label="Control plane">
+          <ul class="model-aliases__nav-list">
+            <li><a class="model-aliases__nav-link" href="/public/admin/principals.html">Principals</a></li>
+            <li><a class="model-aliases__nav-link is-current" href="/public/admin/model-aliases.html" aria-current="page">Resources &amp; aliases</a></li>
+            <li><span class="model-aliases__nav-link is-disabled" aria-disabled="true" title="Not available in this build">Grants</span></li>
+            <li><span class="model-aliases__nav-link is-disabled" aria-disabled="true" title="Not available in this build">Audit &amp; consumption</span></li>
+          </ul>
+        </nav>
+        <div class="model-aliases__content">
       <section class="ma-panel principals__session" aria-labelledby="session-title">
         <div class="ma-panel__header">
           <div>
@@ -50,8 +60,12 @@
       <div id="page-error" class="ma-alert" data-tone="critical" hidden>
         <p id="page-error-title" class="ma-alert__title">Request failed</p>
       </div>
+      <section id="resources-context" class="model-aliases__resources" aria-labelledby="resources-context-title">
+        <h2 id="resources-context-title" class="ma-panel__title">Resources</h2>
+        <p class="principals__subtitle">Aliases below are managed on this surface. The resource catalog exposes no management actions in this build.</p>
+      </section>
       <div class="model-aliases__layout">
-        <section id="alias-list" class="ma-panel" aria-labelledby="alias-list-title">
+        <section id="alias-list" class="ma-panel model-aliases__list" aria-labelledby="alias-list-title">
           <div class="ma-panel__header">
             <div>
               <h2 id="alias-list-title" class="ma-panel__title">Model aliases</h2>
@@ -75,7 +89,7 @@
             </div>
           </div>
         </section>
-        <section id="alias-detail" class="ma-panel" aria-labelledby="alias-detail-title" hidden>
+        <aside id="alias-detail" class="ma-panel model-aliases__panel" aria-labelledby="alias-detail-title" hidden>
           <div class="ma-panel__header">
             <div>
               <h2 id="alias-detail-title" class="ma-panel__title">Alias detail</h2>
@@ -113,7 +127,7 @@
               <p id="detail-error-title" class="ma-alert__title">Request failed</p>
             </div>
           </div>
-        </section>
+        </aside>
       </div>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
       <dialog id="deactivate-dialog" class="principals__dialog" aria-labelledby="deactivate-title">
@@ -128,6 +142,7 @@
           </div>
         </form>
       </dialog>
+      </div>
     </main>
     <script type="module" src="/public/admin/model-aliases.js"></script>
   </body>

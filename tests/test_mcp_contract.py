@@ -49,6 +49,16 @@ def test_contract_pins_exact_tools_actions_resources_errors_and_timeout() -> Non
             "resource_type": "mcp_tool",
         },
     }
+    assert contract["discovery_visibility"] == {
+        "server_gate": {"action": "mcp.discovery", "resource_type": "mcp_server"},
+        "tool_filter": {"action": "mcp.invoke", "resource_type": "mcp_tool"},
+        "allowed_empty": {"status": 200, "tools": []},
+        "denied_server": {"status": 403, "error_code": "resource_unavailable"},
+    }
+    assert contract["discovery_request"] == {
+        "query_parameters": [],
+        "unknown_query": {"status": 422, "error_code": "contract_validation_failed"},
+    }
     assert contract["timeout"] == {
         "seconds": 30,
         "status": 504,

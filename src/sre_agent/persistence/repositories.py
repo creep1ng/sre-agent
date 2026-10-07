@@ -21,6 +21,8 @@ from sre_agent.governance.dto import (
     PrincipalContext,
     Resource,
     ResourceCatalogEntry,
+    SkillManifest,
+    SkillVersionRecord,
 )
 from sre_agent.persistence.api_keys import (
     api_key_prefix,
@@ -38,6 +40,7 @@ from sre_agent.persistence.models import (
     MCPToolRow,
     PrincipalRow,
     ResourceRow,
+    SkillVersionRow,
 )
 from sre_agent.persistence.projections import (
     project_audit_event,
@@ -304,7 +307,7 @@ class IdempotencyConflictError(RuntimeError):
 
 
 class IdempotencyRepository:
-    """Scoped POST bindings: same hash replays, other hash conflicts."""
+    """Scoped request bindings: same hash replays, other hash conflicts."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -366,6 +369,39 @@ class IdempotencyRepository:
             row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
             if row is None:
                 raise RuntimeError("idempotency claim was not retained")
+        if row.payload_sha256 != payload_sha256:
+            raise IdempotencyConflictError(scope)
+        stored = row.outcome
+        return IdempotencyBinding(
+            outcome=IdempotencyOutcome(
+                response_status=stored["response_status"],
+                resource_id=stored["resource_id"],
+                replayed=True,
+                response_payload=dict(stored.get("response_payload", {})),
+            ),
+            replayed=True,
+        )
+
+    async def peek(
+        self,
+        *,
+        scope: str,
+        key_digest: str,
+        payload_sha256: str,
+        now: datetime | None = None,
+    ) -> IdempotencyBinding | None:
+        """Read-only replay check: same hash replays, other hash conflicts.
+
+        Returns None when no unexpired binding exists, without creating one,
+        so genuinely-new requests can still be validated before any claim.
+        Expired rows are treated as absent; claim_or_replay reaps them.
+        """
+        created_at = now or datetime.now(UTC)
+        row = await self._session.get(IdempotencyRecordRow, (scope, key_digest))
+        if row is None:
+            return None
+        if row.expires_at is not None and row.expires_at <= created_at:
+            return None
         if row.payload_sha256 != payload_sha256:
             raise IdempotencyConflictError(scope)
         stored = row.outcome
@@ -791,6 +827,139 @@ class CatalogRepository:
         row.tags = list(resource.tags)
 
 
+class SkillVersionConflictError(RuntimeError):
+    """An immutable Skill identity is already bound to another publication."""
+
+
+class SkillVersionRepository:
+    """Persist immutable Skill bodies alongside their governed catalog projection."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def publish(
+        self,
+        *,
+        skill_id: str,
+        version: str,
+        owner_id: str,
+        manifest: SkillManifest,
+        content_sha256: str,
+        now: datetime | None = None,
+    ) -> SkillVersionRecord:
+        resource_id = f"{skill_id}@{version}"
+        existing = await self._session.get(SkillVersionRow, (skill_id, version))
+        if existing is not None:
+            if existing.owner_id != owner_id or existing.content_sha256 != content_sha256:
+                raise SkillVersionConflictError(resource_id)
+            return self._project(existing)
+
+        created_at = now or datetime.now(UTC)
+        row = SkillVersionRow(
+            skill_id=skill_id,
+            version=version,
+            resource_type="skill",
+            resource_id=resource_id,
+            owner_id=owner_id,
+            manifest=manifest.model_dump(mode="json"),
+            content_sha256=content_sha256,
+            created_at=created_at,
+        )
+        catalog_row = await self._session.get(ResourceRow, ("skill", resource_id))
+        if catalog_row is not None:
+            if catalog_row.owner_id != owner_id:
+                raise SkillVersionConflictError(resource_id)
+            if catalog_row.status not in ("draft", "published"):
+                raise SkillVersionConflictError(resource_id)
+            catalog_row.source = "skill"
+            catalog_row.source_ref = resource_id
+            catalog_row.status = "published"
+            catalog_row.display_name = manifest.display_name
+            catalog_row.visibility = "private"
+            catalog_row.description = manifest.description
+            catalog_row.tags = []
+            catalog_row.updated_at = created_at
+            await self._session.flush()
+        else:
+            await CatalogRepository(self._session).create(
+                resource_type="skill",
+                resource_id=resource_id,
+                owner_id=owner_id,
+                source="skill",
+                source_ref=resource_id,
+                status="published",
+                display_name=manifest.display_name,
+                visibility="private",
+                description=manifest.description,
+                tags=[],
+                now=created_at,
+            )
+        self._session.add(row)
+        await self._session.flush()
+        return self._project(row)
+
+    async def get(self, skill_id: str, version: str) -> SkillVersionRecord | None:
+        row = await self._session.get(SkillVersionRow, (skill_id, version))
+        return self._project(row) if row is not None else None
+
+    async def replace_status(
+        self,
+        skill_id: str,
+        version: str,
+        status: str,
+        *,
+        expected_updated_at: datetime,
+        now: datetime | None = None,
+    ) -> tuple[ResourceCatalogEntry, datetime] | None:
+        resource_id = f"{skill_id}@{version}"
+        if await self.get(skill_id, version) is None:
+            return None
+        statement = (
+            update(ResourceRow)
+            .where(
+                ResourceRow.resource_type == "skill",
+                ResourceRow.resource_id == resource_id,
+                ResourceRow.updated_at == expected_updated_at,
+                ResourceRow.status != status,
+            )
+            .values(status=status, updated_at=now or datetime.now(UTC))
+            .returning(ResourceRow)
+        )
+        row = (await self._session.execute(statement)).scalar_one_or_none()
+        if row is None:
+            row = await self._session.get(ResourceRow, ("skill", resource_id))
+            if row is None:
+                return None
+            if row.updated_at != expected_updated_at:
+                raise StaleWriteError(resource_id)
+        return project_catalog_entry(row), row.updated_at
+
+    async def get_status(
+        self, skill_id: str, version: str
+    ) -> tuple[ResourceCatalogEntry, datetime] | None:
+        resource_id = f"{skill_id}@{version}"
+        if await self.get(skill_id, version) is None:
+            return None
+        row = await self._session.get(ResourceRow, ("skill", resource_id))
+        if row is None:
+            return None
+        return project_catalog_entry(row), row.updated_at
+
+    @staticmethod
+    def _project(row: SkillVersionRow) -> SkillVersionRecord:
+        return SkillVersionRecord.model_validate(
+            {
+                "skill_id": row.skill_id,
+                "version": row.version,
+                "owner_id": row.owner_id,
+                "resource_id": row.resource_id,
+                "manifest": row.manifest,
+                "content_sha256": row.content_sha256,
+                "created_at": row.created_at,
+            }
+        )
+
+
 class GrantRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -900,6 +1069,10 @@ class AuditRepository:
         self._session = session
 
     async def append(self, event: AuditEvent) -> None:
+        # Validate at the persistence boundary too: callers can construct or copy a
+        # Pydantic model without running its validators, but stored DTOs must not
+        # associate provider consumption with non-LLM resources.
+        event = AuditEvent.model_validate(event.model_dump(mode="python"))
         if event.latency_ms is None:
             raise ValueError("latency_ms is required for persistence")
         values = event.model_dump(mode="json")
@@ -916,6 +1089,71 @@ class AuditRepository:
             .limit(limit)
         )
         return [project_audit_event(row) for row in rows]
+
+    async def query_filtered(
+        self,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        request_id: str | None = None,
+        decision: str | None = None,
+        principal_digest: str | None = None,
+        model_alias_digest: str | None = None,
+        incident_digest: str | None = None,
+        run_digest: str | None = None,
+        task_digest: str | None = None,
+        trace_digest: str | None = None,
+        limit: int = 100,
+    ) -> tuple[list[AuditEvent], bool]:
+        """Filter audit rows in storage for the published 2.3.0 list surface.
+
+        Digest filters match opaque HMAC references computed by the caller;
+        the repository never sees keys. Window is ``start <= occurred_at`` and
+        ``occurred_at < end``. Fixed ordering (occurred_at DESC, event_id
+        DESC); no cursor exists on this surface. Returns ``(items, has_more)``.
+        """
+        if not 1 <= limit <= self.MAX_READ_LIMIT:
+            raise ValueError(f"limit must be between 1 and {self.MAX_READ_LIMIT}")
+        statement = select(AuditEventRow)
+        if start is not None:
+            statement = statement.where(AuditEventRow.occurred_at >= start)
+        if end is not None:
+            statement = statement.where(AuditEventRow.occurred_at < end)
+        if request_id is not None:
+            statement = statement.where(
+                AuditEventRow.correlation["request_id"].as_string() == request_id
+            )
+        if decision is not None:
+            statement = statement.where(
+                AuditEventRow.policy_decision["decision"].as_string() == decision
+            )
+        if principal_digest is not None:
+            statement = statement.where(
+                AuditEventRow.identity["principal_ref"]["digest"].as_string() == principal_digest
+            )
+        if model_alias_digest is not None:
+            statement = statement.where(
+                AuditEventRow.model_alias_ref["digest"].as_string() == model_alias_digest
+            )
+        ref_filters = (
+            ("incident_ref", incident_digest),
+            ("run_ref", run_digest),
+            ("task_ref", task_digest),
+            ("trace_ref", trace_digest),
+        )
+        for key, digest in ref_filters:
+            if digest is not None:
+                statement = statement.where(
+                    AuditEventRow.correlation[key]["digest"].as_string() == digest
+                )
+        rows = (
+            await self._session.scalars(
+                statement.order_by(
+                    AuditEventRow.occurred_at.desc(), AuditEventRow.event_id.desc()
+                ).limit(limit + 1)
+            )
+        ).all()
+        return [project_audit_event(row) for row in rows[:limit]], len(rows) > limit
 
 
 class MCPOwnerRepository:

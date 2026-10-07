@@ -1,4 +1,4 @@
-"""Issue #189 A2: run.read provisioning through the governed API."""
+"""Governed provisioning of the incident workflow run grants (issues #189 and #330)."""
 
 import asyncio
 import os
@@ -45,16 +45,35 @@ SUBJECT = Principal(
     created_at=NOW,
     updated_at=NOW,
 )
-BEARER: list[str] = []
+HARNESS = Principal(
+    principal_id="incident-harness",
+    kind="agent",
+    display_name="Incident harness",
+    status="active",
+    created_at=NOW,
+    updated_at=NOW,
+)
 
 
-@pytest.fixture(scope="module", autouse=True)
-def provisioned_database() -> None:
+@pytest.fixture(autouse=True)
+def admin_bearer() -> str:
+    """Start every case from an empty store holding only the administrative prerequisites.
+
+    No case may depend on what another one left behind: each provisions the state
+    it asserts through the governed path itself, so a case selected alone, or run
+    in any order, sees exactly the state it declares.
+    """
+
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
+            "principals, idempotency_records, "
+            "alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     config = Config("alembic.ini")
@@ -64,7 +83,8 @@ def provisioned_database() -> None:
         connection.execute(
             "INSERT INTO principals VALUES "
             "('admin-human','human','Admin','active',now(),now()),"
-            "('demo-human','human','Demo','active',now(),now())"
+            "('demo-human','human','Demo','active',now(),now()),"
+            "('incident-harness','agent','Incident harness','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at) VALUES "
@@ -87,11 +107,30 @@ def provisioned_database() -> None:
                 )
         return f"Bearer {issued.key}"
 
-    BEARER.append(asyncio.run(_setup()))
+    bearer = asyncio.run(_setup())
     asyncio.run(database.dispose())
+    return bearer
 
 
-async def _decision() -> str:
+async def _provision_then_revoke_run_read(bearer: str) -> None:
+    """Reach the state the grant cases assert on, through the governed API only."""
+
+    database = Database(DATABASE_URL)
+    try:
+        service = build_service(database, b"0" * 32)
+        result = await provision(service, bearer)
+        assert (
+            result.run_read_active,
+            result.run_start_active,
+            result.run_command_active,
+            result.run_approve_active,
+        ) == (True, True, True, True)
+        assert await revoke_run_read(service, bearer) == 204
+    finally:
+        await database.dispose()
+
+
+async def _decision(action: str = "run.read", subject: Principal = SUBJECT) -> str:
     database = Database(DATABASE_URL)
     try:
         async with database.transaction() as session:
@@ -99,7 +138,7 @@ async def _decision() -> str:
                 ResourceRepository(session), GrantRepository(session)
             )
             evaluation = await engine.evaluate(
-                SUBJECT, "run.read", "incident_workflow", "incident-response"
+                subject, action, "incident_workflow", "incident-response"
             )
             if evaluation.decision.decision == "allow":
                 return "allow"
@@ -109,26 +148,28 @@ async def _decision() -> str:
 
 
 @pytest.mark.asyncio
-async def test_governed_provision_opens_and_revoke_closes(monkeypatch, capsys) -> None:
+async def test_governed_provision_opens_and_revoke_closes(
+    monkeypatch, capsys, admin_bearer: str
+) -> None:
     assert await _decision() == f"deny:{AuthorizationDenialCause.RESOURCE_MISSING}"
     database = Database(DATABASE_URL)
     try:
         service = build_service(database, b"0" * 32)
-        result = await provision(service, BEARER[0])
+        result = await provision(service, admin_bearer)
         assert (result.catalog_status, result.grant_status, result.run_read_active) == (
             201,
             201,
             True,
         )
         assert await _decision() == "allow"
-        replayed = await provision(service, BEARER[0])
+        replayed = await provision(service, admin_bearer)
         assert (replayed.catalog_status, replayed.grant_status, replayed.run_read_active) == (
             201,
             201,
             True,
         )
-        assert await revoke_run_read(service, BEARER[0]) == 204
-        revoked_replay = await provision(service, BEARER[0])
+        assert await revoke_run_read(service, admin_bearer) == 204
+        revoked_replay = await provision(service, admin_bearer)
         assert (revoked_replay.catalog_status, revoked_replay.grant_status) == (201, 201)
         assert revoked_replay.run_read_active is False
     finally:
@@ -136,7 +177,51 @@ async def test_governed_provision_opens_and_revoke_closes(monkeypatch, capsys) -
     assert await _decision() == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
 
     monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
-    monkeypatch.setenv("ADMIN_API_KEY", BEARER[0].removeprefix("Bearer "))
+    monkeypatch.setenv("ADMIN_API_KEY", admin_bearer.removeprefix("Bearer "))
     monkeypatch.setenv("AUDIT_KEY_HEX", "00" * 32)
     assert await _run(revoke=False) == 1
     assert '"run_read_active": false' in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_run_start_is_granted_and_revoked_apart_from_run_read(admin_bearer: str) -> None:
+    """Least privilege only means something if the two grants move separately.
+
+    The case provisions both grants and revokes the reader through the governed
+    path itself, so starting runs must still be allowed afterwards: revoking the
+    reader cannot take the starter with it, and neither can be inferred from the
+    other.
+    """
+
+    await _provision_then_revoke_run_read(admin_bearer)
+    assert await _decision("run.read") == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    assert await _decision("run.start") == "allow"
+    assert (
+        await _decision("run.start", HARNESS)
+        == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_harness_can_never_approve_what_it_proposed(admin_bearer: str) -> None:
+    """The operator sends commands and approves; the agent does neither.
+
+    Provisioning both actions for one principal is not the risk; provisioning
+    either of them for the harness is. An agent that could approve its own
+    mitigation would make the human gate decorative, so the decision is asserted
+    for the harness too, on the state this case provisions through the governed
+    path itself.
+    """
+
+    await _provision_then_revoke_run_read(admin_bearer)
+    assert await _decision("run.command") == "allow"
+    assert await _decision("run.approve") == "allow"
+    assert (
+        await _decision("run.command", HARNESS)
+        == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    )
+    assert (
+        await _decision("run.approve", HARNESS)
+        == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"
+    )
+    assert await _decision("run.read") == f"deny:{AuthorizationDenialCause.GRANT_NOT_APPLICABLE}"

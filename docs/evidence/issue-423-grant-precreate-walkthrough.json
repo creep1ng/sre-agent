@@ -1,0 +1,89 @@
+{
+  "cases": [
+    {
+      "case": "missing principal",
+      "error_code": "resource_not_found",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 404
+    },
+    {
+      "case": "inactive principal",
+      "error_code": "resource_not_found",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 404
+    },
+    {
+      "case": "missing resource",
+      "error_code": "resource_not_found",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 404
+    },
+    {
+      "case": "inactive resource",
+      "error_code": "resource_not_found",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 404
+    },
+    {
+      "case": "restricted caller before lookup",
+      "error_code": "resource_unavailable",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 403
+    },
+    {
+      "case": "valid create",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "idempotent replay of valid create",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "duplicate active tuple",
+      "error_code": "idempotency_conflict",
+      "grant_rows": 0,
+      "idempotency_bindings": 0,
+      "status": 409
+    },
+    {
+      "case": "replay principal setup create",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "stable replay after principal deactivated",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "replay resource setup create",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    },
+    {
+      "case": "stable replay after resource deactivated",
+      "error_code": null,
+      "grant_rows": 1,
+      "idempotency_bindings": 1,
+      "status": 201
+    }
+  ],
+  "issue": 423
+}

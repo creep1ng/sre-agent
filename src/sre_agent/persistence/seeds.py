@@ -13,6 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
+from sre_agent.bok.owner import seed_bok_demo
 from sre_agent.governance.dto import MCPServer, MCPTool, ModelAlias
 from sre_agent.mcp.owner import MCP_CONTRACT_VERSION, MCP_SERVER_ID, MCP_TOOL_IDS, MCPRegistry
 from sre_agent.persistence.api_keys import hash_api_key, is_api_key, verify_api_key
@@ -36,6 +37,10 @@ ADMIN_RESOURCES = (
     ("administrative_control", "principals"),
     ("administrative_control", "credentials"),
     ("administrative_control", "model_aliases"),
+    ("administrative_control", "usage"),
+    ("administrative_control", "consumption_limits"),
+    ("administrative_control", "catalog"),
+    ("administrative_control", "grants"),
 )
 ADMIN_GRANTS = (
     ("grant-admin-human-admin-read-principals", "admin-human", "admin.read"),
@@ -44,6 +49,13 @@ ADMIN_GRANTS = (
     ("grant-admin-human-admin-write-credentials", "admin-human", "admin.write"),
     ("grant-admin-human-admin-read-model-aliases", "admin-human", "admin.read"),
     ("grant-admin-human-admin-write-model-aliases", "admin-human", "admin.write"),
+    ("grant-admin-human-admin-read-usage", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-read-consumption-limits", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-consumption-limits", "admin-human", "admin.write"),
+    ("grant-admin-human-admin-read-catalog", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-catalog", "admin-human", "admin.write"),
+    ("grant-admin-human-admin-read-grants", "admin-human", "admin.read"),
+    ("grant-admin-human-admin-write-grants", "admin-human", "admin.write"),
 )
 KEY_ENV = (
     "ADMIN_HUMAN_API_KEY",
@@ -445,7 +457,7 @@ async def _seed_session(
         len(grants),
         len(admin_resources),
         len(admin_grants),
-    ) != (4, 4, 2, 2, 3, 6):
+    ) != (4, 4, 2, 2, 7, 13):
         raise SeedConflict("seed_state_conflict: incomplete_seed_graph")
     by_principal = {row.principal_id: row for row in principals}
     by_credential = {row.principal_id: row for row in credentials}
@@ -708,6 +720,7 @@ async def _run() -> None:
     actions.add_argument("--check-routing", action="store_true")
     actions.add_argument("--reconcile-routing", metavar="EXPECTED_SHA256")
     actions.add_argument("--seed-mcp", action="store_true")
+    actions.add_argument("--seed-bok", action="store_true")
     arguments = parser.parse_args()
     dsn = environ.get("DATABASE_URL")
     if not dsn:
@@ -717,6 +730,11 @@ async def _run() -> None:
         if arguments.seed_mcp:
             created = await seed_mcp_demo(database)
             print("mcp seed created" if created else "mcp seed converged")
+            return
+        if arguments.seed_bok:
+            async with database.transaction() as session:
+                created = await seed_bok_demo(session)
+            print("bok seed created" if created else "bok seed converged")
             return
         if arguments.check_routing:
             drift = await routing_drift(database, RoutingSettings.from_environment())
