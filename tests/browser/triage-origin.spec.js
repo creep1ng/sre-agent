@@ -40,6 +40,12 @@ test("external producer dismissal is labeled from backend provenance after reloa
   const producer = requiredKey("E2E_EXTERNAL_API_KEY");
   const operator = requiredKey("E2E_TRIAGE_API_KEY");
   const id = alertId("external");
+  await connectForAlert(page, id, producer);
+  await expect(page.locator("#command-operation option[value='open_triage']")).toBeDisabled();
+  await expect(page.locator("#command-operation option[value='triage_declare']")).toBeDisabled();
+  await expect(page.locator("#command-operation option[value='triage_dismiss']")).toBeEnabled();
+  await expect(page.locator("#command-operation option[value='triage_link']")).toBeEnabled();
+  await page.locator("#disconnect-button").click();
   const response = await postCommand(request, producer, id, {
     operation: "triage_dismiss",
     expected_version: 1,
@@ -54,6 +60,7 @@ test("external producer dismissal is labeled from backend provenance after reloa
   await expect(page.locator("#result-status")).toHaveText("dismissed");
   await expect(page.locator("#result-origin")).toHaveText("External automatic");
   await expect(page.locator("#result-responsible-system")).toHaveText("producer-e2e");
+  await expect(page.locator("#submit-button")).toBeDisabled();
   await expect(page.locator("#api-key")).toHaveValue("");
   if (process.env.T23_14_ARTIFACT_DIR) {
     await page.screenshot({
@@ -80,6 +87,7 @@ test("authorized external producer links to a real operator-declared incident", 
   await page.locator("#api-key").fill(operator);
   await page.locator("#connect-button").click();
   await page.locator("#alert-id").fill(targetAlert);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("Operator declares the shared incident.");
   await page.locator("#command-severity").selectOption("sev2");
@@ -118,6 +126,7 @@ test("manual declaration remains manual and has no responsible external system",
   await page.locator("#api-key").fill(operator);
   await page.locator("#connect-button").click();
   await page.locator("#alert-id").fill(id);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("Operator declares after assessing impact.");
   await page.locator("#command-severity").selectOption("sev2");

@@ -89,7 +89,7 @@ test("sends open_triage without reason and syncs state", async ({ page }) => {
   await expect(page.locator("#result-origin")).toHaveText("—");
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
   await expect(page.locator("#expected-version")).toHaveValue("2");
-  await expect(page.locator("#triage-state")).toContainText("al-journey-01 is open (version 2).");
+  await expect(page.locator("#triage-state")).toContainText("al-journey-01 is open (version 2), read from the API.");
 });
 
 test("sends dismiss and link with exact bodies", async ({ page }) => {
@@ -151,6 +151,7 @@ test("rejects a declaration without operator impact before sending", async ({ pa
   });
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.selectOption("#command-operation", "triage_declare");
   await page.fill("#command-reason", "Declaring.");
   await page.selectOption("#command-severity", "sev2");
@@ -219,6 +220,7 @@ test("renders authentication, authorization, conflict and outage failures distin
   let body = "{}";
   await page.route((url) => url.pathname === COMMANDS_PATH, (route) =>
     route.fulfill(json(status, body)));
+  await connect(page);
   const cases = [
     [401, null, "Authentication required"],
     [403, null, "Access unavailable"],
@@ -226,12 +228,18 @@ test("renders authentication, authorization, conflict and outage failures distin
     [409, "stale_version", "Conflict"],
     [503, "storage_unavailable", "Service unavailable"],
   ];
-  for (const [next, code, title] of cases) {
+  for (let index = 0; index < cases.length; index += 1) {
+    const [next, code, title] = cases[index];
     status = next;
     body = code === null ? "{}" : JSON.stringify({ error: { code, message: `server says ${code}` } });
     await page.fill("#alert-id", "al-journey-01");
+    await expect(page.locator("#command-operation")).toBeEnabled();
     await page.click("#submit-button");
     await expect(page.locator("#page-error-title")).toHaveText(title);
+    if (index < cases.length - 1) {
+      await page.fill("#alert-id", "");
+      await page.fill("#alert-id", "al-journey-01");
+    }
   }
   await expect(page.locator("#page-error-detail")).toContainText("server says storage_unavailable");
 });
@@ -255,6 +263,7 @@ test("ignores a double submit while a command is in flight", async ({ page }) =>
   });
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.selectOption("#command-operation", "open_triage");
   await page.$eval("#command-form", (form) => form.requestSubmit());
   await page.$eval("#command-form", (form) => form.requestSubmit());
@@ -337,9 +346,12 @@ test("late response cannot overwrite a newer result", async ({ page }) => {
 });
 
 test("exposes impact only for declaration and no actor or timestamp inputs", async ({ page }) => {
+  await connect(page);
+  await page.fill("#alert-id", "al-journey-01");
   await expect(page.locator('[name="impact"]')).toHaveCount(1);
   await expect(page.locator('[name="impact"]')).toHaveAttribute("maxlength", "2000");
   await expect(page.locator('[name="impact"]')).toHaveAttribute("aria-required", "false");
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.selectOption("#command-operation", "triage_declare");
   await expect(page.locator('[name="impact"]')).toHaveAttribute("aria-required", "true");
   await page.selectOption("#command-operation", "open_triage");

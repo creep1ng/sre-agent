@@ -52,11 +52,12 @@
           <input class="ma-input ma-mono" id="expected-version" name="expected_version" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" value="1" required /></div>
           <div class="ma-field"><label class="ma-field__label" for="command-operation">Operation</label>
           <select class="ma-select" id="command-operation" name="operation" required>
-            <option value="open_triage" selected>open_triage</option>
-            <option value="triage_dismiss">triage_dismiss</option>
-            <option value="triage_link">triage_link</option>
-            <option value="triage_declare">triage_declare</option>
+            <option value="open_triage" selected disabled>open_triage</option>
+            <option value="triage_dismiss" disabled>triage_dismiss</option>
+            <option value="triage_link" disabled>triage_link</option>
+            <option value="triage_declare" disabled>triage_declare</option>
           </select></div>
+          <p id="actions-status" class="ma-panel__description" aria-live="polite">Connect and select an alert to load actions from the backend.</p>
           <div class="ma-field"><label class="ma-field__label" for="command-reason">Reason</label>
           <input class="ma-input" id="command-reason" name="reason" type="text" autocomplete="off" maxlength="1000" placeholder="Required except for open_triage" /></div>
           <div class="ma-field"><label class="ma-field__label" for="command-target">Target incident ID (link only)</label>
@@ -72,7 +73,7 @@
           <div class="ma-field"><label class="ma-field__label" for="command-impact">Impact (declare only)</label>
           <textarea class="ma-input" id="command-impact" name="impact" rows="3" maxlength="2000" aria-required="false" placeholder="Describe the consequence of the incident."></textarea></div>
           <div class="ma-button-row">
-            <button id="submit-button" class="ma-button ma-button--primary" type="submit">Send command</button>
+            <button id="submit-button" class="ma-button ma-button--primary" type="submit" disabled>Send command</button>
           </div>
         </form></div>
       </section>

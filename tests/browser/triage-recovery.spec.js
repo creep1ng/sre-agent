@@ -17,6 +17,7 @@ async function connectTriage(page, key) {
 
 async function dismissAlert(page, alertId, reason) {
   await page.locator("#alert-id").fill(alertId);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_dismiss");
   await page.locator("#command-reason").fill(reason);
   await page.locator("#submit-button").click();
@@ -91,6 +92,7 @@ test("declared incident explains the absent alert context", async ({ page }) => 
   const alertId = `al-ca1-warroom-${SUFFIX}`;
   await connectTriage(page, key);
   await page.locator("#alert-id").fill(alertId);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("CA1 null-alert proof.");
   await page.locator("#command-severity").selectOption("sev2");
