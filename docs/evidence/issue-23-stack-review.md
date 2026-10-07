@@ -276,3 +276,11 @@ Expected114checks pass. Only the checksDB dependency starts; other services' exa
 Parent additionally loaded the backend in its owned API, observed readiness200 and authenticated actual eligibleGET200 with100 returned items for a valid ID without a triage decision. Actual body recorded in `t23-17/live-eligible.json`; screenshot below was inspected, with no credential rendered. This is a bounded API result, not proof of complete incident inventory or the still-pending target-selector UI. No browserDB reset or command was sent by the capture.
 
 ![Actual bounded eligible-incidents API response](issue-23-eligible-api.png)
+
+## Current checkpoint: backend audit and UI failure-first proof
+
+On2026-10-07 an independent read-only audit of committed `32de182` found no actionable backend P0/P1 in exact grants, terminal identity, atomic state/event/response persistence, mandatory impact, backend provenance, eligible filtering or locked POST revalidation. This is a source audit, not another executed test or human acceptance. Existing genuine HTTP/PostgreSQL coverage is in `tests/test_triage_http.py` (impact/replay, producer provenance, context/grant revocation/real policy-storage failure, eligible auth/storage/filter/bound and list→close→POST rejection).
+
+Parent independently verified the eight pre-authored UI cases against the frozen backend-new/UI-old candidate in a **new isolated tmpfs database**, not the existing evidence database: **8 failed, exit1**, `/tmp/triage23-review/t23-18/isolated-red/parent-red-final-authorized.log`. Four inbox cases fail at the missing deep link; four target cases fail at the missing eligible GET. A Docker socket permission failure preceded this run and is retained separately, not represented as behavioral RED. Existing downstream declaration/reload/media assertions were strengthened before source; no new post-code unit cases. UI GREEN and full final CA mapping remain pending.
+
+The inbox is served static synthetic JSON. Its forthcoming actual nginx→triage→FastAPI/PostgreSQL journeys will prove that integration, **not live provider ingestion**. A real PostgreSQL list→close→POST test proves the backend race; an injected409 browser case proves only UI recovery/no false success. Failure-run recordings are not acceptance media.
