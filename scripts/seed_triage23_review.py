@@ -32,7 +32,8 @@ PRINCIPALS = {
     ),
     "op-nogrant": ("human", ()),
     "op-noread": ("human", ("alert.dismiss",)),
-    "producer-e2e": ("agent", ("alert.dismiss", "alert.associate", "run.read")),
+    "reader-e2e": ("human", ("alert.read",)),
+    "producer-e2e": ("agent", ("alert.dismiss", "alert.associate", "run.read", "alert.read")),
     "producer-nogrant": ("agent", ()),
 }
 
@@ -86,13 +87,14 @@ async def seed() -> None:
         "E2E_TRIAGE_API_KEY": keys["op-e2e"],
         "E2E_NOGRANT_API_KEY": keys["op-nogrant"],
         "E2E_OP_NOREAD_API_KEY": keys["op-noread"],
+        "E2E_TRIAGE_READONLY_API_KEY": keys["reader-e2e"],
         "E2E_EXTERNAL_API_KEY": keys["producer-e2e"],
         "E2E_EXTERNAL_NOGRANT_API_KEY": keys["producer-nogrant"],
         "E2E_TRIAGE_LEGACY_ALERT_ID": "al-t23-legacy",
     }
     KEY_FILE.write_text("".join(f"{name}={value}\n" for name, value in values.items()))
     KEY_FILE.chmod(0o600)
-    print("Seeded five synthetic principals and a pre-provenance legacy decision.")
+    print("Seeded six synthetic principals and a pre-provenance legacy decision.")
 
 
 if __name__ == "__main__":
