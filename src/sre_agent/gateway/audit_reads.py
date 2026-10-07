@@ -3,11 +3,12 @@
 import re
 from datetime import datetime
 from time import monotonic
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Security
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
@@ -34,17 +35,78 @@ FORBIDDEN_PARAMS = (
     " redacted_content include_content"
 ).split()
 ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
+CANONICAL_UUID_PATTERN = (
+    r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+)
+AUDIT_EVENT_ID_SCHEMA = {
+    "oneOf": [
+        {
+            "type": "string",
+            "format": "uuid",
+            "pattern": CANONICAL_UUID_PATTERN,
+        },
+        {
+            "type": "string",
+            "pattern": ID_PATTERN,
+            "not": {"pattern": CANONICAL_UUID_PATTERN},
+        },
+    ]
+}
+AUDIT_LIST_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["items", "limit", "truncated"],
+    "properties": {
+        "items": {
+            "type": "array",
+            "maxItems": MAX_LIMIT,
+            "items": {"$ref": "urn:sre-agent:schema:audit-event-metadata:2.7.0"},
+        },
+        "limit": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT},
+        "truncated": {"type": "boolean"},
+    },
+}
+AUDIT_QUERY_PARAMETERS = [
+    {"name": "principal_id", "in": "query", "schema": {"type": "string", "pattern": ID_PATTERN}},
+    {"name": "decision", "in": "query", "schema": {"enum": ["allow", "deny"]}},
+    {"name": "model_alias_id", "in": "query", "schema": {"type": "string"}},
+    {"name": "request_id", "in": "query", "schema": {"type": "string", "format": "uuid"}},
+    {"name": "incident_id", "in": "query", "schema": {"type": "string"}},
+    {"name": "run_id", "in": "query", "schema": {"type": "string"}},
+    {"name": "task_id", "in": "query", "schema": {"type": "string"}},
+    {"name": "trace_id", "in": "query", "schema": {"type": "string"}},
+    {"name": "from", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+    {"name": "to", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+    {
+        "name": "limit",
+        "in": "query",
+        "schema": {"type": "integer", "minimum": 1, "maximum": MAX_LIMIT, "default": DEFAULT_LIMIT},
+    },
+]
+AUDIT_LIST_REQUIRED_FILTERS = FILTER_KEYS.copy()
+AUDIT_FORBIDDEN_QUERY_PARAMETERS = FORBIDDEN_PARAMS.copy()
+AUDIT_SCOPE = {
+    "action": READ_ACTION,
+    "resource_type": RESOURCE_TYPE,
+    "resource_id": RESOURCE_ID,
+}
+AUDIT_ERROR_DESCRIPTIONS = {
+    401: "Authentication failed before lookup",
+    403: "Authenticated Principal is not permitted",
+    404: "Identical response for hidden and absent resources",
+    422: "Closed-body, unsafe-list, unsupported-pagination, or audit-content validation failure",
+    503: "Authoritative audit store did not durably accept the safe event",
+}
+_audit_bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
 
 
 def _valid_event_id(value: Any) -> bool:
-    if re.fullmatch(ID_PATTERN, str(value)) is not None:
-        return True
-    try:
-        UUID(str(value))
-        return True
-    except ValueError:
-        pattern = r"^cor_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-        return re.fullmatch(pattern, str(value)) is not None
+    event_id = str(value)
+    return (
+        re.fullmatch(CANONICAL_UUID_PATTERN, event_id) is not None
+        or re.fullmatch(ID_PATTERN, event_id) is not None
+    )
 
 
 ERRORS = {
@@ -371,15 +433,86 @@ class AuditReadsService:
 
 def audit_reads_router(service: AuditReadsService) -> APIRouter:
     router = APIRouter(tags=["Audit"])
+    audit_responses = {
+        status: {
+            "description": description,
+            "content": {
+                "application/json": {
+                    "schema": {"$ref": "urn:sre-agent:schema:error-envelope:2.7.0"}
+                }
+            },
+        }
+        for status, description in AUDIT_ERROR_DESCRIPTIONS.items()
+    }
+    audit_list_responses = {
+        status: response for status, response in audit_responses.items() if status != 404
+    }
 
-    @router.get("/v1/audit-events")
-    async def list_events(request: Request) -> JSONResponse:
+    @router.get(
+        "/v1/audit-events",
+        operation_id="listAuditEvents",
+        summary="List filtered audit metadata",
+        description=(
+            "Requires a listed identity, decision, alias, correlation, or bounded-time filter; "
+            "ordered by (occurred_at,event_id) descending. Content parameters are rejected."
+        ),
+        responses={
+            **audit_list_responses,
+            200: {
+                "description": "Bounded metadata-only AuditEvent list",
+                "content": {"application/json": {"schema": AUDIT_LIST_SCHEMA}},
+            },
+        },
+        openapi_extra={
+            "parameters": AUDIT_QUERY_PARAMETERS,
+            "x-required-query-any-of": AUDIT_LIST_REQUIRED_FILTERS,
+            "x-forbidden-query-parameters": AUDIT_FORBIDDEN_QUERY_PARAMETERS,
+            "x-governed-scope": AUDIT_SCOPE,
+        },
+    )
+    async def list_events(
+        request: Request,
+        _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
+    ) -> JSONResponse:
         return await service.list_events(
             dict(request.query_params), request.headers.get("authorization")
         )
 
-    @router.get("/v1/audit-events/{event_id}")
-    async def get_event(event_id: str, request: Request) -> JSONResponse:
-        return await service.get_event(event_id, request.headers.get("authorization"))
+    @router.get(
+        "/v1/audit-events/{id}",
+        operation_id="getAuditEvent",
+        summary="Get audit metadata",
+        description=(
+            "Metadata and redaction state only. Raw or redacted content retrieval is unsupported."
+        ),
+        responses={
+            **audit_responses,
+            200: {
+                "description": "Metadata-only AuditEvent projection",
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "urn:sre-agent:schema:audit-event-metadata:2.7.0"}
+                    }
+                },
+            },
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "id",
+                    "in": "path",
+                    "required": True,
+                    "schema": AUDIT_EVENT_ID_SCHEMA,
+                }
+            ],
+            "x-governed-scope": AUDIT_SCOPE,
+        },
+    )
+    async def get_event(
+        id: str,
+        request: Request,
+        _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
+    ) -> JSONResponse:
+        return await service.get_event(id, request.headers.get("authorization"))
 
     return router

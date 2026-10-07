@@ -282,7 +282,45 @@ def test_detail_metadata_conforms_and_404() -> None:
         ).status_code
         == 404
     )
+    legacy_compact_id = "abcdefabcdefabcdefabcdefabcdefab"
+    legacy_missing = client.get(f"/v1/audit-events/{legacy_compact_id}", headers=headers)
+    assert legacy_missing.status_code == 404
+    _assert_terminal_validation_record(legacy_missing, 404, "authorization")
     assert client.get("/v1/audit-events/NOPE!", headers=headers).status_code == 422
+
+
+def _assert_terminal_validation_record(response, status: int, stage: str) -> None:
+    request_id = response.json()["request_id"]
+    with psycopg.connect(DATABASE_URL) as connection:
+        rows = connection.execute(
+            "SELECT to_jsonb(a) FROM audit_events a WHERE operation='audit.project' "
+            "AND correlation->>'request_id'=%s",
+            (request_id,),
+        ).fetchall()
+    assert len(rows) == 1
+    row = rows[0][0]
+    assert row["operation"] == "audit.project"
+    assert row["action"] == "read_metadata"
+    assert row["response_status"] == status
+    assert row["stage"] == stage
+    assert row["content_state"] == "absent"
+    assert row["correlation"]["request_id"] == request_id
+
+
+@pytest.mark.parametrize(
+    "event_id",
+    (
+        "3f2504e04f8911d39a0c0305e82c3301",
+        "{3f2504e0-4f89-11d3-9a0c-0305e82c3301}",
+        "urn:uuid:3f2504e0-4f89-11d3-9a0c-0305e82c3301",
+    ),
+)
+def test_noncanonical_uuid_path_forms_are_audited_validation_errors(event_id: str) -> None:
+    response = _client().get(
+        f"/v1/audit-events/{event_id}", headers={"Authorization": BEARERS["admin"]}
+    )
+    assert response.status_code == 422, response.text
+    _assert_terminal_validation_record(response, 422, "validation")
 
 
 def test_event_id_accepts_digit_leading_uuids() -> None:
