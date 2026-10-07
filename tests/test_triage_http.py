@@ -3,6 +3,8 @@
 import asyncio
 import os
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -11,6 +13,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
+from psycopg import sql
 
 from sre_agent.application import create_application
 from sre_agent.persistence.database import Database
@@ -862,16 +865,28 @@ def test_post_revalidates_grant_revoked_after_context_projection() -> None:
 
 def test_context_fails_closed_when_real_policy_storage_is_unavailable() -> None:
     role = "triage_context_policy_denied"
-    dsn = "postgresql://triage_context_policy_denied@checks-db:5432/triage23_checks"
+    password = uuid4().hex
+    parts = urlsplit(DATABASE_URL)
+    dsn = urlunsplit(parts._replace(netloc=f"{role}:{password}@{parts.netloc.rsplit('@', 1)[-1]}"))
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         if connection.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,)).fetchone():
             connection.execute(f"DROP OWNED BY {role}")
             connection.execute(f"DROP ROLE {role}")
-        connection.execute(f"CREATE ROLE {role} LOGIN")
-        connection.execute(f"GRANT CONNECT ON DATABASE triage23_checks TO {role}")
+        connection.execute(
+            sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                sql.Identifier(role), sql.Literal(password)
+            )
+        )
+        connection.execute(
+            sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                sql.Identifier(connection.info.dbname), sql.Identifier(role)
+            )
+        )
         connection.execute(f"GRANT USAGE ON SCHEMA public TO {role}")
         connection.execute(f"GRANT SELECT ON TABLE credentials, principals, resources TO {role}")
     try:
+        with psycopg.connect(dsn) as restricted:
+            assert restricted.execute("SELECT COUNT(*) FROM credentials").fetchone()[0] > 0
         with _client(dsn) as client:
             response = _get_context(client, "al-context-policy-fault", BEARERS["reader"])
         assert response.status_code == 503
