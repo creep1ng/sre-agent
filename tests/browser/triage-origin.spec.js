@@ -79,26 +79,11 @@ test("external producer dismissal is labeled from backend provenance after reloa
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
 });
 
-test("authorized external producer links to a real operator-declared incident", async ({ page, request }) => {
+test("authorized external producer links to a real backend-eligible incident", async ({ page, request }) => {
   const producer = requiredKey("E2E_EXTERNAL_API_KEY");
   const operator = requiredKey("E2E_TRIAGE_API_KEY");
-  const targetAlert = alertId("link-target");
-  await page.goto(`${WEB}/public/admin/triage.html`);
-  await page.locator("#api-key").fill(operator);
-  await page.locator("#connect-button").click();
-  await page.locator("#alert-id").fill(targetAlert);
-  await expect(page.locator("#command-operation")).toBeEnabled();
-  await page.locator("#command-operation").selectOption("triage_declare");
-  await page.locator("#command-reason").fill("Operator declares the shared incident.");
-  await page.locator("#command-severity").selectOption("sev2");
-  await page.locator("#command-impact").fill("Customer payments are unavailable.");
-  await page.locator("#submit-button").click();
-  await expect(page.locator("#result-status")).toHaveText("declared");
-  const incidentText = await page.locator("#result-incident").textContent();
-  const incidentId = incidentText?.match(/inc-[a-z0-9-]+/)?.[0];
-  expect(incidentId).toBeTruthy();
-
   const alert = alertId("linked");
+  const incidentId = "inc-0000-t23-linkable";
   const linked = await postCommand(request, producer, alert, {
     operation: "triage_link",
     expected_version: 1,

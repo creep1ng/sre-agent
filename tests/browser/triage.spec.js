@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const COMMANDS_PATH = "/api/v1/alerts/al-journey-01/triage/commands";
 const CONTEXT_PATH = "/api/v1/alerts/al-journey-01/triage/context";
+const ELIGIBLE_PATH = "/api/v1/alerts/al-journey-01/triage/eligible-incidents";
 const ALL_ACTIONS = ["open_triage", "triage_dismiss", "triage_link", "triage_declare"];
 
 function stateResult(status, incident = null) {
@@ -26,7 +27,10 @@ async function send(page, operation, configure = {}) {
   await expect(page.locator("#command-operation")).toBeEnabled();
   await page.selectOption("#command-operation", operation);
   for (const [selector, value] of Object.entries(configure)) {
-    if (selector === "#command-severity") await page.selectOption(selector, value);
+    if (selector === "#command-severity" || selector === "#command-target") {
+      await expect(page.locator(`${selector} option[value=\"${value}\"]`)).toHaveCount(1);
+      await page.selectOption(selector, value);
+    }
     else await page.fill(selector, value);
   }
   await page.click("#submit-button");
@@ -58,6 +62,11 @@ test.beforeEach(async ({ page }) => {
       actor: "op-human", reason: body.reason ?? null, decided_at: "2026-09-20T10:00:00Z",
     };
   });
+  await page.route((url) => url.pathname === ELIGIBLE_PATH, (route) =>
+    route.fulfill(json(200, JSON.stringify({
+      items: [{ incident_id: "inc-target-01", state: "active" }],
+    }))),
+  );
   await page.route((url) => url.pathname === CONTEXT_PATH, (route) =>
     route.fulfill(json(200, JSON.stringify({
       alert_id: "al-journey-01", triage_state: mockedState, allowed_actions: ALL_ACTIONS,

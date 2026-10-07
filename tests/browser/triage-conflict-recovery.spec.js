@@ -51,19 +51,8 @@ test.beforeEach(async ({ page }) => {
 
 test("stale command reads the winning version before explicit resubmission", async ({ page, request }) => {
   const key = requiredKey("E2E_TRIAGE_API_KEY");
-  const targetAlert = alertId("t23-target");
   const raceAlert = alertId("t23-race");
-
-  const target = await postCommand(request, key, targetAlert, {
-    operation: "triage_declare",
-    expected_version: 1,
-    reason: "T23-2 real browser link target.",
-    severity: "sev2",
-    impact: "The existing checkout incident blocks new customer payments.",
-  });
-  expect(target.response.status()).toBe(201);
-  const targetIncident = target.body.incident_id;
-  expect(targetIncident).toMatch(/^inc-/);
+  const targetIncident = "inc-0000-t23-linkable";
 
   const initial = await postCommand(request, key, raceAlert, {
     operation: "open_triage",
@@ -77,7 +66,8 @@ test("stale command reads the winning version before explicit resubmission", asy
   await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_link");
   await page.locator("#command-reason").fill("Link after reviewing the current alert.");
-  await page.locator("#command-target").fill(targetIncident);
+  await expect(page.locator(`#command-target option[value="${targetIncident}"]`)).toHaveCount(1);
+  await page.locator("#command-target").selectOption(targetIncident);
 
   const beforeStaleSubmit = page.context()["__triageRequests"].length;
   const winner = await postCommand(request, key, raceAlert, {
