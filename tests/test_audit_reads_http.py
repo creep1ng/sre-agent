@@ -17,6 +17,7 @@ from referencing import Registry, Resource
 from sre_agent.application import create_application
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.audit_reads import AuditReadsService, _valid_event_id
+from sre_agent.gateway.responses import PostgresAuditStore
 from sre_agent.governance.dto import AuditEvent
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import AuditRepository, GrantRepository
@@ -213,8 +214,28 @@ def test_any_of_forbidden_and_invalid_filters() -> None:
     ):
         response = client.get(f"/v1/audit-events?{query}", headers=headers)
         assert response.status_code == 422, query
+    for forbidden in (
+        "cursor=abc",
+        "page=1",
+        "offset=5",
+        "continuation_token=abc",
+        "next=abc",
+        "content=x",
+        "raw_content=x",
+        "redacted_content=x",
+        "include_content=true",
+    ):
+        query = f"{forbidden}&decision=deny"
+        response = client.get(f"/v1/audit-events?{query}", headers=headers)
+        assert response.status_code == 422, query
     alone = client.get("/v1/audit-events?from=2026-09-21T00:00:00Z", headers=headers).json()
-    assert alone == {"items": [], "limit": 100, "truncated": False}
+    assert (alone["limit"], alone["truncated"]) == (100, False)
+    lower_bound = datetime(2026, 9, 21, tzinfo=UTC)
+    for item in alone["items"]:
+        occurred_at = datetime.fromisoformat(item["occurred_at"].replace("Z", "+00:00"))
+        assert occurred_at >= lower_bound
+        AuditEvent.model_validate_json(json.dumps(item))
+        assert "redacted_content" not in item
 
 
 def test_list_filters_default_limit_and_empty() -> None:
@@ -225,9 +246,11 @@ def test_list_filters_default_limit_and_empty() -> None:
     body = response.json()
     assert (body["limit"], body["truncated"]) == (100, False)
     assert len(body["items"]) == 4
-    mine = client.get("/v1/audit-events?principal_id=admin-human", headers=headers).json()
+    mine = client.get(
+        f"/v1/audit-events?{WINDOW_QS}&principal_id=admin-human", headers=headers
+    ).json()
     assert len(mine["items"]) == 4
-    denied = client.get("/v1/audit-events?decision=deny", headers=headers).json()
+    denied = client.get(f"/v1/audit-events?{WINDOW_QS}&decision=deny", headers=headers).json()
     assert len(denied["items"]) == 1
     requested = client.get(
         f"/v1/audit-events?request_id={UUID(int=0xC0000000000000000000000000000000 + 52)}",
@@ -265,7 +288,8 @@ def test_detail_metadata_conforms_and_404() -> None:
 def test_event_id_accepts_digit_leading_uuids() -> None:
     assert _valid_event_id(DIGIT_EVENT_ID)
     assert _valid_event_id("cor_12345678-1234-1234-8234-123456789012")
-    assert not _valid_event_id("not-a-uuid")
+    assert _valid_event_id("not-a-uuid")
+    assert not _valid_event_id("NOPE!")
 
 
 def test_digit_leading_uuid_round_trip() -> None:
@@ -292,7 +316,7 @@ async def test_storage_failure_is_503_without_list() -> None:
     def broken():
         raise RuntimeError("boom")
 
-    service = AuditReadsService(broken, HMAC_KEY)
+    service = AuditReadsService(broken, HMAC_KEY, PostgresAuditStore(broken))
     response = await service.list_events(
         {"from": "2026-09-20T00:00:00Z", "to": "2026-09-21T00:00:00Z"}, BEARERS["admin"]
     )

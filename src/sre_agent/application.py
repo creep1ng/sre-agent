@@ -145,7 +145,9 @@ def create_application(
         )
         application.include_router(
             audit_reads_router(
-                AuditReadsService(database.sessions, runtime_settings.audit_hmac_key.encode())
+                AuditReadsService(
+                    database.sessions, runtime_settings.audit_hmac_key.encode(), store
+                )
             )
         )
     if provider is not None and runtime_settings.audit_hmac_key:

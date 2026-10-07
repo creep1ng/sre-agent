@@ -9,7 +9,7 @@ WINDOW = {"from": "2026-09-20T00:00:00Z", "to": "2026-09-21T00:00:00Z"}
 
 
 def _service() -> AuditReadsService:
-    return AuditReadsService(None, KEY)
+    return AuditReadsService(None, KEY, object())
 
 
 def test_full_filter_set_resolves_to_storage_arguments() -> None:

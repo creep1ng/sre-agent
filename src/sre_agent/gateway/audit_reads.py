@@ -2,6 +2,7 @@
 
 import re
 from datetime import datetime
+from time import monotonic
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -10,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
-from sre_agent.governance.dto import Principal, PrincipalContext
+from sre_agent.governance.dto import PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.models import AuditEventRow
 from sre_agent.persistence.repositories import (
@@ -36,6 +37,8 @@ ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
 
 
 def _valid_event_id(value: Any) -> bool:
+    if re.fullmatch(ID_PATTERN, str(value)) is not None:
+        return True
     try:
         UUID(str(value))
         return True
@@ -84,8 +87,8 @@ def project_metadata(values: dict[str, Any]) -> dict[str, Any]:
 
 
 class AuditReadsService:
-    def __init__(self, sessions: Any, hmac_key: bytes) -> None:
-        self.sessions = sessions
+    def __init__(self, sessions: Any, hmac_key: bytes, audit: Any) -> None:
+        self.sessions, self.audit = sessions, audit
         self._projector = AuditProjector(hmac_key)
 
     def _error(
@@ -113,22 +116,74 @@ class AuditReadsService:
 
     async def _authorized(
         self,
-        request_id: UUID,
         authorization: str | None,
-    ) -> tuple[Principal | None, JSONResponse | None]:
+    ) -> tuple[PrincipalContext | None, Any | None, int | None]:
         try:
             context = await self._authenticate(authorization)
             if context is None:
-                return None, self._error(request_id, 401, headers={"WWW-Authenticate": "Bearer"})
+                return None, None, 401
             async with self.sessions() as session:
                 evaluation = await AuthorizationDecisionEngine(
                     ResourceRepository(session), GrantRepository(session)
                 ).evaluate(context.principal, READ_ACTION, RESOURCE_TYPE, RESOURCE_ID)
         except Exception:
-            return None, self._error(request_id, 503)
+            return None, None, 503
         if evaluation.decision.decision != "allow":
-            return None, self._error(request_id, 403)
-        return context.principal, None
+            return context, evaluation, 403
+        return context, evaluation, None
+
+    async def _finish(
+        self,
+        request_id: UUID,
+        started: float,
+        status: int,
+        stage: str,
+        *,
+        error_code: str | None = None,
+        payload: dict[str, Any] | None = None,
+        context: PrincipalContext | None = None,
+        evaluation: Any | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> JSONResponse:
+        try:
+            audit_reason = {
+                "validation_error": "contract_validation_failed",
+            }.get(error_code or "", error_code)
+            event = self._projector.control_event(
+                request_id,
+                status,
+                max(0, int((monotonic() - started) * 1000)),
+                stage,
+                operation="audit.project",
+                action="read_metadata",
+                reason=audit_reason,
+                retryable=status == 503,
+                context=context if stage == "authorization" else None,
+                resource_ref=("administrative_control", "audit")
+                if stage == "authorization"
+                else None,
+                decision=evaluation.decision if stage == "authorization" else None,
+                authorization_denial_cause=(
+                    evaluation.denial_cause
+                    if stage == "authorization" and status in {403, 404}
+                    else None
+                ),
+            )
+            await self.audit.append(event)
+        except Exception:
+            return self._error(request_id, 503)
+        if payload is not None:
+            return JSONResponse(payload, status_code=status)
+        code = error_code or ERRORS[status][0]
+        return JSONResponse(
+            {
+                "error": {"code": code, "message": ERRORS[status][1]},
+                "request_id": str(request_id),
+                "retryable": status == 503,
+            },
+            status_code=status,
+            headers=headers,
+        )
 
     def _digest(self, domain: str, value: str) -> str:
         return self._projector.reference(domain, value).digest
@@ -191,13 +246,33 @@ class AuditReadsService:
         return parsed
 
     async def list_events(self, raw: dict[str, Any], authorization: str | None) -> JSONResponse:
-        request_id = uuid4()
+        request_id, started = uuid4(), monotonic()
         filters = self._filters(raw)
         if filters is None:
-            return self._error(request_id, 422)
-        _, error = await self._authorized(request_id, authorization)
-        if error is not None:
-            return error
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                error_code="validation_error",
+            )
+        context, evaluation, auth_status = await self._authorized(authorization)
+        if auth_status is not None:
+            stage = (
+                "authentication"
+                if auth_status == 401
+                else ("authorization" if auth_status == 403 else "audit")
+            )
+            return await self._finish(
+                request_id,
+                started,
+                auth_status,
+                stage,
+                error_code=ERRORS[auth_status][0],
+                context=context,
+                evaluation=evaluation,
+                headers={"WWW-Authenticate": "Bearer"} if auth_status == 401 else None,
+            )
         limit = filters.pop("limit")
         try:
             async with self.sessions() as session:
@@ -205,22 +280,56 @@ class AuditReadsService:
                     limit=limit, **filters
                 )
         except Exception:
-            return self._error(request_id, 503)
-        return JSONResponse(
-            {
+            return await self._finish(
+                request_id,
+                started,
+                503,
+                "authorization",
+                error_code="audit_unavailable",
+                context=context,
+                evaluation=evaluation,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            context=context,
+            evaluation=evaluation,
+            payload={
                 "items": [project_metadata(e.model_dump(mode="json")) for e in events],
                 "limit": limit,
                 "truncated": has_more,
-            }
+            },
         )
 
     async def get_event(self, event_id: str, authorization: str | None) -> JSONResponse:
-        request_id = uuid4()
+        request_id, started = uuid4(), monotonic()
         if not _valid_event_id(event_id):
-            return self._error(request_id, 422)
-        _, error = await self._authorized(request_id, authorization)
-        if error is not None:
-            return error
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                error_code="validation_error",
+            )
+        context, evaluation, auth_status = await self._authorized(authorization)
+        if auth_status is not None:
+            stage = (
+                "authentication"
+                if auth_status == 401
+                else ("authorization" if auth_status == 403 else "audit")
+            )
+            return await self._finish(
+                request_id,
+                started,
+                auth_status,
+                stage,
+                error_code=ERRORS[auth_status][0],
+                context=context,
+                evaluation=evaluation,
+                headers={"WWW-Authenticate": "Bearer"} if auth_status == 401 else None,
+            )
         try:
             async with self.sessions() as session:
                 row = await session.get(AuditEventRow, event_id)
@@ -230,10 +339,34 @@ class AuditReadsService:
 
                     event = project_audit_event(row)
         except Exception:
-            return self._error(request_id, 503)
+            return await self._finish(
+                request_id,
+                started,
+                503,
+                "authorization",
+                error_code="audit_unavailable",
+                context=context,
+                evaluation=evaluation,
+            )
         if event is None:
-            return self._error(request_id, 404)
-        return JSONResponse(project_metadata(event.model_dump(mode="json")))
+            return await self._finish(
+                request_id,
+                started,
+                404,
+                "authorization",
+                error_code="resource_not_found",
+                context=context,
+                evaluation=evaluation,
+            )
+        return await self._finish(
+            request_id,
+            started,
+            200,
+            "authorization",
+            context=context,
+            evaluation=evaluation,
+            payload=project_metadata(event.model_dump(mode="json")),
+        )
 
 
 def audit_reads_router(service: AuditReadsService) -> APIRouter:
