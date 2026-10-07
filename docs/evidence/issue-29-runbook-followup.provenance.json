@@ -1,0 +1,18 @@
+{
+  "tested_sha": "22a13fd4019c34f68a496d27e1c32320bb343201",
+  "captured_at_utc": "2026-10-03T19:06:28.022Z",
+  "request_id": "5e3014a4-8883-4a1b-8a4d-4cd2a7a19d93",
+  "response_date": "Sat, 03 Oct 2026 19:06:26 GMT",
+  "status": 200,
+  "surface": "real browser rendering of actual FastAPI JSON response; not Swagger examples",
+  "file": "issue-29-runbook-followup.png",
+  "sanitized": true,
+  "api_image_id": "sha256:a31600f5cfc4510b236581fc0fa3de97ac7a7eb24741a341fc2fcf88b87209e6",
+  "previous_image_id": "sha256:c052778e2fa349abfb0c8152724e7d5682ce7cf128fb16a633aa39c30894d058",
+  "new_container_observed": true,
+  "database_preservation_marker_rows": 1,
+  "replay_started_at": "2026-10-03T19:06:23.117252+00:00",
+  "replay_checks_passed": 38,
+  "deterministic_tests_passed": 46,
+  "token_scope": "project-scoped DEMO_STATE_DIR retained for checks and SQL"
+}

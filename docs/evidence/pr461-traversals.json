@@ -1,0 +1,207 @@
+{
+  "probe": "docs/evidence/pr461-traversals.probe.mjs",
+  "page_url": "http://web/public/admin/consumption.html",
+  "transport": "real page plus real endpoint through the web proxy; artificial delay injected only after route.fetch() to the real endpoint",
+  "artificial_delay_ms": 1500,
+  "late_window_ms": 3500,
+  "controlled_data": {
+    "month": "2026-09",
+    "incident": "incident-a"
+  },
+  "credentials": {
+    "admin_a": "ADMIN_HUMAN_API_KEY, value redacted",
+    "restricted_b": "RESTRICTED_HARNESS_API_KEY, value redacted"
+  },
+  "served_asset": {
+    "path": "/public/admin/consumption.js",
+    "http": 200,
+    "bytes": 8851,
+    "sha256_16": "0a7dad4e437054c3"
+  },
+  "http_baseline": [
+    {
+      "query": "month=2026-09",
+      "status": 200,
+      "filter": {
+        "month": "2026-09"
+      },
+      "request_count": 0,
+      "coverage": {
+        "status": "complete",
+        "known": 0,
+        "incomplete": 0,
+        "unknown": 0
+      },
+      "error_code": null
+    },
+    {
+      "query": "incident_id=incident-a",
+      "status": 200,
+      "filter": {
+        "incident_id": "incident-a"
+      },
+      "request_count": 0,
+      "coverage": {
+        "status": "complete",
+        "known": 0,
+        "incomplete": 0,
+        "unknown": 0
+      },
+      "error_code": null
+    },
+    {
+      "query": "request_id=not-a-uuid",
+      "status": 422,
+      "filter": null,
+      "request_count": null,
+      "coverage": null,
+      "error_code": "validation_error"
+    },
+    {
+      "query": "month=2026-09",
+      "status": 401,
+      "filter": null,
+      "request_count": null,
+      "coverage": null,
+      "error_code": "authentication_failed"
+    },
+    {
+      "query": "month=2026-09",
+      "status": 403,
+      "filter": null,
+      "request_count": null,
+      "coverage": null,
+      "error_code": "resource_unavailable"
+    }
+  ],
+  "traversals": [
+    {
+      "id": "T1",
+      "pass": true,
+      "atSwitch": {
+        "dataState": "idle",
+        "status": "Choose a filter and load consumption.",
+        "resultHidden": true,
+        "loadingHidden": true,
+        "scopeHidden": true,
+        "monthHidden": true,
+        "apiKeyEmpty": true,
+        "requestCount": "—",
+        "monthText": "",
+        "monthInput": "",
+        "incidentInput": "",
+        "idleText": "Choose a filter and load consumption."
+      },
+      "afterLateWindow": {
+        "dataState": "idle",
+        "status": "Choose a filter and load consumption.",
+        "resultHidden": true,
+        "loadingHidden": true,
+        "scopeHidden": true,
+        "monthHidden": true,
+        "apiKeyEmpty": true,
+        "requestCount": "—",
+        "monthText": "",
+        "monthInput": "",
+        "incidentInput": "",
+        "idleText": "Choose a filter and load consumption."
+      },
+      "delayedCall": {
+        "phase": "T1-pending-month",
+        "method": "GET",
+        "query": "month=2026-09",
+        "status": 200,
+        "delayed_ms": 1500
+      }
+    },
+    {
+      "id": "T2",
+      "pass": true,
+      "loaded": {
+        "dataState": "ready",
+        "status": "Consumption loaded.",
+        "resultHidden": false,
+        "loadingHidden": true,
+        "scopeHidden": false,
+        "monthHidden": false,
+        "apiKeyEmpty": true,
+        "requestCount": "0",
+        "monthText": "2026-09",
+        "monthInput": "2026-09",
+        "incidentInput": "",
+        "idleText": "Choose a filter and load consumption."
+      },
+      "cleared": {
+        "dataState": "idle",
+        "status": "Choose a filter and load consumption.",
+        "resultHidden": true,
+        "loadingHidden": true,
+        "scopeHidden": true,
+        "monthHidden": true,
+        "apiKeyEmpty": true,
+        "requestCount": "0",
+        "monthText": "2026-09",
+        "monthInput": "2026-09",
+        "incidentInput": "",
+        "idleText": "Choose a filter and load consumption."
+      },
+      "settled": {
+        "dataState": "idle",
+        "status": "Choose a filter and load consumption.",
+        "resultHidden": true,
+        "loadingHidden": true,
+        "scopeHidden": true,
+        "monthHidden": true,
+        "apiKeyEmpty": true,
+        "requestCount": "0",
+        "monthText": "2026-09",
+        "monthInput": "2026-09",
+        "incidentInput": "",
+        "idleText": "Choose a filter and load consumption."
+      },
+      "clearLatencyMs": 58
+    },
+    {
+      "id": "T3",
+      "pass": true,
+      "cleared": {
+        "dataState": "idle",
+        "status": "Choose a filter and load consumption.",
+        "resultHidden": true,
+        "loadingHidden": true,
+        "scopeHidden": true,
+        "monthHidden": true,
+        "apiKeyEmpty": true,
+        "requestCount": "0",
+        "monthText": "2026-09",
+        "monthInput": "2026-09",
+        "incidentInput": "",
+        "idleText": "Choose a filter and load consumption."
+      },
+      "afterLateWindow": {
+        "dataState": "idle",
+        "status": "Choose a filter and load consumption.",
+        "resultHidden": true,
+        "loadingHidden": true,
+        "scopeHidden": true,
+        "monthHidden": true,
+        "apiKeyEmpty": true,
+        "requestCount": "0",
+        "monthText": "2026-09",
+        "monthInput": "2026-09",
+        "incidentInput": "",
+        "idleText": "Choose a filter and load consumption."
+      },
+      "delayedCall": {
+        "phase": "T3-pending-A",
+        "method": "GET",
+        "query": "month=2026-09",
+        "status": 200,
+        "delayed_ms": 1500
+      }
+    }
+  ],
+  "console_errors": [],
+  "overall": "pass",
+  "sanitized": true
+}

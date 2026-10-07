@@ -85,7 +85,7 @@ test("release 2.2.0 validates catalog contract and additive compatibility", asyn
   assert.ok(manifest.inventory.schemas.some(({ path }) => path.endsWith("json-schema/domain/resource-catalog-entry.schema.json")));
   assert.ok(manifest.inventory.examples.some(({ path }) => path.endsWith("examples/catalog/resource-list.example.json")));
 });
-test("release tooling admits 2.3.0 alongside the new 2.4.0 release", async () => {
+test("release tooling admits 2.3.0 alongside the new 2.6.0 release", async () => {
   const command = spawnSync(
     process.execPath,
     [fileURLToPath(new URL("../release.mjs", import.meta.url)), "validate", "--release", "2.3.0"],
@@ -95,7 +95,7 @@ test("release tooling admits 2.3.0 alongside the new 2.4.0 release", async () =>
 
   const root = fileURLToPath(new URL("../../releases/", import.meta.url));
   const result = await validatePublishedReleases(root, async () => ({ artifacts: 1, results: 1 }));
-  assert.deepEqual(result.releases.slice(-2), ["2.3.0", "2.4.0"]);
+  assert.deepEqual(result.releases.slice(-2), ["2.5.0", "2.6.0"]);
 });
 test("release tooling admits and discovers additive 2.4.0 over 2.3.0", async () => {
   const command = spawnSync(
@@ -106,7 +106,7 @@ test("release tooling admits and discovers additive 2.4.0 over 2.3.0", async () 
   assert.doesNotMatch(command.stderr, /Usage:/);
 
   const releases = await validatePublishedReleases();
-  assert.equal(releases.releases.at(-1), "2.4.0");
+  assert.equal(releases.releases.at(-1), "2.6.0");
 
   const manifest = parse(await readFile(new URL("../../releases/2.4.0/manifest.yaml", import.meta.url), "utf8"));
   assert.deepEqual(manifest.baseline, {

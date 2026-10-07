@@ -16,6 +16,7 @@ class Settings:
     release_metadata: ReleaseMetadata = field(default_factory=ReleaseMetadata.defaults)
     grafana_mcp_endpoint: str | None = None
     grafana_mcp_token: str | None = field(default=None, repr=False)
+    openrouter_management_key: str | None = field(default=None, repr=False)
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -42,4 +43,5 @@ class Settings:
             ReleaseMetadata.from_environment(environment),
             environment.get("GRAFANA_MCP_ENDPOINT") or None,
             mcp_token,
+            openrouter_management_key=environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None,
         )

@@ -4,6 +4,8 @@ Real uvicorn subprocess serving sre_agent.main:app (the exact packaged
 entrypoint), real TCP HTTP, real PostgreSQL. Kill the server, start it
 again on the SAME database without re-registering or re-granting anything,
 then prove detail/timeline/snapshot are identical and auth still holds.
+Issue #330 adds the run state and run events: the run is re-read through the
+runs contract after the restart, with the cursor still at its last event.
 """
 
 import os
@@ -31,6 +33,9 @@ PATHS = (
     f"/v1/incidents/{INCIDENT_ID}",
     f"/v1/incidents/{INCIDENT_ID}/timeline",
     f"/v1/incidents/{INCIDENT_ID}/snapshot",
+    # Issue #330: the run state and run events of the runs contract.
+    f"/v1/incidents/{INCIDENT_ID}/runs/{RUN_ID}",
+    f"/v1/incidents/{INCIDENT_ID}/runs/{RUN_ID}/events",
 )
 
 
@@ -107,6 +112,8 @@ def test_packaged_restart_preserves_reads_and_authorization() -> None:
         _stop_server(server)
     assert server.returncode is not None
     assert before[PATHS[0]]["runs"][0]["run_id"] == RUN_ID
+    assert before[PATHS[3]]["run_id"] == RUN_ID
+    assert before[PATHS[3]]["cursor"] == before[PATHS[4]]["next_cursor"]
     server = _start_server(port)
     try:
         after = _reads(port, headers)

@@ -18,6 +18,7 @@ class ProviderRequest(ProviderDTO):
     input: Annotated[str, Field(min_length=1, max_length=65_536)]
     model: ConcreteModel
     provider: ProviderName
+    max_output_tokens: Annotated[int, Field(gt=0, le=2_147_483_647)] | None = None
 
 
 class ProviderResult(ProviderDTO):

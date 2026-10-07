@@ -45,9 +45,12 @@ def fresh_database() -> None:
     assert DATABASE_URL is not None
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
-            "mcp_tools, mcp_servers, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, "
+            "resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
