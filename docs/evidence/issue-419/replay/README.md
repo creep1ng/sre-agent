@@ -72,3 +72,16 @@ The configuration serves the checkout read-only and writes Playwright output
 outside the source tree. The suite covers credential changes/clears, reason
 recovery, action stability, and the pending-command Refresh lock when those
 changes are present in the checked-out source.
+
+## Captured result for this helper candidate
+
+Replayed from a clean detached checkout of source `fd0c7eb18980e04905f7bd6d672b8ff560127baa`, based on main `31b4d2f8ba3dc292ea9bce59c069ffa21ebfc02f`. The tested product tree is main-only; no #489 Refresh-lock change is included. Docker Compose was 5.6.0; Playwright was 1.63.0.
+
+- Packaged API/web run: **1 Playwright test passed**. `whoami` returned exactly `demo-human` and `admin-human` for their separate credentials, both 200 with `no-store`; invalid credential returned generic 401. OpenAPI showed Bearer security, the sole `principal_id` property and a 401 response.
+- Valid UI approval returned 202 and sent `actor_reference` `demo-human`; SQL showed exactly one persisted decision attributed to that principal. A mismatched `admin-human` claim returned 403 `actor_attribution_mismatch`; SQL showed zero decisions for that run.
+- SQL readback found exactly four active demo-human `run.*` grants (`run.read`, `run.start`, `run.command`, `run.approve`) and no `admin.read`.
+- Fresh real packaged UI screenshot: [final-review-receipt.png](final-review-receipt.png), SHA-256 `c16bb747ea194b9ab59fa1521bb5458bd9bda59ed2b18b9da3951aee193c756a`.
+- Focused existing browser review suite: **12 passed in 19.1 seconds** using the mock HTTP seam; this is separate from packaged API evidence.
+- Packaged image IDs: API `sha256:33721791f0284d5f30cec5c65bbfbf34e654bfad930930d3e29abfc0dbe2c1e6`; web `sha256:b9483a6014b2b590a487bb7feae6211315cb853bcb63d7ea7a4761da50e6bfbc`; e2e `sha256:308985938513ee17eaf048254c14769ff6a48e9dd7abd526c37f1b5a8f53eb6b`.
+
+This is a reproducibility helper/evidence slice only. It does not close issue #419 or claim the final #489 Refresh behavior.
