@@ -46,6 +46,10 @@ function principalsPayload() {
 }
 
 function catalogPayload() {
+  // Real contract shape: the catalog never enumerates administrative_control
+  // (CatalogRepository.CATALOG_TYPES excludes it), so this fixture contains
+  // only catalog types. Seeded admin resources reach the create form through
+  // the page's manual seeded-admin options, asserted below.
   return {
     items: [
       {
@@ -61,11 +65,30 @@ function catalogPayload() {
         inference_provider: "provider-should-never-render",
         discoverability: { display_name: "Triage agent", visibility: "private", description: "", tags: [] },
       },
+      {
+        resource_type: "llm_model",
+        resource_id: "retired-model",
+        owner_id: "triage-agent",
+        status: "inactive",
+        source: "model_alias",
+        source_ref: "retired-model",
+        discoverability: { display_name: "Retired model", visibility: "private", description: "", tags: [] },
+      },
     ],
     limit: 100,
     truncated: false,
   };
 }
+
+const SEEDED_ADMIN_RESOURCE_VALUES = [
+  "administrative_control/principals",
+  "administrative_control/credentials",
+  "administrative_control/model_aliases",
+  "administrative_control/usage",
+  "administrative_control/consumption_limits",
+  "administrative_control/catalog",
+  "administrative_control/grants",
+];
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
@@ -123,6 +146,9 @@ test("principal filter loads grants over an exactly-one-filter GET and renders t
   await page.route("**/api/v1/principals?limit=100", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(principalsPayload()) }),
   );
+  await page.route("**/api/v1/catalog/resources**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalogPayload()) }),
+  );
   await page.route("**/api/v1/grants**", async (route) => {
     grantUrls.push(route.request().url());
     await route.fulfill({
@@ -157,7 +183,7 @@ test("principal filter loads grants over an exactly-one-filter GET and renders t
   await expect(page.locator("[data-grant-row='grant-revoked-1']")).toContainText("revoked");
   await expect(page.locator("#resource-filter")).toHaveValue("");
   await expect(page.locator("#create-grant-button")).toBeVisible();
-  await expect(page.locator("#create-grant-button")).toBeDisabled();
+  await expect(page.locator("#create-grant-button")).toBeEnabled();
   expect(await page.locator("#grant-count").textContent()).toMatch(/grant/);
   expect(await storageContents(page)).toEqual({ local: {}, session: {} });
   const leak = await page.evaluate(() => ({ href: location.href, body: document.body.textContent ?? "" }));
@@ -345,4 +371,180 @@ test("restricted identity and invalid keys see no rows", async ({ page }) => {
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable", { timeout: 20_000 });
   await expect(page.locator("[data-grant-row]")).toHaveCount(0);
   await expect(page.locator("#grant-count")).toHaveText("Not loaded.");
+});
+
+async function connectWithGrantRoutes(page, postStatus) {
+  await page.route("**/api/v1/principals?limit=100", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(principalsPayload()) }),
+  );
+  await page.route("**/api/v1/catalog/resources**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalogPayload()) }),
+  );
+  const posted = [];
+  let createdSeen = false;
+  const createdGrant = () =>
+    grantItem({
+      grant_id: "grant-incident-harness-invoke-triage-agent",
+      principal_id: "incident-harness",
+      action: "invoke",
+      resource: { resource_type: "llm_model", resource_id: "triage-agent" },
+    });
+  await page.route("**/api/v1/grants**", async (route) => {
+    if (route.request().method() === "POST") {
+      posted.push({
+        body: JSON.parse(route.request().postData() ?? "{}"),
+        idempotencyKey: await route.request().headerValue("idempotency-key"),
+      });
+      if (postStatus === 201) {
+        createdSeen = true;
+        await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(createdGrant()) });
+      } else {
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "idempotency_conflict", message: "Grant already exists." } }),
+        });
+      }
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(grantPayload(createdSeen ? [createdGrant()] : [])),
+    });
+  });
+  await page.fill("#api-key", "sre_s1_placeholder_key_for_seam_fulfillment");
+  await page.click("#connect-button");
+  await expect(page.locator("#create-grant-button")).toBeEnabled();
+  return { posted };
+}
+
+test("create flow posts a real grant body, announces 201 and refreshes without reload", async ({ page }) => {
+  const { posted } = await connectWithGrantRoutes(page, 201);
+  await expect(page.locator("#create-principal option[value='incident-harness']")).toHaveCount(1);
+  await expect(page.locator("#create-principal option[value='retired-harness']")).toHaveCount(0);
+  await expect(page.locator("#create-resource option[value='llm_model/triage-agent']")).toHaveCount(1);
+  // The fulfilled catalog carries no administrative_control entry (real
+  // contract shape), so the catalog-driven resource filter cannot offer it…
+  await expect(page.locator("#resource-filter option[value='grants']")).toHaveCount(0);
+  // …while the create form still offers every seeded admin resource through
+  // its manual seeded-admin options.
+  for (const value of SEEDED_ADMIN_RESOURCE_VALUES) {
+    await expect(page.locator(`#create-resource option[value='${value}']`)).toHaveCount(1);
+  }
+  await expect(page.locator("#create-resource option[value='administrative_control/grants'][data-manual-source='seeded-admin-resource']")).toHaveCount(1);
+  await expect(page.locator("#create-resource option[value='llm_model/retired-model']")).toHaveCount(0);
+  await expect(page.locator("#create-action option")).toHaveCount(8);
+  await page.click("#create-grant-button");
+  await expect(page.locator("#create-dialog")).toBeVisible();
+  await page.fill("#create-grant-id", "grant-incident-harness-invoke-triage-agent");
+  await page.selectOption("#create-principal", "incident-harness");
+  await page.selectOption("#create-action", "invoke");
+  await page.selectOption("#create-resource", "llm_model/triage-agent");
+  await page.click("#create-submit");
+  await expect(page.locator("#live-region")).toContainText(
+    "Grant grant-incident-harness-invoke-triage-agent ready (201 created or stable replay).",
+  );
+  await expect(page.locator("#create-dialog")).toBeHidden();
+  await expect(page.locator("[data-grant-row='grant-incident-harness-invoke-triage-agent']")).toHaveCount(1);
+  expect(posted).toHaveLength(1);
+  expect(posted[0].body).toEqual({
+    grant_id: "grant-incident-harness-invoke-triage-agent",
+    principal_id: "incident-harness",
+    action: "invoke",
+    resource: { resource_type: "llm_model", resource_id: "triage-agent" },
+    effect: "allow",
+  });
+  expect(posted[0].idempotencyKey).toMatch(/^grant-create-[0-9a-f]{32}$/);
+  const pageText = (await page.locator("#grants-page").textContent()) ?? "";
+  expect(pageText).not.toContain("concrete-model-should-never-render");
+  expect(pageText).not.toContain("router-should-never-render");
+  expect(pageText).not.toContain("provider-should-never-render");
+});
+
+test("duplicate grant keeps the dialog with 409 wording and adds no row", async ({ page }) => {
+  await connectWithGrantRoutes(page, 409);
+  await page.click("#create-grant-button");
+  await expect(page.locator("#create-dialog")).toBeVisible();
+  await page.fill("#create-grant-id", "grant-admin-human-admin-read-grants");
+  await page.selectOption("#create-principal", "admin-human");
+  await page.selectOption("#create-action", "admin.read");
+  // administrative_control/grants comes from the manual seeded-admin options
+  // (the catalog fixture carries no administrative_control entry).
+  await page.selectOption("#create-resource", "administrative_control/grants");
+  await page.click("#create-submit");
+  await expect(page.locator("#create-error-title")).toHaveText("Grant already exists (409 duplicate)");
+  await expect(page.locator("#create-dialog")).toBeVisible();
+  await expect(page.locator("#create-grant-id")).toHaveValue("grant-admin-human-admin-read-grants");
+  await expect(page.locator("[data-grant-row]")).toHaveCount(0);
+});
+
+test("create then revoke keeps the same filter and the revoked row", async ({ page }) => {
+  // Seam-level create→revoke continuity only: the HTTP seam is fulfilled, so
+  // the real authorization-boundary allow/deny proof lives in
+  // docs/evidence/issue-21-grants-integrated-probe.py (grantee credential
+  // through GET /v1/principals, 200 before revoke, 403 after).
+  await page.route("**/api/v1/principals?limit=100", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(principalsPayload()) }),
+  );
+  await page.route("**/api/v1/catalog/resources**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalogPayload()) }),
+  );
+  const deleteUrls = [];
+  let createdSeen = false;
+  let revokedSeen = false;
+  const integratedGrant = () =>
+    grantItem({
+      grant_id: "grant-incident-harness-invoke-triage-agent",
+      principal_id: "incident-harness",
+      action: "invoke",
+      resource: { resource_type: "llm_model", resource_id: "triage-agent" },
+      status: revokedSeen ? "revoked" : "active",
+    });
+  await page.route("**/api/v1/grants**", async (route) => {
+    if (route.request().method() === "POST") {
+      createdSeen = true;
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(integratedGrant()) });
+      return;
+    }
+    if (route.request().method() === "DELETE") {
+      deleteUrls.push(route.request().url());
+      revokedSeen = true;
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(grantPayload(createdSeen ? [integratedGrant()] : [])),
+    });
+  });
+  await page.fill("#api-key", "sre_s1_placeholder_key_for_seam_fulfillment");
+  await page.click("#connect-button");
+  await expect(page.locator("#create-grant-button")).toBeEnabled();
+  await page.click("#create-grant-button");
+  await page.fill("#create-grant-id", "grant-incident-harness-invoke-triage-agent");
+  await page.selectOption("#create-principal", "incident-harness");
+  await page.selectOption("#create-action", "invoke");
+  await page.selectOption("#create-resource", "llm_model/triage-agent");
+  await page.click("#create-submit");
+  const row = page.locator("[data-grant-row='grant-incident-harness-invoke-triage-agent']");
+  await expect(row).toContainText("active");
+  await expect(page.locator("#principal-filter")).toHaveValue("incident-harness");
+  await expect(page.locator("#resource-filter")).toHaveValue("");
+  await row.locator("[data-grant-revoke]").click();
+  await expect(page.locator("#revoke-dialog")).toBeVisible();
+  await page.locator("#revoke-submit").click();
+  expect(deleteUrls).toHaveLength(1);
+  await expect(page.locator("#revoke-dialog")).toBeHidden();
+  // currentFilter kept: the revoke refresh reuses the create filter,
+  // so the same row stays listed with the revoked badge.
+  await expect(row).toContainText("revoked");
+  await expect(row).toHaveCount(1);
+  await expect(page.locator("#principal-filter")).toHaveValue("incident-harness");
+  await expect(page.locator("#resource-filter")).toHaveValue("");
+  await expect(page.locator("#live-region")).toContainText("revoked");
+  if (process.env.GRANTS_INTEGRATED_CAPTURE) {
+    await page.screenshot({ path: process.env.GRANTS_INTEGRATED_CAPTURE, fullPage: true });
+  }
 });
