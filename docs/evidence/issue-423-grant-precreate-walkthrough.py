@@ -6,13 +6,20 @@ error codes, GrantRow counts (zero-mutation proof) and idempotency-record
 counts (no binding consumed on rejection). Also traverses the stable-replay
 path: create a grant, deactivate its principal/resource, then retry the same
 key/body within retention and expect the registered 201 replay (not 404),
-plus a distinct new-tuple duplicate expecting 409. Prints ONLY the JSON
-transcript.
+plus a distinct new-tuple duplicate expecting 409. Admitted creates use the
+exact #480 matrix value bare "invoke" on llm_model (GRANT_ADMITTED_ACTIONS);
+rejection probes keep non-admitted "invoke.x" behind missing/inactive refs so
+404-before-422 and 403-before-lookup ordering still holds. Prints ONLY the JSON
+transcript to stdout. CA8 automatic asserts then verify every case (status
+plus grant_rows plus bindings plus error_code) against the pre-create
+contract, report the summary to stderr, and exit non-zero on ANY violation
+so the run FAILS instead of merely recording.
 """
 
 import asyncio
 import json
 import os
+import sys
 import uuid
 
 import psycopg
@@ -237,7 +244,7 @@ def main() -> None:
             restricted_key,
         )
     )
-    valid = grant_body(f"{NS}-g-valid", f"{NS}-active-human", f"{NS}-active-model", "invoke.valid")
+    valid = grant_body(f"{NS}-g-valid", f"{NS}-active-human", f"{NS}-active-model", "invoke")
     valid_key = fresh_key()
     cases.append(attempt("valid create", valid, valid_key, admin_key))
     with TestClient(app, raise_server_exceptions=False) as client:
@@ -266,7 +273,7 @@ def main() -> None:
                 f"{NS}-g-duplicate",
                 f"{NS}-active-human",
                 f"{NS}-active-model",
-                "invoke.valid",
+                "invoke",
             ),
             fresh_key(),
             admin_key,
@@ -276,7 +283,7 @@ def main() -> None:
         f"{NS}-g-replay-p",
         f"{NS}-replay-human",
         f"{NS}-replay-model",
-        "invoke.replay",
+        "invoke",
     )
     replay_principal_key = fresh_key()
     cases.append(
@@ -295,7 +302,7 @@ def main() -> None:
         f"{NS}-g-replay-r",
         f"{NS}-replay-human-2",
         f"{NS}-replay-model-2",
-        "invoke.replay",
+        "invoke",
     )
     replay_resource_key = fresh_key()
     cases.append(
@@ -310,7 +317,83 @@ def main() -> None:
             admin_key,
         )
     )
-    print(json.dumps({"issue": 423, "cases": cases}, indent=2, sort_keys=True))
+    print(json.dumps({"issue": 423, "cases": cases}, indent=2, sort_keys=True), flush=True)
+    assert_transcript(cases)
+
+
+def assert_transcript(cases: list) -> None:
+    """CA8 automatic asserts: fail the run (non-zero exit) on ANY violation.
+
+    Each expectation checks real endpoint state: HTTP status plus GrantRow
+    count plus idempotency-binding count plus the error envelope code.
+    Missing/inactive refs must be rejected with 404 resource_not_found and
+    zero rows plus zero bindings; the restricted caller stays 403
+    resource_unavailable before lookup; admitted bare-invoke creates must
+    persist exactly one row with one binding; the same-key replay must stay
+    stable; the new-tuple duplicate must stay 409; the stable replays after
+    deactivation must stay 201 via the peek path. Summary goes to stderr so
+    stdout stays pure JSON for transcript regeneration.
+    """
+    expected = {
+        # Missing/inactive refs: rejected before claim, nothing persisted.
+        "missing principal": (404, "resource_not_found", 0, 0),
+        "inactive principal": (404, "resource_not_found", 0, 0),
+        "missing resource": (404, "resource_not_found", 0, 0),
+        "inactive resource": (404, "resource_not_found", 0, 0),
+        # Denied caller before lookup.
+        "restricted caller before lookup": (403, "resource_unavailable", 0, 0),
+        # Admitted bare-invoke creates: one row and one binding.
+        "valid create": (201, None, 1, 1),
+        "idempotent replay of valid create": (201, None, 1, 1),
+        # New-tuple duplicate keeps the published conflict envelope.
+        "duplicate active tuple": (409, "idempotency_conflict", 0, 0),
+        # Stable replays after deactivation keep 201 via the peek path.
+        "replay principal setup create": (201, None, 1, 1),
+        "stable replay after principal deactivated": (201, None, 1, 1),
+        "replay resource setup create": (201, None, 1, 1),
+        "stable replay after resource deactivated": (201, None, 1, 1),
+    }
+    by_name = {case["case"]: case for case in cases}
+    failures = []
+    for name, (want_status, want_code, want_rows, want_bindings) in expected.items():
+        actual = by_name.get(name)
+        if actual is None:
+            failures.append(f"case {name!r}: missing from transcript")
+            continue
+        for field, want in (
+            ("status", want_status),
+            ("error_code", want_code),
+            ("grant_rows", want_rows),
+            ("idempotency_bindings", want_bindings),
+        ):
+            if actual.get(field) != want:
+                failures.append(
+                    f"case {name!r}: expected {field}={want!r} "
+                    f"actual {field}={actual.get(field)!r} "
+                    f"(status={actual.get('status')!r} "
+                    f"error_code={actual.get('error_code')!r} "
+                    f"grant_rows={actual.get('grant_rows')!r} "
+                    f"bindings={actual.get('idempotency_bindings')!r})"
+                )
+    failed_names = {failure.split(":")[0] for failure in failures}
+    passed_cases = len(expected) - len(failed_names)
+    print(
+        f"CA8 asserts: {passed_cases}/{len(expected)} cases passed, {len(failures)} violation(s)",
+        file=sys.stderr,
+    )
+    for failure in failures:
+        print(f"CA8 violation: {failure}", file=sys.stderr)
+    if failures or len(cases) != len(expected):
+        print(
+            f"CA8 result: FAIL ({len(failures)} violation(s); "
+            f"transcript cases={len(cases)} expected={len(expected)})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(
+        f"CA8 result: PASS (all {len(expected)} cases match the pre-create contract)",
+        file=sys.stderr,
+    )
 
 
 if __name__ == "__main__":
