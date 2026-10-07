@@ -11,6 +11,7 @@ from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
+from sre_agent.gateway.identity import router as identity_router
 from sre_agent.gateway.openrouter import OpenRouterProvider
 from sre_agent.gateway.endpoint_catalog import OpenRouterEndpointCatalog
 from sre_agent.gateway.providers import LLMProvider
@@ -95,6 +96,7 @@ def create_application(
 
     application.openapi = openapi_with_release_metadata  # type: ignore[method-assign]
     application.include_router(health.health_router(probe))
+    application.include_router(identity_router)
     application.state.planes = (control, incident, harness)
     application.state.session_provider = database.sessions
     application.state.database = database
