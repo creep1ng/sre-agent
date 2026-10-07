@@ -59,7 +59,8 @@ def test_contract_schemas_and_paths() -> None:
     post = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/commands"]["post"]
     headers = {p["name"] for p in post["parameters"] if "name" in p}
     assert "Idempotency-Key" in headers
-    assert OPENAPI["info"]["version"] == "2.0.0"
+    assert OPENAPI["info"]["version"] == "3.0.0"
+    assert SCHEMAS["triage-state"]["$id"] == "urn:sre-agent:schema:triage-state:2.0.0"
     assert post["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
         "urn:sre-agent:schema:triage-command:2.0.0"
     )
@@ -141,11 +142,46 @@ def test_command_payloads_are_closed_per_operation() -> None:
     for addition, valid in cases:
         assert validator.is_valid(request | addition) is valid
     assert "actor" not in by_op["triage_declare"]["properties"]
+    assert "decision_origin" not in by_op["triage_declare"]["properties"]
+    assert "responsible_system" not in by_op["triage_declare"]["properties"]
     assert by_op["triage_dismiss"]["properties"]["reason"] == {
         "type": "string",
         "minLength": 1,
         "maxLength": 1000,
     }
+
+
+def test_state_schema_requires_backend_validated_provenance() -> None:
+    schema = SCHEMAS["triage-state"]
+    assert {"decision_origin", "responsible_system"} <= set(schema["required"])
+    assert schema["properties"]["decision_origin"]["enum"] == [
+        "manual",
+        "external_automatic",
+        "unknown",
+    ]
+    assert schema["properties"]["responsible_system"] == {
+        "type": ["string", "null"],
+        "maxLength": 64,
+    }
+    validator = Draft202012Validator(schema)
+    base = {
+        "alert_id": "al-contract-origin",
+        "status": "dismissed",
+        "incident_id": None,
+        "expected_version": 1,
+        "decision_origin": "manual",
+        "responsible_system": None,
+    }
+    assert validator.is_valid(base)
+    assert validator.is_valid(base | {"decision_origin": "unknown"})
+    assert validator.is_valid(
+        base | {"decision_origin": "external_automatic", "responsible_system": "producer-a"}
+    )
+    assert not validator.is_valid(base | {"decision_origin": "browser_claimed"})
+    assert not validator.is_valid(
+        base | {"decision_origin": "external_automatic", "responsible_system": None}
+    )
+    assert not validator.is_valid(base | {"unexpected": True})
 
 
 def test_eligible_states_exclude_terminal() -> None:
@@ -161,9 +197,9 @@ def test_contract_examples_validate() -> None:
         [(sid, Resource.from_contents(s)) for sid, s in by_id.items()]
     )
     cases = {
-        "triage-open.json": "urn:sre-agent:schema:triage-state:1.0.0",
+        "triage-open.json": "urn:sre-agent:schema:triage-state:2.0.0",
         "command-request.json": "urn:sre-agent:schema:triage-command:2.0.0",
-        "command-declare.json": "urn:sre-agent:schema:triage-state:1.0.0",
+        "command-declare.json": "urn:sre-agent:schema:triage-state:2.0.0",
         "error-409.json": "urn:sre-agent:schema:error-envelope:2.0.0",
     }
     errors: list[str] = []

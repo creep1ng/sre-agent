@@ -112,6 +112,8 @@ class TriageResult:
     expected_version: int
     actor: str
     decided_at: str
+    decision_origin: str
+    responsible_system: str | None
     replayed: bool
     http_status: int
 
@@ -216,10 +218,12 @@ class TriageService:
             await self._authorize(session, principal, ACTIONS[operation])
             if operation == "triage_link":
                 await self._authorize(session, principal, "run.read")
-            if operation in {"triage_dismiss", "triage_link", "triage_declare"} and (
-                principal.kind != "human"
-            ):
+            if principal.kind != "human" and operation not in {"triage_dismiss", "triage_link"}:
                 raise TriageError(403, "operator_required")
+            decision_origin = "manual" if principal.kind == "human" else "external_automatic"
+            responsible_system = (
+                principal.principal_id if decision_origin == "external_automatic" else None
+            )
             idem = IdempotencyRepository(session)
             try:
                 binding = await idem.claim_or_replay(
@@ -238,6 +242,10 @@ class TriageService:
                 raise TriageError(409, "idempotency_conflict") from None
             if binding.replayed:
                 stored = dict(binding.outcome.response_payload)
+                # Older idempotency records have no trustworthy provenance.
+                # Never infer it from the stored actor identity.
+                stored.setdefault("decision_origin", "unknown")
+                stored.setdefault("responsible_system", None)
                 return TriageResult(replayed=True, http_status=created, **stored)
             repository = TriageRepository(session)
             current = await repository.get(alert_id)
@@ -282,6 +290,8 @@ class TriageService:
                 severity=severity,
                 actor=principal.principal_id,
                 decided_at=datetime.now(UTC),
+                decision_origin=decision_origin,
+                responsible_system=responsible_system,
             )
             if persisted is None:
                 raise TriageError(409, "stale_version")
@@ -293,6 +303,8 @@ class TriageService:
                 "expected_version": persisted["expected_version"],
                 "actor": persisted["actor"],
                 "decided_at": iso,
+                "decision_origin": persisted["decision_origin"],
+                "responsible_system": persisted["responsible_system"],
             }
             await idem.set_response_payload(scope=scope, key_digest=digest, response_payload=result)
             return TriageResult(replayed=False, http_status=created, **result)
@@ -322,6 +334,8 @@ class TriageService:
             "reason": current.get("reason"),
             "actor": current.get("actor"),
             "decided_at": iso,
+            "decision_origin": current.get("decision_origin", "unknown"),
+            "responsible_system": current.get("responsible_system"),
         }
 
     async def _transition(
