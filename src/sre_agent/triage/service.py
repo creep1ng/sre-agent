@@ -67,6 +67,9 @@ STATES = {
     "triage_link": "linked",
     "triage_declare": "declared",
 }
+OPERATION_ORDER = ("open_triage", "triage_dismiss", "triage_link", "triage_declare")
+EXTERNAL_OPERATIONS = {"triage_dismiss", "triage_link"}
+TERMINAL_STATES = {"dismissed", "linked", "declared"}
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ELIGIBLE = {"active", "investigating", "mitigating", "verifying"}
 ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
@@ -133,11 +136,43 @@ class TriageService:
         self._units = lambda: PostgresIncidentUnitOfWork(database)
         self._runtime = IncidentRuntime(workflow, self._units)
 
+    @staticmethod
+    def _principal_may_issue(principal: Principal, operation: str) -> bool:
+        return principal.kind == "human" or (
+            principal.kind == "agent" and operation in EXTERNAL_OPERATIONS
+        )
+
+    @staticmethod
+    def _authorization_engine(session: Any) -> AuthorizationDecisionEngine:
+        return AuthorizationDecisionEngine(ResourceRepository(session), GrantRepository(session))
+
+    async def _has_action(self, session: Any, principal: Principal, action: str) -> bool:
+        decision = await self._authorization_engine(session).evaluate(
+            principal, action, WORKFLOW_TYPE, WORKFLOW_ID
+        )
+        return decision.decision.decision == "allow"
+
     async def _authorize(self, session: Any, principal: Principal, action: str) -> None:
-        engine = AuthorizationDecisionEngine(ResourceRepository(session), GrantRepository(session))
-        decision = await engine.evaluate(principal, action, WORKFLOW_TYPE, WORKFLOW_ID)
-        if decision.decision.decision != "allow":
+        if not await self._has_action(session, principal, action):
             raise TriageError(403, "not_authorized")
+
+    async def _allowed_actions(
+        self, session: Any, principal: Principal, current_status: str | None
+    ) -> list[str]:
+        if current_status in TERMINAL_STATES:
+            return []
+        allowed: list[str] = []
+        for operation in OPERATION_ORDER:
+            if not self._principal_may_issue(principal, operation):
+                continue
+            if not await self._has_action(session, principal, ACTIONS[operation]):
+                continue
+            if operation == "triage_link" and not await self._has_action(
+                session, principal, "run.read"
+            ):
+                continue
+            allowed.append(operation)
+        return allowed
 
     def _check(
         self,
@@ -218,7 +253,7 @@ class TriageService:
             await self._authorize(session, principal, ACTIONS[operation])
             if operation == "triage_link":
                 await self._authorize(session, principal, "run.read")
-            if principal.kind != "human" and operation not in {"triage_dismiss", "triage_link"}:
+            if not self._principal_may_issue(principal, operation):
                 raise TriageError(403, "operator_required")
             decision_origin = "manual" if principal.kind == "human" else "external_automatic"
             responsible_system = (
@@ -254,7 +289,7 @@ class TriageService:
             ):
                 raise TriageError(409, "stale_version")
             current_status = (current or {}).get("status")
-            if current_status in {"dismissed", "linked", "declared"}:
+            if current_status in TERMINAL_STATES:
                 if operation == "triage_declare" and current_status == "declared":
                     raise TriageError(409, "already_declared")
                 if operation == "triage_link":
@@ -324,6 +359,10 @@ class TriageService:
                 raise TriageError(503, "storage_unavailable") from error
         if current is None:
             raise TriageError(404, "triage_not_found")
+        return self._project_state(alert_id, current)
+
+    @staticmethod
+    def _project_state(alert_id: str, current: dict[str, Any]) -> dict[str, Any]:
         decided = current.get("decided_at")
         iso = decided.isoformat() if isinstance(decided, datetime) else str(decided)
         return {
@@ -336,6 +375,26 @@ class TriageService:
             "decided_at": iso,
             "decision_origin": current.get("decision_origin", "unknown"),
             "responsible_system": current.get("responsible_system"),
+        }
+
+    async def read_context(self, principal: Principal, *, alert_id: str) -> dict[str, Any]:
+        """Project persisted triage state and currently authorized next actions.
+
+        The alert.read grant gates the state lookup before policy projection.
+        This is advisory only; execute() repeats every authorization check.
+        A missing triage row is returned as null and does not imply alert inventory.
+        """
+        async with self._database.transaction() as session:
+            await self._authorize(session, principal, READ_ACTION)
+            try:
+                current = await TriageRepository(session).get(alert_id)
+            except Exception as error:
+                raise TriageError(503, "storage_unavailable") from error
+            allowed = await self._allowed_actions(session, principal, (current or {}).get("status"))
+        return {
+            "alert_id": alert_id,
+            "triage_state": None if current is None else self._project_state(alert_id, current),
+            "allowed_actions": allowed,
         }
 
     async def _transition(

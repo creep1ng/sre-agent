@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const COMMANDS_PATH = "/api/v1/alerts/al-journey-01/triage/commands";
+const CONTEXT_PATH = "/api/v1/alerts/al-journey-01/triage/context";
+const ALL_ACTIONS = ["open_triage", "triage_dismiss", "triage_link", "triage_declare"];
 
 function stateResult(status, incident = null) {
   return {
@@ -21,6 +23,7 @@ async function connect(page) {
 }
 
 async function send(page, operation, configure = {}) {
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.selectOption("#command-operation", operation);
   for (const [selector, value] of Object.entries(configure)) {
     if (selector === "#command-severity") await page.selectOption(selector, value);
@@ -31,6 +34,7 @@ async function send(page, operation, configure = {}) {
 
 test.beforeEach(async ({ page }) => {
   const consoleErrors = [];
+  let mockedState = null;
   page.on("console", (message) => {
     if (
       message.type() === "error" &&
@@ -41,6 +45,24 @@ test.beforeEach(async ({ page }) => {
   });
   page.on("pageerror", (error) => consoleErrors.push(String(error?.message ?? error)));
   page.context()["__consoleErrors"] = consoleErrors;
+  page.on("response", (response) => {
+    const request = response.request();
+    if (request.method() !== "POST" || !request.url().includes("/triage/commands") || !response.ok()) return;
+    const body = request.postDataJSON();
+    const operation = body.operation;
+    mockedState = {
+      alert_id: decodeURIComponent(new URL(request.url()).pathname.split("/").at(-3)),
+      status: { open_triage: "open", triage_dismiss: "dismissed", triage_link: "linked", triage_declare: "declared" }[operation],
+      expected_version: body.expected_version + 1,
+      incident_id: operation === "triage_declare" ? "inc-created-01" : operation === "triage_link" ? body.target_incident_id : null,
+      actor: "op-human", reason: body.reason ?? null, decided_at: "2026-09-20T10:00:00Z",
+    };
+  });
+  await page.route((url) => url.pathname === CONTEXT_PATH, (route) =>
+    route.fulfill(json(200, JSON.stringify({
+      alert_id: "al-journey-01", triage_state: mockedState, allowed_actions: ALL_ACTIONS,
+    }))),
+  );
   await page.goto("/public/admin/triage.html");
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "idle");
 });

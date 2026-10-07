@@ -269,6 +269,9 @@ export function createAdministrativeApiClient({
     getTriageState(alertId) {
       return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage`);
     },
+    getTriageContext(alertId) {
+      return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage/context`);
+    },
     getIncidentTimeline(incidentId, { runId, after, limit } = {}) {
       const params = new URLSearchParams();
       if (runId) params.set("run_id", runId);

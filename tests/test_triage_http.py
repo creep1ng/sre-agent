@@ -3,6 +3,8 @@
 import asyncio
 import os
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -11,6 +13,7 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
+from psycopg import sql
 
 from sre_agent.application import create_application
 from sre_agent.persistence.database import Database
@@ -51,7 +54,9 @@ def triage_http_database() -> None:
             "('reader-human','human','Reader','active',now(),now()),"
             "('bystander-human','human','Bystander','active',now(),now()),"
             "('producer-agent','agent','External producer','active',now(),now()),"
-            "('producer-limited','agent','Limited producer','active',now(),now())"
+            "('producer-limited','agent','Limited producer','active',now(),now()),"
+            "('context-human','human','Context operator','active',now(),now()),"
+            "('context-revocable','human','Revocable operator','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at,"
@@ -75,6 +80,8 @@ def triage_http_database() -> None:
             issued_by = await creds.issue("bystander-human")
             issued_agent = await creds.issue("producer-agent")
             issued_limited = await creds.issue("producer-limited")
+            issued_context_human = await creds.issue("context-human")
+            issued_context_revocable = await creds.issue("context-revocable")
             grants = GrantRepository(session)
             for index, action in enumerate(
                 ("alert.triage", "alert.dismiss", "alert.associate", "run.read", "incident.declare")
@@ -117,11 +124,52 @@ def triage_http_database() -> None:
                     "incident_workflow",
                     "incident-response",
                 )
+            for index, action in enumerate(
+                (
+                    "alert.read",
+                    "alert.triage",
+                    "alert.dismiss",
+                    "alert.associate",
+                    "run.read",
+                    "incident.declare",
+                )
+            ):
+                await grants.create(
+                    f"grant-context-human-{index}",
+                    "context-human",
+                    action,
+                    "incident_workflow",
+                    "incident-response",
+                )
+            for index, action in enumerate(("alert.read", "alert.dismiss")):
+                await grants.create(
+                    f"grant-context-revocable-{index}",
+                    "context-revocable",
+                    action,
+                    "incident_workflow",
+                    "incident-response",
+                )
+            await grants.create(
+                "grant-producer-agent-read",
+                "producer-agent",
+                "alert.read",
+                "incident_workflow",
+                "incident-response",
+            )
+            await grants.create(
+                "grant-producer-limited-read",
+                "producer-limited",
+                "alert.read",
+                "incident_workflow",
+                "incident-response",
+            )
         BEARERS["op"] = f"Bearer {issued_op.key}"
         BEARERS["reader"] = f"Bearer {issued_reader.key}"
         BEARERS["bystander"] = f"Bearer {issued_by.key}"
         BEARERS["agent"] = f"Bearer {issued_agent.key}"
         BEARERS["limited_agent"] = f"Bearer {issued_limited.key}"
+        BEARERS["context_human"] = f"Bearer {issued_context_human.key}"
+        BEARERS["context_revocable"] = f"Bearer {issued_context_revocable.key}"
 
     asyncio.run(_setup())
     asyncio.run(database.dispose())
@@ -685,6 +733,169 @@ def test_storage_outage_is_503() -> None:
 def _get(client: TestClient, alert_id: str, bearer: str | None):
     headers = {} if bearer is None else {"Authorization": bearer}
     return client.get(f"/v1/alerts/{alert_id}/triage", headers=headers)
+
+
+def _get_context(client: TestClient, alert_id: str, bearer: str | None):
+    headers = {} if bearer is None else {"Authorization": bearer}
+    return client.get(f"/v1/alerts/{alert_id}/triage/context", headers=headers)
+
+
+def test_context_read_only_principal_gets_empty_actions_and_null_state_without_effects() -> None:
+    client, alert_id = _client(), "al-context-reader-only"
+    before = (
+        _incident_count(),
+        _count_rows("alert_triage"),
+        _count_rows("incident.run_events"),
+        _count_rows("idempotency_records"),
+    )
+    response = _get_context(client, alert_id, BEARERS["reader"])
+    assert response.status_code == 200, response.text
+    assert response.json() == {"alert_id": alert_id, "triage_state": None, "allowed_actions": []}
+    assert (
+        _incident_count(),
+        _count_rows("alert_triage"),
+        _count_rows("incident.run_events"),
+        _count_rows("idempotency_records"),
+    ) == before
+
+
+@pytest.mark.parametrize(
+    ("bearer_name", "expected_actions"),
+    [
+        (
+            "context_human",
+            ["open_triage", "triage_dismiss", "triage_link", "triage_declare"],
+        ),
+        ("agent", ["triage_dismiss", "triage_link"]),
+        ("limited_agent", ["triage_dismiss"]),
+        ("reader", []),
+    ],
+)
+def test_context_projects_exact_policy_actions_for_humans_agents_and_readers(
+    bearer_name: str, expected_actions: list[str]
+) -> None:
+    alert_id = f"al-context-{bearer_name}"
+    response = _get_context(_client(), alert_id, BEARERS[bearer_name])
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "alert_id": alert_id,
+        "triage_state": None,
+        "allowed_actions": expected_actions,
+    }
+
+
+def test_context_refreshes_state_and_hides_all_fresh_actions_after_terminal_decision() -> None:
+    client, alert_id = _client(), "al-context-terminal"
+    opened = _post(
+        client,
+        alert_id,
+        _cmd("open_triage"),
+        "k-context-open-123456789",
+        BEARERS["context_human"],
+    )
+    assert opened.status_code == 200
+    current = _get_context(client, alert_id, BEARERS["context_human"])
+    assert current.status_code == 200
+    assert current.json()["triage_state"]["status"] == "open"
+    assert current.json()["allowed_actions"] == [
+        "open_triage",
+        "triage_dismiss",
+        "triage_link",
+        "triage_declare",
+    ]
+    dismissed = _post(
+        client,
+        alert_id,
+        _cmd("triage_dismiss", version=1, reason=REASON),
+        "k-context-dismiss-1234567",
+        BEARERS["context_human"],
+    )
+    assert dismissed.status_code == 200
+    terminal = _get_context(client, alert_id, BEARERS["context_human"])
+    assert terminal.status_code == 200
+    assert terminal.json()["triage_state"]["status"] == "dismissed"
+    assert terminal.json()["allowed_actions"] == []
+
+
+def test_context_requires_read_grant_before_known_or_unknown_state_lookup() -> None:
+    client, alert_id = _client(), "al-context-protected"
+    opened = _post(
+        client,
+        alert_id,
+        _cmd("open_triage"),
+        "k-context-protect-12345",
+        BEARERS["context_human"],
+    )
+    assert opened.status_code == 200
+    for requested_id in (alert_id, "al-context-absent"):
+        response = _get_context(client, requested_id, BEARERS["op"])
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "not_authorized"
+        assert "triage_state" not in response.json()
+
+
+def test_context_rejects_malformed_alert_identifier() -> None:
+    response = _get_context(_client(), "BAD ID!", BEARERS["reader"])
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_command"
+
+
+def test_post_revalidates_grant_revoked_after_context_projection() -> None:
+    client, alert_id = _client(), "al-context-revoked"
+    projected = _get_context(client, alert_id, BEARERS["context_revocable"])
+    assert projected.status_code == 200
+    assert projected.json()["allowed_actions"] == ["triage_dismiss"]
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE grants SET status='revoked' WHERE principal_id='context-revocable' "
+            "AND action='alert.dismiss'"
+        )
+    before = (_count_rows("alert_triage"), _count_rows("idempotency_records"))
+    response = _post(
+        client,
+        alert_id,
+        _cmd("triage_dismiss", reason=REASON),
+        "k-context-revoked-123456789",
+        BEARERS["context_revocable"],
+    )
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "not_authorized"
+    assert (_count_rows("alert_triage"), _count_rows("idempotency_records")) == before
+
+
+def test_context_fails_closed_when_real_policy_storage_is_unavailable() -> None:
+    role = "triage_context_policy_denied"
+    password = uuid4().hex
+    parts = urlsplit(DATABASE_URL)
+    dsn = urlunsplit(parts._replace(netloc=f"{role}:{password}@{parts.netloc.rsplit('@', 1)[-1]}"))
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        if connection.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,)).fetchone():
+            connection.execute(f"DROP OWNED BY {role}")
+            connection.execute(f"DROP ROLE {role}")
+        connection.execute(
+            sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                sql.Identifier(role), sql.Literal(password)
+            )
+        )
+        connection.execute(
+            sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                sql.Identifier(connection.info.dbname), sql.Identifier(role)
+            )
+        )
+        connection.execute(f"GRANT USAGE ON SCHEMA public TO {role}")
+        connection.execute(f"GRANT SELECT ON TABLE credentials, principals, resources TO {role}")
+    try:
+        with psycopg.connect(dsn) as restricted:
+            assert restricted.execute("SELECT COUNT(*) FROM credentials").fetchone()[0] > 0
+        with _client(dsn) as client:
+            response = _get_context(client, "al-context-policy-fault", BEARERS["reader"])
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "storage_unavailable"
+        assert response.headers["Retry-After"] == "5"
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+            connection.execute(f"DROP OWNED BY {role}")
+            connection.execute(f"DROP ROLE {role}")
 
 
 def test_triage_state_reads_back_dismiss() -> None:
