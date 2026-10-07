@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import yaml
+
 from scripts.bootstrap_otel_account import BootstrapError, bootstrap_account
 
 TEST_ACCOUNT_ID = "123456789012"
@@ -324,3 +326,234 @@ class PersonalBootstrapTests(unittest.TestCase):
             self.run_bootstrap()
 
         self.assertIn("delete-access-key", self.runner.call_args.args[0])
+
+
+class InfrastructureTemplateTests(unittest.TestCase):
+    def test_operator_can_query_instance_type_availability_by_az(self) -> None:
+        template = yaml.safe_load(Path("infra/otel-demo-operator.yaml").read_text())
+        policy = template["Resources"]["OTelDemoOperatorNetworkPolicy"]["Properties"][
+            "PolicyDocument"
+        ]
+        read_statement = next(
+            item
+            for item in policy["Statement"]
+            if item.get("Sid") == "ReadNetworkAndOwnedInstances"
+        )
+
+        self.assertIn("ec2:DescribeInstanceTypeOfferings", read_statement["Action"])
+
+    def test_ssm_instance_actions_restrict_owned_nodes_with_ssm_resource_tags(self) -> None:
+        template = yaml.safe_load(Path("infra/otel-demo-operator.yaml").read_text())
+        policy = template["Resources"]["OTelDemoOperatorSessionPolicy"]["Properties"][
+            "PolicyDocument"
+        ]
+        statements = {item["Sid"]: item for item in policy["Statement"]}
+
+        for sid in (
+            "RunDeadlineUpdateOnlyOnOwnedInstances",
+            "StartSessionsOnlyOnOwnedInstances",
+        ):
+            with self.subTest(sid=sid):
+                statement = statements[sid]
+                conditions = statement["Condition"]["StringEquals"]
+                self.assertEqual(conditions["ssm:resourceTag/ManagedBy"], "otel-demo-cli")
+                self.assertEqual(conditions["ssm:resourceTag/Project"], "otel-demo")
+                self.assertEqual(conditions["aws:RequestedRegion"], "us-east-1")
+                self.assertNotIn("ec2:ResourceTag", conditions)
+
+    def test_create_security_group_uses_only_supported_authorization_context(self) -> None:
+        template = yaml.safe_load(Path("infra/otel-demo-operator.yaml").read_text())
+        policy = template["Resources"]["OTelDemoOperatorNetworkPolicy"]["Properties"][
+            "PolicyDocument"
+        ]
+        statements = [
+            item for item in policy["Statement"] if item.get("Action") == "ec2:CreateSecurityGroup"
+        ]
+        group_statement = next(
+            item
+            for item in statements
+            if isinstance(item["Resource"], dict)
+            and item["Resource"].get("Fn::Sub", "").endswith("security-group/*")
+        )
+        vpc_statement = next(
+            item
+            for item in statements
+            if isinstance(item["Resource"], dict)
+            and item["Resource"].get("Fn::Sub", "").endswith("vpc/${VpcId}")
+        )
+
+        self.assertEqual(
+            len(statements),
+            2,
+        )
+        self.assertEqual(
+            group_statement["Resource"],
+            {
+                "Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:"
+                "${AWS::AccountId}:security-group/*"
+            },
+        )
+        self.assertEqual(
+            group_statement["Condition"]["StringEquals"],
+            {"aws:RequestedRegion": "us-east-1"},
+        )
+        self.assertNotIn("ec2:Vpc", str(group_statement.get("Condition", {})))
+        self.assertNotIn("aws:RequestTag", str(group_statement.get("Condition", {})))
+        self.assertEqual(
+            vpc_statement["Resource"],
+            {"Fn::Sub": "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}"},
+        )
+        self.assertNotIn("ec2:Vpc", str(vpc_statement.get("Condition", {})))
+        self.assertEqual(
+            vpc_statement["Condition"]["StringEquals"]["aws:RequestedRegion"],
+            "us-east-1",
+        )
+        tag_statement = next(
+            item for item in policy["Statement"] if item.get("Action") == "ec2:CreateTags"
+        )
+        self.assertEqual(
+            tag_statement["Condition"]["StringEquals"]["ec2:CreateAction"],
+            "CreateSecurityGroup",
+        )
+        self.assertEqual(
+            tag_statement["Condition"]["StringEquals"]["aws:RequestTag/ManagedBy"],
+            "otel-demo-cli",
+        )
+        self.assertEqual(
+            tag_statement["Condition"]["StringEquals"]["aws:RequestTag/Project"],
+            "otel-demo",
+        )
+        self.assertNotIn("ec2:AuthorizeSecurityGroupIngress", str(policy))
+
+    def test_template_scopes_scheduler_trust_and_termination_and_sets_monthly_budget(self) -> None:
+        operator = Path("infra/otel-demo-operator.yaml").read_text(encoding="utf-8")
+        runtime = Path("infra/otel-demo-runtime.yaml").read_text(encoding="utf-8")
+
+        for required in (
+            "AWS::IAM::User",
+            "OTelDemoOperator",
+            "iam:PassedToService",
+            "iam:GetInstanceProfile",
+            "ce:GetCostAndUsage",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, operator)
+        for required in (
+            "OTelDemoInstanceProfile",
+            "AmazonSSMManagedInstanceCore",
+            "OTelDemoSchedulerExecutionRole",
+            "scheduler.amazonaws.com",
+            "aws:SourceAccount",
+            "AWS::AccountId",
+            "aws:SourceArn",
+            "schedule-group/otel-demo",
+            "ec2:TerminateInstances",
+            "ec2:ResourceTag/ManagedBy",
+            "ScheduleGroup",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, runtime)
+        self.assertNotIn("AWS::IAM::AccessKey", operator + runtime)
+        budget = Path("infra/otel-demo-budget.yaml").read_text(encoding="utf-8")
+        for required in (
+            "AWS::Budgets::BudgetsAction",
+            "COST",
+            "MONTHLY",
+            "10",
+            "AlertEmail",
+            "Budget",
+        ):
+            self.assertIn(required, budget)
+        parsed = yaml.safe_load(runtime)
+        scheduler_trust = parsed["Resources"]["OTelDemoSchedulerExecutionRole"]["Properties"]
+        source_arn = scheduler_trust["AssumeRolePolicyDocument"]["Statement"][0]["Condition"][
+            "ArnLike"
+        ]["aws:SourceArn"]["Fn::Sub"]
+        self.assertTrue(source_arn.endswith(":schedule-group/otel-demo"))
+
+    def test_operator_policy_has_no_inbound_rule_mutation_permission(self) -> None:
+        template = Path("infra/otel-demo-operator.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("ec2:AuthorizeSecurityGroupIngress", template)
+        self.assertNotIn("ec2:ModifyInstanceAttribute", template)
+
+    def test_customer_managed_operator_policies_stay_within_iam_size_quota(self) -> None:
+        template = yaml.safe_load(Path("infra/otel-demo-operator.yaml").read_text())
+        resources = template["Resources"]
+        policies = [
+            resource["Properties"]["PolicyDocument"]
+            for name, resource in resources.items()
+            if name.startswith("OTelDemoOperator")
+            and resource.get("Type") == "AWS::IAM::ManagedPolicy"
+        ]
+
+        self.assertGreaterEqual(len(policies), 2)
+        for policy in policies:
+            compact = json.dumps(policy, separators=(",", ":"), ensure_ascii=True)
+            self.assertLessEqual(len(compact), 6144, f"managed policy is {len(compact)} characters")
+
+    def test_run_instances_policy_requires_amazon_owned_images_and_snapshots(self) -> None:
+        template = yaml.safe_load(Path("infra/otel-demo-operator.yaml").read_text())
+        policy = template["Resources"]["OTelDemoOperatorEc2Policy"]["Properties"]["PolicyDocument"]
+        image_statement = next(
+            item
+            for item in policy["Statement"]
+            if item.get("Sid") == "LaunchOnlyCanonicalUbuntuImagesAndSnapshots"
+        )
+
+        self.assertEqual(image_statement["Condition"]["StringEquals"]["ec2:Owner"], "amazon")
+        self.assertEqual(
+            image_statement["Resource"],
+            [
+                "arn:aws:ec2:us-east-1::image/*",
+                "arn:aws:ec2:us-east-1:*:snapshot/*",
+            ],
+        )
+
+    def test_budget_action_denies_new_run_instances_without_blocking_scheduler(self) -> None:
+        template = yaml.safe_load(Path("infra/otel-demo-budget.yaml").read_text())
+        resources = template["Resources"]
+        actions = [
+            value
+            for value in resources.values()
+            if value.get("Type") == "AWS::Budgets::BudgetsAction"
+        ]
+        self.assertEqual(len(actions), 1)
+        action = actions[0]["Properties"]
+        self.assertEqual(action["ActionType"], "APPLY_IAM_POLICY")
+        self.assertEqual(action["ApprovalModel"], "AUTOMATIC")
+        self.assertEqual(action["NotificationType"], "ACTUAL")
+        self.assertEqual(action["ActionThreshold"], {"Type": "PERCENTAGE", "Value": 100})
+        self.assertEqual(
+            action["Subscribers"],
+            [{"Address": {"Ref": "AlertEmail"}, "Type": "EMAIL"}],
+        )
+        self.assertEqual(
+            action["Definition"]["IamActionDefinition"]["Users"],
+            ["OTelDemoOperator"],
+        )
+        deny = resources["OTelDemoRunInstancesDenyPolicy"]["Properties"]["PolicyDocument"]
+        self.assertEqual(deny["Statement"][0]["Effect"], "Deny")
+        self.assertEqual(deny["Statement"][0]["Action"], "ec2:RunInstances")
+        self.assertEqual(deny["Statement"][0]["Resource"], "*")
+        role = resources["OTelDemoBudgetActionExecutionRole"]["Properties"]
+        trust = role["AssumeRolePolicyDocument"]["Statement"][0]
+        self.assertEqual(trust["Principal"]["Service"], "budgets.amazonaws.com")
+        self.assertEqual(
+            trust["Condition"]["ArnLike"]["aws:SourceArn"]["Fn::Sub"],
+            "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/"
+            "otel-demo-monthly-account-budget",
+        )
+        permissions = role["Policies"][0]["PolicyDocument"]["Statement"][0]
+        self.assertEqual(permissions["Action"], ["iam:AttachUserPolicy", "iam:DetachUserPolicy"])
+        self.assertEqual(
+            permissions["Resource"]["Fn::Sub"],
+            "arn:${AWS::Partition}:iam::${AWS::AccountId}:user/OTelDemoOperator",
+        )
+        self.assertEqual(
+            permissions["Condition"]["ArnEquals"]["iam:PolicyARN"],
+            {"Ref": "OTelDemoRunInstancesDenyPolicy"},
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
