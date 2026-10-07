@@ -22,6 +22,7 @@ async function switchCredential(page, key) {
 
 async function dismiss(page, alertId, reason) {
   await page.locator("#alert-id").fill(alertId);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_dismiss");
   await page.locator("#command-reason").fill(reason);
   await page.locator("#submit-button").click();
@@ -40,6 +41,11 @@ async function expectNeutralPanel(page, stateLine = "Connect to begin.") {
   await expect(page.locator("#result-summary")).toHaveText("No command sent yet.");
   await expect(page.locator("#triage-state")).toHaveText(stateLine);
   await expect(page.locator("#expected-version")).toHaveValue("1");
+}
+
+async function expectNoDecisionFacts(page) {
+  for (const id of ["#result-operation", "#result-status", "#result-reason", "#result-incident", "#result-version", "#result-actor", "#result-decided", "#result-origin", "#result-responsible-system"])
+    await expect(page.locator(id)).toHaveText("—");
 }
 
 test("clear session leaves a fully neutral panel", async ({ page }) => {
@@ -64,9 +70,10 @@ test("direct credential switch never shows the previous identity facts", async (
   await switchCredential(page, grantless);
   await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
   const alertB = `al-c3a-switch-b-${Date.now().toString(36)}`;
-  await dismiss(page, alertB, "C3a grantless probe.");
+  await page.locator("#alert-id").fill(alertB);
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
-  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expect(page.locator("#submit-button")).toBeDisabled();
+  await expectNoDecisionFacts(page);
   await page.screenshot({ path: "docs/evidence/c3a-session-isolation.png", fullPage: true });
 });
 
@@ -106,6 +113,7 @@ test("clear and switch reset the reusable command form", async ({ page }) => {
   await page.locator("#api-key").fill(full);
   await page.locator("#connect-button").click();
   await page.locator("#alert-id").fill(`al-c3e-form-b-${stamp}`);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("C3e form second proof.");
   await page.locator("#command-severity").selectOption("sev3");
@@ -116,10 +124,11 @@ test("clear and switch reset the reusable command form", async ({ page }) => {
   await switchCredential(page, grantless);
   await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
   await expectPristineForm(page);
-  await dismiss(page, `al-c3e-form-c-${stamp}`, "C3e grantless probe.");
+  await page.locator("#alert-id").fill(`al-c3e-form-c-${stamp}`);
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
-  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
-  await expect(page.locator("#command-reason")).toHaveValue("C3e grantless probe.");
+  await expect(page.locator("#submit-button")).toBeDisabled();
+  await expectNoDecisionFacts(page);
+  await expect(page.locator("#command-reason")).toHaveValue("");
 });
 
 test("first connect from a deep link recovers without inheriting form state", async ({ page }) => {

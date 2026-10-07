@@ -1,4 +1,5 @@
 import {
+  ApiClientError,
   createAdministrativeApiClient,
   createMemoryCredentialStore,
 } from "/public/api/client.js";
@@ -15,6 +16,7 @@ const targetInput = document.getElementById("command-target");
 const severityInput = document.getElementById("command-severity");
 const impactInput = document.getElementById("command-impact");
 const submitButton = document.getElementById("submit-button");
+const actionsStatus = document.getElementById("actions-status");
 const disconnectButton = document.getElementById("disconnect-button");
 const liveRegion = document.getElementById("live-region");
 const errorBox = document.getElementById("page-error");
@@ -36,6 +38,12 @@ const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 let sessionGeneration = 0;
 let commandInFlight = false;
+let contextGeneration = 0;
+let sessionActive = false;
+let contextAlertId = "";
+let allowedActions = null;
+let lastObservedAlertId = "";
+let contextTimer = null;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const DECISION_ORIGIN_LABELS = Object.freeze({
@@ -106,6 +114,51 @@ function clearResultDisplay(summary) {
   resultSummary.textContent = summary;
 }
 
+function updateActionControls() {
+  const hasProjection = contextAlertId === alertInput.value.trim() && allowedActions !== null;
+  for (const option of operationInput.options) {
+    option.disabled = !hasProjection || !allowedActions.includes(option.value);
+  }
+  operationInput.disabled = commandInFlight || !hasProjection || allowedActions.length === 0;
+  alertInput.disabled = commandInFlight;
+  submitButton.disabled =
+    commandInFlight || !hasProjection || !allowedActions.includes(operationInput.value);
+}
+
+function clearActionProjection() {
+  contextAlertId = "";
+  allowedActions = null;
+  actionsStatus.textContent = sessionActive
+    ? "Loading operations permitted by the backend…"
+    : "Connect and select an alert to load actions from the backend.";
+  updateActionControls();
+}
+
+function isValidContext(item, alertId) {
+  const actions = ["open_triage", "triage_dismiss", "triage_link", "triage_declare"];
+  if (
+    item === null || typeof item !== "object" || item.alert_id !== alertId ||
+    !Array.isArray(item.allowed_actions) ||
+    item.allowed_actions.some((action) => !actions.includes(action)) ||
+    new Set(item.allowed_actions).size !== item.allowed_actions.length
+  ) return false;
+  if (item.triage_state === null) return true;
+  const state = item.triage_state;
+  return state !== null && typeof state === "object" && state.alert_id === alertId &&
+    ["open", "dismissed", "linked", "declared"].includes(state.status) &&
+    Number.isInteger(state.expected_version) && state.expected_version > 0;
+}
+
+function renderContextState(alertId, state) {
+  if (state === null) {
+    clearResultDisplay("No recorded decision for this alert.");
+    stateLine.textContent = `Alert ${alertId} has no recorded decision yet.`;
+    versionInput.value = "1";
+  } else {
+    setResult(state.status, state, "recovered");
+  }
+}
+
 function setResult(operation, item, source = "live") {
   resultOperation.textContent = operation;
   resultStatus.textContent = text(item.status) || "—";
@@ -154,6 +207,7 @@ function clearResult() {
   targetInput.value = "";
   severityInput.value = "";
   impactInput.value = "";
+  lastObservedAlertId = "";
 }
 
 const OPERATION_FIELDS = Object.freeze({
@@ -190,22 +244,86 @@ function buildBody(operation) {
   return { ok: true, body };
 }
 
-async function refreshAfterConflict(alertId, generation) {
+async function readTriageContext(
+  alertId,
+  generation,
+  { preserveResult = false, confirmedCommand = false, showReadError = true } = {},
+) {
+  const requestGeneration = ++contextGeneration;
+  contextAlertId = "";
+  allowedActions = null;
+  actionsStatus.textContent = "Loading operations permitted by the backend…";
+  updateActionControls();
+  page.dataset.state = "loading";
   try {
-    const item = await controlApi.getTriageState(alertId);
-    if (generation !== sessionGeneration) return;
+    const item = await controlApi.getTriageContext(alertId);
+    if (
+      generation !== sessionGeneration || requestGeneration !== contextGeneration ||
+      alertInput.value.trim() !== alertId || !sessionActive
+    ) return { ok: false, stale: true };
+    if (!isValidContext(item, alertId)) {
+      throw new ApiClientError("invalid_response", "The API returned an invalid triage context.");
+    }
+    if (confirmedCommand && item.triage_state === null) {
+      contextAlertId = "";
+      allowedActions = null;
+      actionsStatus.textContent = "The command result is confirmed, but no triage state was returned; further operations are disabled.";
+      updateActionControls();
+      page.dataset.state = "error";
+      const error = new ApiClientError(
+        "invalid_response",
+        "The command was confirmed, but backend context contains no triage state. Further operations are disabled.",
+      );
+      stateLine.textContent = "The command result is confirmed; current operations are unavailable.";
+      if (showReadError) showError(error, "read");
+      return { ok: false, error };
+    }
+    contextAlertId = alertId;
+    allowedActions = [...item.allowed_actions];
+    actionsStatus.textContent = allowedActions.length === 0
+      ? "The backend currently permits no triage operations for this alert."
+      : "Enabled operations are permitted by the backend for this identity and alert.";
+    updateActionControls();
+    renderContextState(alertId, item.triage_state);
+    page.dataset.state = "ready";
+    hideError();
+    return { ok: true, item };
+  } catch (error) {
+    if (
+      generation !== sessionGeneration || requestGeneration !== contextGeneration ||
+      alertInput.value.trim() !== alertId || !sessionActive
+    ) return { ok: false, stale: true };
+    contextAlertId = "";
+    allowedActions = null;
+    actionsStatus.textContent = preserveResult
+      ? "The command result is confirmed; permitted next operations could not be refreshed."
+      : "No operation is available until backend context can be read.";
+    updateActionControls();
+    if (!preserveResult) clearResultDisplay("Current state could not be verified; no command was confirmed.");
+    page.dataset.state = error?.kind === "network" ? "offline" : "error";
+    if (preserveResult) {
+      stateLine.textContent = "The command result is confirmed; current operations are unavailable.";
+    } else {
+      stateLine.textContent = `Alert ${alertId} current state is unavailable.`;
+    }
+    if (showReadError) showError(error, "read");
+    return { ok: false, error };
+  }
+}
+
+async function refreshAfterConflict(alertId, generation) {
+  const refreshed = await readTriageContext(alertId, generation, { showReadError: false });
+  if (refreshed.stale) return;
+  if (refreshed.ok) {
     page.dataset.state = "error";
-    setResult(item.status ?? "read", item ?? {}, "recovered");
     showError({
       kind: "conflict",
       message: "The command version is stale. Current API state is shown; review the command context and submit again.",
     });
-  } catch (readError) {
-    if (generation !== sessionGeneration) return;
+  } else {
+    const readError = refreshed.error;
     const [readTitle, readDetail] = describeError(readError, "read");
-    page.dataset.state = readError?.kind === "network" ? "offline" : "error";
     clearResultDisplay("Current state could not be verified; no command was confirmed.");
-    stateLine.textContent = `Alert ${alertId} current state is unavailable.`;
     showError({
       kind: "conflict",
       message: `The command version is stale. Current state could not be refreshed (${readTitle}: ${readDetail}). No command was retried or confirmed.`,
@@ -221,6 +339,11 @@ async function sendCommand() {
     return;
   }
   const operation = operationInput.value;
+  if (contextAlertId !== alertId || !allowedActions?.includes(operation)) {
+    showError({ kind: "validation", message: "Select an operation currently permitted by the backend." });
+    updateActionControls();
+    return;
+  }
   const checked = buildBody(operation);
   if (!checked.ok) {
     showError({ kind: "validation", message: checked.message });
@@ -229,7 +352,7 @@ async function sendCommand() {
   const generation = sessionGeneration;
   const idempotencyKey = newCommandKey();
   commandInFlight = true;
-  submitButton.disabled = true;
+  updateActionControls();
   hideError();
   page.dataset.state = "loading";
   announce(`Sending ${operation}.`);
@@ -241,18 +364,24 @@ async function sendCommand() {
     const url = new URL(window.location.href);
     url.searchParams.set("alert_id", alertId);
     window.history.replaceState(null, "", url);
+    await readTriageContext(alertId, generation, { preserveResult: true, confirmedCommand: true });
   } catch (error) {
     if (generation !== sessionGeneration) return;
     if (error?.kind === "conflict" && error?.code === "stale_version") {
       await refreshAfterConflict(alertId, generation);
     } else {
+      if (error?.kind === "authorization") {
+        contextGeneration += 1;
+        clearActionProjection();
+        actionsStatus.textContent = "The command was denied; reload backend permissions before retrying.";
+      }
       page.dataset.state = error?.kind === "network" ? "offline" : "error";
       showError(error);
     }
   } finally {
     if (generation === sessionGeneration) {
       commandInFlight = false;
-      submitButton.disabled = false;
+      updateActionControls();
     }
   }
 }
@@ -268,41 +397,49 @@ operationInput.addEventListener("change", () => {
     String(OPERATION_FIELDS[operationInput.value]?.includes("impact") ?? false),
   );
   hideError();
+  updateActionControls();
 });
+
+alertInput.addEventListener("input", () => {
+  const alertId = alertInput.value.trim();
+  if (alertId === lastObservedAlertId) return;
+  lastObservedAlertId = alertId;
+  contextGeneration += 1;
+  clearActionProjection();
+  clearResultDisplay("Loading current alert context from the backend.");
+  versionInput.value = "1";
+  if (!sessionActive) return;
+  hideError();
+  if (!/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) {
+    actionsStatus.textContent = "Enter a valid alert identifier to load backend-permitted operations.";
+    page.dataset.state = "idle";
+    return;
+  }
+  clearTimeout(contextTimer);
+  contextTimer = setTimeout(() => readContextForCurrentAlert(), 120);
+});
+
+alertInput.addEventListener("change", () => {
+  clearTimeout(contextTimer);
+  readContextForCurrentAlert();
+});
+
+function readContextForCurrentAlert() {
+  if (!sessionActive) return;
+  const alertId = alertInput.value.trim();
+  if (contextAlertId === alertId && allowedActions !== null) return;
+  if (!/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) return;
+  readTriageContext(alertId, sessionGeneration);
+}
 
 async function recoverDecision(alertId) {
   if (!/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) {
     showError({ kind: "validation", message: "Enter an alert identifier." }, "read");
     return;
   }
-  const generation = sessionGeneration;
-  commandInFlight = true;
-  submitButton.disabled = true;
   hideError();
-  page.dataset.state = "loading";
-  announce("Recovering the persisted decision from the API.");
-  try {
-    const item = await controlApi.getTriageState(alertId);
-    if (generation !== sessionGeneration) return;
-    page.dataset.state = "ready";
-    setResult(item.status ?? "read", item ?? {}, "recovered");
-  } catch (error) {
-    if (generation !== sessionGeneration) return;
-    if (error?.kind === "not_found" && error?.code === "triage_not_found") {
-      page.dataset.state = "ready";
-      resultSummary.textContent = "No recorded decision for this alert.";
-      stateLine.textContent = `Alert ${alertId} has no recorded decision yet.`;
-      announce(resultSummary.textContent);
-      return;
-    }
-    page.dataset.state = error?.kind === "network" ? "offline" : "error";
-    showError(error, "read");
-  } finally {
-    if (generation === sessionGeneration) {
-      commandInFlight = false;
-      submitButton.disabled = false;
-    }
-  }
+  announce("Loading alert triage context and backend-authorized operations.");
+  return readTriageContext(alertId, sessionGeneration);
 }
 
 sessionForm.addEventListener("submit", (event) => {
@@ -315,12 +452,16 @@ sessionForm.addEventListener("submit", (event) => {
   credentialStore.set(value);
   apiKeyInput.value = "";
   sessionGeneration += 1;
+  sessionActive = true;
+  contextGeneration += 1;
   commandInFlight = false;
-  submitButton.disabled = false;
+  alertInput.disabled = false;
+  clearActionProjection();
   const deepLinkAlertId = pendingDeepLinkAlertId;
   pendingDeepLinkAlertId = "";
   clearResult();
   if (deepLinkAlertId !== "") alertInput.value = deepLinkAlertId;
+  lastObservedAlertId = alertInput.value.trim();
   hideError();
   page.dataset.state = "idle";
   stateLine.textContent = "Connected. Enter an alert and send a command.";
@@ -332,8 +473,11 @@ sessionForm.addEventListener("submit", (event) => {
 disconnectButton.addEventListener("click", () => {
   sessionGeneration += 1;
   credentialStore.clear();
+  sessionActive = false;
+  contextGeneration += 1;
   commandInFlight = false;
-  submitButton.disabled = false;
+  alertInput.disabled = false;
+  clearActionProjection();
   hideError();
   page.dataset.state = "idle";
   clearResult();
@@ -346,6 +490,8 @@ disconnectButton.addEventListener("click", () => {
 
 const initialAlertId = new URL(window.location.href).searchParams.get("alert_id") ?? "";
 if (/^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId)) alertInput.value = initialAlertId;
+lastObservedAlertId = alertInput.value.trim();
 let pendingDeepLinkAlertId = /^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId) ? initialAlertId : "";
 
 page.dataset.state = "idle";
+clearActionProjection();

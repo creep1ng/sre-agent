@@ -19,15 +19,19 @@ async function connect(page, key, alertId = null) {
 test("command with a grantless identity is forbidden and persists nothing", async ({ page }) => {
   const { full, grantless } = journeyKeys();
   const alertId = `al-ca5-nopersist-${SUFFIX}`;
+  let posts = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/triage/commands")) posts += 1;
+  });
   await connect(page, grantless, alertId);
-  await page.locator("#command-operation").selectOption("triage_dismiss");
-  await page.locator("#command-reason").fill("CA5 grantless probe.");
-  await page.locator("#submit-button").click();
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
-  await expect(page.locator("#page-error-detail")).toContainText("cannot be confirmed");
+  await expect(page.locator("#page-error-detail")).toContainText("cannot read triage state");
+  await expect(page.locator("#submit-button")).toBeDisabled();
+  await expect(page.locator("#command-operation option[value='triage_dismiss']")).toBeDisabled();
   await expect(page.locator("#result-status")).toHaveText("—");
   await expect(page.locator("#result-reason")).toHaveText("—");
   await expect(page.locator("#result-actor")).toHaveText("—");
+  expect(posts).toBe(0);
   await connect(page, full, alertId);
   await expect(page.locator("#result-summary")).toHaveText("No recorded decision for this alert.");
   await expect(page.locator("#page-error")).toBeHidden();
@@ -38,6 +42,7 @@ test("recovery read with a grantless identity shows forbidden without data", asy
   const alertId = `al-ca5-noread-${SUFFIX}`;
   await connect(page, full);
   await page.locator("#alert-id").fill(alertId);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_dismiss");
   await page.locator("#command-reason").fill("CA5 decided proof.");
   await page.locator("#submit-button").click();

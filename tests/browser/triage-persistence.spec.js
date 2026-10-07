@@ -17,6 +17,7 @@ async function connectTriage(page, key) {
 
 async function declareAlert(page, alertId, key) {
   await page.locator("#alert-id").fill(alertId);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("E2E persistence proof.");
   await page.locator("#command-severity").selectOption("sev2");

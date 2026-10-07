@@ -30,18 +30,19 @@ async function connect(page, key, id) {
   await page.goto(`${BASE}/public/admin/triage.html?alert_id=${encodeURIComponent(id)}`);
   await page.locator("#api-key").fill(key);
   await page.locator("#connect-button").click();
+  await expect(page.locator("#command-operation")).toBeEnabled();
 }
 
 async function expectRecoveryRead(page, previousCount) {
   await expect.poll(() => page.context()["__triageRequests"].length).toBeGreaterThan(previousCount);
-  await expect.poll(() => page.context()["__triageRequests"].at(-1)?.method).toBe("GET");
+  await expect.poll(() => page.context()["__triageRequests"].at(-1)?.pathname.endsWith("/triage/context")).toBe(true);
 }
 
 test.beforeEach(async ({ page }) => {
   const requests = [];
   page.on("request", (request) => {
     const url = new URL(request.url());
-    if (/\/api\/v1\/alerts\/[^/]+\/triage(?:\/commands)?$/.test(url.pathname)) {
+    if (/\/api\/v1\/alerts\/[^/]+\/triage(?:\/commands|\/context)?$/.test(url.pathname)) {
       requests.push({ method: request.method(), pathname: url.pathname });
     }
   });
@@ -73,6 +74,7 @@ test("stale command reads the winning version before explicit resubmission", asy
 
   await connect(page, key, raceAlert);
   await expect(page.locator("#result-version")).toHaveText("1");
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_link");
   await page.locator("#command-reason").fill("Link after reviewing the current alert.");
   await page.locator("#command-target").fill(targetIncident);
@@ -129,6 +131,7 @@ test("stale declaration preserves selected severity for an explicit retry", asyn
 
   await connect(page, key, id);
   await expect(page.locator("#result-version")).toHaveText("1");
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("Declare after reconciling fresh state.");
   await page.locator("#command-severity").selectOption("sev3");
@@ -156,9 +159,8 @@ test("stale declaration preserves selected severity for an explicit retry", asyn
   await expect(page.locator("#command-severity")).toHaveValue("sev3");
 });
 
-test("failed recovery read keeps conflict and never invents current state", async ({ page, request }) => {
+test("stale-version recovery preserves the draft when a context reread is denied", async ({ page, request }) => {
   const fullKey = requiredKey("E2E_TRIAGE_API_KEY");
-  const noReadKey = requiredKey("E2E_OP_NOREAD_API_KEY");
   const id = alertId("t23-noread");
 
   const initial = await postCommand(request, fullKey, id, {
@@ -174,10 +176,18 @@ test("failed recovery read keeps conflict and never invents current state", asyn
   expect(winner.response.status()).toBe(200);
   expect(winner.body.expected_version).toBe(2);
 
+  let contextReads = 0;
+  await page.route((url) => url.pathname.endsWith("/triage/context"), async (route) => {
+    contextReads += 1;
+    if (contextReads === 2)
+      return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: { code: "not_authorized" } }) });
+    return route.continue();
+  });
   await page.goto(`${BASE}/public/admin/triage.html`);
-  await page.locator("#api-key").fill(noReadKey);
+  await page.locator("#api-key").fill(fullKey);
   await page.locator("#connect-button").click();
   await page.locator("#alert-id").fill(id);
+  await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#expected-version").fill("1");
   await page.locator("#command-operation").selectOption("triage_dismiss");
   await page.locator("#command-reason").fill("Preserve operator context after denied read.");
@@ -185,8 +195,8 @@ test("failed recovery read keeps conflict and never invents current state", asyn
   await page.locator("#submit-button").click();
   await expect(page.locator("#page-error-title")).toHaveText("Conflict");
   await expect.poll(() =>
-    page.context()["__triageRequests"].filter(({ method }) => method === "GET").length,
-  ).toBe(1);
+    page.context()["__triageRequests"].filter(({ pathname }) => pathname.endsWith("/triage/context")).length,
+  ).toBe(2);
   await expect(page.locator("#page-error-detail")).toContainText("read");
   await expect(page.locator("#result-summary")).toHaveText(
     "Current state could not be verified; no command was confirmed.",
@@ -201,12 +211,12 @@ test("failed recovery read keeps conflict and never invents current state", asyn
   await expect(page.locator("#command-reason")).toHaveValue("Preserve operator context after denied read.");
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "error");
   expect(page.context()["__triageRequests"].filter(({ method }) => method === "POST")).toHaveLength(1);
-  expect(page.context()["__triageRequests"].filter(({ method }) => method === "GET")).toHaveLength(1);
+  expect(page.context()["__triageRequests"].filter(({ pathname }) => pathname.endsWith("/triage/context"))).toHaveLength(2);
 });
 
-test("switching identities releases only the new generation while an old response is held", async ({ page }) => {
+test("reconnecting with the same credential releases only the new generation while an old response is held", async ({ page }) => {
   const fullKey = requiredKey("E2E_TRIAGE_API_KEY");
-  const commandOnlyKey = requiredKey("E2E_OP_NOREAD_API_KEY");
+  const reconnectingKey = fullKey;
   const alertA = alertId("t23-switch-a");
   const alertB = alertId("t23-switch-b");
 
@@ -238,14 +248,16 @@ test("switching identities releases only the new generation while an old respons
 
   try {
     await page.locator("#alert-id").fill(alertA);
+    await expect(page.locator("#command-operation")).toBeEnabled();
     await page.locator("#command-operation").selectOption("open_triage");
     await page.locator("#submit-button").click();
     await expect.poll(() => page.evaluate(() => globalThis.__triageGate.held)).toContain(alertA);
 
-    await page.locator("#api-key").fill(commandOnlyKey);
+    await page.locator("#api-key").fill(reconnectingKey);
     await page.locator("#connect-button").click();
-    await expect(page.locator("#submit-button")).toBeEnabled();
+    await expect(page.locator("#submit-button")).toBeDisabled();
     await page.locator("#alert-id").fill(alertB);
+    await expect(page.locator("#command-operation")).toBeEnabled();
     await page.locator("#command-operation").selectOption("triage_dismiss");
     await page.locator("#command-reason").fill("Independent switched-session command.");
     await page.locator("#submit-button").click();
