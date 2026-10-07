@@ -37,6 +37,7 @@ RUN apt-get update \
 
 COPY tests ./tests
 COPY demo ./demo
+COPY infra ./infra
 COPY scripts ./scripts
 COPY schemas ./schemas
 COPY public ./public
