@@ -135,10 +135,10 @@ function renderRows() {
   }
 }
 
-async function loadEvents() {
+async function loadEvents({ preserveError = false } = {}) {
   const generation = sessionGeneration + 1;
   sessionGeneration = generation;
-  errorBox.hidden = true;
+  if (!preserveError) errorBox.hidden = true;
   page.dataset.state = "loading";
   loadingState.hidden = false;
   listWrap.hidden = true;
@@ -149,25 +149,31 @@ async function loadEvents() {
     const payload = await controlApi.listAuditEvents(currentFilters);
     if (generation !== sessionGeneration) return false;
     currentItems = Array.isArray(payload?.items) ? payload.items : [];
+    const truncated = payload?.truncated === true;
     renderRows();
     loadingState.hidden = true;
     if (currentItems.length > 0) {
       page.dataset.state = "ready";
       listWrap.hidden = false;
-      countLine.textContent = `${currentItems.length} audit event${currentItems.length === 1 ? "" : "s"}.`;
+      countLine.textContent = `${currentItems.length} audit event${currentItems.length === 1 ? "" : "s"}.${truncated ? " Results are truncated; additional matching events were omitted." : ""}`;
       announce(countLine.textContent);
       return true;
     }
     page.dataset.state = "empty";
     listEmpty.hidden = false;
-    emptyDetail.textContent = "The API returned an empty audit events list for these filters.";
-    countLine.textContent = "No audit events.";
-    announce("No audit events.");
+    emptyDetail.textContent = truncated
+      ? "No audit events on this page. Additional matching events may be omitted because results are truncated."
+      : "The API returned an empty audit events list for these filters.";
+    countLine.textContent = truncated
+      ? "No audit events on this page. Results are truncated; additional matching events may be omitted."
+      : "No audit events.";
+    announce(countLine.textContent);
     expanded.clear();
     return true;
   } catch (error) {
     if (generation !== sessionGeneration) return false;
     currentItems = [];
+    expanded.clear();
     renderRows();
     loadingState.hidden = true;
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
@@ -201,7 +207,7 @@ rowsBody.addEventListener("click", async (event) => {
   } catch (error) {
     if (generation !== sessionGeneration) return;
     showError(error);
-    await loadEvents();
+    await loadEvents({ preserveError: true });
   }
 });
 

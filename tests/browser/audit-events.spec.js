@@ -67,17 +67,36 @@ test("renders a list with only contract parameters and reports empty results", a
   await expect(page.locator("#page-error")).toBeHidden();
 });
 
-test("renders authentication, authorization, validation and outage failures distinctly", async ({ page }) => {
-  let status = 401;
-  let body = "{}";
-  await page.route((url) => url.pathname === LIST_PATH, (route) => route.fulfill(json(status, body)));
+test("renders authenticated list failures distinctly and proves each request reaches the mock route", async ({ page }) => {
+  let status = 200;
+  let body = JSON.stringify({ items: [] });
+  let listRequests = 0;
+  await page.route((url) => url.pathname === LIST_PATH, (route) => {
+    listRequests += 1;
+    return route.fulfill(json(status, body));
+  });
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "empty");
   for (const [next, code, title] of [[401, null, "Authentication required"], [403, null, "Access unavailable"], [422, "validation_error", "Invalid request"], [503, "audit_unavailable", "Service unavailable"]]) {
     status = next;
     body = code === null ? "{}" : JSON.stringify({ error: { code, message: title } });
     await page.click("#apply-button");
     await expect(page.locator("#page-error-title")).toHaveText(title);
     await expect(page.locator("[data-event-row]")).toHaveCount(0);
+    expect(listRequests).toBeGreaterThan(1);
   }
+  expect(listRequests).toBe(5);
+});
+
+test("announces a partial result even when a truncated page is empty", async ({ page }) => {
+  await page.route((url) => url.pathname === LIST_PATH, (route) =>
+    route.fulfill(json(200, JSON.stringify({ items: [], truncated: true }))));
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await expect(page.locator("#event-count")).toContainText(/partial|truncat/i);
+  await expect(page.locator("#live-region")).toContainText(/partial|truncat/i);
+  await expect(page.locator("#page-error")).toBeHidden();
 });
 
 test("opens metadata-only detail and reports a missing event as not found", async ({ page }) => {
@@ -124,20 +143,85 @@ test("opens metadata-only detail and reports a missing event as not found", asyn
   await expect(detail).toContainText("openrouter");
   await expect(detail).toContainText("a".repeat(64));
   await expect(detail).toContainText("b".repeat(64));
+  const assertPrivateMarkersAbsent = async () => {
+    const bodyText = await page.locator("body").innerText();
+    const storage = await page.evaluate(() => JSON.stringify({
+      local: Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]),
+      session: Object.keys(sessionStorage).map((key) => [key, sessionStorage.getItem(key)]),
+    }));
+    const requestText = JSON.stringify(observedRequests);
+    for (const marker of privateMarkers) {
+      expect(bodyText).not.toContain(marker);
+      expect(storage).not.toContain(marker);
+      expect(requestText).not.toContain(marker);
+    }
+  };
+  await assertPrivateMarkersAbsent();
   await page.click("#apply-button");
-  const bodyText = await page.locator("body").innerText();
-  const storage = await page.evaluate(() => JSON.stringify({
-    local: Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]),
-    session: Object.keys(sessionStorage).map((key) => [key, sessionStorage.getItem(key)]),
-  }));
-  const requestText = JSON.stringify(observedRequests);
-  for (const marker of privateMarkers) {
-    expect(bodyText).not.toContain(marker);
-    expect(storage).not.toContain(marker);
-    expect(requestText).not.toContain(marker);
-  }
+  await assertPrivateMarkersAbsent();
   await page.click("[data-expand-event='evt-gone-01']");
   await expect(page.locator("#page-error-title")).toHaveText("Audit event not found");
+  await expect(page.locator("#page-error")).toBeVisible();
+});
+
+test("retains a detail 404/503 error after its automatic list refresh", async ({ page }) => {
+  let detailStatus = 404;
+  let listRequests = 0;
+  await page.route((url) => url.pathname.startsWith(LIST_PATH), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === LIST_PATH) {
+      listRequests += 1;
+      return route.fulfill(json(200, JSON.stringify({ items: [eventItem("evt-detail-failure")] })));
+    }
+    return route.fulfill(json(detailStatus, detailStatus === 503
+      ? JSON.stringify({ error: { code: "audit_unavailable", message: "unavailable" } }) : "{}"));
+  });
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await page.click("[data-expand-event='evt-detail-failure']");
+  await expect(page.locator("#page-error-title")).toHaveText("Audit event not found");
+  await expect(page.locator("#page-error")).toBeVisible();
+  await expect(page.locator("#event-count")).toHaveText("1 audit event.");
+  expect(listRequests).toBe(2);
+
+  await page.locator("#page-error").waitFor({ state: "visible" });
+  await page.reload();
+  // A separate outage case ensures the 503 detail state is not replaced by a
+  // successful automatic list refresh either.
+  detailStatus = 503;
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await page.click("[data-expand-event='evt-detail-failure']");
+  await expect(page.locator("#page-error-title")).toHaveText("Service unavailable");
+  await expect(page.locator("#page-error")).toBeVisible();
+  await expect(page.locator("#event-count")).toHaveText("1 audit event.");
+});
+
+test("clears prior rows and expanded details when an authenticated list refresh fails", async ({ page }) => {
+  let listStatus = 200;
+  let listBody = JSON.stringify({ items: [eventItem("evt-stale-01")] });
+  let listRequests = 0;
+  await page.route((url) => url.pathname.startsWith(LIST_PATH), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path !== LIST_PATH) return route.fulfill(json(200, JSON.stringify({ ...eventItem("evt-stale-01"), response_status: 200 })));
+    listRequests += 1;
+    return route.fulfill(json(listStatus, listBody));
+  });
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  await page.click("[data-expand-event='evt-stale-01']");
+  await expect(page.locator("[data-event-detail='evt-stale-01']")).toBeVisible();
+  await expect(page.locator("[data-event-detail='evt-stale-01']")).toContainText("200");
+  expect(listRequests).toBe(1);
+
+  listStatus = 503;
+  listBody = JSON.stringify({ error: { code: "audit_unavailable", message: "unavailable" } });
+  await page.click("#apply-button");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "error");
+  await expect(page.locator("#page-error-title")).toHaveText("Service unavailable");
+  await expect(page.locator("[data-event-row]")).toHaveCount(0);
+  await expect(page.locator("[data-event-detail]")).toHaveCount(0);
+  expect(listRequests).toBe(2);
 });
 
 test("lists through the connected API with contract parameters", async ({ page }) => {
