@@ -400,8 +400,14 @@ class IncidentRuntime:
         transition_id = transition.transition_id
         if transition_id == "triage_link" and not inputs.get("target_incident_id"):
             raise PreconditionFailedError("triage_link requires target_incident_id")
-        if transition_id == "triage_declare" and not inputs.get("severity"):
-            raise PreconditionFailedError("triage_declare requires severity")
+        if transition_id == "triage_declare":
+            if not inputs.get("severity"):
+                raise PreconditionFailedError("triage_declare requires severity")
+            impact = inputs.get("impact")
+            if not isinstance(impact, str) or not impact.strip() or len(impact) > 2000:
+                raise PreconditionFailedError(
+                    "triage_declare requires nonblank operator impact of at most 2000 characters"
+                )
         if transition_id == "continue_investigation" and inputs.get("remaining_step_budget", 0) < 1:
             raise PreconditionFailedError("continue_investigation requires remaining step budget")
         if transition_id == "propose_mitigation":
@@ -465,6 +471,7 @@ class IncidentRuntime:
             incident["linked_incident_id"] = inputs["target_incident_id"]
         if transition.transition_id == "triage_declare":
             incident["severity"] = inputs["severity"]
+            incident["impact"] = inputs["impact"]
         if transition.transition_id in {
             "open_triage",
             "triage_dismiss",
@@ -506,6 +513,12 @@ class IncidentRuntime:
             raise PreconditionFailedError(
                 "pre-declaration states cannot carry an incident identity"
             )
+        if transition.transition_id == "triage_declare":
+            impact = incident_state.get("impact")
+            if not isinstance(impact, str) or not impact.strip() or len(impact) > 2000:
+                raise PreconditionFailedError(
+                    "triage_declare requires nonblank operator impact of at most 2000 characters"
+                )
         if transition.target == "linked" and not incident_state.get("linked_incident_id"):
             raise PreconditionFailedError("linked incidents require a target incident identity")
         if transition.target == "closed" and not incident_state.get("postmortem"):

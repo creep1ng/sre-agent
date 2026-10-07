@@ -1,0 +1,72 @@
+{
+  "tested_source_sha": "2049c2a3afc96d403da851abdd5e28669c15d182",
+  "stack_base_sha": "63ebc6198a0ca5ce257f1826060bb6345d96b095",
+  "original_stack_leaf_sha": "df17a07edb8259671763f1ba9e8cfa4e763365bf",
+  "evidence_kind": "controlled integration",
+  "browser": {
+    "startTime": "2026-10-07T14:23:56.402Z",
+    "duration": 173905.703,
+    "expected": 54,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "browser_exit_code": 0,
+  "browser_suites": 9,
+  "backend": {
+    "tested_sha": "a571078da80aa0b899ab99c281166bfabea6db0a",
+    "passed": 114,
+    "seconds": 38.85,
+    "exit_code": 0,
+    "current_backend_source_and_tests_match": true
+  },
+  "source_sha256": {
+    "public/admin/triage.js": "55131139db911e940e00f1129d81d0806df7b0620df7aa7408f89e1eb23fe64f",
+    "public/admin/triage.html": "fc5e72d8ef2a2824e334ea52e527f28d5f9c29e5e201ccfd6efa71642626c92f",
+    "public/api/client.js": "0d25f91412f23d76f45283ee100c3f1772b6abae0ad3aef25a196a82926f6108",
+    "public/incident-ui/alerts.js": "35441fe7e83863802596594061962b58d4c3da5d5c9cd2583292e3638caeed86",
+    "tests/browser/triage-eligible.spec.js": "b7263d41370bb245f77e469d6d7d72775107e0675162145486be69a2cb0af338",
+    "scripts/seed_triage23_review.py": "74821511764c06413eb5d6d96133c51e8bdd7b1fbce7d58a5544d80d89306473",
+    "playwright.production.config.js": "23d468d4752df250dfd7d3695d4305b4f8e2f918627482811e010959af963c27",
+    "compose.triage23.yaml": "5565e0a2dab95b7d16e4d90b83222df2eb4a0f89f7d965c14aba2a70258cbf08",
+    "scripts/run_triage23_review.sh": "f4ef2693b277ca415ca5795cf214fc32e2a3ed6d3e4f3241d6216898cc6394f0",
+    "scripts/run_triage23_browser.sh": "fd6a0d8d45c8bad12eb349cdab7101f3bf5890f8a74c6f2a758c605219ee5158",
+    "src/sre_agent/gateway/triage.py": "d45f31f28cc772e56a5f364df945a63c11711005a348365dcfae40e847611e35",
+    "src/sre_agent/triage/service.py": "b4ceb65523ca3a9c32687d65d4033f171bd21b4958b385f5b357a5c2a6e32e23",
+    "src/sre_agent/persistence/incidents.py": "605273abcd4cd7e4528d2126307cff247fae7555cedbc293edfdcf2decacf260",
+    "agent/api/triage.openapi.yaml": "d8242c79950307cd919ddca7d08f1006dc2f10077019edcdc52c933bf8c330c4",
+    "tests/test_triage_http.py": "e788ef0559ddb03be5dc778f9defa499bb9ea75f43785f7af4b35aa99acdf65f",
+    "tests/test_triage_contract.py": "9df096ceb3dd703bece0005cd9b3b403575f30f42f4a6c78f44701e9c1973258"
+  },
+  "screenshots_sha256": {
+    "issue-23-inbox-dismiss.png": "7007c5abe16d854326e71d26ab8d6e6fa0d32f05526f54895b16f27eeb978be8",
+    "issue-23-inbox-link.png": "d2962af4136867cc9b8236020deecac500e4ed24282811643d2e01d469e0ef61",
+    "issue-23-inbox-declare.png": "47ca45e103eb85e10dbf58ff86e6b6d3ba92bbc902177263de4757f556aac39e",
+    "issue-23-eligible-selector.png": "7bb758130c282217db1d45533336bbef9cb901e0b175f493272a1813cac22c5d",
+    "issue-23-origin-final.png": "b6c27a39604af27dd574ac8f2788bfcfe41428ec90d1065aeeb05d3ae6d6b7f6",
+    "issue-23-recovery-final.png": "7b38b3479e5bd23ec1ccc1ed58cfb8f345ed76eddf23c7ad0bade1b300fa46f2",
+    "issue-23-denial-final.png": "67ebea2af0c7e11f2e15546685cdb95cf4b70c70ba7d095aaaa86b0ae4bf65a2"
+  },
+  "versions": {
+    "python": "3.12.14",
+    "fastapi": "0.115.12",
+    "sqlalchemy": "2.0.52",
+    "psycopg": "3.2.6",
+    "alembic": "1.19.1",
+    "postgresql_image": "17.4-alpine (digest pinned in compose.triage23.yaml)"
+  },
+  "images": {
+    "api": "sha256:77dee9429302849a5330f372e37c61927b37dfaf24d2d9ce60bfa5541ba18ed4",
+    "web": "sha256:fe1a5944b2b6c4862dbd40c644f4e5232934d724321d77570cedfad3882f5270",
+    "e2e": "sha256:cb6e4ee6afa9db45564313233ee0ef3bba421785d2fbcc7755c98bcd81f07b48"
+  },
+  "boundaries": [
+    "Inbox uses served synthetic JSON, not live provider ingestion.",
+    "External producer proof uses authorized synthetic agent credentials and real HTTP/persistence.",
+    "Injected browser faults are not real backend evaluation faults; separate HTTP/PostgreSQL tests cover these.",
+    "Eight final text artifacts scanned: no generated credential values; seven screenshots visually inspected.",
+    "Three temporal samples per genuine inbox clip inspected; not a full-frame media certification.",
+    "Hosted CI for the new local candidate and independent human acceptance remain pending.",
+    "No publication, merge or issue closure performed."
+  ]
+}

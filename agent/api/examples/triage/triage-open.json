@@ -7,6 +7,8 @@
     "expected_version": 1,
     "reason": null,
     "actor": null,
-    "decided_at": null
+    "decided_at": null,
+    "decision_origin": "manual",
+    "responsible_system": null
   }
 }

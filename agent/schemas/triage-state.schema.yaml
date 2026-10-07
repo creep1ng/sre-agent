@@ -6,11 +6,11 @@
 # open creates no incident; declare creates exactly one (201).
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:triage-state:1.0.0
+$id: urn:sre-agent:schema:triage-state:2.0.0
 title: TriageState
 type: object
 additionalProperties: false
-required: [alert_id, status, expected_version]
+required: [alert_id, status, expected_version, decision_origin, responsible_system]
 properties:
   alert_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
   status: { enum: [open, dismissed, linked, declared] }
@@ -19,3 +19,18 @@ properties:
   reason: { type: [string, "null"], maxLength: 1000, default: null }
   actor: { type: [string, "null"], maxLength: 200, default: null }
   decided_at: { type: [string, "null"], format: date-time, default: null }
+  decision_origin: { enum: [manual, external_automatic, unknown] }
+  responsible_system: { type: [string, "null"], maxLength: 64 }
+allOf:
+  - if:
+      properties:
+        decision_origin: { const: external_automatic }
+    then:
+      properties:
+        responsible_system: { type: string, minLength: 1, pattern: '\S', maxLength: 64 }
+  - if:
+      properties:
+        decision_origin: { enum: [manual, unknown] }
+    then:
+      properties:
+        responsible_system: { type: "null" }
