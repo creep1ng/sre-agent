@@ -1,6 +1,6 @@
 # Issue 419 — authenticated identity evidence
 
-> **Evidence boundaries.** `replay.json` and `review-receipt.png` describe a former combined candidate and are preserved for provenance. The `current-*` artifacts below are bound to source SHA `aac524061716635339a91e2f84d8ebf00ce58249`. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof. The committed [replay guide](replay/README.md) includes separate helper-candidate results and is not, by itself, proof that the final #489 source was served. No hosted CI, human review, PR integration, or issue closure is claimed for #489.
+> **Evidence boundaries.** `replay.json` and `review-receipt.png` describe a former combined candidate and are preserved for provenance. The earlier `current-*` artifacts are bound to source SHA `aac524061716635339a91e2f84d8ebf00ce58249`; the fresh `candidate-489/*` artifacts below are bound to `e0bc3eb59e6d74f90120e02e6abc7402d187331b`. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof. The committed [replay guide](replay/README.md) distinguishes helper-candidate results from this fresh #489 run. No hosted CI, human review, PR integration, or issue closure is claimed for #489.
 
 ## Final local #489 candidate (2026-10-07)
 
@@ -34,6 +34,17 @@ Use the [tracked replay guide](replay/README.md) from a clean checkout. It creat
 ### Remaining boundary
 
 This is local candidate evidence only. It does not establish the subsequent PR branch/base state, a fresh human review, GitHub merge, or issue closure; those remote operations belong to the parent and were not observed in this local replay. After sibling integration, preserve the tested #489 source bytes when retargeting; re-run final checks if any candidate bytes change.
+
+### Fresh verification after helper integration
+
+After merging main `9c5c1765e4c39538609ad8e3d55009dfaee1b155`, the corrected local #489 candidate was `e0bc3eb59e6d74f90120e02e6abc7402d187331b`. Its `src/`, `public/`, and `tests/` trees are byte-identical to the previously tested #489 source `aac524061716635339a91e2f84d8ebf00ce58249`; the only new behavior in the replay helper is a direct API boundary assertion. The API and web images were rebuilt from the repository Dockerfiles at that candidate, and OpenAPI reported the exact `SOURCE_SHA`.
+
+- The packaged replay passed **1/1**. For each credential, direct `http://api:8000/v1/whoami` returned only its own principal and exactly `Cache-Control: no-store`; the separate Nginx route returned each identity and retained its semantic `no-store` assertion (`no-store, no-store`). Invalid credentials returned the generic 401. The focused mock-seam browser suite passed **12/12**, and the required focused Python command passed **96**.
+- SQL readback showed four active `demo-human` `run.*` grants and no `admin.read`; the valid approval persisted one `demo-human`-attributed decision, while the mismatched identity returned 403 and persisted zero decisions.
+- The private synthetic Compose environment was mode `0600` inside a mode-`0700` directory, passed only with `--env-file`; the isolated project was removed after capture. API image: `sha256:08bfffc48367a277fb7f292851d5e494bc03e6ccb428a1b16476bcfa7b1e8eb4`; web image: `sha256:5e4f0657a718a4e2ff26d591708230f8b8b4e47ffb9355d8cc5899b7729be846`.
+- Sanitized artifacts: [direct/proxy replay response](candidate-489/replay.json), [SQL readback](candidate-489/sql.txt), and [credential-cleared packaged screenshot](candidate-489/final-review-receipt.png), SHA-256 `c16bb747ea194b9ab59fa1521bb5458bd9bda59ed2b18b9da3951aee193c756a`.
+
+The existing backend HTTP test already asserts the exact API `no-store` header. This addition verifies the same contract against the packaged API directly, rather than relying on Nginx, which independently adds that header.
 
 ## Former local backend candidate — historical (2026-10-07)
 

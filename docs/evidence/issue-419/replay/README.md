@@ -95,3 +95,9 @@ behavior/test tree was independently replayed at `a05015582301183b937be0f9a2ab27
 - Packaged image IDs: API `sha256:4a844554f64c76b3d9b4c3de3924a071e5f47b9aaed232c9b1826bea5f8e2a43`; web `sha256:74701394e2ff0204a29bba34929ca5f1c1958b0dc37cec6a71f01ccb82d4eb83`; e2e `sha256:37132d45f0f8083fe44c00f786a15957c5fb772004ef0fd85e83c4cbd36a2c56`.
 
 This is a reproducibility helper/evidence slice only. It does not close issue #419 or claim the final #489 Refresh behavior.
+
+## Fresh #489 candidate verification
+
+The corrected helper was run from #489 candidate source `e0bc3eb59e6d74f90120e02e6abc7402d187331b`, after the helper tree from main `9c5c1765e4c39538609ad8e3d55009dfaee1b155` was merged. Packaged replay passed **1/1** and the tracked browser mock-seam suite passed **12/12**; the focused Python command passed **96**. OpenAPI reported the exact `SOURCE_SHA`; direct API responses for both principals were `200` with exactly `Cache-Control: no-store`, while the separate Nginx responses retained their semantic `no-store` assertion. SQL recorded one decision attributed to `demo-human`, zero for the mismatched principal, and only four `run.*` grants (no `admin.read`).
+
+Sanitized replay, SQL, and credential-cleared screenshot for that run are [replay.json](../candidate-489/replay.json), [sql.txt](../candidate-489/sql.txt), and [final-review-receipt.png](../candidate-489/final-review-receipt.png). This exact candidate proof is distinct from the earlier main-only helper capture above.
