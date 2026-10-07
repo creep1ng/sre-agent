@@ -199,6 +199,7 @@ rowsBody.addEventListener("click", async (event) => {
   try {
     const item = await controlApi.getAuditEvent(eventId);
     if (generation !== sessionGeneration) return;
+    errorBox.hidden = true;
     const index = currentItems.findIndex((entry) => text(entry.event_id) === eventId);
     if (index >= 0) currentItems[index] = item;
     else currentItems = [...currentItems, item];

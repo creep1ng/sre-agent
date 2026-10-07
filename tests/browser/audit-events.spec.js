@@ -197,6 +197,39 @@ test("retains a detail 404/503 error after its automatic list refresh", async ({
   await expect(page.locator("#event-count")).toHaveText("1 audit event.");
 });
 
+test("clears a retained detail error when a later detail request succeeds", async ({ page }) => {
+  let detailStatus = 404;
+  const detailRequests = new Map();
+  await page.route((url) => url.pathname.startsWith(LIST_PATH), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === LIST_PATH)
+      return route.fulfill(json(200, JSON.stringify({ items: [eventItem("evt-detail-missing"), eventItem("evt-detail-present")] })));
+    const eventId = path.split("/").at(-1);
+    detailRequests.set(eventId, (detailRequests.get(eventId) ?? 0) + 1);
+    if (eventId === "evt-detail-missing")
+      return route.fulfill(json(detailStatus, detailStatus === 503
+        ? JSON.stringify({ error: { code: "audit_unavailable", message: "unavailable" } }) : "{}"));
+    return route.fulfill(json(200, JSON.stringify(eventItem(eventId))));
+  });
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+
+  for (const [status, title] of [[404, "Audit event not found"], [503, "Service unavailable"]]) {
+    detailStatus = status;
+    await page.click("[data-expand-event='evt-detail-missing']");
+    await expect(page.locator("#page-error-title")).toHaveText(title);
+    await expect(page.locator("#page-error")).toBeVisible();
+    await expect(page.locator("#event-count")).toHaveText("2 audit events.");
+
+    await page.click("[data-expand-event='evt-detail-present']");
+    expect(detailRequests.get("evt-detail-present")).toBe(status === 404 ? 1 : 2);
+    await expect(page.locator("[data-event-detail='evt-detail-present']")).toBeVisible();
+    await expect(page.locator("#page-error")).toBeHidden();
+    expect(detailRequests.get("evt-detail-missing")).toBe(status === 404 ? 1 : 2);
+    await page.click("[data-expand-event='evt-detail-present']");
+  }
+});
+
 test("clears prior rows and expanded details when an authenticated list refresh fails", async ({ page }) => {
   let listStatus = 200;
   let listBody = JSON.stringify({ items: [eventItem("evt-stale-01")] });
