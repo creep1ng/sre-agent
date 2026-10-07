@@ -57,7 +57,10 @@ function describeError(error, scope = "command") {
   if (error?.kind === "not_found")
     return ["Not found", "Unknown alert or target incident. Nothing was changed."];
   if (error?.kind === "conflict")
-    return ["Conflict", "The version is stale or the command key was reused. Refresh state."];
+    return [
+      "Conflict",
+      text(error?.message) || "The version is stale or the command key was reused. Refresh state.",
+    ];
   if (error?.kind === "api" && error?.status === 422)
     return ["Invalid request", error?.message ?? "The command payload was rejected."];
   if (error?.kind === "api" && error?.code === "storage_unavailable")
@@ -78,6 +81,17 @@ function showError(error, scope = "command") {
 function hideError() {
   errorBox.hidden = true;
   errorDetail.textContent = "";
+}
+
+function clearResultDisplay(summary) {
+  resultOperation.textContent = "—";
+  resultStatus.textContent = "—";
+  resultReason.textContent = "—";
+  resultIncident.textContent = "—";
+  resultVersion.textContent = "—";
+  resultActor.textContent = "—";
+  resultDecided.textContent = "—";
+  resultSummary.textContent = summary;
 }
 
 function setResult(operation, item, source = "live") {
@@ -113,14 +127,7 @@ function setResult(operation, item, source = "live") {
 }
 
 function clearResult() {
-  resultOperation.textContent = "—";
-  resultStatus.textContent = "—";
-  resultReason.textContent = "—";
-  resultIncident.textContent = "—";
-  resultVersion.textContent = "—";
-  resultActor.textContent = "—";
-  resultDecided.textContent = "—";
-  resultSummary.textContent = "No command sent yet.";
+  clearResultDisplay("No command sent yet.");
   stateLine.textContent = "Connect to begin.";
   versionInput.value = "1";
   alertInput.value = "";
@@ -154,6 +161,29 @@ function buildBody(operation) {
   return { ok: true, body };
 }
 
+async function refreshAfterConflict(alertId, generation) {
+  try {
+    const item = await controlApi.getTriageState(alertId);
+    if (generation !== sessionGeneration) return;
+    page.dataset.state = "error";
+    setResult(item.status ?? "read", item ?? {}, "recovered");
+    showError({
+      kind: "conflict",
+      message: "The command version is stale. Current API state is shown; review the command context and submit again.",
+    });
+  } catch (readError) {
+    if (generation !== sessionGeneration) return;
+    const [readTitle, readDetail] = describeError(readError, "read");
+    page.dataset.state = readError?.kind === "network" ? "offline" : "error";
+    clearResultDisplay("Current state could not be verified; no command was confirmed.");
+    stateLine.textContent = `Alert ${alertId} current state is unavailable.`;
+    showError({
+      kind: "conflict",
+      message: `The command version is stale. Current state could not be refreshed (${readTitle}: ${readDetail}). No command was retried or confirmed.`,
+    });
+  }
+}
+
 async function sendCommand() {
   if (commandInFlight) return;
   const alertId = alertInput.value.trim();
@@ -184,11 +214,17 @@ async function sendCommand() {
     window.history.replaceState(null, "", url);
   } catch (error) {
     if (generation !== sessionGeneration) return;
-    page.dataset.state = error?.kind === "network" ? "offline" : "error";
-    showError(error);
+    if (error?.kind === "conflict" && error?.code === "stale_version") {
+      await refreshAfterConflict(alertId, generation);
+    } else {
+      page.dataset.state = error?.kind === "network" ? "offline" : "error";
+      showError(error);
+    }
   } finally {
-    commandInFlight = false;
-    submitButton.disabled = false;
+    if (generation === sessionGeneration) {
+      commandInFlight = false;
+      submitButton.disabled = false;
+    }
   }
 }
 
@@ -229,8 +265,10 @@ async function recoverDecision(alertId) {
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     showError(error, "read");
   } finally {
-    commandInFlight = false;
-    submitButton.disabled = false;
+    if (generation === sessionGeneration) {
+      commandInFlight = false;
+      submitButton.disabled = false;
+    }
   }
 }
 
@@ -244,6 +282,8 @@ sessionForm.addEventListener("submit", (event) => {
   credentialStore.set(value);
   apiKeyInput.value = "";
   sessionGeneration += 1;
+  commandInFlight = false;
+  submitButton.disabled = false;
   const deepLinkAlertId = pendingDeepLinkAlertId;
   pendingDeepLinkAlertId = "";
   clearResult();

@@ -41,9 +41,13 @@ Live hosted checks were successful for all eleven PRs at inspection; this is sep
 | CA1 durable dismiss, actor/time/reload | Real dismiss/recovery journeys and SQL readback pass | Bind final correction candidate and durable reproduction |
 | CA2 eligible target list and rejection by ID | Backend sequential rejection exists; no list handler or selection UI | Implement contracted listing; verify link-versus-close race and real selection |
 | CA3 declare ID, severity/impact/event/reload | Real declaration/reload and SQL event/ID/severity proof | Impact is explicitly unresolved in contract and null in runtime; product decision required |
-| CA4 no duplicate key effects; conflict refresh/context | Existing backend idempotency/CAS checks pass | UI only says “Refresh state”; its mock test manually changes the version, not an authoritative GET |
+| CA4 no duplicate key effects; conflict refresh/context | Existing backend idempotency/CAS checks pass | Authorized GET recovery now passes real browser proof; terminal rewrite still permits duplicate incidents and remains pending |
 | CA5 403/missing policy/evaluation failure without false success | Real grantless 403 and absent persisted decision pass | Demonstrate missing-policy/evaluation-failure paths; do not invent an evaluator |
 | CA6 manual versus external automatic distinction | No browser anomaly/threshold evaluator; actor displayed | No decision-origin projection or external automatic evidence; authoritative contract required |
+
+Two further explicit integration requirements remain unmet: `public/incident-ui/alerts.js` only emits an unconsumed `midnight:triage-requested` event; no inbox→triage navigation exists. The triage UI hardcodes every operation instead of consuming domain-provided permitted actions. The direct-URL browser journeys above do not prove inbox journeys. Alert source metadata is not automatic decision origin.
+
+Additional **P1 confirmed through real HTTP**, still pending correction: one synthetic alert received `triage_declare` 201/version1, then `triage_dismiss` 200/version2/incident_id null, then `triage_declare` 201/version3 with a *different* incident ID. The current guard rejects repeated declare only while the status is still declared; another command can erase that guard and canonical association. Captured safe output: `/tmp/triage23-review/terminal-probe.log`. Workflow triage decisions have terminal destinations; the browser must not invent another state machine to cover this service failure.
 
 ## Corrected P1: link versus concurrent close
 
@@ -59,7 +63,7 @@ For standalone reproduction, prepare an owner-readable local `.env` from `.env.e
 docker compose -p triage23reviewchecks --profile checks run --build --rm python-checks pytest -p no:cacheprovider -q tests/test_triage_link.py
 ```
 
-Expected: five passed, including both concurrent orderings and already-ineligible destination rejection. Observed equivalent pinned-image mounted-candidate execution: five passed, with independent full suite50passed above. The prepared `.env` and Docker/Git are host prerequisites; pytest and dependencies run only inside Docker. Rollback: revert the target-row lock correction; concurrent eligibility protection is then lost.
+Expected: five passed, including both concurrent orderings and already-ineligible destination rejection. Observed: the standalone command first failed before execution because this host's Docker address pools were fully subnetted. No unrelated networks were pruned. Reusing the existing owned internal network through a temporary external-network Compose override, the actual candidate Dockerfile build and same command passed **5 tests in 3.95 seconds**, image `sha256:d1833bdf37c29ddc0d9ff321c1d6e238998e41852c4de467374656e888b5a59b`. Logs: `/tmp/triage23-review/t23-1-compose-reproduction.log` (host failure) and `t23-1-compose-owned-network.log` (successful reproduction). This infrastructure-only variation does not alter database/test inputs. The prepared `.env` and Docker/Git are host prerequisites; pytest and dependencies run only inside Docker. Rollback: revert the target-row lock correction; concurrent eligibility protection is then lost.
 
 ## Environment and evidence boundaries
 
@@ -70,3 +74,13 @@ Cached checks image `sha256:698d015a7a95b2a20e342b96d1681fb604d8cf7dc497328530d2
 Private local recovery artifacts: `/tmp/triage23-review/baseline-python.log`, `baseline-browser.log`, `baseline-authoritative-corrected.sql.txt`, `browser-artifacts/evidence/`. Synthetic credentials reside only in an owner-readable private file and must not be attached. These temporary paths are **not** a durable published reproduction package. Repeatable repository commands and final candidate-bound media remain pending.
 
 No push, publication, merge, issue closure, scope exception or human approval has occurred. All pending criteria above remain pending even though baseline tests pass. See [the task document](../../odd/tasks/triage-23-stack-review.md).
+
+## Corrected P1: stale conflict recovery and session generation
+
+After 409 `stale_version`, the UI now performs an authorized GET, displays current API state/version while preserving the operator draft, and requires explicit resubmission. A failed read retains the conflict without inventing current facts. Connecting another identity resets its command gate; an old response cannot overwrite or unlock the new generation.
+
+Worker observed RED before recovery and generation fixes, then GREEN23passed. Parent independent final run: **34 passed in 56.4s**, no skips (21 real nginx/FastAPI/PostgreSQL integration journeys and 13 route-mocked UI checks). Both JavaScript syntax checks and diff whitespace checks passed. UI SHA256 `75307d81f364cef6d4423d3a4f7e4e479111d9cc5921cbfd996c10c4ec5e78e1`; new spec SHA256 `60083ba8b7d85933c9dfcbd4d89ac6c7b46d5be4d8acfb21c15f9a85cfb30267`. Parent log `/tmp/triage23-review/t23-2-parent-all-browser.log`.
+
+![Real conflict recovery before explicit retry](issue-23-conflict-recovery.png)
+
+The screenshot was inspected: synthetic identifiers/reason, credential field empty, conflict notice and API version2 with draft intact. Reproduction setup is still temporary; T23-5 must package seeds/config and bind the final candidate before acceptance. Rollback: revert the UI recovery/generation correction; authoritative recovery and switched-session command availability are then lost.
