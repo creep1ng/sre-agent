@@ -1,14 +1,15 @@
 # Issue 25 audit review evidence
 
 Reviewed stack: #378 -> #379 -> #385 -> #386, integrated with current main
-`677fb76ae345e223d4313e8c5bcbdbd7acb9bbf3`; #490 base is #386 at
-`878c6cf7ec64ab998e043333180e7d6acdd9a37f`. Runtime bytes are unchanged from
-`080bef8c109b5d21c108ce501ea1aaaff460c8db`, where full Python checks ran. The
-user corrected the target to #25, not #330. Live Project midnight.agent: Todo.
-Some P1s were corrected: observable leakage checks on #386, safe correlation
-detail on child #491, and additive contract ID compatibility in #493 (`c76476c`,
-Codex no issues). #493 full checks remain pending. Two runtime P1s remain open in
-separate follow-ups; no issue closure or merge is claimed. RDD disabled/unmanaged.
+`ef5ba500e673160aa73d92fffc61ee452c284bc6`; #490 restacked base is #386 at
+`f87d134ab69e743e9c1662224c29ca0912961f2e`. PR #493 contract 2.7.0 is merged
+on this main; the full release was accepted and hosted gates passed. Runtime and
+public source trees are unchanged from main 677fb76, so prior controlled HTTP/UI
+captures remain byte-matched. The user corrected the target to #25, not #330.
+Live Project midnight.agent: Todo. Some P1s were corrected: observable leakage
+checks on #386, safe correlation detail on child #491, and additive contract ID
+compatibility in #493. Two runtime P1s remain open in separate follow-ups; no
+issue closure or merge of the audit stack is claimed. RDD disabled/unmanaged.
 
 ## Findings and remaining gaps
 
@@ -23,18 +24,20 @@ separate follow-ups; no issue closure or merge is claimed. RDD disabled/unmanage
   assertions for rendered DOM, storage and requests. Child #491 renders the
   selected event request UUID and opaque incident/run/task HMAC digests with
   text content only. No trace ref was produced, so trace rendering is not evidenced.
-- **P1 corrected separately** #493 preserves the additive contract ID union; Codex
-  reported no issues, but its full checks remain pending.
+- **P1 corrected separately** #493 preserves the additive contract ID union; PR
+  #493 was human-accepted, all hosted gates succeeded, and it merged as
+  `ef5ba500e673160aa73d92fffc61ee452c284bc6`.
 
 ## Observed results and criterion mapping
 
 Latest controlled HTTP/SQL capture: `2026-10-07T03:11:46.012109+00:00`;
 correlation browser capture: `2026-10-07T03:12:59.985Z`. On final #491 leaf,
 8 Playwright journeys passed (16.4s), and 68 targeted Python checks passed
-(57.24s). Full `python-checks` on prior current-main/#386 candidate
-`080bef8c109b5d21c108ce501ea1aaaff460c8db`: 1562 passed, 1 skipped
-(483.51s); this full-suite result predates the #491 UI-only change. No strict-TDD
-mode was verified; browser failure-first checks were observed for the fixes.
+(57.24s) on the pre-restack #491 source. Docker access was unavailable for a new
+run on the exact restacked leaf. Full `python-checks` on `080bef8c109b5d21c108ce501ea1aaaff460c8db`
+(main 677, before the contract-only main merge): 1562 passed, 1 skipped
+(483.51s); neither result is claimed as a fresh full-suite run on the final leaf.
+No strict-TDD mode was verified; browser failure-first checks were observed.
 
 | Criterion | Evidence / boundary |
 | --- | --- |
@@ -83,5 +86,6 @@ No live provider, killed-database, browser-offline or independent human acceptan
 was run. Full Python suite belongs to the pre-#491 candidate stated above; do not
 attribute it to the final leaf. CA1-CA6 have the bounded evidence listed, but
 #25 acceptance remains partial while P2s, outage cases and human acceptance are
-open. The two runtime P1s above and #493 checks are also pending. Screenshot
+open. The two runtime P1s above remain pending. #493 is merged with its hosted
+gates successful; this is separate from acceptance of the audit stack. Screenshot
 inspection is not a substitute for human PR review.
