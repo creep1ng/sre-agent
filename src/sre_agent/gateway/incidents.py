@@ -1,5 +1,6 @@
 # ruff: noqa: E501, I001
-"""Authoritative incident query endpoints: detail, timeline and public snapshot (HT-INC-RUNTIME-B, issue #189).
+"""Authoritative incident query endpoints: detail, timeline and public snapshot (HT-INC-RUNTIME-B, issue #189),
+and the run state and run events of the runs contract (HT-INC-COMMANDS, issue #330).
 
 Delivery lives in the gateway: bearer authentication, workflow-scoped
 authorization (run.read on incident_workflow, pinned workflow as the stable
@@ -32,6 +33,7 @@ from sre_agent.incident.projections import (
     encode_cursor,
     project_detail,
     project_event,
+    project_run_state,
     project_snapshot,
 )
 from sre_agent.incident.workflow import IncidentWorkflow
@@ -43,6 +45,11 @@ READ_ACTION = "run.read"
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 RETRY_AFTER_SECONDS = "5"
+# Attempts at reading a run and its last event without a transition landing between
+# the two reads. A miss means writes are racing the read; the caller may retry.
+STATE_READ_ATTEMPTS = 3
+# The most events the event repository returns in one call.
+EVENT_PAGE = 1000
 
 ERRORS = {
     401: ("authentication_failed", "Authentication is required."),
@@ -76,6 +83,40 @@ class IncidentWorkflowResourceReader:
 
 
 Authorizer = Callable[[Any, Principal], Awaitable[AuthorizationEvaluation]]
+
+
+class StateReadRaceError(Exception):
+    """Every attempt saw a transition land between reading a run and its events."""
+
+
+async def consistent_run_state(
+    work: IncidentUnitOfWork, run_id: str
+) -> tuple[RunRecord, int] | None:
+    """The run and the sequence of the last event it reflects, read as one consistent pair.
+
+    Every transition bumps the run version and appends its events in the same commit.
+    The run is read again after its events: if the version did not move, no transition
+    landed in between, so the cursor describes exactly the state returned and a consumer
+    polling from it neither skips nor re-applies an event. Events are read from the
+    latest snapshot on, which the runtime takes every few transitions.
+    """
+
+    for _ in range(STATE_READ_ATTEMPTS):
+        run = await work.runs.get(run_id)
+        if run is None:
+            return None
+        snapshot = await work.snapshots.latest(run_id)
+        sequence = snapshot.event_sequence if snapshot is not None else -1
+        while True:
+            page = await work.events.list_after(run_id, sequence=sequence, limit=EVENT_PAGE)
+            if page:
+                sequence = page[-1].sequence
+            if len(page) < EVENT_PAGE:
+                break
+        again = await work.runs.get(run_id)
+        if again is not None and again.version == run.version:
+            return run, sequence
+    raise StateReadRaceError(run_id)
 
 
 class IncidentQueryService:
@@ -302,6 +343,39 @@ class IncidentQueryService:
             return self._error(request_id, 503)
         return JSONResponse(payload, status_code=200)
 
+    async def get_run_state(
+        self, incident_id: str, run_id: str, authorization: str | None
+    ) -> JSONResponse:
+        """GET /v1/incidents/{incident_id}/runs/{run_id}: the run-state projection.
+
+        The run must belong to the incident in the path; a run of another incident is
+        404, exactly like one that does not exist, so the route cannot confirm it.
+        """
+
+        request_id = uuid4()
+        if not self._valid_identifier(incident_id, IDENTIFIER_PATTERN):
+            return self._error(request_id, 422)
+        if not self._valid_identifier(run_id, RUN_ID_PATTERN):
+            return self._error(request_id, 422)
+        _, error = await self._authorized_principal(request_id, authorization)
+        if error is not None:
+            return error
+        _, error = await self._incident_or_error(request_id, incident_id)
+        if error is not None:
+            return error
+        try:
+            async with self.units() as work:
+                found = await consistent_run_state(work, run_id)
+            if found is None or found[0].incident_id != incident_id:
+                return self._error(request_id, 404, "run_not_found")
+            run, sequence = found
+            payload = project_run_state(run, self.workflow, event_sequence=sequence)
+        except UnsupportedWorkflowDataError:
+            return self._error(request_id, 422, "validation_error")
+        except Exception:
+            return self._error(request_id, 503)
+        return JSONResponse(payload, status_code=200)
+
 
 def incident_router(service: IncidentQueryService) -> APIRouter:
     router = APIRouter()
@@ -326,6 +400,25 @@ def incident_router(service: IncidentQueryService) -> APIRouter:
         return await service.get_snapshot(
             incident_id,
             request.query_params.get("run_id"),
+            request.headers.get("authorization"),
+        )
+
+    @router.get("/v1/incidents/{incident_id}/runs/{run_id}")
+    async def run_state(incident_id: str, run_id: str, request: Request) -> JSONResponse:
+        return await service.get_run_state(
+            incident_id, run_id, request.headers.get("authorization")
+        )
+
+    @router.get("/v1/incidents/{incident_id}/runs/{run_id}/events")
+    async def run_events(incident_id: str, run_id: str, request: Request) -> JSONResponse:
+        # The timeline of one run: the same page, cursor and projection, with the
+        # run fixed by the path instead of chosen by a query parameter.
+        params = request.query_params
+        return await service.get_timeline(
+            incident_id,
+            run_id,
+            params.get("after"),
+            params.get("limit"),
             request.headers.get("authorization"),
         )
 

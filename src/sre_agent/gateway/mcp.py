@@ -426,7 +426,9 @@ class MCPGatewayService:
             return await self._audited(
                 UUID(request_id),
                 started,
-                JSONResponse(self._map_result(tool_id, result)),
+                JSONResponse(
+                    self._map_result(tool_id, result), headers={"X-Request-ID": request_id}
+                ),
                 operation="mcp.invoke",
                 stage="response",
                 context=context,
@@ -784,6 +786,12 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
         responses={
             200: {
                 "description": "Tool result from the configured Grafana MCP upstream.",
+                "headers": {
+                    "X-Request-ID": {
+                        "description": "Correlates this invocation with its metadata-only audit.",
+                        "schema": {"type": "string", "format": "uuid"},
+                    }
+                },
                 "content": {
                     "application/json": {
                         "examples": {
