@@ -827,10 +827,10 @@ def test_persisted_bok_audit_blocks_lossy_downgrade(client):
     with pytest.raises(RuntimeError, match=guard):
         command.downgrade(config, "20260929_15")
     with psycopg.connect(DATABASE_URL) as connection:
-        # The blocked downgrade leaves the schema on the union head with the BoK
+        # The blocked downgrade leaves the schema on the current head with the BoK
         # evidence that made it lossy still present.
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260929_18",
+            "20260928_14",
         )
         assert connection.execute(
             "SELECT count(*) FROM audit_events WHERE operation='bok.search'"

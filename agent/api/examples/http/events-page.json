@@ -37,13 +37,13 @@
         "occurred_at": "2026-08-24T14:21:00Z"
       }
     ],
-    "next_cursor": "seq:2",
+    "next_cursor": "seq:1",
     "has_more": false
   },
   "x-http-mock": {
     "request": {
       "method": "GET",
-      "path": "/v1/incidents/inc-otel-payment-failure/runs/run_a1b2c3d4e5/events?after=seq%3A0",
+      "path": "/v1/incidents/inc-otel-payment-failure/runs/run_a1b2c3d4e5/events",
       "headers": {
         "Authorization": "Bearer fixture-token"
       },
@@ -91,7 +91,7 @@
             "occurred_at": "2026-08-24T14:21:00Z"
           }
         ],
-        "next_cursor": "seq:2",
+        "next_cursor": "seq:1",
         "has_more": false
       }
     }

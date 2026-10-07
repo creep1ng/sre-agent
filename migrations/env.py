@@ -14,15 +14,25 @@ if url.startswith("postgresql://"):
 config.set_main_option("sqlalchemy.url", url)
 
 
+# The revision whose audit operation vocabulary is the union of every sibling history.
+UNION_HEAD = "20261001_02"
+
+
 def integrated_upgrade():
-    """Recognize only a forward upgrade into the explicitly supported union head."""
+    """Recognize only a forward upgrade that reaches the explicitly supported union head.
+
+    The destination is the union head or a later revision built on it: a migration that
+    follows the union must not take the upgrade out of the guarded path.
+    """
     script = ScriptDirectory.from_config(config)
     destination = context.get_context().opts.get("destination_rev")
     target = script.as_revision_number(destination) if destination else None
-    if target not in ("20260929_18", "20260923_13"):
+    if target is None:
+        return None
+    ancestors = {revision.revision for revision in script.iterate_revisions(target, "base")}
+    if UNION_HEAD not in ancestors:
         return None
     current = set(context.get_context().get_current_heads())
-    ancestors = {revision.revision for revision in script.iterate_revisions(target, "base")}
     if current == {target} or not current <= ancestors:
         return None
     # An intermediate vocabulary narrower than the union cannot be validated against rows
@@ -30,10 +40,10 @@ def integrated_upgrade():
     # a superset of every ancestor vocabulary, so no existing row can violate it and it is
     # always validated. Keying on the union text keeps an ancestor that already declares the
     # full vocabulary on the validating path.
-    # Heads 20260929_17 and 20260929_18 only add reservation tables and the
-    # reason vocabulary, leaving the operation vocabulary untouched, so the
-    # union is read from 20261001_02, the nearest ancestor that declares it.
-    union = script.get_revision("20261001_02").module.NEW_OPERATION
+    # A revision after the union head may add tables or another vocabulary while leaving
+    # the operation vocabulary untouched, so the union is always read from UNION_HEAD, the
+    # nearest ancestor that declares it, and never from the destination.
+    union = script.get_revision(UNION_HEAD).module.NEW_OPERATION
     legacy_checks = {
         script.get_revision(revision).module.NEW_OPERATION
         for revision in (
