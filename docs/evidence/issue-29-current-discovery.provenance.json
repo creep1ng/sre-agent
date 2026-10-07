@@ -1,0 +1,16 @@
+{
+  "tested_sha": "944f658f5a951c6506c6545e4fabf0c4ecd6ee43",
+  "captured_at_utc": "2026-10-03T17:31:18.350Z",
+  "request_id": "4b405cb1-f7bc-4085-a41e-c699ddafc498",
+  "response_date": "Sat, 03 Oct 2026 17:31:17 GMT",
+  "status": 200,
+  "surface": "real browser rendering of actual FastAPI JSON response; not Swagger examples",
+  "file": "issue-29-current-discovery.png",
+  "sanitized": true,
+  "sha256": "a852cb222d2ec6afa6ecf222c9296d5155ee17a51ee3c0c3f7f1309703a1d70c",
+  "separate_capture_note": "Distinct real browser request captured before the passed API replay; this request ID and time are not among the replay cases and must not be used as if they shared its audit/counter window.",
+  "visual_inspection": "Actual FastAPI JSON response with both tools and public metadata; no API key, Authorization header, request payload, or tool result shown.",
+  "browser_image": "i29-evidence-browser:local",
+  "browser_image_id": "sha256:3bdb08c997925af7720916e371eab63da32727d18159753559d813621f7f9235",
+  "browser_runtime": "Playwright 1.63.0; pinned browser Dockerfile"
+}

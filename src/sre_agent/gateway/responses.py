@@ -1,5 +1,7 @@
 # ruff: noqa: E501, I001
 
+from datetime import UTC, datetime
+from decimal import Decimal
 from time import monotonic
 from typing import Annotated, Any, Literal, Protocol
 from uuid import UUID, uuid4
@@ -15,6 +17,7 @@ from starlette.exceptions import HTTPException
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
 from sre_agent.governance.dto import AuditEvent, Consumption
 from sre_agent.persistence.repositories import AuditRepository, ResourceRepository
@@ -182,6 +185,7 @@ ERRORS = {
     401: ("authentication_failed", "Authentication failed."), 403: ("resource_unavailable", "Resource unavailable."),
     422: ("contract_validation_failed", "Request validation failed."), 502: ("provider_evidence_invalid", "Provider response was invalid."),
     503: ("upstream_unavailable", "Upstream provider unavailable."), 504: ("upstream_timeout", "Upstream provider timed out."),
+    429: ("consumption_limit_exceeded", "Consumption limit exceeded."),
 }
 ERROR_MESSAGES = {
     "audit_unavailable": "Audit unavailable.",
@@ -204,8 +208,10 @@ def _empty_consumption(availability: Literal["absent", "unavailable"]) -> Consum
 
 class ResponsesService:  # noqa: E305
     def __init__(self, sessions: Any, provider: LLMProvider, audit: AuditStore,
-                 projector: AuditProjector) -> None:
+                 projector: AuditProjector, admission: Any = None,
+                 endpoint_catalog: Any = None) -> None:
         self.sessions, self.provider, self.audit, self.projector = sessions, provider, audit, projector
+        self.admission, self.endpoint_catalog = admission, endpoint_catalog
 
     async def create(self, raw: Any, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
@@ -241,11 +247,28 @@ class ResponsesService:  # noqa: E305
                                       alias=request.model, decision=decision,
                                       reason="routing_unavailable", retryable=True,
                                       identifiers=identifiers)
+        # Admission is unconditional: it is what enforces an active limit and
+        # reserves the exposure. Gating it on catalog configuration let an
+        # active provider with no catalog reach the provider unchecked.
+        service = self.admission or ConsumptionAdmissionService(self.sessions)
+        admission = await service.admit(
+            incident_id=identifiers.get("incident_id"), model=request.model,
+            provider=assignment.inference_provider, catalog=self.endpoint_catalog,
+            now=datetime.now(UTC),
+            request_id=request_id,
+        )
+        if not admission.allowed:
+            status = 503 if admission.retryable else 429
+            return await self._finish(request_id, started, status, "authorization",
+                                      context=context, alias=request.model, decision=decision,
+                                      reason=admission.denial_reason or "consumption_bounds_unavailable",
+                                      retryable=status in {429, 503, 504}, identifiers=identifiers)
         try:
             provider_request = ProviderRequest(
                 input=request.input,
                 model=assignment.concrete_model,
                 provider=assignment.inference_provider,
+                max_output_tokens=admission.max_output_tokens,
             )
         except ValidationError:
             # Persisted routing data can outlive provider identifier rules. Do
@@ -257,6 +280,7 @@ class ResponsesService:  # noqa: E305
         try:
             result = await self.provider.create(provider_request)
             consumption = result.consumption or _empty_consumption("absent")
+            await self._settle_exact(admission.reservation_id, consumption)
             payload = {"id": result.response_id, "object": "response", "status": "completed", "model": result.model, "output": [{"type": "message", "role": "assistant",
                        "content": [{"type": "output_text", "text": result.text}]}],
                        "request_id": str(request_id), "metadata": {"requested_model_alias": request.model,
@@ -271,6 +295,8 @@ class ResponsesService:  # noqa: E305
                                     "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
                                     "evidence_invalid": (502, "upstream_invalid", "provider_evidence_invalid")}.get(
                                         failure.kind, (502, "upstream_invalid", "upstream_invalid_response"))
+            await self._settle_exact(admission.reservation_id,
+                                     failure.consumption or _empty_consumption("unavailable"))
             return await self._finish(request_id, started, status, "upstream", context=context,
                                       alias=request.model, decision=decision, assignment=assignment,
                                       reason=reason, retryable=status in {503, 504}, identifiers=identifiers,
@@ -292,8 +318,22 @@ class ResponsesService:  # noqa: E305
         message = ERROR_MESSAGES.get(code, message)
         headers = {"Retry-After": str(retry_after)} if retry_after else None
         return JSONResponse({"error": {"code": code, "message": message},
-                             "request_id": str(request_id), "retryable": status in {503, 504}},
+                             "request_id": str(request_id), "retryable": status in {429, 503, 504}},
                             status, headers=headers)
+
+    async def _settle_exact(self, reservation: str | None, consumption: Consumption) -> None:
+        if reservation is None or consumption.availability != "complete":
+            return
+        if consumption.precision != "exact":
+            return
+        try:
+            service = self.admission or ConsumptionAdmissionService(self.sessions)
+            await service.settle(reservation_id=reservation,
+                                 tokens=consumption.total_tokens or 0,
+                                 usd_cost=Decimal(consumption.billed_usd)
+                                 if consumption.billed_usd else None)
+        except Exception:
+            pass  # uncertain settlement stays reserved; never fail the response
 
 
 def responses_router(service: ResponsesService) -> APIRouter:
@@ -321,7 +361,7 @@ def responses_router(service: ResponsesService) -> APIRouter:
         example = {
             "error": {"code": code, "message": message},
             "request_id": "00000000-0000-4000-8000-000000000001",
-            "retryable": status in {503, 504},
+            "retryable": status in {429, 503, 504},
         }
         response = {
             "model": ErrorEnvelope,

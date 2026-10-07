@@ -6,6 +6,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 
+from sre_agent.gateway.health import postgres_readiness_probe
 from sre_agent.persistence.database import Database
 
 DATABASE_URL = os.environ.get(
@@ -17,8 +18,11 @@ DATABASE_URL = os.environ.get(
 def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
+        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS audit_events, grants, credentials, resources, "
+            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "bok_collection_versions, "
+            "audit_events, skill_versions, grants, credentials, resources, "
             "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -36,8 +40,32 @@ def migrated_database() -> None:
               'accepted', 'released', 'not_attempted')"""
         )
         connection.commit()
+    command.upgrade(config, "20260926_14")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events
+            SELECT (jsonb_populate_record(NULL::audit_events, to_jsonb(audit_events) ||
+              '{"event_id":"00000000-0000-4000-8000-000000000098",
+                "operation":"usage.read","action":"admin.read"}'::jsonb)).*
+            FROM audit_events"""
+        )
+        before = connection.execute(
+            "SELECT to_jsonb(audit_events) FROM audit_events ORDER BY event_id"
+        ).fetchall()
     command.upgrade(config, "head")
     command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT to_jsonb(audit_events) FROM audit_events ORDER BY event_id"
+            ).fetchall()
+            == before
+        )
+
+
+@pytest.mark.asyncio
+async def test_integrated_head_is_ready_after_populated_repeated_upgrade() -> None:
+    await postgres_readiness_probe(DATABASE_URL)()
 
 
 def test_repeated_head_has_expected_domain_tables() -> None:
@@ -48,13 +76,19 @@ def test_repeated_head_has_expected_domain_tables() -> None:
     assert {row[0] for row in rows} == {
         "alembic_version",
         "audit_events",
+        "bok_section_chunks",
+        "bok_documents",
+        "bok_collection_versions",
         "credentials",
+        "consumption_reservations",
+        "consumption_limit_policies",
         "grants",
         "idempotency_records",
         "mcp_servers",
         "mcp_tools",
         "principals",
         "resources",
+        "skill_versions",
     }
 
 
@@ -287,7 +321,7 @@ def test_database_trigger_rejects_audit_updates_and_deletes() -> None:
         for statement in ("UPDATE audit_events SET retryable=true", "DELETE FROM audit_events"):
             with pytest.raises(psycopg.errors.RaiseException), connection.transaction():
                 connection.execute(statement)
-        assert connection.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 2
+        assert connection.execute("SELECT count(*) FROM audit_events").fetchone()[0] == 3
 
 
 def test_404_denial_evidence_prevents_fail_open_downgrade() -> None:
@@ -414,3 +448,220 @@ def test_consumption_is_append_only_with_exact_decimal_json() -> None:
             connection.execute(
                 "UPDATE audit_events SET consumption='{}'::jsonb WHERE event_id=%s", (event_id,)
             )
+
+
+def test_status_head_downgrade_preserves_usage_and_bok_operations() -> None:
+    """Rolling the status slice back must keep the parent's usage and BoK vocabulary."""
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute("DELETE FROM audit_events WHERE operation = 'skills.resolve'")
+        connection.execute(
+            """INSERT INTO audit_events
+            SELECT (jsonb_populate_record(NULL::audit_events, to_jsonb(audit_events) ||
+              '{"event_id":"00000000-0000-4000-8000-000000000197",
+                "operation":"usage.read","action":"admin.read"}'::jsonb)).*
+            FROM audit_events LIMIT 1"""
+        )
+        connection.commit()
+    # 20260930_20 is the last revision before the Skill status vocabulary is admitted, so
+    # downgrading to it must drop 'catalog.status.replace' and keep the BoK and usage words
+    # that its descendants inherit rather than re-declare.
+    command.downgrade(config, "20260930_20")
+    with psycopg.connect(DATABASE_URL) as connection:
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+    assert "'usage.read'" in operation_check
+    assert "'bok.search'" in operation_check
+    assert "'catalog.status.replace'" not in operation_check
+    command.upgrade(config, "head")
+
+
+def test_merge_19_downgrade_preserves_parent_audit_for_revision_18() -> None:
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute("DELETE FROM audit_events WHERE operation = 'skills.resolve'")
+        connection.execute(
+            """INSERT INTO audit_events
+            SELECT (jsonb_populate_record(NULL::audit_events, to_jsonb(audit_events) ||
+              '{"event_id":"00000000-0000-4000-8000-000000000199",
+                "operation":"usage.read","action":"admin.read"}'::jsonb)).*
+            FROM audit_events LIMIT 1"""
+        )
+        connection.commit()
+    command.downgrade(config, "20260930_18")
+    with psycopg.connect(DATABASE_URL) as connection:
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+    assert "'usage.read'" in operation_check
+    assert "'catalog.status.replace'" in operation_check
+    assert "'skills.resolve'" not in operation_check
+    command.upgrade(config, "head")
+
+
+def test_skill_resolution_audit_operation_and_denied_404_are_persistable() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              response_status, retryable, latency_ms, correlation, resource, redaction,
+              content_state, authoritative_acceptance, ordinary_result, exporter_result)
+            VALUES ('00000000-0000-4000-8000-000000000016', now(), 'skills.resolve',
+              'invoke', 'authorization', 'success', 'grant_matched', 200, false, 0,
+              '{\"request_id\":\"successful-skill-read\"}'::jsonb,
+              '{\"resource_type\":\"skill\"}'::jsonb, '{}', 'absent',
+              'accepted', 'released', 'not_attempted')"""
+        )
+        connection.execute(
+            """INSERT INTO audit_events (
+              event_id, occurred_at, operation, action, stage, outcome, reason_code,
+              authorization_denial_cause, response_status, retryable, latency_ms,
+              correlation, resource, redaction, content_state, authoritative_acceptance,
+              ordinary_result, exporter_result)
+            VALUES ('00000000-0000-4000-8000-000000000017', now(), 'skills.resolve',
+              'invoke', 'authorization', 'denied', 'no_matching_grant', 'resource_missing',
+              404, false, 0, '{\"request_id\":\"unavailable-skill-read\"}'::jsonb,
+              '{\"resource_type\":\"skill\"}'::jsonb, '{}', 'absent', 'accepted',
+              'suppressed', 'not_attempted')"""
+        )
+        rows = connection.execute(
+            "SELECT operation, response_status, authorization_denial_cause "
+            "FROM audit_events WHERE event_id IN (%s, %s) ORDER BY event_id",
+            (
+                "00000000-0000-4000-8000-000000000016",
+                "00000000-0000-4000-8000-000000000017",
+            ),
+        ).fetchall()
+    assert rows == [
+        ("skills.resolve", 200, None),
+        ("skills.resolve", 404, "resource_missing"),
+    ]
+
+
+def test_consumption_policy_defaults_and_bigint_storage() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT policy_id, version, incident_token_limit, monthly_usd_limit "
+            "FROM consumption_limit_policies"
+        ).fetchall() == [(1, 0, None, None)]
+        connection.execute(
+            "UPDATE consumption_limit_policies SET version=2147483648, "
+            "incident_token_limit=2147483648, monthly_usd_limit=0.000000000001"
+        )
+        assert connection.execute(
+            "SELECT version, incident_token_limit, monthly_usd_limit::text "
+            "FROM consumption_limit_policies"
+        ).fetchone() == (2147483648, 2147483648, "0.000000000001")
+        connection.rollback()
+
+
+@pytest.mark.parametrize(
+    "column", ["policy_id", "version", "incident_token_limit", "monthly_usd_limit"]
+)
+def test_consumption_policy_rejects_invalid_storage(column: str) -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(f"UPDATE consumption_limit_policies SET {column}=-1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "operation",
+    [
+        "consumption_limits.get",
+        "consumption_limits.replace",
+        "usage.read",
+        "catalog.create",
+        "catalog.list",
+        "catalog.read",
+    ],
+)
+async def test_consumption_audit_vocabulary_persists_without_rewriting_history(
+    operation: str,
+) -> None:
+    from uuid import uuid4
+
+    from sre_agent.gateway.audit import AuditProjector
+    from sre_agent.gateway.responses import PostgresAuditStore
+
+    database = Database(DATABASE_URL)
+    try:
+        event = AuditProjector(b"synthetic-migration-evidence").control_event(
+            uuid4(),
+            503,
+            0,
+            "audit",
+            operation=operation,
+            action="admin.write" if operation.endswith("replace") else "admin.read",
+            reason="upstream_unavailable",
+            retryable=True,
+        )
+        await PostgresAuditStore(database.sessions).append(event)
+        with psycopg.connect(DATABASE_URL) as connection:
+            assert connection.execute(
+                "SELECT operation, content_state, consumption FROM audit_events WHERE event_id=%s",
+                (str(event.event_id),),
+            ).fetchone() == (operation, "absent", None)
+            assert connection.execute(
+                "SELECT consumption->>'billed_usd' FROM audit_events WHERE event_id=%s",
+                ("00000000-0000-4000-8000-000000000130",),
+            ).fetchone() == ("0.0012300",)
+    finally:
+        await database.dispose()
+
+
+def test_consumption_sql_audit_evidence_blocks_lossy_downgrade() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO audit_events SELECT (jsonb_populate_record(NULL::audit_events, "
+            "to_jsonb(a) || jsonb_build_object('operation','consumption_limits.get', "
+            "'event_id','00000000-0000-4000-8000-000000000334'))).* "
+            "FROM audit_events a WHERE event_id='00000000-0000-4000-8000-000000000000'"
+        )
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="consumption.*audit evidence"):
+        command.downgrade(config, "20260926_14")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20260928_14",
+        )
+        assert connection.execute("SELECT count(*) FROM consumption_limit_policies").fetchone() == (
+            1,
+        )
+
+
+def test_consumption_put_binding_persists_and_blocks_lossy_downgrade() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO principals (principal_id,kind,display_name,status,created_at,updated_at) "
+            "VALUES ('policy-schema-admin','human','Synthetic administrator','active',now(),now())"
+        )
+        connection.execute(
+            "INSERT INTO idempotency_records (scope,key_digest,payload_sha256,principal_id,method,"
+            "canonical_path,binding,outcome,created_at,expires_at,transition_count) "
+            "VALUES ('policy-schema-admin|PUT|/v1/consumption-limits',"
+            "repeat('a',64),repeat('b',64),"
+            "'policy-schema-admin','PUT','/v1/consumption-limits','at_least_24h',"
+            '\'{"response_status":200,"response_payload":{"version":1}}\','
+            "now(),now()+interval '1 day',1)"
+        )
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    with pytest.raises(RuntimeError, match="PUT.*bindings"):
+        command.downgrade(config, "20260929_15")
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert connection.execute(
+            "SELECT method, transition_count, outcome->'response_payload'->>'version' "
+            "FROM idempotency_records WHERE principal_id='policy-schema-admin'"
+        ).fetchone() == ("PUT", 1, "1")
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "20260928_14",
+        )
