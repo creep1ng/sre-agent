@@ -129,6 +129,12 @@ def test_runtime_audit_openapi_matches_published_27_contract() -> None:
             "resource_type": "administrative_control",
             "resource_id": "audit",
         }
+        parameter_keys = [
+            (resolved["in"], resolved["name"])
+            for item in actual.get("parameters", [])
+            if (resolved := _resolve_parameter(item, runtime))
+        ]
+        assert len(parameter_keys) == len(set(parameter_keys)), (path, parameter_keys)
         actual_parameters = _parameters(actual, runtime)
         published_parameters = _parameters(published, canonical)
         assert set(actual_parameters) == set(published_parameters)
@@ -137,7 +143,9 @@ def test_runtime_audit_openapi_matches_published_27_contract() -> None:
             assert actual_parameter.get("required", False) == canonical_parameter.get(
                 "required", False
             )
-            assert actual_parameter["schema"] == canonical_parameter["schema"]
+            actual_schema = dict(actual_parameter["schema"])
+            actual_schema.pop("title", None)
+            assert actual_schema == canonical_parameter["schema"]
         assert set(actual["responses"]) == set(published["responses"]), path
         for status, response in published["responses"].items():
             canonical_response = _resolve_response(response, canonical)

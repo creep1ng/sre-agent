@@ -6,7 +6,7 @@ from time import monotonic
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request, Security
+from fastapi import APIRouter, Path, Request, Security
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -107,6 +107,11 @@ def _valid_event_id(value: Any) -> bool:
         re.fullmatch(CANONICAL_UUID_PATTERN, event_id) is not None
         or re.fullmatch(ID_PATTERN, event_id) is not None
     )
+
+
+def _event_id_json_schema(schema: dict[str, Any]) -> None:
+    schema.clear()
+    schema.update(AUDIT_EVENT_ID_SCHEMA)
 
 
 ERRORS = {
@@ -497,19 +502,11 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
             },
         },
         openapi_extra={
-            "parameters": [
-                {
-                    "name": "id",
-                    "in": "path",
-                    "required": True,
-                    "schema": AUDIT_EVENT_ID_SCHEMA,
-                }
-            ],
             "x-governed-scope": AUDIT_SCOPE,
         },
     )
     async def get_event(
-        id: str,
+        id: Annotated[str, Path(json_schema_extra=_event_id_json_schema)],
         request: Request,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
     ) -> JSONResponse:
