@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SRE Agent Alert Triage API
-  version: 3.0.0
+  version: 3.1.0
   description: >-
     Alert triage commands and reads (TRIAGE, issue #23) over the stable
     incident_workflow/incident-response resource. Reads need alert.read;
@@ -19,7 +19,10 @@ info:
     responsible system. Human decisions are manual. Authorized agent dismiss
     or link decisions are external_automatic and identify the authenticated
     producer principal as responsible_system. Legacy decisions without
-    verifiable provenance are unknown with null responsible_system. Eligible
+    verifiable provenance are unknown with null responsible_system. The
+    additive triage context read returns persisted state or null plus current
+    domain-authorized actions; null does not assert alert-inventory existence,
+    and commands always revalidate grants. Eligible
     destinations are active, investigating, mitigating, verifying (resolved,
     postmortem, closed excluded, re-evaluated inside the operation).
     Dismissed/linked answer 200, declare answers 201 once, races answer 409.
@@ -50,6 +53,22 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/alerts/{alert_id}/triage/context:
+    get:
+      operationId: getAlertTriageContext
+      parameters:
+        - { name: alert_id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
+      responses:
+        '200':
+          description: Persisted triage state and currently authorized next actions; null state does not establish inventory existence
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:triage-context:1.0.0' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
   /v1/alerts/{alert_id}/triage/eligible-incidents:

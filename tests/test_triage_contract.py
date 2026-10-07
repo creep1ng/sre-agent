@@ -12,7 +12,7 @@ ROOT = Path(__file__).parents[1]
 OPENAPI = yaml.safe_load((ROOT / "agent/api/triage.openapi.yaml").read_text())
 SCHEMAS = {
     name: yaml.safe_load((ROOT / f"agent/schemas/{name}.schema.yaml").read_text())
-    for name in ("triage-state", "triage-command")
+    for name in ("triage-state", "triage-command", "triage-context")
 }
 ENVELOPE = json.loads(
     (ROOT / "schemas/releases/2.0.0/json-schema/http/error-envelope.schema.json").read_text()
@@ -55,11 +55,17 @@ def test_contract_schemas_and_paths() -> None:
         "/v1/alerts/{alert_id}/triage",
         "/v1/alerts/{alert_id}/triage/eligible-incidents",
         "/v1/alerts/{alert_id}/triage/commands",
+        "/v1/alerts/{alert_id}/triage/context",
     } <= set(OPENAPI["paths"])
+    context = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/context"]["get"]
+    assert context["operationId"] == "getAlertTriageContext"
+    assert context["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] == (
+        "urn:sre-agent:schema:triage-context:1.0.0"
+    )
     post = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/commands"]["post"]
     headers = {p["name"] for p in post["parameters"] if "name" in p}
     assert "Idempotency-Key" in headers
-    assert OPENAPI["info"]["version"] == "3.0.0"
+    assert OPENAPI["info"]["version"] == "3.1.0"
     assert SCHEMAS["triage-state"]["$id"] == "urn:sre-agent:schema:triage-state:2.0.0"
     assert post["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
         "urn:sre-agent:schema:triage-command:2.0.0"
@@ -182,6 +188,39 @@ def test_state_schema_requires_backend_validated_provenance() -> None:
         base | {"decision_origin": "external_automatic", "responsible_system": None}
     )
     assert not validator.is_valid(base | {"unexpected": True})
+
+
+def test_context_contract_is_closed_and_supports_null_or_authoritative_state() -> None:
+    schema = SCHEMAS["triage-context"]
+    assert schema["additionalProperties"] is False
+    assert schema["required"] == ["alert_id", "triage_state", "allowed_actions"]
+    assert schema["properties"]["allowed_actions"]["uniqueItems"] is True
+    assert schema["properties"]["allowed_actions"]["items"]["enum"] == [
+        "open_triage",
+        "triage_dismiss",
+        "triage_link",
+        "triage_declare",
+    ]
+    registry = Registry().with_resources(
+        [(item["$id"], Resource.from_contents(item)) for item in SCHEMAS.values()]
+    )
+    validator = Draft202012Validator(schema, registry=registry)
+    null_context = {"alert_id": "al-context-contract", "triage_state": None, "allowed_actions": []}
+    state = {
+        "alert_id": "al-context-contract",
+        "status": "dismissed",
+        "incident_id": None,
+        "expected_version": 2,
+        "decision_origin": "manual",
+        "responsible_system": None,
+    }
+    assert validator.is_valid(null_context)
+    assert validator.is_valid(
+        null_context | {"triage_state": state, "allowed_actions": ["triage_dismiss"]}
+    )
+    assert not validator.is_valid(null_context | {"allowed_actions": ["open_triage"] * 2})
+    assert not validator.is_valid(null_context | {"allowed_actions": ["invented_action"]})
+    assert not validator.is_valid(null_context | {"unexpected": True})
 
 
 def test_eligible_states_exclude_terminal() -> None:
