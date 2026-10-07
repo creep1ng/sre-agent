@@ -118,3 +118,11 @@ docker compose -p triage23reviewchecks --profile checks run --build --rm python-
 ```
 
 This new impact unit has only been independently run with matching cacheddependencies and read-only source, not yet a fresh Composebuild. Manual UI/client changes and agent-to-human actor authority correction remain pending; do not claim fullCA3 or CA6accepted. Rollback removes mandatoryimpact and its reducer assignment, losing this new CA3 guarantee.
+
+## Corrected P1: agent credentials represented as a human operator
+
+Real baseline commands by an active, granted agent returned200dismiss,200link and201declare, despite the workflow permitting only humans for terminal triage. Parent SQL then showed `principal_kind=agent`, stored runtime decision `actor=human`, and `actor_reference=producer-agent`. This was false actor authority, not evidence of an automatic origin.
+
+The manual command service now checks the authenticated principal kind after action grants (including link run.read) but before idempotent binding. Nonhuman terminal manual commands return403`operator_required` without triage/incident/event effects. Open-triage and reads are unchanged; no automaticterminal permission or workflowactor was silently enabled.
+
+Failurecases preceded production changes. Parent baseline RED:**3failed23deselected5.93s**. Parent corrected complete triage/runtime suite:**78passed19.92s**, Ruffcheck/format2files and whitespacepass. Workerearlylinkfixture missedrun.read and was corrected before final RED. Logs `/tmp/triage23-review/t23-12/parent-{red,actor-sql,green}.log`. SourceSHA256 `a9c575a5b3463ae5099f3889e4897e7d88031e8a61ab0547049344d65990dfc7`; HTTPtestSHA256 `6c5eb21c28ce5ee690fcf54d45de579420621dbca69436d1e2fef31c0737b19f`. Use the existing DockerCompose HTTP reproduction command above; a fresh Composebuild of this new actor unit is still pending. Rollback allows an agent to impersonate a human in terminal triage again.
