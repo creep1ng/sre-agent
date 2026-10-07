@@ -500,6 +500,65 @@ def _assert_terminal_validation_record(response, status: int, stage: str) -> Non
         assert all(row.get(key) is None for key in ("identity", "resource", "policy_decision"))
 
 
+GET_BODY_CASES = (
+    (b'{"raw_content":"ISSUE25_PRIVATE_BODY"}', "application/json"),
+    (b'{"redacted_content":"ISSUE25_PRIVATE_BODY"}', "application/json"),
+    (b'{"include_content":true}', "application/json"),
+    (b'{"content":"ISSUE25_PRIVATE_BODY"}', "application/json"),
+    (b"{}", "application/json"),
+    (b"null", "application/json"),
+    (b"7", "application/json"),
+    (b'"ISSUE25_PRIVATE_BODY"', "application/json"),
+    (b"not-json-ISSUE25_PRIVATE_BODY", "application/octet-stream"),
+)
+
+
+@pytest.mark.parametrize(
+    "target",
+    ("/v1/audit-events?decision=deny", f"/v1/audit-events/{DIGIT_EVENT_ID}"),
+    ids=("list", "detail"),
+)
+@pytest.mark.parametrize("body,content_type", GET_BODY_CASES)
+def test_nonempty_get_bodies_are_rejected_and_audited(target, body, content_type) -> None:
+    response = _client().request(
+        "GET",
+        target,
+        content=body,
+        headers={
+            "Authorization": BEARERS["admin"],
+            "Content-Type": content_type,
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "validation_error"
+    assert "items" not in response.json() and "event_id" not in response.json()
+    assert "ISSUE25_PRIVATE_BODY" not in response.text
+    _assert_terminal_validation_record(response, 422, "validation")
+
+
+@pytest.mark.parametrize(
+    "target",
+    ("/v1/audit-events?decision=deny", f"/v1/audit-events/{DIGIT_EVENT_ID}"),
+    ids=("list", "detail"),
+)
+def test_nonempty_get_body_preserves_authentication_and_grant_order(target) -> None:
+    client = _client()
+    body = b'{"raw_content":"ISSUE25_PRIVATE_BODY"}'
+    anonymous = client.request("GET", target, content=body)
+    assert anonymous.status_code == 401
+    assert "ISSUE25_PRIVATE_BODY" not in anonymous.text
+    _assert_terminal_validation_record(anonymous, 401, "authentication")
+    restricted = client.request(
+        "GET",
+        target,
+        content=body,
+        headers={"Authorization": BEARERS["bystander"]},
+    )
+    assert restricted.status_code == 403
+    assert "ISSUE25_PRIVATE_BODY" not in restricted.text
+    _assert_terminal_validation_record(restricted, 403, "authorization")
+
+
 @pytest.mark.parametrize("field", ("from", "to"))
 @pytest.mark.parametrize(
     "timestamp",

@@ -358,7 +358,12 @@ class AuditReadsService:
             return None
         return parsed
 
-    async def list_events(self, raw: dict[str, Any], authorization: str | None) -> JSONResponse:
+    async def list_events(
+        self,
+        raw: dict[str, Any],
+        authorization: str | None,
+        has_body: bool = False,
+    ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         filters = self._filters(raw)
         if filters is None:
@@ -385,6 +390,14 @@ class AuditReadsService:
                 context=context,
                 evaluation=evaluation,
                 headers={"WWW-Authenticate": "Bearer"} if auth_status == 401 else None,
+            )
+        if has_body:
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                error_code="validation_error",
             )
         limit = filters.pop("limit")
         try:
@@ -421,6 +434,7 @@ class AuditReadsService:
         event_id: str,
         authorization: str | None,
         query_params: dict[str, Any] | None = None,
+        has_body: bool = False,
     ) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         if not _valid_event_id(event_id):
@@ -452,6 +466,14 @@ class AuditReadsService:
             key in (query_params or {})
             for key in ("content", "raw_content", "redacted_content", "include_content")
         ):
+            return await self._finish(
+                request_id,
+                started,
+                422,
+                "validation",
+                error_code="validation_error",
+            )
+        if has_body:
             return await self._finish(
                 request_id,
                 started,
@@ -520,6 +542,12 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
         status: response for status, response in audit_responses.items() if status != 404
     }
 
+    async def _has_nonempty_body(request: Request) -> bool:
+        has_body = False
+        async for chunk in request.stream():
+            has_body = has_body or bool(chunk)
+        return has_body
+
     @router.get(
         "/v1/audit-events",
         operation_id="listAuditEvents",
@@ -547,7 +575,9 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
     ) -> JSONResponse:
         return await service.list_events(
-            dict(request.query_params), request.headers.get("authorization")
+            dict(request.query_params),
+            request.headers.get("authorization"),
+            await _has_nonempty_body(request),
         )
 
     @router.get(
@@ -576,7 +606,10 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
     ) -> JSONResponse:
         return await service.get_event(
-            id, request.headers.get("authorization"), dict(request.query_params)
+            id,
+            request.headers.get("authorization"),
+            dict(request.query_params),
+            await _has_nonempty_body(request),
         )
 
     return router
