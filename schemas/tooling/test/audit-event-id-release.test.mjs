@@ -24,7 +24,8 @@ function validator(schema, enforceFormats) {
   return ajv.compile(schema);
 }
 
-test("2.7 audit event IDs are disjoint canonical UUID or correlation IDs with formats on and off", async () => {
+test("2.7 audit event IDs preserve 2.6 values and add canonical UUIDs with formats on and off", async () => {
+  const api26 = await openApi("2.6.0");
   const api = await openApi("2.7.0");
   const schema = auditEventIdSchema(api);
   const accepted = [
@@ -33,18 +34,32 @@ test("2.7 audit event IDs are disjoint canonical UUID or correlation IDs with fo
     "00000000-0000-0000-0000-000000000000",
     "C0000000-0000-4000-8000-000000000005",
     "cor_12345678-1234-1234-8234-123456789012",
-  ];
-  const rejected = [
-    "not-an-event-id",
-    "3f2504e0-4f89-11d3-9a0c-0305e82c330x",
+    "abc",
+    "usr_existing",
     "cor_not-a-uuid",
     "cor_12345678-1234-7234-8234-123456789012",
+    "not-an-event-id",
+  ];
+  const rejected = [
+    "ab",
+    "Aaa",
+    "a".repeat(65),
+    "not an event id",
+    "cor_bad/character",
+    "3f2504e0-4f89-11d3-9a0c-0305e82c330x",
   ];
 
   for (const enforceFormats of [true, false]) {
     const valid = validator(schema, enforceFormats);
-    for (const value of accepted) assert.equal(valid(value), true, `${value} should validate with formats ${enforceFormats ? "on" : "off"}`);
-    for (const value of rejected) assert.equal(valid(value), false, `${value} should fail with formats ${enforceFormats ? "on" : "off"}`);
+    const legacy = validator(api26.components.parameters.Id.schema, enforceFormats);
+    for (const value of accepted) {
+      if (["abc", "cor_not-a-uuid", "not-an-event-id"].includes(value)) assert.equal(legacy(value), true, `${value} must remain valid under 2.6 Id`);
+      assert.equal(valid(value), true, `${value} should validate with formats ${enforceFormats ? "on" : "off"}`);
+    }
+    for (const value of rejected) {
+      assert.equal(legacy(value), false, `${value} was not valid under 2.6 Id`);
+      assert.equal(valid(value), false, `${value} should fail with formats ${enforceFormats ? "on" : "off"}`);
+    }
   }
 });
 
@@ -54,7 +69,7 @@ test("2.7 broadens only the audit detail parameter and preserves the 2.6 grant 4
   const previousGenericId = api26.components.parameters.Id;
   assert.deepEqual(api27.components.parameters.Id, previousGenericId);
   assert.equal(api27.paths["/v1/audit-events/{id}"].get.parameters[0].$ref, "#/components/parameters/AuditEventId");
-  assert.equal(api27.paths["/v1/grants"].post.responses["404"].description, api26.paths["/v1/grants"].post.responses["404"].description);
+  assert.deepEqual(api27.paths["/v1/grants"].post.responses["404"], api26.paths["/v1/grants"].post.responses["404"]);
 
   const genericId = validator(api27.components.parameters.Id.schema, true);
   assert.equal(genericId("3f2504e0-4f89-11d3-9a0c-0305e82c3301"), false, "generic Id must retain its pre-existing UUID rejection");

@@ -361,7 +361,7 @@ components:
   securitySchemes: { bearerAuth: { type: http, scheme: bearer } }
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
-    AuditEventId: { name: id, in: path, required: true, schema: { oneOf: [{ type: string, format: uuid, pattern: '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$' }, { type: string, pattern: '^cor_[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' }] } }
+    AuditEventId: { name: id, in: path, required: true, schema: { oneOf: [{ type: string, format: uuid, pattern: '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$' }, { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$', not: { pattern: '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$' } }] } }
     IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[\x20-\x7E]+$' } }
     Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 100 } }
     PrincipalFilter: { name: principal_id, in: query, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }

@@ -26,9 +26,9 @@ inventory:
     - path: releases/2.7.0/conformance/consumers.yaml
       sha256: sha256:d4fc4fc0f7a46a49ed35b00c82c62a7534396d8839b9f0f729d9e1a665cad5b4
     - path: releases/2.7.0/conformance/evidence.json
-      sha256: sha256:ff9c4fb400e0ef267665f8d560e096ed6ca7c9cc3074b69c152d5eb92065b388
+      sha256: sha256:1492a305d98647a269ea34e99999b9fdbd133ed02015ad9acb4ac835ff1472e9
     - path: releases/2.7.0/conformance/migration.md
-      sha256: sha256:94467967e966ab84b47abae96e760911db0a86177b3b804e8b078b1b64ab188c
+      sha256: sha256:b55115c114cfa95b90ff294a9fe73be269cb947d2ff134eed365ad5a0404d715
     - path: releases/2.7.0/conformance/ownership-evidence.json
       sha256: sha256:e02c9f2b69e30cda9c22de072538a16270e7ee74f2d3af9cba1e27f5e1749038
     - path: releases/2.7.0/conformance/ownership-matrix.yaml
@@ -140,9 +140,9 @@ inventory:
     - path: releases/2.7.0/fixtures/negative/control.principal.status.missing-expected-updated-at.negative.v2.7.0.fixture.json
       sha256: sha256:21c895e4eeaa3813a99057aba0cc7a7c263f01febce9258f442f330487b2a251
     - path: releases/2.7.0/fixtures/negative/future-fastapi.extra.projection.json
-      sha256: sha256:27abc32305f149fad1592b4dd91efdc11732d90bc0c17d72b05ff3ff8e655cc7
+      sha256: sha256:622e2727eda777d89a6fc3158c95ca96cd9fcde549192d4bfa514186e6e8076e
     - path: releases/2.7.0/fixtures/negative/future-fastapi.missing.projection.json
-      sha256: sha256:d468f5ffa6fec5bc57ef1b664b7c01bc593441b22c36cae36e72291dd04a342b
+      sha256: sha256:3f0eca7c9ec0c0e103adb6ef0e81fe6911de5bd1fe8672a9bc2a83bcdacd4866
     - path: releases/2.7.0/fixtures/negative/shared.correlation.authority.negative.v2.7.0.fixture.json
       sha256: sha256:40bb13338a67a798fa08867b6bd464ee11a166683d5ab250e4c37fa508760020
     - path: releases/2.7.0/fixtures/negative/shared.credential-reference.hash.negative.v2.7.0.fixture.json
@@ -318,7 +318,7 @@ inventory:
     - path: releases/2.7.0/fixtures/positive/control.principal.status.replace.positive.v2.7.0.fixture.json
       sha256: sha256:6ea49d111227ccb2aee90b0b0128ec073a05f00c96f120e910cf19de11207a91
     - path: releases/2.7.0/fixtures/positive/future-fastapi.match.projection.json
-      sha256: sha256:0cce0b33426892bcd32457c0a1f0759e4b5ded96bc5922f2cfd1e1813e069194
+      sha256: sha256:67953e1d598cc088abb4b20dca3f43e9faa9a7e735bfb0a10aeaf24b83ced84b
     - path: releases/2.7.0/fixtures/positive/responses.boundary.aliases.positive.v2.7.0.fixture.json
       sha256: sha256:9e990ce6332b524f709b71d305af337cda34f955024fb1c76bb6825bf304281b
     - path: releases/2.7.0/fixtures/positive/responses.boundary.credentials.positive.v2.7.0.fixture.json
@@ -361,7 +361,7 @@ inventory:
     - api_major: 1
       dialect: 3.1.0
       path: releases/2.7.0/openapi/control-plane.yaml
-      sha256: sha256:2a0ef53bb3a562164bdf9d62ecf164a310567447bdb7e8313b5095ad6832d7f8
+      sha256: sha256:30264f35d18c6beddd2515d523588dcaea6f3ae0aebc326a2e7550c994de3213
       version: 2.7.0
     - api_major: 1
       dialect: 3.1.0

@@ -1,11 +1,14 @@
 # Issue 25 audit event-ID contract 2.7.0
 
 The historical audit-detail OpenAPI parameter used letter-leading generic `Id`,
-although runtime accepts canonical UUIDs and permitted `cor_` IDs. This additive
+although runtime historically accepts canonical UUIDs and permitted `cor_` IDs. This additive
 release introduces `AuditEventId` only for audit detail. Its UUID alternative has
 an explicit structural pattern: correctness does not depend on a validator
-asserting `format: uuid`. The two `oneOf` alternatives are disjoint even when
-format validation is disabled. Generic `Id` remains byte-identical to 2.6.0;
+asserting `format: uuid`. The `oneOf` alternatives are disjoint even when format validation is disabled.
+The legacy generic-ID language remains accepted on this path: `abc` and
+`cor_not-a-uuid` cannot be narrowed away in an additive minor. IDs outside both
+the legacy language and canonical UUID language are rejected. Runtime lookup
+compatibility for legacy IDs is verified in a separate small runtime unit. Generic `Id` remains byte-identical to 2.6.0;
 it retains its existing lowercase-leading behavior, including valid `cor_` IDs.
 
 This snapshot derives from the actual published 2.6.0 release, preserving its
@@ -17,6 +20,16 @@ The release format requires a complete self-contained snapshot, not inheritance.
 The maintainer explicitly approved 2.7.0 and transfer of the release-only size
 exception on2026-10-06: `size:exception-contract-update`. This does not waive size
 policy for the audit runtime, UI, evidence or navigation units.
+
+## Additive compatibility review correction
+
+Codex on the initial2.7 candidate found a P1: narrowing legacy generic IDs was
+incompatible with a minor release. Before correction, new cases showed that
+`abc`, `cor_not-a-uuid` and `not-an-event-id` passed2.6 but failed the candidate.
+The corrected schema admits canonical UUIDs plus every previous generic ID;
+the legacy branch excludes canonical UUIDs to avoid double matches for
+letter-leading UUIDs. Both format modes pass. The grant404 assertion now compares
+the entire response reference, not two undefined description fields.
 
 ## Failure-first proof
 
@@ -53,7 +66,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/scripts/capture_issue25_cont
 ```
 
 Expected: canonical UUIDs and permitted correlation IDs pass with formats on/off;
-malformed IDs fail; shared generic Id and existing grant404 remain unchanged.
+IDs outside both accepted languages fail; shared generic Id and grant404 are unchanged.
 The screenshot renders actual sanitized harness output, not a service simulation.
 Pagination #470 and whole-issue acceptance remain outside this contract unit.
 Rollback before acceptance: revert this proposal. After immutable publication,
