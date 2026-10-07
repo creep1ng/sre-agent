@@ -1,0 +1,38 @@
+{
+  "observed": [
+    {
+      "path": "/api/v1/whoami",
+      "status": 200,
+      "body": {
+        "principal_id": "demo-human"
+      }
+    },
+    {
+      "path": "/api/v1/incidents/inc-issue419-browser/runs/run_incissue419browser/commands",
+      "status": 202,
+      "body": {
+        "run_id": "run_incissue419browser",
+        "incident_id": "inc-issue419-browser",
+        "workflow_version": "1.0.0",
+        "status": "running",
+        "current_state": "verifying",
+        "pending_command": null,
+        "cursor": "seq:0",
+        "terminated_reason": null,
+        "updated_at": "2026-10-07T00:09:36.307064Z"
+      }
+    }
+  ],
+  "receipt": "Decisión approve_mitigation registrada por el backend (transición apply_mitigation, resultado approve). Estado del run: verifying.",
+  "mismatch": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "actor_attribution_mismatch",
+        "message": "Actor attribution must match the authenticated principal."
+      },
+      "request_id": "3b064110-fbc9-42ba-8bed-3e1cd2c97726",
+      "retryable": false
+    }
+  }
+}
