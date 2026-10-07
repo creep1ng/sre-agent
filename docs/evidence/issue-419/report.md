@@ -1,10 +1,58 @@
 # Issue 419 — authenticated identity evidence
 
-> **Historical media.** `replay.json` and `review-receipt.png` are retained from a former combined candidate. They are not fresh UI evidence for backend-only #488. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof.
+> **Evidence boundaries.** `replay.json` and `review-receipt.png` describe a former combined candidate and are preserved for provenance. The earlier `current-*` artifacts are bound to source SHA `aac524061716635339a91e2f84d8ebf00ce58249`; the fresh `candidate-489/*` artifacts below are bound to `e0bc3eb59e6d74f90120e02e6abc7402d187331b`. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof. The committed [replay guide](replay/README.md) distinguishes helper-candidate results from this fresh #489 run. No hosted CI, human review, PR integration, or issue closure is claimed for #489.
 
-## Current local backend candidate (2026-10-07)
+## Final local #489 candidate (2026-10-07)
 
-The #488 backend candidate tested below was `06fb91efccae99e23d8c5fd9f693c7270de11418`, based directly on main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`; source commit `a1b61838cee7624c1ef05abb406fc80069bc9cbe` contains its implementation. That implementation is limited to `src/sre_agent/gateway/identity.py`, `src/sre_agent/application.py`, and `tests/test_incident_command_http.py` (132 additions / 2 deletions). It mounts and documents `GET /v1/whoami`, which returns only the authenticated principal ID through the existing bearer-authentication boundary and does not require `admin.read`. This report update is documentation-only; it does not change the tested source or tests.
+The local candidate is branch `work/issue-489`, source commit `aac524061716635339a91e2f84d8ebf00ce58249` (`fix(ui): prevent refresh during pending command`), based on combined local merge `5f36349f67bc2bbef58f2889f54c2eab658f081a`. That merge combines the tested #488 backend source candidate `06fb91efccae99e23d8c5fd9f693c7270de11418` and #416 frontend candidate `161258165a0cd29e2243efae85cf8fb1fe71363c`, both descended from main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`. The corrected backend evidence commit `79a377b10d33ee9c78bc09fca0504df05604bb48` is now merged into this branch as documentation/history only; it does not change the tested source or tests. The #416 sibling head was not modified. The #489-only Refresh-lock source/test change was transplanted from the immutable original range `81796a1803f470eb22b8d02c3294c6423db598f8..87878e6365a9a039194bc4ba0b30ee52f7a2ed9f` (source commit `fa4c0d46e70ecf9a354da50ea2ec35514f34526d`); no other behavior was added. The selected two-file transplant patch is byte-for-byte identical to the corresponding paths in that original range (patch SHA-256 `a5433005540330433783494565ee5a578107cf32f9a2af790c4c3d2c5649c6ef`).
+
+The parent reports a fresh #416 review at `161258165a0cd29e2243efae85cf8fb1fe71363c` with P2 comment `4207229849` requesting this pending-command Refresh lock. The combined #489 candidate addresses that finding in `public/incident-ui/review.js` (`setSubmitting` disables Refresh; `loadAll` returns while submitting; `submissionComplete` prevents a second action after acceptance) and `tests/browser/review.spec.js` (the request is held pending while the test asserts Refresh remains disabled and exactly one command is sent). This is code-level remediation on combined #489, not a claim that standalone #416 contains the fix or that the review thread has been replied to/resolved; the parent owns those review operations.
+
+### Observed checks
+
+- Strict TDD reproduced the race before the source edit: the browser assertion that Refresh stays disabled while a command POST is pending failed, with **1 failed / 11 passed**. After the transplanted fix, the existing browser review suite passed **12 tests**. This browser suite uses its declared mock HTTP seam for credential-change/clear cancellation, action stability, reason recovery, and the in-flight double-submit/Refresh lock; it is not the packaged-server proof below.
+- Combined focused Python command passed **96 tests**:
+
+  ```sh
+  docker compose --env-file .env.example -p issue419final --profile checks run --build --rm python-checks pytest -q tests/test_authentication.py tests/test_incident_command_http.py tests/test_incident_run_http.py tests/test_run_api_contract.py tests/test_incident_workflow_provisioning.py tests/test_incident_review_ui.py
+  ```
+
+- Full checks passed at the source SHA: `docker compose --env-file .env.example -p issue419final --profile checks run --build --rm python-checks` — exit 0, **1,575 passed, 1 skipped**. The skip is the opt-in live OpenRouter smoke test. Repository format/lint, contracts, typing, migration and isolation checks completed successfully in that run.
+- A one-off browser replay against the original production API/web Dockerfiles first returned 403 when loading the synthetic run because the isolated seed contained no demo-human run grants. No application code changed. I then used the repository's governed `scripts/provision_incident_workflow.py` against only that isolated database; it returned 201 for the workflow and all four grants and read each grant back active. The real packaged replay then passed **1 Playwright test**.
+- Two earlier provisioner invocations also failed before database writes: the first exited 2 because the local adapter passed a 128-character audit value where the script requires 64 hex characters; the second exited 1 with `ModuleNotFoundError: No module named 'asyncpg'` after forcing an unsupported driver. The successful invocation passed the existing hex HMAC value and the repository's `postgresql://` DSN, which the `Database` helper adapts to installed psycopg. No source or database behavior changed to mask these setup errors.
+- The real replay used synthetic credentials/data, original packaged API image `sha256:7851425b28732efb5d6f58bc7c8286eef5c0e0eee56ec918e2cb47bf69218f99`, web image `sha256:67dbcef4507e9d5e935f79cebe606fc7c76a13e1c88cdab1773d2abd25cf7758`, and API build revision `aac524061716635339a91e2f84d8ebf00ce58249` (Nginx 1.27.5, Playwright 1.63.0). All containers/data were scoped to Compose project `issue419finalreplay`.
+- Real packaged `GET /api/v1/whoami` returned only `demo-human` for that credential and only `admin-human` for the distinct admin credential. The invalid synthetic credential received the generic 401 envelope with no principal. OpenAPI exposed the mounted Bearer-protected endpoint and `principal_id` response. The database grant readback shows demo-human has only its four `run.*` workflow grants, with no `admin.read` grant.
+- The packaged UI submitted `approve_mitigation` with `actor_reference` `demo-human`; the API returned 202. SQL readback shows exactly one persisted decision for that run, attributed to `demo-human`. A separate command claiming `admin-human` under the demo credential received 403 `actor_attribution_mismatch`; its run has **zero** persisted decisions.
+- Existing `tests/test_authentication.py::test_all_authentication_failures_are_uniform_and_stop_before_resources_or_upstream` covers missing, malformed, unknown, revoked, expired, and inactive-principal credentials. It asserts the same generic 401 response, no credential leakage, and no resource/upstream access. The focused suite above passed this check. The actual packaged replay independently confirmed the invalid-credential case.
+
+The sanitized actual outputs are [the replay response](current-replay.json), [the SQL readback](current-sql.txt), and [the browser screenshot](current-review-receipt.png). The screenshot was captured from the real packaged UI after the credential field was cleared; SHA-256 `ba880b2769b53b714041d28f2d3126566f33c68274e5d09fd66a1734e73f5498`. Reproduction uses the committed helper and safe Compose procedure in [replay/README.md](replay/README.md); it generates synthetic configuration with restrictive permissions and passes it only to Compose, never sourcing it on the host. The helper's separately captured `31bef8d`/`a050155` results are not substituted for these `aac5240` outputs.
+
+### Reproduction commands
+
+Use the [tracked replay guide](replay/README.md) from a clean checkout. It creates fresh synthetic environment input, sends it to Compose with `--env-file` only, uses the committed seed/replay/browser files, and documents cleanup of the unique project. It separates the packaged API/web replay from the focused browser mock-seam suite. The helper's historic `31bef8d`/`a050155` capture is explicitly scoped to that helper candidate; it does not rebind the `current-*` evidence above or claim to have served the final #489 source.
+
+### Remaining boundary
+
+This is local candidate evidence only. It does not establish the subsequent PR branch/base state, a fresh human review, GitHub merge, or issue closure; those remote operations belong to the parent and were not observed in this local replay. After sibling integration, preserve the tested #489 source bytes when retargeting; re-run final checks if any candidate bytes change.
+
+### Fresh verification after helper integration
+
+After merging main `9c5c1765e4c39538609ad8e3d55009dfaee1b155`, the corrected local #489 candidate was `e0bc3eb59e6d74f90120e02e6abc7402d187331b`. Its `src/`, `public/`, and `tests/` trees are byte-identical to the previously tested #489 source `aac524061716635339a91e2f84d8ebf00ce58249`; the only new behavior in the replay helper is a direct API boundary assertion. The API and web images were rebuilt from the repository Dockerfiles at that candidate, and OpenAPI reported the exact `SOURCE_SHA`.
+
+- The packaged replay passed **1/1**. For each credential, direct `http://api:8000/v1/whoami` returned only its own principal and exactly `Cache-Control: no-store`; the separate Nginx route returned each identity and retained its semantic `no-store` assertion (`no-store, no-store`). Invalid credentials returned the generic 401. The focused mock-seam browser suite passed **12/12**, and the required focused Python command passed **96**.
+- SQL readback showed four active `demo-human` `run.*` grants and no `admin.read`; the valid approval persisted one `demo-human`-attributed decision, while the mismatched identity returned 403 and persisted zero decisions.
+- The private synthetic Compose environment was mode `0600` inside a mode-`0700` directory, passed only with `--env-file`; the isolated project was removed after capture. API image: `sha256:08bfffc48367a277fb7f292851d5e494bc03e6ccb428a1b16476bcfa7b1e8eb4`; web image: `sha256:5e4f0657a718a4e2ff26d591708230f8b8b4e47ffb9355d8cc5899b7729be846`.
+- Sanitized artifacts: [direct/proxy replay response](candidate-489/replay.json), [SQL readback](candidate-489/sql.txt), and [credential-cleared packaged screenshot](candidate-489/final-review-receipt.png), SHA-256 `c16bb747ea194b9ab59fa1521bb5458bd9bda59ed2b18b9da3951aee193c756a`.
+
+The existing backend HTTP test already asserts the exact API `no-store` header. This addition verifies the same contract against the packaged API directly, rather than relying on Nginx, which independently adds that header.
+
+## Former local backend candidate — historical (2026-10-07)
+
+The candidate mounts `GET /v1/whoami` on the application and returns only the authenticated principal identifier through the existing bearer-authentication boundary. The endpoint has focused HTTP/OpenAPI coverage. Strict TDD observed 9 failures / 19 deselected before the endpoint existed; after implementation, the focused backend suite passed 92 tests and the full checks service passed 1,574 tests with 1 skipped (the existing opt-in live OpenRouter check). These are local code-test results, not hosted CI, packaged UI proof, or final #419 acceptance. Exact backend candidate commands and boundaries are recorded in the [backend candidate verification section](#backend-candidate-verification-for-488-source-tested); these older result counts remain historical evidence only.
+
+## Backend candidate verification for #488 (source-tested)
+
+The backend candidate tested here was `06fb91efccae99e23d8c5fd9f693c7270de11418`, based directly on main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`; source commit `a1b61838cee7624c1ef05abb406fc80069bc9cbe` contains its implementation. The corrected backend docs/evidence head was `79a377b10d33ee9c78bc09fca0504df05604bb48`, merged into the final local #489 branch without changing source or tests. The implementation is limited to `src/sre_agent/gateway/identity.py`, `src/sre_agent/application.py`, and `tests/test_incident_command_http.py` (132 additions / 2 deletions). It mounts and documents `GET /v1/whoami`, which returns only the authenticated principal ID through the existing bearer-authentication boundary and does not require `admin.read`.
 
 ### Verification
 
@@ -21,7 +69,7 @@ The #488 backend candidate tested below was `06fb91efccae99e23d8c5fd9f693c7270de
   docker compose --env-file .env.example -p issue419identity --profile checks run --build --rm python-checks
   ```
 
-These are local results for the backend candidate, not hosted CI results. This report does not claim a fresh standalone #488 UI screenshot or a packaged UI/API replay. The older screenshot and replay below remain historical only; final UI proof must be paired with the frontend candidate and bound to that combined candidate.
+These are local backend results, not hosted CI results. The #488 report does not claim a fresh standalone UI screenshot or packaged UI/API replay; the focused #416 browser suite uses a mock HTTP seam. The fresh packaged UI/API replay and `current-*` screenshot above are bound to #489 source `aac524061716635339a91e2f84d8ebf00ce58249`, not to the backend-only candidate.
 
 ---
 
