@@ -1,0 +1,86 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 instance and EventBridge Scheduler roles for temporary OTel Demo sessions.
+
+Resources:
+  OTelDemoInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: OTelDemoInstanceRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: ManagedBy
+          Value: otel-demo-cli
+        - Key: Project
+          Value: otel-demo
+  OTelDemoInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: OTelDemoInstanceProfile
+      Roles:
+        - Ref: OTelDemoInstanceRole
+  OTelDemoSchedulerGroup:
+    Type: AWS::Scheduler::ScheduleGroup
+    Properties:
+      Name: otel-demo
+      Tags:
+        - Key: ManagedBy
+          Value: otel-demo-cli
+        - Key: Project
+          Value: otel-demo
+  OTelDemoSchedulerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: OTelDemoSchedulerExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount:
+                  Ref: AWS::AccountId
+              ArnLike:
+                aws:SourceArn:
+                  Fn::Sub: arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/otel-demo
+      Policies:
+        - PolicyName: TerminateOnlyOwnedDemoInstances
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ec2:TerminateInstances
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+                Condition:
+                  StringEquals:
+                    ec2:ResourceTag/ManagedBy: otel-demo-cli
+                    ec2:ResourceTag/Project: otel-demo
+      Tags:
+        - Key: ManagedBy
+          Value: otel-demo-cli
+        - Key: Project
+          Value: otel-demo
+
+Outputs:
+  InstanceProfileName:
+    Value:
+      Ref: OTelDemoInstanceProfile
+  SchedulerGroupName:
+    Value:
+      Ref: OTelDemoSchedulerGroup
+  SchedulerExecutionRoleArn:
+    Value:
+      Fn::GetAtt:
+        - OTelDemoSchedulerExecutionRole
+        - Arn
