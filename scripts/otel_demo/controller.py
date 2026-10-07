@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -37,6 +38,20 @@ class DemoController:
     def up(self, *, now: datetime | None = None) -> dict[str, Any]:
         now = (now or datetime.now(UTC)).astimezone(UTC).replace(microsecond=0)
         with _host_lock(self.config.lock_path):
+            existing = self.aws.find_shared_instance()
+            if existing:
+                self._scheduler_preflight()
+                if existing["state"] not in {"pending", "running"}:
+                    raise DemoError("shared OTel Demo instance is not active; refusing reuse")
+                try:
+                    deadline = self.aws.termination_deadline(instance_id=existing["instance_id"])
+                except DemoError as exc:
+                    raise DemoError(
+                        "shared OTel Demo instance has no verified termination schedule"
+                    ) from exc
+                if deadline <= now:
+                    raise DemoError("shared OTel Demo termination deadline has passed")
+                return existing
             try:
                 month_to_date = self.aws.month_to_date_cost(today=now)
             except DemoError as exc:
@@ -50,11 +65,6 @@ class DemoController:
                     f"budget ${self.config.monthly_budget_usd:.2f})"
                 )
             self._scheduler_preflight()
-            existing = self.aws.find_shared_instance()
-            if existing:
-                raise DemoError(
-                    f"shared OTel Demo session already exists ({existing['instance_id']})"
-                )
             expires = now + self.config.default_ttl
             network = self.aws.default_network()
             ami = self.aws.latest_ubuntu_ami()
@@ -149,8 +159,17 @@ class DemoController:
         )
 
     def down(self) -> None:
-        self._scheduler_preflight()
-        instance_id = self._current()["instance_id"]
-        # Keep Scheduler's safety net through its deadline; termination may be
-        # accepted asynchronously, and deleting first would remove the fallback.
-        self.aws.terminate_instance(instance_id=instance_id)
+        with _host_lock(self.config.lock_path):
+            # EC2 can temporarily omit a just-launched instance from DescribeInstances.
+            # Retry a missing result before accepting an idempotent absent-session no-op.
+            for attempt in range(5):
+                status = self.aws.instance_status()
+                if status is not None:
+                    break
+                if attempt == 4:
+                    return
+                time.sleep(2 ** (attempt + 1))
+            self._scheduler_preflight()
+            # Keep Scheduler's safety net through its deadline; termination may be
+            # accepted asynchronously, and deleting first would remove the fallback.
+            self.aws.terminate_instance(instance_id=status["instance_id"])
