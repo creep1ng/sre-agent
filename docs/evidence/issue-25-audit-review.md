@@ -75,3 +75,12 @@ were NOT performed. Safe correlation navigation/link deliverable is not establis
 by a manual request-ID filter. #25 is not fully accepted/closed by this review.
 
 Sanitized: yes. Screenshot inspected; no credential/header/prompt/output artifacts.
+
+## Codex correspondence follow-up
+
+The helper now rejects HTTP/SQL disagreement in event ID, producer request
+correlation, response status and latency before emitting evidence. A controlled
+projection-mismatch probe first accepted all four corruptions; after correction
+it rejects all four. The normal six-case real PostgreSQL capture and connected
+browser were repeated successfully; this is an injected negative probe, not an
+external outage. Capture time: `2026-10-07T01:51:21.269538+00:00`.

@@ -118,6 +118,13 @@ def main():
             if len(rows) != 1 or rows[0][1] != expected or rows[0][2] < 0:
                 raise RuntimeError("producer SQL evidence mismatch: " + name)
             listed, detail, item = audit_projection(client, admin, request_id, marker)
+            if (
+                item.get("event_id") != rows[0][0]
+                or item.get("correlation", {}).get("request_id") != request_id
+                or item.get("response_status") != rows[0][1]
+                or item.get("latency_ms") != rows[0][2]
+            ):
+                raise RuntimeError("HTTP/SQL correspondence mismatch: " + name)
             cases.append(
                 {
                     "name": name,
