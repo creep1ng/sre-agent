@@ -308,3 +308,86 @@ readonly-markerfailure +done-timeout +browser-failedmarker allnonzeroandrestored
 realconnectedbrowser success503/0stalerows/0details andverifiedrestoration.
 ControllerarmscleanupbeforeDDL, validatesrestricteddb, noDockersocket/newservice.
 Docker-only recipe updated; finalRuffpassed. Parentfreshunioncapture stillpending.
+
+T25 exactsourcea59256c73413e249f763c29f87404abdc1c0f07d includes maina354.
+Unpublishedlintrepair restack heads:5e84484/c22edda/5f38d1b/93df181; no remoterewrite.
+Parentfreshbrowser12passed39.7s; HTTPhelpermanifest/API/hostmatcha8c0d106,
+servedUI0ccffe45 matches fourbrowserJSONs. Actualallow has3nonnullHMACrefs.
+Freshconnectedfault200→503/1priorrow+detail→0/0/error, rawpreconditionarchived,
+SQLrestorationt|t. Sanitizedtextscanspassed; full1591collectedsuite stillrunning.
+
+T25 parentexactsourcea592 fullDocker1590passed1liveOpenRouterSkipped461.53s;
+Ruff/format/lock/importboundaries/mypy/Alembiccheck allpassed. Fresh terminal
+SQL capture nowregenerating afterfullsuite; no otherchecksDB writers.
+
+T25 freshterminal9passed8.34s +11actualJSONLrecords; appendfault0rows; typed
+probes0/2 rejected; all7normalreadterminals1row. Parentinspectedall7PNGs and
+textsecret/private-marker scanspassed. Exacta592 localtechnicalacceptance renewed;
+GitHubexactheadreview, hostedCI andindependenthumanfreshness acceptance pending.
+
+## Caller-envelope review continuation
+Published correction units PR514-517 and atomic integration PR518 head
+ ee82793e834f28f95cf9b8a2cec79b6bc95665da over maina354. User accepted this
+exact candidate/sourcea592 conditionally: no unresolved Codex findings and all
+checks pass (PR518 comment6039287589). No merge performed.
+- [ ] T26 Require caller-specific list/detail envelopes before terminal mutation
+  classification (PR516 comment4207605002, P1). Preauthor wrong detail/list and
+  mutation-detail-envelope behavior cases, observe RED/GREEN in Docker pytest,
+  regenerate actual terminal SQL artifacts, publish bounded correction.
+T23 row-count proof is provisional again: a valid wrong-route envelope can pass
+current helper. Existing populated HMAC/UI/restoration proof remains historical.
+T25 local technical acceptance ofa592 is qualified pending T26 and fresh exact-head
+review, CI and human freshness acceptance. Next: delegated helper/tests correction.
+- [ ] T27 Align runtime audit-route OpenAPI metadata with published2.7 (PR518
+  comment4207658104): filters/path/auth, response/error and governed metadata;
+  preserve custom runtime validation/terminal recording, no automatic FastAPI
+  validation bypassing the governed service. Failure-first OpenAPI behavior checks.
+- [ ] T28 Enforce released canonical UUID or additive legacy-ID language (PR518
+  comment4207658116), with preauthored HTTP422/terminal persistence proof for
+  digit-leading compact/braced/URN forms; preserve actual valid legacy forms.
+T27/T28 are exact-candidate unresolved findings; no merge while any remain.
+
+T26 implementation verified: preauthored4RED plus old-source actual Docker wrong-
+route mutation falsepositive; focused4GREEN/full13GREEN8.62s and actual11JSONL
+records. Parentformatcheck failed then corrected; sourcecommitc0496a7, bounded
+unit1f6449f125lines over517, unpublished. Fresh joint evidence still pending.
+T27/T28 implemented after observed missing-error-envelope and malformed-UUID RED;
+canonical compact/braced/URN forms now422+onevalidationrow, valid legacy compact
+still404authorization. Rebuilt scoped28GREEN16.61s/Ruff; parentformatcheck failed
+then formatted2files and staticchecks passed. Combined cohesive contract unit is
+exact400 authored lines (385add/15delete), standalone0c9e56e over1f6449f, unpublished.
+Final integrated source8f51c040923b932857cc3d12293117bd139289c8; fullDocker checks
+session36717, runtime rebuild/browser session35620 running. No full GREEN claimed
+for this source yet. ee827 CI later all ordinary jobs passed; security pending;
+its Codex findings remain qualification gates, not erased by green CI.
+Next: independent full verification and fresh HTTP/SQL/UI source-matched captures;
+publish bounded units/update518, exact-headreview/checks and humanfreshness gate.
+
+Live main advanced again to c2074fd8cb90840bc1a747dfe5ad1ad332d9ee03 (#488
+current authenticated identity). Final-only automatic union preserves identity and
+audit APIs; source25b48de45d0b25afb619a29e817ea51cfb5e9076. Obsolete8f fullchecks/
+browser jobs interrupted intentionally exit130 (no fullPASS), no run containers
+remain. New exactunion fullchecks session98667 and runtime/browser64482 running;
+.env.worktree declaredrevision updated safely/mode600, neverprinted. Unitbranches
+unchanged1f6449f125lines/0c9e56e400lines. All oldee827 hostedchecksSUCCESS now,
+but oldacceptance remains qualified; no merge pending freshproof/review/human.
+
+Fresh union full run observed RED:1606passed/1skipped/1failed323.43s. Existing
+`test_current_governed_operations_have_one_declared_contract` correctly detects
+newly described audit routes absent from its old EXPECTED_SCOPES inventory.
+- [ ] T29 Adapt existing governed-operation expected inventory to the two audit
+  routes' actual admin.read/administrative_control/audit scope, preserve assertions;
+  no new unit scenarios after source. Separate <=400 fixture-only correction,
+  then rerun exact joint full suite; no blanket fullGREEN claim yet.
+
+T29 existingfixture6GREEN12.32s/Ruff/format; finalsourcefixturecommit791ce48,
+standaloneunit2c22464 adds10lines over0c9e56e. Runtime/helper/UI/Compose files
+byteidenticalto25b48. Parent fullchecks verified25b48image+only791fixture readonly
+mount:1607passed/1liveOpenRouterSkipped310.49s, prechecks/Alembicpassed, exit0.
+Freshbrowser12passed18.3s; detail-recovery1passed4.9s actualPNG regenerated.
+Freshterminal13passed7.93s +11actualJSONLrecords afterfullDBrelease. All8PNGs
+manuallyinspected; privateconfig/private-marker textscanspassed. HTTPbadtemporary
+capture detectedold8fhelperhash; regenerated aftersuccessfulbuild. Exacthost/API/
+helperhash33640bab matches25b runtime source; capturesdeclaredrevision25b truthful.
+Localtechnicalacceptance791recorded in updatedreport; unitpublication/newexacthead
+Codex/CI/humanfreshness/conditionalmerge stillpending. No remoteheadupdate yet.
