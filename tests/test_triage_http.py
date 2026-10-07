@@ -56,7 +56,8 @@ def triage_http_database() -> None:
             "('producer-agent','agent','External producer','active',now(),now()),"
             "('producer-limited','agent','Limited producer','active',now(),now()),"
             "('context-human','human','Context operator','active',now(),now()),"
-            "('context-revocable','human','Revocable operator','active',now(),now())"
+            "('context-revocable','human','Revocable operator','active',now(),now()),"
+            "('eligible-linker','human','Eligible incident reader','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at,"
@@ -82,6 +83,7 @@ def triage_http_database() -> None:
             issued_limited = await creds.issue("producer-limited")
             issued_context_human = await creds.issue("context-human")
             issued_context_revocable = await creds.issue("context-revocable")
+            issued_eligible_linker = await creds.issue("eligible-linker")
             grants = GrantRepository(session)
             for index, action in enumerate(
                 ("alert.triage", "alert.dismiss", "alert.associate", "run.read", "incident.declare")
@@ -163,6 +165,20 @@ def triage_http_database() -> None:
                 "incident_workflow",
                 "incident-response",
             )
+            await grants.create(
+                "grant-eligible-linker-alert-read",
+                "eligible-linker",
+                "alert.read",
+                "incident_workflow",
+                "incident-response",
+            )
+            await grants.create(
+                "grant-eligible-linker-run-read",
+                "eligible-linker",
+                "run.read",
+                "incident_workflow",
+                "incident-response",
+            )
         BEARERS["op"] = f"Bearer {issued_op.key}"
         BEARERS["reader"] = f"Bearer {issued_reader.key}"
         BEARERS["bystander"] = f"Bearer {issued_by.key}"
@@ -170,6 +186,7 @@ def triage_http_database() -> None:
         BEARERS["limited_agent"] = f"Bearer {issued_limited.key}"
         BEARERS["context_human"] = f"Bearer {issued_context_human.key}"
         BEARERS["context_revocable"] = f"Bearer {issued_context_revocable.key}"
+        BEARERS["eligible_linker"] = f"Bearer {issued_eligible_linker.key}"
 
     asyncio.run(_setup())
     asyncio.run(database.dispose())
@@ -740,6 +757,11 @@ def _get_context(client: TestClient, alert_id: str, bearer: str | None):
     return client.get(f"/v1/alerts/{alert_id}/triage/context", headers=headers)
 
 
+def _get_eligible_incidents(client: TestClient, alert_id: str, bearer: str | None):
+    headers = {} if bearer is None else {"Authorization": bearer}
+    return client.get(f"/v1/alerts/{alert_id}/triage/eligible-incidents", headers=headers)
+
+
 def test_context_read_only_principal_gets_empty_actions_and_null_state_without_effects() -> None:
     client, alert_id = _client(), "al-context-reader-only"
     before = (
@@ -970,3 +992,168 @@ def test_triage_state_denials() -> None:
     )
     assert down.status_code == 503
     assert down.headers["Retry-After"] == "5"
+
+
+def test_eligible_incidents_uses_valid_untriaged_alert_without_inventory_lookup() -> None:
+    client, alert_id = _client(), "al-no-triage-eligible"
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE incident.incidents SET state=jsonb_build_object('state','closed')"
+        )
+    before = (
+        _incident_count(),
+        _count_rows("alert_triage"),
+        _count_rows("incident.run_events"),
+        _count_rows("idempotency_records"),
+    )
+
+    listed = _get_eligible_incidents(client, alert_id, BEARERS["eligible_linker"])
+
+    assert listed.status_code == 200, listed.text
+    assert listed.json() == {"items": []}
+    assert _get(client, alert_id, BEARERS["reader"]).status_code == 404
+    assert (
+        _incident_count(),
+        _count_rows("alert_triage"),
+        _count_rows("incident.run_events"),
+        _count_rows("idempotency_records"),
+    ) == before
+
+
+def test_eligible_incidents_requires_authentication_and_both_read_grants() -> None:
+    client, alert_id = _client(), "al-eligible-auth"
+    for bearer, status, code in (
+        (None, 401, "authentication_failed"),
+        (BEARERS["reader"], 403, "not_authorized"),
+        (BEARERS["op"], 403, "not_authorized"),
+        (BEARERS["eligible_linker"], 200, None),
+    ):
+        response = _get_eligible_incidents(client, alert_id, bearer)
+        assert response.status_code == status, response.text
+        if code is not None:
+            assert response.json()["error"]["code"] == code
+
+
+def test_eligible_incidents_rejects_malformed_alert_id_before_authentication() -> None:
+    response = _get_eligible_incidents(_client(), "BAD ID!", None)
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_command"
+
+
+def test_eligible_incidents_fails_closed_on_real_incident_storage_denial() -> None:
+    role = "triage_eligible_incidents_denied"
+    password = uuid4().hex
+    parts = urlsplit(DATABASE_URL)
+    dsn = urlunsplit(parts._replace(netloc=f"{role}:{password}@{parts.netloc.rsplit('@', 1)[-1]}"))
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        if connection.execute("SELECT 1 FROM pg_roles WHERE rolname=%s", (role,)).fetchone():
+            connection.execute(f"DROP OWNED BY {role}")
+            connection.execute(f"DROP ROLE {role}")
+        connection.execute(
+            sql.SQL("CREATE ROLE {} LOGIN PASSWORD {}").format(
+                sql.Identifier(role), sql.Literal(password)
+            )
+        )
+        connection.execute(
+            sql.SQL("GRANT CONNECT ON DATABASE {} TO {}").format(
+                sql.Identifier(connection.info.dbname), sql.Identifier(role)
+            )
+        )
+        connection.execute(f"GRANT USAGE ON SCHEMA public TO {role}")
+        connection.execute(
+            f"GRANT SELECT ON TABLE credentials, principals, resources, grants TO {role}"
+        )
+    try:
+        with psycopg.connect(dsn) as restricted:
+            assert restricted.execute("SELECT COUNT(*) FROM credentials").fetchone()[0] > 0
+        with _client(dsn) as client:
+            denied = _get_eligible_incidents(client, "al-eligible-denied", BEARERS["reader"])
+            unavailable = _get_eligible_incidents(
+                client, "al-eligible-storage-fault", BEARERS["eligible_linker"]
+            )
+        assert denied.status_code == 403
+        assert denied.json()["error"]["code"] == "not_authorized"
+        assert unavailable.status_code == 503
+        assert unavailable.json()["error"]["code"] == "storage_unavailable"
+        assert unavailable.headers["Retry-After"] == "5"
+    finally:
+        with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+            connection.execute(f"DROP OWNED BY {role}")
+            connection.execute(f"DROP ROLE {role}")
+
+
+def test_eligible_incidents_caps_in_deterministic_order_and_excludes_terminal_states() -> None:
+    eligible = ("active", "investigating", "mitigating", "verifying")
+    terminal = ("resolved", "postmortem", "closed")
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE incident.incidents SET state=jsonb_build_object('state','closed')"
+        )
+        for index in range(105):
+            incident_id = f"inc-list-{index:03d}"
+            state = eligible[index % len(eligible)]
+            connection.execute(
+                "INSERT INTO incident.incidents (incident_id,state,version,created_at,updated_at) "
+                "VALUES (%s,jsonb_build_object('state',CAST(%s AS text)),0,now(),now())",
+                (incident_id, state),
+            )
+        for state in terminal:
+            connection.execute(
+                "INSERT INTO incident.incidents (incident_id,state,version,created_at,updated_at) "
+                "VALUES (%s,jsonb_build_object('state',CAST(%s AS text)),0,now(),now())",
+                (f"inc-a-terminal-{state}", state),
+            )
+
+    response = _get_eligible_incidents(_client(), "al-eligible-bounded", BEARERS["eligible_linker"])
+    expected = [
+        {"incident_id": f"inc-list-{index:03d}", "state": eligible[index % len(eligible)]}
+        for index in range(100)
+    ]
+    assert response.status_code == 200, response.text
+    assert response.json() == {"items": expected}
+
+
+def test_eligible_list_then_closed_destination_is_rejected_without_association() -> None:
+    client, alert_id, incident_id = _client(), "al-eligible-close-race", "inc-eligible-race"
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "INSERT INTO incident.incidents (incident_id,state,version,created_at,updated_at) "
+            "VALUES (%s,jsonb_build_object('state','active'),0,now(),now())",
+            (incident_id,),
+        )
+
+    listed = _get_eligible_incidents(client, alert_id, BEARERS["eligible_linker"])
+    assert listed.status_code == 200, listed.text
+    assert {item["incident_id"] for item in listed.json()["items"]} >= {incident_id}
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE incident.incidents SET state=jsonb_build_object('state','resolved') "
+            "WHERE incident_id=%s",
+            (incident_id,),
+        )
+    before = (_count_rows("alert_triage"), _count_rows("idempotency_records"))
+    linked = _post(
+        client,
+        alert_id,
+        _cmd("triage_link", target_incident_id=incident_id, reason=REASON),
+        "k-eligible-close-race-01",
+        BEARERS["op"],
+    )
+    assert linked.status_code == 409, linked.text
+    assert linked.json()["error"]["code"] == "destination_ineligible"
+    with psycopg.connect(DATABASE_URL) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM alert_triage WHERE alert_id=%s AND status='linked'",
+                (alert_id,),
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            connection.execute(
+                "SELECT state->>'state' FROM incident.incidents WHERE incident_id=%s",
+                (incident_id,),
+            ).fetchone()[0]
+            == "resolved"
+        )
+    assert (_count_rows("alert_triage"), _count_rows("idempotency_records")) == before

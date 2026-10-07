@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SRE Agent Alert Triage API
-  version: 3.1.0
+  version: 3.2.0
   description: >-
     Alert triage commands and reads (TRIAGE, issue #23) over the stable
     incident_workflow/incident-response resource. Reads need alert.read;
@@ -74,6 +74,10 @@ paths:
   /v1/alerts/{alert_id}/triage/eligible-incidents:
     get:
       operationId: listEligibleIncidents
+      description: >-
+        Accepts any syntactically valid alert ID without checking alert inventory or requiring a
+        stored triage decision. Returns at most 100 existing incidents in link-eligible states,
+        ordered by incident_id ascending; an empty list does not assert that the alert exists.
       parameters:
         - { name: alert_id, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' } }
       responses:
@@ -82,9 +86,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EligibleIncidents' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
   /v1/alerts/{alert_id}/triage/commands:
@@ -142,7 +146,7 @@ components:
               state: { enum: [active, investigating, mitigating, verifying] }
   responses:
     BadRequest:
-      description: Malformed command envelope
+      description: Malformed identifier or command envelope
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' } } }
     Unauthorized:
       description: Missing or invalid bearer credential
