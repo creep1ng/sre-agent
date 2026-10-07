@@ -28,7 +28,7 @@ Each run ends with one `terminated_reason` of `run-state`:
 | `completed` | The model proposed a cited hypothesis, a mitigation or a conclusion |
 | `needs_human` | The model asked for a person, or the gateway answered an unexpected status or body |
 | `invalid_output` | Two consecutive answers were not one valid action or cited unknown evidence |
-| `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool |
+| `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool or BoK collection |
 | `upstream_unavailable` | The gateway failed twice (network, timeout or 5xx), or a tool failed |
 | `max_steps` | Six turns passed without a final answer |
 
@@ -43,6 +43,18 @@ before every model call and retry, without cache. The result lists each version 
 dependencies and resolution request id, naming its `skills.resolve` audit event; resuming passes the
 digest back. 401, 403 and 404 end the run as `denied`; a 5xx, network error or timeout, retried
 once, as `upstream_unavailable`; another body or digest as `needs_human`. Skills grant no tools.
+
+## BoK
+
+A run searches only the BoK collection versions it authorizes as `bok_collection` capabilities
+with action `bok.search`, each an exact `collection_id@version` (issue #34). The model asks with
+`{"action": "search_bok", "collection": "...", "query": "..."}`; the harness posts it, with the
+same key, to `POST /v1/bok/collections/{collection_id}/versions/{version}/search` for five
+fragments at most and with no cache, so a revoked grant stops the next search. Each fragment is
+evidence with `source: bok`, its collection version as `datasource_uid` and, as `query`, the
+producer's read of exactly that chunk. An empty search is an answer; 401 and 403 end the run as
+`denied`, and a 5xx, network error or timeout, retried once, as `upstream_unavailable` with the
+producer's code; another body as `needs_human`. None falls back to fixtures.
 
 ## Deterministic demonstration
 

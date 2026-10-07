@@ -1,5 +1,6 @@
-"""Gateway ports over HTTP with a gateway principal key: `POST {base_url}/v1/responses` and
-`GET {base_url}/v1/skills/{skill_id}/{version}/resolve` (issue #32).
+"""Gateway ports over HTTP with a gateway principal key: `POST {base_url}/v1/responses`,
+`GET {base_url}/v1/skills/{skill_id}/{version}/resolve` (issue #32) and
+`POST {base_url}/v1/bok/collections/{collection_id}/versions/{version}/search` (issue #34).
 
 The client holds no provider or MCP secret. It reads the part of each contract it uses with
 its own models, so the investigator never imports gateway code.
@@ -14,7 +15,7 @@ from uuid import UUID
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
-from sre_agent.investigator.ports import GatewayError, GatewayReply, ResolvedSkill
+from sre_agent.investigator.ports import BoKFragment, GatewayError, GatewayReply, ResolvedSkill
 
 URL = "INVESTIGATOR_GATEWAY_URL"
 KEY = "INVESTIGATOR_GATEWAY_API_KEY"
@@ -78,6 +79,31 @@ class _Resolution(BaseModel):
     skill: _SkillVersion
     dependencies: list[_SkillVersion]
     request_id: UUID
+
+
+class _Fragment(BaseModel):
+    """A search result as #332 serves it; the loop checks its version and locator."""
+
+    collection_id: str
+    version: str
+    document_id: str
+    section_id: str
+    chunk_index: int
+    title: str
+    source_ref: str
+    content: str
+
+
+class _Search(BaseModel):
+    results: list[_Fragment]
+
+
+class _Code(BaseModel):
+    code: Annotated[str, Field(pattern=r"^[a-z_]{1,64}$")]
+
+
+class _Failure(BaseModel):
+    error: _Code
 
 
 def _skill(item: _SkillVersion, request_id: UUID, *dependencies: ResolvedSkill) -> ResolvedSkill:
@@ -155,6 +181,38 @@ class GatewayClient:
             raise GatewayError("rejected", status)
         dependencies = [_skill(item, body.request_id) for item in body.dependencies]
         return _skill(body.skill, body.request_id, *dependencies)
+
+    async def search(
+        self, collection_id: str, version: str, query: str, limit: int
+    ) -> list[BoKFragment]:
+        """One search in an exact BoK collection version, classified as `BoKSource` says."""
+        headers = {"Authorization": f"Bearer {self._settings.api_key.get_secret_value()}"}
+        url = f"{self._settings.base_url.rstrip('/')}/v1/bok/collections/{collection_id}"
+        body = {"query": query, "limit": limit}
+        try:
+            response = await self._http.post(
+                f"{url}/versions/{version}/search", json=body, headers=headers
+            )
+        except httpx.TimeoutException:
+            raise GatewayError("transient", code="timeout") from None
+        except httpx.HTTPError:
+            raise GatewayError("transient", code="network") from None
+        status = response.status_code
+        if status in (401, 403):
+            raise GatewayError("denied", status)
+        if status >= 500:
+            try:
+                code: str | None = _Failure.model_validate_json(response.content).error.code
+            except ValidationError:
+                code = None
+            raise GatewayError("transient", status, code=code)
+        if status != 200:
+            raise GatewayError("rejected", status)
+        try:
+            found = _Search.model_validate_json(response.content)
+        except ValidationError:
+            raise GatewayError("rejected", status) from None
+        return [BoKFragment(**item.model_dump()) for item in found.results]
 
     async def aclose(self) -> None:
         await self._http.aclose()
