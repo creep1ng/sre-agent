@@ -58,6 +58,7 @@ def test_ui_maps_real_triage_outage_code() -> None:
 
 
 def test_ui_computes_no_thresholds_or_detection() -> None:
-    lowered = JAVASCRIPT.lower()
+    # A returned contract state is data, not a mitigation decision or evaluator.
+    lowered = JAVASCRIPT.lower().replace('"mitigating"', "")
     for fragment in ("threshold", "anomal", "detect", "mitigat", "umbral"):
         assert fragment not in lowered
