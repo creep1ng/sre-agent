@@ -2,8 +2,9 @@
 
 Authorized follow-up: safe same-origin request-ID navigation plus explicit safe
 rendering of the event's opaque correlation references. Current main is
-`677fb76ae345e223d4313e8c5bcbdbd7acb9bbf3`; the connected capture uses the #491
-leaf. UI Git blob: `06164fbb18614a298afd98f8f806cfda80f30e4b`; served SHA-256:
+`ef5ba500e673160aa73d92fffc61ee452c284bc6`; #493 contract 2.7.0 is merged,
+human-accepted, and all hosted gates succeeded. The #491 stack is restacked on
+that main (parent #386 `f87d134ab69e743e9c1662224c29ca0912961f2e`). UI Git blob: `06164fbb18614a298afd98f8f806cfda80f30e4b`; served SHA-256:
 `cb60f3b4003dabc221f1091a093a973792f3b6ace6529dc950bb8b612e9f942c`.
 The capture verifies the served bytes match the candidate UI before use.
 
@@ -19,11 +20,13 @@ refs, but `trace_ref` was null and is not claimed as visible proof.
 
 Failure-first browser assertions exercise valid UUID navigation, authentication,
 malicious values as inert text, and no unexpected navigation/network request.
-The current #491 candidate passed **8 Playwright journeys (16.4s)**; targeted
-Python audit/UI checks passed **68 tests (57.24s)**. The full Python suite
-(1562 passed, 1 skipped) ran on the earlier current-main/#386 candidate
-`080bef8c109b5d21c108ce501ea1aaaff460c8db`, before this UI-only change; it is
-not attributed to the #491 leaf.
+The pre-restack #491 source passed **8 Playwright journeys (16.4s)** and **68
+targeted Python checks (57.24s)**. Docker socket access was denied during this
+restack, so those checks were not rerun on the exact new merge commits. Full
+`python-checks` (1562 passed, 1 skipped) ran on `080bef8c109b5d21c108ce501ea1aaaff460c8db`
+(main 677, before the contract-only main merge); it is not a fresh full-suite run
+on the current leaf. The final restack keeps byte-identical `src`, `public` and
+`tests` trees versus the prior #491 candidate.
 
 Fresh connected captures at `2026-10-07T03:12:59.985Z` follow actual allow and
 deny producer events retained in isolated PostgreSQL. Both request IDs and SQL
@@ -52,9 +55,9 @@ docker compose -p audit25-review --env-file .env.worktree -f compose.yaml -f com
 Two runtime P1s remain outside this navigation UI: #378 still lacks terminal
 audit records for audit-read outcomes, and the separate legacy event-ID lookup
 path still needs its governed-404 compatibility follow-up. These captures do not
-exercise either behavior. The separate contract PR #493 (`c76476c`) corrected the
-additive contract-ID union and received Codex no issues, but its full checks remain
-pending.
+exercise either behavior. The separate contract PR #493 corrected the additive
+contract-ID union and is merged on current main; its acceptance is not proof of
+the outstanding audit-runtime fixes.
 
 P2 truncation notice and hidden 404 remain. Missing-filter interactions with
 forbidden query keys, real database outage, browser-offline behavior, live
