@@ -17,7 +17,18 @@ const REVIEW_ACTIONS = Object.freeze({
   }),
 });
 
-const state = { incidentId: null, runId: null, pending: null, idempotencyKey: null, generation: 0, submitting: false, draftComments: {} };
+const state = {
+  incidentId: null,
+  runId: null,
+  pending: null,
+  idempotencyKey: null,
+  generation: 0,
+  submitting: false,
+  commandInFlight: false,
+  refreshAfterCommand: false,
+  submissionComplete: false,
+  draftComments: {},
+};
 
 const nodes = {};
 const credentialStore = createMemoryCredentialStore();
@@ -30,7 +41,7 @@ function byId(id) {
 function cacheNodes() {
   [
     "review", "loading-state", "credential-section", "credential-form",
-    "credential-input", "credential-error", "error-missing-id", "error-401",
+    "credential-input", "credential-error", "command-status", "error-missing-id", "error-401",
     "error-403", "error-404", "error-409", "error-503", "context-section",
     "fact-incident", "fact-run", "fact-state", "fact-workflow",
     "actions-section", "actions-list", "actions-empty",
@@ -44,7 +55,7 @@ function cacheNodes() {
 
 function hideAll() {
   [
-    "loading-state", "credential-section", "error-missing-id", "error-401",
+    "loading-state", "credential-section", "command-status", "error-missing-id", "error-401",
     "error-403", "error-404", "error-409", "error-503", "context-section",
     "actions-section", "decision-section", "receipt-section",
   ].forEach((id) => {
@@ -104,15 +115,16 @@ function renderActions(actions) {
 
 function setSubmitting(submitting) {
   state.submitting = submitting;
+  nodes["refresh-button"].disabled = submitting;
   nodes["decision-submit"].disabled = submitting;
   nodes["decision-comment"].disabled = submitting;
   nodes["actions-list"].querySelectorAll("button").forEach((button) => {
-    button.disabled = submitting;
+    button.disabled = submitting || state.submissionComplete;
   });
 }
 
 function openDecision(action) {
-  if (state.submitting) return;
+  if (state.submitting || state.submissionComplete) return;
   if (state.pending) state.draftComments[state.pending.command] = nodes["decision-comment"].value;
   state.pending = action;
   state.idempotencyKey = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-review`;
@@ -143,7 +155,17 @@ function commandPayload(action, principalId) {
 }
 
 async function loadAll() {
+  if (state.commandInFlight) {
+    state.refreshAfterCommand = true;
+    nodes["forget-credential"].hidden = false;
+    nodes["command-status"].textContent =
+      "El comando ya se envió y no se puede cancelar. El estado actual se consultará cuando termine.";
+    nodes["command-status"].hidden = false;
+    return;
+  }
+  if (state.submitting) return;
   const generation = (state.generation += 1);
+  state.submissionComplete = false;
   setSubmitting(false);
   hideAll();
   nodes["loading-state"].hidden = false;
@@ -172,13 +194,17 @@ async function loadAll() {
 async function submitDecision(event) {
   event.preventDefault();
   const action = state.pending;
-  if (!action || state.submitting) return;
+  if (!action || state.submitting || state.submissionComplete) return;
   const generation = state.generation;
   state.draftComments[action.command] = nodes["decision-comment"].value;
   setSubmitting(true);
+  let commandDispatched = false;
   try {
     const identity = await client.getWhoAmI();
     if (generation !== state.generation) return;
+    state.commandInFlight = true;
+    state.refreshAfterCommand = false;
+    commandDispatched = true;
     const response = await client.sendRunCommand(
       state.incidentId,
       state.runId,
@@ -186,6 +212,7 @@ async function submitDecision(event) {
       state.idempotencyKey,
     );
     if (generation !== state.generation) return;
+    state.submissionComplete = true;
     nodes["receipt-line"].textContent =
       `Decisión ${action.command} registrada por el backend (transición ${action.transition}, ` +
       `resultado ${action.outcome}). Estado del run: ${response.current_state ?? "—"}.`;
@@ -195,6 +222,24 @@ async function submitDecision(event) {
     if (generation !== state.generation) return;
     if (error instanceof ApiClientError) showError(showKind(error));
     else showError("503");
+  } finally {
+    if (commandDispatched) {
+      state.commandInFlight = false;
+      const refreshAfterCommand = state.refreshAfterCommand;
+      state.refreshAfterCommand = false;
+      setSubmitting(false);
+      if (generation !== state.generation) {
+        if (refreshAfterCommand) {
+          void loadAll();
+        } else {
+          nodes["command-status"].textContent =
+            "El comando enviado ya no está pendiente en el navegador. No se puede confirmar aquí si se aplicó. Autentícate y consulta el estado actual antes de decidir si lo reintentas.";
+          nodes["command-status"].hidden = false;
+        }
+      }
+    } else if (generation === state.generation) {
+      setSubmitting(false);
+    }
   }
 }
 
@@ -218,11 +263,18 @@ function forgetCredential() {
   state.pending = null;
   state.draftComments = {};
   state.idempotencyKey = null;
-  setSubmitting(false);
+  state.submissionComplete = false;
+  state.refreshAfterCommand = false;
+  if (!state.commandInFlight) setSubmitting(false);
   credentialStore.clear();
   hideAll();
   nodes["credential-section"].hidden = false;
   nodes["review"].dataset.state = "auth";
+  if (state.commandInFlight) {
+    nodes["command-status"].textContent =
+      "El comando ya se envió y no se puede cancelar. El resultado no se mostrará en esta sesión; autentícate para consultar el estado actual cuando termine.";
+    nodes["command-status"].hidden = false;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", () => {

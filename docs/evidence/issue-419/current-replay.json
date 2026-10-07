@@ -1,0 +1,78 @@
+{
+  "source_sha": "aac524061716635339a91e2f84d8ebf00ce58249",
+  "evidence_kind": "controlled integration",
+  "identities": {
+    "demo_human": {
+      "status": 200,
+      "body": {
+        "principal_id": "demo-human"
+      },
+      "cache_control": "no-store, no-store"
+    },
+    "admin_human": {
+      "status": 200,
+      "body": {
+        "principal_id": "admin-human"
+      },
+      "cache_control": "no-store, no-store"
+    }
+  },
+  "invalid_credential": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "authentication_failed",
+        "message": "Authentication failed."
+      },
+      "request_id": "0695e9ed-ead5-44f8-82a6-d34ffa5c7c4b",
+      "retryable": false
+    }
+  },
+  "whoami_openapi": {
+    "status": 200,
+    "bearer_security": [
+      {
+        "HTTPBearer": []
+      }
+    ],
+    "response_properties": [
+      "principal_id"
+    ],
+    "declares_401": true
+  },
+  "valid_command": {
+    "status": 202,
+    "request": {
+      "command": "approve_mitigation",
+      "actor": "human",
+      "actor_reference": {
+        "reference_version": "1.0.0",
+        "principal_id": "demo-human"
+      },
+      "comment": "Verified by the authenticated operator."
+    },
+    "response": {
+      "run_id": "run_incissue419finalbrowser",
+      "incident_id": "inc-issue419-final-browser",
+      "workflow_version": "1.0.0",
+      "status": "running",
+      "current_state": "verifying",
+      "pending_command": null,
+      "cursor": "seq:0",
+      "terminated_reason": null,
+      "updated_at": "2026-10-07T12:59:55.412372Z"
+    }
+  },
+  "mismatched_identity": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "actor_attribution_mismatch",
+        "message": "Actor attribution must match the authenticated principal."
+      },
+      "request_id": "585106c5-bc93-4884-9a97-2d53d0137858",
+      "retryable": false
+    }
+  },
+  "screenshot": "final-review-receipt.png"
+}

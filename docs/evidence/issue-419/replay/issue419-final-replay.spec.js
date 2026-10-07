@@ -20,14 +20,24 @@ test("captures real packaged identity and command attribution proof", async ({ p
       headers: { authorization: `Bearer ${key}` },
     });
     const body = await response.json();
+    const apiResponse = await request.get("http://api:8000/v1/whoami", {
+      headers: { authorization: `Bearer ${key}` },
+    });
+    const apiBody = await apiResponse.json();
     expect(response.status()).toBe(200);
     expect(body).toEqual({ principal_id: expected });
     expect(response.headers()["cache-control"]?.split(",").map((directive) =>
       directive.trim().toLowerCase())).toContain("no-store");
+    expect(apiResponse.status()).toBe(200);
+    expect(apiBody).toEqual({ principal_id: expected });
+    expect(apiResponse.headers()["cache-control"]).toBe("no-store");
     identities[label] = {
       status: response.status(),
       body,
       cache_control: response.headers()["cache-control"],
+      api_status: apiResponse.status(),
+      api_body: apiBody,
+      api_cache_control: apiResponse.headers()["cache-control"],
     };
   }
 

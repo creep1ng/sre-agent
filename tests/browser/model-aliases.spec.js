@@ -810,7 +810,10 @@ test("sidebar covers the control plane without fictitious routes", async ({ page
   await expect(current).toHaveText("Resources & aliases");
   await expect(nav.locator("a[href*='grant' i]")).toHaveCount(0);
   await expect(nav.locator("a[href*='audit' i]")).toHaveCount(0);
-  for (const label of ["Grants", "Audit & consumption"]) {
+  await expect(nav.getByRole("link", { name: "Audit & consumption" })).toHaveAttribute(
+    "href", "/public/admin/consumption.html",
+  );
+  for (const label of ["Grants"]) {
     const item = nav.getByText(label, { exact: true });
     await expect(item).toBeVisible();
     await expect(item).toHaveAttribute("aria-disabled", "true");
