@@ -1,10 +1,10 @@
 # Issue 25 integrated closure-gap verification
 
-> **Latest exact candidate (2026-10-07):** `f24befc4bb0d029fa1248888e7ab154c32a9e67a`,
+> **Latest exact candidate (2026-10-07):** `731ec67304e05a9f981e945599696a34921a1d2e`,
 > including current-main union `9d6ed3da8f22132561635de9a429989d21773724`.
 > The deployed API build revision and all regenerated HTTP/browser evidence declare
 > this exact candidate. Runtime-source SHA-256 is
-> `946c1fdf477ce5255e69e9efee6d5acece79c19b73d670ed047b99d56f953106`; served
+> `9ec98adb3e3b245591727fbefb55f64de81a01a2652cee957946868c55cbce0a`; served
 > `public/admin/audit-events.js` SHA-256 is
 > `0ccffe4504867c90dc103ea4ed97a108be14446ebfe526131c10dd1c75a45e2b`.
 > Do not read the earlier `5ac4eaeb…` paragraphs below as current-candidate proof;
@@ -15,14 +15,14 @@ Select the exact source tree directly, not a PR head or floating branch:
 
 ```console
 git fetch https://github.com/creep1ng/sre-agent.git codex/issue-25-final-integration
-git worktree add --detach /tmp/issue25-proof-f24 f24befc4bb0d029fa1248888e7ab154c32a9e67a
-cd /tmp/issue25-proof-f24
-test "$(git rev-parse HEAD)" = f24befc4bb0d029fa1248888e7ab154c32a9e67a
+git worktree add --detach /tmp/issue25-proof-731 731ec67304e05a9f981e945599696a34921a1d2e
+cd /tmp/issue25-proof-731
+test "$(git rev-parse HEAD)" = 731ec67304e05a9f981e945599696a34921a1d2e
 ```
 
 ## Current exact-candidate verification
 
-- Full Python checks: **1616 passed, 1 opt-in live-OpenRouter skip** in 392.02s;
+- Full Python checks: **1644 passed, 1 opt-in live-OpenRouter skip** in 448.88s;
   prechecks and Alembic checks passed.
 - Scoped audit HTTP/OpenAPI/terminal-boundary suite after T37/T38: **32 passed**
   in 18.34s. The pre-fix failure-first run had 4 failures and 28 passes in 51.58s:
@@ -31,17 +31,17 @@ test "$(git rev-parse HEAD)" = f24befc4bb0d029fa1248888e7ab154c32a9e67a
   helper incorrectly expected a response `request_id`; successful detail does not
   expose it. That existing scenario was corrected to compare SQL terminal-row IDs
   before/after and assert expected metadata. No new scenario was added after code.
-- Audit browser suite against the rebuilt candidate: **14 passed** in 19.5s.
+- Audit browser suite against the rebuilt candidate: **14 passed** in 37.7s.
   This includes no-sensitive-content assertions before Apply and after Apply,
   retained 404/503 detail errors, truncation disclosure, and mocked read-error
   behavior (stale rows/details cleared and error visible). The connected fault is
   independently captured below.
-- CI-equivalent static browser suite: **76 passed, 60 skipped** in about 1.8m.
-  Nine current PNGs were manually inspected. Thirteen current text artifacts were
+- CI-equivalent static browser suite: **76 passed, 60 skipped** in about 2.1m.
+  Nine current PNGs were manually inspected. Fourteen current text artifacts were
   scanned: private environment values and synthetic credential/marker strings were
   absent. A first default-container UID scan hit `PermissionError`; a host-UID rerun
   passed without changing the mode-600 environment file or weakening permissions.
-- Terminal audit checks: **13 passed** in 8.99s and the helper emitted 11 actual
+- Terminal audit checks: **13 passed** in 9.10s and the helper emitted 11 actual
   SQL-backed JSONL rows. A separate fresh detail-boundary helper produced five
   actual rows: uppercase persisted UUID detail 200 plus `content`, `raw_content`,
   `redacted_content`, and `include_content` each 422, exactly one terminal row per
@@ -54,12 +54,69 @@ test "$(git rev-parse HEAD)" = f24befc4bb0d029fa1248888e7ab154c32a9e67a
   latest source/helper/runtime hashes agree; no stale image or parent screenshot is
   attributed to this candidate.
 
+### RFC3339 review continuation and current running proof
+
+T40 follows exact1be80 Codex finding4210324797. Python's ISO parser accepts basic
+and week dates and other spellings beyond [RFC3339 §5.6](https://www.rfc-editor.org/rfc/rfc3339#section-5.6).
+The preauthored HTTP/SQL suite covers24 malformed from/to combinations with a valid
+`decision` filter and4 legal UTC/offset/fraction/lowercase t/z forms. Final pre-source
+RED:9 failed/51 passed24.02s; corrected suite60 passed27.35s after the86-line fix,
+Ruff/format passed. An earlier pre-source helper overgeneralized no-subject validation
+rules to authorized404 (10 failures); it was corrected before the implementation.
+Syntax is checked before calendar conversion, preserving auth/grant ordering and
+one no-content/no-subject validation terminal for invalid authorized requests.
+The existing Python datetime leap-second limitation is unchanged, not newly supported.
+Current actual running proof:12 JSONL records in `issue-25-time-boundary.jsonl`,
+8 malformed HTTP422 and4 legal HTTP200, each with exactly one safe terminal row.
+Initial detail-delta capture overlapped connected browser read writers and correctly
+failed its exact-one assertion; the temporary partial output was rejected and all
+five detail/12 time cases rerun sequentially. Serialize these SQL-delta probes and
+connected captures; no artifacts were manually repaired. Navigation1/5.0s and
+mock detail recovery1/5.6s captures were refreshed after the restored real fault.
+
+Run this exact sanitized time-filter probe against the isolated running stack:
+
+```sh
+docker run --rm -i --network audit25-closure_runtime --env-file .env.worktree \
+  -v "$PWD/src:/app/src:ro" audit25-closure-python-checks python - \
+  > docs/evidence/issue-25-time-boundary.jsonl <<'PY'
+import json, os
+from urllib.parse import urlsplit
+import httpx, psycopg
+from sre_agent.settings import Settings
+settings=Settings.from_environment({k:v for k,v in os.environ.items() if not k.startswith('OPENROUTER')})
+target=urlsplit(settings.database_url)
+assert target.hostname=='db' and target.path=='/audit25_closure'
+query="SELECT event_id::text, to_jsonb(a) FROM audit_events a WHERE operation='audit.project' AND action='read_metadata'"
+cases=[(field+'_'+str(i),{'decision':'deny',field:value},422,'validation') for field in ('from','to') for i,value in enumerate(('20260920T000000Z','2026-W38-7T00:00:00Z','2026-09-20T00:00:00+00:60','2026-09-20T00:00:00,1Z'))]
+cases += [(name,{'decision':'deny','from':start,'to':end},200,'authorization') for name,start,end in (('utc','2026-09-20T00:00:00Z','2026-09-21T00:00:00Z'),('offset','2026-09-20T00:00:00-04:00','2026-09-21T00:00:00+02:00'),('fraction','2026-09-20T00:00:00.123Z','2026-09-21T00:00:00.123456Z'),('lowercase','2026-09-20t00:00:00z','2026-09-21t00:00:00z'))]
+with psycopg.connect(settings.database_url) as db, httpx.Client(base_url='http://api:8000',headers={'Authorization':'Bearer '+os.environ['ADMIN_HUMAN_API_KEY']}) as client:
+    assert client.get('/openapi.json').json()['info']['x-sre-agent-build-revision']=='731ec67304e05a9f981e945599696a34921a1d2e'
+    for name,params,expected,stage in cases:
+        before={key for key,_ in db.execute(query).fetchall()}
+        response=client.get('/v1/audit-events',params=params)
+        assert response.status_code==expected
+        records=dict(db.execute(query).fetchall()); added=set(records)-before
+        assert len(added)==1
+        row=records[next(iter(added))]
+        assert row['response_status']==expected and row['stage']==stage
+        assert row['content_state']=='absent' and row['redacted_content'] is None
+        subject_present=any(row.get(k) is not None for k in ('identity','resource','policy_decision'))
+        assert subject_present==(expected==200)
+        if expected==200:
+            assert isinstance(response.json()['items'],list)
+        else:
+            assert response.json()['error']['code']=='validation_error' and 'items' not in response.json()
+        print(json.dumps({'case':name,'filters':params,'http_status':response.status_code,'new_terminal_rows':len(added),'terminal_event_id':row['event_id'],'terminal_request_id':row['correlation']['request_id'],'terminal_status':row['response_status'],'terminal_stage':row['stage'],'terminal_outcome':row['outcome'],'content_state':row['content_state'],'subject_present':subject_present},sort_keys=True))
+PY
+```
+
 ### Reproduce the final detail-terminal capture
 
 On the isolated synthetic Compose stack described below, after the producer HTTP
 helper has written `issue-25-audit-http.json`, run the following exact helper
 through Docker stdin in the existing Python checks image. It refuses any database other than `db` /
-`audit25_closure`, asserts API build revision `f24befc4…`, compares SQL terminal
+`audit25_closure`, asserts API build revision `731ec673…`, compares SQL terminal
 row IDs before and after every request, and prints only sanitized response and
 terminal metadata:
 
@@ -80,7 +137,7 @@ event_id=next(c['sql']['event_id'] for c in producer['cases'] if c['name']=='all
 assert event_id.upper()!=event_id
 query="SELECT event_id::text, to_jsonb(a) FROM audit_events a WHERE operation='audit.project' AND action='read_metadata'"
 with psycopg.connect(settings.database_url) as db, httpx.Client(base_url='http://api:8000',headers={'Authorization':'Bearer '+os.environ['ADMIN_HUMAN_API_KEY']}) as client:
-    assert client.get('/openapi.json').json()['info']['x-sre-agent-build-revision']=='f24befc4bb0d029fa1248888e7ab154c32a9e67a'
+    assert client.get('/openapi.json').json()['info']['x-sre-agent-build-revision']=='731ec67304e05a9f981e945599696a34921a1d2e'
     for name,path,params,expected,stage in [('uppercase_uuid_detail',event_id.upper(),{},200,'authorization')]+[(key,event_id,{key:'true'},422,'validation') for key in ('content','raw_content','redacted_content','include_content')]:
         before={key for key,_ in db.execute(query).fetchall()}
         response=client.get('/v1/audit-events/'+path,params=params)
@@ -133,10 +190,11 @@ changed CSP and the latter was a non-secure browser origin without
 fixed by weakening tests. The loopback topology above reproduces the observed CI-equivalent run. Stop the
 scoped server even if Playwright fails; the observed parent run used an EXIT cleanup trap.
 
-The current PR518 remote head is still `8c06bff…` against base `4e3eb2b…` and has
-an unstable state; the published PR head is not this tested candidate. Human
-acceptance previously covered only the earlier exact head and remains conditional.
-Fresh exact-head review/CI/human freshness are required before integration.
+Exact previous carrier1be80 review5446408317 found the RFC3339 filter gap;
+its hosted checks subsequently all passed, but that does not erase the finding.
+T40 corrects the gap in this new source. Previous8c/source5ac human acceptance
+remains conditional and qualified; it does not transfer to this new candidate.
+Fresh exact-final-head review/ALL checks and independent human freshness are gates.
 
 ## Historical prior candidate and scope (not latest evidence)
 The tested joint candidate is `5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288`.
@@ -267,19 +325,19 @@ floating main is substituted. From the repository, fetch and select it explicitl
 
 ```console
 git fetch https://github.com/creep1ng/sre-agent.git codex/issue-25-final-integration
-git worktree add --detach /tmp/issue25-proof-f24 f24befc4bb0d029fa1248888e7ab154c32a9e67a
-cd /tmp/issue25-proof-f24
+git worktree add --detach /tmp/issue25-proof-731 731ec67304e05a9f981e945599696a34921a1d2e
+cd /tmp/issue25-proof-731
 git rev-parse HEAD
 ```
 
-Require exactly`f24befc4bb0d029fa1248888e7ab154c32a9e67a` before preparing ignored configuration.
+Require exactly`731ec67304e05a9f981e945599696a34921a1d2e` before preparing ignored configuration.
 Do not copy an environment file containing someone else's credentials.
 
 Git/Docker host; Python3.12.14, PostgreSQL17.4 pinned digest and Playwright1.63.0
 images/lockfiles from the tested source. Prepare ignored mode600 `.env.worktree`
 from `.env.example`: DB `audit25_closure`, user `sre_agent`, URL host `db`, fresh
 synthetic keys/HMAC, `lab/model` + `lab`, no external keys, contract2.7.0,
-build revisionf24befc4bb0d029fa1248888e7ab154c32a9e67a (the exact tested and deployed source). Never print/source/upload this file.
+build revision731ec67304e05a9f981e945599696a34921a1d2e (the exact tested and deployed source). Never print/source/upload this file.
 Use a fresh Compose project; choose an unused `ISSUE25_EVIDENCE_SUBNET` when needed.
 Existing services only; combine the no-host-port overlay with the small IPAM overlay.
 The terminal helper resets only disposable `python_checks`, never the evidence DB.
@@ -310,7 +368,7 @@ with open('/evidence/issue-25-audit-http.json') as f:
 request_id=next(case['request_id'] for case in evidence['cases'] if case['name']=='allow')
 with httpx.Client(base_url='http://api:8000', headers={'Authorization':'Bearer '+os.environ['ADMIN_HUMAN_API_KEY']}) as client:
     document=client.get('/openapi.json').json()
-    assert document['info']['x-sre-agent-build-revision']=='f24befc4bb0d029fa1248888e7ab154c32a9e67a'
+    assert document['info']['x-sre-agent-build-revision']=='731ec67304e05a9f981e945599696a34921a1d2e'
     assert document['info']['x-sre-agent-contract-version']=='2.7.0'
     listing=document['paths']['/v1/audit-events']['get']
     detail=document['paths']['/v1/audit-events/{id}']['get']
@@ -328,7 +386,7 @@ with httpx.Client(base_url='http://api:8000', headers={'Authorization':'Bearer '
     assert response.status_code==200
     Draft202012Validator(detail_schema,format_checker=FormatChecker()).validate(response.json())
     assert response.json()==payload['items'][0]
-print('Actual current API: contract2.7/sourcef24befc4, unique path, 34-operation local schema; complete list and detail validate.')
+print('Actual current API: contract2.7/source731ec67, unique path, 34-operation local schema; complete list and detail validate.')
 PY
 ```
 
@@ -398,7 +456,7 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --e
 
 ## Technical acceptance and remaining delivery gates
 I explicitly accept the technical criteria on exact candidate
-`f24befc4bb0d029fa1248888e7ab154c32a9e67a`, including T37/T38, based on the
+`731ec67304e05a9f981e945599696a34921a1d2e`, including T37/T38/T40, based on the
 current full Python/prechecks, browser, static, terminal SQL, connected query-fault,
 and source-matched evidence listed above. This is local technical acceptance only:
 the exact candidate is not the current remote PR518 head, and there is no fresh
