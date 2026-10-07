@@ -34,6 +34,54 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "idle");
 });
 
+test("opens audit events from the existing consumption navigation without carrying session data", async ({ page }) => {
+  const credential = "sre_admn_navigation_marker_0123456789";
+  await page.goto("/public/admin/consumption.html");
+  await page.fill("#api-key", credential);
+
+  const auditLink = page.getByRole("navigation", { name: "Control plane" }).getByRole("link", { name: "Audit events" });
+  await expect(auditLink).toHaveAttribute("href", "/public/admin/audit-events.html");
+  await auditLink.click();
+
+  await expect(page).toHaveURL("/public/admin/audit-events.html");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "idle");
+  await expect(page.locator("#api-key")).toHaveValue("");
+  const storage = await page.evaluate(() => JSON.stringify({
+    local: Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]),
+    session: Object.keys(sessionStorage).map((key) => [key, sessionStorage.getItem(key)]),
+  }));
+  expect(page.url()).not.toContain(credential);
+  expect(storage).not.toContain(credential);
+});
+
+test("discovers Audit events through the existing control-plane navigation", async ({ page }) => {
+  const credential = "sre_admn_navigation_marker_0123456789";
+  await page.goto("/public/admin/model-aliases.html");
+  await page.fill("#api-key", credential);
+
+  const sectionLink = page.getByRole("navigation", { name: "Control plane" }).getByRole("link", { name: "Audit & consumption" });
+  await expect(sectionLink).toHaveAttribute("href", "/public/admin/consumption.html");
+  await sectionLink.click();
+  await expect(page).toHaveURL("/public/admin/consumption.html");
+
+  await page.fill("#api-key", credential);
+  const auditLink = page.getByRole("navigation", { name: "Control plane" }).getByRole("link", { name: "Audit events" });
+  await expect(auditLink).toHaveAttribute("href", "/public/admin/audit-events.html");
+  await auditLink.click();
+
+  await expect(page).toHaveURL("/public/admin/audit-events.html");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "idle");
+  await expect(page.locator("#api-key")).toHaveValue("");
+  const storage = await page.evaluate(() => JSON.stringify({
+    local: Object.keys(localStorage).map((key) => [key, localStorage.getItem(key)]),
+    session: Object.keys(sessionStorage).map((key) => [key, sessionStorage.getItem(key)]),
+  }));
+  expect(page.url()).not.toContain(credential);
+  expect(storage).not.toContain(credential);
+  if (process.env.AUDIT_NAV_SCREENSHOT)
+    await page.screenshot({ path: process.env.AUDIT_NAV_SCREENSHOT, fullPage: true });
+});
+
 test.afterEach(async ({ page }) => {
   expect(page.context()["__consoleErrors"] ?? []).toEqual([]);
 });
