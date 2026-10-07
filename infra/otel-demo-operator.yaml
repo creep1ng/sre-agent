@@ -1,0 +1,289 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Least-privilege operator identity for the temporary OTel Demo launcher.
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: Verified VPC containing the public default subnet used by the launcher.
+
+Resources:
+  OTelDemoOperator:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: OTelDemoOperator
+      Tags:
+        - Key: ManagedBy
+          Value: otel-demo-cli
+        - Key: Project
+          Value: otel-demo
+
+      ManagedPolicyArns:
+        - Ref: OTelDemoOperatorNetworkPolicy
+        - Ref: OTelDemoOperatorEc2Policy
+        - Ref: OTelDemoOperatorSessionPolicy
+  OTelDemoOperatorNetworkPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: OTelDemoOperatorNetworkPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadNetworkAndOwnedInstances
+            Effect: Allow
+            Action:
+              - ec2:DescribeInstances
+              - ec2:DescribeVpcs
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeInstanceTypeOfferings
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: ResolveUbuntuAmi
+            Effect: Allow
+            Action: ssm:GetParameter
+            Resource: arn:aws:ssm:us-east-1::parameter/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+          - Sid: ReadMonthlyCostForPrelaunchGuard
+            Effect: Allow
+            Action: ce:GetCostAndUsage
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: CreateOnlyTaggedOutboundSecurityGroupInVPC
+            Effect: Allow
+            Action: ec2:CreateSecurityGroup
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: AuthorizeCreateSecurityGroupInSelectedVPC
+            Effect: Allow
+            Action: ec2:CreateSecurityGroup
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: TagOwnedSecurityGroupAtCreation
+            Effect: Allow
+            Action: ec2:CreateTags
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+            Condition:
+              StringEquals:
+                ec2:CreateAction: CreateSecurityGroup
+                aws:RequestTag/ManagedBy: otel-demo-cli
+                aws:RequestTag/Project: otel-demo
+              ForAllValues:StringEquals:
+                aws:TagKeys:
+                  - ManagedBy
+                  - Project
+                  - SharedSession
+  OTelDemoOperatorEc2Policy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: OTelDemoOperatorEc2Policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LaunchOnlyTaggedT3aXlargeInstances
+            Effect: Allow
+            Action: ec2:RunInstances
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+            Condition:
+              StringEquals:
+                ec2:InstanceType: t3a.xlarge
+                aws:RequestTag/ManagedBy: otel-demo-cli
+                aws:RequestTag/Project: otel-demo
+          - Sid: LaunchTaggedDemoVolumes
+            Effect: Allow
+            Action: ec2:RunInstances
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*
+            Condition:
+              StringEquals:
+                aws:RequestTag/ManagedBy: otel-demo-cli
+                aws:RequestTag/Project: otel-demo
+          - Sid: LaunchOnlyCanonicalUbuntuImagesAndSnapshots
+            Effect: Allow
+            Action: ec2:RunInstances
+            Resource:
+              - arn:aws:ec2:us-east-1::image/*
+              - arn:aws:ec2:us-east-1:*:snapshot/*
+            Condition:
+              StringEquals:
+                ec2:Owner: amazon
+          - Sid: LaunchOnlyInSelectedSubnet
+            Effect: Allow
+            Action: ec2:RunInstances
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:subnet/*
+            Condition:
+              StringEquals:
+                ec2:Vpc:
+                  Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}
+          - Sid: LaunchWithOwnedSecurityGroupOnly
+            Effect: Allow
+            Action: ec2:RunInstances
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*
+            Condition:
+              StringEquals:
+                ec2:Vpc:
+                  Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}
+                ec2:ResourceTag/ManagedBy: otel-demo-cli
+                ec2:ResourceTag/Project: otel-demo
+          - Sid: LaunchNetworkInterfaceInSelectedVPC
+            Effect: Allow
+            Action: ec2:RunInstances
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*
+            Condition:
+              StringEquals:
+                ec2:Vpc:
+                  Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcId}
+          - Sid: TagOnlyOwnedLaunchResources
+            Effect: Allow
+            Action: ec2:CreateTags
+            Resource:
+              - Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+              - Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:volume/*
+            Condition:
+              StringEquals:
+                ec2:CreateAction: RunInstances
+                aws:RequestTag/ManagedBy: otel-demo-cli
+                aws:RequestTag/Project: otel-demo
+              ForAllValues:StringEquals:
+                aws:TagKeys:
+                  - ManagedBy
+                  - Project
+                  - SharedSession
+                  - CreatedAt
+                  - ExpiresAt
+          - Sid: TerminateOnlyOwnedDemoInstances
+            Effect: Allow
+            Action: ec2:TerminateInstances
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+            Condition:
+              StringEquals:
+                ec2:ResourceTag/ManagedBy: otel-demo-cli
+                ec2:ResourceTag/Project: otel-demo
+  OTelDemoOperatorSessionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: OTelDemoOperatorSessionPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ReadOnlyDemoSchedulerGroup
+            Effect: Allow
+            Action: scheduler:GetScheduleGroup
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule-group/otel-demo
+          - Sid: ManageSchedulesOnlyInDemoGroup
+            Effect: Allow
+            Action:
+              - scheduler:CreateSchedule
+              - scheduler:UpdateSchedule
+              - scheduler:GetSchedule
+              - scheduler:DeleteSchedule
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/otel-demo/*
+          - Sid: UseSchedulerExecutionRoleOnlyForScheduler
+            Effect: Allow
+            Action: iam:PassRole
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/OTelDemoSchedulerExecutionRole
+            Condition:
+              StringEquals:
+                iam:PassedToService: scheduler.amazonaws.com
+                aws:RequestedRegion: us-east-1
+          - Sid: UseInstanceRoleOnlyForEC2
+            Effect: Allow
+            Action: iam:PassRole
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/OTelDemoInstanceRole
+            Condition:
+              StringEquals:
+                iam:PassedToService: ec2.amazonaws.com
+                aws:RequestedRegion: us-east-1
+          - Sid: ReadOnlyDemoInstanceProfile
+            Effect: Allow
+            Action: iam:GetInstanceProfile
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:instance-profile/OTelDemoInstanceProfile
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: ReadSchedulerExecutionRole
+            Effect: Allow
+            Action: iam:GetRole
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:iam::${AWS::AccountId}:role/OTelDemoSchedulerExecutionRole
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: QueryInstanceManagerAndRunDeadlineUpdate
+            Effect: Allow
+            Action:
+              - ssm:DescribeInstanceInformation
+              - ssm:GetCommandInvocation
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: UseOnlyDeadlineUpdateDocument
+            Effect: Allow
+            Action: ssm:SendCommand
+            Resource: arn:aws:ssm:us-east-1::document/AWS-RunShellScript
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: RunDeadlineUpdateOnlyOnOwnedInstances
+            Effect: Allow
+            Action: ssm:SendCommand
+            Resource:
+              - Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+            Condition:
+              StringEquals:
+                ssm:resourceTag/ManagedBy: otel-demo-cli
+                ssm:resourceTag/Project: otel-demo
+                aws:RequestedRegion: us-east-1
+          - Sid: UseOnlyPortForwardingSessionDocument
+            Effect: Allow
+            Action: ssm:StartSession
+            Resource: arn:aws:ssm:us-east-1::document/AWS-StartPortForwardingSession
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+          - Sid: StartSessionsOnlyOnOwnedInstances
+            Effect: Allow
+            Action: ssm:StartSession
+            Resource:
+              Fn::Sub: arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*
+            Condition:
+              StringEquals:
+                ssm:resourceTag/ManagedBy: otel-demo-cli
+                ssm:resourceTag/Project: otel-demo
+                aws:RequestedRegion: us-east-1
+          - Sid: OpenSessionMessageChannels
+            Effect: Allow
+            Action:
+              - ssmmessages:CreateControlChannel
+              - ssmmessages:CreateDataChannel
+              - ssmmessages:OpenControlChannel
+              - ssmmessages:OpenDataChannel
+            Resource: '*'
+            Condition:
+              StringEquals:
+                aws:RequestedRegion: us-east-1
+
+Outputs:
+  OperatorUserName:
+    Value:
+      Ref: OTelDemoOperator
