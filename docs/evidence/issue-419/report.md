@@ -1,10 +1,27 @@
 # Issue 419 — authenticated identity evidence
 
-> **Historical evidence — superseded candidate.** This report, `replay.json`, and `review-receipt.png` describe the former combined #488 candidate and are preserved for provenance. They are not bound to the current local backend-only #488 candidate (`a1b61838cee7624c1ef05abb406fc80069bc9cbe`, based on main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`). The existing frontend behavior and tests were relocated to local #416 candidate `161258165a0cd29e2243efae85cf8fb1fe71363c`; #489's pending-Refresh lock is not in these candidates. The old packaged replay/screenshot therefore do not establish the current UI/backend pairing or the final #419 acceptance criteria. Re-run packaged UI evidence on the final integrated candidate before relying on it.
+> **Historical media.** `replay.json` and `review-receipt.png` are retained from a former combined candidate. They are not fresh UI evidence for backend-only #488. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof.
 
 ## Current local backend candidate (2026-10-07)
 
-The candidate mounts `GET /v1/whoami` on the application and returns only the authenticated principal identifier through the existing bearer-authentication boundary. The endpoint has focused HTTP/OpenAPI coverage. Strict TDD observed 9 failures / 19 deselected before the endpoint existed; after implementation, the focused backend suite passed 92 tests and the full checks service passed 1,574 tests with 1 skipped (the existing opt-in live OpenRouter check). These are local code-test results, not hosted CI, packaged UI proof, or final #419 acceptance. See the repository task record `odd/tasks/issue-419-chain-integration.md` for exact reproduction commands and candidate boundaries.
+The #488 backend candidate tested below was `06fb91efccae99e23d8c5fd9f693c7270de11418`, based directly on main `a3541a96d83364a126ceff418ed3cbf7dbdc2d82`; source commit `a1b61838cee7624c1ef05abb406fc80069bc9cbe` contains its implementation. That implementation is limited to `src/sre_agent/gateway/identity.py`, `src/sre_agent/application.py`, and `tests/test_incident_command_http.py` (132 additions / 2 deletions). It mounts and documents `GET /v1/whoami`, which returns only the authenticated principal ID through the existing bearer-authentication boundary and does not require `admin.read`. This report update is documentation-only; it does not change the tested source or tests.
+
+### Verification
+
+- Strict-TDD RED: **9 failures / 19 deselected** before the endpoint existed.
+- Focused backend tests: **92 passed**.
+
+  ```sh
+  docker compose --env-file .env.example -p issue419identity --profile checks run --build --rm python-checks pytest -q tests/test_authentication.py tests/test_incident_command_http.py tests/test_incident_run_http.py tests/test_run_api_contract.py tests/test_incident_workflow_provisioning.py
+  ```
+
+- Full checks: **1,574 passed, 1 skipped** (opt-in live OpenRouter smoke), exit 0.
+
+  ```sh
+  docker compose --env-file .env.example -p issue419identity --profile checks run --build --rm python-checks
+  ```
+
+These are local results for the backend candidate, not hosted CI results. This report does not claim a fresh standalone #488 UI screenshot or a packaged UI/API replay. The older screenshot and replay below remain historical only; final UI proof must be paired with the frontend candidate and bound to that combined candidate.
 
 ---
 
