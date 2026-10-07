@@ -192,3 +192,11 @@ T23-26 current complete sourcea14 Docker full1663passed1liveOpenRouterSkipped429
 
 
 T23-26 reviewed: actual GitHub Codex540 completed2026-10-07T16:14:41Z at0149def, no majorissues. Bounded545 published4authoredlines andmanualCodexreviewrequested. T27 independent full static GREEN80passed80existingseed-dependentSkips2.3m exit0; excludesonly3 fixture-only suites, all9 productionT23suites54no-skips retained. T28 currentexistingUIPythonmodule7passed0.23s plusRuff/format; firstattemptread-onlyRuffcachepermissionfailure retained, correctedrunner--no-cache exit0. Source8e1a06984040463c6e8a98e22b99ef04a7a83a25 production/UI/T23suite/packagebytes identical toa14-tested source. No final human acceptance or merge; GitHub545 review and final atomic proposal/checks pending.
+
+
+- [x] **T23-29** Reconcile the preexisting harness separation guard after actual Codex545P14209402995 and independent complete current-test RED1failed1662passed1skip328.86s. The guard asserted the old exact two-item ignore-list spelling. One mechanical direct-inline existing-case correction will check suite membership in the ignore array rather than exact spelling/order and preserve production selections; no new unit case or product change. Run existingmodule/Ruff then defaultfullcurrentcandidate. PR545/final546 need newexactheadreview; prior humanquestion namesf164anddoesnotaccept a changedhead.
+
+Final546 draft created atf164ad8, actualhosted7399add103delete7502total, currentbase9c5c176; @codexreviewrequested. Successful reconciliation workflow is NOTpassingpr-governance(draftfailure). Attach attempts545/546 stillawaitdesktopresponse, PR540attachmentconfirmed. Mainunchanged9c5whenfullREDcompleted. Finalacceptance/mergepending; no mainmutation.
+
+
+T23-29 bounded correction preserves the existing guard semantics by checking required suite membership in the ignore array, not the exact two-item spelling/order. Existing harnessmodule10passed0.42s plusRuff/format exit0; no newcase added. Full current repeat remainsrequired. The updated pure correction unit branches from8e and is merged into the finalcarrier history with no product/UI/browser/package change; distinctPRheads preserved. Earlier f164 humanacceptancequestion is superseded by necessary existing-test correction, not treated as approval of a newhead. GitHub finalreview and exactfinal acceptancepending.

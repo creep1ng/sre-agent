@@ -50,5 +50,19 @@
     "passed": 7,
     "seconds": 0.23,
     "exit_code": 0
-  }
+  },
+  "current_test_red": {
+    "passed": 1662,
+    "skipped": 1,
+    "failed": 1,
+    "seconds": 328.86,
+    "exit_code": 1,
+    "cause": "Existing harness guard locked prior exact two-item static-ignore literal"
+  },
+  "existing_guard_green": {
+    "passed": 10,
+    "seconds": 0.42,
+    "exit_code": 0
+  },
+  "guard_correction_unit_sha": "c248458aff7a386fe269554b9530f62677036608"
 }
