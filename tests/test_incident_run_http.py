@@ -123,18 +123,9 @@ def authorized_database() -> None:
                     "administrative_control",
                     resource,
                 )
-        # The workflow resource comes from the governed catalog; slice A2 makes
-        # the starter grant governed too, so here it is only fixture data.
+        # Provisioning creates the workflow resource and its starter grant.
         provisioned = await provision(build_service(database, b"0" * 32), f"Bearer {admin.key}")
         assert provisioned.catalog_status == 201
-        async with database.transaction() as session:
-            await GrantRepository(session).create(
-                "grant-demo-human-run-start-incident-response",
-                "demo-human",
-                "run.start",
-                "incident_workflow",
-                "incident-response",
-            )
         async with PostgresIncidentUnitOfWork(database) as work:
             await work.incidents.add(INCIDENT_ID, _base_state(), now=NOW)
             await work.incidents.add(OTHER_INCIDENT_ID, _base_state(), now=NOW)

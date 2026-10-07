@@ -1,0 +1,73 @@
+# Real, project-scoped Grafana -> Prometheus backend for Issue 30 acceptance.
+# Combine after compose.yaml, compose.mcp.yaml and compose.issue29-counter.yaml.
+services:
+  db:
+    ports: !reset []
+
+  api:
+    ports: !reset []
+    depends_on:
+      grafana:
+        condition: service_healthy
+
+  grafana-mcp:
+    environment:
+      ISSUE29_UPSTREAM_URL: http://issue30-fault-proxy:8000
+    depends_on:
+      issue30-fault-proxy:
+        condition: service_started
+
+  mcp-upstream:
+    environment:
+      GRAFANA_URL: http://grafana:3000
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    depends_on:
+      grafana:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63
+    environment:
+      GF_SECURITY_ADMIN_USER: issue30
+      GF_SECURITY_ADMIN_PASSWORD: issue30-local-only
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ./demo/issue30/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+    networks: [runtime, mcp-boundary]
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: "no"
+
+  prometheus:
+    image: quay.io/prometheus/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus"]
+    volumes:
+      - ./demo/issue30/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks: [runtime]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9090/-/ready >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: "no"
+
+  web:
+    ports: !reset []
+
+  issue30-fault-proxy:
+    image: ${COMPOSE_PROJECT_NAME:?Set a unique Compose project with -p}-api-runtime:local
+    entrypoint: ["python", "/instrument/issue30_fault_proxy.py"]
+    environment:
+      ISSUE30_UPSTREAM_URL: http://mcp-upstream:8000
+    volumes:
+      - ./scripts/issue30_fault_proxy.py:/instrument/issue30_fault_proxy.py:ro
+    networks: [mcp-boundary]
+    restart: "no"
