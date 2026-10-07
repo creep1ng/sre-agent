@@ -1,9 +1,8 @@
-"""Static guards for the mitigation review surface (HU-OPS-06, #41a-1).
+"""Static guards for the mitigation review surface and command integration.
 
-Slice 41a-1 only derives and displays review actions; #330 publishes no POST
-routes yet, so nothing is submitted. Command names, transitions and auth
-actions are cross-checked against incident-response.yaml and
-run-command.schema.yaml instead of being hardcoded twice.
+The UI derives review actions from the published workflow and submits commands
+through the shared API client. Command names, transitions and auth actions are
+cross-checked against incident-response.yaml and run-command.schema.yaml.
 """
 
 from pathlib import Path
@@ -45,12 +44,12 @@ def test_review_surface_stays_within_slice_scope() -> None:
         "postmortem",
         "expected_version",
         "localStorage",
-        "principal_id",
         "cancel_run",
         "propose_disposition",
     ):
         assert forbidden not in JAVASCRIPT, forbidden
         assert forbidden not in HTML, forbidden
+    assert "principal_id" not in HTML
 
 
 def test_review_reads_through_the_shared_seam() -> None:

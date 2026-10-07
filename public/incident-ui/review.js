@@ -17,7 +17,7 @@ const REVIEW_ACTIONS = Object.freeze({
   }),
 });
 
-const state = { incidentId: null, runId: null, pending: null, idempotencyKey: null, generation: 0, draftComments: {} };
+const state = { incidentId: null, runId: null, pending: null, idempotencyKey: null, generation: 0, submitting: false, draftComments: {} };
 
 const nodes = {};
 const credentialStore = createMemoryCredentialStore();
@@ -102,7 +102,17 @@ function renderActions(actions) {
   nodes["actions-section"].hidden = false;
 }
 
+function setSubmitting(submitting) {
+  state.submitting = submitting;
+  nodes["decision-submit"].disabled = submitting;
+  nodes["decision-comment"].disabled = submitting;
+  nodes["actions-list"].querySelectorAll("button").forEach((button) => {
+    button.disabled = submitting;
+  });
+}
+
 function openDecision(action) {
+  if (state.submitting) return;
   if (state.pending) state.draftComments[state.pending.command] = nodes["decision-comment"].value;
   state.pending = action;
   state.idempotencyKey = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-review`;
@@ -114,13 +124,14 @@ function openDecision(action) {
   nodes["decision-section"].hidden = false;
 }
 
-// Cuerpo contractual exacto salvo actor_reference, que el servidor deriva de
-// la credencial (el contrato lo exige pero la UI no fabrica identidades).
-function commandPayload(action) {
+// The identity is freshly resolved from this credential for each command; it
+// is never persisted in UI state or browser storage.
+function commandPayload(action, principalId) {
   const comment = nodes["decision-comment"].value.trim();
   return {
     command: action.command,
     actor: "human",
+    actor_reference: { reference_version: "1.0.0", principal_id: principalId },
     turn_id: null,
     disposition: null,
     comment: comment ? comment.slice(0, 2000) : null,
@@ -133,6 +144,7 @@ function commandPayload(action) {
 
 async function loadAll() {
   const generation = (state.generation += 1);
+  setSubmitting(false);
   hideAll();
   nodes["loading-state"].hidden = false;
   nodes["review"].dataset.state = "loading";
@@ -160,22 +172,27 @@ async function loadAll() {
 async function submitDecision(event) {
   event.preventDefault();
   const action = state.pending;
-  if (!action || nodes["decision-submit"].disabled) return;
+  if (!action || state.submitting) return;
+  const generation = state.generation;
   state.draftComments[action.command] = nodes["decision-comment"].value;
-  nodes["decision-submit"].disabled = true;
+  setSubmitting(true);
   try {
+    const identity = await client.getWhoAmI();
+    if (generation !== state.generation) return;
     const response = await client.sendRunCommand(
       state.incidentId,
       state.runId,
-      commandPayload(action),
+      commandPayload(action, identity.principal_id),
       state.idempotencyKey,
     );
+    if (generation !== state.generation) return;
     nodes["receipt-line"].textContent =
       `Decisión ${action.command} registrada por el backend (transición ${action.transition}, ` +
       `resultado ${action.outcome}). Estado del run: ${response.current_state ?? "—"}.`;
     nodes["decision-section"].hidden = true;
     nodes["receipt-section"].hidden = false;
   } catch (error) {
+    if (generation !== state.generation) return;
     if (error instanceof ApiClientError) showError(showKind(error));
     else showError("503");
   }
@@ -201,6 +218,7 @@ function forgetCredential() {
   state.pending = null;
   state.draftComments = {};
   state.idempotencyKey = null;
+  setSubmitting(false);
   credentialStore.clear();
   hideAll();
   nodes["credential-section"].hidden = false;

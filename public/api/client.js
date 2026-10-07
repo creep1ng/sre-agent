@@ -259,6 +259,9 @@ export function createAdministrativeApiClient({
     getIncident(incidentId) {
       return request(`/v1/incidents/${encodeURIComponent(incidentId)}`);
     },
+    getWhoAmI() {
+      return request("/v1/whoami");
+    },
     getIncidentTimeline(incidentId, { runId, after, limit } = {}) {
       const params = new URLSearchParams();
       if (runId) params.set("run_id", runId);

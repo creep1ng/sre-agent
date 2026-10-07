@@ -35,6 +35,10 @@ function detailPayload(currentState = "mitigating", workflowVersion = "1.0.0") {
 }
 
 async function openReview(page, detail) {
+  await page.route("**/api/v1/whoami", async (route) => {
+    const token = route.request().headers().authorization;
+    await route.fulfill({ json: { principal_id: token?.endsWith("second") ? "other-human" : "demo-human" } });
+  });
   await page.route("**/api/v1/incidents/**", async (route) => {
     const request = route.request();
     if (request.method() === "POST" && request.url().includes("/commands")) {
@@ -121,7 +125,10 @@ test("records approval without claiming execution", async ({ page }) => {
   expect(posted).toHaveLength(1);
   expect(posted[0].headers["idempotency-key"]).toMatch(/^[0-9a-f-]{10,}$/);
   expect(posted[0].body).toMatchObject({ command: "approve_mitigation", actor: "human" });
-  expect(JSON.stringify(posted[0].body)).not.toContain("principal_id");
+  expect(posted[0].body.actor_reference).toEqual({
+    reference_version: "1.0.0",
+    principal_id: "demo-human",
+  });
 });
 
 test("rejects and requests changes with contractual bodies", async ({ page }) => {
@@ -129,10 +136,77 @@ test("rejects and requests changes with contractual bodies", async ({ page }) =>
   const posted = await mockCommands(page, async () => ({ status: 202, json: acceptedPayload() }));
   await decide(page, "reject_mitigation");
 
-  expect(posted).toHaveLength(1);
+  await expect.poll(() => posted.length).toBe(1);
   expect(posted[0].body).toMatchObject({
     command: "reject_mitigation",
+    actor_reference: { reference_version: "1.0.0", principal_id: "demo-human" },
     authorization: { action: "run.approve" },
+  });
+});
+
+test("uses the currently authenticated identity after changing credentials", async ({ page }) => {
+  await openReview(page);
+  const posted = await mockCommands(page, async () => ({ status: 202, json: acceptedPayload() }));
+  await page.locator("#forget-credential").click();
+  await page.locator("#credential-input").fill("sre_demo_token_second");
+  await page.locator("#credential-form button[type=submit]").click();
+  await expect(page.locator("#actions-list button")).toHaveCount(3);
+  await decide(page, "approve_mitigation");
+
+  await expect.poll(() => posted.length).toBe(1);
+  expect(posted[0].body.actor_reference.principal_id).toBe("other-human");
+});
+
+test("does not submit an identity lookup made stale by clearing the credential", async ({ page }) => {
+  await openReview(page);
+  let release = () => {};
+  const gate = new Promise((resolve) => { release = resolve; });
+  await page.unroute("**/api/v1/whoami");
+  await page.route("**/api/v1/whoami", async (route) => {
+    await gate;
+    await route.fulfill({ json: { principal_id: "demo-human" } });
+  });
+  const posted = await mockCommands(page, async () => ({ status: 202, json: acceptedPayload() }));
+  await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
+  await page.locator("#decision-submit").click();
+  await page.locator("#forget-credential").click();
+  release();
+  await page.waitForTimeout(50);
+  expect(posted).toHaveLength(0);
+  await expect(page.locator("#review")).toHaveAttribute("data-state", "auth");
+});
+
+test("keeps one submitted action and its idempotency key stable during identity lookup", async ({ page }) => {
+  await openReview(page);
+  let release = () => {};
+  const gate = new Promise((resolve) => { release = resolve; });
+  let lookups = 0;
+  await page.unroute("**/api/v1/whoami");
+  await page.route("**/api/v1/whoami", async (route) => {
+    lookups += 1;
+    await gate;
+    await route.fulfill({ json: { principal_id: "demo-human" } });
+  });
+  const posted = await mockCommands(page, async () => ({ status: 202, json: acceptedPayload() }));
+  await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
+  await page.locator("#decision-comment").fill("Original approval reason.");
+  const submittedKey = await page.locator("#decision-key").textContent();
+  await page.locator("#decision-submit").click();
+  await expect.poll(() => lookups).toBe(1);
+
+  await expect(page.locator('#actions-list button[data-command="reject_mitigation"]')).toBeDisabled();
+  await expect(page.locator("#decision-comment")).toBeDisabled();
+  await expect(page.locator("#decision-submit")).toBeDisabled();
+  release();
+  await expect.poll(() => posted.length).toBe(1);
+  await expect(page.locator("#receipt-line")).toContainText("approve_mitigation");
+
+  expect(lookups).toBe(1);
+  expect(posted).toHaveLength(1);
+  expect(posted[0].headers["idempotency-key"]).toBe(submittedKey);
+  expect(posted[0].body).toMatchObject({
+    command: "approve_mitigation",
+    comment: "Original approval reason.",
   });
 });
 
@@ -149,7 +223,7 @@ test("sends a single request while a submit is in flight", async ({ page }) => {
   await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
   await page.locator("#decision-submit").click();
   await expect(page.locator("#decision-submit")).toBeDisabled();
-  expect(posted).toHaveLength(1);
+  await expect.poll(() => posted.length).toBe(1);
   release();
   await expect(page.locator("#receipt-line")).toContainText("approve_mitigation");
   expect(posted).toHaveLength(1);
