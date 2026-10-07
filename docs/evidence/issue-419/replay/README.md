@@ -2,8 +2,8 @@
 
 This helper runs the repository's production API and web Dockerfiles against an
 isolated PostgreSQL volume, then drives the packaged review UI with synthetic
-credentials. It also runs the existing 12-case browser review suite against its
-mock HTTP seam. It never calls an external model provider.
+credentials. It also runs the browser review suite against its mock HTTP seam.
+It never calls an external model provider.
 
 ## Requirements and safe local inputs
 
@@ -74,8 +74,9 @@ docker compose --env-file "$ENV_FILE" -f compose.yaml -f docs/evidence/issue-419
 
 The configuration serves the checkout read-only and writes Playwright output
 outside the source tree. The suite covers credential changes/clears, reason
-recovery, action stability, and the pending-command Refresh lock when those
-changes are present in the checked-out source.
+recovery, action stability, the pending-command Refresh lock, and
+reauthentication after clearing a credential during an already-dispatched
+command when those changes are present in the checked-out source.
 
 ## Captured result for this helper candidate
 
