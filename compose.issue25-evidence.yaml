@@ -1,0 +1,7 @@
+# Combine with compose.yaml and compose.e2e.yaml (no host-published ports).
+# Use a fresh project name and an unused small subnet for each reproduction.
+networks:
+  runtime:
+    ipam:
+      config:
+        - subnet: ${ISSUE25_EVIDENCE_SUBNET:-10.253.139.0/28}
