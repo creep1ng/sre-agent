@@ -93,6 +93,12 @@ async function expectPristineForm(page) {
   await expect(page.locator("#command-target")).toHaveValue("");
   await expect(page.locator("#command-severity")).toHaveValue("");
   await expect(page.locator("#command-impact")).toHaveValue("");
+  await expect(page.locator("#alert-context-service")).toHaveValue("");
+  await expect(page.locator("#alert-context-summary")).toHaveValue("");
+  await expect(page.locator("#alert-context-observed-at")).toHaveValue("");
+  await expect(page.locator("#alert-context-source")).toHaveValue("");
+  await expect(page.locator("#alert-context-severity")).toHaveValue("");
+  await expect(page.locator("#alert-context-confirmed")).not.toBeChecked();
 }
 
 test("clear and switch reset the reusable command form", async ({ page }) => {
@@ -120,6 +126,12 @@ test("clear and switch reset the reusable command form", async ({ page }) => {
   await page.locator("#command-reason").fill("C3e form second proof.");
   await page.locator("#command-severity").selectOption("sev3");
   await page.locator("#command-impact").fill("Second declaration impact proof.");
+  await page.locator("#alert-context-service").fill("checkout-api");
+  await page.locator("#alert-context-summary").fill("Payment attempts return errors.");
+  await page.locator("#alert-context-observed-at").fill("2026-10-07T17:30:00Z");
+  await page.locator("#alert-context-source").fill("operator-confirmed test report");
+  await page.locator("#alert-context-severity").selectOption("sev4");
+  await page.locator("#alert-context-confirmed").check();
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
   await switchCredential(page, grantless);
