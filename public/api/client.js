@@ -273,6 +273,9 @@ export function createAdministrativeApiClient({
     getIncident(incidentId) {
       return request(`/v1/incidents/${encodeURIComponent(incidentId)}`);
     },
+    getWhoAmI() {
+      return request("/v1/whoami");
+    },
     getIncidentTimeline(incidentId, { runId, after, limit } = {}) {
       const params = new URLSearchParams();
       if (runId) params.set("run_id", runId);
@@ -289,6 +292,16 @@ export function createAdministrativeApiClient({
       const query = params.toString();
       return request(
         `/v1/incidents/${encodeURIComponent(incidentId)}/snapshot${query ? `?${query}` : ""}`,
+      );
+    },
+    sendRunCommand(incidentId, runId, body, idempotencyKey) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/commands`,
+        {
+          method: "POST",
+          body,
+          headers: mutationHeaders(idempotencyKey),
+        },
       );
     },
   });
