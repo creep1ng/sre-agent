@@ -16,6 +16,13 @@ const targetInput = document.getElementById("command-target");
 const targetListStatus = document.getElementById("target-list-status");
 const severityInput = document.getElementById("command-severity");
 const impactInput = document.getElementById("command-impact");
+const alertContextFields = document.getElementById("alert-context-fields");
+const alertContextServiceInput = document.getElementById("alert-context-service");
+const alertContextSummaryInput = document.getElementById("alert-context-summary");
+const alertContextObservedAtInput = document.getElementById("alert-context-observed-at");
+const alertContextSourceInput = document.getElementById("alert-context-source");
+const alertContextSeverityInput = document.getElementById("alert-context-severity");
+const alertContextConfirmedInput = document.getElementById("alert-context-confirmed");
 const submitButton = document.getElementById("submit-button");
 const actionsStatus = document.getElementById("actions-status");
 const disconnectButton = document.getElementById("disconnect-button");
@@ -313,6 +320,7 @@ function clearResult() {
   targetInput.value = "";
   severityInput.value = "";
   impactInput.value = "";
+  clearDeclarationContext();
   lastObservedAlertId = "";
 }
 
@@ -322,6 +330,51 @@ const OPERATION_FIELDS = Object.freeze({
   triage_link: Object.freeze(["reason", "target_incident_id"]),
   triage_declare: Object.freeze(["reason", "severity", "impact"]),
 });
+
+const ALERT_CONTEXT_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+
+function clearDeclarationContext() {
+  alertContextServiceInput.value = "";
+  alertContextSummaryInput.value = "";
+  alertContextObservedAtInput.value = "";
+  alertContextSourceInput.value = "";
+  alertContextSeverityInput.value = "";
+  alertContextConfirmedInput.checked = false;
+}
+
+function updateDeclarationContextControls() {
+  const required = operationInput.value === "triage_declare";
+  alertContextFields.hidden = !required;
+  for (const input of [
+    alertContextServiceInput,
+    alertContextSummaryInput,
+    alertContextObservedAtInput,
+    alertContextSourceInput,
+    alertContextSeverityInput,
+    alertContextConfirmedInput,
+  ]) {
+    input.setAttribute("aria-required", String(required));
+  }
+}
+
+function buildDeclarationAlertContext() {
+  const context = {
+    service: alertContextServiceInput.value,
+    summary: alertContextSummaryInput.value,
+    observed_at: alertContextObservedAtInput.value,
+    source: alertContextSourceInput.value,
+    severity: alertContextSeverityInput.value,
+  };
+  if (
+    context.service.trim() === "" || context.service.length > 200 ||
+    context.summary.trim() === "" || context.summary.length > 2000 ||
+    !ALERT_CONTEXT_TIMESTAMP.test(context.observed_at) ||
+    context.source.trim() === "" || context.source.length > 200 ||
+    !["sev1", "sev2", "sev3", "sev4"].includes(context.severity) ||
+    !alertContextConfirmedInput.checked
+  ) return { ok: false };
+  return { ok: true, context };
+}
 
 function buildBody(operation) {
   const versionText = versionInput.value.trim();
@@ -350,6 +403,16 @@ function buildBody(operation) {
     if (impact.length > 2000)
       return { ok: false, message: "Impact must be no more than 2000 characters." };
     body.impact = impact;
+  }
+  if (operation === "triage_declare") {
+    const alertContext = buildDeclarationAlertContext();
+    if (!alertContext.ok) {
+      return {
+        ok: false,
+        message: "Enter and confirm the actual alert service, summary, observed time, source, and severity.",
+      };
+    }
+    body.alert_context = alertContext.context;
   }
   return { ok: true, body };
 }
@@ -515,6 +578,7 @@ commandForm.addEventListener("submit", (event) => {
 });
 
 operationInput.addEventListener("change", () => {
+  updateDeclarationContextControls();
   impactInput.setAttribute(
     "aria-required",
     String(OPERATION_FIELDS[operationInput.value]?.includes("impact") ?? false),
@@ -537,6 +601,7 @@ alertInput.addEventListener("input", () => {
   const alertId = alertInput.value.trim();
   if (alertId === lastObservedAlertId) return;
   lastObservedAlertId = alertId;
+  clearDeclarationContext();
   contextGeneration += 1;
   clearActionProjection();
   clearResultDisplay("Loading current alert context from the backend.");
@@ -627,4 +692,5 @@ lastObservedAlertId = alertInput.value.trim();
 let pendingDeepLinkAlertId = /^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId) ? initialAlertId : "";
 
 page.dataset.state = "idle";
+updateDeclarationContextControls();
 clearActionProjection();

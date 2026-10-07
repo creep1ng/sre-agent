@@ -126,6 +126,12 @@ test("stale declaration preserves selected severity for an explicit retry", asyn
   await page.locator("#command-reason").fill("Declare after reconciling fresh state.");
   await page.locator("#command-severity").selectOption("sev3");
   await page.locator("#command-impact").fill("Operators report that new orders cannot be paid.");
+  await page.locator("#alert-context-service").fill("checkout-api");
+  await page.locator("#alert-context-summary").fill("Payment attempts return errors.");
+  await page.locator("#alert-context-observed-at").fill("2026-10-07T17:30:00Z");
+  await page.locator("#alert-context-source").fill("operator-confirmed monitoring report");
+  await page.locator("#alert-context-severity").selectOption("sev3");
+  await page.locator("#alert-context-confirmed").check();
   const beforeStaleSubmit = page.context()["__triageRequests"].length;
   const winner = await postCommand(request, key, id, {
     operation: "open_triage",
@@ -142,6 +148,12 @@ test("stale declaration preserves selected severity for an explicit retry", asyn
   await expect(page.locator("#command-reason")).toHaveValue("Declare after reconciling fresh state.");
   await expect(page.locator("#command-severity")).toHaveValue("sev3");
   await expect(page.locator("#command-impact")).toHaveValue("Operators report that new orders cannot be paid.");
+  await expect(page.locator("#alert-context-service")).toHaveValue("checkout-api");
+  await expect(page.locator("#alert-context-summary")).toHaveValue("Payment attempts return errors.");
+  await expect(page.locator("#alert-context-observed-at")).toHaveValue("2026-10-07T17:30:00Z");
+  await expect(page.locator("#alert-context-source")).toHaveValue("operator-confirmed monitoring report");
+  await expect(page.locator("#alert-context-severity")).toHaveValue("sev3");
+  await expect(page.locator("#alert-context-confirmed")).toBeChecked();
 
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
