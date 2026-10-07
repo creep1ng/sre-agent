@@ -21,6 +21,7 @@ DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
 )
 REASON = "Sustained 5xx spike on checkout."
+IMPACT = "Checkout requests failed for customers."
 BEARERS: dict[str, str] = {}
 ROOT = Path(__file__).parents[1]
 STATE_VALIDATOR = Draft202012Validator(
@@ -101,6 +102,8 @@ def _client(url: str = DATABASE_URL) -> TestClient:
 
 
 def _cmd(operation: str, version: int = 1, **kwargs) -> dict:
+    if operation == "triage_declare":
+        kwargs.setdefault("impact", IMPACT)
     return {"operation": operation, "expected_version": version, **kwargs}
 
 
@@ -127,6 +130,11 @@ def _post(
 def _incident_count() -> int:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         return int(connection.execute("SELECT count(*) FROM incident.incidents").fetchone()[0])
+
+
+def _count_rows(table: str) -> int:
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        return int(connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
 
 
 def test_open_dismiss_link_are_200() -> None:
@@ -177,6 +185,91 @@ def test_declare_replay_returns_original_without_second_incident() -> None:
     assert second.json()["incident_id"] == first.json()["incident_id"]
     assert second.json()["expected_version"] == first.json()["expected_version"]
     assert _incident_count() == before + 1
+
+
+def test_declare_persists_operator_impact_through_http_state_event_and_replay() -> None:
+    client, alert_id = _client(), "al-impact-http"
+    prefix = "Customer checkout remained unavailable. "
+    impact = prefix + "x" * (2000 - len(prefix))
+    assert len(impact) == 2000
+    body = _cmd("triage_declare", reason=REASON, severity="sev2", impact=impact)
+    before = _incident_count()
+    first = _post(client, alert_id, body, "k-impact-http-123456", BEARERS["op"])
+    assert first.status_code == 201
+    result = first.json()
+    assert _incident_count() == before + 1
+
+    state = _get(client, alert_id, BEARERS["reader"])
+    assert state.status_code == 200
+    assert state.json()["incident_id"] == result["incident_id"]
+    detail = client.get(
+        f"/v1/incidents/{result['incident_id']}", headers={"Authorization": BEARERS["op"]}
+    )
+    assert detail.status_code == 200
+    assert detail.json()["impact"] == impact
+
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        incident = connection.execute(
+            "SELECT state->>'impact' FROM incident.incidents WHERE incident_id=%s",
+            (result["incident_id"],),
+        ).fetchone()
+        event = connection.execute(
+            "SELECT payload->'incident_state'->>'impact' FROM incident.run_events "
+            "WHERE incident_id=%s ORDER BY sequence LIMIT 1",
+            (result["incident_id"],),
+        ).fetchone()
+        event_count = connection.execute(
+            "SELECT count(*) FROM incident.run_events WHERE incident_id=%s",
+            (result["incident_id"],),
+        ).fetchone()[0]
+    assert incident == (impact,)
+    assert event == (impact,)
+    assert event_count == 1
+
+    replay = _post(client, alert_id, body, "k-impact-http-123456", BEARERS["op"])
+    assert replay.status_code == 201
+    assert replay.json() == result
+    assert _incident_count() == before + 1
+    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM incident.run_events WHERE incident_id=%s",
+            (result["incident_id"],),
+        ).fetchone() == (1,)
+
+
+@pytest.mark.parametrize(
+    ("impact", "include_impact", "status", "code"),
+    [
+        (None, False, 422, "invalid_impact"),
+        (None, True, 422, "invalid_impact"),
+        (7, True, 400, "invalid_command"),
+        ("", True, 422, "invalid_impact"),
+        (" \t\n ", True, 422, "invalid_impact"),
+        ("x" * 2001, True, 422, "invalid_impact"),
+    ],
+)
+def test_invalid_impact_is_rejected_without_persisting_decision_or_incident(
+    impact, include_impact: bool, status: int, code: str
+) -> None:
+    client = _client()
+    alert_id = f"al-bad-impact-{status}-{code}-{int(include_impact)}"
+    body = _cmd("triage_declare", reason=REASON, severity="sev2")
+    if include_impact:
+        body["impact"] = impact
+    else:
+        body.pop("impact")
+    incidents_before = _incident_count()
+    triage_before = _count_rows("alert_triage")
+    events_before = _count_rows("incident.run_events")
+
+    response = _post(client, alert_id, body, f"k-bad-impact-{status}-{code}-1234", BEARERS["op"])
+
+    assert response.status_code == status
+    assert response.json()["error"]["code"] == code
+    assert _incident_count() == incidents_before
+    assert _count_rows("alert_triage") == triage_before
+    assert _count_rows("incident.run_events") == events_before
+    assert _get(client, alert_id, BEARERS["reader"]).status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -292,7 +385,7 @@ def test_forbidden_hides_existence() -> None:
 def test_status_table() -> None:
     client, bearer = _client(), BEARERS["op"]
     open_v1 = _cmd("open_triage")
-    dec = {"reason": REASON, "severity": "sev2"}
+    dec = {"reason": REASON, "severity": "sev2", "impact": IMPACT}
     V, S, N = "validation_error", "stale_version", "incident_not_found"
     nosev = _cmd("triage_declare", reason=REASON)
     sev9 = _cmd("triage_declare", reason=REASON, severity="sev9")
@@ -369,7 +462,14 @@ def test_status_table() -> None:
         ("ahk", nosev, "k-nosev-12345678901", None, 422, "invalid_severity"),
         ("ahk", sev9, "k-sev9-12345678901", None, 422, "invalid_severity"),
         ("ahs", _cmd("triage_declare", version=2, **dec), "k-stale-12345678901", None, 409, S),
-        ("ahi", _cmd("triage_declare", **dec, impact="down"), "k-impact-123456789", None, 422, V),
+        (
+            "ahi",
+            _cmd("triage_declare", **(dec | {"impact": ""})),
+            "k-impact-123456789",
+            None,
+            422,
+            "invalid_impact",
+        ),
         ("ahn", nolink, "k-404-1234567890123", None, 404, N),
         ("BAD ID!", open_v1, "k-badid-12345678901", None, 400, "invalid_command"),
     ]

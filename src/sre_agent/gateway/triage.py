@@ -26,7 +26,7 @@ ALLOWED_KEYS = {
     "open_triage": frozenset({"operation", "expected_version"}),
     "triage_dismiss": frozenset({"operation", "expected_version", "reason"}),
     "triage_link": frozenset({"operation", "expected_version", "reason", "target_incident_id"}),
-    "triage_declare": frozenset({"operation", "expected_version", "reason", "severity"}),
+    "triage_declare": frozenset({"operation", "expected_version", "reason", "severity", "impact"}),
 }
 
 MESSAGES = {

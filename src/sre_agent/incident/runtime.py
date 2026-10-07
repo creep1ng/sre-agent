@@ -465,6 +465,8 @@ class IncidentRuntime:
             incident["linked_incident_id"] = inputs["target_incident_id"]
         if transition.transition_id == "triage_declare":
             incident["severity"] = inputs["severity"]
+            if "impact" in inputs:
+                incident["impact"] = inputs["impact"]
         if transition.transition_id in {
             "open_triage",
             "triage_dismiss",

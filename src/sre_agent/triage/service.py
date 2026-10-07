@@ -170,11 +170,11 @@ class TriageService:
             raise TriageError(422, "invalid_target")
         if operation == "triage_link" and severity is not None and severity not in SEVERITIES:
             raise TriageError(422, "invalid_severity")
-        # Declare: severity sev1..sev4 required; any impact is 422 (schema-closed).
+        # Declaration impact is the operator-stated incident consequence.
         if operation == "triage_declare":
             if severity not in SEVERITIES:
                 raise TriageError(422, "invalid_severity")
-            if impact is not None:
+            if not isinstance(impact, str) or not impact.strip() or len(impact) > 2000:
                 raise TriageError(422, "invalid_impact")
 
     async def execute(
@@ -399,7 +399,7 @@ class TriageService:
                 principal_id=principal.principal_id,
                 display_name=principal.display_name,
             ),
-            inputs={"severity": severity},
+            inputs={"severity": severity, "impact": impact},
         )
         try:
             await runtime.execute(command)
