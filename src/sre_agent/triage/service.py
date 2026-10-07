@@ -397,6 +397,17 @@ class TriageService:
             "allowed_actions": allowed,
         }
 
+    async def list_eligible_incidents(self, principal: Principal) -> dict[str, Any]:
+        """Return a bounded destination projection after both read grants are checked."""
+        async with self._database.transaction() as session:
+            await self._authorize(session, principal, READ_ACTION)
+            await self._authorize(session, principal, "run.read")
+            try:
+                items = await PostgresIncidentRepository(session).list_eligible(tuple(ELIGIBLE))
+            except Exception as error:
+                raise TriageError(503, "storage_unavailable") from error
+        return {"items": list(items)}
+
     async def _transition(
         self,
         session: Any,

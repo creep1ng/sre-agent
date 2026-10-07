@@ -250,3 +250,37 @@ Expected: `passed=46 skipped=0 failed=0 flaky=0`, exit0 and real screenshots in 
 Local bounded units: client/fixture preparation25lines, UI plus real journeys391lines, pre-authored mocked context matrix112lines, private fixture/package15lines. Count is additions plus deletions, including the new spec; no size exception or publication. Complete issue acceptance is still pending eligible-incident listing, inbox navigation, complete CA matrix/packaged evaluation fault and final audit/human review. Engram mirror pending runtime identity restoration; local recovery document is current.
 
 Next contract question (verified current source): eligibleGET still advertises404unknownalert, but no authoritative alert inventory exists; absence in `alert_triage` cannot prove that condition. Recommend accepting a syntactically valid correlationID and returning bounded eligibleitems (possiblyempty), with existing alert.read/run.read gates. This clarification has not been accepted or implemented. The inbox's `midnight:triage-requested` event still has no consumer; directURL tests do not prove inboxnavigation. Fullreview remains incomplete.
+
+## Authorized eligible-incident backend (T23-17)
+
+User annotation1 accepted valid alert IDs without stored triage and removal of the eligibleGET unknown-alert404. `GET /v1/alerts/{alert_id}/triage/eligible-incidents` now gates on both `alert.read` and `run.read`, then returns at most100 existing link-eligible incidents, ascending by ID. It uses the same eligible-state set as the locked POST revalidation. A read never writes or asserts inventory existence; old stateGET404 stays unchanged. Source OpenAPI3.2.0 documents valid opaque correlation IDs and malformed-ID400; immutable releases are untouched.
+
+Six genuine HTTP/PostgreSQL failure cases were written before source: untriaged/empty/noeffects; both exact readgrants/authentication; malformed ID; real restricted-role incident-storage denial503 after successful AuthN; bounded ordering and all terminal exclusions; listed destination closes then linkPOST409 with noassociation. Parent independent final frozen749b029 baseline RED **6failed40deselected7.11s exit1**; corrected current complete triage/runtime GREEN **102passed28.21s exit0**, Ruffcheck/format5files and whitespacechecks pass. Worker finalHTTP/contract53passed29.71s. Cached image supplied dependencies only; current source was mounted read-only. Logs `/tmp/triage23-review/t23-17/parent-{red-final,green-final}.log`.
+
+Retained limitations/failures: first worker fixture had a PostgreSQL indeterminate type, corrected before finalRED/source. After source, the prewritten cap/filter fixture was found to sort terminal IDs after the first100 candidates, weakening direct exclusion evidence. Only those existing fixture IDs were corrected to sort before the limit, then parent repeated finalRED/GREEN; no new post-code unitcase or production fix. Earlier green53passed22.62s is not substituted for final stronger evidence. Full current candidate source/tests265add+del before parent tracking/report; no size exception.
+
+Fresh actual DockerCompose build/API media remain pending for this new backend. Existing UI still uses a text target; backend proof alone does not fulfill CA2 selection or inbox navigation. No fullissue/human/hostedCI acceptance or publication. Engram mirror unavailable; local recovery is current. Rollback removes this contracted list implementation and source clarification, leaving POST locking and existing reads intact.
+
+### Fresh build and public reproduction for eligible reads
+
+Frozen tested source `a571078da80aa0b899ab99c281166bfabea6db0a`: actual DockerCompose checks build **114passed36.16s exit0**, covering all triage/runtime plus incident persistence; image config `ce3abb19962759ddbf0e2f1ea676ecdc7beb88e8a5ca1e1f2b719d39b96009f6`. Repetition using the public `.env.example` (not private temporary keys) also **114passed38.85s exit0**. Own checksDB is separate from the browserDB. Logs `t23-17/parent-compose-a571078-final.log` and `parent-compose-public-config.log`. First attempt with `/dev/null` configuration failed interpolation before tests, retained separately; no successful test claim for it.
+
+From the candidate checkout, with a unique isolated Compose project name:
+
+```sh
+docker compose --env-file .env.example -p triage23-eligible-checks --profile checks run --build --rm -T python-checks pytest -p no:cacheprovider -q tests/test_triage*.py tests/test_incident_runtime.py tests/test_incident_persistence.py
+```
+
+Expected114checks pass. Only the checksDB dependency starts; other services' example credentials/providers are unused placeholders, not real credentials or external provider execution. If local Docker pools are exhausted, supply an external-runtime override referring to a newly owned, inspected-free internal network, never another stack's db/api/web network aliases; the parent reused only its own existing checks service/network. Remove only the reproduction's own project after completion.
+
+Parent additionally loaded the backend in its owned API, observed readiness200 and authenticated actual eligibleGET200 with100 returned items for a valid ID without a triage decision. Actual body recorded in `t23-17/live-eligible.json`; screenshot below was inspected, with no credential rendered. This is a bounded API result, not proof of complete incident inventory or the still-pending target-selector UI. No browserDB reset or command was sent by the capture.
+
+![Actual bounded eligible-incidents API response](issue-23-eligible-api.png)
+
+## Current checkpoint: backend audit and UI failure-first proof
+
+On2026-10-07 an independent read-only audit of committed `32de182` found no actionable backend P0/P1 in exact grants, terminal identity, atomic state/event/response persistence, mandatory impact, backend provenance, eligible filtering or locked POST revalidation. This is a source audit, not another executed test or human acceptance. Existing genuine HTTP/PostgreSQL coverage is in `tests/test_triage_http.py` (impact/replay, producer provenance, context/grant revocation/real policy-storage failure, eligible auth/storage/filter/bound and list→close→POST rejection).
+
+Parent independently verified the eight pre-authored UI cases against the frozen backend-new/UI-old candidate in a **new isolated tmpfs database**, not the existing evidence database: **8 failed, exit1**, `/tmp/triage23-review/t23-18/isolated-red/parent-red-final-authorized.log`. Four inbox cases fail at the missing deep link; four target cases fail at the missing eligible GET. A Docker socket permission failure preceded this run and is retained separately, not represented as behavioral RED. Existing downstream declaration/reload/media assertions were strengthened before source; no new post-code unit cases. UI GREEN and full final CA mapping remain pending.
+
+The inbox is served static synthetic JSON. Its forthcoming actual nginx→triage→FastAPI/PostgreSQL journeys will prove that integration, **not live provider ingestion**. A real PostgreSQL list→close→POST test proves the backend race; an injected409 browser case proves only UI recovery/no false success. Failure-run recordings are not acceptance media.
