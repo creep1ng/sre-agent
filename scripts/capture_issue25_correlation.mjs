@@ -53,6 +53,15 @@ try {
     const detail = page.locator('[data-event-detail]');
     await expect(detail).toContainText(entry.sql.event_id);
     await expect(detail).toContainText(String(entry.producer_status));
+    await expect(detail).toContainText(entry.request_id);
+    const visibleRefs = [];
+    for (const field of ['incident_ref', 'run_ref', 'task_ref', 'trace_ref']) {
+      const digest = entry.items[0].correlation[field]?.digest;
+      if (digest) {
+        await expect(detail).toContainText(digest);
+        visibleRefs.push(field);
+      }
+    }
     const body = await page.locator('body').innerText();
     for (const value of [process.env.ADMIN_HUMAN_API_KEY, process.env.RESTRICTED_HARNESS_API_KEY,
       'ISSUE25_PRIVATE_PROMPT_', 'ISSUE25_PRIVATE_OUTPUT_']) {
@@ -63,7 +72,8 @@ try {
     proofs.push({ name, request_id: entry.request_id, event_id: entry.sql.event_id,
       href, browser_url: page.url(), requires_reauthentication: true,
       nonadmin_rows: 0, nonadmin_error: 'Access unavailable', producer_status: entry.producer_status,
-      list_request_ids: apiRequests, list_statuses: listStatuses, metadata_only: true });
+      list_request_ids: apiRequests, list_statuses: listStatuses, visible_refs: visibleRefs,
+      metadata_only: true });
     await context.close();
   }
   writeFileSync('/evidence/issue-25-correlation.json', JSON.stringify({
