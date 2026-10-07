@@ -13,6 +13,7 @@ const versionInput = document.getElementById("expected-version");
 const operationInput = document.getElementById("command-operation");
 const reasonInput = document.getElementById("command-reason");
 const targetInput = document.getElementById("command-target");
+const targetListStatus = document.getElementById("target-list-status");
 const severityInput = document.getElementById("command-severity");
 const impactInput = document.getElementById("command-impact");
 const submitButton = document.getElementById("submit-button");
@@ -44,6 +45,13 @@ let contextAlertId = "";
 let allowedActions = null;
 let lastObservedAlertId = "";
 let contextTimer = null;
+let eligibleGeneration = 0;
+let eligibleAlertId = "";
+let eligibleSessionGeneration = 0;
+let eligibleIncidents = null;
+
+const ELIGIBLE_INCIDENT_STATES = new Set(["active", "investigating", "mitigating", "verifying"]);
+const INCIDENT_ID_PATTERN = /^[a-z][a-z0-9_-]{2,63}$/;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const DECISION_ORIGIN_LABELS = Object.freeze({
@@ -101,6 +109,98 @@ function hideError() {
   errorDetail.textContent = "";
 }
 
+function invalidateEligibleIncidents(message = "Select triage_link to load backend-eligible incidents.") {
+  eligibleGeneration += 1;
+  eligibleAlertId = "";
+  eligibleSessionGeneration = 0;
+  eligibleIncidents = null;
+  targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+  targetInput.value = "";
+  targetInput.disabled = true;
+  targetListStatus.textContent = message;
+}
+
+function validEligibleResponse(response) {
+  if (!response || typeof response !== "object" || !Array.isArray(response.items) || response.items.length > 100)
+    return false;
+  const seen = new Set();
+  return response.items.every((item) => {
+    if (!item || typeof item !== "object" || !INCIDENT_ID_PATTERN.test(item.incident_id) ||
+      !ELIGIBLE_INCIDENT_STATES.has(item.state) || seen.has(item.incident_id)) return false;
+    seen.add(item.incident_id);
+    return true;
+  });
+}
+
+function renderEligibleIncidents(items, selectedTarget = "") {
+  targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+  for (const item of items) {
+    targetInput.add(new Option(`${item.incident_id} · ${item.state}`, item.incident_id));
+  }
+  targetInput.value = items.some((item) => item.incident_id === selectedTarget) ? selectedTarget : "";
+  targetListStatus.textContent = items.length === 0
+    ? "No eligible incidents were returned by the backend."
+    : `Showing up to 100 eligible incidents; this list may be incomplete (${items.length} returned).`;
+}
+
+function eligibleListIsCurrent(alertId = alertInput.value.trim()) {
+  return sessionActive && eligibleAlertId === alertId &&
+    eligibleSessionGeneration === sessionGeneration && Array.isArray(eligibleIncidents) &&
+    contextAlertId === alertId && allowedActions?.includes("triage_link");
+}
+
+async function loadEligibleIncidents({ force = false, preserveSelection = false, selectedTarget = "" } = {}) {
+  const alertId = alertInput.value.trim();
+  if (!sessionActive || contextAlertId !== alertId || !allowedActions?.includes("triage_link") ||
+    operationInput.value !== "triage_link") {
+    invalidateEligibleIncidents();
+    updateActionControls();
+    return { ok: false };
+  }
+  if (!force && eligibleListIsCurrent(alertId)) return { ok: true, items: eligibleIncidents };
+
+  const requestGeneration = ++eligibleGeneration;
+  const generation = sessionGeneration;
+  const selectedBeforeRead = preserveSelection ? selectedTarget || targetInput.value : "";
+  eligibleAlertId = "";
+  eligibleSessionGeneration = 0;
+  eligibleIncidents = null;
+  targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+  targetInput.value = "";
+  targetInput.disabled = true;
+  targetListStatus.textContent = "Loading eligible incidents from the backend…";
+  updateActionControls();
+  try {
+    const response = await controlApi.getEligibleIncidents(alertId);
+    if (requestGeneration !== eligibleGeneration || generation !== sessionGeneration ||
+      !sessionActive || alertInput.value.trim() !== alertId || contextAlertId !== alertId ||
+      !allowedActions?.includes("triage_link") || operationInput.value !== "triage_link")
+      return { ok: false, stale: true };
+    if (!validEligibleResponse(response)) throw new ApiClientError("invalid_response", "The API returned an invalid eligible-incident list.");
+    eligibleAlertId = alertId;
+    eligibleSessionGeneration = generation;
+    eligibleIncidents = response.items;
+    renderEligibleIncidents(response.items, preserveSelection ? selectedBeforeRead : "");
+    targetInput.disabled = response.items.length === 0;
+    updateActionControls();
+    return { ok: true, items: response.items };
+  } catch (error) {
+    if (requestGeneration !== eligibleGeneration || generation !== sessionGeneration ||
+      !sessionActive || alertInput.value.trim() !== alertId || contextAlertId !== alertId ||
+      operationInput.value !== "triage_link") return { ok: false, stale: true };
+    eligibleAlertId = "";
+    eligibleSessionGeneration = 0;
+    eligibleIncidents = null;
+    targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+    targetInput.value = "";
+    targetInput.disabled = true;
+    targetListStatus.textContent = "Could not load eligible incidents. No link target is available.";
+    updateActionControls();
+    showError(error, "read");
+    return { ok: false, error };
+  }
+}
+
 function clearResultDisplay(summary) {
   resultOperation.textContent = "—";
   resultStatus.textContent = "—";
@@ -121,11 +221,17 @@ function updateActionControls() {
   }
   operationInput.disabled = commandInFlight || !hasProjection || allowedActions.length === 0;
   alertInput.disabled = commandInFlight;
+  const validTarget = eligibleListIsCurrent() &&
+    eligibleIncidents.some((item) => item.incident_id === targetInput.value);
+  targetInput.disabled = commandInFlight || operationInput.value !== "triage_link" ||
+    !eligibleListIsCurrent() || eligibleIncidents.length === 0;
   submitButton.disabled =
-    commandInFlight || !hasProjection || !allowedActions.includes(operationInput.value);
+    commandInFlight || !hasProjection || !allowedActions.includes(operationInput.value) ||
+    (operationInput.value === "triage_link" && !validTarget);
 }
 
 function clearActionProjection() {
+  invalidateEligibleIncidents();
   contextAlertId = "";
   allowedActions = null;
   actionsStatus.textContent = sessionActive
@@ -229,7 +335,11 @@ function buildBody(operation) {
   const reason = reasonInput.value.trim();
   if (reason !== "" && fields.includes("reason")) body.reason = reason;
   const target = targetInput.value.trim();
-  if (target !== "" && fields.includes("target_incident_id")) body.target_incident_id = target;
+  if (fields.includes("target_incident_id")) {
+    if (!eligibleListIsCurrent() || !eligibleIncidents.some((item) => item.incident_id === target))
+      return { ok: false, message: "Select a target from the latest backend eligible-incidents list." };
+    body.target_incident_id = target;
+  }
   const severity = severityInput.value;
   if (severity !== "" && fields.includes("severity")) body.severity = severity;
   const impact = impactInput.value;
@@ -247,9 +357,11 @@ function buildBody(operation) {
 async function readTriageContext(
   alertId,
   generation,
-  { preserveResult = false, confirmedCommand = false, showReadError = true } = {},
+  { preserveResult = false, confirmedCommand = false, showReadError = true, preserveTarget = false } = {},
 ) {
   const requestGeneration = ++contextGeneration;
+  const targetToPreserve = preserveTarget ? targetInput.value : "";
+  invalidateEligibleIncidents("Loading current alert permissions and eligible targets…");
   contextAlertId = "";
   allowedActions = null;
   actionsStatus.textContent = "Loading operations permitted by the backend…";
@@ -287,6 +399,11 @@ async function readTriageContext(
     renderContextState(alertId, item.triage_state);
     page.dataset.state = "ready";
     hideError();
+    if (operationInput.value === "triage_link" && allowedActions.includes("triage_link")) {
+      void loadEligibleIncidents({ preserveSelection: preserveTarget, selectedTarget: targetToPreserve });
+    } else {
+      targetListStatus.textContent = "Eligible targets are available only for a backend-permitted triage_link.";
+    }
     return { ok: true, item };
   } catch (error) {
     if (
@@ -312,7 +429,7 @@ async function readTriageContext(
 }
 
 async function refreshAfterConflict(alertId, generation) {
-  const refreshed = await readTriageContext(alertId, generation, { showReadError: false });
+  const refreshed = await readTriageContext(alertId, generation, { showReadError: false, preserveTarget: true });
   if (refreshed.stale) return;
   if (refreshed.ok) {
     page.dataset.state = "error";
@@ -369,6 +486,12 @@ async function sendCommand() {
     if (generation !== sessionGeneration) return;
     if (error?.kind === "conflict" && error?.code === "stale_version") {
       await refreshAfterConflict(alertId, generation);
+    } else if (error?.kind === "conflict" && error?.code === "destination_ineligible") {
+      invalidateEligibleIncidents("The destination is no longer eligible. Refreshing the list; choose a target again.");
+      await loadEligibleIncidents({ force: true });
+      if (generation !== sessionGeneration || !sessionActive || alertInput.value.trim() !== alertId) return;
+      page.dataset.state = "error";
+      showError(error);
     } else {
       if (error?.kind === "authorization") {
         contextGeneration += 1;
@@ -396,6 +519,16 @@ operationInput.addEventListener("change", () => {
     "aria-required",
     String(OPERATION_FIELDS[operationInput.value]?.includes("impact") ?? false),
   );
+  hideError();
+  if (operationInput.value === "triage_link") {
+    void loadEligibleIncidents();
+  } else {
+    invalidateEligibleIncidents();
+  }
+  updateActionControls();
+});
+
+targetInput.addEventListener("change", () => {
   hideError();
   updateActionControls();
 });

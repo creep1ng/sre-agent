@@ -60,8 +60,11 @@
           <p id="actions-status" class="ma-panel__description" aria-live="polite">Connect and select an alert to load actions from the backend.</p>
           <div class="ma-field"><label class="ma-field__label" for="command-reason">Reason</label>
           <input class="ma-input" id="command-reason" name="reason" type="text" autocomplete="off" maxlength="1000" placeholder="Required except for open_triage" /></div>
-          <div class="ma-field"><label class="ma-field__label" for="command-target">Target incident ID (link only)</label>
-          <input class="ma-input ma-mono" id="command-target" name="target_incident_id" type="text" autocomplete="off" spellcheck="false" /></div>
+          <div class="ma-field"><label class="ma-field__label" for="command-target">Eligible target incident (link only)</label>
+          <select class="ma-select ma-mono" id="command-target" name="target_incident_id" disabled>
+            <option value="" selected>Select an eligible incident…</option>
+          </select>
+          <p id="target-list-status" class="ma-panel__description" aria-live="polite">Select triage_link to load backend-eligible incidents.</p></div>
           <div class="ma-field"><label class="ma-field__label" for="command-severity">Severity (declare only)</label>
           <select class="ma-select" id="command-severity" name="severity">
             <option value="" selected>Select severity…</option>
