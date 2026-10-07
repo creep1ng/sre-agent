@@ -254,6 +254,118 @@ test("surfaces network failure as offline without false state", async ({ page })
   await expect(page.locator("#result-status")).toHaveText("—");
 });
 
+test("context denial, storage failure and malformed projection fail closed without POST", async ({ page }) => {
+  let mode = "denied";
+  await page.route((url) => url.pathname === CONTEXT_PATH, (route) => {
+    if (mode === "denied") return route.fulfill(json(403, JSON.stringify({ error: { code: "not_authorized" } })));
+    if (mode === "unavailable") return route.fulfill(json(503, JSON.stringify({ error: { code: "storage_unavailable" } })));
+    return route.fulfill(json(200, JSON.stringify({
+      alert_id: "al-journey-01", triage_state: null, allowed_actions: ["invented_action"],
+    })));
+  });
+  let posts = 0;
+  await page.route((url) => url.pathname === COMMANDS_PATH, (route) => {
+    posts += 1;
+    return route.fulfill(json(200, JSON.stringify(stateResult("open"))));
+  });
+  await connect(page);
+  await page.fill("#alert-id", "al-journey-01");
+  await expect(page.locator("#submit-button")).toBeDisabled();
+  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await page.locator("#command-form").evaluate((form) =>
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(posts).toBe(0);
+
+  for (const [nextMode, title] of [["unavailable", "Service unavailable"], ["malformed", "Request failed"]]) {
+    mode = nextMode;
+    await page.fill("#alert-id", "");
+    await page.fill("#alert-id", "al-journey-01");
+    await expect(page.locator("#page-error-title")).toHaveText(title);
+    await expect(page.locator("#submit-button")).toBeDisabled();
+    await page.locator("#command-form").evaluate((form) =>
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(posts).toBe(0);
+  }
+});
+
+test("a successful command refresh displays the newer authoritative context", async ({ page }) => {
+  let reads = 0;
+  await page.route((url) => url.pathname === CONTEXT_PATH, (route) => {
+    reads += 1;
+    const state = reads === 1 ? null : {
+      alert_id: "al-journey-01", status: "open", expected_version: 3,
+      incident_id: null, reason: null, actor: "op-human", decided_at: "2026-09-20T10:00:01Z",
+    };
+    return route.fulfill(json(200, JSON.stringify({
+      alert_id: "al-journey-01", triage_state: state, allowed_actions: ALL_ACTIONS,
+    })));
+  });
+  await page.route((url) => url.pathname === COMMANDS_PATH, (route) =>
+    route.fulfill(json(200, JSON.stringify(stateResult("open")))),
+  );
+  await connect(page);
+  await page.fill("#alert-id", "al-journey-01");
+  await send(page, "open_triage");
+  await expect(page.locator("#result-version")).toHaveText("3");
+  await expect(page.locator("#expected-version")).toHaveValue("3");
+  await expect(page.locator("#result-summary")).toContainText("Recovered from backend: open");
+  expect(reads).toBe(2);
+});
+
+test("a confirmed command with a null refresh context keeps its result but disables further operations", async ({ page }) => {
+  let reads = 0;
+  await page.route((url) => url.pathname === CONTEXT_PATH, (route) => {
+    reads += 1;
+    return route.fulfill(json(200, JSON.stringify({
+      alert_id: "al-journey-01", triage_state: null, allowed_actions: ALL_ACTIONS,
+    })));
+  });
+  await page.route((url) => url.pathname === COMMANDS_PATH, (route) =>
+    route.fulfill(json(200, JSON.stringify(stateResult("open")))),
+  );
+  await connect(page);
+  await page.fill("#alert-id", "al-journey-01");
+  await send(page, "open_triage");
+  await expect(page.locator("#result-status")).toHaveText("open");
+  await expect(page.locator("#result-summary")).toContainText("open");
+  await expect(page.locator("#submit-button")).toBeDisabled();
+  await expect(page.locator("#page-error")).toBeVisible();
+  await expect(page.locator("#page-error-title")).toHaveText("Request failed");
+  await expect(page.locator("#page-error-detail")).toContainText("confirmed");
+  expect(reads).toBe(2);
+});
+
+test("changing alert invalidates prior projection and ignores a late context response", async ({ page }) => {
+  let releaseA;
+  let firstA = true;
+  await page.route((url) => url.pathname.endsWith("/triage/context"), async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-3));
+    if (id === "al-context-a" && firstA) {
+      firstA = false;
+      await new Promise((resolve) => { releaseA = resolve; });
+    }
+    const allowed = id === "al-context-b" ? ["triage_dismiss"] : ALL_ACTIONS;
+    return route.fulfill(json(200, JSON.stringify({ alert_id: id, triage_state: null, allowed_actions: allowed })));
+  });
+  await connect(page);
+  await page.fill("#alert-id", "al-context-a");
+  await expect.poll(() => Boolean(releaseA)).toBe(true);
+  await page.fill("#alert-id", "al-context-b");
+  await expect(page.locator("#command-operation option[value='open_triage']")).toBeDisabled();
+  await expect(page.locator("#command-operation option[value='triage_dismiss']")).toBeEnabled();
+  await expect(page.locator("#command-operation")).toHaveValue("open_triage");
+  await expect(page.locator("#submit-button")).toBeDisabled();
+  releaseA();
+  await expect(page.locator("#command-operation option[value='open_triage']")).toBeDisabled();
+  await expect(page.locator("#command-operation")).toHaveValue("open_triage");
+  await expect(page.locator("#submit-button")).toBeDisabled();
+  await expect(page.locator("#command-operation")).toBeEnabled();
+  await page.selectOption("#command-operation", "triage_dismiss");
+  await expect(page.locator("#submit-button")).toBeEnabled();
+});
+
 test("ignores a double submit while a command is in flight", async ({ page }) => {
   let requests = 0;
   await page.route((url) => url.pathname === COMMANDS_PATH, async (route) => {

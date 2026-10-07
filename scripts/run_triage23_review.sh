@@ -37,7 +37,7 @@ echo "Building pinned repository services. Logs: $RUN_DIR/build.log"
 "${COMPOSE[@]}" run --build --rm --user "$(id -u):$(id -g)" seed 2>&1 | tee "$RUN_DIR/seed.log"
 test "$(stat -c '%a' "$ARTIFACTS/credentials.env")" = 600
 "${COMPOSE[@]}" up -d api web 2>&1 | tee "$RUN_DIR/services.log"
-echo "Running all seven selected suites with one worker; logs: $RUN_DIR/browser.log"
+echo "Running all eight selected suites (46 tests) with one worker; logs: $RUN_DIR/browser.log"
 set +e
 "${COMPOSE[@]}" run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp e2e sh /run/triage23-browser.sh \
   > "$RUN_DIR/browser.log" 2>&1
