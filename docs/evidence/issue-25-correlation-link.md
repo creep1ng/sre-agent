@@ -1,44 +1,44 @@
 # Issue 25 safe correlation navigation
 
-Authorized follow-up to the audit review: implement the previously absent link,
-not the unrelated P2 fixes or pagination. Delivery route: delegated direct.
-Base runtime: `0af22e97d815a1c511b1a24eec14f70d3611be75`, plus uncommitted UI/tests.
-UI Git blob: `619ced26be1d901ba74cf3847a69905c887243df`.
-Served UI SHA256: `68ceb142c7069cfe9dbc7d66cd7029c0afea0e337f7160849e4e04b36300daf6`;
-the capture checks served bytes match the candidate before exercising navigation.
+Authorized follow-up: safe same-origin request-ID navigation plus explicit safe
+rendering of the event's opaque correlation references. Current main is
+`677fb76ae345e223d4313e8c5bcbdbd7acb9bbf3`; the connected capture uses the #491
+leaf. UI Git blob: `06164fbb18614a298afd98f8f806cfda80f30e4b`; served SHA-256:
+`cb60f3b4003dabc221f1091a093a973792f3b6ace6529dc950bb8b612e9f942c`.
+The capture verifies the served bytes match the candidate UI before use.
 
 ## Behavior and observed proof
 
-Detail now offers **View correlated events**, using only a valid contract
-`correlation.request_id`. The destination is fixed and same-origin, not supplied
-by the server/user. Opening it prefills that UUID, clears unrelated query state,
-keeps credentials out of URLs and requires a new authenticated session. It does
-not issue a broad/automatic audit read. Invalid/duplicate IDs show validation;
-malicious correlation values produce no link. Nil/uppercase UUIDs match the API.
+Detail's **View correlated events** link uses only a valid contract
+`correlation.request_id`, to a fixed same-origin URL. It clears unrelated query
+state; credentials are not carried in URLs and the destination requires new
+authentication. Detail renders `request_id` and explicit incident/run/task/trace
+reference digest values using text content only; it does not expose raw IDs or
+create links from HMAC refs. The observed producer generated incident/run/task
+refs, but `trace_ref` was null and is not claimed as visible proof.
 
-Failure-first: initial three scenarios failed before UI edits (3 failed/4 passed,
-23.3s). An added UUID boundary exposed the initial over-strict parser (1 failed/7
-passed, 16.6s); corrected to the API-compatible canonical UUID universe. Final
-candidate: **8 browser tests passed (10.3s; restored candidate)** and **24 existing HTTP/PostgreSQL/UI
-checks passed (20.20s; restored candidate)**. No unit tests added and no retroactive strict-TDD claim.
+Failure-first browser assertions exercise valid UUID navigation, authentication,
+malicious values as inert text, and no unexpected navigation/network request.
+The current #491 candidate passed **8 Playwright journeys (16.4s)**; targeted
+Python audit/UI checks passed **68 tests (57.24s)**. The full Python suite
+(1562 passed, 1 skipped) ran on the earlier current-main/#386 candidate
+`080bef8c109b5d21c108ce501ea1aaaff460c8db`, before this UI-only change; it is
+not attributed to the #491 leaf.
 
-Real connected capture at `2026-10-07T01:54:09.884Z` followed both gateway-produced
-allow and deny events retained in isolated PostgreSQL. For each, the clicked URL
-and all three API reads retain exactly the producer's request ID. Read statuses
-are **200 -> 403 -> 200**: admin, restricted identity (zero rows), then admin.
-Reload does not carry credentials or query automatically. The reopened detail
-matches the SQL event ID and producer status (200/403), with metadata only.
-
-Artifacts: `issue-25-correlation.json`, `issue-25-correlation-allow.png`,
-`issue-25-correlation-deny.png`. Both screenshots were visually inspected and
-actual synthetic credentials/prompt-output markers checked absent from JSON/DOM.
-This proves the safe-link deliverable in the local candidate, not full issue25
-acceptance. Other P2s, #470 pagination and independent human review remain pending.
+Fresh connected captures at `2026-10-07T03:12:59.985Z` follow actual allow and
+deny producer events retained in isolated PostgreSQL. Both request IDs and SQL
+event IDs match `issue-25-audit-http.json` from the parent evidence. Each browser
+sequence is **200 -> 403 -> 200** (admin, restricted identity with zero rows,
+admin); each of three list reads uses exactly the producer request ID. Both
+screenshots show the selected event and its request/incident/run/task metadata.
+The artifact records visible refs; trace is null. Screenshots were inspected.
+These are controlled integrations using a deterministic injected LLM provider,
+real PostgreSQL and the connected gateway, not live external-provider proof.
 
 ## Containerized reproduction
 
-Use the original review's isolated `.env.worktree` and producer capture recipe in
-`issue-25-audit-review.md` first; no external provider keys or shared database.
+Use the isolated `.env.worktree` and producer capture recipe in
+`issue-25-audit-review.md` first. No external provider keys or shared database.
 
 ```sh
 docker compose -p audit25-review --env-file .env.worktree -f compose.yaml -f compose.e2e.yaml up -d --build web
@@ -47,16 +47,11 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-review_runtime --en
 docker compose -p audit25-review --env-file .env.worktree -f compose.yaml -f compose.e2e.yaml --profile checks --profile e2e down
 ```
 
-Published navigation evidence; no merge or issue closure. Full repository suite, live external
-provider, actual killed-DB/offline demonstrations and human acceptance NOT run.
-RDD disabled/unmanaged. Keep review evidence and navigation as separate delivery
-units, each <=400 additions+deletions; do not submit the combined diff as one PR.
-Rollback: revert the UI/tests navigation unit; backend/storage contracts unchanged.
-Sanitized: yes.
+## Remaining acceptance gaps
 
-## Refreshed parent correspondence
-
-After parent HTTP/SQL evidence refreshed, correlation artifacts were regenerated
-from that exact producer artifact on `0295805211ce516bcc6d9a076d29d4b7285947ff`.
-Both allow/deny request IDs and SQL event IDs agree with the parent artifact;
-actual connected capture again observed200/403/200 and unchanged served UI hash.
+P2 truncation notice and hidden 404 remain. Missing-filter interactions with
+forbidden query keys, real database outage, browser-offline behavior, live
+provider, and independent human acceptance were not demonstrated. Do not treat
+these captures or the full-suite result on the earlier candidate as full #25
+acceptance. RDD disabled/unmanaged. Keep #490 and this #491 follow-up as separate
+size-bounded delivery units; no merge or issue closure is claimed.
