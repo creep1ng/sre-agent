@@ -1,12 +1,14 @@
 # Issue 25 audit review evidence
 
 Reviewed stack: #378 -> #379 -> #385 -> #386, integrated with current main
-`677fb76ae345e223d4313e8c5bcbdbd7acb9bbf3`; evidence unit #490 is based on
-`080bef8c109b5d21c108ce501ea1aaaff460c8db`. The user corrected the target to
-#25, not #330. Live Project midnight.agent: Todo. P0/P1 findings were confirmed
-and corrected in bounded follow-ups: observable leakage checks on #386 and safe
-correlation-detail rendering on child #491. No unverified finding is represented
-as fixed; no issue closure or merge is claimed. RDD disabled/unmanaged.
+`677fb76ae345e223d4313e8c5bcbdbd7acb9bbf3`; #490 base is #386 at
+`878c6cf7ec64ab998e043333180e7d6acdd9a37f`. Runtime bytes are unchanged from
+`080bef8c109b5d21c108ce501ea1aaaff460c8db`, where full Python checks ran. The
+user corrected the target to #25, not #330. Live Project midnight.agent: Todo.
+Some P1s were corrected: observable leakage checks on #386, safe correlation
+detail on child #491, and additive contract ID compatibility in #493 (`c76476c`,
+Codex no issues). #493 full checks remain pending. Two runtime P1s remain open in
+separate follow-ups; no issue closure or merge is claimed. RDD disabled/unmanaged.
 
 ## Findings and remaining gaps
 
@@ -14,11 +16,15 @@ as fixed; no issue closure or merge is claimed. RDD disabled/unmanaged.
   announced as ordinary counts. Pagination remains deferred to #470.
 - **P2** detail 404 is hidden by list reload; current browser assertion checks
   hidden text, not visible error state.
-- P1 source-scanning browser checks were replaced with behavior assertions for
-  rendered DOM, storage and requests. The selected-event detail now renders
-  request UUID and opaque incident/run/task HMAC digests via text content only;
-  no raw identifiers or links are derived from those refs. No trace ref was
-  produced by this producer input, so trace rendering is not evidenced.
+- **P1 pending** #378 still lacks terminal audit records for audit-read outcomes;
+  a separate authorized runtime follow-up is in progress. The independent legacy
+  event-ID lookup path also still needs the governed-404 compatibility follow-up.
+- **P1 corrected** source-scanning browser checks were replaced by behavior
+  assertions for rendered DOM, storage and requests. Child #491 renders the
+  selected event request UUID and opaque incident/run/task HMAC digests with
+  text content only. No trace ref was produced, so trace rendering is not evidenced.
+- **P1 corrected separately** #493 preserves the additive contract ID union; Codex
+  reported no issues, but its full checks remain pending.
 
 ## Observed results and criterion mapping
 
@@ -77,4 +83,5 @@ No live provider, killed-database, browser-offline or independent human acceptan
 was run. Full Python suite belongs to the pre-#491 candidate stated above; do not
 attribute it to the final leaf. CA1-CA6 have the bounded evidence listed, but
 #25 acceptance remains partial while P2s, outage cases and human acceptance are
-open. Screenshot inspection is not a substitute for human PR review.
+open. The two runtime P1s above and #493 checks are also pending. Screenshot
+inspection is not a substitute for human PR review.
