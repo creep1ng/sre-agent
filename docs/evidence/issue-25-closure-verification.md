@@ -1,15 +1,23 @@
 # Issue 25 integrated closure-gap verification
 
 ## Candidate and scope
-The tested joint source candidate is `e1847a66554285c4e0400728fdc5c2bc46515ea8`:
-PR378 → PR379 → PR385 → PR386 → PR490 → PR491 (`343402e`) plus the five
-bounded correction commits. Its contract base is merged main `ef5ba500` (2.7.0).
-Later evidence/tracking-only commits do not replace the tested source identity.
-Every new capture below is from this joint candidate, **not** evidence that an
-earlier parent independently implements its descendants' UI functions.
-Runtime source manifest SHA-256: `13a2b1fb891a93835205cf81fd8c2ab2e4889a3952290690b434a0d5088ffe03`.
-The manifest hashes sorted `src/**/*.py` paths, NUL, file hash, and newline.
-The HTTP helper also records its own hash; browser captures record served UI hash.
+The tested joint source candidate is `a59256c73413e249f763c29f87404abdc1c0f07d`:
+PR378 → PR379 → PR385 → PR386 → PR490 → PR491 → PR497–502, followed by four
+bounded fresh-review correction units and merged current main
+`a3541a96d83364a126ceff418ed3cbf7dbdc2d82` (human incident command API).
+Immutable contract2.7.0 and all earlier releases are preserved.
+Evidence/tracking-only commits do not replace the tested source identity.
+Every refreshed capture below is from this joint candidate, **not** evidence that
+an earlier parent independently implements descendants' functions.
+Runtime source manifest SHA-256: `a8c0d106c83ba8c405a5ff0d7e9ae467611537b210f66bb8ae798a7be21bb937`.
+The manifest hashes sorted `src/**/*.py` paths, NUL, file hash, and newline;
+the host, HTTP helper image and running API all matched it independently.
+HTTP helper SHA-256: `ae55d8a4d6fa802ff3793697e567b7d2a4766e98595fce25d617bf44b60069b6`.
+Browser artifacts record served UI SHA-256
+`0ccffe4504867c90dc103ea4ed97a108be14446ebfe526131c10dd1c75a45e2b`.
+The allow producer sends controlled contract-valid incident/run/task IDs and
+requires all three independently computed HMAC references in both SQL and HTTP.
+Raw IDs are not emitted in the captured projection.
 
 Live Projects #8 lists #25 as Done; the issue was human-closed at
 2026-10-07T03:24:35Z, but the runtime stack remains open and unmerged.
@@ -41,21 +49,36 @@ become unavailable while identity/grant tables remain intact. It is not a killed
 database or query-only append-success proof; the HTTP boundary suite covers that.
 
 ## Verification
-- API failure-first: 7 failed/22 passed on baseline; corrected five-file run29 passed44.54s.
-- Browser failure-first: 3 failed/8 passed; first correction run10/11 exposed a
-  malformed503 mock fixture, fixed to the contractual `audit_unavailable` envelope.
-- Worker browser GREEN11/11 in22.2s; parent independent browser GREEN11/11 in31.3s.
-- Parent full Python:1567 passed,1 skipped in691.34s; Ruff/format/locked deps,
-  import boundaries and mypy passed. The skip is the opt-in live OpenRouter case.
-- Connected captures: allow/deny200→403→200; actual list-query fault200→503
-  cleared1 prior row/detail to0/0, visible error; table restoration verified.
-- All three new browser JSON artifacts match served UI SHA-256
-  `12497e0a9287d8f5890c3ac3fb81c550cd99b63f20ef57f83e0bdc4571aa8ae2`;
-  SQL/HTTP helper source manifest matches the actual committed Python source.
-- Existing compact/braced UUID parser permissiveness was not expanded; an abandoned
-  experiment added no surviving tests or runtime changes for that separate behavior.
-- No hosted CI pass, independent human acceptance, live provider, killed-DB or
-  offline demonstration is inferred from local results.
+- Fresh-review UI failure-first: retained banner remained after a later successful
+  detail; corrected scenario passes for both404 and503. Parent complete browser
+  suite on the integrated API/UI:12 passed in39.7s.
+- Prior all-null correlation assertion failed; refreshed helper requires populated
+  incident/run/task HMAC refs and passed actual producer/SQL checks. Producer
+  statuses200/403/401/422/503 persist one row; append-failure503 persists zero.
+- Fresh full Python and prechecks: 1590 passed,1 skipped in461.53s;
+  Ruff/format/lock/import boundaries/mypy and Alembic check passed. The skip is
+  the opt-in live OpenRouter case..
+- Fresh terminal boundary and SQL capture: 9 passed in8.34s; actual helper
+  emitted11 JSONL records on the integrated image and isolated PostgreSQL..
+  Typed mutation probes accept only exact1→0/1→2 row-count failures after valid
+  HTTP envelopes and all SQL rows are checked; wrong statuses/malformed rows
+  propagate. Authenticated403/404/503 identity/resource refs are asserted against
+  independently computed seeded HMAC expectations, with no `else True` branches.
+- Controller failure-first: the old unprotected sequence left the table renamed.
+  Marker-write failure, done timeout and a reported browser failure all exit
+  nonzero but restore the original table. Real connected fault200→503 clears
+  one prior row/detail to0/0 with visible error. The raw helper precondition is
+  archived unchanged as `issue-25-query-precondition.json`; restoration SQL is
+  `issue-25-query-restoration.txt` (`t|t`). No manually invented JSON fields.
+- Fresh connected allow/deny navigation remains200→403→200; metadata/detail
+  captures, mock404/503/truncation and real fault are explicitly distinguished.
+- Full precheck first stopped at RuffUP012 in the helper; mechanical encoding
+  correction was made before restarting. No failed run is presented as a pass.
+- Previous e1847 Python1567/1skip and browser11 results are historical only.
+  Existing compact/braced UUID parser permissiveness was not expanded.
+- Exact-credential/private-marker artifact scans passed; real screenshots are
+  manually inspected. Hosted CI, human acceptance and merge remain separate gates;
+  no live-provider, killed-DB or offline demonstration is inferred.
 
 ## Environment and safe reproduction
 Git/Docker host; Python3.12.14, PostgreSQL17.4 pinned digest and Playwright1.63.0
@@ -94,23 +117,26 @@ and GID so the host can inspect and remove their files.
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'rm -f /evidence/query-fault-ready.json /evidence/query-fault-active /evidence/query-fault-done /evidence/issue-25-query-failure-failed.json'
 docker run --rm --detach --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/capture_issue25_query_failure.mjs:/e2e/capture.mjs:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e node /e2e/capture.mjs
 docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/scripts/control_issue25_query_fault.py:/app/scripts/control_issue25_query_fault.py:ro" -v "$PWD/docs/evidence:/evidence" audit25-closure-python-checks:latest python /app/scripts/control_issue25_query_fault.py
-docker run --rm --network audit25-closure_runtime --env-file .env.worktree audit25-closure-python-checks:latest python -c 'from sre_agent.settings import Settings; import os,psycopg; s=Settings.from_environment({k:v for k,v in os.environ.items() if not k.startswith("OPENROUTER")}); c=psycopg.connect(s.database_url); print("table_flags="+str(c.execute("SELECT to_regclass(%s) IS NOT NULL,to_regclass(%s) IS NULL",("public.audit_events","public.audit_events_issue25_fault")).fetchone())); c.close()'
+docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml exec -T db psql -U sre_agent -d audit25_closure -v ON_ERROR_STOP=1 -tAc "SELECT to_regclass('audit_events') IS NOT NULL, to_regclass('audit_events_issue25_fault') IS NULL" > docs/evidence/issue-25-query-restoration.txt
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'cp /evidence/query-fault-ready.json /evidence/issue-25-query-precondition.json && rm -f /evidence/query-fault-ready.json /evidence/query-fault-active /evidence/query-fault-done'
 docker compose --env-file .env.worktree -p audit25-closure -f compose.yaml -f compose.e2e.yaml -f compose.issue25-evidence.yaml --profile checks --profile e2e down
 ```
 
 The controller exits nonzero for a failed browser capture or a timeout, but still
-checks and restores the table after the rename; the readback prints `(True, True)`
+checks and restores the table after the rename; the saved SQL readback is `t|t`
 only when the original table exists and the temporary fault name is absent.
 
 ## Technical acceptance
-Historical local technical acceptance covered the five requested corrections on
-source candidate `e1847a66554285c4e0400728fdc5c2bc46515ea8`, based on independent
-Docker verification, HTTP/SQL invariants and inspected real browser captures.
-CA1 is accepted only for bounded filtering and truthful truncation; #470 remains
-deferred. This is local technical acceptance, not independent human acceptance,
-hosted CI, merge permission, issue closure or delivery of stable pagination.
-Fresh Codex findings on PR498–502 qualify this historical acceptance. The next
-corrected candidate requires new behavioral checks, populated correlation evidence
-and capture-failure restoration verification before renewed explicit acceptance.
-Rollback: revert the bounded follow-up commits; immutable contract releases untouched.
-Sanitized: yes. Only synthetic metadata and actual browser captures may be published.
+I explicitly accept the five requested closure corrections on exact joint source
+`a59256c73413e249f763c29f87404abdc1c0f07d`, based on independent complete Docker
+checks, actual populated HTTP/SQL correlation, terminal persistence/release-gate
+invariants and inspected real browser captures. This supersedes provisional e1847
+technical acceptance for the current delivery candidate, not its historic facts.
+CA1 acceptance covers bounded filtering and truthful truncation; stable pagination
+remains explicitly deferred to #470, not delivered. This is local technical
+acceptance, not independent human acceptance, hosted CI or a merge approval.
+Fresh GitHub Codex review and ordinary human freshness acceptance remain pending.
+The user approved a size exception only for final atomic integration; each fresh
+correction PR remains below400 changed lines. No protection or review bypass.
+Rollback: revert the bounded runtime/UI changes; immutable releases untouched.
+Sanitized: yes. Captures contain synthetic metadata, no raw producer content or keys.

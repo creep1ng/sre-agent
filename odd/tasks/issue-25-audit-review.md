@@ -308,3 +308,19 @@ readonly-markerfailure +done-timeout +browser-failedmarker allnonzeroandrestored
 realconnectedbrowser success503/0stalerows/0details andverifiedrestoration.
 ControllerarmscleanupbeforeDDL, validatesrestricteddb, noDockersocket/newservice.
 Docker-only recipe updated; finalRuffpassed. Parentfreshunioncapture stillpending.
+
+T25 exactsourcea59256c73413e249f763c29f87404abdc1c0f07d includes maina354.
+Unpublishedlintrepair restack heads:5e84484/c22edda/5f38d1b/93df181; no remoterewrite.
+Parentfreshbrowser12passed39.7s; HTTPhelpermanifest/API/hostmatcha8c0d106,
+servedUI0ccffe45 matches fourbrowserJSONs. Actualallow has3nonnullHMACrefs.
+Freshconnectedfault200→503/1priorrow+detail→0/0/error, rawpreconditionarchived,
+SQLrestorationt|t. Sanitizedtextscanspassed; full1591collectedsuite stillrunning.
+
+T25 parentexactsourcea592 fullDocker1590passed1liveOpenRouterSkipped461.53s;
+Ruff/format/lock/importboundaries/mypy/Alembiccheck allpassed. Fresh terminal
+SQL capture nowregenerating afterfullsuite; no otherchecksDB writers.
+
+T25 freshterminal9passed8.34s +11actualJSONLrecords; appendfault0rows; typed
+probes0/2 rejected; all7normalreadterminals1row. Parentinspectedall7PNGs and
+textsecret/private-marker scanspassed. Exacta592 localtechnicalacceptance renewed;
+GitHubexactheadreview, hostedCI andindependenthumanfreshness acceptance pending.
