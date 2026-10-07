@@ -100,7 +100,10 @@ async def seed() -> None:
     }
     KEY_FILE.write_text("".join(f"{name}={value}\n" for name, value in values.items()))
     KEY_FILE.chmod(0o600)
-    print("Seeded six synthetic principals, one active link target, and a pre-provenance legacy decision.")
+    print(
+        "Seeded six synthetic principals, one active link target, "
+        "and a pre-provenance legacy decision."
+    )
 
 
 if __name__ == "__main__":
