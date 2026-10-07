@@ -1,0 +1,20 @@
+# Isolated production replay: keep ports private and pass provisioning inputs only
+# inside containers. Requires Docker Compose 2.24.4+ for !reset.
+services:
+  db:
+    ports: !reset []
+  api:
+    environment:
+      ADMIN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      AUDIT_KEY_HEX: ${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}
+    ports: !reset []
+  python-checks:
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ADMIN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      AUDIT_KEY_HEX: ${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}
+  web:
+    ports: !reset []
+  e2e:
+    environment:
+      SOURCE_SHA: ${SRE_AGENT_BUILD_REVISION:?SRE_AGENT_BUILD_REVISION is required}
