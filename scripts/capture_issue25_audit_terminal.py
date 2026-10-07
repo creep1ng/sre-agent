@@ -17,6 +17,13 @@ ADMIN_KEY = "sre_admn_0123456789abcdefghijklmnop"
 RESTRICTED_KEY = "sre_rest_0123456789abcdefghijklmnop"
 
 
+class AuditRowCountMismatch(AssertionError):
+    def __init__(self, expected: int, actual: int) -> None:
+        super().__init__(f"expected {expected} new audit rows, got {actual}")
+        self.expected = expected
+        self.actual = actual
+
+
 def projection_snapshot() -> set[str]:
     with psycopg.connect(DATABASE_URL) as connection:
         rows = connection.execute(
@@ -42,19 +49,35 @@ def report(
     persisted: bool = True,
 ) -> dict:
     body = response.json()
-    request_id = body.get("request_id")
-    rows = new_projections(previous_ids)
     if response.status_code != expected_status:
         raise AssertionError(
             f"{label}: expected HTTP {expected_status}, got {response.status_code}"
         )
-    if persisted and len(rows) != 1:
-        raise AssertionError(f"{label}: expected exactly one new audit row, got {len(rows)}")
+    if not isinstance(body, dict):
+        raise AssertionError(f"{label}: expected a JSON object response")
+    request_id = body.get("request_id")
+    if response.status_code == 200:
+        list_response = (
+            set(body) == {"items", "limit", "truncated"}
+            and isinstance(body["items"], list)
+            and isinstance(body["limit"], int)
+            and isinstance(body["truncated"], bool)
+        )
+        detail_response = (
+            isinstance(body.get("event_id"), str)
+            and isinstance(body.get("correlation"), dict)
+            and isinstance(body["correlation"].get("request_id"), str)
+        )
+        if not (list_response or detail_response):
+            raise AssertionError(f"{label}: malformed successful response envelope")
+        if request_id is not None and (not isinstance(request_id, str) or not request_id.strip()):
+            raise AssertionError(f"{label}: response request ID is malformed")
+    elif not isinstance(request_id, str) or not request_id.strip():
+        raise AssertionError(f"{label}: error response did not expose a request ID")
+    rows = new_projections(previous_ids)
     if not persisted:
         if rows:
-            raise AssertionError(f"{label}: expected no new audit row, got {len(rows)}")
-        if not request_id:
-            raise AssertionError(f"{label}: failed response did not expose its request ID")
+            raise AuditRowCountMismatch(0, len(rows))
         with psycopg.connect(DATABASE_URL) as connection:
             count = connection.execute(
                 "SELECT count(*) FROM audit_events WHERE operation='audit.project' "
@@ -63,17 +86,23 @@ def report(
             ).fetchone()[0]
         if count != 0:
             raise AssertionError(f"{label}: request ID unexpectedly exists in audit SQL")
-    row = rows[0] if rows else None
-    if row:
+    for row in rows:
         row_request_id = row["correlation"]["request_id"]
         if request_id and row_request_id != request_id:
             raise AssertionError(f"{label}: response and audit request IDs differ")
+        if request_id is None:
+            request_id = row_request_id
+        elif row_request_id != request_id:
+            raise AssertionError(f"{label}: audit rows have inconsistent request IDs")
         if row["response_status"] != expected_status:
             raise AssertionError(f"{label}: persisted status differs from expected status")
         if row["operation"] != "audit.project" or row["action"] != "read_metadata":
             raise AssertionError(f"{label}: unexpected audit operation/action")
         if row["content_state"] != "absent" or row.get("redacted_content") is not None:
             raise AssertionError(f"{label}: audit row contains unexpected content")
+    if persisted and len(rows) != 1:
+        raise AuditRowCountMismatch(1, len(rows))
+    row = rows[0] if rows else None
     result = {
         "case": label,
         "http_status": response.status_code,
@@ -99,6 +128,36 @@ def report(
         result["error_code"] = body["error"]["code"]
     print(json.dumps(result, sort_keys=True))
     return result
+
+
+def expect_mutation_probe_rejection(
+    label: str,
+    response,
+    previous_ids: set[str],
+    *,
+    expected_status: int,
+    expected_rows: int,
+) -> None:
+    try:
+        report(label, response, previous_ids, expected_status=expected_status)
+    except AuditRowCountMismatch as error:
+        if error.expected != 1 or error.actual != expected_rows:
+            raise AssertionError(
+                f"{label}: expected the exact 1-to-{expected_rows} row-count rejection"
+            ) from error
+        print(
+            json.dumps(
+                {
+                    "case": f"probe_rejects_{label}",
+                    "actual": True,
+                    "expected_rows": error.expected,
+                    "observed_rows": error.actual,
+                },
+                sort_keys=True,
+            )
+        )
+    else:
+        raise AssertionError(f"{label}: audit invariant probe accepted the mutation")
 
 
 def main() -> None:
@@ -209,20 +268,13 @@ def main() -> None:
             f"/v1/audit-events/{source_event['event_id']}",
             headers={"Authorization": f"Bearer {ADMIN_KEY}"},
         )
-    try:
-        report("controlled_noop_mutation", response, before, expected_status=200)
-    except AssertionError as error:
-        print(
-            json.dumps(
-                {
-                    "case": "probe_rejects_noop_mutation",
-                    "actual": True,
-                    "reason": str(error),
-                }
-            )
-        )
-    else:
-        raise AssertionError("audit invariant probe accepted an append-suppression mutation")
+    expect_mutation_probe_rejection(
+        "controlled_noop_mutation",
+        response,
+        before,
+        expected_status=200,
+        expected_rows=0,
+    )
 
     class DoubleAppendAudit:
         sessions = None
@@ -249,20 +301,13 @@ def main() -> None:
             f"/v1/audit-events/{source_event['event_id']}",
             headers={"Authorization": f"Bearer {ADMIN_KEY}"},
         )
-    try:
-        report("controlled_double_append_mutation", response, before, expected_status=200)
-    except AssertionError as error:
-        print(
-            json.dumps(
-                {
-                    "case": "probe_rejects_double_append_mutation",
-                    "actual": True,
-                    "reason": str(error),
-                }
-            )
-        )
-    else:
-        raise AssertionError("audit invariant probe accepted a double-append mutation")
+    expect_mutation_probe_rejection(
+        "controlled_double_append_mutation",
+        response,
+        before,
+        expected_status=200,
+        expected_rows=2,
+    )
 
 
 if __name__ == "__main__":

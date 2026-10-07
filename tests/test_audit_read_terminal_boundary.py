@@ -1,8 +1,13 @@
 """Real PostgreSQL HTTP proofs for the governed audit-read terminal boundary."""
 
 import asyncio
+import hashlib
+import hmac
+import importlib.util
 import os
 from collections.abc import Iterator
+from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import psycopg
@@ -37,6 +42,20 @@ SEED_ENV = {
     "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 UUID_MISSING = "00000000-0000-4000-8000-000000000000"
+
+
+def _expected_audit_digest(domain: str, value: str) -> str:
+    payload = f"sre-audit-v1\0{domain}\0{value}".encode()
+    return hmac.new(AUDIT_KEY.encode(), payload, hashlib.sha256).hexdigest()
+
+
+def _terminal_capture_module() -> ModuleType:
+    script = Path(__file__).parents[1] / "scripts" / "capture_issue25_audit_terminal.py"
+    spec = importlib.util.spec_from_file_location("issue25_terminal_capture", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -103,8 +122,49 @@ def _assert_terminal_row(response, status: int) -> dict[str, Any]:
     assert row["correlation"]["request_id"] == request_id
     assert row["content_state"] == "absent"
     assert row.get("redacted_content") is None
-    assert row["identity"] is None if status in {401, 422} else True
-    assert row["resource"] is None if status in {401, 422} else True
+    if status in {401, 422}:
+        assert row["identity"] is None
+        assert row["resource"] is None
+    else:
+        expected_identity = {
+            403: (
+                "restricted-harness",
+                "agent",
+                "credential-restricted-harness",
+            ),
+            404: (
+                "admin-human",
+                "human",
+                "credential-admin-human",
+            ),
+            503: (
+                "admin-human",
+                "human",
+                "credential-admin-human",
+            ),
+        }[status]
+        identity = row["identity"]
+        assert isinstance(identity, dict)
+        assert identity["principal_kind"] == expected_identity[1]
+        assert identity["principal_status"] == "active"
+        assert identity["authenticated_at"]
+        for key, domain, identifier in (
+            ("principal_ref", "principal", expected_identity[0]),
+            ("credential_ref", "credential", expected_identity[2]),
+        ):
+            reference = identity[key]
+            assert reference["algorithm"] == "hmac-sha-256"
+            assert reference["key_version"] == 1
+            assert reference["digest"] == _expected_audit_digest(domain, identifier)
+        resource = row["resource"]
+        assert isinstance(resource, dict)
+        assert resource["resource_type"] == "administrative_control"
+        reference = resource["resource_ref"]
+        assert reference["algorithm"] == "hmac-sha-256"
+        assert reference["key_version"] == 1
+        assert reference["digest"] == _expected_audit_digest(
+            "resource", "administrative_control/audit"
+        )
     return row
 
 
@@ -308,3 +368,88 @@ def test_failed_audit_append_suppresses_a_denied_read_response() -> None:
     assert response.json()["error"]["code"] == "audit_unavailable"
     assert response.json()["retryable"] is True
     assert len(_projection_rows()) == before
+
+
+@pytest.mark.parametrize("actual_rows", [0, 2])
+def test_terminal_capture_mutation_probe_classifies_only_row_count_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    actual_rows: int,
+) -> None:
+    capture = _terminal_capture_module()
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, str]:
+            return {"items": [], "limit": 50, "truncated": False}
+
+    rows = [
+        {
+            "event_id": f"event-{index}",
+            "correlation": {"request_id": "request-1"},
+            "response_status": 200,
+            "operation": "audit.project",
+            "action": "read_metadata",
+            "content_state": "absent",
+            "redacted_content": None,
+        }
+        for index in range(actual_rows)
+    ]
+    monkeypatch.setattr(capture, "new_projections", lambda _previous: rows)
+
+    capture.expect_mutation_probe_rejection(
+        "controlled_mutation",
+        Response(),
+        set(),
+        expected_status=200,
+        expected_rows=actual_rows,
+    )
+
+
+def test_terminal_capture_mutation_probe_does_not_mask_wrong_http_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capture = _terminal_capture_module()
+
+    class Response:
+        status_code = 503
+
+        @staticmethod
+        def json() -> dict[str, str]:
+            return {"items": [], "limit": 50, "truncated": False}
+
+    monkeypatch.setattr(capture, "new_projections", lambda _previous: [])
+
+    with pytest.raises(AssertionError, match="expected HTTP 200, got 503"):
+        capture.expect_mutation_probe_rejection(
+            "wrong_status",
+            Response(),
+            set(),
+            expected_status=200,
+            expected_rows=0,
+        )
+
+
+def test_terminal_capture_mutation_probe_does_not_mask_malformed_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capture = _terminal_capture_module()
+
+    class Response:
+        status_code = 200
+
+        @staticmethod
+        def json() -> dict[str, str]:
+            return {"items": [], "limit": 50, "truncated": False}
+
+    monkeypatch.setattr(capture, "new_projections", lambda _previous: [{"event_id": "bad"}])
+
+    with pytest.raises(KeyError, match="correlation"):
+        capture.expect_mutation_probe_rejection(
+            "malformed_row",
+            Response(),
+            set(),
+            expected_status=200,
+            expected_rows=2,
+        )
