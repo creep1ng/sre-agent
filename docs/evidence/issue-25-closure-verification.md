@@ -1,13 +1,11 @@
 # Issue 25 integrated closure-gap verification
 
 ## Candidate and scope
-The tested joint candidate is `13fc4ba1854ee75923a02da94311995e5d569c0e`.
-Runtime/helper/UI source is`e0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3`; the tested descendant changes only
-the existing usage-publication expectations. Runtime files are byte-identical,
-and captures truthfully retain deployed build revisione0fa793. This includes current main
-`31b4d2f8ba3dc292ea9bce59c069ffa21ebfc02f` (identity and incident mitigation UI).
+The tested joint candidate is `5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288`.
+Runtime/helper/UI source is the same exact tested commit `5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288`; captures truthfully declare that deployed build revision. This includes main
+`4e3eb2b52e6979991c7f6d3f8a8b0bb8beb0b557` (identity, incident mitigation and review-command refresh lock).
 This includes PR378 → PR379 → PR385 → PR386 → PR490 → PR491 → PR497–502,
-PR514–517 and bounded post-review corrections (125/400/10/27/12/251 lines).
+PR514–517 and bounded post-review corrections (125/400/10/27/12/251/41/52 lines).
 Immutable contract2.7.0 and all earlier releases are preserved. The default runtime
 and safe example configuration activate2.7.0. Audit success payloads explicitly
 advertise a runtime-local projection schema, not the narrower frozen2.7 metadata URN.
@@ -17,7 +15,7 @@ Evidence/tracking-only carriers are not independently tested joint source trees.
 Use the deterministic Git setup below before Docker builds, including when starting
 from a stacked evidence PR whose base does not contain the current-main union.
 Runtime source manifest SHA-256:
-`b06fe806a4fec61d1ebca70f47e23220142091d05679704ba3cdb3d14e8d7fca`.
+`f8014b2e9529563a2e824528c96bd61eb0d511d34a757af298b12265a47f2bbb`.
 The manifest hashes sorted paths relative to `src/`, NUL, file hash and newline;
 the host, current mounted HTTP helper source and rebuilt running API matched.
 HTTP helper SHA-256: `ae55d8a4d6fa802ff3793697e567b7d2a4766e98595fce25d617bf44b60069b6`.
@@ -30,7 +28,7 @@ actual SQL and HTTP; raw controlled incident/run/task IDs are not emitted.
 Full checks used the previously verified25b48 dependency image with current
 `src/`, `tests/`, `public/`, `docs/` and `.env.example` mounted read-only;
 Ruff cache used writable`/tmp`. Runtime/API/web were rebuilt from runtime source
-`e0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3`, byte-identical to the tested descendant.
+`5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288`, identical to the tested source.
 The HTTP/terminal helper processes also mounted current`src/` read-only. No image
 label or environment revision alone is treated as proof of executable source.
 The Docker reproduction below rebuilds the exact tested tree instead of reusing
@@ -71,14 +69,14 @@ database or query-only append-success proof; the HTTP boundary suite covers that
 ## Verification
 - Fresh-review UI failure-first: retained banner remained after a later successful
   detail; corrected scenario passes for both404 and503. Parent complete browser
-  suite on the integrated API/UI:12 passed in22.0s.
+  suite on the integrated API/UI:14 passed in18.3s.
 - Prior all-null correlation assertion failed; refreshed helper requires populated
   incident/run/task HMAC refs and passed actual producer/SQL checks. Producer
   statuses200/403/401/422/503 persist one row; append-failure503 persists zero.
-- Fresh full Python and prechecks: 1610 passed,1 skipped in286.94s;
+- Fresh full Python and prechecks: 1613 passed,1 skipped in315.38s;
   Ruff/format/lock/import boundaries/mypy and Alembic check passed. The skip is
   the opt-in live OpenRouter case..
-- Fresh terminal boundary and SQL capture: 13 passed in9.42s; actual helper
+- Fresh terminal boundary and SQL capture: 13 passed in10.29s; actual helper
   emitted11 JSONL records on the integrated image and isolated PostgreSQL..
   Typed mutation probes accept only exact1→0/1→2 row-count failures after valid
   HTTP envelopes and all SQL rows are checked; wrong statuses/malformed rows
@@ -95,7 +93,7 @@ database or query-only append-success proof; the HTTP boundary suite covers that
 - Earlier a592 precheck stopped at RuffUP012 in the helper; mechanical encoding
   correction was made before restarting. No failed run is presented as a pass.
 - Previous e1847 Python1567/1skip and browser11 results are historical only.
-  Canonical UUID validation now rejects noncanonical forms outside the valid legacy language.
+  Canonical detail UUID validation rejects noncanonical forms outside the valid legacy language. The request UUID filter now rejects compact, braced and URN spellings before parsing, with one validation terminal row; canonical uppercase and authentication/grant ordering remain covered.
 - Exact-credential/private-marker artifact scans passed; real screenshots are
   manually inspected. Hosted CI, human acceptance and merge remain separate gates;
   no live-provider, killed-DB or offline demonstration is inferred.
@@ -107,7 +105,7 @@ Real persisted out-of-snapshot operations failed3/13 before the local projection
 schema. Parent scoped16GREEN12.75s includes runtime HTTP/OpenAPI/default metadata.
 The actual current API's complete list envelope and detail validate against the
 advertised local schemas; raw`issue-25-runtime-openapi.json` is unmodified HTTP output.
-Initial full runtimee0 run had1609pass/1skip/1fail399.66s: usage publication
+Historical full runtimee0 run had1609pass/1skip/1fail399.66s: usage publication
 pinned2.6. The existing scenario's version/URN expectations were adapted to2.7
 without weakening selector/security/schema/inventory assertions (2GREEN5.77s),
 then the exact descendant full suite passed. No failed run is a fullGREEN.
@@ -131,19 +129,19 @@ floating main is substituted. From the repository, fetch and select it explicitl
 
 ```console
 git fetch https://github.com/creep1ng/sre-agent.git codex/issue-25-final-integration
-git worktree add --detach /tmp/issue25-proof-13fc4ba 13fc4ba1854ee75923a02da94311995e5d569c0e
-cd /tmp/issue25-proof-13fc4ba
+git worktree add --detach /tmp/issue25-proof-5ac4eae 5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288
+cd /tmp/issue25-proof-5ac4eae
 git rev-parse HEAD
 ```
 
-Require exactly`13fc4ba1854ee75923a02da94311995e5d569c0e` before preparing ignored configuration.
+Require exactly`5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288` before preparing ignored configuration.
 Do not copy an environment file containing someone else's credentials.
 
 Git/Docker host; Python3.12.14, PostgreSQL17.4 pinned digest and Playwright1.63.0
 images/lockfiles from the tested source. Prepare ignored mode600 `.env.worktree`
 from `.env.example`: DB `audit25_closure`, user `sre_agent`, URL host `db`, fresh
 synthetic keys/HMAC, `lab/model` + `lab`, no external keys, contract2.7.0,
-build revisione0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3 (the deployed runtime source, byte-identical to the tested descendant). Never print/source/upload this file.
+build revision5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288 (the exact tested and deployed source). Never print/source/upload this file.
 Use a fresh Compose project; choose an unused `ISSUE25_EVIDENCE_SUBNET` when needed.
 Existing services only; combine the no-host-port overlay with the small IPAM overlay.
 The terminal helper resets only disposable `python_checks`, never the evidence DB.
@@ -174,7 +172,7 @@ with open('/evidence/issue-25-audit-http.json') as f:
 request_id=next(case['request_id'] for case in evidence['cases'] if case['name']=='allow')
 with httpx.Client(base_url='http://api:8000', headers={'Authorization':'Bearer '+os.environ['ADMIN_HUMAN_API_KEY']}) as client:
     document=client.get('/openapi.json').json()
-    assert document['info']['x-sre-agent-build-revision']=='e0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3'
+    assert document['info']['x-sre-agent-build-revision']=='5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288'
     assert document['info']['x-sre-agent-contract-version']=='2.7.0'
     listing=document['paths']['/v1/audit-events']['get']
     detail=document['paths']['/v1/audit-events/{id}']['get']
@@ -192,7 +190,7 @@ with httpx.Client(base_url='http://api:8000', headers={'Authorization':'Bearer '
     assert response.status_code==200
     Draft202012Validator(detail_schema,format_checker=FormatChecker()).validate(response.json())
     assert response.json()==payload['items'][0]
-print('Actual current API: contract2.7/sourcee0fa793, unique path, 34-operation local schema; complete list and detail validate.')
+print('Actual current API: contract2.7/source5ac4eae, unique path, 34-operation local schema; complete list and detail validate.')
 PY
 ```
 
@@ -201,7 +199,7 @@ PY
 existing mock journey: detailA404/503 survives list refresh, then detailB200 clears
 the retained banner. It is not a connected API claim. The container derives only
 screenshot/output settings from the committed production config; traces remain off
-and the test/source files are unchanged. The focused journey passed in7.0s.
+and the test/source files are unchanged. The focused journey passed in3.1s.
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'node --input-type=module -e '\''import config from "./playwright.production.config.js"; import {writeFileSync} from "node:fs"; config.use.screenshot="on"; config.outputDir="/tmp/detail-recovery"; config.testDir="/e2e/tests/browser"; writeFileSync("/tmp/issue25-evidence.config.mjs", "export default "+JSON.stringify(config));'\'' && npx playwright test --config=/tmp/issue25-evidence.config.mjs -g "clears a retained detail error when a later detail request succeeds" && find /tmp/detail-recovery -name test-finished-1.png -exec cp {} /evidence/issue-25-detail-recovery.png \;'
@@ -233,11 +231,38 @@ The controller exits nonzero for a failed browser capture or a timeout, but stil
 checks and restores the table after the rename; the saved SQL readback is `t|t`
 only when the original table exists and the temporary fault name is absent.
 
+## Latest request-filter and navigation review
+PR518 exact7fc findings4209292491/4209292475 were reproduced before correction.
+Authorized compact/braced/URN request filters returned200 before the syntax check
+(3 failed,26 passed); scoped corrected HTTP/OpenAPI/terminal suite passed29 in17.78s.
+Canonical uppercase UUIDs still match; authentication401 and authorization403
+still precede query validation. Each invalid authorized filter persists exactly
+one validation terminal row; no automatic FastAPI validation bypass was introduced.
+Navigation failed first at the disabled Consumption Audit entry (1 failed,12 passed),
+then at the disabled Model aliases combined entry (1 failed). Existing same-origin
+Model aliases → Consumption → Audit events links now work. Browser journeys verify
+fresh empty credentials and no marker in URLs/local/session storage; no new layout
+or credential persistence. The fresh parent rebuilt-source run passed14 in18.3s.
+An earlier parent run had13pass/1fail19.5s solely because its screenshot output mount
+was not writable (EACCES); the same source rerun used a writable temporary capture
+mount, and the resulting actual screenshot was copied locally. No failed run counts
+as a pass. Full-check start manifest and committed source/test/public bytes matched;
+ancestry-only carrier32ab657 introduces no runtime/test/config changes.
+
+`issue-25-audit-navigation.png` is the actual idle page reached through the complete
+navigation journey, not a generated capture. The screenshot alone does not prove
+links or absence of credential persistence; the behavioral journey does.
+Reproduce the screenshot with host UID, writable container output and traces off:
+
+```sh
+docker run --rm --user "$(id -u):$(id -g)" --network audit25-closure_runtime --env-file .env.worktree -e AUDIT_NAV_SCREENSHOT=/evidence/issue-25-audit-navigation.png -v "$PWD/docs/evidence:/evidence" audit25-closure-e2e sh -c 'node --input-type=module -e '\''import config from "./playwright.production.config.js"; import {writeFileSync} from "node:fs"; config.outputDir="/tmp/audit-navigation"; config.testDir="/e2e/tests/browser"; writeFileSync("/tmp/issue25-navigation.config.mjs", "export default "+JSON.stringify(config));'\'' && npx playwright test --config=/tmp/issue25-navigation.config.mjs -g "discovers Audit events through the existing control-plane navigation"'
+```
+
 ## Technical acceptance
 I explicitly accept the five requested closure corrections on exact joint source
-`13fc4ba1854ee75923a02da94311995e5d569c0e`, based on the complete Docker checks, actual HTTP/SQL persistence,
+`5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288`, including the later canonical request-filter and product-navigation fixes, based on the complete Docker checks, actual HTTP/SQL persistence,
 source-matched inspected captures and native runtime OpenAPI/schema verification.
-Earlier791/e1847/a592 acceptance is qualified by the subsequently corrected findings;
+Earlier13fc/791/e1847/a592 acceptance is qualified by the subsequently corrected findings;
 its historical checks are not inflated into current proof. The runtime-local schema
 is an explicit implementation extension, not a claim that the frozen2.7 operation
 enum covers every persisted event. No operations are hidden or rewritten.

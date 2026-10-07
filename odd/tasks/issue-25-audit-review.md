@@ -404,7 +404,7 @@ Next: freshtargetedcaptures/report/newfinalheadmetadata/review, humanfreshnessga
 Parent actualGET `/openapi.json` found duplicate detail id/path parameters:
 nativeFastAPIstr plus manuallyappendedoneOf. Existingparitytest silentlycollapsed
 them into a dictionary, so scoped/fullGREEN is insufficient for validOpenAPI.
-- [ ] T30 Preassert parameter uniqueness in existing parity scenario, observeRED,
+- [x] T30 Preassert parameter uniqueness in existing parity scenario, observeRED,
   fix via native documentation-only Path schema (no servicevalidation bypass),
   verify same canonical schema plus HTTPterminal behavior, publish separatebounded
   unit because PR520already400. Localtechnicalacceptance791/6ed provisional again.
@@ -415,17 +415,17 @@ f80c78f9. Full1608passed1skip379.38s +prechecks/Alembic; browser12passed28.3s;
 terminal13passed9.25s +11actualSQLrecords. All8freshPNG manually inspected;
 connectedfault200→503 clearsprior1/1to0/0, boundedcontrollerrestored SQLt|t.
 Standalone27line5a30533 unpublished; currentCDFtechnicalacceptance stillqualified.
-- [ ] T31 Correct PR520 P1 comment4208495712: parity environment override masks
+- [x] T31 Correct PR520 P1 comment4208495712: parity environment override masks
   defaultcontract2.6 vs emitted2.7metadata. Removeoverride and assertdefaultactive
   matchespublished2.7 beforefix; activatepublished2.7default, adaptexistingrelease
   expectations/example configuration, preserveimmutableversions/overridecompatibility.
   FailurefirstDockerpytest; boundedfollowup, freshcandidate verification.
-- [ ] T32 Correct PR522 P2 comment4208493370: evidencecarrier lacks mainunion.
+- [x] T32 Correct PR522 P2 comment4208493370: evidencecarrier lacks mainunion.
   DeterministichostGitsetup must explicitly check out immutabletestedjointSHA
   beforeDockerbuild (isolatedworktree), sourcehashverified; do notclaimcarrier's
   ownhead executed. Refreshactualfinaljointproof then exactheadreview/CI/human.
 
-- [ ] T33 Investigate PR518 P2 comment4208468108: released2.7 metadata operation
+- [x] T33 Investigate PR518 P2 comment4208468108: released2.7 metadata operation
   enum excludes existing persisted mounted operations. Preserveimmutable snapshots
   and all visible events; choose honest runtime-local representation or approved
   newrelease after scoped read-only exploration. No implementationacceptanceyet.
@@ -454,7 +454,7 @@ setup, boundedpublication/evidence522restack, exactfinal518review/CI/human.
 Fresh e0 fullsuite RED:1609passed1skipped1failed399.66s. Existing usage-publication
 scenario pins activeCONTRACT_VERSION2.6 evenafter deliberate2.7activation;
 its later canonicalusageURN expectation also pins2.6 despite selectedsnapshot2.7.
-- [ ] T34 Adapt only existing usage publication expectations to active published
+- [x] T34 Adapt only existing usage publication expectations to active published
   2.7; preserve selector/security/status/closedschema/inventorychecks. Mechanical
   onefilefixturecorrection after observedfullRED, no newpost-codeunit scenarios.
   Verifyexistingmodule then actualjointfullsuite. Runtime/helpers/UIbytesunchanged
@@ -469,3 +469,45 @@ withoutanysrc/test/public/script/configtreechange (explicitgitdiffexit0).
 Unpublishedcohesiveunits: nativepath27lines5a30533→defaultrelease12lines5f48f791
 →runtimeprojection251lines7bcf29fd. Allparentunitheads nowancestors of finalcarrier.
 Sourcebranchmergedoesnot itselfconferreview/humanacceptance. Freshfullstillpending.
+
+PublishednewsourcePR542nativepath27→543defaultactivation12→544runtimeprojection251;
+PR522append-onlyrestackedto544/evidence344, final518head7fc7921889862d6c4db01f3f99dca7c233b45f8a,
+actualGitHubbase31b. Allreadbackheads/sizescorrect. Finalsource/test/public/script/config
+identical13fc (gitdiffexit0). Parenttaskmergekeptnewverifiedcheckboxes/progressover
+staleuncheckedcarrierhistory; no source/evidenceconflicts. Currentfull1610/1skip286.94s,
+browser12/22s, terminal13/9.42s+11actualSQLrecords. ActualAPI/HTTPhelper/hostmanifestb06
+andrawnativeOpenAPIdeclares e0 truthful; completeAPIlist/detailvalidate34-operationlocal
+schema. All8freshPNGinspected andcurrentprivatevalue/markertextscanspass.
+Nativeappattachcalls542/543/544 timedout (allattempted, no confirmedreceipt); GitHub
+creation/readbackverified. Nativeartifactavailabilitydoesnot authorizeorblockmerge.
+FreshCodexonexact7fc publishedtwoactualP2findings; localtechnicalacceptancequalifiedagain:
+- [x] T35 Reject noncanonical request UUID filter spellings before UUID conversion
+  (518comment4209292491): preauthor compact/braced/URN authorized422 +onevalidation
+  terminal, preservecanonicalforms andauth/grantordering; observeREDthenGREEN.
+- [x] T36 Expose audit UI in existing control-plane navigation (518comment4209292475):
+  narrowread-onlynavexploration, browserjourneytestbeforeHTML/sourceedit, observed
+  missinglinkREDthen actualnavigationGREEN; real repeatablescreenshot, safeURLs.
+T25/T7/T8 remainpending; no mergeorhumanreceipttransfer. T30/T31/T32/T33/T34 source,
+reproductionandboundedpublication outcomes nowobserved, finalacceptancestillgated.
+
+T35 worker failure-first RED3malformed forms200/26passed; focused GREEN29passed17.78s,
+Ruff/formatpass. Parent reviewed twofile41addition fix and committedf85157112fdd9c50204d72f6f615d90a0336f3e5.
+No freshintegratedproof/publication claimed. T36 upstreammodel-aliases nav also
+disabled; extend existing Model aliases→Consumption→Audit journey failurefirst
+before upstreamHTMLedit. PR518qualification6042346787 published, actualremote
+body staticvalidatorGREEN[] exit0 afteroptionalheredoc removal (reportkeepsrecipe).
+
+T35/T36 actualjoint5ac4eaeb08aa3c3a17a3ad8db03e9cc3e771f288 includescurrentmain4e3:
+full1613passed1opt-inliveOpenRouterskip315.38s/prechecks/Alembicexit0. Fullrunstarted
+assembledtree; startmanifest src/tests/publicbytesmatchedcommittedtree; ancestry32ab
+changesnosource/tests/public/scripts/config. Runtime/API rebuiltexact5ac; independent
+host/API/helpermanifestf8014b2e9529563a2e824528c96bd61eb0d511d34a757af298b12265a47f2bbb.
+Freshbrowser14passed18.3s; firstparent13pass1fail19.5s EACCESscreenshotmount
+disclosed, sourceunchangedrerunuseswritabletemporarycapturefolder. Terminal13passed
+10.29s+11actualSQLJSONL; wholelist/detailnativeAPIvalidationPASS. Actualallowdeny
+200403200,3nonnullHMACrefs; connectedfault200503clears1row/detailto0/0 and
+controllerrestorationverifiedt|t. Mockdetailrecovery1passed3.1s. All9currentPNGs
+manuallyinspected; privateconfig/credentialmarkerscanspass. Preparedboundedsource
+511fc41→e23ece52, newevidence936fc190over522 (includesrequiredsourceancestry,
+no unrelatedmainfiles); unpublished. Reportlocaltechnicalacceptance5ac renewed,
+NOT freshhumanreceipt/GitHubCodex/CIapproval; T25/T7/T8 stillpending.
