@@ -1,6 +1,6 @@
 # Issue 419 — authenticated identity evidence
 
-> **Historical media.** `replay.json` and `review-receipt.png` describe a former combined candidate and are preserved for provenance; they are not current packaged UI evidence. The refreshed `current-*` artifacts below are bound to the local #489 candidate source SHA `aac524061716635339a91e2f84d8ebf00ce58249`. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof. No hosted CI, human review, PR integration, or issue closure is claimed.
+> **Evidence boundaries.** `replay.json` and `review-receipt.png` describe a former combined candidate and are preserved for provenance. The `current-*` artifacts below are bound to source SHA `aac524061716635339a91e2f84d8ebf00ce58249`. The focused browser journeys belong to #416's frontend candidate and use a mock HTTP seam; they are not backend or packaged-stack proof. The committed [replay guide](replay/README.md) includes separate helper-candidate results and is not, by itself, proof that the final #489 source was served. No hosted CI, human review, PR integration, or issue closure is claimed for #489.
 
 ## Final local #489 candidate (2026-10-07)
 
@@ -25,31 +25,11 @@ The parent reports a fresh #416 review at `161258165a0cd29e2243efae85cf8fb1fe713
 - The packaged UI submitted `approve_mitigation` with `actor_reference` `demo-human`; the API returned 202. SQL readback shows exactly one persisted decision for that run, attributed to `demo-human`. A separate command claiming `admin-human` under the demo credential received 403 `actor_attribution_mismatch`; its run has **zero** persisted decisions.
 - Existing `tests/test_authentication.py::test_all_authentication_failures_are_uniform_and_stop_before_resources_or_upstream` covers missing, malformed, unknown, revoked, expired, and inactive-principal credentials. It asserts the same generic 401 response, no credential leakage, and no resource/upstream access. The focused suite above passed this check. The actual packaged replay independently confirmed the invalid-credential case.
 
-The sanitized actual outputs are [the replay response](current-replay.json), [the SQL readback](current-sql.txt), and [the browser screenshot](current-review-receipt.png). The screenshot was captured from the real packaged UI after the credential field was cleared; SHA-256 `ba880b2769b53b714041d28f2d3126566f33c68274e5d09fd66a1734e73f5498`. The one-off replay script/config and exact captured inputs remain in local scratch directory `work/issue-419-final-evidence/`; they are not production source or committed test harness.
+The sanitized actual outputs are [the replay response](current-replay.json), [the SQL readback](current-sql.txt), and [the browser screenshot](current-review-receipt.png). The screenshot was captured from the real packaged UI after the credential field was cleared; SHA-256 `ba880b2769b53b714041d28f2d3126566f33c68274e5d09fd66a1734e73f5498`. Reproduction uses the committed helper and safe Compose procedure in [replay/README.md](replay/README.md); it generates synthetic configuration with restrictive permissions and passes it only to Compose, never sourcing it on the host. The helper's separately captured `31bef8d`/`a050155` results are not substituted for these `aac5240` outputs.
 
 ### Reproduction commands
 
-Focused browser review suite:
-
-```sh
-docker compose --env-file .env.example -p issue419final --profile e2e run --build --rm --no-deps -v "$PWD:/workspace:ro" -v /tmp/playwright-issue419-review.config.js:/e2e/playwright-review.config.js:ro e2e npx playwright test --config=/e2e/playwright-review.config.js
-```
-
-Reproduction command for the packaged replay (the observed run mounted `/tmp/issue419-final-replay.spec.js` and `/tmp/playwright-issue419-final.config.js`; the retained `work/` copies below are byte-identical. These exact container commands document the local run; they are not turnkey from a GitHub checkout because the referenced helper files, output mount, and `/tmp/issue419finalreplay.env` are local-only and uncommitted. No reusable replay harness is included. The environment contains only synthetic credentials and is not committed):
-
-```sh
-docker compose --env-file /tmp/issue419finalreplay.env -p issue419finalreplay -f compose.yaml -f compose.e2e.yaml --profile e2e run --build --rm --no-deps -v "$PWD/work/issue-419-final-evidence/replay.spec.js:/e2e/tests/browser/issue419-final-replay.spec.js:ro" -v "$PWD/work/issue-419-final-evidence/playwright.config.js:/e2e/playwright-review.config.js:ro" -v "$PWD/work/issue-419-final-evidence:/evidence" e2e npx playwright test --config=/e2e/playwright-review.config.js
-```
-
-The synthetic records were seeded from the tracked fixture with the local-only helper, then workflow/grants were established through the existing governed provisioner. The original seed invocation used the identical script copy in `/tmp`:
-
-```sh
-docker compose --env-file /tmp/issue419finalreplay.env -p issue419finalreplay run --rm --no-deps -T -v "$PWD/agent/fixtures/incidents/otel-payment-failure/initial-state.yaml:/fixtures/initial-state.yaml:ro" --entrypoint python api - < /tmp/issue419-final-seed.py
-set -a; . /tmp/issue419finalreplay.env; set +a
-docker compose --env-file /tmp/issue419finalreplay.env -p issue419finalreplay --profile checks run --rm --no-deps -e "DATABASE_URL=${DATABASE_URL}" -e "ADMIN_API_KEY=${ADMIN_HUMAN_API_KEY}" -e "AUDIT_KEY_HEX=${AUDIT_HMAC_KEY}" python-checks python scripts/provision_incident_workflow.py
-```
-
-The successful provisioning output was `catalog_status: 201`, all four grant status fields `201`, and all four persisted-active checks `true`. Retained local scratch copies of the seed/replay helpers and config are under `work/issue-419-final-evidence/`; their hashes match the original `/tmp` inputs. The one-off replay helper calls the packaged service through Nginx and records only synthetic identities, response bodies, command attribution, and the credential-cleared UI. It does not persist Authorization headers or provider secrets.
+Use the [tracked replay guide](replay/README.md) from a clean checkout. It creates fresh synthetic environment input, sends it to Compose with `--env-file` only, uses the committed seed/replay/browser files, and documents cleanup of the unique project. It separates the packaged API/web replay from the focused browser mock-seam suite. The helper's historic `31bef8d`/`a050155` capture is explicitly scoped to that helper candidate; it does not rebind the `current-*` evidence above or claim to have served the final #489 source.
 
 ### Remaining boundary
 
