@@ -136,8 +136,7 @@ async def test_period_is_database_immutable_and_downgrade_preserves_live_rows(
     assert record is not None and record.period_start == PERIOD
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261006_01",
-
+            "20261007_01",
         )
         assert connection.execute("SELECT count(*) FROM consumption_reservations").fetchone() == (
             4,
