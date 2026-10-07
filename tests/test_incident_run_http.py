@@ -290,7 +290,10 @@ async def _declare(incident_id: str, run_id: str, command_id: str) -> int:
         actor="human",
         actor_reference=ActorReference(principal_id="demo-human"),
         outcome="declare",
-        inputs={"severity": "sev2"},
+        inputs={
+            "severity": "sev2",
+            "impact": "Customers could not complete checkout.",
+        },
     )
     try:
         runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
