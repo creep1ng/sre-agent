@@ -1,0 +1,25 @@
+TAP version 13
+# Subtest: 2.6.0 audit detail accepts only schema event IDs without widening shared Id
+ok 1 - 2.6.0 audit detail accepts only schema event IDs without widening shared Id
+  ---
+  duration_ms: 91.525109
+  ...
+# Subtest: 2.5.0 remains immutable and retains its original generic audit Id
+ok 2 - 2.5.0 remains immutable and retains its original generic audit Id
+  ---
+  duration_ms: 71.403953
+  ...
+# Subtest: 2.6.0 is a complete additive immutable release over 2.5.0
+ok 3 - 2.6.0 is a complete additive immutable release over 2.5.0
+  ---
+  duration_ms: 115212.805579
+  ...
+1..3
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 115799.017537

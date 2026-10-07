@@ -1,0 +1,489 @@
+baseline:
+  compatibility: additive
+  previous_major: 2.0.0
+  previous_release: 2.5.0
+contract_version: 2.6.0
+dialects:
+  json_schema: https://json-schema.org/draft/2020-12/schema
+  openapi: 3.1.0
+inventory:
+  adrs:
+    - path: adrs/ADR-001-responses.md
+      sha256: sha256:209d14c869cae70ca33dc01e2343d3e4335e79ddc2cc462a3260c673110c618c
+    - path: adrs/ADR-002-principal.md
+      sha256: sha256:e57fe9338dbe4f4f2bb601abce5546d984ef9a2805868f32fdfc379e9543d882
+    - path: adrs/ADR-003-api-keys.md
+      sha256: sha256:231d1664a6bfc01bbb9cb10db5ac3daa96aff8ff78b30f98639cfe01796172fb
+    - path: adrs/ADR-004-grants.md
+      sha256: sha256:aa891404a220c2d4bca46fe2ed7464b79be7cf652cb24f4755ccfdb5d4de7bc6
+    - path: adrs/ADR-005-audit-redaction.md
+      sha256: sha256:75f932fb87b84244d529b2f3a32b96fa7c3c7ff26f149633fe886fc3297560d8
+    - path: adrs/ADR-006-sanitized-audit-content.md
+      sha256: sha256:44e350527d359a52f7a72acc92f3dd974018db193adeacabb0270a4cd325cfef
+  conformance:
+    - path: releases/2.6.0/conformance/compatibility.json
+      sha256: sha256:57a0d1923cb32302f033771318c0490f0e7603b6a644f1cd732b538f049ba9ae
+    - path: releases/2.6.0/conformance/consumers.yaml
+      sha256: sha256:f862900741b9e8a74a2300428393f3b854c145c6b55c21069a669a946a2ec699
+    - path: releases/2.6.0/conformance/evidence.json
+      sha256: sha256:c16eb15c0a7c1d3814cadbdd5997da646fdc99f022263acbc2a3699a866b4e58
+    - path: releases/2.6.0/conformance/migration.md
+      sha256: sha256:86dc4e77210b99affed594aac085b8d31abd824b379cd9c48e81421e0581a986
+    - path: releases/2.6.0/conformance/ownership-evidence.json
+      sha256: sha256:9d44ab4dc19591d393ce86f326896e248078d7d4f19953142f9742007eb02d96
+    - path: releases/2.6.0/conformance/ownership-matrix.yaml
+      sha256: sha256:27ac6caa443a31979ff4561accd07b159175e3218207e948d8c7e3e5ed045313
+    - path: releases/2.6.0/conformance/resource-catalog-evidence.json
+      sha256: sha256:652c5a179e60a2539485dd8a7846159c43b499fbee4492e047021b4c14145b5b
+    - path: releases/2.6.0/conformance/resource-catalog-matrix.yaml
+      sha256: sha256:812ea4a124adaac9f7d6d997d397dce659c664c1ee2b82adba95a47caa1dd9c8
+    - path: releases/2.6.0/conformance/suite.yaml
+      sha256: sha256:4e032a02ccc5b5533ede37fae54b897a4f03a1d10dc8cff2d9586ca0e7bf103a
+  examples:
+    - path: releases/2.6.0/examples/audit/absent-content.example.json
+      sha256: sha256:9b8621dd7d2dc5f89491e63e6b8718c25979efc2f2094a21f08a32d970c08a02
+    - path: releases/2.6.0/examples/audit/allow.example.json
+      sha256: sha256:d332383dec2b8387475e6fa27f474becf8ba3928666c97be09f8477703c693a2
+    - path: releases/2.6.0/examples/audit/metadata-only.example.json
+      sha256: sha256:39dfba68b90377eecf1cb7043a47b06d636992e1034ebc87ca4b7712621f1e3b
+    - path: releases/2.6.0/examples/audit/pre-auth-422.example.json
+      sha256: sha256:4e39e7b3d5631c0bc12b14efc5ece73d2ace36d5eb999d2876b2c6e47459f8c8
+    - path: releases/2.6.0/examples/audit/pre-route-deny.example.json
+      sha256: sha256:fa54205f85b0742d4f4b04117302026728ae025ebff4cb8222eaf7010bbb02d8
+    - path: releases/2.6.0/examples/audit/unresolved-identity-401.example.json
+      sha256: sha256:20eb1c86d092c04950dc34832f16adae6862823ba90bb14848599e1607cfea36
+    - path: releases/2.6.0/examples/catalog/resource-list.example.json
+      sha256: sha256:972f86cd61f56cac17bf6e630b861d86ebfba6c85246a3ef4f2786345eb94be6
+    - path: releases/2.6.0/examples/catalog/resource-read.example.json
+      sha256: sha256:e023bc9847f341db4f7660b3840d6a50efa45f759d381cf23100a64be1ef16b8
+    - path: releases/2.6.0/examples/control/bootstrap-repeat.example.json
+      sha256: sha256:bce84a5d9ec50f6d7fd127b4183f03868119d18ca26d19252ce35f9ad9c3dd35
+    - path: releases/2.6.0/examples/control/credential-issuance-first.example.json
+      sha256: sha256:a9791b12e5158d6af0f7e7f1b0e02850e55a9cd435ebe776b7c35d680086b7e2
+    - path: releases/2.6.0/examples/responses/completed-response.example.json
+      sha256: sha256:388b6faa3ea4d9bd1bc89f481c976fa3198ceb0c05eb704d4dc888c362bc2193
+    - path: releases/2.6.0/examples/responses/minimal-request.example.json
+      sha256: sha256:8ba932102da94c5dd253b47f478506f4c5db2871c3fd70e3ecea2e7501a9bcac
+  fixtures:
+    - path: releases/2.6.0/fixtures/negative/audit.authorization-denial-cause-missing.negative.v2.6.0.fixture.json
+      sha256: sha256:cba97bd0335ef020c4abbaa98bc968f38245abb5e918b8f9a6fccc3fa776b7d9
+    - path: releases/2.6.0/fixtures/negative/audit.authorization-denial-cause-null.negative.v2.6.0.fixture.json
+      sha256: sha256:ed3d28b06fb61119c1e08384a626088168021a3d4ea3c4112651a8ab3c474acc
+    - path: releases/2.6.0/fixtures/negative/audit.authorization-denial-cause.negative.v2.6.0.fixture.json
+      sha256: sha256:2af756add3a132135f239a54e74077816cbd84855b32f80744d793a36c0a62b4
+    - path: releases/2.6.0/fixtures/negative/audit.event.delete.negative.v2.6.0.fixture.json
+      sha256: sha256:17b076dc26780da0716d252a7a2566465f3623f9166cef4c47fed909ac13211e
+    - path: releases/2.6.0/fixtures/negative/audit.event.mutation.negative.v2.6.0.fixture.json
+      sha256: sha256:84eef49a225e97b75b862040da907074e4ffa76bca41d2a6ac55b4c6d34d9ca7
+    - path: releases/2.6.0/fixtures/negative/audit.latency.negative.v2.6.0.fixture.json
+      sha256: sha256:48ebf8d15f1036dc051814efb47aa7ffcea6d6874165661def9319c63af8b2bb
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.authorization.negative.v2.6.0.fixture.json
+      sha256: sha256:56aa4a6e86840f380db45a22f4f67c8d2ca76a9b7fb80b43b7f7f6fa3cb3b719
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.direct-sink.negative.v2.6.0.fixture.json
+      sha256: sha256:6e6af4083ed06d17b0b59cf039ab39c18011f082e16a7df0546914c83e2b2ce8
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.embedded-secret.negative.v2.6.0.fixture.json
+      sha256: sha256:34c611aa2e46f68cfabd25237d8a9eb536cf2616d8e6f0fac7744806071effb5
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.partial-payload.negative.v2.6.0.fixture.json
+      sha256: sha256:fd8ecb997b00a29ec85bb50437a269b70a240850d67ba4e84b3497fe58ad3c9a
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.provider-object.negative.v2.6.0.fixture.json
+      sha256: sha256:c351c811c44f5307f9f8774cdf63f4ca9a67ad5957e11e84ecb1498b9ca173fe
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.provider-secret-content.negative.v2.6.0.fixture.json
+      sha256: sha256:88fc40d956d0904bb4f745829775be4ce6289669c1f7fede13fa33e4219c7378
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.raw-key-content.negative.v2.6.0.fixture.json
+      sha256: sha256:acc10c04e5f6a500950ee266c9f64519053d36d4c35318d2103e936259796f7d
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.raw-key.negative.v2.6.0.fixture.json
+      sha256: sha256:ccac6c224e2dd99420d71e878819092e057f34f95ac5bd50cd2bfc40359b52bc
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.sanitized-text-ambiguous.negative.v2.6.0.fixture.json
+      sha256: sha256:4e42bf9c48474c7eac6baca958e16e1c0f2d40a261d3b57a4b8d3d4ee3a18f2d
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.sanitized-text-missing.negative.v2.6.0.fixture.json
+      sha256: sha256:4860e8735556edcacaac8364ff311ab004578f117ea5e1373b2c64f8ec298279
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.upstream-secret-content.negative.v2.6.0.fixture.json
+      sha256: sha256:402ee38ada25679c16be782dcb0b7f8d54d88d526eac740d2f68a58e1f8fd5c1
+    - path: releases/2.6.0/fixtures/negative/audit.redaction.upstream-secret.negative.v2.6.0.fixture.json
+      sha256: sha256:a602e862ca3da46e8d3636f211cb7e3df70586d3c59c7dcc1f347cb9bbff2aab
+    - path: releases/2.6.0/fixtures/negative/audit.store.false-release.negative.v2.6.0.fixture.json
+      sha256: sha256:b5f6e40b3b91d5e4b412fa9a78b4878768123e740353316cc99bf57709338b6c
+    - path: releases/2.6.0/fixtures/negative/catalog.discovery.limit.negative.v2.6.0.fixture.json
+      sha256: sha256:18f882724d00deaca75b9581a05ab091fbbdbedbd5d31b435b05a62a2a700524
+    - path: releases/2.6.0/fixtures/negative/catalog.entry.closed-field.negative.v2.6.0.fixture.json
+      sha256: sha256:facb09ad5d43b08c7abeec96413c341a613ea4839da7600f240477680b06b782
+    - path: releases/2.6.0/fixtures/negative/catalog.http.pagination.negative.v2.6.0.fixture.json
+      sha256: sha256:50cd9e9bd91413c270e0dedf43003f336b5d33dc50d764e5b7277c97cfd8574d
+    - path: releases/2.6.0/fixtures/negative/catalog.lifecycle.implicit-repair.negative.v2.6.0.fixture.json
+      sha256: sha256:5ad205c220c2cfac1d09417cb9b89a6e57597f376656340d72bf0b3c9ef5425e
+    - path: releases/2.6.0/fixtures/negative/catalog.lifecycle.stale-version.negative.v2.6.0.fixture.json
+      sha256: sha256:ad9ffecd875b02ba7edd5024aec78a250befdb2f21ab306092a3e2de62d86c24
+    - path: releases/2.6.0/fixtures/negative/consumption.complete-missing-context.negative.v2.6.0.fixture.json
+      sha256: sha256:d37957e17be8687d02f29432d01f54d8e37fa2ac8b9d20f5b07443c9434929b5
+    - path: releases/2.6.0/fixtures/negative/consumption.invariant.negative.v2.6.0.fixture.json
+      sha256: sha256:2d05ce60a0c0ee129dfc009740a0b09af6ca845d1f41149cf10d01f6513c5d0c
+    - path: releases/2.6.0/fixtures/negative/consumption.partial-complete.negative.v2.6.0.fixture.json
+      sha256: sha256:7b3073e793be5ada7d33c94d051da28f3d8a9e1c203c93a2912418054b71ac0f
+    - path: releases/2.6.0/fixtures/negative/consumption.partial-empty.negative.v2.6.0.fixture.json
+      sha256: sha256:c252aa56ad135c64aada429f682082534ca11b9ff99a9545183b1a07be954539
+    - path: releases/2.6.0/fixtures/negative/consumption.raw-body.negative.v2.6.0.fixture.json
+      sha256: sha256:d9406867c336f745cf0e5189a99278078a68958006c01a6dc1c106c4a5e35652
+    - path: releases/2.6.0/fixtures/negative/control.audit.administrative-identity-missing.negative.v2.6.0.fixture.json
+      sha256: sha256:5c0f370b51ac0c464fb07f1250cfa36118e25707f658e9f2f054048f004878c6
+    - path: releases/2.6.0/fixtures/negative/control.audit.administrative-model-alias.negative.v2.6.0.fixture.json
+      sha256: sha256:2b1e4fb431795e0eb8a4ff41e07043c9ac0330cb5d90f3f55e222d6725401a68
+    - path: releases/2.6.0/fixtures/negative/control.audit.redacted-content.negative.v2.6.0.fixture.json
+      sha256: sha256:60adb7936e2987f3b0306ae71ad0c5b760eb89e080de79060f95b6a124713247
+    - path: releases/2.6.0/fixtures/negative/control.bootstrap.identity-mismatch.negative.v2.6.0.fixture.json
+      sha256: sha256:1797ce104edaf01c762d6f1a7d6496ee862c2799b9835078497fc6379a50cc32
+    - path: releases/2.6.0/fixtures/negative/control.credential.replay-secret.negative.v2.6.0.fixture.json
+      sha256: sha256:094aaec2bbedd79809bbe73b4f40a05be63ff12401d39762f04c9cd4676b411b
+    - path: releases/2.6.0/fixtures/negative/control.idempotency.duplicate-transition.negative.v2.6.0.fixture.json
+      sha256: sha256:f5043aefeb67dbed4219fd3a8b457c4c3d6ebaa625f3124edfd7cf1d989ff61b
+    - path: releases/2.6.0/fixtures/negative/control.idempotency.minimum-retention.negative.v2.6.0.fixture.json
+      sha256: sha256:533101f40de91f5da6f0e77a338e0674e4e4110df5f315f459da80447de9c543
+    - path: releases/2.6.0/fixtures/negative/control.principal.status.missing-expected-updated-at.negative.v2.6.0.fixture.json
+      sha256: sha256:1c0b3fb0b2b8739e4edb1d4dd50bebefa37fa649d269e5eb0fe796f5d8491845
+    - path: releases/2.6.0/fixtures/negative/future-fastapi.extra.projection.json
+      sha256: sha256:a2271aabf88f353b331c857ccddef53e5007c15857f6f3e84bb090ae76beee4c
+    - path: releases/2.6.0/fixtures/negative/future-fastapi.missing.projection.json
+      sha256: sha256:eaee97e3458278d03c52985af91c5ca8d8fc25ccaba368a17a656eec37143143
+    - path: releases/2.6.0/fixtures/negative/shared.correlation.authority.negative.v2.6.0.fixture.json
+      sha256: sha256:94c9f6577e9252d7a15d81da0d8ed32a5e632926a5b3a28c528a51c1276bbec9
+    - path: releases/2.6.0/fixtures/negative/shared.credential-reference.hash.negative.v2.6.0.fixture.json
+      sha256: sha256:e74d1045e2a36158d63370ac5d6a95ec448b3fad9dd2fce544bf7ddd09a50d29
+    - path: releases/2.6.0/fixtures/negative/shared.credential-reference.raw-key.negative.v2.6.0.fixture.json
+      sha256: sha256:04cbb8c37946fede3ae190834c14da814c4c8403eb27a6723a7db4406c6050d1
+    - path: releases/2.6.0/fixtures/negative/shared.error-envelope.authorization.negative.v2.6.0.fixture.json
+      sha256: sha256:a1fe01b448dba5c2722b9c6fd8dad9d1a9dbc2eef0dd707a50a86d4aa65cdeb2
+    - path: releases/2.6.0/fixtures/negative/shared.error-envelope.stack.negative.v2.6.0.fixture.json
+      sha256: sha256:39955b27ee6129c3867790f05943934e0a7897fbdb0cfcd3b682a15f55d19383
+    - path: releases/2.6.0/fixtures/negative/shared.grant.deny-effect.negative.v2.6.0.fixture.json
+      sha256: sha256:325a977b0d0fdfa0d1b4a604735b4bfda3badf1768a2caefef616643e608d229
+    - path: releases/2.6.0/fixtures/negative/shared.grant.routing.negative.v2.6.0.fixture.json
+      sha256: sha256:fe43c83c3d3c8b9bbcef7d168af0f4985fb267eceea18103a583901412d0f860
+    - path: releases/2.6.0/fixtures/negative/shared.list-envelope.continuation.negative.v2.6.0.fixture.json
+      sha256: sha256:82954f28bd5c55b1641c9825ead442d269c51384eb5ee5bdb833c820c8ee5825
+    - path: releases/2.6.0/fixtures/negative/shared.policy-decision.deny-policy-id.negative.v2.6.0.fixture.json
+      sha256: sha256:43835e46bdcdda1210840a2c5312c87b3572413d36e1f3428eff76741d16a654
+    - path: releases/2.6.0/fixtures/negative/shared.principal-context.authorization.negative.v2.6.0.fixture.json
+      sha256: sha256:89c72ed0f72aa24163f562f4b8429866668fb99f236bf0039c7d1876e041622b
+    - path: releases/2.6.0/fixtures/negative/shared.principal.kind.negative.v2.6.0.fixture.json
+      sha256: sha256:db700c714a2d26aac37c4987d7c5f989615fd31b5d120b8df245712b5cabbe1e
+    - path: releases/2.6.0/fixtures/negative/shared.principal.legacy-identity.negative.v2.6.0.fixture.json
+      sha256: sha256:a94a6cafe3e2333d75601efbc83f111ce7babd87f38b9ec4a5ee5c7c1a44940d
+    - path: releases/2.6.0/fixtures/negative/shared.resource.routing.negative.v2.6.0.fixture.json
+      sha256: sha256:ebf6e0058e6436d0ed5e30c6f5beef3e7bfc5218e240794d859192e92e73672e
+    - path: releases/2.6.0/fixtures/negative/shared.resource.type.negative.v2.6.0.fixture.json
+      sha256: sha256:dd6e53a85dcc3107980faf28f400374e52fd189d865013912037cf20ed5153d3
+    - path: releases/2.6.0/fixtures/positive/audit.authentication.credential.positive.v2.6.0.fixture.json
+      sha256: sha256:535ad92240ca8095b88a21e9e006cb814c012701fd55691ca5f254654fdac9ee
+    - path: releases/2.6.0/fixtures/positive/audit.authentication.unresolved-401.positive.v2.6.0.fixture.json
+      sha256: sha256:6373620605a9bafb59a9f7eeb4af948d946f67452fdf921ee9dbbd8757bc0565
+    - path: releases/2.6.0/fixtures/positive/audit.event.metadata-only.positive.v2.6.0.fixture.json
+      sha256: sha256:07df16aefde00799742b39ecd2fa81b4f9e7e7b933b2ba87754cf1911654dde2
+    - path: releases/2.6.0/fixtures/positive/audit.exporter.failed.positive.v2.6.0.fixture.json
+      sha256: sha256:4f70e049db51b07d9d2dd4eb6dd00a861fe4370c53f5aea232c2d3a716779dff
+    - path: releases/2.6.0/fixtures/positive/audit.mcp.discovery.positive.v2.6.0.fixture.json
+      sha256: sha256:3679917f900b957b43efb85a2da4f07b96262e694651f248ec513b23009bc7d7
+    - path: releases/2.6.0/fixtures/positive/audit.mcp.invoke.positive.v2.6.0.fixture.json
+      sha256: sha256:5ba3624fd40be7d68f5dbfbee4fc12278d8a8e119d7591da481a7d22fa9ca498
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.command-output.positive.v2.6.0.fixture.json
+      sha256: sha256:b5341c43f0662da8c99342fbefe3867ee7bdb5f11f00fa94a68e2d8a12699cb7
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.error.positive.v2.6.0.fixture.json
+      sha256: sha256:b83e444c9104aaec69e5e4bccbfaf20cd8d414edfcd8e4417b24c14f8d4f0ef9
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.free-content.positive.v2.6.0.fixture.json
+      sha256: sha256:ef48b1e4b96cc00a1439b8674bccef867f0ddbf5fd94a3fe0058a9b8974b4341
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.llm-input.positive.v2.6.0.fixture.json
+      sha256: sha256:f2e737ae935b0fb764545a2d06ee00a7417cdf6fcc736ca95feb28abe49d64ab
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.llm-response.positive.v2.6.0.fixture.json
+      sha256: sha256:5ab9e1e43715884a60da08ad0905a1d52e2e508e54e6e3e0aa3a5e57d8ce6754
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.mcp-log.positive.v2.6.0.fixture.json
+      sha256: sha256:95603d8bab975dc3093d761bf831ee8ea1ab85cec15c952f5edceff83d995d41
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.sandbox-output.positive.v2.6.0.fixture.json
+      sha256: sha256:a1e51fef203b96bf88ec5295d84a58c7782ba42ad7d57bbbc13c9cd5186c6dd4
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.tool-arguments.positive.v2.6.0.fixture.json
+      sha256: sha256:2bda728a27c452cb09ab6b7420b6b7879d6df6a58896cd27e39847e18c5bfb87
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.tool-result.positive.v2.6.0.fixture.json
+      sha256: sha256:37d29f4b025d14381be510301f76777ec4f03756eb0c59db3c4ddafb346ee3de
+    - path: releases/2.6.0/fixtures/positive/audit.redaction.uncertain.positive.v2.6.0.fixture.json
+      sha256: sha256:1bce2726a3aacdd7d9bba2619ec19d1dcb9ad6f506cad61183e335285d7a1b61
+    - path: releases/2.6.0/fixtures/positive/audit.responses.allowed.positive.v2.6.0.fixture.json
+      sha256: sha256:fd9338990c93edfa8049a7a78ea794cf89602cb491b71ebb04c3e12f1412d9c8
+    - path: releases/2.6.0/fixtures/positive/audit.responses.consumption-unavailable.positive.v2.6.0.fixture.json
+      sha256: sha256:1bec158dee8c2f067eb3e43f38430a5436767eb4ba079ee7288926fd9ca30905
+    - path: releases/2.6.0/fixtures/positive/audit.responses.denied.positive.v2.6.0.fixture.json
+      sha256: sha256:d89c327c089066c85553a9c73a5e9374f662798d957902812e33faa94ddcc938
+    - path: releases/2.6.0/fixtures/positive/audit.store.rejected.positive.v2.6.0.fixture.json
+      sha256: sha256:2090d8665667b6e285b67fdaf6aa533c4c5be1482a62b0869b6d729f2d6a3c3d
+    - path: releases/2.6.0/fixtures/positive/audit.usage-read.preauthorization-storage.positive.v2.6.0.fixture.json
+      sha256: sha256:c6acca8782c5b0303e6ad2d75048bdb670b086918e2ce15936a6ab7bd64929da
+    - path: releases/2.6.0/fixtures/positive/audit.usage-read.runtime-outcomes.positive.v2.6.0.fixture.json
+      sha256: sha256:07a8b3ea3d7998217c838f9eb657ff03cca0bd6f3c66d2902d4cd2926ae3a209
+    - path: releases/2.6.0/fixtures/positive/audit.validation.pre-auth-422.positive.v2.6.0.fixture.json
+      sha256: sha256:39fa853c988d9b19c5940c245e09be157df994200707a5f2a4df73f704f125ab
+    - path: releases/2.6.0/fixtures/positive/catalog.discovery.positive.v2.6.0.fixture.json
+      sha256: sha256:581addfbe875488eb5f006ce826ad50c75de27c0b1902dabd2c14695aeb86fe3
+    - path: releases/2.6.0/fixtures/positive/catalog.entries.positive.v2.6.0.fixture.json
+      sha256: sha256:040d5630aa03cbac0727e58bcd29bf549c304d8ab96d6edc7b79c767c69f7ec9
+    - path: releases/2.6.0/fixtures/positive/catalog.http.positive.v2.6.0.fixture.json
+      sha256: sha256:ad10b80d60f6e064226577ea7fbff6e2130ad0e94c138957d9378c44c55b83b4
+    - path: releases/2.6.0/fixtures/positive/catalog.lifecycle.positive.v2.6.0.fixture.json
+      sha256: sha256:cec213b607c5d18e123781051c866c29a5b010899303a44d12ea0dd95ccccc98
+    - path: releases/2.6.0/fixtures/positive/consumption.states.positive.v2.6.0.fixture.json
+      sha256: sha256:1d0a0f5c7ea8ef095d7215c3263b3648007b25642e1f0e725875e4c09c163844
+    - path: releases/2.6.0/fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:1e3e94b8fcf47763b916ca7bda1fb8cb1c99cbba52a8929a623bfaed0c6de3fc
+    - path: releases/2.6.0/fixtures/positive/control.audit.aliases-create-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:3277c1ada7113be912cbac3a375589d92cb89ea3185b5c100b9f51f2b776a6df
+    - path: releases/2.6.0/fixtures/positive/control.audit.aliases-get-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:1489bfe4d8ea9807e1f771b235ff778a9a3e53f410ce9ff8ef586ba3e7af56dd
+    - path: releases/2.6.0/fixtures/positive/control.audit.aliases-list-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:b60e916b12fd5bffb2b85bef43ed6906e91fad97cf7556c408e4356bfcccf2b4
+    - path: releases/2.6.0/fixtures/positive/control.audit.aliases-status-replace-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:1d461134da2204988d3ed65582449d924527e9d40129c141f9b252681bb704f2
+    - path: releases/2.6.0/fixtures/positive/control.audit.catalog-create-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:7bed290f5b494af639139912d4283b449896a458e72875260fe14aaab1b67e82
+    - path: releases/2.6.0/fixtures/positive/control.audit.catalog-list-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:21213132b9900bbc05b325e006829f77507fa65d4c093145a69f342fd893e1d4
+    - path: releases/2.6.0/fixtures/positive/control.audit.catalog-read-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:3831a6f0a2ad2edbfb46b6f5b70815773f07349d4f47f0567cbde224d6cd9ddb
+    - path: releases/2.6.0/fixtures/positive/control.audit.content-request.positive.v2.6.0.fixture.json
+      sha256: sha256:5a63e57edd6dde3abc96947e956044e3ca1e4889e308ba75a848f658af9b5f3e
+    - path: releases/2.6.0/fixtures/positive/control.audit.credentials-rotate-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:12a50306c46d19b3b75de9735569e621f0a60fbd6b5a3d615cc78e6f5979e23d
+    - path: releases/2.6.0/fixtures/positive/control.audit.credentials-rotate-deny.positive.v2.6.0.fixture.json
+      sha256: sha256:8bc10b6a85f1ef79516eeb743aae4b67708e58aebd53950e2920e5f6d573289d
+    - path: releases/2.6.0/fixtures/positive/control.audit.grants-create-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:7710ea891890bacb0d3e2432d1d3a5e46bdf486754173123930fdc5f291a1b0e
+    - path: releases/2.6.0/fixtures/positive/control.audit.grants-list-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:e0b286d9976a489ebe8ecaea732647766ea6aa5ff904db56e1dd3ee6c5ca2823
+    - path: releases/2.6.0/fixtures/positive/control.audit.grants-revoke-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:62a50c8fe77b09a50dc55d07590d25778f626857b2f9405b936c6ddfdcab936f
+    - path: releases/2.6.0/fixtures/positive/control.audit.metadata-only.positive.v2.6.0.fixture.json
+      sha256: sha256:1cfcf771b4784d7fa161f7206b63fb50ad3ed7d9c060584d8f387f8ab49294cc
+    - path: releases/2.6.0/fixtures/positive/control.audit.principals-create-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:46a65a3700c95607d2179ec6dddc4bbe71f1746aba2d764db10ce2c9638498a4
+    - path: releases/2.6.0/fixtures/positive/control.audit.principals-create-deny.positive.v2.6.0.fixture.json
+      sha256: sha256:6f202f9b0c4adb171f625f6ee1f80fbda2398dfceb5301b115643b2418dba86c
+    - path: releases/2.6.0/fixtures/positive/control.audit.principals-get-hidden-denial.positive.v2.6.0.fixture.json
+      sha256: sha256:51949e3c9bd050c36f52ff1e35757ff9e20137974f7df8968cd96c8b3fa6f681
+    - path: releases/2.6.0/fixtures/positive/control.audit.principals-get-missing-after-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:66b7eb2024620b762ad987ad4b2e48758b200ca70b8807080e55291493e70aa9
+    - path: releases/2.6.0/fixtures/positive/control.audit.principals-status-conflict.positive.v2.6.0.fixture.json
+      sha256: sha256:5ba5beb3e730454186c34744417b95d9fa0b38b5e0916654bd085b579b461c31
+    - path: releases/2.6.0/fixtures/positive/control.audit.principals-status-validation-anonymous.positive.v2.6.0.fixture.json
+      sha256: sha256:7448876ada824abfabfd4a96b98600a7adf101f831514b48183b1c794bc48d36
+    - path: releases/2.6.0/fixtures/positive/control.audit.required-filter.positive.v2.6.0.fixture.json
+      sha256: sha256:1bea05e2fb7e176d80d950debc550b69b312e27b71b5376712f44fd7a9e15a34
+    - path: releases/2.6.0/fixtures/positive/control.bootstrap.conflict.positive.v2.6.0.fixture.json
+      sha256: sha256:a4fc52c2a4ae9087fe231570e11f48e1c826dce4fdcdb35b68ae2ddc24bd2531
+    - path: releases/2.6.0/fixtures/positive/control.bootstrap.first.positive.v2.6.0.fixture.json
+      sha256: sha256:fccf98343775295ebf73fe035c66778a0dd17f2d1e80fb0b5a58c8d9151fe37f
+    - path: releases/2.6.0/fixtures/positive/control.bootstrap.repeat.positive.v2.6.0.fixture.json
+      sha256: sha256:6b3eb4ce61e56d6cc14adb61aad24a8e6b20f8e4d4eb946d57445af7280c66a5
+    - path: releases/2.6.0/fixtures/positive/control.credential.issue-first.positive.v2.6.0.fixture.json
+      sha256: sha256:33e7fecb0e638d26e5e7e8d4396398accba4a4c0a5a84ff2ef18a9fc52ab2c19
+    - path: releases/2.6.0/fixtures/positive/control.credential.issue-replay.positive.v2.6.0.fixture.json
+      sha256: sha256:88bf9d7e733bebe28c2418765cdae0f105d81c2cef057d7f6eb21ed392dab666
+    - path: releases/2.6.0/fixtures/positive/control.credential.list-metadata.positive.v2.6.0.fixture.json
+      sha256: sha256:76448b9952423736ebc91c442b8e49bf4cb662a0fd002160f9c3a03bf1fce5fa
+    - path: releases/2.6.0/fixtures/positive/control.credential.rotation-first.positive.v2.6.0.fixture.json
+      sha256: sha256:68b3d1b52f52276a1d663bad6e098f17821ade4f4133c1b367585a2959f7241e
+    - path: releases/2.6.0/fixtures/positive/control.credential.rotation-inactive-http.positive.v2.6.0.fixture.json
+      sha256: sha256:d2697878b47517af5884659bd6d5aef5a35351d5233da23ad7cabd1438657a4a
+    - path: releases/2.6.0/fixtures/positive/control.credential.rotation-inactive.positive.v2.6.0.fixture.json
+      sha256: sha256:69f003fd03c220c8d0635d3576db7b1f7063fe4da3fcf7486853f10eda547aa3
+    - path: releases/2.6.0/fixtures/positive/control.credential.rotation-replay.positive.v2.6.0.fixture.json
+      sha256: sha256:30e37a0b4e02509424d90da937cb42da7a50848ef4c732f8a114305ccd9b9f8b
+    - path: releases/2.6.0/fixtures/positive/control.hidden.absent.positive.v2.6.0.fixture.json
+      sha256: sha256:9f2d30613367e50c321b46dab4926ab9620404c5886d3718bb4e1c257fc2bdef
+    - path: releases/2.6.0/fixtures/positive/control.hidden.unauthorized.positive.v2.6.0.fixture.json
+      sha256: sha256:094efe240886b6416a1b03bfeac06940ad776e5e13fd48cfeb69fe0c142044ae
+    - path: releases/2.6.0/fixtures/positive/control.idempotency.credential-lifetime.positive.v2.6.0.fixture.json
+      sha256: sha256:6a686ebef61cd94faa2d2ca7101bf434bf5be401aaed0ad8f70c8b74b5b31cbc
+    - path: releases/2.6.0/fixtures/positive/control.idempotency.initial.positive.v2.6.0.fixture.json
+      sha256: sha256:4b72749ade16ec23867394d5019573a7cc8f92d386f5ed91ad1db5ebfda95da0
+    - path: releases/2.6.0/fixtures/positive/control.idempotency.missing-key.positive.v2.6.0.fixture.json
+      sha256: sha256:0db605be978352b0ef58b99e76d16c69e12695aa50c3b53d75109912aa4cc238
+    - path: releases/2.6.0/fixtures/positive/control.idempotency.payload-conflict.positive.v2.6.0.fixture.json
+      sha256: sha256:1114ca92f85add33e63a9de7f058891bf374991fe07d3891cb6dd51ff2f0e2e3
+    - path: releases/2.6.0/fixtures/positive/control.idempotency.repeated-delete.positive.v2.6.0.fixture.json
+      sha256: sha256:aab1aff9ffc6f460508ce1c17091bb1bc8d08bf4df72f9d5b27b585fc1ea339c
+    - path: releases/2.6.0/fixtures/positive/control.idempotency.replay.positive.v2.6.0.fixture.json
+      sha256: sha256:af06019bdf623a0eac2fe86e8c46009445a76bffa29fae1c87961229ab99e0b4
+    - path: releases/2.6.0/fixtures/positive/control.list.bounded-truncated.positive.v2.6.0.fixture.json
+      sha256: sha256:f437317d12c6b7c1131ef44b0a1a878a5661228a22d15094fca6a7e38dbe6cf7
+    - path: releases/2.6.0/fixtures/positive/control.list.forbidden-pagination.positive.v2.6.0.fixture.json
+      sha256: sha256:9177581c011683518bf6ae9eb38513aeaa36625500de26e6d71803a07627ffc6
+    - path: releases/2.6.0/fixtures/positive/control.list.limit-101.positive.v2.6.0.fixture.json
+      sha256: sha256:dc26569a331632d134fd3f8d46bcb76abfa1bec6333c506b4987363bb6fd3e1d
+    - path: releases/2.6.0/fixtures/positive/control.list.required-filter.positive.v2.6.0.fixture.json
+      sha256: sha256:cd6b311e7037c096987953d35995bafdd02ba9aa4a57f53e9551e6250c95eb05
+    - path: releases/2.6.0/fixtures/positive/control.principal.status.replace.positive.v2.6.0.fixture.json
+      sha256: sha256:e379f229f743053e3de76a69cfba1c062ed94e5fb7e50edf0358b7438d71a5ab
+    - path: releases/2.6.0/fixtures/positive/future-fastapi.match.projection.json
+      sha256: sha256:59f233361ed5c9d144d11f30d549a6bdf29ddea809c69d135948f867336cac1f
+    - path: releases/2.6.0/fixtures/positive/responses.boundary.aliases.positive.v2.6.0.fixture.json
+      sha256: sha256:a324e7db08f5620ca67015f8dcba7dddb1c77e0fad1c27268965247ffa178296
+    - path: releases/2.6.0/fixtures/positive/responses.boundary.credentials.positive.v2.6.0.fixture.json
+      sha256: sha256:2e30d356d1e13bc479c2e69513b11106f3e98104dfa6652f3493cfe79ecc2a7c
+    - path: releases/2.6.0/fixtures/positive/responses.boundary.invalid-request-and-credential.positive.v2.6.0.fixture.json
+      sha256: sha256:a127e7fb1583525249a82c8b552b27d04284e124332df472c00df03ba0de3008
+    - path: releases/2.6.0/fixtures/positive/responses.errors.traces.positive.v2.6.0.fixture.json
+      sha256: sha256:09776251a1fe8914576613f749858671955627d6ec9193f3c4d8d538cba3e2b2
+    - path: releases/2.6.0/fixtures/positive/responses.errors.upstream.positive.v2.6.0.fixture.json
+      sha256: sha256:c83543a2feda300433f04bf0c460c7d502d6fff52e9fec7ea5ee25bc7014247f
+    - path: releases/2.6.0/fixtures/positive/responses.openrouter-metadata.positive.v2.6.0.fixture.json
+      sha256: sha256:cc07c0ebfe5d027c2c1f453c1785e532c0be71d2629fa8b860f3f0d9dc8c0c4a
+    - path: releases/2.6.0/fixtures/positive/shared.correlation.safe.positive.v2.6.0.fixture.json
+      sha256: sha256:db32b9155ce12c0d8223f06489df9d0bfc8de5ac3058bdb5fd6367df3076b701
+    - path: releases/2.6.0/fixtures/positive/shared.credential-reference.active.positive.v2.6.0.fixture.json
+      sha256: sha256:52e4a74dd3065e1fc3d564c6405ec0ecc38a38ca12e2f645d36906ce1aad2d5d
+    - path: releases/2.6.0/fixtures/positive/shared.error-envelope.safe.positive.v2.6.0.fixture.json
+      sha256: sha256:6c68bf89203abbad37dc698999599f767a9487f2b4a69c2f7ee8ed88b6145110
+    - path: releases/2.6.0/fixtures/positive/shared.grant.direct-allow.positive.v2.6.0.fixture.json
+      sha256: sha256:d5c1aa87bd5b1da0ccd275e1507d86907929ac6bcee7c6da8b89787debd6e6e2
+    - path: releases/2.6.0/fixtures/positive/shared.list-envelope.bounded.positive.v2.6.0.fixture.json
+      sha256: sha256:34aff5c45d4b8acd5cb2b419d43c9b72027fa344780c72508053a192e092e6ff
+    - path: releases/2.6.0/fixtures/positive/shared.model-alias.assignment.positive.v2.6.0.fixture.json
+      sha256: sha256:79f6cb2875f48fb201accb49b3a6e5564e04e078afa7eba15d1e110f9c5ca1b7
+    - path: releases/2.6.0/fixtures/positive/shared.policy-decision.allow.positive.v2.6.0.fixture.json
+      sha256: sha256:5f07db3cfafacb1824f290d5975acafbdc72b6962decc9df4f16388edc24ddf4
+    - path: releases/2.6.0/fixtures/positive/shared.policy-decision.default-deny.positive.v2.6.0.fixture.json
+      sha256: sha256:ce6f51ec4e65183efde301e9ff93233404d7cae02d592c3ab5528e7cf2e5cfd7
+    - path: releases/2.6.0/fixtures/positive/shared.principal-context.authenticated.positive.v2.6.0.fixture.json
+      sha256: sha256:b10c8a5a37ecaa42dcc11bc5e84093a161e9ac4c26430f89e337bac0c13cf8d3
+    - path: releases/2.6.0/fixtures/positive/shared.principal.agent.positive.v2.6.0.fixture.json
+      sha256: sha256:bfe8ad752cc1e34ce1f26676fac45f3117b92bea38592999d03bc895c6bbbf8e
+    - path: releases/2.6.0/fixtures/positive/shared.principal.human.positive.v2.6.0.fixture.json
+      sha256: sha256:b0cde4b938f43883f2011f9ab93096f2053ceebedbf63be66784410d3102fa84
+    - path: releases/2.6.0/fixtures/positive/shared.resource.model.positive.v2.6.0.fixture.json
+      sha256: sha256:65a601e7421db61b8d8df6833d781eec90228ddf220f392d54432e4361abe12d
+    - path: releases/2.6.0/fixtures/positive/usage.read.positive.v2.6.0.fixture.json
+      sha256: sha256:1bbb99093c5ce1abb8639dfd5496412ed75710ed60ff1b87f467b68f762ad14d
+  openapi:
+    - api_major: 1
+      dialect: 3.1.0
+      path: releases/2.6.0/openapi/control-plane.yaml
+      sha256: sha256:6e18983a2574492ab5f4a8c99d545deab72371b6c6eb1746e727f81cf8012c82
+      version: 2.6.0
+    - api_major: 1
+      dialect: 3.1.0
+      path: releases/2.6.0/openapi/responses.yaml
+      sha256: sha256:3794654471541a92dd7e2b1b9c28ede99534d2cd11eb5ff8ac62ef694d9f4e63
+      version: 2.6.0
+    - api_major: 1
+      dialect: 3.1.0
+      path: releases/2.6.0/openapi/usage-read.yaml
+      sha256: sha256:ff083a4493b7c75e22e160846a116806e4535e7ab3032dc202472ced26ba4aa4
+      version: 2.6.0
+  schemas:
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:audit-event:2.6.0
+      path: releases/2.6.0/json-schema/domain/audit-event.schema.json
+      sha256: sha256:8e530d46f4408a88c702597dc96672d6dfef76a7ecdffa2b34a423e181a7dce8
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:consumption:2.6.0
+      path: releases/2.6.0/json-schema/domain/consumption.schema.json
+      sha256: sha256:0a0ff396a57ebd48d1df3c7615b4988257def029553e93e7478be5d2ae9f9a36
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:correlation:2.6.0
+      path: releases/2.6.0/json-schema/domain/correlation.schema.json
+      sha256: sha256:e8caede86a31ecd600210896642ed8b7ddd8a5da30e1c3fb6a35c5066ceca226
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:credential-reference:2.6.0
+      path: releases/2.6.0/json-schema/domain/credential-reference.schema.json
+      sha256: sha256:c3fdd830cf4e5ff450ca0ffa7271b44bff26c2544d5490e41ac638afa66212b9
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:grant:2.6.0
+      path: releases/2.6.0/json-schema/domain/grant.schema.json
+      sha256: sha256:d33d3f8544307665e7a6f5c688e45aa3dcbab87af81c8a6c16a82199708b40ad
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:model-alias:2.6.0
+      path: releases/2.6.0/json-schema/domain/model-alias.schema.json
+      sha256: sha256:35d00e6e5ff6474cba5d73bd774ad25be5295125899396e647e5f2d7f70abbcf
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:policy-decision:2.6.0
+      path: releases/2.6.0/json-schema/domain/policy-decision.schema.json
+      sha256: sha256:979ad652148734875214858d207c6452ab749d551053cdcd03e77b293c5e08b5
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:principal-context:2.6.0
+      path: releases/2.6.0/json-schema/domain/principal-context.schema.json
+      sha256: sha256:100cd3e5a1399faa92c71bbbb32c0a7ac090c357329379e42e953f450453376f
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:principal:2.6.0
+      path: releases/2.6.0/json-schema/domain/principal.schema.json
+      sha256: sha256:9d81aecc84e50ed651e09d02917ead6d283c182d0f3b2a8fc6e5cdbb7f4cff42
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:resource-catalog-entry:2.6.0
+      path: releases/2.6.0/json-schema/domain/resource-catalog-entry.schema.json
+      sha256: sha256:2cd58d97e7e815fd064dfb2c8f3673e36171129e044961dfd322aad6e94dc579
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:resource:2.6.0
+      path: releases/2.6.0/json-schema/domain/resource.schema.json
+      sha256: sha256:7d7466161ee083c4cd77af493ac852d00d8b3658cca12aead6c6ce20e1f17cc6
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:audit-event-metadata:2.6.0
+      path: releases/2.6.0/json-schema/http/audit-event-metadata.schema.json
+      sha256: sha256:e80174ce0b93cb6c6a10016299e3d44d89cff2316745c5f06dc0baf9f29fe936
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:bootstrap-seed:2.6.0
+      path: releases/2.6.0/json-schema/http/bootstrap-seed.schema.json
+      sha256: sha256:9e3c17be750c003693dc4b78cd126c0da98a123fcb0d7f358e101a6d8a05fda7
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:control-http-case:2.6.0
+      path: releases/2.6.0/json-schema/http/control-http-case.schema.json
+      sha256: sha256:b8b38b7c68ed0e2b0047df25f91f44195a2b24a30b605edb244533ced1568933
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:credential-issuance:2.6.0
+      path: releases/2.6.0/json-schema/http/credential-issuance.schema.json
+      sha256: sha256:057591dbca88c580bfa173859149aedaa576ce6207d301f0a232bb9b7dd2b3d0
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:credential-rotation:2.6.0
+      path: releases/2.6.0/json-schema/http/credential-rotation.schema.json
+      sha256: sha256:7d181b5de2aea198363609e3a63564b70f081bda1d90f47c16346b01805922a9
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:error-envelope:2.6.0
+      path: releases/2.6.0/json-schema/http/error-envelope.schema.json
+      sha256: sha256:5b456482b959005def11551d15c8654fe4b3ac5f0751c7c84dd7675f54f65ba9
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:idempotency-record:2.6.0
+      path: releases/2.6.0/json-schema/http/idempotency-record.schema.json
+      sha256: sha256:3af03f3cd7938c4d67524d2fd214c0f1e71acb98b08092369d12be2bd3d9b141
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:list-envelope:2.6.0
+      path: releases/2.6.0/json-schema/http/list-envelope.schema.json
+      sha256: sha256:aaee63e199837d96a7dcb7d00fa94939e5f81edf2f3c38fef5025e19f77e952c
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:openrouter-metadata-case:2.6.0
+      path: releases/2.6.0/json-schema/http/openrouter-metadata-case.schema.json
+      sha256: sha256:a021c24556c64ba05f541649692f714cd4aef398252d02fdce25d5c938e524c5
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:principal-status-replace:2.6.0
+      path: releases/2.6.0/json-schema/http/principal-status-replace.schema.json
+      sha256: sha256:904035495f97b2a811780283d428e6314ba44a224ec8e088976b487e1ca73ffe
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:resource-catalog-http-case:2.6.0
+      path: releases/2.6.0/json-schema/http/resource-catalog-http-case.schema.json
+      sha256: sha256:9ec6b06d7c09421c276860a62fd45b5743e0de321bdee79d810ee40156950b99
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:resource-catalog-lifecycle-case:2.6.0
+      path: releases/2.6.0/json-schema/http/resource-catalog-lifecycle-case.schema.json
+      sha256: sha256:348183ba05072dfb30d2a1dec3c252b071f584d8ba07688517c3d7889bf2b203
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:resource-catalog-list:2.6.0
+      path: releases/2.6.0/json-schema/http/resource-catalog-list.schema.json
+      sha256: sha256:bd7a642633332a470746e1d32cae32e8c8ea9826823e4e9426411f1d4d5ae23e
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:responses-http-case:2.6.0
+      path: releases/2.6.0/json-schema/http/responses-http-case.schema.json
+      sha256: sha256:2976ffe2c4218b7551d9379bc7ed556dd6de575bc5b1cf1adcf9ba23fef93b6d
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:responses-request:2.6.0
+      path: releases/2.6.0/json-schema/http/responses-request.schema.json
+      sha256: sha256:5c4f6c51a2b6b53e931866187d575da4e199d4300cfd0907ac3d794b24413486
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:responses-response:2.6.0
+      path: releases/2.6.0/json-schema/http/responses-response.schema.json
+      sha256: sha256:34da8f9a859943be51aa2d2a0c92629bb7218000269a8bb684a7efae8f5c56dc
+    - dialect: https://json-schema.org/draft/2020-12/schema
+      id: urn:sre-agent:schema:usage-read:2.6.0
+      path: releases/2.6.0/json-schema/http/usage-read.schema.json
+      sha256: sha256:dfa4539db37e160426f243391c07bf68b3ef1f658628bd693ed57981b24deb4a
+status: immutable
