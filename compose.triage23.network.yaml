@@ -1,0 +1,6 @@
+# Optional host-specific IPAM override after inspecting local Docker subnets.
+networks:
+  runtime:
+    ipam:
+      config:
+        - subnet: ${T23_NETWORK_SUBNET:?choose an unused private subnet}

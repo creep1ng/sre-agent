@@ -72,6 +72,45 @@ test("external producer dismissal is labeled from backend provenance after reloa
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
 });
 
+test("authorized external producer links to a real operator-declared incident", async ({ page, request }) => {
+  const producer = requiredKey("E2E_EXTERNAL_API_KEY");
+  const operator = requiredKey("E2E_TRIAGE_API_KEY");
+  const targetAlert = alertId("link-target");
+  await page.goto(`${WEB}/public/admin/triage.html`);
+  await page.locator("#api-key").fill(operator);
+  await page.locator("#connect-button").click();
+  await page.locator("#alert-id").fill(targetAlert);
+  await page.locator("#command-operation").selectOption("triage_declare");
+  await page.locator("#command-reason").fill("Operator declares the shared incident.");
+  await page.locator("#command-severity").selectOption("sev2");
+  await page.locator("#command-impact").fill("Customer payments are unavailable.");
+  await page.locator("#submit-button").click();
+  await expect(page.locator("#result-status")).toHaveText("declared");
+  const incidentText = await page.locator("#result-incident").textContent();
+  const incidentId = incidentText?.match(/inc-[a-z0-9-]+/)?.[0];
+  expect(incidentId).toBeTruthy();
+
+  const alert = alertId("linked");
+  const linked = await postCommand(request, producer, alert, {
+    operation: "triage_link",
+    expected_version: 1,
+    reason: "Authorized producer correlates this alert to the active incident.",
+    target_incident_id: incidentId,
+  });
+  expect(linked.status()).toBe(200);
+  expect(await linked.json()).toMatchObject({
+    status: "linked",
+    incident_id: incidentId,
+    decision_origin: "external_automatic",
+    responsible_system: "producer-e2e",
+  });
+  await connectForAlert(page, alert, operator);
+  await expect(page.locator("#result-status")).toHaveText("linked");
+  await expect(page.locator("#result-incident")).toContainText(incidentId);
+  await expect(page.locator("#result-origin")).toHaveText("External automatic");
+  await expect(page.locator("#result-responsible-system")).toHaveText("producer-e2e");
+});
+
 test("manual declaration remains manual and has no responsible external system", async ({ page }) => {
   const operator = requiredKey("E2E_TRIAGE_API_KEY");
   const id = alertId("manual");
