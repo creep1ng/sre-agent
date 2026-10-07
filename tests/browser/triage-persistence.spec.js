@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://127.0.0.1:8081";
+const DECLARATION_IMPACT = "Payments are unavailable for new customer orders.";
 
 function journeyKey(name) {
   const value = process.env[name];
@@ -19,6 +20,7 @@ async function declareAlert(page, alertId, key) {
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("E2E persistence proof.");
   await page.locator("#command-severity").selectOption("sev2");
+  await page.locator("#command-impact").fill(DECLARATION_IMPACT);
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
   const href = await page.locator("#result-incident a").getAttribute("href");
@@ -38,6 +40,7 @@ async function readFacts(page) {
     id: await page.locator("#fact-id").textContent(),
     state: await page.locator("#incident-state").textContent(),
     version: await page.locator("#version-line").textContent(),
+    impact: await page.locator("#fact-impact").textContent(),
   };
 }
 
@@ -52,6 +55,7 @@ test("declare navigates to the authoritative incident across reload", async ({ p
   await page.locator("#credential-input").fill(key);
   await page.locator("#credential-form button[type=submit]").click();
   await expect(page.locator("#fact-id")).toHaveText(incidentId);
+  await expect(page.locator("#fact-impact")).toHaveText(DECLARATION_IMPACT);
   const before = await readFacts(page);
   await page.reload();
   await page.locator("#credential-input").fill(key);
@@ -72,6 +76,7 @@ test("second session reads the same persisted incident", async ({ browser }) => 
   const reader = await second.newPage();
   await openWarRoom(reader, incidentId, key);
   await expect(reader.locator("#fact-id")).toHaveText(incidentId);
+  await expect(reader.locator("#fact-impact")).toHaveText(DECLARATION_IMPACT);
   await second.close();
 });
 

@@ -126,3 +126,27 @@ Real baseline commands by an active, granted agent returned200dismiss,200link an
 The manual command service now checks the authenticated principal kind after action grants (including link run.read) but before idempotent binding. Nonhuman terminal manual commands return403`operator_required` without triage/incident/event effects. Open-triage and reads are unchanged; no automaticterminal permission or workflowactor was silently enabled.
 
 Failurecases preceded production changes. Parent baseline RED:**3failed23deselected5.93s**. Parent corrected complete triage/runtime suite:**78passed19.92s**, Ruffcheck/format2files and whitespacepass. Workerearlylinkfixture missedrun.read and was corrected before final RED. Logs `/tmp/triage23-review/t23-12/parent-{red,actor-sql,green}.log`. SourceSHA256 `a9c575a5b3463ae5099f3889e4897e7d88031e8a61ab0547049344d65990dfc7`; HTTPtestSHA256 `6c5eb21c28ce5ee690fcf54d45de579420621dbca69436d1e2fef31c0737b19f`. Use the existing DockerCompose HTTP reproduction command above; a fresh Composebuild of this new actor unit is still pending. Rollback allows an agent to impersonate a human in terminal triage again.
+
+## Real CA5 policy and evaluation-fault probe
+
+Independent FastAPI/PostgreSQL evidence (no mocked responses): removing the isolated workflow policy resource/grants returned403 `not_authorized`; a newly created synthetic database role authenticated successfully but had no SELECT permission on grants, producing503 `storage_unavailable`, retryabletrue. Neither request changed triage, incident, event or idempotency row counts. Only the synthetic role was removed afterward. No browser threshold/rubric evaluator was invented.
+
+Actual output is `/tmp/triage23-review/t23-5/ca5-real-probe.log`; setup is `/tmp/triage23-review/t23-5/ca5-real-probe.py`, executed with `docker run` against the separate owned checks database. These temporary artifacts prove backend fail-closed behavior, not a durable published reproduction package or complete browser CA5 acceptance.
+
+## Verified CA3 UI integration and current candidate checks
+
+Manual declarations require nonblank operator impact (max2000); exact text is sent only for declare, preserved through stale recovery and cleared with session context. Real browser journeys read the same impact from incident detail after navigation, reload and a second session. No UI impact rubric or origin inference exists.
+
+Observed pre-source RED: old UI lacked the impact selector. Worker first full candidate run35passed1failed from a lowercase-only assertion against `Impact`; corrected case-insensitive assertion and repeated36passed54.9s. A broad run against old bundled nginx was stopped, then the owned nginx image rebuilt. Parent independent final browser repetition:**36passed1.1m**, no skips (21real integration,15route-mocked UI checks). Parent first invocation failed before tests because the artifact directory was not writable; preserved and repeated with the host UID.
+
+Fresh actual candidate Composebuild passed **78 Python checks in27.30s**, image `sha256:5d1cf8b37b03ac9247e57469dcb447d7b764fa4bf3515c760148471c778b3252`, including current impact, actor authority, concurrency, runtime and static UI cases. Initial command referenced nonexistentdocker-compose.yml and failed before build; corrected tocompose.yaml. This supersedes the fresh-build-pending status of the earlier backend/actor units above.
+
+```sh
+docker compose --env-file <private-local-checks-env> -p triage23reviewchecks -f compose.yaml -f <owned-network-override> --profile checks run --build --rm python-checks pytest -p no:cacheprovider -q tests/test_triage_commands.py tests/test_triage_http.py tests/test_triage_declare.py tests/test_triage_contract.py tests/test_triage_link.py tests/test_triage_store.py tests/test_triage_ui.py tests/test_incident_runtime.py
+```
+
+Use the isolated local configuration/network prerequisites already described; angle-bracket paths are explicit prerequisites, not supplied artifacts. Logs `/tmp/triage23-review/t23-10/parent-{compose,browser}.log`. Durable self-contained seeds/browser reproduction package and human acceptance still pending; no hosted CI result is claimed for these local changes. JavaScript syntax, static UI checks and diff whitespace checks pass.
+
+![Actual persisted operator impact in the authoritative incident](issue-23-impact.png)
+
+Parent inspected this real screenshot: synthetic incident/operator, impact consequence, severity and initial event; no credential shown. Screenshot SHA256 `30a3da5cd5f40026d056766c149b5ca8a9672567497f911365ee3d03c95644bc`; UI SHA256 `1c2e3d0b6bb72976ab920ffff8f75384faaa49a18a844ceef3281beffae84cf5`. Rollback removes impact entry/validation from UI and makes new declarations incompatible with the mandatory backend field. CA6 producer outcome authority is still unresolved; no external automatic terminal journey or full issue23 acceptance is claimed.

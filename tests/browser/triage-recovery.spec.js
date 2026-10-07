@@ -94,6 +94,7 @@ test("declared incident explains the absent alert context", async ({ page }) => 
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("CA1 null-alert proof.");
   await page.locator("#command-severity").selectOption("sev2");
+  await page.locator("#command-impact").fill("The affected service cannot process new payments.");
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
   const incidentId = await page.locator("#result-incident").textContent();

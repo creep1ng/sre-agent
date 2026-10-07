@@ -58,6 +58,7 @@ test("stale command reads the winning version before explicit resubmission", asy
     expected_version: 1,
     reason: "T23-2 real browser link target.",
     severity: "sev2",
+    impact: "The existing checkout incident blocks new customer payments.",
   });
   expect(target.response.status()).toBe(201);
   const targetIncident = target.body.incident_id;
@@ -130,6 +131,7 @@ test("stale declaration preserves selected severity for an explicit retry", asyn
   await page.locator("#command-operation").selectOption("triage_declare");
   await page.locator("#command-reason").fill("Declare after reconciling fresh state.");
   await page.locator("#command-severity").selectOption("sev3");
+  await page.locator("#command-impact").fill("Operators report that new orders cannot be paid.");
   const beforeStaleSubmit = page.context()["__triageRequests"].length;
   const winner = await postCommand(request, key, id, {
     operation: "open_triage",
@@ -145,6 +147,7 @@ test("stale declaration preserves selected severity for an explicit retry", asyn
   await expect(page.locator("#command-operation")).toHaveValue("triage_declare");
   await expect(page.locator("#command-reason")).toHaveValue("Declare after reconciling fresh state.");
   await expect(page.locator("#command-severity")).toHaveValue("sev3");
+  await expect(page.locator("#command-impact")).toHaveValue("Operators report that new orders cannot be paid.");
 
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");

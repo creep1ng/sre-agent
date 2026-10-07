@@ -92,7 +92,7 @@ test("sends dismiss and link with exact bodies", async ({ page }) => {
   await expect(page.locator("#result-incident")).toHaveText("inc-target-01");
 });
 
-test("sends declare with severity and shows the created incident", async ({ page }) => {
+test("sends the operator impact exactly with declaration and shows the created incident", async ({ page }) => {
   let observed = null;
   await page.route(
     (url) => url.pathname === COMMANDS_PATH,
@@ -103,12 +103,14 @@ test("sends declare with severity and shows the created incident", async ({ page
   );
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
-  await send(page, "triage_declare", { "#command-reason": "Declaring.", "#command-severity": "sev2" });
+  const impact = "  Checkout stopped accepting payments for new orders.  ";
+  await send(page, "triage_declare", {
+    "#command-reason": "Declaring.", "#command-severity": "sev2", "#command-impact": impact,
+  });
   const body = await observed.postDataJSON();
   expect(body).toEqual({
-    operation: "triage_declare", expected_version: 1, reason: "Declaring.", severity: "sev2",
+    operation: "triage_declare", expected_version: 1, reason: "Declaring.", severity: "sev2", impact,
   });
-  expect(body).not.toHaveProperty("impact");
   expect(body).not.toHaveProperty("actor");
   const key = observed.headers()["idempotency-key"];
   expect(key).toMatch(/^triage-[0-9a-f]{32}$/);
@@ -117,12 +119,47 @@ test("sends declare with severity and shows the created incident", async ({ page
   await expect(page.locator("#result-summary")).toContainText("inc-created-01");
 });
 
+test("rejects a declaration without operator impact before sending", async ({ page }) => {
+  let requests = 0;
+  await page.route((url) => url.pathname === COMMANDS_PATH, (route) => {
+    requests += 1;
+    return route.fulfill(json(201, JSON.stringify(stateResult("declared", "inc-created-01"))));
+  });
+  await connect(page);
+  await page.fill("#alert-id", "al-journey-01");
+  await page.selectOption("#command-operation", "triage_declare");
+  await page.fill("#command-reason", "Declaring.");
+  await page.selectOption("#command-severity", "sev2");
+  for (const value of ["", "   "]) {
+    await page.fill("#command-impact", value);
+    await page.click("#submit-button");
+    await expect(page.locator("#page-error-title")).toHaveText("Invalid request");
+    await expect(page.locator("#page-error-detail")).toContainText(/impact/i);
+  }
+  expect(requests).toBe(0);
+});
+
+test("does not send impact for operations other than declaration", async ({ page }) => {
+  const seen = [];
+  await page.route((url) => url.pathname === COMMANDS_PATH, (route) => {
+    seen.push(route.request().postDataJSON());
+    return route.fulfill(json(200, JSON.stringify(stateResult("open"))));
+  });
+  await connect(page);
+  await page.fill("#alert-id", "al-journey-01");
+  await page.fill("#command-impact", "Only applies to a declared incident.");
+  await send(page, "open_triage");
+  expect(seen[0]).toEqual({ operation: "open_triage", expected_version: 1 });
+});
+
 test("renders a missing severity as an invalid request", async ({ page }) => {
   await page.route((url) => url.pathname === COMMANDS_PATH, (route) =>
     route.fulfill(json(422, JSON.stringify({ error: { code: "invalid_severity" } }))));
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
-  await send(page, "triage_declare", { "#command-reason": "Declaring." });
+  await send(page, "triage_declare", {
+    "#command-reason": "Declaring.", "#command-impact": "Checkout stopped accepting payments.",
+  });
   await expect(page.locator("#page-error-title")).toHaveText("Invalid request");
 });
 
@@ -142,9 +179,13 @@ test("switching operations drops stale fields before sending", async ({ page }) 
     "#command-reason": "Same incident.",
     "#command-target": "inc-target-01",
   });
-  await send(page, "triage_declare", { "#command-reason": "Declaring.", "#command-severity": "sev2" });
+  await send(page, "triage_declare", {
+    "#command-reason": "Declaring.", "#command-severity": "sev2",
+    "#command-impact": "Checkout stopped accepting payments.",
+  });
   expect(seen[1]).toEqual({
     operation: "triage_declare", expected_version: 2, reason: "Declaring.", severity: "sev2",
+    impact: "Checkout stopped accepting payments.",
   });
   expect(seen[1]).not.toHaveProperty("target_incident_id");
 });
@@ -271,10 +312,14 @@ test("late response cannot overwrite a newer result", async ({ page }) => {
   expect(seen).toHaveLength(2);
 });
 
-test("exposes no impact, actor or timestamp inputs", async ({ page }) => {
-  await expect(page.locator('[name="impact"]')).toHaveCount(0);
+test("exposes impact only for declaration and no actor or timestamp inputs", async ({ page }) => {
+  await expect(page.locator('[name="impact"]')).toHaveCount(1);
+  await expect(page.locator('[name="impact"]')).toHaveAttribute("maxlength", "2000");
+  await expect(page.locator('[name="impact"]')).toHaveAttribute("aria-required", "false");
+  await page.selectOption("#command-operation", "triage_declare");
+  await expect(page.locator('[name="impact"]')).toHaveAttribute("aria-required", "true");
+  await page.selectOption("#command-operation", "open_triage");
+  await expect(page.locator('[name="impact"]')).toHaveAttribute("aria-required", "false");
   await expect(page.locator('[name="actor"]')).toHaveCount(0);
   await expect(page.locator('[name="timestamp"]')).toHaveCount(0);
-  const source = await page.evaluate(() => fetch("/public/admin/triage.js").then((r) => r.text()));
-  expect(source).not.toContain("impact");
 });

@@ -13,6 +13,7 @@ const operationInput = document.getElementById("command-operation");
 const reasonInput = document.getElementById("command-reason");
 const targetInput = document.getElementById("command-target");
 const severityInput = document.getElementById("command-severity");
+const impactInput = document.getElementById("command-impact");
 const submitButton = document.getElementById("submit-button");
 const disconnectButton = document.getElementById("disconnect-button");
 const liveRegion = document.getElementById("live-region");
@@ -56,6 +57,8 @@ function describeError(error, scope = "command") {
       : ["Access unavailable", "The command cannot be confirmed for this identity."];
   if (error?.kind === "not_found")
     return ["Not found", "Unknown alert or target incident. Nothing was changed."];
+  if (error?.kind === "validation")
+    return ["Invalid request", text(error?.message) || "Review the command fields and try again."];
   if (error?.kind === "conflict")
     return [
       "Conflict",
@@ -134,13 +137,14 @@ function clearResult() {
   reasonInput.value = "";
   targetInput.value = "";
   severityInput.value = "";
+  impactInput.value = "";
 }
 
 const OPERATION_FIELDS = Object.freeze({
   open_triage: Object.freeze([]),
   triage_dismiss: Object.freeze(["reason"]),
   triage_link: Object.freeze(["reason", "target_incident_id"]),
-  triage_declare: Object.freeze(["reason", "severity"]),
+  triage_declare: Object.freeze(["reason", "severity", "impact"]),
 });
 
 function buildBody(operation) {
@@ -158,6 +162,15 @@ function buildBody(operation) {
   if (target !== "" && fields.includes("target_incident_id")) body.target_incident_id = target;
   const severity = severityInput.value;
   if (severity !== "" && fields.includes("severity")) body.severity = severity;
+  const impact = impactInput.value;
+  impactInput.setAttribute("aria-required", String(fields.includes("impact")));
+  if (fields.includes("impact")) {
+    if (impact.trim() === "")
+      return { ok: false, message: "Impact is required when declaring an incident." };
+    if (impact.length > 2000)
+      return { ok: false, message: "Impact must be no more than 2000 characters." };
+    body.impact = impact;
+  }
   return { ok: true, body };
 }
 
@@ -234,6 +247,10 @@ commandForm.addEventListener("submit", (event) => {
 });
 
 operationInput.addEventListener("change", () => {
+  impactInput.setAttribute(
+    "aria-required",
+    String(OPERATION_FIELDS[operationInput.value]?.includes("impact") ?? false),
+  );
   hideError();
 });
 
