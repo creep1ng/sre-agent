@@ -40,6 +40,11 @@ CANONICAL_UUID_PATTERN = (
     r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
     r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
 )
+RFC3339_TIMESTAMP_PATTERN = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt]"
+    r"(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]"
+    r"(?:\.[0-9]+)?(?:[Zz]|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$"
+)
 AUDIT_EVENT_ID_SCHEMA = {
     "oneOf": [
         {
@@ -285,6 +290,15 @@ class AuditReadsService:
     def _digest(self, domain: str, value: str) -> str:
         return self._projector.reference(domain, value).digest
 
+    @staticmethod
+    def _parse_rfc3339_timestamp(value: str) -> datetime:
+        if RFC3339_TIMESTAMP_PATTERN.fullmatch(value) is None:
+            raise ValueError("timestamp is not RFC 3339 date-time")
+        normalized = value[:10] + "T" + value[11:]
+        if normalized.endswith(("z", "Z")):
+            normalized = normalized[:-1] + "+00:00"
+        return datetime.fromisoformat(normalized)
+
     def _filters(self, raw: dict[str, Any]) -> dict[str, Any] | None:
         if any(key in raw for key in FORBIDDEN_PARAMS):
             return None
@@ -318,14 +332,14 @@ class AuditReadsService:
         start = end = None
         if raw.get("from") is not None:
             try:
-                start = datetime.fromisoformat(raw["from"])
+                start = self._parse_rfc3339_timestamp(raw["from"])
             except ValueError:
                 return None
             if start.tzinfo is None:
                 return None
         if raw.get("to") is not None:
             try:
-                end = datetime.fromisoformat(raw["to"])
+                end = self._parse_rfc3339_timestamp(raw["to"])
             except ValueError:
                 return None
             if end.tzinfo is None:
