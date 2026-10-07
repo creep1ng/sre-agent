@@ -22,7 +22,7 @@ passed, 16.6s); corrected to the API-compatible canonical UUID universe. Final
 candidate: **8 browser tests passed (10.3s; restored candidate)** and **24 existing HTTP/PostgreSQL/UI
 checks passed (20.20s; restored candidate)**. No unit tests added and no retroactive strict-TDD claim.
 
-Real connected capture at `2026-10-07T00:49:09.170Z` followed both gateway-produced
+Real connected capture at `2026-10-07T01:54:09.884Z` followed both gateway-produced
 allow and deny events retained in isolated PostgreSQL. For each, the clicked URL
 and all three API reads retain exactly the producer's request ID. Read statuses
 are **200 -> 403 -> 200**: admin, restricted identity (zero rows), then admin.
@@ -47,9 +47,16 @@ docker run --rm --user "$(id -u):$(id -g)" --network audit25-review_runtime --en
 docker compose -p audit25-review --env-file .env.worktree -f compose.yaml -f compose.e2e.yaml --profile checks --profile e2e down
 ```
 
-No remote write, commit, merge or closure. Full repository suite, live external
+Published navigation evidence; no merge or issue closure. Full repository suite, live external
 provider, actual killed-DB/offline demonstrations and human acceptance NOT run.
 RDD disabled/unmanaged. Keep review evidence and navigation as separate delivery
 units, each <=400 additions+deletions; do not submit the combined diff as one PR.
 Rollback: revert the UI/tests navigation unit; backend/storage contracts unchanged.
 Sanitized: yes.
+
+## Refreshed parent correspondence
+
+After parent HTTP/SQL evidence refreshed, correlation artifacts were regenerated
+from that exact producer artifact on `0295805211ce516bcc6d9a076d29d4b7285947ff`.
+Both allow/deny request IDs and SQL event IDs agree with the parent artifact;
+actual connected capture again observed200/403/200 and unchanged served UI hash.
