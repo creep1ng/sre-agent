@@ -1,6 +1,61 @@
 # Issue #23 triage stack review
 
-Status: in progress; **issue #23 is not accepted**. This is a local review, not a published PR, merge authorization or human acceptance. RDD: disabled/unmanaged.
+Status: local code review and CA1–CA6 verification complete; **issue #23 is not accepted**. This is a local review, not a published PR, merge authorization or human acceptance. RDD: disabled/unmanaged.
+
+## Final local verdict (2026-10-07)
+
+The reviewed local correction candidate has **no remaining concrete P0/P1 findings in the final backend/UI audits**. The original eleven remote PRs are still OPEN; their green hosted checks do not cover these unpublished corrections. Confirmed fixes include link-versus-close serialization, terminal incident identity preservation, stale/context/session recovery, human-only declaration with mandatory operator impact, explicit backend provenance, backend-authorized actions, eligible selection and same-ID inbox navigation.
+
+Tested source: `2049c2a3afc96d403da851abdd5e28669c15d182`. Stack base: `63ebc6198a0ca5ce257f1826060bb6345d96b095`. Final independent fresh Docker package: **54 passed, 0 skipped, 0 failed, 0 flaky; 173.906 seconds; exit0**, nine suites. Source manifests match before/after execution. Actual backend source/contract/tests still match tested `a571078da80aa0b899ab99c281166bfabea6db0a`: **114 passed, 38.85 seconds, exit0** using public configuration. See [machine-readable identities, hashes, versions and results](issue-23-final-verification.json). All application/package tools ran inside repository containers; the host wrapper supplies only Docker orchestration and safe private configuration. The final package removed only its own tmpfs database/network; shared evidence databases and other projects were untouched.
+
+| Criterion | Verifiable scenario and source | Observed result |
+| --- | --- | --- |
+| CA1 | `triage-eligible.spec.js`: inbox dismiss → explicit command → reload → real state GET; `test_triage_commands.py`: replay/conflict checks | Same alert, durable reason, authenticated actor and timestamp; one terminal decision. [Reload screenshot](issue-23-inbox-dismiss.png). |
+| CA2 | Real UI bounded list → select → link → state GET; `test_eligible_incidents_caps_in_deterministic_order_and_excludes_terminal_states` | Up to100, stable ordering; no closed destinations; untriaged IDs supported. [Selection](issue-23-eligible-selector.png), [linked reload](issue-23-inbox-link.png). |
+| CA3 | Inbox declare/reload exact incident ID + incident detail GET; `test_declare_persists_operator_impact_through_http_state_event_and_replay`; `test_declare_accepts_every_contract_severity` | Mandatory exact impact persists in state and initial event, severity retained, same incident after reload/replay, one initial event. [Declared reload](issue-23-inbox-declare.png). |
+| CA4 | Real same-key replay/SQL counts and both link/close lock orderings; `triage-conflict-recovery.spec.js` real winning-version read then explicit retry | No duplicate incident/event;409 refreshes authorized context and retains reason/current eligible target; no automatic retry. [Recovery](issue-23-recovery-final.png). |
+| CA5 | Real grantless403 browser/HTTP; `test_context_fails_closed_when_real_policy_storage_is_unavailable`; eligible restricted-role storage503; injected browser empty/403/503/malformed/late responses | No false success or unauthorized effects. Real PostgreSQL denial tests backend faults; injected browser cases prove presentation only. [Denied context](issue-23-denial-final.png). |
+| CA6 | `triage-origin.spec.js`: actual authorized producer dismiss/link HTTP → UI/reload, manual declaration, genuine pre-migration legacy row | Backend validates `manual`/`external_automatic`/`unknown`; responsible producer shown, no UI thresholds/origin inference. Agents cannot declare/open. [External decision](issue-23-origin-final.png). |
+
+CA2 backend executable cases are `test_eligible_incidents_caps_in_deterministic_order_and_excludes_terminal_states`, `test_eligible_list_then_closed_destination_is_rejected_without_association`, and the two real concurrent lock-order checks in `test_triage_link.py`. The browser `destination_ineligible`409 is injected: it proves refreshed choices, cleared target, preserved reason, disabled submission until explicit selection, and no automatic POST; it does **not** masquerade as the real SQL-close race.
+
+The inbox is a real nginx-served **synthetic JSON fixture**, not live provider ingestion. Producer credentials are synthetic authorized agent credentials; their decisions actually traverse FastAPI and PostgreSQL. The project has grant-based authorization, not a separate threshold evaluator: CA5 demonstrates absent grants and real policy-storage failure without inventing one.
+
+### Environment and repeatable Docker commands
+
+Python3.12.14, FastAPI0.115.12, SQLAlchemy2.0.52, psycopg3.2.6, Alembic1.19.1; digest-pinned PostgreSQL17.4 and repository Dockerfiles/lockfiles. Exact built image IDs are in the JSON receipt. For the browser run, safely prepare `/tmp/triage23-local` and its empty `artifacts` directory with owner-only permissions700, an empty `artifacts/credentials.env` file600, and a private `compose.env` file600 containing:
+
+```ini
+COMPOSE_PROJECT_NAME=triage23-local-unique
+T23_ARTIFACTS_DIR=/tmp/triage23-local/artifacts
+T23_CREDENTIALS_FILE=/tmp/triage23-local/artifacts/credentials.env
+```
+
+Choose a unique project name and empty artifact directory per run. The committed seed creates six synthetic identities, a real legacy row before migration, and one eligible target; no missing temporary seed, real provider credential, published port or ambient `.env` is required. Do not print/source/commit the generated credential file. From the tested checkout:
+
+```sh
+docker compose --env-file /tmp/triage23-local/compose.env -f compose.triage23.yaml build db seed api web e2e
+docker compose --env-file /tmp/triage23-local/compose.env -f compose.triage23.yaml up -d db
+docker compose --env-file /tmp/triage23-local/compose.env -f compose.triage23.yaml run --rm --user "$(id -u):$(id -g)" seed
+docker compose --env-file /tmp/triage23-local/compose.env -f compose.triage23.yaml up -d api web
+docker compose --env-file /tmp/triage23-local/compose.env -f compose.triage23.yaml run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp e2e sh /run/triage23-browser.sh
+docker compose --env-file /tmp/triage23-local/compose.env -f compose.triage23.yaml down --remove-orphans
+docker compose --env-file .env.example -p triage23-local-checks --profile checks run --build --rm -T python-checks pytest -p no:cacheprovider -q tests/test_triage*.py tests/test_incident_runtime.py tests/test_incident_persistence.py
+```
+
+Expected: browser54/0/0/0 with real screenshots and recordings; backend114 passes. Always perform scoped cleanup after a failed browser run too. When Docker's default pool is exhausted, inspect a free private subnet, add `T23_NETWORK_SUBNET` to private configuration and add `-f compose.triage23.network.yaml` to each browser Compose command. Never reuse another project's db/api/web aliases or prune its resources. The equivalent `scripts/run_triage23_review.sh` wrapper automatically creates private configuration and cleans up its own project even on failure.
+
+### Evidence, retained failures and delivery boundaries
+
+Final private run: `/tmp/triage23-20261007T142216Z-1594216.KB6ZMK`; logs/manifests: `/tmp/triage23-review/t23-18/parent-final-corrected`. Seven committed screenshots were visually inspected; eight final text artifacts contained none of the generated credential values. Three genuine inbox WebM clips exist under `artifacts/test-results/triage-eligible-real-inbox-*/video.webm`; start/middle/end samples were inspected in isolated Docker Chromium, with no visible credential value. Samples are not a full-frame certification. These recordings are not published; browser fault-case recordings must not be labeled real-service proof.
+
+Deferred: media storage unavailable; screenshot evidence is mandatory.
+
+Retained latest failures: baseline UI8fails; first GREEN53pass/1copy mismatch; initial weakly ordered conflict race passed (not conclusive), strengthened deterministic worker/parentRED1fail then focusedGREEN1pass; first parent static attempt hit a read-only Ruff cache, then E501 on fixture message, then first line-wrap still exceeded100. Final adjacent-literal formatting passed Ruff/format and shell syntax; Node syntax passed in Docker. Parent package before that purely mechanical formatting change also54passed128.330s; **the final173.906s run uses the final formatted commit**, not substituted earlier results. All functional final cases ran; none skipped. ShellCheck was unavailable locally and was not claimed. Earlier retained failures are detailed chronologically below.
+
+Nonblocking UI copy follow-up: after a denied context read, target-list status can retain its loading message even though the main error is visible and command submission remains disabled. This is not a P0/P1 or false success.
+
+Local latest bounded units: target UI/existing fixtures210lines (`d9ccd46`), inbox/pre-authored E2E389 (`0eaf902`), package19 (`0a82cde`), fixture-format5 (`2049c2a`), additions plus deletions. No size exception, push, PR publication, merge or issue closure. Hosted CI for the new candidate and independent human acceptance remain pending; RDD is disabled/unmanaged. Engram synchronization is pending runtime session registration, not simulated by another identity. Local tracker and this report preserve recovery.
 
 ## Scope and identity
 
@@ -34,7 +89,7 @@ Live hosted checks were successful for all eleven PRs at inspection; this is sep
 - Real, locally produced session-isolation and 403 screenshots were inspected; credentials were not printed or included in screenshots/traces.
 - Initial ad-hoc SQL used the wrong `version` column and nonexistent `incident.events` table; those queries failed and were corrected to `expected_version` and `incident.run_events`. They are not product failures.
 
-## Requirement audit (not acceptance)
+## Baseline requirement audit (historical, not acceptance)
 
 | Criterion | Current evidence | Remaining work |
 | --- | --- | --- |
@@ -45,7 +100,7 @@ Live hosted checks were successful for all eleven PRs at inspection; this is sep
 | CA5 403/missing policy/evaluation failure without false success | Real grantless 403 and absent persisted decision pass | Demonstrate missing-policy/evaluation-failure paths; do not invent an evaluator |
 | CA6 manual versus external automatic distinction | No browser anomaly/threshold evaluator; actor displayed | No decision-origin projection or external automatic evidence; authoritative contract required |
 
-Two further explicit integration requirements remain unmet: `public/incident-ui/alerts.js` only emits an unconsumed `midnight:triage-requested` event; no inbox→triage navigation exists. The triage UI hardcodes every operation instead of consuming domain-provided permitted actions. The direct-URL browser journeys above do not prove inbox journeys. Alert source metadata is not automatic decision origin.
+At the baseline, two further explicit integration requirements were unmet: `public/incident-ui/alerts.js` only emits an unconsumed `midnight:triage-requested` event; no inbox→triage navigation exists. The triage UI hardcodes every operation instead of consuming domain-provided permitted actions. The direct-URL browser journeys above do not prove inbox journeys. Alert source metadata is not automatic decision origin.
 
 Additional **P1 confirmed through real HTTP**, corrected below: one synthetic alert received `triage_declare` 201/version1, then `triage_dismiss` 200/version2/incident_id null, then `triage_declare` 201/version3 with a *different* incident ID. The current guard rejects repeated declare only while the status is still declared; another command can erase that guard and canonical association. Captured safe output: `/tmp/triage23-review/terminal-probe.log`. Workflow triage decisions have terminal destinations; the browser must not invent another state machine to cover this service failure.
 
