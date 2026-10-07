@@ -176,18 +176,23 @@ test("does not submit an identity lookup made stale by clearing the credential",
   await expect(page.locator("#review")).toHaveAttribute("data-state", "auth");
 });
 
-test("keeps one submitted action and its idempotency key stable during identity lookup", async ({ page }) => {
+test("keeps one submitted action stable while identity and command requests are pending", async ({ page }) => {
   await openReview(page);
-  let release = () => {};
-  const gate = new Promise((resolve) => { release = resolve; });
+  let releaseIdentity = () => {};
+  const identityGate = new Promise((resolve) => { releaseIdentity = resolve; });
+  let releaseCommand = () => {};
+  const commandGate = new Promise((resolve) => { releaseCommand = resolve; });
   let lookups = 0;
   await page.unroute("**/api/v1/whoami");
   await page.route("**/api/v1/whoami", async (route) => {
     lookups += 1;
-    await gate;
+    await identityGate;
     await route.fulfill({ json: { principal_id: "demo-human" } });
   });
-  const posted = await mockCommands(page, async () => ({ status: 202, json: acceptedPayload() }));
+  const posted = await mockCommands(page, async () => {
+    await commandGate;
+    return { status: 202, json: acceptedPayload() };
+  });
   await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
   await page.locator("#decision-comment").fill("Original approval reason.");
   const submittedKey = await page.locator("#decision-key").textContent();
@@ -197,9 +202,13 @@ test("keeps one submitted action and its idempotency key stable during identity 
   await expect(page.locator('#actions-list button[data-command="reject_mitigation"]')).toBeDisabled();
   await expect(page.locator("#decision-comment")).toBeDisabled();
   await expect(page.locator("#decision-submit")).toBeDisabled();
-  release();
+  releaseIdentity();
   await expect.poll(() => posted.length).toBe(1);
+  await expect(page.locator("#refresh-button")).toBeDisabled();
+  await expect(page.locator("#decision-section")).toBeVisible();
+  releaseCommand();
   await expect(page.locator("#receipt-line")).toContainText("approve_mitigation");
+  await expect(page.locator("#refresh-button")).toBeEnabled();
 
   expect(lookups).toBe(1);
   expect(posted).toHaveLength(1);
