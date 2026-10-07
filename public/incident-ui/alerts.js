@@ -309,6 +309,12 @@
     nodes["triage-feedback"].hidden = false;
   }
 
+  function openTriageForRequestedAlert(event) {
+    const alertId = event.detail?.alert_id;
+    if (typeof alertId !== "string" || !/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) return;
+    window.location.assign(`/public/admin/triage.html?alert_id=${encodeURIComponent(alertId)}`);
+  }
+
   function showLoadError(error) {
     console.error(error);
     nodes["loading-state"].hidden = true;
@@ -354,6 +360,7 @@
     syncThemeSwitch();
     nodes["theme-toggle"].addEventListener("click", toggleTheme);
     nodes["start-triage"].addEventListener("click", emitTriageRequest);
+    document.addEventListener("midnight:triage-requested", openTriageForRequestedAlert);
     loadAlerts();
   });
 })();
