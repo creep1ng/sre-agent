@@ -26,7 +26,9 @@ ALLOWED_KEYS = {
     "open_triage": frozenset({"operation", "expected_version"}),
     "triage_dismiss": frozenset({"operation", "expected_version", "reason"}),
     "triage_link": frozenset({"operation", "expected_version", "reason", "target_incident_id"}),
-    "triage_declare": frozenset({"operation", "expected_version", "reason", "severity", "impact"}),
+    "triage_declare": frozenset(
+        {"operation", "expected_version", "reason", "severity", "impact", "alert_context"}
+    ),
 }
 
 MESSAGES = {
@@ -113,6 +115,7 @@ class TriageHttpService:
                 reason=raw.get("reason"),
                 severity=raw.get("severity"),
                 impact=raw.get("impact"),
+                alert_context=raw.get("alert_context"),
                 target_incident_id=raw.get("target_incident_id"),
                 idempotency_key=idempotency_key,
             )

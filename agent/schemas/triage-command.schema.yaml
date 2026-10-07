@@ -6,10 +6,11 @@
 # for open. target_incident_id only exists for link. Declaration severity is
 # operator-selected and may override the intake suggestion. The server
 # requires the operator-stated incident impact. The server determines
-# actor/timestamp: no actor field is admitted here.
+# actor/timestamp: no actor field is admitted here. Declarations require the
+# operator-confirmed source alert facts so the created incident is canonical.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:triage-command:2.0.0
+$id: urn:sre-agent:schema:triage-command:3.0.0
 title: TriageCommand
 oneOf:
   - type: object
@@ -35,10 +36,21 @@ oneOf:
       target_incident_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
   - type: object
     additionalProperties: false
-    required: [operation, expected_version, reason, severity, impact]
+    required: [operation, expected_version, reason, severity, impact, alert_context]
     properties:
       operation: { const: triage_declare }
       expected_version: { type: integer, minimum: 1 }
       reason: { type: string, minLength: 1, maxLength: 1000 }
       severity: { enum: [sev1, sev2, sev3, sev4], description: Operator-confirmed severity; may override the intake suggestion. }
       impact: { type: string, minLength: 1, maxLength: 2000, pattern: '\S', description: Operator-stated consequence of the incident. }
+      alert_context:
+        type: object
+        additionalProperties: false
+        required: [service, summary, observed_at, source, severity]
+        description: Operator-confirmed alert facts; alert_id and status are assigned by the server.
+        properties:
+          service: { type: string, minLength: 1, maxLength: 200, pattern: '\S' }
+          summary: { type: string, minLength: 1, maxLength: 2000, pattern: '\S' }
+          observed_at: { type: string, format: date-time }
+          source: { type: string, minLength: 1, maxLength: 200, pattern: '\S' }
+          severity: { enum: [sev1, sev2, sev3, sev4] }

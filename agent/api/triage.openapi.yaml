@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SRE Agent Alert Triage API
-  version: 3.2.0
+  version: 3.3.0
   description: >-
     Alert triage commands and reads (TRIAGE, issue #23) over the stable
     incident_workflow/incident-response resource. Reads need alert.read;
@@ -32,6 +32,10 @@ info:
     responsible_system, not full history.
     Declare requires the operator's nonblank incident impact (the consequence
     of the incident), up to 2000 characters; no impact rubric is computed.
+    Declare also requires operator-confirmed alert context: service, summary,
+    RFC3339 observation time, source, and alert severity. The backend
+    validates and preserves those facts in the canonical incident alert; the
+    alert severity remains separate from the incident severity decision.
     No generic comments: the triage reason is not a comment system.
 servers: [{ url: / }]
 security: [{ bearerAuth: [] }]
@@ -101,7 +105,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: 'urn:sre-agent:schema:triage-command:2.0.0' }
+            schema: { $ref: 'urn:sre-agent:schema:triage-command:3.0.0' }
             examples:
               declare: { $ref: './examples/triage/command-request.json' }
       responses:

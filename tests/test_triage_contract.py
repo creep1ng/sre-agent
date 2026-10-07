@@ -65,10 +65,10 @@ def test_contract_schemas_and_paths() -> None:
     post = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/commands"]["post"]
     headers = {p["name"] for p in post["parameters"] if "name" in p}
     assert "Idempotency-Key" in headers
-    assert OPENAPI["info"]["version"] == "3.2.0"
+    assert OPENAPI["info"]["version"] == "3.3.0"
     assert SCHEMAS["triage-state"]["$id"] == "urn:sre-agent:schema:triage-state:2.0.0"
     assert post["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
-        "urn:sre-agent:schema:triage-command:2.0.0"
+        "urn:sre-agent:schema:triage-command:3.0.0"
     )
     key = next(p for p in post["parameters"] if p.get("name") == "Idempotency-Key")
     assert key["required"] is True and key["in"] == "header"
@@ -88,7 +88,7 @@ def test_contract_schemas_and_paths() -> None:
     assert set(eligible["responses"]) == {"200", "400", "401", "403", "503"}
     eligible_schema = eligible["responses"]["200"]["content"]["application/json"]["schema"]
     assert eligible_schema == {"$ref": "#/components/schemas/EligibleIncidents"}
-    assert OPENAPI["info"]["version"] == "3.2.0"
+    assert OPENAPI["info"]["version"] == "3.3.0"
 
 
 def test_contract_refs_resolve() -> None:
@@ -110,22 +110,42 @@ def test_command_payloads_are_closed_per_operation() -> None:
     variants = SCHEMAS["triage-command"]["oneOf"]
     assert {v["properties"]["operation"]["const"] for v in variants} == OPERATIONS
     by_op = {v["properties"]["operation"]["const"]: v for v in variants}
+    expected_required = {
+        "open_triage": ["operation", "expected_version"],
+        "triage_dismiss": ["operation", "expected_version", "reason"],
+        "triage_link": ["operation", "expected_version", "reason", "target_incident_id"],
+        "triage_declare": [
+            "operation",
+            "expected_version",
+            "reason",
+            "severity",
+            "impact",
+            "alert_context",
+        ],
+    }
     for operation in OPERATIONS:
-        assert by_op[operation]["required"] == (
-            ["operation", "expected_version"]
-            if operation == "open_triage"
-            else ["operation", "expected_version", "reason", "severity", "impact"]
-            if operation == "triage_declare"
-            else ["operation", "expected_version", "reason", "target_incident_id"]
-            if operation == "triage_link"
-            else ["operation", "expected_version", "reason"]
-        )
+        assert by_op[operation]["required"] == expected_required[operation]
     assert by_op["triage_declare"]["properties"]["severity"]["enum"] == [
         "sev1",
         "sev2",
         "sev3",
         "sev4",
     ]
+    assert by_op["triage_declare"]["properties"]["alert_context"] == {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["service", "summary", "observed_at", "source", "severity"],
+        "properties": {
+            "service": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S"},
+            "summary": {"type": "string", "minLength": 1, "maxLength": 2000, "pattern": "\\S"},
+            "observed_at": {"type": "string", "format": "date-time"},
+            "source": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S"},
+            "severity": {"enum": ["sev1", "sev2", "sev3", "sev4"]},
+        },
+        "description": (
+            "Operator-confirmed alert facts; alert_id and status are assigned by the server."
+        ),
+    }
     assert by_op["triage_declare"]["properties"]["impact"] == {
         "type": "string",
         "minLength": 1,
@@ -139,6 +159,13 @@ def test_command_payloads_are_closed_per_operation() -> None:
         "expected_version": 1,
         "reason": "test",
         "impact": "Customers could not complete checkout.",
+        "alert_context": {
+            "service": "checkout",
+            "summary": "Elevated checkout failures.",
+            "observed_at": "2026-10-07T10:30:00Z",
+            "source": "operator-confirmed-monitoring",
+            "severity": "sev2",
+        },
     }
     suggested = "sev2"
     cases = [
@@ -149,10 +176,20 @@ def test_command_payloads_are_closed_per_operation() -> None:
         ({"impact": None}, False),
         ({"severity": "sev1", "impact": "x" * 2000}, True),
         ({"severity": "sev1", "impact": "x" * 2001}, False),
+        ({"alert_context": {**request["alert_context"], "severity": "critical"}}, False),
+        ({"alert_context": {**request["alert_context"], "extra": "no"}}, False),
     ]
     assert "sev1" != suggested
     for addition, valid in cases:
         assert validator.is_valid(request | addition) is valid
+    context_validator = Draft202012Validator(
+        by_op["triage_declare"]["properties"]["alert_context"],
+        format_checker=FormatChecker(),
+    )
+    assert context_validator.is_valid(request["alert_context"])
+    assert not context_validator.is_valid(
+        request["alert_context"] | {"observed_at": "2026-10-07T10:30:00"}
+    )
     assert "actor" not in by_op["triage_declare"]["properties"]
     assert "decision_origin" not in by_op["triage_declare"]["properties"]
     assert "responsible_system" not in by_op["triage_declare"]["properties"]
@@ -243,7 +280,7 @@ def test_contract_examples_validate() -> None:
     )
     cases = {
         "triage-open.json": "urn:sre-agent:schema:triage-state:2.0.0",
-        "command-request.json": "urn:sre-agent:schema:triage-command:2.0.0",
+        "command-request.json": "urn:sre-agent:schema:triage-command:3.0.0",
         "command-declare.json": "urn:sre-agent:schema:triage-state:2.0.0",
         "error-409.json": "urn:sre-agent:schema:error-envelope:2.0.0",
     }
