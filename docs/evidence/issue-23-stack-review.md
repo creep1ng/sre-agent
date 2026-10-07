@@ -365,3 +365,53 @@ On2026-10-07 an independent read-only audit of committed `32de182` found no acti
 Parent independently verified the eight pre-authored UI cases against the frozen backend-new/UI-old candidate in a **new isolated tmpfs database**, not the existing evidence database: **8 failed, exit1**, `/tmp/triage23-review/t23-18/isolated-red/parent-red-final-authorized.log`. Four inbox cases fail at the missing deep link; four target cases fail at the missing eligible GET. A Docker socket permission failure preceded this run and is retained separately, not represented as behavioral RED. Existing downstream declaration/reload/media assertions were strengthened before source; no new post-code unit cases. UI GREEN and full final CA mapping remain pending.
 
 The inbox is served static synthetic JSON. Its forthcoming actual nginx→triage→FastAPI/PostgreSQL journeys will prove that integration, **not live provider ingestion**. A real PostgreSQL list→close→POST test proves the backend race; an injected409 browser case proves only UI recovery/no false success. Failure-run recordings are not acceptance media.
+
+
+## Required source alert context checkpoint (2026-10-07)
+
+This checkpoint supersedes previous declaration-input acceptance: the maintainer
+requires service, summary, RFC3339 observation time, source and alert severity.
+The operator enters/confirms real values; missing data is never inferred.
+The closed command contract is now 3.0.0 (triage OpenAPI 3.3.0). Alert identity
+and status are server-owned. Incident severity and mandatory operator impact
+remain separate from source alert severity. Authenticated decision provenance
+remains backend-owned; external producers still cannot declare.
+
+Current local proof: 97 backend HTTP/PostgreSQL/service/contract checks passed
+in 50.75 seconds. They validate the complete persisted incident, first event
+and snapshot against the canonical incident-state schema and validate an
+InvestigationRequest; invalid context leaves no triage/incident/event/snapshot
+or idempotency effect. Changed context under one key conflicts; another caller
+cannot reuse an owner's decision. The earlier ownership unit passed110checks.
+Fresh actual production browser package:54passed,0skipped,0failed,0flaky,
+139.364seconds. Missing/unconfirmed context makes no POST; operator-supplied
+facts persist and appear after reload, with distinct alert/incident severities.
+The existing session/producer-denial fixtures were adapted after the first
+52pass/2fail run; no new tests were added after implementation.
+Eight fresh genuine screenshots were individually inspected; credential inputs
+are empty, and four text artifacts contain none of the generated API keys.
+See issue-23-context-verification.json and issue-23-declaration-context.png.
+The complete current source check first produced1761passed,1live-provider
+skip,13auditfixture-errors419.39s. Its guarded test reset omitted alert_triage
+while resetting migrations, causing DuplicateTable. Only that existing reset
+was corrected; all13existingcases passed9.12s/Ruff/format. The complete current
+repeat is pending; scoped/browser passes are not a complete suite pass.
+
+### Original issue330 boundary
+
+The live issue330 remainsOPEN/Projectmidnight.agentTodo and explicitly excludes
+pre-declaration triage endpoints. Its existing real-HTTP/PostgreSQL suites map
+CA1 to test_incident_run_http/test_incident_restart_reads, CA2 to start/command
+replay and runtime concurrency, CA3 to cross-scope401/403/404, CA4 to human
+approval/attribution/artifact state, CA5 to gateway-to-IncidentRuntime and its
+unit of work, and CA7 to test_incident_workflow_provisioning plus HTTP grants.
+Source presence alone is not a fresh pass: current full execution is required.
+The restart proof rereads an existing durable run rather than one combined
+HTTP-start-and-restart sequence. For CA6, this runtime performs no external
+mitigation effects; no external exactly-once guarantee is asserted. A future
+external effect's confirmed/failure/unknown outcome distinction is not proved
+by these checks, so this work does not close issue330 or silently claim that
+external criterion fulfilled.
+
+Remote exact-head review/CI and independent human acceptance remain pending;
+no main merge, issue closure, protection bypass or native RDD approval is claimed.
