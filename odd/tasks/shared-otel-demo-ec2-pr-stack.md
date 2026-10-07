@@ -66,14 +66,14 @@ Docker reproduction and no live-AWS claim. All observed PR diffs are under
 400 additions plus deletions against their current base. PR #504 fixed the
 CI pytest import path after the hosted unit job failed collection; the fix
 was merge-forwarded without force-pushing through PR #512. Original behavior
-source and tests stayed unchanged during propagation. PR #13 (shared reuse
-and idempotent teardown) is prepared locally but not yet opened. Two new
+source and tests stayed unchanged during propagation. Feature branch `codex/otel-demo-ec2/13-shared-reuse` verifies shared reuse
+and idempotent teardown. Two new
 acceptance checks were observed RED before the fix; at source SHA
 `641a713`, exact-checkout networkless Docker reported 59 focused passes and
 Ruff passed 17 files without a PYTHONPATH override.
 
-Next: capture and publish the final behavior evidence/PR, map #494 criteria
-back to the stack, verify current hosted CI and governance statuses, mirror
-this tracker to Engram, and request independent human review. Live AWS
+Next: map #494 criteria back to the stack, verify current hosted CI and
+governance statuses, mirror this tracker to Engram, and request independent
+human review. Live AWS
 provisioning, Scheduler firing, SSM forwarding and billing controls are
 not validated in this publication session; the issue remains open.
