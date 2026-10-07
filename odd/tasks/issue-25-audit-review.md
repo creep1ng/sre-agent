@@ -330,7 +330,7 @@ Published correction units PR514-517 and atomic integration PR518 head
  ee82793e834f28f95cf9b8a2cec79b6bc95665da over maina354. User accepted this
 exact candidate/sourcea592 conditionally: no unresolved Codex findings and all
 checks pass (PR518 comment6039287589). No merge performed.
-- [ ] T26 Require caller-specific list/detail envelopes before terminal mutation
+- [x] T26 Require caller-specific list/detail envelopes before terminal mutation
   classification (PR516 comment4207605002, P1). Preauthor wrong detail/list and
   mutation-detail-envelope behavior cases, observe RED/GREEN in Docker pytest,
   regenerate actual terminal SQL artifacts, publish bounded correction.
@@ -338,11 +338,11 @@ T23 row-count proof is provisional again: a valid wrong-route envelope can pass
 current helper. Existing populated HMAC/UI/restoration proof remains historical.
 T25 local technical acceptance ofa592 is qualified pending T26 and fresh exact-head
 review, CI and human freshness acceptance. Next: delegated helper/tests correction.
-- [ ] T27 Align runtime audit-route OpenAPI metadata with published2.7 (PR518
+- [x] T27 Align runtime audit-route OpenAPI metadata with published2.7 (PR518
   comment4207658104): filters/path/auth, response/error and governed metadata;
   preserve custom runtime validation/terminal recording, no automatic FastAPI
   validation bypassing the governed service. Failure-first OpenAPI behavior checks.
-- [ ] T28 Enforce released canonical UUID or additive legacy-ID language (PR518
+- [x] T28 Enforce released canonical UUID or additive legacy-ID language (PR518
   comment4207658116), with preauthored HTTP422/terminal persistence proof for
   digit-leading compact/braced/URN forms; preserve actual valid legacy forms.
 T27/T28 are exact-candidate unresolved findings; no merge while any remain.
@@ -375,7 +375,7 @@ but oldacceptance remains qualified; no merge pending freshproof/review/human.
 Fresh union full run observed RED:1606passed/1skipped/1failed323.43s. Existing
 `test_current_governed_operations_have_one_declared_contract` correctly detects
 newly described audit routes absent from its old EXPECTED_SCOPES inventory.
-- [ ] T29 Adapt existing governed-operation expected inventory to the two audit
+- [x] T29 Adapt existing governed-operation expected inventory to the two audit
   routes' actual admin.read/administrative_control/audit scope, preserve assertions;
   no new unit scenarios after source. Separate <=400 fixture-only correction,
   then rerun exact joint full suite; no blanket fullGREEN claim yet.
@@ -391,3 +391,81 @@ capture detectedold8fhelperhash; regenerated aftersuccessfulbuild. Exacthost/API
 helperhash33640bab matches25b runtime source; capturesdeclaredrevision25b truthful.
 Localtechnicalacceptance791recorded in updatedreport; unitpublication/newexacthead
 Codex/CI/humanfreshness/conditionalmerge stillpending. No remoteheadupdate yet.
+
+Published/attached boundedPR519helper125→520contract400→521inventory10→522evidence263.
+No own-headexecutionfabricated: bodiespointtestedjoint791/carrier304/currentmainc207.
+Afterpublicationlive mainadvanced31b4d2f8ba3dc292ea9bce59c069ffa21ebfc02f
+(incidentmitigationUI plusadditivesharedAPIclientmethod); finalonlymerge6edab48
+preservesall, backend/helpers/auditEvents script unchanged25b. Parentcurrentunion
+fullchecks37467 usesverified25b backendimage pluscurrenttests/public readonlymount;
+actualbrowser12passed15.2s afterweb/e2erebuild, fullGREENstillpending.
+Next: freshtargetedcaptures/report/newfinalheadmetadata/review, humanfreshnessgate.
+
+Parent actualGET `/openapi.json` found duplicate detail id/path parameters:
+nativeFastAPIstr plus manuallyappendedoneOf. Existingparitytest silentlycollapsed
+them into a dictionary, so scoped/fullGREEN is insufficient for validOpenAPI.
+- [ ] T30 Preassert parameter uniqueness in existing parity scenario, observeRED,
+  fix via native documentation-only Path schema (no servicevalidation bypass),
+  verify same canonical schema plus HTTPterminal behavior, publish separatebounded
+  unit because PR520already400. Localtechnicalacceptance791/6ed provisional again.
+
+T30 sourcecdf536f observed uniquenessRED1fail4.63s, focusedGREEN1pass4.15s;
+actualAPI independently has onecanonical id/path and exacthost/API/helpermanifest
+f80c78f9. Full1608passed1skip379.38s +prechecks/Alembic; browser12passed28.3s;
+terminal13passed9.25s +11actualSQLrecords. All8freshPNG manually inspected;
+connectedfault200→503 clearsprior1/1to0/0, boundedcontrollerrestored SQLt|t.
+Standalone27line5a30533 unpublished; currentCDFtechnicalacceptance stillqualified.
+- [ ] T31 Correct PR520 P1 comment4208495712: parity environment override masks
+  defaultcontract2.6 vs emitted2.7metadata. Removeoverride and assertdefaultactive
+  matchespublished2.7 beforefix; activatepublished2.7default, adaptexistingrelease
+  expectations/example configuration, preserveimmutableversions/overridecompatibility.
+  FailurefirstDockerpytest; boundedfollowup, freshcandidate verification.
+- [ ] T32 Correct PR522 P2 comment4208493370: evidencecarrier lacks mainunion.
+  DeterministichostGitsetup must explicitly check out immutabletestedjointSHA
+  beforeDockerbuild (isolatedworktree), sourcehashverified; do notclaimcarrier's
+  ownhead executed. Refreshactualfinaljointproof then exactheadreview/CI/human.
+
+- [ ] T33 Investigate PR518 P2 comment4208468108: released2.7 metadata operation
+  enum excludes existing persisted mounted operations. Preserveimmutable snapshots
+  and all visible events; choose honest runtime-local representation or approved
+  newrelease after scoped read-only exploration. No implementationacceptanceyet.
+
+T31 scopedRED2failed2passed8.86s beforedefaultactivation; GREEN4passed8.64s,
+Ruff/formatpass, existingexplicitoverridecompatibilitypreserved. Fourfile8line
+boundedsourcecommitted; fullnewjoint/capturesstillpending; release2.7immutable.
+T33 scopedread-onlyexploration verified exactlysixruntimeDTOoperations absent
+from2.7metadataenum, actualmigrationspersistthem andprojectionpreservesoperation.
+Selectedboundedruntime-local namedOpenAPIcomponent derivedfromAuditEvent schema,
+constrainedactualmetadata projection, visiblymarkedimplementationextension.
+No frozenURNreuse/snapshotedit, no eventhiding/relabeling/newrelease. Testsfirst:
+realpersisted sixfamilies/list/detailvalidateadvertisedschema, forbiddencontent
+mustfail, legacycanonicalIDprojection remainsadditive, thenRED/GREEN sourcefix.
+
+T33 realDBRED3failed10passed10.62s beforefix; sourcee0fa793c2fcb1c4dc3e75f4f0f444cff3f8badf3
+inline runtime-local named$id/title/scope +internal$defs covers34operations and
+actualIDlanguage, excludesprojectedcontent, no frozenURNreuse. Worker13GREEN10.81s;
+parent16GREEN12.75s incldefaultrelease +Ruff/format. Parentfirstformatcachepermission
+failedbeforepytest; onlycachelocation/tmpcorrected, no sourcechangeforcache.
+Bounded251line3files unitprepared over8lineT31child over27lineT30child, unpublished.
+Fullnewjoint4016/browser45729running; no currentfullGREEN orlocaltechnicalacceptance
+claimed. Nextfreshcaptures/defaultschemaactualAPI, reportdeterministicworktree
+setup, boundedpublication/evidence522restack, exactfinal518review/CI/human.
+
+Fresh e0 fullsuite RED:1609passed1skipped1failed399.66s. Existing usage-publication
+scenario pins activeCONTRACT_VERSION2.6 evenafter deliberate2.7activation;
+its later canonicalusageURN expectation also pins2.6 despite selectedsnapshot2.7.
+- [ ] T34 Adapt only existing usage publication expectations to active published
+  2.7; preserve selector/security/status/closedschema/inventorychecks. Mechanical
+  onefilefixturecorrection after observedfullRED, no newpost-codeunit scenarios.
+  Verifyexistingmodule then actualjointfullsuite. Runtime/helpers/UIbytesunchanged
+  frome0 source; deployedcapturebuildrevisionmusttruthfullyremain e0 unlessrebuilt.
+
+T34 existingmodule2GREEN5.77s/Ruffformat; fixtureonlysource13fc4ba1854ee75923a02da94311995e5d569c0e.
+Runtime/helpers/UI bytesunchangede0, manifestb06fe806; actualnativeAPI OpenAPIcaptured
+unmodified andadhoccompleteAPIlistenvelope/detailvalidate local34operationschema.
+Actualbrowser12passed22.0s; refreshedrealallowdeny/DBfault/mocks beforefullDBrelease.
+Fullrerun21510 startedon13fc, then sourcebranchesrecordedvia cleanfinalmergec126258
+withoutanysrc/test/public/script/configtreechange (explicitgitdiffexit0).
+Unpublishedcohesiveunits: nativepath27lines5a30533→defaultrelease12lines5f48f791
+→runtimeprojection251lines7bcf29fd. Allparentunitheads nowancestors of finalcarrier.
+Sourcebranchmergedoesnot itselfconferreview/humanacceptance. Freshfullstillpending.
