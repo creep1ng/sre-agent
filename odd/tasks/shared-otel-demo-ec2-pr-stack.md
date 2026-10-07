@@ -51,7 +51,7 @@ RDD: disabled by the global setting; ordinary policy applies.
 - [x] **OTEL-PR-9** Close #494 acceptance gaps found in post-publication audit:
   `up` reuses a live scheduled session, and `down` is idempotent when absent;
   observe failing behavior checks before the fix and repeat focused Docker checks.
-- [ ] **OTEL-PR-10** Address PR #513 review finding: a first empty EC2 lookup
+- [x] **OTEL-PR-10** Address PR #513 review finding: a first empty EC2 lookup
   during `down` must not signal success if a just-launched shared instance
   becomes visible on retry. Observe RED before implementation; keep retries
   bounded and preserve the absent-session no-op; repeat exact-SHA Docker checks,
@@ -92,8 +92,13 @@ is eventually consistent, so the first empty lookup after launch is not
 reliable evidence of absence. The two updated behavior checks were RED against
 the prior controller (`2 failed` because only one lookup occurred). `down` now
 uses the same host lock as `up` and retries absent lookups with 2/4/8/16-second
-backoff before returning an absent-session no-op. Offline Docker reported 60
-focused tests passed and Ruff lint passed; formatting identified one spacing
-correction, which was applied. Final exact-SHA Docker verification and PR
-evidence refresh remain pending. Repeated empty responses are still not a
-mathematical proof of absence; Scheduler and guest deadline remain fallbacks.
+backoff before returning an absent-session no-op. Exact behavior-source SHA
+`c58b70314c509d385994f6e2e28e9b072bcad033` passed 60 focused tests,
+Ruff lint and format in networkless Docker; three named teardown checks also
+passed. A real screenshot was inspected and committed; PR #513 evidence was
+refreshed, validated with the local governance parser (174 changed lines,
+no metadata errors), and the reviewer comment was answered at
+https://github.com/creep1ng/sre-agent/pull/513#discussion_r4207780039.
+Repeated empty responses are still not proof of absence; Scheduler and guest
+deadline remain fallbacks. Hosted live AWS behavior and human acceptance remain
+pending.
