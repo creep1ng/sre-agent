@@ -150,3 +150,19 @@ Use the isolated local configuration/network prerequisites already described; an
 ![Actual persisted operator impact in the authoritative incident](issue-23-impact.png)
 
 Parent inspected this real screenshot: synthetic incident/operator, impact consequence, severity and initial event; no credential shown. Screenshot SHA256 `30a3da5cd5f40026d056766c149b5ca8a9672567497f911365ee3d03c95644bc`; UI SHA256 `1c2e3d0b6bb72976ab920ffff8f75384faaa49a18a844ceef3281beffae84cf5`. Rollback removes impact entry/validation from UI and makes new declarations incompatible with the mandatory backend field. CA6 producer outcome authority is still unresolved; no external automatic terminal journey or full issue23 acceptance is claimed.
+
+## Accepted external outcome policy and durable provenance storage
+
+User annotation1 authorizes external automatic dismiss/link only; declare remains exclusively manual with mandatory operator impact. External decisions are scoped to the pre-incident alert-triage adapter, not direct incident runtime commands. Existing dismiss/link paths do not execute IncidentRuntime; only declare does. Its workflow version and actor policy remain unchanged. Subsequent API contracts must document this boundary explicitly.
+
+Migration20261006_01 descends the actual triage head20260923_13. It stores decision_origin with manual/external_automatic/unknown checks and nullable responsible_system; all existing rows backfill unknown/null without inferring from historical actor IDs or current principal kind. ORM/storage match; required readiness head advances, and populated sibling-history union handling remains active. Downgrade refuses to discard known provenance.
+
+Parent independent baseline-overlay RED:**3failed8.67s**; final current candidate eight-module GREEN:**101passed79.26s**, no skips. Matching cacheddependencies/read-only candidate source, isolated checks database. Logs `/tmp/triage23-review/t23-13/parent-red.log` and `parent-green-full.log`. Worker focused RED3failed10.72s/GREEN3passed10.10s. Worker accidentally left earlier exec sessions running and overlapped destructive schema resets; durable broad log15failed57passed29errors113.65s, later95pass6fail131.97s stream not durably captured. Shared redirection contaminated the log; no output reconstructed. Parent verified no leftover test containers before an independent single sequence. Ruff lint/format and whitespace checks pass.
+
+Containerized command for those same modules (isolated configuration/network prerequisites above):
+
+```sh
+docker compose --env-file <private-local-checks-env> -p triage23reviewchecks -f compose.yaml -f <owned-network-override> --profile checks run --build --rm python-checks pytest -p no:cacheprovider -q tests/test_triage_store.py tests/test_skill_migration_compatibility.py tests/test_migrations.py tests/test_health.py tests/test_incident_persistence.py tests/test_demo_seeds.py tests/test_consumption_reservation_persistence.py tests/test_bok_http.py
+```
+
+This storage unit has not yet had a fresh Composebuild independently rerun. Actual observed run used matching cached dependencies with read-only current source. No HTTP response fields or external decision authority/UI were changed in this unit, so **CA6 remains pending**, not accepted by migration alone. Rollback is refused when it would erase known provenance; legacy-only rows may downgrade.

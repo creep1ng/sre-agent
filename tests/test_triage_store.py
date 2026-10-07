@@ -72,6 +72,55 @@ async def test_create_read_and_cas() -> None:
 
 
 @pytest.mark.asyncio
+async def test_decision_origin_and_responsible_system_persist() -> None:
+    legacy_default = await _write(**_base(alert_id="al-origin-default"))
+    assert legacy_default is not None
+    assert (legacy_default["decision_origin"], legacy_default["responsible_system"]) == (
+        "unknown",
+        None,
+    )
+
+    manual = await _write(**_base(alert_id="al-origin-manual", decision_origin="manual"))
+    external = await _write(
+        **_base(
+            alert_id="al-origin-external",
+            decision_origin="external_automatic",
+            responsible_system="producer-payments",
+        )
+    )
+    assert manual is not None and (manual["decision_origin"], manual["responsible_system"]) == (
+        "manual",
+        None,
+    )
+    assert external is not None and (
+        external["decision_origin"],
+        external["responsible_system"],
+    ) == ("external_automatic", "producer-payments")
+
+
+def test_storage_rejects_invalid_provenance_pairs() -> None:
+    with psycopg.connect(DATABASE_URL) as connection:
+        invalid = (
+            ("not-an-origin", None),
+            ("external_automatic", None),
+            ("external_automatic", " \t\n "),
+            ("manual", "producer-payments"),
+            ("unknown", "producer-payments"),
+        )
+        for index, (origin, system) in enumerate(invalid):
+            with pytest.raises(psycopg.errors.CheckViolation):
+                with connection.transaction():
+                    connection.execute(
+                        "INSERT INTO alert_triage (alert_id, status, incident_id,"
+                        " expected_version, reason, severity, actor, decided_at,"
+                        " decision_origin, responsible_system)"
+                        " VALUES (%s, 'open', NULL, 1, NULL, NULL, 'producer-agent', now(),"
+                        " %s, %s)",
+                        (f"al-origin-invalid-{index}", origin, system),
+                    )
+
+
+@pytest.mark.asyncio
 async def test_check_invariants_reject_bad_rows() -> None:
     database = Database(DATABASE_URL)
     try:

@@ -527,6 +527,16 @@ class AlertTriageRow(Base):
             "(status='declared' AND severity IS NOT NULL) OR status <> 'declared'",
             name="ck_alert_triage_declare_severity",
         ),
+        CK(
+            "decision_origin IN ('manual','external_automatic','unknown')",
+            name="ck_alert_triage_decision_origin",
+        ),
+        CK(
+            "(decision_origin = 'external_automatic' AND responsible_system IS NOT NULL "
+            "AND responsible_system ~ '[^[:space:]]') OR "
+            "(decision_origin IN ('manual','unknown') AND responsible_system IS NULL)",
+            name="ck_alert_triage_provenance_pair",
+        ),
     )
     alert_id = mapped_column(String(64), primary_key=True)
     status = required(String(16))
@@ -536,3 +546,5 @@ class AlertTriageRow(Base):
     severity = mapped_column(String(8), nullable=True)
     actor = required(String(64))
     decided_at = required(DateTime(timezone=True))
+    decision_origin = required(String(32), server_default=sql_text("'unknown'"))
+    responsible_system = mapped_column(String(64), nullable=True)

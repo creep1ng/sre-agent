@@ -19,7 +19,7 @@ def integrated_upgrade():
     script = ScriptDirectory.from_config(config)
     destination = context.get_context().opts.get("destination_rev")
     target = script.as_revision_number(destination) if destination else None
-    if target not in ("20260929_18", "20260923_13"):
+    if target not in ("20260929_18", "20260923_13", "20261006_01"):
         return None
     current = set(context.get_context().get_current_heads())
     ancestors = {revision.revision for revision in script.iterate_revisions(target, "base")}
