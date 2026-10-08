@@ -22,7 +22,7 @@ def migrated_database() -> None:
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
             "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -75,6 +75,7 @@ def test_repeated_head_has_expected_domain_tables() -> None:
         ).fetchall()
     assert {row[0] for row in rows} == {
         "alembic_version",
+        "alert_triage",
         "audit_events",
         "bok_section_chunks",
         "bok_documents",
@@ -631,7 +632,7 @@ def test_consumption_sql_audit_evidence_blocks_lossy_downgrade() -> None:
         command.downgrade(config, "20260926_14")
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260928_14",
+            "20261007_01",
         )
         assert connection.execute("SELECT count(*) FROM consumption_limit_policies").fetchone() == (
             1,
@@ -663,5 +664,5 @@ def test_consumption_put_binding_persists_and_blocks_lossy_downgrade() -> None:
             "FROM idempotency_records WHERE principal_id='policy-schema-admin'"
         ).fetchone() == ("PUT", 1, "1")
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260928_14",
+            "20261007_01",
         )

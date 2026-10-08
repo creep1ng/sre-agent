@@ -83,7 +83,8 @@ def authorized_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "DROP TABLE IF EXISTS alert_triage, consumption_limit_policies, "
+            "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
             "resources, mcp_tools, mcp_servers, "
@@ -289,7 +290,10 @@ async def _declare(incident_id: str, run_id: str, command_id: str) -> int:
         actor="human",
         actor_reference=ActorReference(principal_id="demo-human"),
         outcome="declare",
-        inputs={"severity": "sev2"},
+        inputs={
+            "severity": "sev2",
+            "impact": "Customers could not complete checkout.",
+        },
     )
     try:
         runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))

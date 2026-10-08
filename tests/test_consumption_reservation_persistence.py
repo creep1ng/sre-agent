@@ -30,7 +30,7 @@ def reservation_database() -> Database:
         connection.execute(
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, "
             "bok_documents, bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
             "mcp_tools, mcp_servers, principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -136,7 +136,7 @@ async def test_period_is_database_immutable_and_downgrade_preserves_live_rows(
     assert record is not None and record.period_start == PERIOD
     with psycopg.connect(DATABASE_URL) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260928_14",
+            "20261007_01",
         )
         assert connection.execute("SELECT count(*) FROM consumption_reservations").fetchone() == (
             4,

@@ -1,0 +1,94 @@
+name: ${COMPOSE_PROJECT_NAME:?set a unique project name}
+
+# Isolated issue-23 evidence stack; only the existing db/seed/api/web/e2e
+# service names and repository Dockerfiles are reused.
+services:
+  db:
+    image: postgres:17.4-alpine@sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5
+    environment:
+      POSTGRES_DB: triage23
+      POSTGRES_USER: triage23
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U triage23 -d triage23]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [runtime]
+
+  seed:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: checks
+    command: [python, scripts/seed_triage23_review.py]
+    environment:
+      DATABASE_URL: postgresql://triage23@db:5432/triage23
+      T23_CREDENTIALS_FILE: /artifacts/credentials.env
+    volumes:
+      - ${T23_ARTIFACTS_DIR:?set a private artifact directory}:/artifacts
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [runtime]
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql://triage23@db:5432/triage23
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [runtime]
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    healthcheck:
+      test: [CMD, wget, --quiet, --tries=1, --spider, http://127.0.0.1/health]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      api:
+        condition: service_healthy
+    networks: [runtime]
+
+  e2e:
+    build:
+      context: .
+      dockerfile: docker/e2e.Dockerfile
+    env_file:
+      - "${T23_CREDENTIALS_FILE:?seed credential file required}"
+    environment:
+      PLAYWRIGHT_BASE_URL: http://web
+      PLAYWRIGHT_PRODUCTION_TOPOLOGY: "1"
+      T23_REVIEW: "1"
+      PLAYWRIGHT_OUTPUT_DIR: /artifacts/test-results
+      E2E_BASE_URL: http://web
+      E2E_API_BASE_URL: http://api:8000
+      T23_14_ARTIFACT_DIR: /artifacts
+      T23_2_ARTIFACT_DIR: /artifacts
+      T23_18_ARTIFACT_DIR: /artifacts
+    volumes:
+      - ${T23_ARTIFACTS_DIR:?set a private artifact directory}:/artifacts
+      - ${T23_ARTIFACTS_DIR:?set a private artifact directory}:/e2e/docs/evidence
+      - ./scripts/run_triage23_browser.sh:/run/triage23-browser.sh:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    networks: [runtime]
+
+networks:
+  runtime:
+    internal: true

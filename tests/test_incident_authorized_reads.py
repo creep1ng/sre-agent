@@ -62,7 +62,10 @@ COMMANDS = (
         actor="human",
         actor_reference=ActorReference(principal_id="demo-human", display_name="Demo human"),
         outcome="declare",
-        inputs={"severity": "sev2"},
+        inputs={
+            "severity": "sev2",
+            "impact": "Customers could not complete checkout.",
+        },
     ),
     IncidentCommand(
         command_id="cmd_a3_investigate",
@@ -104,7 +107,7 @@ def prepare_authorized_database() -> None:
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
-            "resources, mcp_tools, mcp_servers, "
+            "resources, alert_triage, mcp_tools, mcp_servers, "
             "principals, idempotency_records, "
             "alembic_version CASCADE"
         )

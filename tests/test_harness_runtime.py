@@ -92,7 +92,17 @@ def test_browser_configs_keep_static_and_production_suites_separate() -> None:
     assert '"api-seam.spec.js"' in production_config
     assert '"production-proxy.spec.js"' in production_config
     assert "showcase.spec.js" not in production_config
-    assert 'testIgnore: ["api-seam.spec.js", "production-proxy.spec.js"]' in static_config
+    # Guard suite membership, not the spelling or ordering of the array.
+    ignored_suites = static_config.split("testIgnore:", 1)[1].split("]", 1)[0]
+    for suite in (
+        "api-seam.spec.js",
+        "production-proxy.spec.js",
+        "triage-origin.spec.js",
+        "triage-context.spec.js",
+        "triage-eligible.spec.js",
+    ):
+        assert f'"{suite}"' in ignored_suites
+        assert f'"{suite}"' in production_config
 
 
 @pytest.mark.parametrize(

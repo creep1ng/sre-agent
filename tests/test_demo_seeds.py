@@ -38,7 +38,7 @@ def migrated_database() -> None:
             "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
-            "resources, mcp_tools, mcp_servers, "
+            "resources, alert_triage, mcp_tools, mcp_servers, "
             "principals, idempotency_records, "
             "alembic_version CASCADE"
         )
@@ -107,9 +107,9 @@ async def test_seed_rerun_converges_without_rotation_or_secret_persistence() -> 
         ).fetchone()
         stored = repr(connection.execute("SELECT prefix, key_hash FROM credentials").fetchall())
     await database.dispose()
-    assert counts == [4, 4, 9, 15]
-    assert admin_resources == 7
-    assert admin_grants == 13
+    assert counts == [4, 4, 10, 16]
+    assert admin_resources == 8
+    assert admin_grants == 14
     assert usage_resource == ("active",)
     assert usage_read_grant == (
         "admin-human",
@@ -162,9 +162,9 @@ async def test_seed_upgrades_pre_control_plane_graph_additively() -> None:
             "SELECT count(*) FROM grants WHERE action LIKE 'admin.%'"
         ).fetchone()[0]
     await database.dispose()
-    assert counts == [4, 4, 9, 15]
-    assert admin_resources == 7
-    assert admin_grants == 13
+    assert counts == [4, 4, 10, 16]
+    assert admin_resources == 8
+    assert admin_grants == 14
 
 
 @pytest.mark.asyncio
@@ -178,7 +178,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             connection.execute(
                 "SELECT count(*) FROM resources WHERE resource_type='administrative_control'"
             ).fetchone()[0]
-            == 7
+            == 8
         )
 
     database = Database(DATABASE_URL)
@@ -195,7 +195,7 @@ async def test_seed_restores_missing_admin_grant_when_resources_are_complete() -
             "SELECT count(*) FILTER (WHERE action LIKE 'admin.%'), count(*) FROM grants"
         ).fetchone()
     assert restored == ("admin-human", "admin.read", "administrative_control", "principals")
-    assert counts == (13, 15)
+    assert counts == (14, 16)
 
 
 @pytest.mark.asyncio
@@ -237,9 +237,9 @@ async def test_seed_converges_across_alias_and_catalog_migrations(
             "SELECT owner_id, source, source_ref, display_name, visibility, description, tags "
             "FROM resources WHERE resource_type='llm_model' ORDER BY resource_id"
         ).fetchall()
-    assert version == "20260928_14"
-    assert admin_resources == 7
-    assert admin_grants == 13
+    assert version == "20261007_01"
+    assert admin_resources == 8
+    assert admin_grants == 14
     assert projection == [
         (
             "remediation-agent",

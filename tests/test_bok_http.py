@@ -58,7 +58,8 @@ def migrated_database() -> None:
             "DROP TABLE IF EXISTS consumption_reservations, consumption_limit_policies, "
             "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, mcp_tools, mcp_servers, "
+            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
+            "mcp_tools, mcp_servers, "
             "principals, idempotency_records, alembic_version CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -830,7 +831,7 @@ def test_persisted_bok_audit_blocks_lossy_downgrade(client):
         # The blocked downgrade leaves the schema on the current head with the BoK
         # evidence that made it lossy still present.
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20260928_14",
+            "20261007_01",
         )
         assert connection.execute(
             "SELECT count(*) FROM audit_events WHERE operation='bok.search'"
