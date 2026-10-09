@@ -42,12 +42,13 @@ def test_request_attribution_read_rejects_unauthorized_and_invalid_filters() -> 
             Path("schemas/releases/2.8.0/json-schema/http/error-envelope.schema.json").read_text()
         )
         registry = Registry().with_resource(error["$id"], Resource.from_contents(error))
-        denied = client.get("/v1/audit-events", params={"request_id": str(UUID(int=1))})
-        assert denied.status_code == 401
-        schema = runtime["paths"]["/v1/audit-events"]["get"]["responses"]["401"]["content"][
-            "application/json"
-        ]["schema"]
-        Draft202012Validator(schema, registry=registry).validate(denied.json())
+        for path in ("/v1/audit-events", "/v1/usage/requests"):
+            denied = client.get(path, params={"request_id": str(UUID(int=1))})
+            assert denied.status_code == 401
+            schema = runtime["paths"][path]["get"]["responses"]["401"]["content"][
+                "application/json"
+            ]["schema"]
+            Draft202012Validator(schema, registry=registry).validate(denied.json())
         for headers, status in (({}, 401), (auth(RESTRICTED), 403)):
             response = client.get(
                 "/v1/usage/requests",
@@ -197,7 +198,14 @@ def test_repeated_selector_and_unknown_query_are_closed_errors() -> None:
             params={"request_id": "00000000-0000-0000-0000-000000004542", "trace": "secret"},
             headers=auth(ADMIN),
         )
-        assert repeated.status_code == unknown.status_code == 422
-        for response in (repeated, unknown):
+        body = client.request(
+            "GET",
+            "/v1/usage/requests",
+            headers=auth(ADMIN),
+            params={"request_id": "00000000-0000-0000-0000-000000004542"},
+            json={"unsupported": "synthetic-read-content"},
+        )
+        assert repeated.status_code == unknown.status_code == body.status_code == 422
+        for response in (repeated, unknown, body):
             assert set(response.json()) == {"error", "request_id", "retryable"}
             assert "items" not in response.text and "trace" not in response.text
