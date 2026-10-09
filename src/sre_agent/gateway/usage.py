@@ -193,12 +193,27 @@ class UsageReadProjection:
         month: str | None = None,
     ) -> dict[str, Any]:
         """Return one selector's aggregate or fail rather than silently truncating."""
+        rows, selected_filter, incident_ref = await self.select_evidence(
+            request_id=request_id, incident_id=incident_id, month=month
+        )
+        return self._aggregate(rows, selected_filter, incident_ref)
+
+    async def select_evidence(
+        self,
+        *,
+        request_id: UUID | None = None,
+        incident_id: str | None = None,
+        month: str | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any] | None]:
+        """Select the authoritative bounded audit evidence shared by usage reads."""
         selectors = sum(value is not None for value in (request_id, incident_id, month))
         if selectors != 1:
             raise ValueError("exactly one usage selector is required")
 
         statement = select(
+            AuditEventRow.event_id.label("event_id"),
             AuditEventRow.occurred_at,
+            AuditEventRow.stage.label("stage"),
             AuditEventRow.correlation["request_id"].astext.label("request_id"),
             AuditEventRow.correlation["incident_ref"].label("incident_ref"),
             AuditEventRow.correlation["run_ref"].label("run_ref"),
@@ -249,14 +264,16 @@ class UsageReadProjection:
             selected_filter = {"month": month}
 
         statement = statement.order_by(
-            AuditEventRow.occurred_at.asc(), AuditEventRow.event_id.asc()
+            canonical_months.c.canonical_at.asc(),
+            request_ids.asc(),
+            AuditEventRow.occurred_at.asc(),
+            AuditEventRow.event_id.asc(),
         ).limit(self.MAX_ROWS + 1)
         async with self._sessions() as session:
             rows = (await session.execute(statement)).mappings().all()
         if len(rows) > self.MAX_ROWS:
             raise UsageReadLimitExceeded("usage scope exceeds the evidence row limit")
-
-        return self._aggregate(rows, selected_filter, incident_ref)
+        return rows, selected_filter, incident_ref
 
     @staticmethod
     def _month_range(month: str) -> tuple[datetime, datetime]:
@@ -297,21 +314,15 @@ class UsageReadProjection:
             month_key = row["canonical_at"].astimezone(UTC).strftime("%Y-%m")
             monthly_requests[month_key].add(request_key)
 
+        reconciled = cls._reconcile_requests(requests)
         known: list[dict[str, Any]] = []
         incomplete = 0
         unknown = 0
-        for evidence in requests.values():
-            consumption_values = {
-                json.dumps(row["consumption"], sort_keys=True, separators=(",", ":"))
-                if row["consumption"] is not None
-                else "null"
-                for row in evidence
-            }
-            incident_refs = {json.dumps(row["incident_ref"], sort_keys=True) for row in evidence}
-            if len(consumption_values) != 1 or len(incident_refs) != 1:
+        for request in reconciled.values():
+            if not request["consistent"]:
                 unknown += 1
                 continue
-            consumption = evidence[0]["consumption"]
+            consumption = request["consumption"]
             availability = consumption.get("availability") if consumption else None
             if availability == "complete":
                 known.append(consumption)
@@ -346,6 +357,28 @@ class UsageReadProjection:
                 "unknown": unknown,
             },
         }
+
+    @staticmethod
+    def _reconcile_requests(
+        requests: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, dict[str, Any]]:
+        """Deduplicate request evidence and detect inconsistent per-request facts."""
+        reconciled: dict[str, dict[str, Any]] = {}
+        for request_key, evidence in requests.items():
+            consumption_values = {
+                json.dumps(row["consumption"], sort_keys=True, separators=(",", ":"))
+                if row["consumption"] is not None
+                else "null"
+                for row in evidence
+            }
+            incident_refs = {json.dumps(row["incident_ref"], sort_keys=True) for row in evidence}
+            consistent = len(consumption_values) == 1 and len(incident_refs) == 1
+            reconciled[request_key] = {
+                "consistent": consistent,
+                "consumption": evidence[0]["consumption"] if consistent else None,
+                "canonical_at": min(row["canonical_at"] for row in evidence),
+            }
+        return reconciled
 
     @classmethod
     def _totals(cls, known: list[dict[str, Any]], complete: bool) -> dict[str, Any]:
@@ -480,6 +513,43 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
         )
 
+    async def authorize_usage(request: Request) -> tuple[Any, Any, JSONResponse | None]:
+        """Share the governed authorization and audited denial path across usage reads."""
+        try:
+            context, evaluation = await authorize_governed_access(
+                projection._sessions,
+                request.headers.get("authorization"),
+                "admin.read",
+                "administrative_control",
+                "usage",
+            )
+        except AuthenticationFailed:
+            denied = await finish(
+                request,
+                status=401,
+                stage="authentication",
+                code="authentication_failed",
+                message="Authentication failed.",
+            )
+            return None, None, denied
+        except Exception:
+            denied = await finish(request, status=503, stage="audit", code="storage_unavailable")
+            return None, None, denied
+        if evaluation.decision.decision == "deny":
+            denied = await finish(
+                request,
+                status=403,
+                stage="authorization",
+                code="resource_unavailable",
+                message="Administrative read is not authorized.",
+                context=context,
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+                resource_ref=("administrative_control", "usage"),
+            )
+            return None, None, denied
+        return context, evaluation, None
+
     class UsageReadRoute(APIRoute):
         def get_route_handler(self):
             route_handler = super().get_route_handler()
@@ -588,37 +658,9 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 message="The usage selector is invalid.",
             )
 
-        try:
-            _context, evaluation = await authorize_governed_access(
-                projection._sessions,
-                request.headers.get("authorization"),
-                "admin.read",
-                "administrative_control",
-                "usage",
-            )
-        except AuthenticationFailed:
-            return await finish(
-                request,
-                status=401,
-                stage="authentication",
-                code="authentication_failed",
-                message="Authentication failed.",
-            )
-        except Exception:
-            return await finish(request, status=503, stage="audit", code="storage_unavailable")
-
-        if evaluation.decision.decision == "deny":
-            return await finish(
-                request,
-                status=403,
-                stage="authorization",
-                code="resource_unavailable",
-                message="Administrative read is not authorized.",
-                context=_context,
-                decision=evaluation.decision,
-                authorization_denial_cause=evaluation.denial_cause,
-                resource_ref=("administrative_control", "usage"),
-            )
+        _context, evaluation, denial = await authorize_usage(request)
+        if denial is not None:
+            return denial
 
         try:
             result = await projection.read(**filters)
