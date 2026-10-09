@@ -1,0 +1,24 @@
+Tested source:2a8a3599095bf363ee9c3fa8be4bf89756381813
+Base main:23e1a42dd1f3c0ad98b76ee6f5f25906570d50c2
+Environment:isolated Docker checks; PostgreSQL17.4 tmpfs; readonly candidate source mounts
+Python3.12.14; uv0.8.14; Ruff0.11.7; mypy2.3.1; Node22.14.0/npm10.9.2
+ShellCheck:PASS (chained runner completed exit0)
+Ruff:All checks passed;258files already formatted
+uv lock:93packages;PASS
+Import boundaries:5kept,0broken;92files404dependencies
+Configured mypy:Success;12source files
+pytest:1785passed,1skipped in543.46s
+Skip:paid live OpenRouter smoke not enabled
+Alembic:No new upgrade operations detected
+Standalone roundtrip:1passed9.43s;JSON persisted
+Real Uvicorn HTTP/SQL:PASS;200 before/after unchanged;401/403/422/422
+Canonical OpenRouter adapter with MockTransport:1passed7.46s;JSON persisted
+Ten E2E observations copied from container/tmp to scoped output bind before --rm
+Actual before/after and governed errors validate against closed2.8.0 schemas:PASS
+Fresh release2.8.0:222artifacts18checks;PASS
+Focused contract2/2PASS107.79s;17request fixtures pass declared validity
+All14releases checked before final fixture correction;earlier13trees byte-identical
+Prior130/130tooling run is predecessor evidence only,not claimed fresh
+Provider:controlled test double/MockTransport/injected failures;no live or paid call
+Independent human review:pending;local results are not hosted CI or acceptance
+Reproduction:see issue-454-historical-attribution.md;Docker commands and safe config prerequisite

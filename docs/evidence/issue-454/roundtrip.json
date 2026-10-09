@@ -1,0 +1,10 @@
+{
+  "content_or_credentials_included": false,
+  "first_request_id": "1bd637d3-1fe4-4c9a-a3fe-c47f6a98d657",
+  "first_requested_model": "openai/gpt-4o-mini",
+  "provider": "controlled-test-double",
+  "reread_first_unchanged": true,
+  "scenario": "issue-454-historical-assignment-reassignment",
+  "second_request_id": "bef9a418-5c93-479a-aac6-a7cac5ad6f4e",
+  "second_requested_model": "anthropic/claude-3.5-haiku"
+}
