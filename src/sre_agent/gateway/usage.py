@@ -720,11 +720,21 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             "invocation rows are legacy and pre-invocation absence is unavailable."
         ),
         responses={
-            401: {"description": "Authentication failed; no request data or counts are returned."},
-            403: {"description": "Administrative request reads are not authorized."},
-            413: {"description": "The selected evidence exceeds the explicit read bound."},
-            422: {"description": "The selector is missing, malformed, repeated, or unknown."},
-            503: {"description": "Persisted request attribution could not be read."},
+            status: {
+                "description": description,
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "urn:sre-agent:schema:error-envelope:2.8.0"}
+                    }
+                },
+            }
+            for status, description in {
+                401: "Authentication failed; no request data or counts are returned.",
+                403: "Administrative request reads are not authorized.",
+                413: "The selected evidence exceeds the explicit read bound.",
+                422: "The selector or body is missing, malformed, repeated, or unsupported.",
+                503: "Persisted request attribution could not be read.",
+            }.items()
         },
         openapi_extra={
             "x-required-query-one-of": ["request_id", "incident_id", "month"],
@@ -748,7 +758,8 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         supplied = list(request.query_params.multi_items())
         supplied_names = [name for name, _ in supplied]
         if (
-            any(name not in selector_names for name in supplied_names)
+            await request.body()
+            or any(name not in selector_names for name in supplied_names)
             or any(name in known_unbounded for name in supplied_names)
             or len(supplied) != 1
         ):

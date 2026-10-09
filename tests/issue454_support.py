@@ -199,6 +199,16 @@ def persist_audit_events(events: list[object]) -> None:
     asyncio.run(persist())
 
 
+def expected_assignment(assignment: dict) -> dict:
+    return {
+        "availability": "available",
+        "alias": assignment["alias"],
+        "model": assignment["concrete_model"],
+        "provider": assignment["inference_provider"],
+        "router": assignment["router"],
+    }
+
+
 def record_artifact(name: str, observed: dict) -> None:
     """Persist only explicitly selected safe observations after successful E2E assertions."""
     text = (
