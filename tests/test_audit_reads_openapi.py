@@ -8,6 +8,7 @@ import yaml
 
 from sre_agent.application import create_application
 from sre_agent.governance.dto import AuditEvent
+from sre_agent.release import CONTRACT_VERSION
 from sre_agent.settings import Settings
 
 CONTROL_PLANE = Path("schemas/releases/2.7.0/openapi/control-plane.yaml")
@@ -104,7 +105,8 @@ def _parameters(
 
 def test_runtime_audit_openapi_matches_published_27_contract() -> None:
     runtime, canonical = _runtime_document(), _canonical_document()
-    assert runtime["info"]["x-sre-agent-contract-version"] == canonical["info"]["version"]
+    assert runtime["info"]["x-sre-agent-contract-version"] == CONTRACT_VERSION
+    assert canonical["info"]["version"] == "2.7.0"
     assert (
         runtime["components"]["securitySchemes"]["bearerAuth"]
         == canonical["components"]["securitySchemes"]["bearerAuth"]

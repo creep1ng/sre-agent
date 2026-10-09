@@ -78,6 +78,7 @@ def test_repeated_head_has_expected_domain_tables() -> None:
         "alembic_version",
         "alert_triage",
         "audit_events",
+        "request_attributions",
         "bok_section_chunks",
         "bok_documents",
         "bok_collection_versions",
