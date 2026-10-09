@@ -43,11 +43,15 @@ class ProviderFailure(Exception):
         *,
         retry_after: int | None = None,
         consumption: Consumption | None = None,
+        credited_model: ConcreteModel | None = None,
+        credited_provider: ProviderName | None = None,
     ) -> None:
         super().__init__(f"provider_{kind}")
         self.kind = kind
         self.retry_after = retry_after
         self.consumption = consumption
+        self.credited_model = credited_model
+        self.credited_provider = credited_provider
 
 
 class LLMProvider(Protocol):
