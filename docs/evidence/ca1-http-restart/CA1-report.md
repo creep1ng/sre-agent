@@ -93,24 +93,36 @@ persistence incidents and uv.lock, confirming packaged source provenance.
 
 ## Reproduction
 
-Preserve the uncommitted candidate files or apply `verified/implementation.patch`
-to the recorded HEAD. The patch also contains task tracking, not production changes.
-Use a **new exclusive** project, unused ports and unused subnet for every complete
-repetition. The runner refuses to overwrite an existing synthetic incident.
-Use the delivered `prepare-config.py` for safe local configuration setup: it creates
-private mode-0600 credentials without printing them, refuses replacement, and
-writes a non-secret Compose override. This standard-library host operation only
-prepares local configuration; all application/schema/test tools execute in Docker.
-Do not attach its generated private environment file.
+Check out PR branch `codex/ca1-http-restart-proof` and run the following from the
+repository root. The publication head may receive documentation-only updates;
+the historical integration result above is tied to tested SHA
+`c7d297cbb11059b1b958e2dece8d54d9db016e1c`; later reproduction tooling and this
+report do not change that historical result. `verified/implementation.patch` is
+an archival record, not an additional patch to apply to the PR branch. Use a **new
+exclusive** project, unused ports and unused subnet for every complete repetition.
+The runner refuses to overwrite an existing synthetic incident.
+
+Host prerequisites are Git, Python 3, and Docker Compose. Before setup, inspect
+Docker networks read-only and choose an unused private IPv4 `/28`, project name
+starting with `ca1-`, distinct unused API/database ports, and two non-overlapping
+directories outside the repository for private config and evidence. The generator
+validates the project, subnet, ports, required Compose variables, isolated tmpfs
+checks database, and evidence mount. It creates `local.env` exclusively at mode
+0600 and refuses to replace either generated file. Secrets are not printed. By
+default `SRE_AGENT_BUILD_REVISION` is derived from the checkout's current Git HEAD;
+`--build-revision` may pin an explicitly known hexadecimal revision. The historical
+result below remains tied to the tested SHA and is not changed by this setup tool.
+This standard-library host operation only prepares local configuration; all
+application/schema/test tools execute in Docker. Do not attach the private env file.
 
 Example safe setup (choose an unused subnet first by read-only Docker inventory):
+run these commands from the checked-out PR repository root.
 
 ```sh
-python3 /home/creep/Documents/Codex/2026-10-07/files-pasted-by-the-user-trabaja/outputs/ca1/prepare-config.py \
+python3 scripts/prepare_ca1_config.py \
   --project ca1-local-repro --private-dir /tmp/ca1-local-repro-private \
   --evidence-dir /tmp/ca1-local-repro-evidence --subnet 10.253.143.0/28 \
   --api-port 58144 --db-port 58145
-cd /tmp/triage23-publish/integrated
 CA1_ENV_FILE=/tmp/ca1-local-repro-private/local.env \
 CA1_OVERRIDE=/tmp/ca1-local-repro-private/compose.proof.yaml \
 CA1_EVIDENCE_DIR=/tmp/ca1-local-repro-evidence \

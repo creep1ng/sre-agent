@@ -80,4 +80,38 @@ passed; chained validators remain unverified. The prior log is historical.
 Draft remains incomplete: npm diagnostic, human review, and explicit maintainer
 size approval (authored additions/deletions exceed 400) before acceptance.
 Engram mirror pending: runtime identity unavailable; no memory writes attempted.
-- [ ] T4 Publish scoped draft PR and verify branch, files, base/head and attachment.
+- [x] T4 Publish scoped draft PR and verify branch, files, base/head and attachment.
+PR: https://github.com/creep1ng/sre-agent/pull/568 (draft).
+Published head: 2b41a74a2cc5b70bf603ee668350c55e36212027; base main unchanged.
+14 scoped files, 1816 additions / 0 deletions; other-session modification excluded.
+GitHub connector publication succeeded and Codex PR attachment succeeded.
+This final publication receipt is local; remote task document records pre-creation
+state, and the PR itself is the authoritative publication receipt.
+
+## Review follow-up
+User authorizes correcting PR568 and merging through the same GitHub connection,
+without bypassing required checks/protections. User explicitly approved the >400
+line size exception after the focused question; record the authorization on PR.
+Root cause: safe config generator was delivered locally but omitted from branch;
+author-local absolute documentation path and missing /evidence mount made fresh
+checkout reproduction incomplete. Publish generator and repository-local steps.
+- [ ] T5 Add generator and portable documentation; validate fresh config, permissions,
+  overwrite refusal, Compose interpolation and proof in an exclusive project.
+- [ ] T6 Publish correction, reply/resolve both review threads, inspect exact-head
+  checks and merge if repository gates permit. Never fabricate human review.
+Engram task mirror pending because runtime identity remains unavailable.
+
+T5 follow-up: generator and repository-local report now authored. Initial safety
+check falsely rejected the unchanged Compose tmpfs DB: DOTALL regex consumed
+following service blocks; fixed to line-bounded multiline matching before final
+validation. Ruff lint/format passed. Fresh config mode0600, secret-free stdout/
+override, unchanged env on overwrite refusal, invalid input rejection and actual
+Compose interpolation/mount/tmpfs/network isolation all passed. Full generated-
+config journey started in ca1-pr568-repro; preserve outcome as pending until exit.
+Size exception explicitly approved by user and recorded at PR comment6073818164;
+review size thread resolved. CI on original publication head passed all jobs,
+including full contract npm chain; old interrupted local npm log remains uncollected.
+PR-governance initially failed because strict single-value fields had prose; moved
+prose out of Delivery route/Tested SHA/Security. Trusted-policy data-only container
+validation returns [] and remote status on original head is now success.
+New correction-head CI and ordinary human acceptance are not yet claimed.
