@@ -31,7 +31,7 @@ def test_active_runtime_publishes_the_versioned_usage_contract() -> None:
         )
     ).openapi()
 
-    assert CONTRACT_VERSION == "2.7.0"
+    assert CONTRACT_VERSION == "2.8.0"
     assert manifest["contract_version"] == runtime["info"]["x-sre-agent-contract-version"]
     assert canonical["info"]["version"] == CONTRACT_VERSION
     assert runtime["info"]["x-sre-agent-contract-version"] == CONTRACT_VERSION
@@ -81,7 +81,7 @@ def test_active_runtime_publishes_the_versioned_usage_contract() -> None:
     runtime_success = runtime_responses["200"]["content"]["application/json"]["schema"]
     canonical_success = canonical_responses["200"]["content"]["application/json"]["schema"]
     assert runtime_success["$ref"].startswith("#/components/schemas/")
-    assert canonical_success["$ref"] == "urn:sre-agent:schema:usage-read:2.7.0"
+    assert canonical_success["$ref"] == "urn:sre-agent:schema:usage-read:2.8.0"
     runtime_model = runtime["components"]["schemas"][
         runtime_success["$ref"].removeprefix("#/components/schemas/")
     ]
