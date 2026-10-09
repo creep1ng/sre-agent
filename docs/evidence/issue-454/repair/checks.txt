@@ -12,3 +12,5 @@ One paid-provider smoke skipped in each full suite; no credentials used
 Hosted CI tracked independently; cancelled runs are not passing evidence
 Human acceptance and merge remain pending
 App attachment inspection unavailable; A454-7 remains unchecked
+Full configured integrated source4a5017d235d105a4bad05163e64ac2364fe8b4da:1787passed1paid-smoke skipped129.25s;Ruff/format/lock/imports/configured mypy/Alembic PASS
+Exact #579 sourcebc7d15ac988b251616368f31caf975c086768ffc:1787passed1paid-smoke skipped130.22s;all configured Python checks and Alembic PASS
