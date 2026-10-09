@@ -470,3 +470,5 @@ All eleven drafts are attached. Backend CA1–CA11 verified;human review pending
   Current app attachment inspection is unavailable; previous attachment
   receipts cannot be independently reconfirmed in this repair session.
 - Engram mirror unavailable: no registered runtime session identity.
+Malformed canonical identity also reproduced RED (1 failed, 2 controls passed);
+validate the model before credit propagation so the error remains structured.
