@@ -16,6 +16,7 @@ from issue454_support import (
     PROMPT,
     ControlledProvider,
     auth,
+    expected_assignment,
     read_item,
 )
 from issue454_support import (
@@ -54,7 +55,7 @@ def test_historical_assignment_survives_real_alias_reassignment() -> None:
 
             # Capture and read while the old assignment is still current.
             first_item = read_item(client, first_id)
-            assert first_item["requested_assignment"]["model"] == first_assignment["concrete_model"]
+            assert first_item["requested_assignment"] == expected_assignment(first_assignment)
 
             # Consumers must get the same evidence-state rules from live OpenAPI.
             runtime = client.get("/openapi.json").json()
@@ -111,7 +112,7 @@ def test_historical_assignment_survives_real_alias_reassignment() -> None:
             second_id = second.json()["request_id"]
             assert provider.requests[1].model == replacement["concrete_model"]
             second_item = read_item(client, second_id)
-            assert second_item["requested_assignment"]["model"] == replacement["concrete_model"]
+            assert second_item["requested_assignment"] == expected_assignment(changed.json())
             assert first_item["requested_assignment"] != second_item["requested_assignment"]
             assert first_item["attribution_status"] in {"available", "partial"}
             assert first_item["credited_model"] == {"availability": "unavailable", "value": None}
