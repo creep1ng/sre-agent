@@ -106,6 +106,11 @@ class OpenRouterProvider:
                 text=_completed_output_text(body),
                 provider=request.provider,
                 consumption=_consumption(body),
+                # `selected_model` has passed the closed metadata checks above;
+                # provider spelling is normalized to the requested catalog tag
+                # only after case-insensitive evidence matching.
+                credited_model=selected_model,
+                credited_provider=request.provider,
             )
         except ProviderFailure as failure:
             raise ProviderFailure(

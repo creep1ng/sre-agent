@@ -27,6 +27,10 @@ class ProviderResult(ProviderDTO):
     text: Annotated[str, Field(min_length=1, max_length=65_536)]
     provider: ProviderName
     consumption: Consumption | None = None
+    # These are separate provider-verified credit identities. They must remain
+    # absent unless an adapter has validated explicit upstream routing evidence.
+    credited_model: ConcreteModel | None = None
+    credited_provider: ProviderName | None = None
 
 
 ProviderFailureKind = Literal["evidence_invalid", "invalid_response", "unavailable", "timeout"]

@@ -16,10 +16,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.attribution import RequestAttribution
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
 from sre_agent.governance.dto import AuditEvent, Consumption
+from sre_agent.persistence.models import RequestAttributionRow
 from sre_agent.persistence.repositories import AuditRepository, ResourceRepository
 
 
@@ -179,6 +181,31 @@ class PostgresAuditStore:
     async def append_in_transaction(self, event: AuditEvent, session: AsyncSession) -> None:
         await AuditRepository(session).append(event)
 
+    async def append_response(self, event: AuditEvent, attribution: RequestAttribution) -> None:
+        """Commit response audit and immutable attribution as one acceptance."""
+        request_id = event.correlation.request_id
+        if (
+            event.operation != "responses.create"
+            or event.stage not in {"response", "upstream"}
+            or request_id != attribution.request_id
+        ):
+            raise ValueError("response attribution does not match its audit event")
+        async with self._sessions() as session, session.begin():
+            await AuditRepository(session).append(event)
+            session.add(
+                RequestAttributionRow(
+                    request_id=str(attribution.request_id),
+                    audit_event_id=str(event.event_id),
+                    requested_alias=attribution.requested_alias,
+                    requested_model=attribution.requested_model,
+                    requested_provider=attribution.requested_provider,
+                    requested_router=attribution.requested_router,
+                    credited_model=attribution.credited_model,
+                    credited_provider=attribution.credited_provider,
+                )
+            )
+            await session.flush()
+
 
 # fmt: off
 ERRORS = {
@@ -277,8 +304,15 @@ class ResponsesService:  # noqa: E305
                                       alias=request.model, decision=decision,
                                       reason="routing_unavailable", retryable=True,
                                       identifiers=identifiers)
+        # Freeze the already-loaded alias assignment at the invocation boundary.
+        # No database alias lookup is performed after this point.
+        invocation_attribution = RequestAttribution.from_assignment(request_id, assignment)
         try:
             result = await self.provider.create(provider_request)
+            attribution = invocation_attribution.with_credit(
+                model=result.credited_model,
+                provider=result.credited_provider,
+            )
             consumption = result.consumption or _empty_consumption("absent")
             await self._settle_exact(admission.reservation_id, consumption)
             payload = {"id": result.response_id, "object": "response", "status": "completed", "model": result.model, "output": [{"type": "message", "role": "assistant",
@@ -289,7 +323,7 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, 200, "response", payload=payload,
                                       context=context, alias=request.model, decision=decision,
                                       assignment=assignment, identifiers=identifiers,
-                                      consumption=consumption)
+                                      consumption=consumption, attribution=attribution)
         except ProviderFailure as failure:
             status, reason, code = {"timeout": (504, "upstream_failed", "upstream_timeout"),
                                     "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
@@ -301,15 +335,23 @@ class ResponsesService:  # noqa: E305
                                       alias=request.model, decision=decision, assignment=assignment,
                                       reason=reason, retryable=status in {503, 504}, identifiers=identifiers,
                                       error_code=code, retry_after=failure.retry_after,
-                                      consumption=failure.consumption or _empty_consumption("unavailable"))
+                                      consumption=failure.consumption or _empty_consumption("unavailable"),
+                                      attribution=invocation_attribution)
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, consumption: Consumption | None = None,
+                      attribution: RequestAttribution | None = None,
                       **facts):
         event = self.projector.event(request_id, status, max(0, int((monotonic() - started) * 1000)),
                                      stage, consumption=consumption, **facts)
         try:
-            await self.audit.append(event)
+            append_response = getattr(self.audit, "append_response", None)
+            if attribution is not None:
+                if not callable(append_response):
+                    raise RuntimeError("atomic response attribution storage unavailable")
+                await append_response(event, attribution)
+            else:
+                await self.audit.append(event)
         except Exception:
             error_code, status, payload = "audit_unavailable", 503, None
         if payload is not None:

@@ -150,7 +150,8 @@ def ca_database() -> Database:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, "
+            "DROP TABLE IF EXISTS request_attributions, consumption_limit_policies, "
+            "bok_section_chunks, "
             "bok_documents, bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
             "mcp_tools, mcp_servers, principals, idempotency_records, "
@@ -575,7 +576,7 @@ def test_ca6_settled_cost_counts_even_when_audit_write_fails(
     ca_database: Database,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from sre_agent.gateway.responses import PostgresAuditStore
+    from sre_agent.persistence.repositories import AuditRepository
 
     seed_incident("ca6-audit-failure")
     body = BODY | {"incident_id": "ca6-audit-failure"}
@@ -588,7 +589,7 @@ def test_ca6_settled_cost_counts_even_when_audit_write_fails(
         raise RuntimeError("controlled audit failure")
 
     with monkeypatch.context() as patch:
-        patch.setattr(PostgresAuditStore, "append", fail_audit)
+        patch.setattr(AuditRepository, "append", fail_audit)
         assert gateway.respond(body=body).status_code == 503
     assert reservations()[0][3:6:2] == ("settled", Decimal("0.3"))
     assert legacy_month_usd() == before
