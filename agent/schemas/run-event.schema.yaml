@@ -33,7 +33,8 @@ $defs:
         pattern: '^evt_[a-z0-9]{8,32}$'
       kind:
         enum: [state_change, evidence_collected, hypothesis_proposed,
-               mitigation_proposed, human_command, denial, escalation, run_terminated]
+               mitigation_proposed, human_command, denial, escalation, run_terminated,
+               investigation_result, dispatch_receipt]
       sequence:
         type: integer
         minimum: 0

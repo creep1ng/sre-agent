@@ -117,7 +117,12 @@ def test_commands_are_human_only(schemas: dict) -> None:
         {"command": "approve_mitigation", "actor": "agent", "actor_reference": identity}
     )
     assert validator.is_valid(
-        {"command": "approve_mitigation", "actor": "human", "actor_reference": identity}
+        {
+            "command": "approve_mitigation",
+            "actor": "human",
+            "actor_reference": identity,
+            "expected_incident_version": 0,
+        }
     )
 
 
@@ -160,6 +165,8 @@ def test_human_authorization_matches_every_catalog_command(schemas: dict) -> Non
             "actor_reference": identity,
             "authorization": {"action": action, "resource": resource},
         }
+        if command in {"approve_mitigation", "reject_mitigation", "request_changes"}:
+            payload["expected_incident_version"] = 0
         if command == "propose_disposition":
             payload["disposition"] = "link"
         assert validator.is_valid(payload), command
@@ -255,7 +262,23 @@ def test_commands_record_who_concretely_acted(schemas: dict) -> None:
     with_identity = without | {
         "actor_reference": {"reference_version": "1.0.0", "principal_id": "demo-human"}
     }
-    assert validator.is_valid(with_identity)
+    assert not validator.is_valid(with_identity)
+    assert validator.is_valid(with_identity | {"expected_incident_version": 0})
+
+
+def test_review_commands_bind_the_exact_incident_revision(schemas: dict) -> None:
+    validator = build_validator(schemas["run-command"])
+    identity = {"reference_version": "1.0.0", "principal_id": "demo-human"}
+    for command in ("approve_mitigation", "reject_mitigation", "request_changes"):
+        base = {"command": command, "actor": "human", "actor_reference": identity}
+        assert not validator.is_valid(base), command
+        assert validator.is_valid(base | {"expected_incident_version": 0}), command
+        for invalid in (True, -1, "0", [], {}):
+            assert not validator.is_valid(base | {"expected_incident_version": invalid}), (
+                command,
+                invalid,
+            )
+    assert schemas["run-command"]["$id"] == "urn:sre-agent:schema:run-command:2.0.0"
 
 
 def test_actor_identity_is_additive_and_versioned(schemas: dict) -> None:

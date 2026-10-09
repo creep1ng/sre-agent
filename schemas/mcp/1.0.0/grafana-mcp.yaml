@@ -1,3 +1,6 @@
+# The 1.0.0 result schema includes an additive `indeterminate` representation
+# for valid upstream scalar/string samples that omit a result-type discriminator.
+# This does not change tool identity, authorization, actions, or input contracts.
 contract_version: "1.0.0"
 protocol: "mcp"
 
@@ -38,6 +41,8 @@ tools:
     result_schema: "json-schema/query-prometheus-result.schema.json"
     input_example: "examples/query-prometheus-input.json"
     result_example: "examples/query-prometheus-result.json"
+    # Additional valid output when the upstream omits its result-type marker.
+    indeterminate_result_example: "examples/query-prometheus-indeterminate-result.json"
   - tool_id: "query_elasticsearch"
     server_id: "grafana-mcp"
     resource_type: "mcp_tool"

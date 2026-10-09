@@ -1,0 +1,7 @@
+# Sanitized summary of the existing HTTP/PostgreSQL restart integration test.
+# Synthetic identifiers only; no credentials or request payloads.
+HTTP_START status=201 incident_id=inc-a4-process-start run_id=run_d3d2c5504f5e7214 state=triage cursor=seq:0
+PROCESS_RESTART old_pid=13 old_exit=-15 new_pid=18 new_exit=-15
+HTTP_RESTART_READ status=200 event_count=1 persisted_event_count=1 state=triage cursor=seq:0
+HTTP_RESUME status=200 incident_id=inc-a4-process-start run_id=run_d3d2c5504f5e7214 state=triage cursor=seq:0 persisted_event_count=1
+1 passed in 6.95s

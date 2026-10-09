@@ -67,6 +67,7 @@ test("offers only the mitigating review actions for workflow 1.0.0", async ({ pa
   }
   await expect(page.locator("#fact-incident")).toHaveText(INCIDENT);
   await expect(page.locator("#fact-run")).toHaveText(RUN);
+  await expect(page.locator("#fact-incident-version")).toHaveText("4");
   await expect(page.locator("#fact-workflow")).toHaveText("1.0.0");
 });
 
@@ -125,6 +126,7 @@ test("records approval without claiming execution", async ({ page }) => {
   expect(posted).toHaveLength(1);
   expect(posted[0].headers["idempotency-key"]).toMatch(/^[0-9a-f-]{10,}$/);
   expect(posted[0].body).toMatchObject({ command: "approve_mitigation", actor: "human" });
+  expect(posted[0].body.expected_incident_version).toBe(4);
   expect(posted[0].body.actor_reference).toEqual({
     reference_version: "1.0.0",
     principal_id: "demo-human",
@@ -141,6 +143,17 @@ test("rejects and requests changes with contractual bodies", async ({ page }) =>
     command: "reject_mitigation",
     actor_reference: { reference_version: "1.0.0", principal_id: "demo-human" },
     authorization: { action: "run.approve" },
+    expected_incident_version: 4,
+  });
+
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#actions-list button")).toHaveCount(3);
+  await decide(page, "request_changes");
+  await expect.poll(() => posted.length).toBe(2);
+  expect(posted[1].body).toMatchObject({
+    command: "request_changes",
+    authorization: { action: "run.command" },
+    expected_incident_version: 4,
   });
 });
 

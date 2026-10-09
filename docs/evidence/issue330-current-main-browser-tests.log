@@ -1,0 +1,5 @@
+Existing browser review UI mock-seam tests, isolated in the existing E2E container.
+Command: docker compose --env-file .env.example -f compose.yaml -f docs/evidence/issue-419/replay/compose.overlay.yaml -p issue330reviewui23e --profile e2e run --build --rm --no-deps -v "$PWD:/workspace:ro" -v "$PWD/tests/browser:/e2e/tests/browser:ro" -v "$PWD/docs/evidence/issue-419/replay/review.config.js:/e2e/playwright-review.config.js:ro" e2e npx playwright test --config=/e2e/playwright-review.config.js tests/browser/review.spec.js
+Result: 14 passed in 19.1s, including version assertions for approve, reject, and request-changes.
+No external API/provider call. Owned Compose project cleanup left zero containers, volumes, networks.
+Local raw output SHA-256: 758f0396976e3bd8df5626cf349b94affe5387644dfe7d501738e50d3eb59e75

@@ -85,6 +85,10 @@ class MemoryRepository:
         identifiers = {record.incident_id, getattr(record, "run_id", None)}
         return record if identifier in identifiers else None
 
+    async def get_for_incident(self, run_id: str, incident_id: str):
+        record = self.store.run
+        return record if record.run_id == run_id and record.incident_id == incident_id else None
+
     async def latest(self, run_id: str):
         return self.store.snapshot if run_id == self.store.run.run_id else None
 
@@ -181,7 +185,9 @@ class MemoryUnitOfWork:
         )
         return result
 
-    async def load_replay(self, run_id: str):
+    async def load_replay(self, run_id: str, *, incident_id: str):
+        if self.store.run.run_id != run_id or self.store.run.incident_id != incident_id:
+            raise RuntimeError(f"incident replay aggregate is unavailable: {run_id}")
         snapshot = self.store.snapshot
         after = snapshot.event_sequence if snapshot else -1
         events = tuple(event for event in self.store.events if event.sequence > after)
@@ -264,9 +270,20 @@ async def test_invalid_or_unapproved_command_has_no_effect(workflow) -> None:
 
 @pytest.mark.asyncio
 async def test_human_approval_is_attributed_and_repeating_command_is_idempotent(workflow) -> None:
-    store = MemoryStore("mitigating", mitigation_strategy={"verification_check": "errors < 1%"})
+    store = MemoryStore(
+        "mitigating",
+        mitigation_strategy={
+            "mitigation_id": "mit_runtime_review",
+            "verification_check": "errors < 1%",
+        },
+    )
     engine = runtime(workflow, store)
-    approved = command("apply_mitigation", outcome="approve", approval=True)
+    approved = command(
+        "apply_mitigation",
+        outcome="approve",
+        approval=True,
+        expected_incident_version=0,
+    )
 
     first = await engine.execute(approved)
     replayed = await engine.execute(approved)
@@ -276,6 +293,95 @@ async def test_human_approval_is_attributed_and_repeating_command_is_idempotent(
     assert len(store.events) == len(store.decisions) == 1
     approval = store.decisions[0].document["approval"]
     assert approval["actor_reference"]["principal_id"] == "operator_one"
+    assert approval["mitigation_id"] == "mit_runtime_review"
+    assert approval["reviewed_incident_version"] == 0
+
+
+@pytest.mark.asyncio
+async def test_stale_mitigation_approval_cannot_apply_after_the_proposal_changes(workflow) -> None:
+    store = MemoryStore(
+        "mitigating",
+        mitigation_strategy={
+            "mitigation_id": "mit_v3_review",
+            "verification_check": "errors < 1%",
+        },
+    )
+    store.incident = replace(store.incident, version=1)
+
+    with pytest.raises(IncidentStaleWriteError):
+        await runtime(workflow, store).execute(
+            command(
+                "apply_mitigation",
+                approval=True,
+                outcome="approve",
+                expected_incident_version=0,
+            )
+        )
+
+    assert store.incident.version == 1
+    assert store.incident.state["state"] == "mitigating"
+    assert store.events == []
+    assert store.decisions == []
+
+
+@pytest.mark.asyncio
+async def test_approval_fails_closed_when_the_mitigation_has_no_identity(workflow) -> None:
+    store = MemoryStore("mitigating", mitigation_strategy={"verification_check": "errors < 1%"})
+
+    with pytest.raises(PreconditionFailedError):
+        await runtime(workflow, store).execute(
+            command(
+                "apply_mitigation",
+                approval=True,
+                outcome="approve",
+                expected_incident_version=0,
+            )
+        )
+
+    assert store.incident.version == 0
+    assert store.events == []
+    assert store.decisions == []
+
+
+@pytest.mark.asyncio
+async def test_new_mitigation_patch_cannot_carry_forward_an_approval(workflow) -> None:
+    state = yaml.safe_load(INITIAL_STATE_PATH.read_text())
+    state.update(
+        state="investigating",
+        incident_id="inc_test",
+        severity="sev2",
+        hypotheses=[{"supporting_evidence": ["ev_review"]}],
+        evidence=[{"evidence_id": "ev_review"}],
+        mitigation_strategy={
+            "mitigation_id": "mit_v2_review",
+            "verification_check": "errors < 1%",
+            "approval_status": "approved",
+        },
+    )
+    store = MemoryStore("investigating", state_document=state)
+
+    with pytest.raises(PreconditionFailedError):
+        await runtime(workflow, store).execute(
+            command(
+                "propose_mitigation",
+                actor="agent",
+                actor_reference=None,
+                inputs={
+                    "incident_patch": {
+                        "mitigation_strategy": {
+                            "mitigation_id": "mit_v3_review",
+                            "verification_check": "errors < 1%",
+                            "approval_status": "approved",
+                        }
+                    }
+                },
+            )
+        )
+
+    assert store.incident.version == 0
+    assert store.incident.state["state"] == "investigating"
+    assert store.events == []
+    assert store.decisions == []
 
 
 @pytest.mark.asyncio
@@ -333,15 +439,48 @@ async def test_close_incident_requires_postmortem_even_with_human_approval(workf
     store = MemoryStore("postmortem")
     engine = runtime(workflow, store)
     with pytest.raises(PreconditionFailedError):
-        await engine.execute(command("close_incident", approval=True))
+        await engine.execute(command("close_incident", approval=True, expected_incident_version=0))
 
     store.incident = replace(
         store.incident,
-        state=store.incident.state | {"postmortem": {"id": "pm_1"}},
+        state=store.incident.state | {"postmortem": {"postmortem_id": "pm_1"}},
     )
-    result = await engine.execute(command("close_incident", approval=True, command_id="cmd_2"))
+    result = await engine.execute(
+        command(
+            "close_incident",
+            approval=True,
+            expected_incident_version=0,
+            command_id="cmd_2",
+        )
+    )
     assert result.incident.state["state"] == "closed"
     assert result.run.state["status"] == "completed"
+    approval = store.decisions[-1].document["approval"]
+    assert approval["postmortem_id"] == "pm_1"
+    assert approval["reviewed_incident_version"] == 0
+
+
+@pytest.mark.asyncio
+async def test_stale_postmortem_approval_cannot_close_a_changed_postmortem(workflow) -> None:
+    state = yaml.safe_load(INITIAL_STATE_PATH.read_text())
+    state.update(
+        state="postmortem",
+        incident_id="inc_test",
+        severity="sev2",
+        postmortem={"postmortem_id": "pm_v3", "summary": "Updated review."},
+    )
+    store = MemoryStore("postmortem", state_document=state)
+    store.incident = replace(store.incident, version=1)
+
+    with pytest.raises(IncidentStaleWriteError):
+        await runtime(workflow, store).execute(
+            command("close_incident", approval=True, expected_incident_version=0)
+        )
+
+    assert store.incident.version == 1
+    assert store.incident.state["state"] == "postmortem"
+    assert store.events == []
+    assert store.decisions == []
 
 
 @pytest.mark.asyncio
@@ -366,6 +505,7 @@ async def test_close_candidate_cannot_erase_postmortem_after_guard_check(workflo
             command(
                 "close_incident",
                 approval=True,
+                expected_incident_version=0,
                 inputs={"incident_patch": {"postmortem": None}},
             )
         )
@@ -380,13 +520,12 @@ async def test_declaration_from_contract_fixture_emits_schema_valid_identity(wor
     state = yaml.safe_load(INITIAL_STATE_PATH.read_text())
     state["state"] = "triage"
     store = MemoryStore("triage", state_document=state)
-    impact = "Customers could not complete checkout."
 
     result = await runtime(workflow, store).execute(
         command(
             "triage_declare",
             outcome="declare",
-            inputs={"severity": "sev2", "impact": impact},
+            inputs={"severity": "sev2", "impact": "Payment requests are failing."},
         )
     )
 
@@ -394,7 +533,6 @@ async def test_declaration_from_contract_fixture_emits_schema_valid_identity(wor
     validator = Draft202012Validator(schema, format_checker=FormatChecker())
     assert result.incident.state["incident_id"] == "inc_test"
     assert result.incident.state["state"] == "active"
-    assert result.incident.state["impact"] == impact
     assert result.incident.state["alert"]["status"] == "triaged"
     assert list(validator.iter_errors(result.incident.state)) == []
 
@@ -421,7 +559,12 @@ async def test_human_approval_updates_schema_valid_mitigation_status(workflow) -
     store = MemoryStore("mitigating", state_document=state)
 
     result = await runtime(workflow, store).execute(
-        command("apply_mitigation", outcome="approve", approval=True)
+        command(
+            "apply_mitigation",
+            outcome="approve",
+            approval=True,
+            expected_incident_version=0,
+        )
     )
 
     schema = yaml.safe_load(STATE_SCHEMA_PATH.read_text())

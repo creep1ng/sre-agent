@@ -1,0 +1,1 @@
+{"cleanup": {"local": "clean", "remote": "absent", "viewer": "clean"}, "outcome": "success", "reason": "verified", "restart_proof": {"cursor": "seq:3", "durable_match": true, "event_count": 4, "process_restarted": true, "run_id": "run_dacd09baf6cb2126"}, "run_id": "run_dacd09baf6cb2126"}

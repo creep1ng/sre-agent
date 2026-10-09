@@ -48,6 +48,7 @@ from sre_agent.incident.runtime import (
     IncidentNotFoundError,
     IncidentRuntime,
     InvalidTransitionError,
+    MissingIncidentVersionError,
     PreconditionFailedError,
     RunNotFoundError,
     RunStart,
@@ -108,9 +109,11 @@ class RunStartService:
         runtime: IncidentRuntime,
         units: Callable[[], IncidentUnitOfWork],
         authorizer: Authorizer | None = None,
+        investigator: Any = None,
     ) -> None:
         self.sessions, self.workflow, self.runtime, self.units = sessions, workflow, runtime, units
         self._authorizer = authorizer or self._default_authorizer
+        self.investigator = investigator
 
     async def _default_authorizer(
         self, session: Any, principal: Principal
@@ -220,8 +223,19 @@ class RunStartService:
         except Exception:
             return self._error(request_id, 503)
         sequence = max((event.sequence for event in result.events), default=-1)
+        run = result.run
+        if body["objective"] == "investigate" and self.investigator is not None:
+            try:
+                await self.investigator.after_start(result)
+                async with self.units() as work:
+                    found = await consistent_run_state(work, result.run.run_id, incident_id)
+                if found is None:
+                    return self._error(request_id, 404, RUN_NOT_FOUND)
+                run, sequence = found
+            except Exception:
+                return self._error(request_id, 503)
         try:
-            payload = project_run_state(result.run, self.workflow, event_sequence=sequence)
+            payload = project_run_state(run, self.workflow, event_sequence=sequence)
         except UnsupportedWorkflowDataError:
             return self._error(request_id, 422)
         return JSONResponse(payload, 200 if result.replayed else 201)
@@ -242,8 +256,8 @@ class RunStartService:
                 # run reads: a transition that lands between reading the run and
                 # its events is read again, never returned as an old state with
                 # a newer cursor. A read that keeps racing is a retryable 503.
-                found = await consistent_run_state(work, run_id)
-            if found is None or found[0].incident_id != incident_id:
+                found = await consistent_run_state(work, run_id, incident_id)
+            if found is None:
                 return self._error(request_id, 404, RUN_NOT_FOUND)
             run, sequence = found
         except Exception:
@@ -286,7 +300,19 @@ COMMAND_ACTIONS = {
     "cancel_run": "run.command",
 }
 COMMAND_FIELDS = frozenset(
-    {"command", "actor", "actor_reference", "turn_id", "disposition", "comment", "authorization"}
+    {
+        "command",
+        "actor",
+        "actor_reference",
+        "turn_id",
+        "disposition",
+        "comment",
+        "authorization",
+        "expected_incident_version",
+    }
+)
+VERSIONED_REVIEW_COMMANDS = frozenset(
+    {"approve_mitigation", "reject_mitigation", "request_changes"}
 )
 DISPOSITIONS = frozenset({"dismiss", "link", "declare"})
 TURN_ID_PATTERN = r"^turn_[a-z0-9]{8,32}$"
@@ -387,6 +413,15 @@ class RunCommandService:
         command = body.get("command")
         if not isinstance(command, str) or command not in COMMAND_ACTIONS:
             return True
+        if command in VERSIONED_REVIEW_COMMANDS:
+            version = body.get("expected_incident_version")
+            # Omission is admitted only to let the runtime replay an exact legacy
+            # idempotency key whose stored hash predates this field. A fresh
+            # versionless review still fails the runtime's version precondition.
+            if "expected_incident_version" in body and (type(version) is not int or version < 0):
+                return True
+        elif "expected_incident_version" in body:
+            return True
         if body.get("actor") != "human":
             return True
         if self._invalid_reference(body.get("actor_reference")):
@@ -441,7 +476,7 @@ class RunCommandService:
         if error is not None:
             return error
         assert principal is not None and idempotency_key is not None
-        # Commands are human-only (run-command:1.0.0). The actor type and the
+        # Commands are human-only (run-command:2.0.0). The actor type and the
         # reference the body asserts must both describe the authenticated
         # principal: an agent credential holding the action, by grant or by
         # mistake, still cannot sign a human command.
@@ -461,6 +496,7 @@ class RunCommandService:
             ),
             disposition=body.get("disposition"),
             comment=body.get("comment"),
+            expected_incident_version=body.get("expected_incident_version"),
             turn_id=body.get("turn_id"),
         )
         try:
@@ -469,6 +505,8 @@ class RunCommandService:
             return error_envelope(request_id, 404)
         except RunNotFoundError:
             return error_envelope(request_id, 404, RUN_NOT_FOUND)
+        except MissingIncidentVersionError:
+            return error_envelope(request_id, 422)
         except (
             ApprovalRequiredError,
             IncidentIdempotencyConflictError,

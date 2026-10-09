@@ -1,6 +1,6 @@
 """Resolve the contract's human commands to named transitions (HT-INC-COMMANDS, issue #330).
 
-The operations UI sends a command by name (`run-command:1.0.0`); the runtime of
+The operations UI sends a command by name (`run-command:2.0.0`); the runtime of
 #26 executes named transitions of the pinned workflow. This module is the only
 place that knows which command means which transition, and it decides nothing
 else: the state rule, the approval guard, the attribution rule and the unit of
@@ -55,6 +55,7 @@ class HumanCommand:
     actor_reference: ActorReference
     disposition: str | None = None
     comment: str | None = None
+    expected_incident_version: int | None = None
     turn_id: str | None = None
     inputs: Mapping[str, Any] | None = None
 
@@ -95,6 +96,7 @@ def resolve(request: HumanCommand) -> IncidentCommand:
         actor_reference=request.actor_reference,
         outcome=outcome,
         approval=request.command in APPROVING_COMMANDS,
+        expected_incident_version=request.expected_incident_version,
         turn_id=request.turn_id,
         inputs=inputs or None,
     )

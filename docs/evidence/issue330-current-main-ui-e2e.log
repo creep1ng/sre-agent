@@ -1,0 +1,7 @@
+Packaged local synthetic API/web + Playwright replay: 1 passed (1.8s).
+Valid demo-human command: HTTP 202. Mismatched identity: HTTP 403, no decision persisted.
+PostgreSQL readback: valid scenario version=1, state=verifying, one decision; mismatch version=0, state=mitigating, zero decisions.
+App/build-input tree: 371fefe2f9cdce578d1353e709cbaeb8da0846e5 (tree object ID, not commit).
+Safe replay JSON SHA-256: 3c80470d3c63ba439411039765da4a8010a17f9cb3b38fcc2822530976c3e015
+Unaltered browser PNG SHA-256: a8850fb522edf19a001e4ea1938c56ec6af1515725530fb82975b38900262b59
+No external model/provider credentials or calls. Owned Compose project and temporary files removed.

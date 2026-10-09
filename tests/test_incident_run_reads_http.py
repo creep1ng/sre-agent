@@ -25,6 +25,7 @@ from typing import Any
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from test_incident_authorized_reads import (
     BEARERS,
     COMMANDS,
@@ -106,6 +107,43 @@ def _get(path: str, bearer: str | None = "demo") -> Any:
     return TestClient(create_application(Settings(DATABASE_URL))).get(path, headers=headers)
 
 
+def _get_with_query_log(path: str) -> tuple[Any, list[tuple[str, Any]]]:
+    app = create_application(Settings(DATABASE_URL))
+    statements: list[tuple[str, Any]] = []
+
+    def capture(_connection, _cursor, statement, parameters, _context, _executemany) -> None:
+        statements.append((statement, parameters))
+
+    engine = app.state.database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        with TestClient(app) as client:
+            response = client.get(path, headers={"Authorization": BEARERS["demo"]})
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    return response, statements
+
+
+def _assert_run_lookup_is_scoped(
+    statements: list[tuple[str, Any]], *, incident_id: str, run_id: str
+) -> None:
+    run_queries = [
+        (statement.lower(), parameters)
+        for statement, parameters in statements
+        if "from incident.runs" in statement.lower()
+    ]
+    assert run_queries
+    for statement, parameters in run_queries:
+        normalized = " ".join(statement.split())
+        assert "where run_id=" in normalized and "and incident_id=" in normalized, normalized
+        assert run_id in str(parameters)
+        assert incident_id in str(parameters)
+    assert not any(
+        "from incident.snapshots" in query.lower() or "from incident.run_events" in query.lower()
+        for query, _ in statements
+    )
+
+
 def _refused(response: Any, status: int, code: str) -> None:
     """A refusal is the shared error envelope of the contract, with the expected code."""
 
@@ -174,9 +212,10 @@ def test_a_run_of_another_incident_is_404_on_both_routes() -> None:
         f"/v1/incidents/inc-reads-elsewhere/runs/{RUN_ID}",
         f"/v1/incidents/inc-reads-elsewhere/runs/{RUN_ID}/events",
     ):
-        response = _get(path)
+        response, statements = _get_with_query_log(path)
         _refused(response, 404, "run_not_found")
         assert "investigating" not in response.text
+        _assert_run_lookup_is_scoped(statements, incident_id="inc-reads-elsewhere", run_id=RUN_ID)
 
 
 def test_the_state_is_the_stored_run_with_a_cursor_for_its_last_event() -> None:
@@ -233,13 +272,13 @@ class RacingUnit:
         self.reads, self.races = 0, races
         self.runs, self.snapshots, self.events = self, self, self
 
-    async def get(self, run_id: str) -> RunRecord:
+    async def get_for_incident(self, run_id: str, incident_id: str) -> RunRecord:
         self.reads += 1
         # Each pair of reads is one attempt; the first `races` attempts see a
         # transition land between their two reads.
         attempt, second = divmod(self.reads - 1, 2)
         version = attempt + 1 if attempt < self.races and second else attempt
-        return RunRecord(run_id, "inc-reads-race", {}, version, NOW, NOW)
+        return RunRecord(run_id, incident_id, {}, version, NOW, NOW)
 
     async def latest(self, run_id: str) -> None:
         return None
@@ -249,14 +288,16 @@ class RacingUnit:
 
 
 def test_a_transition_landing_mid_read_is_read_again_and_never_paired_wrong() -> None:
-    settled = asyncio.run(consistent_run_state(RacingUnit(races=2), "run_increadsrace"))  # type: ignore[arg-type]
+    settled = asyncio.run(
+        consistent_run_state(RacingUnit(races=2), "run_increadsrace", "inc-reads-race")
+    )  # type: ignore[arg-type]
     assert settled is not None and settled[0].version == 2
     with pytest.raises(StateReadRaceError):
-        asyncio.run(consistent_run_state(RacingUnit(races=3), "run_increadsrace"))  # type: ignore[arg-type]
+        asyncio.run(consistent_run_state(RacingUnit(races=3), "run_increadsrace", "inc-reads-race"))  # type: ignore[arg-type]
 
 
 def test_a_read_that_keeps_racing_is_503_and_retryable(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def racing(work: Any, run_id: str) -> None:
+    async def racing(work: Any, run_id: str, incident_id: str) -> None:
         raise StateReadRaceError(run_id)
 
     monkeypatch.setattr("sre_agent.gateway.incidents.consistent_run_state", racing)
@@ -272,8 +313,8 @@ class PagedUnit:
         self.snapshot, self.last, self.reads = snapshot, last, []
         self.runs, self.snapshots, self.events = self, self, self
 
-    async def get(self, run_id: str) -> RunRecord:
-        return RunRecord(run_id, "inc-reads-paged", {}, 7, NOW, NOW)
+    async def get_for_incident(self, run_id: str, incident_id: str) -> RunRecord:
+        return RunRecord(run_id, incident_id, {}, 7, NOW, NOW)
 
     async def latest(self, run_id: str) -> Any:
         return SimpleNamespace(event_sequence=self.snapshot)
@@ -289,7 +330,7 @@ def test_the_cursor_reaches_the_last_event_from_the_snapshot_on(
 ) -> None:
     monkeypatch.setattr("sre_agent.gateway.incidents.EVENT_PAGE", 2)
     unit = PagedUnit(snapshot=3, last=8)
-    found = asyncio.run(consistent_run_state(unit, "run_increadspaged"))  # type: ignore[arg-type]
+    found = asyncio.run(consistent_run_state(unit, "run_increadspaged", "inc-reads-paged"))  # type: ignore[arg-type]
     assert found is not None and found[1] == 8
     # Read from the snapshot on, one page after another: never from the first event.
     assert unit.reads == [3, 5, 7]
