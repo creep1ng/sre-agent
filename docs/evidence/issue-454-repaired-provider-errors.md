@@ -7,14 +7,14 @@ They do not certify a live provider call or independent human acceptance.
 
 Source tree: `af54167b2905510c5f6e8d2263e2852f0fb36619`. The recorded E2E source/tests match this tree;
 subsequent tracker, screenshot and evidence-only commits do not alter runtime.
-The [check receipt](repair/checks.txt) identifies every tested cut separately.
+The [check receipt](issue-454/repair/checks.txt) identifies every tested cut separately.
 
-- Valid canonical credit, HTTP200: [canonical](repair/canonical.json).
-- Valid canonical credit, empty output, HTTP502: [empty output](repair/canonical-empty-output.json).
-- Malformed canonical identity, governed HTTP502: [invalid model](repair/canonical-invalid-model.json).
+- Valid canonical credit, HTTP200: [canonical](issue-454/repair/canonical.json).
+- Valid canonical credit, empty output, HTTP502: [empty output](issue-454/repair/canonical-empty-output.json).
+- Malformed canonical identity, governed HTTP502: [invalid model](issue-454/repair/canonical-invalid-model.json).
 - Credits verified before output rejection remain available in historical reads.
 - Invalid model identities are rejected before credit propagation; no invented credit.
-- Other safe scenario observations in `repair/` were copied before container removal.
+- Other safe scenario observations in `issue-454/repair/` were copied before container removal.
 - Earlier `checks.txt`, canonical receipt and screenshots remain predecessor evidence.
 
 ## Repeat
@@ -29,7 +29,7 @@ docker compose --env-file .env.example -p issue454repair --profile checks stop p
 docker compose --env-file .env.example -p issue454repair --profile checks rm -f python-checks-db
 ```
 
-The real rendered [proof screenshot](repair/proof.png) shows the receipt and actual
+The real rendered [proof screenshot](issue-454/repair/proof.png) shows the receipt and actual
 success/error observations. Only synthetic identifiers, projections and status are
 included; no prompts, outputs, headers, API keys, provider bodies or environment files.
 Independent human review, current hosted CI and app attachment readback remain separate.
