@@ -95,7 +95,7 @@ line size exception after the focused question; record the authorization on PR.
 Root cause: safe config generator was delivered locally but omitted from branch;
 author-local absolute documentation path and missing /evidence mount made fresh
 checkout reproduction incomplete. Publish generator and repository-local steps.
-- [ ] T5 Add generator and portable documentation; validate fresh config, permissions,
+- [x] T5 Add generator and portable documentation; validate fresh config, permissions,
   overwrite refusal, Compose interpolation and proof in an exclusive project.
 - [ ] T6 Publish correction, reply/resolve both review threads, inspect exact-head
   checks and merge if repository gates permit. Never fabricate human review.
@@ -115,3 +115,28 @@ PR-governance initially failed because strict single-value fields had prose; mov
 prose out of Delivery route/Tested SHA/Security. Trusted-policy data-only container
 validation returns [] and remote status on original head is now success.
 New correction-head CI and ordinary human acceptance are not yet claimed.
+
+T5 full generated-config journey PASSED (exit0): project ca1-pr568-repro,
+run_0bd63951279c9142, real API restart, unchanged DB/volume, exact HTTP/SQL reads,
+replay/resume200, auth401/403. Related suites34 passed/47.01s on its newly built
+checks image; guard, generator/harness ruff and shellcheck passed. Config tests
+and full journey logs are local outputs/ca1/pr568-review, not fabricated remote
+SHA results. T5 outcome verified; original proof harness/application unchanged.
+Correction commit1f95d93971fee2d52504772f4496d8dd69485e75 published; both original
+P1 review threads replied/resolved. Fresh correction CI is still in progress;
+pr-governance success. Native RDD remains disabled/unmanaged.
+New automated P2: original full-archive report cited files omitted from the partial
+publication. Revise report to enumerate committed versus local-only evidence and
+remove unavailable paths as reviewer/reproduction dependencies. Preserve history.
+- [x] T7 Correct published artifact inventory; verify all repository-local evidence
+  references exist, reply/resolve follow-up P2, and recheck candidate CI.
+
+T7 report revised to list all confirmed committed artifacts; full local archive
+items omitted from publication explicitly unavailable. Each relative Markdown
+evidence link checked against live PR changed-file inventory (10/10 exist);
+external CI URL is the observed original publication-head run. No fabricated or
+recreated artifacts, no application/harness/config behavior changed.
+The supplementary generated-config reproduction and34 related tests passed;
+correction1f95 CI configuration/checks/static/unit jobs passed, contracts pending.
+Do not infer independent human acceptance from automated comments or user size
+approval. T6 merge remains subject to ordinary repository review/checks policy.
