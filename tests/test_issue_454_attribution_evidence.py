@@ -120,13 +120,15 @@ def test_alias_change_while_provider_is_in_flight_keeps_invocation_snapshot() ->
                 assert restored.status_code == 200, restored.text
 
 
-@pytest.mark.parametrize("empty_output", [False, True])
+@pytest.mark.parametrize(
+    "empty_output, valid_model", [(False, True), (True, True), (False, False)]
+)
 def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
-    empty_output: bool,
+    empty_output: bool, valid_model: bool,
 ) -> None:
     """Controlled OpenRouter HTTP metadata flows through DB into the request read."""
     requested = "openai/gpt-4o-mini"
-    credited = "openai/gpt-4o-mini-20260915"
+    credited = "openai/gpt-4o-mini-20260915" if valid_model else "invalid canonical model"
     secret = "test-only-openrouter-credential"
 
     def respond(request: httpx.Request) -> httpx.Response:
@@ -201,18 +203,28 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
                 headers=auth(CONSUMER),
                 json={"model": "triage-agent", "input": PROMPT},
             )
-            assert created.status_code == (502 if empty_output else 200), created.text
+            assert created.status_code == (502 if empty_output or not valid_model else 200), created.text
             request_id = created.json()["request_id"]
             # Public response keeps requested model identity; credit is separate evidence.
-            if empty_output:
-                assert created.json()["error"]["code"] == "upstream_invalid_response"
+            if empty_output or not valid_model:
+                assert created.json()["error"]["code"] == (
+                    "upstream_invalid_response" if valid_model else "provider_evidence_invalid"
+                )
             else:
                 assert created.json()["model"] == requested
             item = read_item(client, request_id)
             assert item["requested_assignment"]["model"] == requested
-            assert item["credited_model"] == {"availability": "available", "value": credited}
-            assert item["credited_provider"] == {"availability": "available", "value": "openai"}
-            assert item["attribution_status"] == "available"
+            assert item["credited_model"] == (
+                {"availability": "available", "value": credited}
+                if valid_model
+                else {"availability": "unavailable", "value": None}
+            )
+            assert item["credited_provider"] == (
+                {"availability": "available", "value": "openai"}
+                if valid_model
+                else {"availability": "unavailable", "value": None}
+            )
+            assert item["attribution_status"] == ("available" if valid_model else "partial")
             assert item["consumption"] == CONSUMPTION.model_dump(mode="json")
             assert (
                 secret not in repr(item) and OUTPUT not in repr(item) and PROMPT not in repr(item)
@@ -229,7 +241,9 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
                 },
             )
             Path(
-                "/tmp/issue454-canonical-empty-output-artifact.json"
+                "/tmp/issue454-canonical-invalid-model-artifact.json"
+                if not valid_model
+                else "/tmp/issue454-canonical-empty-output-artifact.json"
                 if empty_output
                 else "/tmp/issue454-canonical-adapter-artifact.json"
             ).write_text(
@@ -240,6 +254,7 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
                         "provider": "OpenRouter adapter/httpx.MockTransport; no live/paid call",
                         "http_status": created.status_code,
                         "empty_output": empty_output,
+                        "valid_model": valid_model,
                         "historical_item": item,
                     },
                     indent=2,
