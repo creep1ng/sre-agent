@@ -336,7 +336,10 @@ class ResponsesService:  # noqa: E305
                                       reason=reason, retryable=status in {503, 504}, identifiers=identifiers,
                                       error_code=code, retry_after=failure.retry_after,
                                       consumption=failure.consumption or _empty_consumption("unavailable"),
-                                      attribution=invocation_attribution)
+                                      attribution=invocation_attribution.with_credit(
+                                          model=failure.credited_model,
+                                          provider=failure.credited_provider,
+                                      ))
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, consumption: Consumption | None = None,
