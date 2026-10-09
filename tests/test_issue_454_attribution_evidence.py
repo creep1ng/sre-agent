@@ -22,6 +22,7 @@ from issue454_support import (
     historical_response_event,
     persist_audit_events,
     read_item,
+    record_artifact,
 )
 from issue454_support import (
     DATABASE_URL as DATABASE_URL,
@@ -89,6 +90,7 @@ def test_alias_change_while_provider_is_in_flight_keeps_invocation_snapshot() ->
             item = read_item(client, response.json()["request_id"])
             assert item["requested_assignment"]["model"] == first_assignment["concrete_model"]
             assert item["requested_assignment"]["model"] != replacement["concrete_model"]
+            record_artifact("alias-race", item)
         finally:
             release.set()
             thread.join(timeout=10)
@@ -265,6 +267,7 @@ def test_provider_timeout_records_assignment_but_no_credited_identity() -> None:
         assert item["credited_provider"] == {"availability": "unavailable", "value": None}
         assert item["attribution_status"] == "partial"
         assert item["consumption"] is None or item["consumption"]["availability"] == "unavailable"
+        record_artifact("timeout", item)
 
 
 def test_legacy_audit_without_snapshot_is_explicitly_legacy() -> None:
@@ -292,6 +295,8 @@ def test_legacy_audit_without_snapshot_is_explicitly_legacy() -> None:
         }
         assert item["credited_model"] == {"availability": "unavailable", "value": None}
         assert item["credited_provider"] == {"availability": "unavailable", "value": None}
+
+        record_artifact("legacy", item)
 
 
 def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
@@ -322,6 +327,7 @@ def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
         assert january.json()["items"][0]["request_id"] == str(request_id)
         assert january.json()["items"][0]["month"] == "2000-01"
         assert february.json()["items"] == []
+        record_artifact("month-boundary", {"january": january.json(), "february": february.json()})
 
 
 def test_append_only_injected_store_cannot_accept_invocation_without_snapshot() -> None:
@@ -357,3 +363,8 @@ def test_append_only_injected_store_cannot_accept_invocation_without_snapshot() 
                 assert (
                     connection.execute(query, (response.json()["request_id"],)).fetchone()[0] == 0
                 )
+
+        record_artifact(
+            "append-only-store",
+            {"http_status": response.status_code, "standalone_writes": len(writes)},
+        )
