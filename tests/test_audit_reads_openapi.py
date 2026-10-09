@@ -1,4 +1,4 @@
-"""The runtime audit routes must describe the published 2.7 contract."""
+"""The runtime audit routes must describe the published 2.8 contract."""
 
 import json
 from pathlib import Path
@@ -8,10 +8,11 @@ import yaml
 
 from sre_agent.application import create_application
 from sre_agent.governance.dto import AuditEvent
+from sre_agent.release import CONTRACT_VERSION
 from sre_agent.settings import Settings
 
-CONTROL_PLANE = Path("schemas/releases/2.7.0/openapi/control-plane.yaml")
-METADATA_SCHEMA = "urn:sre-agent:schema:audit-event-metadata:2.7.0"
+CONTROL_PLANE = Path("schemas/releases/2.8.0/openapi/control-plane.yaml")
+METADATA_SCHEMA = "urn:sre-agent:schema:audit-event-metadata:2.8.0"
 RUNTIME_METADATA_SCHEMA_ID = "urn:sre-agent:runtime-schema:audit-event-metadata"
 AUDIT_LIST_SCHEMA = {
     "type": "object",
@@ -102,9 +103,10 @@ def _parameters(
     }
 
 
-def test_runtime_audit_openapi_matches_published_27_contract() -> None:
+def test_runtime_audit_openapi_matches_published_28_contract() -> None:
     runtime, canonical = _runtime_document(), _canonical_document()
-    assert runtime["info"]["x-sre-agent-contract-version"] == canonical["info"]["version"]
+    assert runtime["info"]["x-sre-agent-contract-version"] == CONTRACT_VERSION
+    assert canonical["info"]["version"] == "2.8.0"
     assert (
         runtime["components"]["securitySchemes"]["bearerAuth"]
         == canonical["components"]["securitySchemes"]["bearerAuth"]
@@ -245,7 +247,7 @@ def test_runtime_metadata_schema_is_closed_to_projected_content() -> None:
     registry = Registry().with_resource(schema["$id"], Resource.from_contents(schema))
     validator = Draft202012Validator(schema, registry=registry)
     valid = json.loads(
-        (Path("schemas/releases/2.7.0/examples/audit/allow.example.json")).read_text()
+        (Path("schemas/releases/2.8.0/examples/audit/allow.example.json")).read_text()
     )
     # The frozen example remains valid under its release. Every currently mounted
     # runtime operation must also be representable by the runtime-local schema.
