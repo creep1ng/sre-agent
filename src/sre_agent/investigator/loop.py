@@ -214,6 +214,7 @@ async def investigate(
                     failure_diagnostic=failure_diagnostic,
                 )
             return finish("needs_human", detail=str(error))
+        request_ids.append(reply.request_id)
         turn = Turn(
             turn_id=turn_id,
             task_id=task_id_for(turn_id),
@@ -236,7 +237,6 @@ async def investigate(
                 return finish("invalid_output", detail=str(error))
             feedback = str(error)
             continue
-        request_ids.append(reply.request_id)
         feedback = None
         if not isinstance(action, UseTool):
             turns.append(turn)
@@ -255,7 +255,7 @@ async def investigate(
             if isinstance(error, EvidenceUnavailable) and error.request_id is not None:
                 request_ids.append(error.request_id)
                 mcp_request_ids.append(error.request_id)
-            status: Status = (
+            status = (
                 "denied"
                 if isinstance(error, EvidenceUnavailable) and error.kind == "denied"
                 else "pre_dispatch_rejected"

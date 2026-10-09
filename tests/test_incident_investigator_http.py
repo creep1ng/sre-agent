@@ -1730,3 +1730,61 @@ def test_cancelled_dispatch_lock_commit_does_not_leave_a_pooled_session_lock(
             await database.dispose()
 
     assert asyncio.run(exercise()) == "released"
+
+
+@pytest.mark.parametrize("recover", [False, True])
+def test_invalid_model_output_retains_all_governed_http_audits(recover: bool) -> None:
+    incident_id = f"inc-invalid-model-audits-{str(recover).lower()}"
+    _add_incident(incident_id)
+    _grant_run_access()
+
+    class InvalidThenRecoveryLLM(ScriptedLLM):
+        async def create(self, request: ProviderRequest) -> ProviderResult:
+            self.requests.append(request)
+            if recover and len(self.requests) == 2:
+                output = json.dumps({"action": "request_human", "reason": "Synthetic review"})
+            elif recover:
+                output = json.dumps(
+                    {
+                        "action": "conclude",
+                        "summary": "Synthetic",
+                        "supporting_evidence": ["ev_missing"],
+                    }
+                )
+            else:
+                output = "not valid JSON"
+            return ProviderResult(
+                response_id=f"resp_invalid_{len(self.requests)}",
+                model=request.model,
+                text=output,
+                provider=request.provider,
+            )
+
+    llm, mcp = InvalidThenRecoveryLLM(), ScriptedMCP()
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=llm, mcp=mcp)
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        key = f"invalid-model-audits-{str(recover).lower()}"
+        first = _start(client, incident_id, key)
+        assert first.status_code == 201
+        run_id = first.json()["run_id"]
+        before = _database_rows(incident_id, run_id)
+        replay = _start(client, incident_id, key)
+        assert replay.status_code == 200
+        assert _database_rows(incident_id, run_id) == before
+
+    receipt = _receipts(before[1])[-1]
+    assert len(llm.requests) == 2 and mcp.calls == []
+    with psycopg.connect(DATABASE_URL) as connection:
+        correlated = connection.execute(
+            "SELECT count(*) FROM audit_events WHERE operation = 'responses.create' "
+            "AND response_status = 200 AND correlation ->> 'request_id' = ANY(%s)",
+            (receipt["request_ids"],),
+        ).fetchone()[0]
+    assert correlated == 2
+    print(
+        json.dumps(
+            {"recover": recover, "correlated_response_audits": correlated, "replay_unchanged": True}
+        )
+    )

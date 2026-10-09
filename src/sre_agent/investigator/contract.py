@@ -290,7 +290,6 @@ class InvestigationResult(_Strict):
     mcp_request_ids: list[UUID] = Field(default_factory=list)
     remaining_step_budget: Annotated[int, Field(ge=0)] = 0
     failure_diagnostic: FailureDiagnostic | None = None
-    skills: list[PinnedSkill] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _status_matches_outcome(self) -> InvestigationResult:

@@ -105,35 +105,6 @@ def _skill(item: _SkillVersion, request_id: UUID, *dependencies: ResolvedSkill) 
     )  # fmt: skip
 
 
-class _Pinned(BaseModel):
-    skill_id: str
-    version: str
-
-
-class _Manifest(BaseModel):
-    display_name: str
-    instructions: str
-    dependencies: list[_Pinned]
-
-
-class _SkillVersion(_Pinned):
-    manifest: _Manifest
-    content_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-
-
-class _Resolution(BaseModel):
-    skill: _SkillVersion
-    dependencies: list[_SkillVersion]
-    request_id: UUID
-
-
-def _skill(item: _SkillVersion, request_id: UUID, *dependencies: ResolvedSkill) -> ResolvedSkill:
-    return ResolvedSkill(
-        item.skill_id, item.version, item.content_sha256, item.manifest.display_name,
-        item.manifest.instructions, dependencies, request_id,
-    )  # fmt: skip
-
-
 class GatewayClient:
     def __init__(self, settings: GatewaySettings, http: httpx.AsyncClient | None = None) -> None:
         self._settings = settings
