@@ -237,6 +237,11 @@ EXPECTED_SCOPES = {
         "resource_type": "administrative_control",
         "resource_id": "usage",
     },
+    ("GET", "/v1/usage/requests"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "usage",
+    },
 }
 
 

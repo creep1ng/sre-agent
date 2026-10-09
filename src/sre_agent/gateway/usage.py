@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gateway.usage_requests import read_requests
+from sre_agent.gateway.usage_requests_models import UsageRequestsResponse
 from sre_agent.governance.dto import AuthorizationDenialCause
 from sre_agent.persistence.models import AuditEventRow
 
@@ -702,6 +704,117 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             stage="authorization",
             payload=UsageReadResponse.model_validate(result),
             context=_context,
+            decision=evaluation.decision,
+            resource_ref=("administrative_control", "usage"),
+        )
+
+    @router.get(
+        "/v1/usage/requests",
+        response_model=UsageRequestsResponse,
+        operation_id="readUsageRequests",
+        summary="Read bounded historical request attribution",
+        description=(
+            "Returns immutable persisted routing attribution and existing per-request "
+            "consumption evidence. Exactly one bounded selector is required. Missing "
+            "execution snapshots are never reconstructed from current aliases; historical "
+            "invocation rows are legacy and pre-invocation absence is unavailable."
+        ),
+        responses={
+            401: {"description": "Authentication failed; no request data or counts are returned."},
+            403: {"description": "Administrative request reads are not authorized."},
+            413: {"description": "The selected evidence exceeds the explicit read bound."},
+            422: {"description": "The selector is missing, malformed, repeated, or unknown."},
+            503: {"description": "Persisted request attribution could not be read."},
+        },
+        openapi_extra={
+            "x-required-query-one-of": ["request_id", "incident_id", "month"],
+            "x-maximum-evidence-rows": UsageReadProjection.MAX_ROWS,
+            "x-reject-unknown-query-parameters": True,
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "usage",
+            },
+        },
+    )
+    async def read_usage_requests(
+        request: Request,
+        request_id: Annotated[UUID | None, Query(description="Response request UUID.")] = None,
+        incident_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+        month: Annotated[str | None, Query(pattern=SUPPORTED_MONTH_PATTERN)] = None,
+        _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_usage_bearer)] = None,
+    ) -> UsageRequestsResponse | JSONResponse:
+        request.state.usage_request_id = uuid4()
+        supplied = list(request.query_params.multi_items())
+        supplied_names = [name for name, _ in supplied]
+        if (
+            any(name not in selector_names for name in supplied_names)
+            or any(name in known_unbounded for name in supplied_names)
+            or len(supplied) != 1
+        ):
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="Exactly one bounded usage selector is required.",
+            )
+
+        filters: dict[str, Any] = {
+            name: value
+            for name, value in {
+                "request_id": request_id,
+                "incident_id": incident_id,
+                "month": month,
+            }.items()
+            if value is not None
+        }
+        if len(filters) != 1 or (
+            month is not None and re.fullmatch(SUPPORTED_MONTH_PATTERN, month) is None
+        ):
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="The usage selector is invalid.",
+            )
+
+        context, evaluation, denial = await authorize_usage(request)
+        if denial is not None:
+            return denial
+        try:
+            result = await read_requests(projection, **filters)
+            response = UsageRequestsResponse.model_validate_json(json.dumps(result))
+        except UsageReadLimitExceeded:
+            return await finish(
+                request,
+                status=413,
+                stage="validation",
+                code="usage_scope_too_large",
+                message="The usage scope exceeds the read limit.",
+                context=context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
+        except Exception:
+            # Any malformed snapshot, consumption evidence, or storage failure is
+            # sanitized as unavailable rather than returning raw persisted data.
+            return await finish(
+                request,
+                status=503,
+                stage="audit",
+                code="storage_unavailable",
+                context=context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
+        return await finish(
+            request,
+            status=200,
+            stage="authorization",
+            payload=response.model_dump(mode="json"),
+            context=context,
             decision=evaluation.decision,
             resource_ref=("administrative_control", "usage"),
         )
