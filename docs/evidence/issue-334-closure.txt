@@ -1,0 +1,11 @@
+Tested source: 6e2d95b3eb2c6d09c683c9bd4b1552a00f4271ee
+Real FastAPI TestClient HTTP + isolated PostgreSQL 17.4; provider/catalog doubles.
+Selected unedited stdout rows; no public HTTP audit-read claim.
+.....{"CA5": {"audit_schema": "2.5.0/allowDecision", "http_statuses": [200, 429], "persisted_matches": true, "policy_versions": [1, 2], "repository_matches": true}}
+.{"CA8": {"audit_policy_versions": [1, 2], "http_statuses": [200, 200, 200, 200, 200, 429], "old_request_audited_after_rollover": true, "old_reservation": "settled", "output_caps": [1, 2, 3, 2, 1], "policy_versions": [1, 2], "settled_usd_by_period": ["0.100000000000000000000000000000000000", "0.400000000000000000000000000000000000"], "utc_periods": ["2026-01", "2026-02"]}}
+.{"CA8": {"audit_policy_versions": [1, 2], "http_statuses": [504, 200, 200, 200, 200, 429], "old_request_audited_after_rollover": true, "old_reservation": "reserved", "output_caps": [1, 2, 3, 2, 1], "policy_versions": [1, 2], "settled_usd_by_period": ["0", "0.400000000000000000000000000000000000"], "utc_periods": ["2027-01", "2027-02"]}}
+......{"with_incident": false, "settlement_fails": false, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["settled", "reserved"], "settled_usd": "0.300000000000000000000000000000000000", "outstanding_usd": "0.300000000000000000000000000000000000"}
+.{"with_incident": true, "settlement_fails": false, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["settled", "reserved"], "settled_usd": "0.300000000000000000000000000000000000", "outstanding_usd": "0.300000000000000000000000000000000000"}
+.{"with_incident": false, "settlement_fails": true, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["reserved", "reserved"], "settled_usd": "None", "outstanding_usd": "0.300000000000000000000000000000000000"}
+.{"with_incident": true, "settlement_fails": true, "complete_status": 200, "remaining_request_status": 200, "exhausted_status": 429, "reservation_states": ["reserved", "reserved"], "settled_usd": "None", "outstanding_usd": "0.300000000000000000000000000000000000"}
+19 passed in 122.24s (0:02:02)

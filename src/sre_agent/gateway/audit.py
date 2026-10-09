@@ -123,6 +123,7 @@ class AuditProjector:
         assignment: ModelAlias | None = None,
         identifiers: dict[str, str] | None = None,
         consumption: Consumption | None = None,
+        consumption_policy_version: int | None = None,
     ) -> AuditEvent:
         ref = self.reference
         correlation = {"request_id": request_id}
@@ -142,6 +143,10 @@ class AuditProjector:
             policy = {"decision": decision.decision, "reason_code": decision.reason_code}
             if decision.policy_id:
                 policy["grant_ref"] = ref("grant", decision.policy_id)
+            if decision.decision == "allow" and consumption_policy_version is not None:
+                policy["policy_ref"] = ref(
+                    "policy", f"consumption-limits:1:version:{consumption_policy_version}"
+                )
         # fmt: off
         return AuditEvent(
             event_id=uuid4(), occurred_at=datetime.now(UTC), operation="responses.create",
