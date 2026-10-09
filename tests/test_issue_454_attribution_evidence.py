@@ -298,6 +298,7 @@ def test_legacy_audit_without_snapshot_is_explicitly_legacy() -> None:
 
         record_artifact("legacy", item)
 
+
 def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
     """A two-event month boundary produces one item in the canonical UTC month."""
     provider = ControlledProvider()
@@ -326,9 +327,7 @@ def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
         assert january.json()["items"][0]["request_id"] == str(request_id)
         assert january.json()["items"][0]["month"] == "2000-01"
         assert february.json()["items"] == []
-        record_artifact(
-            "month-boundary", {"january": january.json(), "february": february.json()}
-        )
+        record_artifact("month-boundary", {"january": january.json(), "february": february.json()})
 
 
 def test_append_only_injected_store_cannot_accept_invocation_without_snapshot() -> None:
