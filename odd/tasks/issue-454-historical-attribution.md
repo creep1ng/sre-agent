@@ -10,7 +10,9 @@ Existing usage accounting and audit navigation are not historical attribution.
 
 - Route: delegated direct Organic Driven Development; no SDD artifacts.
 - Branch: `codex/issue-454-historical-attribution`.
-- Current base: `878a0b2a2c5b1855e664c5c5039f6fa61581f703` (fetched main).
+- Current base: `4c3544e69f6d40a14bbfe9a9736d1fc4a029810e` (fetched main).
+  Own unpublished docs commits rebased without source conflicts; main's #541
+  evidence-script update retained. Design-first commit is now `52f43b0`.
 - Live GitHub Projects consulted: midnight.agent; #454 Todo, #143 In progress.
 - Scope authority: #454 and approved comment 6073849454; #143 comment 6073854153.
 - Backend owner Ricardo/creep1ng; consumer UI belongs to Mario/Mariog89.
@@ -85,11 +87,34 @@ production edits; parent readback/approved-comment reconciliation/diff hygiene P
 No independent human acceptance claimed. No production implementation yet.
 Baseline Responses/OpenRouter/usage acceptance: 120 passed in 62.69s, exit 0,
 real isolated PostgreSQL and controlled providers, unchanged source at base878a0b2.
-Design-first commit `de9701d9a85c06470fc796609d3a42f2db0ccb7a` records A454-1.
+Original design-first commit `de9701d` rebased to `52f43b0` records A454-1.
 Default Docker address pools exhausted; temporary network
 overlay `/tmp/sre-agent-issue454-network.yaml` uses inspected free 10.253.144.0/28
 without removing unrelated networks. Logs: `/tmp/issue454-baseline.log`.
-Next: A454-2 preauthor acceptance scenarios/contract; user authorized TDD.
+Next: A454-2 delegated preauthor acceptance scenarios/contract; TDD enabled.
+Writer must produce observable API/PostgreSQL failures before production edits;
+controlled provider is explicit, not a claimed live external/E2E provider call.
+Initial A454-2 Docker run: proposal YAML/JSON Schema syntax PASS; pytest RED
+11 failed / 39 passed in 14.90s, exit 1 (`/tmp/issue454-red.log`). Missing route
+and credited-model assertions fail as intended, but legacy and duplicate fixtures
+failed AuditEvent validation before behavior; correct fixtures and rerun RED before
+production edits. Do not present these two setup failures as valid TDD proof.
+Corrected-fixture rerun: proposal syntax/schema PASS; verified RED 11 failed /
+39 passed in 15.60s, exit 1 (`/tmp/issue454-red-verified.log`). All failures are
+missing requests route or missing adapter credited-model evidence, not setup
+errors. Tests/proposal preauthored before production. A454-2 remains partial until
+the new immutable release/conformance is published and validated. Next A454-3:
+immutable capture and explicit credit, then A454-4 shared authorized projection.
+Contract publication research: 2.7.0 baseline is 199 files / 7,460 lines; 2.8.0
+must be self-contained under current tooling. A focused size-exception question
+was approved by the user on 2026-10-09 exclusively for the contract 2.8.0 PR;
+Verified actual GitHub label `size:exception-contract-update`; apply it only to
+that contract PR as explicitly authorized. No label applied or PR created yet.
+Other PRs remain <=400; no transferred exception or auto-approval implied.
+Keep existing 2.7.0 unchanged; synchronize canonical control-plane + standalone
+usage-read + new schema/fixtures; register issue-454 conformance only for >=2.8.
+Generate projection/evidence/manifest for the NEW unpublished release; never edit
+historical manifest hashes. Runtime activation follows verified new contract.
 Mirror status: PENDING. Host lost registered runtime session identity on resume;
 agent-attributed Engram writes are forbidden until host re-registers the same ID.
 Retain local progress; read mirror9911 as older state, do not invent a new session.

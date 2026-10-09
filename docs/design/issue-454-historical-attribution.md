@@ -113,9 +113,9 @@ keeps content out of audit evidence
 ([ADR-005](../../schemas/adrs/ADR-005-audit-redaction.md)). The new snapshot is
 a separate, authorized usage artifact, not an exception that alters ADR-005.
 
-Before production edits, resolve effective TDD mode and exact runner from
-project/session configuration; it remains unresolved in
-odd/tasks/issue-454-historical-attribution.md. Then pre-author real HTTP /
+The user enabled TDD for #454 on 2026-10-09, prioritizing E2E behavior without
+tautological or change-detector tests. The exact isolated Docker runner is in
+odd/tasks/issue-454-historical-attribution.md. Pre-author real HTTP /
 PostgreSQL scenarios for alias reassignment, canonical OpenRouter evidence,
 provider failure, pre-invocation denial, legacy rows, selector bounds,
 authorization, sanitized failures, and transaction rollback. This document is
