@@ -9,9 +9,10 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from sre_agent.gateway.providers import (
+    ConcreteModel,
     ProviderFailure,
     ProviderFailureKind,
     ProviderRequest,
@@ -181,7 +182,10 @@ def _selected_model(metadata: Any, request: ProviderRequest) -> str:
     model = evidence.get("model") if isinstance(evidence, Mapping) else None
     if not isinstance(model, str):
         raise ProviderFailure("evidence_invalid")
-    return model
+    try:
+        return TypeAdapter(ConcreteModel).validate_python(model)
+    except ValidationError:
+        raise ProviderFailure("evidence_invalid") from None
 
 
 def _matches_provider(evidence: Any, request: ProviderRequest) -> bool:
