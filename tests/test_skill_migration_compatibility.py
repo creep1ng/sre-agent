@@ -116,7 +116,7 @@ async def test_populated_upgrade_preserves_evidence_and_rolls_back(
     after = snapshot()
     assert after["rows"] == before["rows"]
     assert after["grants"] == before["grants"]
-    assert after["heads"] == [("20261007_01",)]
+    assert after["heads"] == [("20261009_01",)]
 
     # Each revision guards only the evidence it owns. Leaving the slice that introduced
     # the persisted operation is lossy and must be refused, while rolling back past a
@@ -181,7 +181,7 @@ def test_populated_legacy_triage_row_upgrades_as_unknown_without_actor_inference
         head = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     assert current[:8] == legacy
     assert current[8:] == ("unknown", None)
-    assert head == ("20261007_01",)
+    assert head == ("20261009_01",)
 
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
@@ -196,7 +196,7 @@ def test_populated_legacy_triage_row_upgrades_as_unknown_without_actor_inference
         ).fetchone()
         head = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     assert kept == ("manual", None)
-    assert head == ("20261007_01",)
+    assert head == ("20261009_01",)
 
 
 @pytest.mark.parametrize(
@@ -262,6 +262,6 @@ def test_populated_sibling_heads_merge_without_losing_branch_rows(
         assert len(command_id) == 150
     else:
         assert len(command_id) <= 128
-    assert heads == [("20261007_01",)]
+    assert heads == [("20261009_01",)]
     if triage_origin is not None:
         assert triage == (triage_origin, responsible_system)
