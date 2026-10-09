@@ -28,15 +28,15 @@ Existing usage accounting and audit navigation are not historical attribution.
 
 ## Testing configuration and checks
 
-Effective TDD mode unresolved: no current project/session switch found; prior
-feature documents are not configuration. Resolve before production implementation.
-Project policy requires tests/failure scenarios BEFORE code; favor API/PostgreSQL
-acceptance with a reproducible terminal artifact, not tautological unit tests.
+Effective TDD mode: ON, explicitly authorized by the user on 2026-10-09 for #454.
+Observe RED -> GREEN -> REFACTOR. Prioritize E2E/API/PostgreSQL acceptance with
+verifiable repeatable artifacts; no tautological or change-detector tests. Write
+behavior/failure scenarios BEFORE production code, following AGENTS.md.
 
 Exact focused runner (after isolated safe local configuration):
 
 ```sh
-docker compose --env-file .env --env-file .env.worktree --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_issue_454_attribution_acceptance.py'
+docker compose --env-file .env --env-file .env.worktree -f compose.yaml -f /tmp/sre-agent-issue454-network.yaml --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_issue_454_attribution_acceptance.py'
 ```
 
 Applicable checks: Ruff lint/format, configured mypy, import boundaries, Alembic
@@ -83,8 +83,13 @@ Live issues/comments/Projects read and main fetched; existing mechanisms inspect
 A454-1 decision recorded in `docs/design/issue-454-historical-attribution.md` before
 production edits; parent readback/approved-comment reconciliation/diff hygiene PASS.
 No independent human acceptance claimed. No production implementation yet.
-Baseline checks launched with real isolated PostgreSQL and controlled provider tests;
-pending completion. Default Docker address pools exhausted; temporary network
+Baseline Responses/OpenRouter/usage acceptance: 120 passed in 62.69s, exit 0,
+real isolated PostgreSQL and controlled providers, unchanged source at base878a0b2.
+Design-first commit `de9701d9a85c06470fc796609d3a42f2db0ccb7a` records A454-1.
+Default Docker address pools exhausted; temporary network
 overlay `/tmp/sre-agent-issue454-network.yaml` uses inspected free 10.253.144.0/28
 without removing unrelated networks. Logs: `/tmp/issue454-baseline.log`.
-Next: resolve TDD question, then A454-2. Mirror written and read back; resync on edits.
+Next: A454-2 preauthor acceptance scenarios/contract; user authorized TDD.
+Mirror status: PENDING. Host lost registered runtime session identity on resume;
+agent-attributed Engram writes are forbidden until host re-registers the same ID.
+Retain local progress; read mirror9911 as older state, do not invent a new session.
