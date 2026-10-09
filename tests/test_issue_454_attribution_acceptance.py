@@ -1,6 +1,7 @@
 """E2E round trip for immutable historical request attribution."""
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from uuid import UUID
 
@@ -21,6 +22,7 @@ from issue454_support import (
     clean_history as clean_history,
 )
 from issue454_support import migrated_database as migrated_database
+from jsonschema import Draft202012Validator
 
 from sre_agent.application import create_application
 from sre_agent.settings import Settings
@@ -53,6 +55,34 @@ def test_historical_assignment_survives_real_alias_reassignment() -> None:
             # Capture and read while the old assignment is still current.
             first_item = read_item(client, first_id)
             assert first_item["requested_assignment"]["model"] == first_assignment["concrete_model"]
+
+            # Consumers must get the same evidence-state rules from live OpenAPI.
+            runtime = client.get("/openapi.json").json()
+            response_schema = runtime["paths"]["/v1/usage/requests"]["get"]["responses"]["200"][
+                "content"
+            ]["application/json"]["schema"]
+            validator = Draft202012Validator(
+                {**response_schema, "components": runtime["components"]}
+            )
+            actual = {"filter": {"request_id": first_id}, "items": [first_item]}
+            validator.validate(actual)
+            contradictions = {}
+            for status in ("available", "legacy", "unavailable"):
+                invalid = deepcopy(actual)
+                invalid["items"][0]["attribution_status"] = status
+                contradictions[status] = invalid
+            invalid = deepcopy(actual)
+            invalid["items"][0]["credited_model"] = {
+                "availability": "available",
+                "value": first_assignment["concrete_model"],
+            }
+            invalid["items"][0]["credited_provider"] = {
+                "availability": "available",
+                "value": first_assignment["inference_provider"],
+            }
+            contradictions["partial-all-credit"] = invalid
+            accepted = [name for name, value in contradictions.items() if validator.is_valid(value)]
+            assert not accepted, f"Live OpenAPI accepted contradictory evidence: {accepted}"
 
             changed = client.put(
                 "/v1/model-aliases/triage-agent/assignment",

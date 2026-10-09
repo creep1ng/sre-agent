@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
+import psycopg
 from fastapi.testclient import TestClient
 from issue454_support import (
     ADMIN,
@@ -290,3 +291,38 @@ def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
         assert january.json()["items"][0]["request_id"] == str(request_id)
         assert january.json()["items"][0]["month"] == "2000-01"
         assert february.json()["items"] == []
+
+
+def test_append_only_injected_store_cannot_accept_invocation_without_snapshot() -> None:
+    """Real API/DB must fail closed if its injected store cannot capture atomically."""
+    provider = ControlledProvider()
+    writes: list[str] = []
+
+    class AppendOnlyStore:
+        async def append(self, audit_event) -> None:
+            writes.append(str(audit_event.event_id))
+            await PostgresAuditStore(injected.state.database.sessions).append(audit_event)
+
+    injected = create_application(
+        Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY),
+        llm_provider=provider,
+        audit_store=AppendOnlyStore(),
+    )
+    with TestClient(injected) as client:
+        response = client.post(
+            "/v1/responses", headers=auth(CONSUMER), json={"model": "triage-agent", "input": PROMPT}
+        )
+        assert len(provider.requests) == 1
+        assert response.status_code == 503, response.text
+        assert response.json()["error"]["code"] == "audit_unavailable"
+        assert set(response.json()) == {"error", "request_id", "retryable"}
+        assert PROMPT not in response.text and OUTPUT not in response.text
+        assert not writes, "non-atomic response audit must not be accepted on its own"
+        with psycopg.connect(DATABASE_URL) as connection:
+            for query in (
+                "SELECT count(*) FROM request_attributions WHERE request_id = %s",
+                "SELECT count(*) FROM audit_events WHERE correlation->>'request_id' = %s",
+            ):
+                assert (
+                    connection.execute(query, (response.json()["request_id"],)).fetchone()[0] == 0
+                )
