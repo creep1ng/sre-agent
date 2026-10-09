@@ -70,7 +70,7 @@ evidence is not a paid/live external call; hosted CI is not human acceptance.
   Reuse authoritative bounded selection/dedup; no duplicate accounting; server-only
   historical resolution; no current alias inference; contract-admitted navigation.
   Checks: selectors/auth/sanitization/legacy/overflow and consumption regressions.
-- [x] **A454-5 — Verify current integrated candidate.**
+- [ ] **A454-5 — Verify current integrated candidate (CI rerun pending).**
   Lint/types/contracts/full applicable tests/migration and recoverable corrections.
   Checks: actual commands/results at exact source SHA; record skipped/failed checks.
 - [x] **A454-6 — Demonstrate CA1–CA11 with repeatable real evidence.**
@@ -472,3 +472,5 @@ All eleven drafts are attached. Backend CA1–CA11 verified;human review pending
 - Engram mirror unavailable: no registered runtime session identity.
 Malformed canonical identity also reproduced RED (1 failed, 2 controls passed);
 validate the model before credit propagation so the error remains structured.
+CI contracts hit the observed15-minute timeout; #570 now allows25minutes,
+without removing release checks. Current hosted rerun is pending, not accepted.
