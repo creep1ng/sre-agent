@@ -1,0 +1,17 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "audit_survivors": 0,
+    "failure_status": 503,
+    "historical_item_after_rejected_mutations": {
+      "alias": "triage-agent",
+      "availability": "available",
+      "model": "openai/gpt-4o-mini",
+      "provider": "openai",
+      "router": "openrouter"
+    },
+    "inserted_before_failure": 1,
+    "snapshot_survivors": 0
+  },
+  "scenario": "post-insert-rollback"
+}
