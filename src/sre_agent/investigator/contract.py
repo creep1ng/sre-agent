@@ -35,6 +35,7 @@ Status = Literal[
 ]
 _TURN = re.compile(r"^turn_[a-z0-9]{8,32}$")
 _FENCE = re.compile(r"^```(?:json)?[ \t]*\n(?P<body>.*)\n```$", re.DOTALL)
+_COLLECTION = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$")
 
 
 class _Strict(BaseModel):
@@ -141,11 +142,31 @@ class InvestigationRequest(_Strict):
             for item in self.authorized_capabilities
         )
 
+    def bok_collections(self) -> list[str]:
+        """Exact `collection_id@version` the run may search (issue #34), never "the latest"."""
+        return sorted(
+            {
+                item.resource_id
+                for item in self.authorized_capabilities
+                if item.resource_type == "bok_collection"
+                and item.action in (None, "bok.search")
+                and _COLLECTION.fullmatch(item.resource_id)
+            }
+        )
+
 
 class UseTool(_Strict):
     action: Literal["use_tool"]
     tool: Name
     arguments: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class SearchBoK(_Strict):
+    """A search in one exact BoK collection version, within the producer's query bounds."""
+
+    action: Literal["search_bok"]
+    collection: Annotated[str, Field(pattern=_COLLECTION.pattern)]
+    query: Annotated[str, Field(min_length=1, max_length=300)]
 
 
 class ProposeHypothesis(_Strict):
@@ -176,7 +197,7 @@ class Conclude(_Strict):
 
 
 Outcome = ProposeHypothesis | ProposeMitigation | RequestHuman | Conclude
-Action = UseTool | Outcome
+Action = UseTool | SearchBoK | Outcome
 _ACTIONS: TypeAdapter[Action] = TypeAdapter(Annotated[Action, Field(discriminator="action")])
 
 
