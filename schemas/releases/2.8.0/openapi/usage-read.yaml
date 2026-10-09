@@ -3,8 +3,8 @@ info:
   title: SRE Agent Usage Read API
   version: 2.8.0
   description: >-
-    Additive proposal for the administrator-only persisted consumption projection.
-    It does not change the published 2.4.0 contract.
+    Published additive 2.8.0 usage-read contract for the administrator-only
+    persisted consumption projection. It preserves the preceding 2.7.0 contract.
 servers:
   - url: /
 security:

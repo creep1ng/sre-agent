@@ -420,6 +420,170 @@
                 "navigation": {}
               }
             }
+          },
+          {
+            "if": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "attribution_status"
+              ],
+              "properties": {
+                "request_id": {},
+                "month": {},
+                "requested_assignment": {},
+                "credited_model": {},
+                "credited_provider": {},
+                "attribution_status": {
+                  "const": "partial"
+                },
+                "consumption": {},
+                "navigation": {}
+              }
+            },
+            "then": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "request_id": {},
+                "month": {},
+                "requested_assignment": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "availability": {
+                      "const": "available"
+                    },
+                    "alias": {},
+                    "model": {},
+                    "provider": {},
+                    "router": {}
+                  }
+                },
+                "credited_model": {},
+                "credited_provider": {},
+                "attribution_status": {},
+                "consumption": {},
+                "navigation": {}
+              },
+              "allOf": [
+                {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "request_id": {},
+                        "month": {},
+                        "requested_assignment": {},
+                        "credited_model": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "availability": {
+                              "const": "unavailable"
+                            },
+                            "value": {}
+                          }
+                        },
+                        "credited_provider": {},
+                        "attribution_status": {},
+                        "consumption": {},
+                        "navigation": {}
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "request_id": {},
+                        "month": {},
+                        "requested_assignment": {},
+                        "credited_model": {},
+                        "credited_provider": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "availability": {
+                              "const": "unavailable"
+                            },
+                            "value": {}
+                          }
+                        },
+                        "attribution_status": {},
+                        "consumption": {},
+                        "navigation": {}
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "attribution_status"
+              ],
+              "properties": {
+                "request_id": {},
+                "month": {},
+                "requested_assignment": {},
+                "credited_model": {},
+                "credited_provider": {},
+                "attribution_status": {
+                  "const": "unavailable"
+                },
+                "consumption": {},
+                "navigation": {}
+              }
+            },
+            "then": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "request_id": {},
+                "month": {},
+                "requested_assignment": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "availability": {
+                      "const": "unavailable"
+                    },
+                    "alias": {},
+                    "model": {},
+                    "provider": {},
+                    "router": {}
+                  }
+                },
+                "credited_model": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "availability": {
+                      "const": "unavailable"
+                    },
+                    "value": {}
+                  }
+                },
+                "credited_provider": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "availability": {
+                      "const": "unavailable"
+                    },
+                    "value": {}
+                  }
+                },
+                "attribution_status": {},
+                "consumption": {},
+                "navigation": {}
+              }
+            }
           }
         ]
       }

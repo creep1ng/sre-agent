@@ -30,6 +30,9 @@ test("2.8.0 publishes a self-contained historical request contract", async () =>
   });
   assert.equal(control.info.version, version);
   assert.equal(usageRead.info.version, version);
+  assert.match(usageRead.info.description, /published.*2\.8\.0/i);
+  assert.match(usageRead.info.description, /preserv\w*.*2\.7\.0/i);
+  assert.doesNotMatch(usageRead.info.description, /proposal|2\.4\.0/i);
   assert.ok(apiRoute, "canonical control-plane API publishes the new endpoint");
   assert.ok(standaloneRoute, "standalone usage-read API publishes the same endpoint");
   assert.equal(apiRoute.responses["200"].content["application/json"].schema.$ref, `urn:sre-agent:schema:usage-requests:${version}`);
@@ -77,6 +80,11 @@ test("request conformance covers honest evidence states and rejects leakage", as
   ];
   const negative = [
     `negative/usage.requests.credit-without-evidence.negative.v${version}.fixture.json`,
+    `negative/usage.requests.unavailable-requested-evidence.negative.v${version}.fixture.json`,
+    `negative/usage.requests.unavailable-credited-model-evidence.negative.v${version}.fixture.json`,
+    `negative/usage.requests.unavailable-credited-provider-evidence.negative.v${version}.fixture.json`,
+    `negative/usage.requests.partial-all-evidence-available.negative.v${version}.fixture.json`,
+    `negative/usage.requests.partial-no-requested-evidence.negative.v${version}.fixture.json`,
     `negative/usage.requests.conflicting-availability.negative.v${version}.fixture.json`,
     `negative/usage.requests.extra-content.negative.v${version}.fixture.json`,
     `negative/usage.requests.navigation-destination.negative.v${version}.fixture.json`,

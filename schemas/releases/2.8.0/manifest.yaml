@@ -26,7 +26,7 @@ inventory:
     - path: releases/2.8.0/conformance/consumers.yaml
       sha256: sha256:66629fed35413aa7a257b46e05b68bdba82bf0c471baf5369b58e749c6cf0947
     - path: releases/2.8.0/conformance/evidence.json
-      sha256: sha256:e84112a55b6990e598f7a13b94c8baed24c2ed621e4fe658d900d354b4d6dce4
+      sha256: sha256:fa71be40dcc914fbcbf28905731c2bbbdcd1fb633ba10ed0423840dfaba363b6
     - path: releases/2.8.0/conformance/migration.md
       sha256: sha256:c9b547039c7b86e742faac1da7ebb7f749effef0938a339a7ec4ecf6fa6228de
     - path: releases/2.8.0/conformance/ownership-evidence.json
@@ -140,9 +140,9 @@ inventory:
     - path: releases/2.8.0/fixtures/negative/control.principal.status.missing-expected-updated-at.negative.v2.8.0.fixture.json
       sha256: sha256:681a578fbea89b48b9c60dd206780c44afca949db816ea8982e1b3cdc0ddd428
     - path: releases/2.8.0/fixtures/negative/future-fastapi.extra.projection.json
-      sha256: sha256:e6d23bb50cf8571b3d06798ef7889e452f6d62db8fe12173df689aa1f4cb1e73
+      sha256: sha256:890986cb43a868c74b2d5ffe65d7a0606ef51d85216fd1ae032776e1be5d9f12
     - path: releases/2.8.0/fixtures/negative/future-fastapi.missing.projection.json
-      sha256: sha256:4b3588271237b4420fbde2163ea4af24a81d5b6e1401e96e20da1db13320ffb6
+      sha256: sha256:9876d2d8428e57fefcc92097d07d86ee58f1290c073fadc225bc1519bad683c4
     - path: releases/2.8.0/fixtures/negative/shared.correlation.authority.negative.v2.8.0.fixture.json
       sha256: sha256:8613fda9e990b147c6de15687f185d703ef409d26f4020222ff19e04d0a908d8
     - path: releases/2.8.0/fixtures/negative/shared.credential-reference.hash.negative.v2.8.0.fixture.json
@@ -185,6 +185,16 @@ inventory:
       sha256: sha256:09cacbc75409e5411d7706a16e86520ae9643faf823f7a03ab5b3bf2b7cbe952
     - path: releases/2.8.0/fixtures/negative/usage.requests.oversized-items.negative.v2.8.0.fixture.json
       sha256: sha256:2ac8df05fb43e343bf5154d1806110cface893fc8331133b0a1d8fdcfe9ce621
+    - path: releases/2.8.0/fixtures/negative/usage.requests.partial-all-evidence-available.negative.v2.8.0.fixture.json
+      sha256: sha256:3ae9b277c5b43919c83c0f55605acec1acf467d57e4992a7ab89de15fdc1441f
+    - path: releases/2.8.0/fixtures/negative/usage.requests.partial-no-requested-evidence.negative.v2.8.0.fixture.json
+      sha256: sha256:8222a40966029830a57b95aa82a44f40a1171ee557a5c3e23585759a6c656eb5
+    - path: releases/2.8.0/fixtures/negative/usage.requests.unavailable-credited-model-evidence.negative.v2.8.0.fixture.json
+      sha256: sha256:8c7e87f9e6418a2afce5697e40381f4c2f56ad6aa092a4f243d3507e6fc4507a
+    - path: releases/2.8.0/fixtures/negative/usage.requests.unavailable-credited-provider-evidence.negative.v2.8.0.fixture.json
+      sha256: sha256:8c7e87f9e6418a2afce5697e40381f4c2f56ad6aa092a4f243d3507e6fc4507a
+    - path: releases/2.8.0/fixtures/negative/usage.requests.unavailable-requested-evidence.negative.v2.8.0.fixture.json
+      sha256: sha256:84b5fe6e17fc6de7519610fa5f87ed05e89c9aec33b1ebb6003a32d9f91d851d
     - path: releases/2.8.0/fixtures/positive/audit.authentication.credential.positive.v2.8.0.fixture.json
       sha256: sha256:b8a19003a7cfafd1b75900f02fa28d1f241725f1290607eab228a9f2de5128fe
     - path: releases/2.8.0/fixtures/positive/audit.authentication.unresolved-401.positive.v2.8.0.fixture.json
@@ -332,7 +342,7 @@ inventory:
     - path: releases/2.8.0/fixtures/positive/control.principal.status.replace.positive.v2.8.0.fixture.json
       sha256: sha256:e39c4039ede9e3ee715ce61c73af87f9fe4007c126c28f88d372e0f0fb31501f
     - path: releases/2.8.0/fixtures/positive/future-fastapi.match.projection.json
-      sha256: sha256:fad101fbe52b1d5479bd84276453056ee6c33a2c3146f31a907563ac72f5cbcc
+      sha256: sha256:ec91e6b061cc5d3b58e7d0071545cd6458073183116f19fbf72f60f986a0f050
     - path: releases/2.8.0/fixtures/positive/responses.boundary.aliases.positive.v2.8.0.fixture.json
       sha256: sha256:caef57d61e88d79d97bb4b283a61c9693904017cc6afd80cf2808b3827ddd5f6
     - path: releases/2.8.0/fixtures/positive/responses.boundary.credentials.positive.v2.8.0.fixture.json
@@ -393,7 +403,7 @@ inventory:
     - api_major: 1
       dialect: 3.1.0
       path: releases/2.8.0/openapi/usage-read.yaml
-      sha256: sha256:cd2e4c012dbd506f1c6ff44169fa0dfcb699726bde368646336e3fe2b126e057
+      sha256: sha256:8eb9145e184c2dad37ee6cf1768afc41f4d29f1e12f27f0012574883cfee8704
       version: 2.8.0
   schemas:
     - dialect: https://json-schema.org/draft/2020-12/schema
@@ -511,5 +521,5 @@ inventory:
     - dialect: https://json-schema.org/draft/2020-12/schema
       id: urn:sre-agent:schema:usage-requests:2.8.0
       path: releases/2.8.0/json-schema/http/usage-requests.schema.json
-      sha256: sha256:d4a9e1deb03c8075c9e7c906320b4af0ea1bbe4df223b1fe209bfb512c06fa7f
+      sha256: sha256:1c31445dd86adf960a86ad916fdd960144be9129318f616d0fd77f0a6dfced33
 status: immutable
