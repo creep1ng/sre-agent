@@ -1,5 +1,7 @@
 """Authorization and persistence guard acceptance for request attribution."""
 
+import json
+from pathlib import Path
 from uuid import UUID
 
 import psycopg
@@ -21,6 +23,8 @@ from issue454_support import (
     clean_history as clean_history,
 )
 from issue454_support import migrated_database as migrated_database
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
 from sqlalchemy import event
 
 from sre_agent.application import create_application
@@ -33,6 +37,17 @@ def test_request_attribution_read_rejects_unauthorized_and_invalid_filters() -> 
         Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY), llm_provider=provider
     )
     with TestClient(app, raise_server_exceptions=False) as client:
+        runtime = client.get("/openapi.json").json()
+        error = json.loads(
+            Path("schemas/releases/2.8.0/json-schema/http/error-envelope.schema.json").read_text()
+        )
+        registry = Registry().with_resource(error["$id"], Resource.from_contents(error))
+        denied = client.get("/v1/audit-events", params={"request_id": str(UUID(int=1))})
+        assert denied.status_code == 401
+        schema = runtime["paths"]["/v1/audit-events"]["get"]["responses"]["401"]["content"][
+            "application/json"
+        ]["schema"]
+        Draft202012Validator(schema, registry=registry).validate(denied.json())
         for headers, status in (({}, 401), (auth(RESTRICTED), 403)):
             response = client.get(
                 "/v1/usage/requests",

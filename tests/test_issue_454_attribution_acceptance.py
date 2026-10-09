@@ -40,6 +40,7 @@ def test_historical_assignment_survives_real_alias_reassignment() -> None:
         after = client.get("/v1/model-aliases/remediation-agent", headers=auth(ADMIN))
         assert before.status_code == after.status_code == 200
         first_assignment, replacement = before.json(), after.json()
+        replacement["router"] = "issue454-router-" + "r" * 84
         assert first_assignment["concrete_model"] != replacement["concrete_model"]
         try:
             first = client.post(
@@ -108,6 +109,8 @@ def test_historical_assignment_survives_real_alias_reassignment() -> None:
             assert provider.requests[1].model == replacement["concrete_model"]
             second_item = read_item(client, second_id)
             assert second_item["requested_assignment"]["model"] == replacement["concrete_model"]
+            assert second_item["requested_assignment"]["router"] == replacement["router"]
+            validator.validate({"filter": {"request_id": second_id}, "items": [second_item]})
             assert first_item["requested_assignment"] != second_item["requested_assignment"]
             assert first_item["attribution_status"] in {"available", "partial"}
             assert first_item["credited_model"] == {"availability": "unavailable", "value": None}
