@@ -9,6 +9,7 @@ from uuid import UUID
 
 import httpx
 import psycopg
+import pytest
 from fastapi.testclient import TestClient
 from issue454_support import (
     ADMIN,
@@ -119,7 +120,10 @@ def test_alias_change_while_provider_is_in_flight_keeps_invocation_snapshot() ->
                 assert restored.status_code == 200, restored.text
 
 
-def test_canonical_openrouter_evidence_survives_http_persistence_and_read() -> None:
+@pytest.mark.parametrize("empty_output", [False, True])
+def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
+    empty_output: bool,
+) -> None:
     """Controlled OpenRouter HTTP metadata flows through DB into the request read."""
     requested = "openai/gpt-4o-mini"
     credited = "openai/gpt-4o-mini-20260915"
@@ -163,6 +167,8 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read() -> N
                     "attempts": [{"provider": "OpenAI", "model": credited, "status": 200}],
                 },
             }
+            if empty_output:
+                body["output"] = []
             return httpx.Response(200, json=body)
         assert request.url.path == f"/api/v1/models/{requested}/endpoints"
         return httpx.Response(
@@ -195,10 +201,13 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read() -> N
                 headers=auth(CONSUMER),
                 json={"model": "triage-agent", "input": PROMPT},
             )
-            assert created.status_code == 200, created.text
+            assert created.status_code == (502 if empty_output else 200), created.text
             request_id = created.json()["request_id"]
             # Public response keeps requested model identity; credit is separate evidence.
-            assert created.json()["model"] == requested
+            if empty_output:
+                assert created.json()["error"]["code"] == "upstream_invalid_response"
+            else:
+                assert created.json()["model"] == requested
             item = read_item(client, request_id)
             assert item["requested_assignment"]["model"] == requested
             assert item["credited_model"] == {"availability": "available", "value": credited}
@@ -209,20 +218,28 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read() -> N
                 secret not in repr(item) and OUTPUT not in repr(item) and PROMPT not in repr(item)
             )
             record_artifact(
-                "canonical",
+                "canonical-empty-output" if empty_output else "canonical",
                 {
+                    "http_status": created.status_code,
+                    "empty_output": empty_output,
                     "request_id": item["request_id"],
                     "requested_model": item["requested_assignment"]["model"],
                     "credited_model": item["credited_model"],
                     "credited_provider": item["credited_provider"],
                 },
             )
-            Path("/tmp/issue454-canonical-adapter-artifact.json").write_text(
+            Path(
+                "/tmp/issue454-canonical-empty-output-artifact.json"
+                if empty_output
+                else "/tmp/issue454-canonical-adapter-artifact.json"
+            ).write_text(
                 json.dumps(
                     {
                         "scenario": "canonical OpenRouter credit survives capture and read",
                         "evidence_kind": "controlled integration",
                         "provider": "OpenRouter adapter/httpx.MockTransport; no live/paid call",
+                        "http_status": created.status_code,
+                        "empty_output": empty_output,
                         "historical_item": item,
                     },
                     indent=2,
