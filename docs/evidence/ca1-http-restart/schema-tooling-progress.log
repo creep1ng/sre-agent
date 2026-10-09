@@ -1,0 +1,268 @@
+ Container ca1-01a118c1-harness-run-a847b3381c59 Creating 
+ Container ca1-01a118c1-harness-run-a847b3381c59 Created 
+
+> @sre-agent/contract-tooling@0.0.0 test
+> node --test
+
+TAP version 13
+# Subtest: 2.7 audit event IDs preserve 2.6 values and add canonical UUIDs with formats on and off
+ok 1 - 2.7 audit event IDs preserve 2.6 values and add canonical UUIDs with formats on and off
+  ---
+  duration_ms: 1798.254582
+  ...
+# Subtest: 2.7 broadens only the audit detail parameter and preserves the 2.6 grant 404
+ok 2 - 2.7 broadens only the audit detail parameter and preserves the 2.6 grant 404
+  ---
+  duration_ms: 917.471923
+  ...
+# Subtest: 2.7 is additive and immutable over the published 2.6 contract
+ok 3 - 2.7 is additive and immutable over the published 2.6 contract
+  ---
+  duration_ms: 359625.889682
+  ...
+# Subtest: governance validates ADR-001 through ADR-005 and normative ownership evidence
+ok 4 - governance validates ADR-001 through ADR-005 and normative ownership evidence
+  ---
+  duration_ms: 136.045368
+  ...
+# Subtest: release 1.1.0 adds accepted ADR-006 without changing historical ADR membership
+ok 5 - release 1.1.0 adds accepted ADR-006 without changing historical ADR membership
+  ---
+  duration_ms: 64.094337
+  ...
+# Subtest: release 1.2.0 preserves accepted governance and ADR membership
+ok 6 - release 1.2.0 preserves accepted governance and ADR membership
+  ---
+  duration_ms: 97.80153
+  ...
+# Subtest: release 1.3.0 preserves accepted governance and ADR membership
+ok 7 - release 1.3.0 preserves accepted governance and ADR membership
+  ---
+  duration_ms: 40.351183
+  ...
+# Subtest: governance pins exact ADR-001 through ADR-005 membership
+ok 8 - governance pins exact ADR-001 through ADR-005 membership
+  ---
+  duration_ms: 376.811869
+  ...
+# Subtest: governance requires Accepted status and every standard heading
+ok 9 - governance requires Accepted status and every standard heading
+  ---
+  duration_ms: 1891.098862
+  ...
+# Subtest: governance pins every approved ADR decision
+ok 10 - governance pins every approved ADR decision
+  ---
+  duration_ms: 330.832858
+  ...
+# Subtest: governance pins every approved ADR deferral
+ok 11 - governance pins every approved ADR deferral
+  ---
+  duration_ms: 187.735923
+  ...
+# Subtest: ownership allowlist rejects content outside an authority
+ok 12 - ownership allowlist rejects content outside an authority
+  ---
+  duration_ms: 27.281632
+  ...
+# Subtest: governance CLI validates ownership and ADR together
+ok 13 - governance CLI validates ownership and ADR together
+  ---
+  duration_ms: 729.968804
+  ...
+# Subtest: ownership governance fails closed for every reviewer mutation
+ok 14 - ownership governance fails closed for every reviewer mutation
+  ---
+  duration_ms: 26.759239
+  ...
+# Subtest: ownership pins exclusive normative sets and exhaustive evidence
+ok 15 - ownership pins exclusive normative sets and exhaustive evidence
+  ---
+  duration_ms: 29.272923
+  ...
+# Subtest: 2.4.0 publishes governed MCP audit operations and resource subjects
+ok 16 - 2.4.0 publishes governed MCP audit operations and resource subjects
+  ---
+  duration_ms: 24.874976
+  ...
+# Subtest: 2.4.0 validates metadata-only MCP discovery and invocation audit fixtures
+ok 17 - 2.4.0 validates metadata-only MCP discovery and invocation audit fixtures
+  ---
+  duration_ms: 3315.866542
+  ...
+# Subtest: 2.4.0 validates as an immutable additive snapshot over 2.3.0
+ok 18 - 2.4.0 validates as an immutable additive snapshot over 2.3.0
+  ---
+  duration_ms: 189372.464981
+  ...
+# Subtest: semantic diff ignores representation ordering for a toy match
+ok 19 - semantic diff ignores representation ordering for a toy match
+  ---
+  duration_ms: 15.051937
+  ...
+# Subtest: semantic diff deterministically rejects every missing, extra, and drift class
+ok 20 - semantic diff deterministically rejects every missing, extra, and drift class
+  ---
+  duration_ms: 114.817773
+  ...
+# Subtest: future FastAPI normalized projection fixtures encode match, missing, and extra behavior
+ok 21 - future FastAPI normalized projection fixtures encode match, missing, and extra behavior
+  ---
+  duration_ms: 41.775681
+  ...
+# Subtest: future FastAPI projections are bound to the canonical SemVer
+ok 22 - future FastAPI projections are bound to the canonical SemVer
+  ---
+  duration_ms: 6.255073
+  ...
+# Subtest: strict local JSON/YAML parsing rejects syntax, duplicate keys, and aliases
+ok 23 - strict local JSON/YAML parsing rejects syntax, duplicate keys, and aliases
+  ---
+  duration_ms: 57.810294
+  ...
+# Subtest: recursive preflight enumerates every resolver-visible locator and terminates cycles
+ok 24 - recursive preflight enumerates every resolver-visible locator and terminates cycles
+  ---
+  duration_ms: 95.940431
+  ...
+# Subtest: externalValue, operationRef, and discriminator mappings share the same offline policy
+ok 25 - externalValue, operationRef, and discriminator mappings share the same offline policy
+  ---
+  duration_ms: 78.876189
+  ...
+# Subtest: preflight rejects wrong OpenAPI and contract versions
+ok 26 - preflight rejects wrong OpenAPI and contract versions
+  ---
+  duration_ms: 61.837679
+  ...
+# Subtest: subprocess errors fail closed and remove pre-existing bundle output
+ok 27 - subprocess errors fail closed and remove pre-existing bundle output
+  ---
+  duration_ms: 125.238336
+  ...
+# Subtest: canonical control plane keeps standalone authority and explicit list semantics
+ok 28 - canonical control plane keeps standalone authority and explicit list semantics
+  ---
+  duration_ms: 277.244398
+  ...
+# Subtest: canonical Responses API is POST-only, JSON-only, and registered by name
+ok 29 - canonical Responses API is POST-only, JSON-only, and registered by name
+  ---
+  duration_ms: 17614.290554
+  ...
+# Subtest: public OpenAPI lint command invokes checks for both canonical APIs
+ok 30 - public OpenAPI lint command invokes checks for both canonical APIs
+  ---
+  duration_ms: 7.392931
+  ...
+# Subtest: central locator policy rejects ambiguity, escape, missing, unreadable, directory, and special targets
+ok 31 - central locator policy rejects ambiguity, escape, missing, unreadable, directory, and special targets
+  ---
+  duration_ms: 330.117892
+  ...
+# Subtest: black-box preflight blocks nested externalValue network and outside sentinel reads
+ok 32 - black-box preflight blocks nested externalValue network and outside sentinel reads
+  ---
+  duration_ms: 1401.189888
+  ...
+# Subtest: black-box bundle output cannot traverse or follow links and valid local inputs pass
+ok 33 - black-box bundle output cannot traverse or follow links and valid local inputs pass
+  ---
+  duration_ms: 10780.483977
+  ...
+# Subtest: black-box bundle stops after lint failure without writing output
+ok 34 - black-box bundle stops after lint failure without writing output
+  ---
+  duration_ms: 8944.427026
+  ...
+# Subtest: consumer coverage pins every owner, fixture, command, and non-authority boundary
+ok 35 - consumer coverage pins every owner, fixture, command, and non-authority boundary
+  ---
+  duration_ms: 149.328689
+  ...
+# Subtest: coverage rejects YAML command substitution without executing it
+ok 36 - coverage rejects YAML command substitution without executing it
+  ---
+  duration_ms: 79.152343
+  ...
+# Subtest: coverage pins every obligation to its exact fixture
+ok 37 - coverage pins every obligation to its exact fixture
+  ---
+  duration_ms: 824.742724
+  ...
+# Subtest: consumer command validates the pinned fixture semantics
+ok 38 - consumer command validates the pinned fixture semantics
+  ---
+  duration_ms: 4582.539277
+  ...
+# Subtest: immutable release comparison rejects any hash drift
+ok 39 - immutable release comparison rejects any hash drift
+  ---
+  duration_ms: 5.938221
+  ...
+# Subtest: generation is byte-deterministic and fails closed on drift or corrupt state
+ok 40 - generation is byte-deterministic and fails closed on drift or corrupt state
+  ---
+  duration_ms: 79.514158
+  ...
+# Subtest: validation rejects corrupt baseline, dialect, and API major metadata
+ok 41 - validation rejects corrupt baseline, dialect, and API major metadata
+  ---
+  duration_ms: 104.527375
+  ...
+# Subtest: published projection goldens cannot be regenerated
+ok 42 - published projection goldens cannot be regenerated
+  ---
+  duration_ms: 131.122958
+  ...
+# Subtest: minor release preserves every positive 1.0.0 instance
+ok 43 - minor release preserves every positive 1.0.0 instance
+  ---
+  duration_ms: 1721.677768
+  ...
+# Subtest: release 1.2.0 preserves every positive 1.1.0 instance
+ok 44 - release 1.2.0 preserves every positive 1.1.0 instance
+  ---
+  duration_ms: 2524.307019
+  ...
+# Subtest: release 1.3.0 preserves compatible 1.2.0 instances while retaining nullable historical audit readback
+ok 45 - release 1.3.0 preserves compatible 1.2.0 instances while retaining nullable historical audit readback
+  ---
+  duration_ms: 2188.097398
+  ...
+# Subtest: published release validation rejects an omitted release
+ok 46 - published release validation rejects an omitted release
+  ---
+  duration_ms: 1.161113
+  ...
+# Subtest: published release validation discovers deterministically and rejects invalid metadata
+ok 47 - published release validation discovers deterministically and rejects invalid metadata
+  ---
+  duration_ms: 2197.739958
+  ...
+# Subtest: 2.1.0 registers the issue-130 consumption consumer
+ok 48 - 2.1.0 registers the issue-130 consumption consumer
+  ---
+  duration_ms: 20.796058
+  ...
+# Subtest: release 2.1.0 preserves every positive 2.0.0 instance under documented normalization
+ok 49 - release 2.1.0 preserves every positive 2.0.0 instance under documented normalization
+  ---
+  duration_ms: 2294.062275
+  ...
+# Subtest: 2.2.0 retains issue-130 and adds version-aware issue-129 catalog coverage
+ok 50 - 2.2.0 retains issue-130 and adds version-aware issue-129 catalog coverage
+  ---
+  duration_ms: 80.920432
+  ...
+# Subtest: release 2.2.0 validates catalog contract and additive compatibility
+ok 51 - release 2.2.0 validates catalog contract and additive compatibility
+  ---
+  duration_ms: 170997.463101
+  ...
+# Subtest: release tooling admits 2.3.0 alongside the new 2.7.0 release
+ok 52 - release tooling admits 2.3.0 alongside the new 2.7.0 release
+  ---
+  duration_ms: 154439.259494
+  ...
+

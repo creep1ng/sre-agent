@@ -1,0 +1,316 @@
+{
+  "authorization_statuses": {
+    "anonymous_events": 401,
+    "anonymous_state": 401,
+    "restricted_events": 403,
+    "restricted_state": 403
+  },
+  "events": {
+    "events": [
+      {
+        "actor": {
+          "reference": {
+            "display_name": null,
+            "principal_id": "demo-human",
+            "reference_version": "1.0.0"
+          },
+          "type": "human"
+        },
+        "event_id": "evt_6ff6ffabb9994bfc",
+        "kind": "state_change",
+        "occurred_at": "2026-10-08T00:15:18.671337Z",
+        "request_id": null,
+        "sequence": 0,
+        "state": "triage",
+        "summary": "Triage opened.",
+        "task_id": null,
+        "turn_id": null
+      }
+    ],
+    "has_more": false,
+    "next_cursor": "seq:0"
+  },
+  "incident_id": "inc-ca1-http-restart",
+  "replay": {
+    "current_state": "triage",
+    "cursor": "seq:0",
+    "incident_id": "inc-ca1-http-restart",
+    "pending_command": null,
+    "run_id": "run_084284a4f8a41001",
+    "status": "running",
+    "terminated_reason": null,
+    "updated_at": "2026-10-08T00:15:18.671337Z",
+    "workflow_version": "1.0.0"
+  },
+  "resume": {
+    "current_state": "triage",
+    "cursor": "seq:0",
+    "incident_id": "inc-ca1-http-restart",
+    "pending_command": null,
+    "run_id": "run_084284a4f8a41001",
+    "status": "running",
+    "terminated_reason": null,
+    "updated_at": "2026-10-08T00:15:18.671337Z",
+    "workflow_version": "1.0.0"
+  },
+  "run_id": "run_084284a4f8a41001",
+  "sql": {
+    "active_demo_read_start_grants": 2,
+    "active_demo_restricted_credential_count": 2,
+    "events": [
+      {
+        "event_id": "evt_6ff6ffabb9994bfc",
+        "incident_id": "inc-ca1-http-restart",
+        "kind": "state_change",
+        "occurred_at": "2026-10-08T00:15:18.671337+00:00",
+        "payload": {
+          "decision_id": "dec_2e3e8c3b8f369e3e",
+          "from": "detected",
+          "incident_state": {
+            "alert": {
+              "alert_id": "al-ca1-synthetic",
+              "observed_at": "2026-10-08T00:15:04.993395+00:00",
+              "service": "synthetic-service",
+              "severity": "sev3",
+              "source": "ca1-http-restart-harness",
+              "status": "triaged",
+              "summary": "Synthetic CA1 restart proof."
+            },
+            "incident_id": null,
+            "linked_incident_id": null,
+            "state": "triage",
+            "updated_at": "2026-10-08T00:15:18.671337+00:00",
+            "workflow_id": "incident-response",
+            "workflow_version": "1.0.0"
+          },
+          "run_state": {
+            "current_state": "triage",
+            "pending_command": null,
+            "status": "running",
+            "terminated_reason": null,
+            "updated_at": "2026-10-08T00:15:18.671337+00:00",
+            "workflow_version": "1.0.0"
+          },
+          "to": "triage",
+          "transition_id": "open_triage",
+          "workflow_id": "incident-response",
+          "workflow_version": "1.0.0"
+        },
+        "run_id": "run_084284a4f8a41001",
+        "sequence": 0,
+        "turn_id": null
+      }
+    ],
+    "incident": {
+      "created_at": "2026-10-08T00:15:04.993395+00:00",
+      "incident_id": "inc-ca1-http-restart",
+      "state": {
+        "alert": {
+          "alert_id": "al-ca1-synthetic",
+          "observed_at": "2026-10-08T00:15:04.993395+00:00",
+          "service": "synthetic-service",
+          "severity": "sev3",
+          "source": "ca1-http-restart-harness",
+          "status": "triaged",
+          "summary": "Synthetic CA1 restart proof."
+        },
+        "incident_id": null,
+        "linked_incident_id": null,
+        "state": "triage",
+        "updated_at": "2026-10-08T00:15:18.671337+00:00",
+        "workflow_id": "incident-response",
+        "workflow_version": "1.0.0"
+      },
+      "updated_at": "2026-10-08T00:15:18.671337+00:00",
+      "version": 1
+    },
+    "runs": [
+      {
+        "created_at": "2026-10-08T00:15:18.666167+00:00",
+        "incident_id": "inc-ca1-http-restart",
+        "run_id": "run_084284a4f8a41001",
+        "state": {
+          "current_state": "triage",
+          "pending_command": null,
+          "status": "running",
+          "terminated_reason": null,
+          "updated_at": "2026-10-08T00:15:18.671337+00:00",
+          "workflow_version": "1.0.0"
+        },
+        "updated_at": "2026-10-08T00:15:18.671337+00:00",
+        "version": 1
+      }
+    ],
+    "snapshots": [
+      {
+        "created_at": "2026-10-08T00:15:18.671337+00:00",
+        "event_sequence": 0,
+        "incident_id": "inc-ca1-http-restart",
+        "incident_state": {
+          "alert": {
+            "alert_id": "al-ca1-synthetic",
+            "observed_at": "2026-10-08T00:15:04.993395+00:00",
+            "service": "synthetic-service",
+            "severity": "sev3",
+            "source": "ca1-http-restart-harness",
+            "status": "triaged",
+            "summary": "Synthetic CA1 restart proof."
+          },
+          "incident_id": null,
+          "linked_incident_id": null,
+          "state": "triage",
+          "updated_at": "2026-10-08T00:15:18.671337+00:00",
+          "workflow_id": "incident-response",
+          "workflow_version": "1.0.0"
+        },
+        "run_id": "run_084284a4f8a41001",
+        "run_state": {
+          "current_state": "triage",
+          "pending_command": null,
+          "status": "running",
+          "terminated_reason": null,
+          "updated_at": "2026-10-08T00:15:18.671337+00:00",
+          "workflow_version": "1.0.0"
+        },
+        "snapshot_id": "snap_22dbfe81e3488473",
+        "version": 1
+      }
+    ],
+    "transition_commits": [
+      {
+        "command_id": "ca1-http-restart-4f0bd1c5e9034ef5912a4896943a2f80",
+        "committed_at": "2026-10-08T00:15:18.671337+00:00",
+        "incident_id": "inc-ca1-http-restart",
+        "payload_sha256": "0e96e434c316c4b5180c6573331e5f88a7f45535c6ec2505d207d1e8af7dba4d",
+        "result": {
+          "events": [
+            {
+              "event_id": "evt_6ff6ffabb9994bfc",
+              "incident_id": "inc-ca1-http-restart",
+              "kind": "state_change",
+              "occurred_at": "2026-10-08T00:15:18.671337+00:00",
+              "payload": {
+                "decision_id": "dec_2e3e8c3b8f369e3e",
+                "from": "detected",
+                "incident_state": {
+                  "alert": {
+                    "alert_id": "al-ca1-synthetic",
+                    "observed_at": "2026-10-08T00:15:04.993395+00:00",
+                    "service": "synthetic-service",
+                    "severity": "sev3",
+                    "source": "ca1-http-restart-harness",
+                    "status": "triaged",
+                    "summary": "Synthetic CA1 restart proof."
+                  },
+                  "incident_id": null,
+                  "linked_incident_id": null,
+                  "state": "triage",
+                  "updated_at": "2026-10-08T00:15:18.671337+00:00",
+                  "workflow_id": "incident-response",
+                  "workflow_version": "1.0.0"
+                },
+                "run_state": {
+                  "current_state": "triage",
+                  "pending_command": null,
+                  "status": "running",
+                  "terminated_reason": null,
+                  "updated_at": "2026-10-08T00:15:18.671337+00:00",
+                  "workflow_version": "1.0.0"
+                },
+                "to": "triage",
+                "transition_id": "open_triage",
+                "workflow_id": "incident-response",
+                "workflow_version": "1.0.0"
+              },
+              "run_id": "run_084284a4f8a41001",
+              "sequence": 0,
+              "turn_id": null
+            }
+          ],
+          "incident": {
+            "created_at": "2026-10-08T00:15:04.993395+00:00",
+            "incident_id": "inc-ca1-http-restart",
+            "state": {
+              "alert": {
+                "alert_id": "al-ca1-synthetic",
+                "observed_at": "2026-10-08T00:15:04.993395+00:00",
+                "service": "synthetic-service",
+                "severity": "sev3",
+                "source": "ca1-http-restart-harness",
+                "status": "triaged",
+                "summary": "Synthetic CA1 restart proof."
+              },
+              "incident_id": null,
+              "linked_incident_id": null,
+              "state": "triage",
+              "updated_at": "2026-10-08T00:15:18.671337+00:00",
+              "workflow_id": "incident-response",
+              "workflow_version": "1.0.0"
+            },
+            "updated_at": "2026-10-08T00:15:18.671337+00:00",
+            "version": 1
+          },
+          "run": {
+            "created_at": "2026-10-08T00:15:18.666167+00:00",
+            "incident_id": "inc-ca1-http-restart",
+            "run_id": "run_084284a4f8a41001",
+            "state": {
+              "current_state": "triage",
+              "pending_command": null,
+              "status": "running",
+              "terminated_reason": null,
+              "updated_at": "2026-10-08T00:15:18.671337+00:00",
+              "workflow_version": "1.0.0"
+            },
+            "updated_at": "2026-10-08T00:15:18.671337+00:00",
+            "version": 1
+          },
+          "snapshot": {
+            "created_at": "2026-10-08T00:15:18.671337+00:00",
+            "event_sequence": 0,
+            "incident_id": "inc-ca1-http-restart",
+            "incident_state": {
+              "alert": {
+                "alert_id": "al-ca1-synthetic",
+                "observed_at": "2026-10-08T00:15:04.993395+00:00",
+                "service": "synthetic-service",
+                "severity": "sev3",
+                "source": "ca1-http-restart-harness",
+                "status": "triaged",
+                "summary": "Synthetic CA1 restart proof."
+              },
+              "incident_id": null,
+              "linked_incident_id": null,
+              "state": "triage",
+              "updated_at": "2026-10-08T00:15:18.671337+00:00",
+              "workflow_id": "incident-response",
+              "workflow_version": "1.0.0"
+            },
+            "run_id": "run_084284a4f8a41001",
+            "run_state": {
+              "current_state": "triage",
+              "pending_command": null,
+              "status": "running",
+              "terminated_reason": null,
+              "updated_at": "2026-10-08T00:15:18.671337+00:00",
+              "workflow_version": "1.0.0"
+            },
+            "snapshot_id": "snap_22dbfe81e3488473",
+            "version": 1
+          }
+        }
+      }
+    ]
+  },
+  "state": {
+    "current_state": "triage",
+    "cursor": "seq:0",
+    "incident_id": "inc-ca1-http-restart",
+    "pending_command": null,
+    "run_id": "run_084284a4f8a41001",
+    "status": "running",
+    "terminated_reason": null,
+    "updated_at": "2026-10-08T00:15:18.671337Z",
+    "workflow_version": "1.0.0"
+  }
+}

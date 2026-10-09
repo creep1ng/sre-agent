@@ -1,0 +1,44 @@
+ Container ca1-01a118c1-verified-python-checks-db-1 Creating 
+ Container ca1-01a118c1-verified-python-checks-db-1 Created 
+ Container ca1-01a118c1-verified-python-checks-db-1 Starting 
+ Container ca1-01a118c1-verified-python-checks-db-1 Started 
+ Container ca1-01a118c1-verified-python-checks-db-1 Waiting 
+ Container ca1-01a118c1-verified-python-checks-db-1 Healthy 
+ Container ca1-01a118c1-verified-python-checks-run-43da4aae2ae4 Creating 
+ Container ca1-01a118c1-verified-python-checks-run-43da4aae2ae4 Created 
+All checks passed!
+247 files already formatted
+Resolved 93 packages in 4ms
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 89 files, 382 dependencies.
+------------------------------------
+
+Incident core does not use concrete adapters KEPT
+Governance does not use concrete adapters KEPT
+Persistence does not use delivery or composition KEPT
+Incident runtime and ports avoid framework dependencies KEPT
+Investigator reaches the gateway over HTTP only and cannot write state KEPT
+
+Contracts: 5 kept, 0 broken.
+Success: no issues found in 12 source files
+..................................                                       [100%]
+34 passed in 66.62s (0:01:06)
+No new upgrade operations detected.
+incident contracts: OK (11 states, 13 transitions, 4 decision points, 3 positive and 6 negative fixtures; process stage mapping: complete)
+incident authorization: OK (5 actions, 6 grants, 8 scenarios; approved resource type: incident_workflow)
+run api: OK (5 paths, 5 schemas, 6 positive and 8 negative examples)
+incident queries: OK (2 schemas, 3 paths, 3 positive and 5 error examples)
