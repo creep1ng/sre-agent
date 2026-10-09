@@ -27,6 +27,10 @@ class ProviderResult(ProviderDTO):
     text: Annotated[str, Field(min_length=1, max_length=65_536)]
     provider: ProviderName
     consumption: Consumption | None = None
+    # These are separate provider-verified credit identities. They must remain
+    # absent unless an adapter has validated explicit upstream routing evidence.
+    credited_model: ConcreteModel | None = None
+    credited_provider: ProviderName | None = None
 
 
 ProviderFailureKind = Literal["evidence_invalid", "invalid_response", "unavailable", "timeout"]
@@ -39,11 +43,15 @@ class ProviderFailure(Exception):
         *,
         retry_after: int | None = None,
         consumption: Consumption | None = None,
+        credited_model: ConcreteModel | None = None,
+        credited_provider: ProviderName | None = None,
     ) -> None:
         super().__init__(f"provider_{kind}")
         self.kind = kind
         self.retry_after = retry_after
         self.consumption = consumption
+        self.credited_model = credited_model
+        self.credited_provider = credited_provider
 
 
 class LLMProvider(Protocol):

@@ -9,9 +9,10 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from sre_agent.gateway.providers import (
+    ConcreteModel,
     ProviderFailure,
     ProviderFailureKind,
     ProviderRequest,
@@ -106,16 +107,26 @@ class OpenRouterProvider:
                 text=_completed_output_text(body),
                 provider=request.provider,
                 consumption=_consumption(body),
+                # `selected_model` has passed the closed metadata checks above;
+                # provider spelling is normalized to the requested catalog tag
+                # only after case-insensitive evidence matching.
+                credited_model=selected_model,
+                credited_provider=request.provider,
             )
         except ProviderFailure as failure:
             raise ProviderFailure(
                 failure.kind,
                 retry_after=failure.retry_after,
                 consumption=_failure_consumption(body),
+                credited_model=selected_model,
+                credited_provider=request.provider,
             ) from None
         except ValidationError:
             raise ProviderFailure(
-                "invalid_response", consumption=_failure_consumption(body)
+                "invalid_response",
+                consumption=_failure_consumption(body),
+                credited_model=selected_model,
+                credited_provider=request.provider,
             ) from None
 
     async def _catalog_confirms_selected_model(
@@ -171,7 +182,10 @@ def _selected_model(metadata: Any, request: ProviderRequest) -> str:
     model = evidence.get("model") if isinstance(evidence, Mapping) else None
     if not isinstance(model, str):
         raise ProviderFailure("evidence_invalid")
-    return model
+    try:
+        return TypeAdapter(ConcreteModel).validate_python(model)
+    except ValidationError:
+        raise ProviderFailure("evidence_invalid") from None
 
 
 def _matches_provider(evidence: Any, request: ProviderRequest) -> bool:

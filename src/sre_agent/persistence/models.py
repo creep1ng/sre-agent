@@ -506,6 +506,50 @@ class AuditEventRow(Base):
     correction_of_event_id = mapped_column(String(40), nullable=True)
 
 
+class RequestAttributionRow(Base):
+    """Separate immutable request-routing evidence, linked to its response audit."""
+
+    __tablename__ = "request_attributions"
+    __table_args__ = (
+        ForeignKeyConstraint(["audit_event_id"], ["audit_events.event_id"]),
+        CK(
+            "request_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'",
+            name="ck_request_attributions_request_id",
+        ),
+        CK(
+            "requested_alias ~ '^[a-z][a-z0-9-]{1,62}[a-z0-9]$'",
+            name="ck_request_attributions_alias",
+        ),
+        CK(
+            "requested_model ~ '^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$'",
+            name="ck_request_attributions_requested_model",
+        ),
+        CK(
+            "requested_provider ~ '^[a-z][a-z0-9._-]{0,63}$'",
+            name="ck_request_attributions_requested_provider",
+        ),
+        CK("requested_router ~ '[^[:space:]]'", name="ck_request_attributions_router"),
+        CK(
+            "credited_model IS NULL OR credited_model ~ '^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$'",
+            name="ck_request_attributions_credited_model",
+        ),
+        CK(
+            "credited_provider IS NULL OR credited_provider ~ '^[a-z][a-z0-9._-]{0,63}$'",
+            name="ck_request_attributions_credited_provider",
+        ),
+        UniqueConstraint("audit_event_id", name="uq_request_attributions_audit_event"),
+    )
+    request_id = mapped_column(String(36), primary_key=True)
+    audit_event_id = required(String(40))
+    requested_alias = required(String(64))
+    requested_model = required(String(200))
+    requested_provider = required(String(64))
+    requested_router = required(String(64))
+    credited_model = mapped_column(String(200), nullable=True)
+    credited_provider = mapped_column(String(64), nullable=True)
+    created_at = required(DateTime(timezone=True), server_default=func.now())
+
+
 class AlertTriageRow(Base):
     __tablename__ = "alert_triage"
     __table_args__ = (

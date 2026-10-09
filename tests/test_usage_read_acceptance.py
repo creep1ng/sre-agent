@@ -72,7 +72,8 @@ def migrated_database() -> None:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "DROP TABLE IF EXISTS request_attributions, consumption_limit_policies, "
+            "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
             "resources, alert_triage, mcp_tools, mcp_servers, "
@@ -97,7 +98,7 @@ def migrated_database() -> None:
 def isolated_audit_events():
     """Prevent persisted rows from one test affecting another test's aggregates."""
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("TRUNCATE TABLE audit_events")
+        connection.execute("TRUNCATE TABLE audit_events, request_attributions")
     yield
 
 
