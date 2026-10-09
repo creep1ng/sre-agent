@@ -1,0 +1,19 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "credited_model": {
+      "availability": "available",
+      "value": "openai/gpt-4o-mini-20260915"
+    },
+    "credited_provider": {
+      "availability": "available",
+      "value": "openai"
+    },
+    "empty_output": true,
+    "http_status": 502,
+    "request_id": "d6b24faf-a216-4d98-982d-6d0372c21413",
+    "requested_model": "openai/gpt-4o-mini",
+    "valid_model": true
+  },
+  "scenario": "canonical-empty-output"
+}

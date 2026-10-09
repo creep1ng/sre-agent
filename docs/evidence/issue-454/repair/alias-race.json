@@ -1,0 +1,15 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "current_model": "anthropic/claude-3.5-haiku",
+    "historical_assignment": {
+      "alias": "triage-agent",
+      "availability": "available",
+      "model": "openai/gpt-4o-mini",
+      "provider": "openai",
+      "router": "openrouter"
+    },
+    "request_id": "58e1c51d-c2c9-415b-9cd2-ec82cd678db5"
+  },
+  "scenario": "alias-race"
+}
