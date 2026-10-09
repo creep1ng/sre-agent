@@ -1,8 +1,10 @@
 """HTTP/provider evidence acceptance for historical request attribution."""
 
 import asyncio
+import json
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -194,6 +196,20 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read() -> N
             assert item["consumption"] == CONSUMPTION.model_dump(mode="json")
             assert (
                 secret not in repr(item) and OUTPUT not in repr(item) and PROMPT not in repr(item)
+            )
+            Path("/tmp/issue454-canonical-adapter-artifact.json").write_text(
+                json.dumps(
+                    {
+                        "scenario": "canonical OpenRouter credit survives capture and read",
+                        "evidence_kind": "controlled integration",
+                        "provider": "OpenRouter adapter/httpx.MockTransport; no live/paid call",
+                        "historical_item": item,
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
             )
     finally:
         asyncio.run(upstream.aclose())
