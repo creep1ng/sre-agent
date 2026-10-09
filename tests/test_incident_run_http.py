@@ -21,6 +21,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from sre_agent.application import create_application
 from sre_agent.gateway.incidents import StateReadRaceError
@@ -124,9 +125,12 @@ def authorized_database() -> None:
                     "administrative_control",
                     resource,
                 )
-        # Provisioning creates the workflow resource and its starter grant.
+        # This governed provisioner persists and verifies the start grant used
+        # by the positive HTTP flow below.
         provisioned = await provision(build_service(database, b"0" * 32), f"Bearer {admin.key}")
         assert provisioned.catalog_status == 201
+        assert provisioned.start_grant_status == 201
+        assert provisioned.run_start_active
         async with PostgresIncidentUnitOfWork(database) as work:
             await work.incidents.add(INCIDENT_ID, _base_state(), now=NOW)
             await work.incidents.add(OTHER_INCIDENT_ID, _base_state(), now=NOW)
@@ -165,6 +169,52 @@ def _start(
         f"/v1/incidents/{incident}/runs",
         json=_body() if body is None else body,
         headers=headers,
+    )
+
+
+def _start_with_query_log(
+    key: str, *, body: Any, incident: str
+) -> tuple[Any, list[tuple[str, Any]]]:
+    app = create_application(Settings(DATABASE_URL))
+    statements: list[tuple[str, Any]] = []
+
+    def capture(_connection, _cursor, statement, parameters, _context, _executemany) -> None:
+        statements.append((statement, parameters))
+
+    engine = app.state.database.engine.sync_engine
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        with TestClient(app) as client:
+            response = client.post(
+                f"/v1/incidents/{incident}/runs",
+                json=body,
+                headers={
+                    "Authorization": BEARERS["demo"],
+                    "Idempotency-Key": key,
+                },
+            )
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    return response, statements
+
+
+def _assert_run_lookup_is_scoped(
+    statements: list[tuple[str, Any]], *, incident_id: str, run_id: str
+) -> None:
+    run_queries = [
+        (statement.lower(), parameters)
+        for statement, parameters in statements
+        if "from incident.runs" in statement.lower()
+    ]
+    assert run_queries
+    for statement, parameters in run_queries:
+        normalized = " ".join(statement.split())
+        assert "where run_id=" in normalized and "and incident_id=" in normalized, normalized
+        assert run_id in str(parameters)
+        assert incident_id in str(parameters)
+    assert not any(
+        "from incident.snapshots" in query.lower() or "from incident.run_events" in query.lower()
+        for query, _ in statements
     )
 
 
@@ -252,9 +302,15 @@ def test_resuming_never_reaches_a_run_of_another_incident() -> None:
 
     neighbour = _start("key-neighbour-001", incident=OTHER_INCIDENT_ID)
     assert neighbour.status_code == 201
-    stolen = _start("key-resume-0002", body=_body(resume_from_run_id=neighbour.json()["run_id"]))
+    foreign_run_id = neighbour.json()["run_id"]
+    stolen, statements = _start_with_query_log(
+        "key-resume-0002",
+        body=_body(resume_from_run_id=foreign_run_id),
+        incident=INCIDENT_ID,
+    )
     assert stolen.status_code == 404
     assert stolen.json()["error"]["code"] == "run_not_found"
+    _assert_run_lookup_is_scoped(statements, incident_id=INCIDENT_ID, run_id=foreign_run_id)
     missing = _start("key-resume-0003", body=_body(resume_from_run_id="run_missing00001"))
     assert missing.status_code == 404
     assert _run_ids() == [OPENED["run_id"], neighbour.json()["run_id"]]
@@ -290,10 +346,7 @@ async def _declare(incident_id: str, run_id: str, command_id: str) -> int:
         actor="human",
         actor_reference=ActorReference(principal_id="demo-human"),
         outcome="declare",
-        inputs={
-            "severity": "sev2",
-            "impact": "Customers could not complete checkout.",
-        },
+        inputs={"severity": "sev2", "impact": "Payment requests are failing."},
     )
     try:
         runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))

@@ -1,0 +1,2 @@
+OPENAPI_GREEN path=/v1/mcp/tools/{tool_id} models=2 top_level_contracts_match=true request_id_body_absent=true inline_examples_validate=true strict=true X-Request-ID_header_uuid=true
+Probe used the local app; no external network or provider call.

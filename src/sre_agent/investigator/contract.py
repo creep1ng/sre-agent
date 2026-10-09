@@ -31,7 +31,13 @@ Step = Annotated[str, Field(min_length=1, max_length=1000)]
 Level = Literal["low", "medium", "high"]
 Objective = Literal["triage", "investigate", "mitigate", "postmortem"]
 Status = Literal[
-    "completed", "needs_human", "denied", "max_steps", "invalid_output", "upstream_unavailable"
+    "completed",
+    "needs_human",
+    "denied",
+    "max_steps",
+    "invalid_output",
+    "pre_dispatch_rejected",
+    "upstream_unavailable",
 ]
 _TURN = re.compile(r"^turn_[a-z0-9]{8,32}$")
 _FENCE = re.compile(r"^```(?:json)?[ \t]*\n(?P<body>.*)\n```$", re.DOTALL)
@@ -51,6 +57,7 @@ class Capability(_Strict):
     resource_type: Literal["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"]
     resource_id: Name
     action: Annotated[str, Field(max_length=100)] | None = None
+    input_schema: dict[str, JsonValue] | None = None
 
 
 class AlertContext(_Projection):
@@ -177,6 +184,15 @@ class Conclude(_Strict):
 
 Outcome = ProposeHypothesis | ProposeMitigation | RequestHuman | Conclude
 Action = UseTool | Outcome
+
+
+class FailureDiagnostic(_Strict):
+    stage: Literal["mcp_response_validation", "gateway_transport"]
+    kind: Literal["denied", "transient", "rejected"]
+    http_status: Annotated[int, Field(ge=100, le=599)] | None = None
+    request_id: UUID | None = None
+
+
 _ACTIONS: TypeAdapter[Action] = TypeAdapter(Annotated[Action, Field(discriminator="action")])
 
 
@@ -269,6 +285,11 @@ class InvestigationResult(_Strict):
     detail: Annotated[str, Field(max_length=500)] | None = None
     evidence: list[CollectedEvidence] = Field(default_factory=list)
     turns: list[Turn] = Field(default_factory=list)
+    skills: list[PinnedSkill] = Field(default_factory=list)
+    request_ids: list[UUID] = Field(default_factory=list)
+    mcp_request_ids: list[UUID] = Field(default_factory=list)
+    remaining_step_budget: Annotated[int, Field(ge=0)] = 0
+    failure_diagnostic: FailureDiagnostic | None = None
     skills: list[PinnedSkill] = Field(default_factory=list)
 
     @model_validator(mode="after")

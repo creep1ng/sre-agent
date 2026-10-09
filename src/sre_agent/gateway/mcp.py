@@ -1,9 +1,11 @@
 """Confined streamable-HTTP transport for the governed Grafana MCP."""
 
 import json
+import logging
 from asyncio import Lock, wait_for
+from enum import StrEnum
 from time import monotonic
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
@@ -11,7 +13,16 @@ import httpx
 from fastapi import APIRouter, Request, Security
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    FiniteFloat,
+    StrictInt,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
@@ -23,6 +34,17 @@ from sre_agent.persistence.repositories import MCPOwnerRepository
 
 MCP_TIMEOUT_SECONDS = 30.0
 _TIME_PATTERN = r"^(now|now-[1-9][0-9]*[smhd])$"
+logger = logging.getLogger(__name__)
+
+
+class MCPInvalidReason(StrEnum):
+    UPSTREAM_INVALID = "upstream_invalid"
+    INITIALIZATION_INVALID = "mcp_initialization_invalid"
+    RPC_RESPONSE_INVALID = "mcp_rpc_response_invalid"
+    RPC_ERROR = "mcp_rpc_error"
+    TOOL_ERROR = "mcp_tool_error"
+    CONTENT_INVALID = "mcp_content_invalid"
+    RESULT_INVALID = "mcp_result_invalid"
 
 
 class MCPUpstreamTimeout(Exception):
@@ -35,6 +57,10 @@ class MCPUpstreamUnavailable(Exception):
 
 class MCPUpstreamInvalid(Exception):
     """The upstream response could not be adapted to the published result contract."""
+
+    def __init__(self, reason: MCPInvalidReason = MCPInvalidReason.UPSTREAM_INVALID) -> None:
+        self.reason = MCPInvalidReason(reason)
+        super().__init__("MCP upstream response is invalid")
 
 
 class MCPUpstreamClient(Protocol):
@@ -104,7 +130,12 @@ class GrafanaMCPClient:
                 and "error" not in response
                 and isinstance(response.get("result"), dict)
             ):
-                raise MCPUpstreamInvalid
+                reason = (
+                    MCPInvalidReason.RPC_ERROR
+                    if isinstance(response, dict) and "error" in response
+                    else MCPInvalidReason.INITIALIZATION_INVALID
+                )
+                raise MCPUpstreamInvalid(reason)
             await self._post_rpc(
                 {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
             )
@@ -131,10 +162,10 @@ class GrafanaMCPClient:
             self._session_id = session_id
         try:
             return self._decode_response(response)
-        except ValueError as error:
+        except ValueError:
             if request.get("method") == "notifications/initialized" and not response.text.strip():
                 return None
-            raise MCPUpstreamInvalid from error
+            raise MCPUpstreamInvalid(MCPInvalidReason.RPC_RESPONSE_INVALID) from None
 
     @staticmethod
     def _decode_response(response: httpx.Response) -> Any:
@@ -165,12 +196,47 @@ class ElasticsearchQuery(BaseModel):
     limit: int = Field(ge=1, le=100)
 
 
+_TOOL_INPUT_MODELS: dict[str, type[BaseModel]] = {
+    "query_prometheus": PrometheusQuery,
+    "query_elasticsearch": ElasticsearchQuery,
+}
+
+
 class PrometheusResult(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
-    result_type: str = Field(pattern=r"^(matrix|vector|scalar|string)$")
-    result: list[dict[str, Any]] = Field(max_length=1000)
+    result_type: Literal["matrix", "vector", "scalar", "string", "indeterminate"]
+    result: (
+        Annotated[list[dict[str, Any]], Field(max_length=1000)]
+        | tuple[
+            StrictInt | FiniteFloat,
+            Annotated[str, Field(max_length=256)],
+        ]
+    )
     warnings: list[Annotated[str, Field(max_length=500)]] = Field(max_length=16)
+
+    @field_validator("result", mode="before")
+    @classmethod
+    def _parse_scalar_sample(cls, value: Any) -> Any:
+        if (
+            isinstance(value, list)
+            and len(value) == 2
+            and type(value[0]) in (int, float)
+            and isinstance(value[1], str)
+        ):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def _result_type_matches_shape(self) -> "PrometheusResult":
+        if isinstance(self.result, tuple):
+            if self.result_type not in {"indeterminate", "scalar", "string"}:
+                raise ValueError(
+                    "scalar sample pairs require a scalar, string, or indeterminate type"
+                )
+        elif self.result_type not in {"matrix", "vector"}:
+            raise ValueError("matrix and vector results require a list of objects")
+        return self
 
 
 class ElasticsearchResult(BaseModel):
@@ -199,6 +265,7 @@ class MCPDiscoveryToolResponse(BaseModel):
     visibility: str
     tags: list[str]
     action: str
+    input_schema: dict[str, Any]
 
 
 class MCPDiscoveryResponse(BaseModel):
@@ -364,6 +431,7 @@ class MCPGatewayService:
                             "visibility": tool.visibility,
                             "tags": tool.tags,
                             "action": "mcp.invoke",
+                            "input_schema": self._input_schema(tool.tool_id),
                         }
                         for tool in tools
                     ],
@@ -423,11 +491,13 @@ class MCPGatewayService:
             result = await wait_for(
                 self.client.call_tool(tool.upstream_name, arguments), MCP_TIMEOUT_SECONDS
             )
+            public_result = self._map_result(tool_id, result)
             return await self._audited(
                 UUID(request_id),
                 started,
                 JSONResponse(
-                    self._map_result(tool_id, result), headers={"X-Request-ID": request_id}
+                    public_result,
+                    headers={"X-Request-ID": request_id},
                 ),
                 operation="mcp.invoke",
                 stage="response",
@@ -459,7 +529,8 @@ class MCPGatewayService:
                 reason="upstream_unavailable",
                 tool_id=tool_id,
             )
-        except MCPUpstreamInvalid:
+        except MCPUpstreamInvalid as error:
+            logger.warning("mcp_upstream_invalid request_id=%s reason=%s", request_id, error.reason)
             return await self._audited(
                 UUID(request_id),
                 started,
@@ -520,17 +591,26 @@ class MCPGatewayService:
             return None, None
 
     @staticmethod
+    def _input_schema(tool_id: str) -> dict[str, Any]:
+        model = _TOOL_INPUT_MODELS.get(tool_id)
+        if model is None:
+            raise ValueError("unsupported MCP tool")
+        return model.model_json_schema(mode="validation")
+
+    @staticmethod
     def _validate_input(tool_id: str, raw: Any) -> dict[str, Any]:
-        if tool_id == "query_prometheus":
-            request = PrometheusQuery.model_validate(raw)
+        model = _TOOL_INPUT_MODELS.get(tool_id)
+        if model is None:
+            raise ValidationError.from_exception_data("MCP tool", [])
+        request = model.model_validate(raw)
+        if isinstance(request, PrometheusQuery):
             return {
                 "datasourceUid": request.datasource_uid,
                 "expr": request.expr,
                 "queryType": request.query_type,
                 "endTime": request.end_time,
             }
-        if tool_id == "query_elasticsearch":
-            request = ElasticsearchQuery.model_validate(raw)
+        if isinstance(request, ElasticsearchQuery):
             return {
                 "datasourceUid": request.datasource_uid,
                 "index": request.index,
@@ -545,27 +625,49 @@ class MCPGatewayService:
     def _map_result(cls, tool_id: str, raw: Any) -> dict[str, Any]:
         payload = cls._unwrap_upstream(raw)
         if tool_id == "query_prometheus":
+            missing = object()
+            top_level_warnings = (
+                payload.get("warnings", missing) if isinstance(payload, dict) else missing
+            )
             if isinstance(payload, dict) and isinstance(payload.get("data"), dict):
                 payload = payload["data"]
             if not isinstance(payload, dict):
-                raise MCPUpstreamInvalid
+                raise MCPUpstreamInvalid(MCPInvalidReason.RESULT_INVALID)
             if "result" in payload:
                 result = payload
             elif "data" in payload:
                 result = {
                     "result": payload["data"],
-                    "resultType": payload.get("resultType", "vector"),
+                    "resultType": payload.get("resultType"),
                 }
             else:
-                raise MCPUpstreamInvalid
+                raise MCPUpstreamInvalid(MCPInvalidReason.RESULT_INVALID)
+            result_data = result["result"]
+            result_type = result.get("resultType")
+            if result_type is None:
+                result_type = (
+                    "indeterminate"
+                    if isinstance(result_data, list)
+                    and len(result_data) == 2
+                    and type(result_data[0]) in (int, float)
+                    and isinstance(result_data[1], str)
+                    else "vector"
+                )
+            warnings = (
+                top_level_warnings
+                if top_level_warnings is not missing
+                else result.get("warnings", [])
+            )
             try:
-                return PrometheusResult(
-                    result_type=result.get("resultType", "vector"),
-                    result=result["result"],
-                    warnings=result.get("warnings", []),
+                return PrometheusResult.model_validate(
+                    {
+                        "result_type": result_type,
+                        "result": result_data,
+                        "warnings": warnings,
+                    }
                 ).model_dump(mode="json")
             except (KeyError, ValidationError) as error:
-                raise MCPUpstreamInvalid from error
+                raise MCPUpstreamInvalid(MCPInvalidReason.RESULT_INVALID) from error
         if tool_id == "query_elasticsearch":
             if isinstance(payload, list):
                 result = {"total": len(payload), "documents": payload, "warnings": []}
@@ -579,30 +681,30 @@ class MCPGatewayService:
                     "warnings": payload.get("warnings", []),
                 }
             else:
-                raise MCPUpstreamInvalid
+                raise MCPUpstreamInvalid(MCPInvalidReason.RESULT_INVALID)
             try:
                 return ElasticsearchResult.model_validate(result).model_dump(mode="json")
             except ValidationError as error:
-                raise MCPUpstreamInvalid from error
-        raise MCPUpstreamInvalid
+                raise MCPUpstreamInvalid(MCPInvalidReason.RESULT_INVALID) from error
+        raise MCPUpstreamInvalid(MCPInvalidReason.RESULT_INVALID)
 
     @staticmethod
     def _unwrap_upstream(raw: Any) -> Any:
         payload = raw
         if isinstance(payload, dict) and "error" in payload:
-            raise MCPUpstreamInvalid
+            raise MCPUpstreamInvalid(MCPInvalidReason.RPC_ERROR)
         if isinstance(payload, dict) and "result" in payload and "jsonrpc" in payload:
             payload = payload["result"]
         if isinstance(payload, dict) and payload.get("isError") is True:
-            raise MCPUpstreamInvalid
+            raise MCPUpstreamInvalid(MCPInvalidReason.TOOL_ERROR)
         if isinstance(payload, dict) and isinstance(payload.get("content"), list):
             texts = [item.get("text") for item in payload["content"] if isinstance(item, dict)]
             if not texts or not isinstance(texts[0], str):
-                raise MCPUpstreamInvalid
+                raise MCPUpstreamInvalid(MCPInvalidReason.CONTENT_INVALID)
             try:
                 return json.loads(texts[0])
-            except ValueError as error:
-                raise MCPUpstreamInvalid from error
+            except ValueError:
+                raise MCPUpstreamInvalid(MCPInvalidReason.CONTENT_INVALID) from None
         return payload
 
     @staticmethod
@@ -717,6 +819,7 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
             "visibility": "private",
             "tags": tags,
             "action": "mcp.invoke",
+            "input_schema": MCPGatewayService._input_schema(tool_id),
         }
         for tool_id, display_name, description, tags in (
             (
@@ -797,11 +900,19 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
                         "examples": {
                             "prometheus": {
                                 "summary": "Illustrative Prometheus result, not live data",
-                                "value": {"result_type": "vector", "result": [], "warnings": []},
+                                "value": {
+                                    "result_type": "vector",
+                                    "result": [],
+                                    "warnings": [],
+                                },
                             },
                             "elasticsearch": {
                                 "summary": "Illustrative Elasticsearch result, not live data",
-                                "value": {"total": 0, "documents": [], "warnings": []},
+                                "value": {
+                                    "total": 0,
+                                    "documents": [],
+                                    "warnings": [],
+                                },
                             },
                         }
                     }

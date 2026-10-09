@@ -1,6 +1,7 @@
 {
   "command": "approve_mitigation",
   "actor": "human",
+  "expected_incident_version": 7,
   "actor_reference": {
     "reference_version": "1.0.0",
     "principal_id": "demo-human",

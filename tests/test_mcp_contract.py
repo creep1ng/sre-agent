@@ -111,6 +111,23 @@ def test_negative_input_fixtures_are_executable() -> None:
         assert errors, f"fixture unexpectedly validates: {fixture_path}"
 
 
+def test_prometheus_result_schema_preserves_indeterminate_sample_as_a_string() -> None:
+    schema = load_json(CONTRACT_DIR / "json-schema/query-prometheus-result.schema.json")
+    validator = Draft202012Validator(schema)
+    sample = {
+        "result_type": "indeterminate",
+        "result": [1779400000, "NaN"],
+        "warnings": ["synthetic warning marker"],
+    }
+
+    assert validator.is_valid(sample)
+    assert not validator.is_valid(sample | {"result_type": "vector"})
+    assert not validator.is_valid(sample | {"result": [1779400000, 1]})
+    assert not validator.is_valid(sample | {"result": [True, "NaN"]})
+    assert not validator.is_valid(sample | {"result": [1779400000, "x" * 257]})
+    assert not validator.is_valid(sample | {"result": [1779400000, "NaN", "extra"]})
+
+
 def test_non_enumeration_scenarios_are_closed_and_zero_effect() -> None:
     contract = load_contract()
     scenarios = contract["non_enumeration_scenarios"]

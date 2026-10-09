@@ -36,10 +36,11 @@ def incident_database() -> None:
         connection.execute("DROP TABLE IF EXISTS alembic_version CASCADE")
         connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS consumption_limit_policies, bok_section_chunks, bok_documents, "
+            "DROP TABLE IF EXISTS alert_triage, consumption_limit_policies, "
+            "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, "
-            "resources, alert_triage, mcp_tools, mcp_servers, "
+            "resources, mcp_tools, mcp_servers, "
             "principals, idempotency_records CASCADE"
         )
         connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
@@ -292,7 +293,7 @@ async def test_snapshot_replay_and_text_context_survive_database_restart() -> No
     restarted = Database(DATABASE_URL)
     try:
         async with PostgresIncidentUnitOfWork(restarted) as unit:
-            replay = await unit.load_replay(run_id)
+            replay = await unit.load_replay(run_id, incident_id=incident_id)
             incident = await unit.incidents.get(incident_id)
             contexts = await unit.text_context.list(run_id)
         assert replay.snapshot is not None
@@ -402,7 +403,7 @@ async def test_replay_reads_every_event_beyond_one_page() -> None:
         connection.commit()
     try:
         async with PostgresIncidentUnitOfWork(database) as unit:
-            replay = await unit.load_replay(run_id)
+            replay = await unit.load_replay(run_id, incident_id=incident_id)
         assert len(replay.events) == 1001
         assert (replay.events[0].sequence, replay.events[-1].sequence) == (0, 1000)
         assert replay.incident.incident_id == incident_id
@@ -574,17 +575,17 @@ async def test_replay_watermark_blocks_a_concurrent_transition_until_consistent_
     entered, release = asyncio.Event(), asyncio.Event()
 
     class PausingReplayUnitOfWork(PostgresIncidentUnitOfWork):
-        async def load_replay(self, run_id: str):
+        async def load_replay(self, run_id: str, *, incident_id: str):
             session = self._require_session()
             await session.execute(
                 text("""SELECT i.incident_id FROM incident.incidents i
                     JOIN incident.runs r ON r.incident_id=i.incident_id
-                    WHERE r.run_id=:run_id FOR SHARE OF i, r"""),
-                {"run_id": run_id},
+                    WHERE r.run_id=:run_id AND r.incident_id=:incident_id FOR SHARE OF i, r"""),
+                {"run_id": run_id, "incident_id": incident_id},
             )
             entered.set()
             await release.wait()
-            return await super().load_replay(run_id)
+            return await super().load_replay(run_id, incident_id=incident_id)
 
     reader = IncidentRuntime(
         workflow,

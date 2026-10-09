@@ -43,6 +43,10 @@ class PreconditionFailedError(IncidentRuntimeError):
     pass
 
 
+class MissingIncidentVersionError(PreconditionFailedError):
+    pass
+
+
 class ApprovalRequiredError(IncidentRuntimeError):
     pass
 
@@ -64,11 +68,30 @@ class IncidentCommand:
     actor_reference: ActorReference | None = None
     outcome: str | None = None
     approval: bool = False
+    expected_incident_version: int | None = None
+    dispatch_id: str | None = None
     turn_id: str | None = None
     inputs: Mapping[str, Any] | None = None
+    extra_events: tuple[EventDraft, ...] = ()
 
     def payload_sha256(self) -> str:
         payload = asdict(self)
+        if self.extra_events:
+            payload["extra_events"] = [
+                {
+                    **asdict(event),
+                    "occurred_at": event.occurred_at.isoformat(),
+                }
+                for event in self.extra_events
+            ]
+        else:
+            # Keep pre-existing command hashes stable when no side events are attached.
+            payload.pop("extra_events")
+        if self.expected_incident_version is None:
+            # Additive fields must not invalidate idempotent retries from older clients.
+            payload.pop("expected_incident_version")
+        if self.dispatch_id is None:
+            payload.pop("dispatch_id")
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
@@ -135,7 +158,7 @@ class IncidentRuntime:
     )
     _PATCHABLE_BY_TRANSITION = {
         "continue_investigation": frozenset({"impact", "hypotheses", "evidence"}),
-        "propose_mitigation": frozenset({"mitigation_strategy"}),
+        "propose_mitigation": frozenset({"mitigation_strategy", "evidence"}),
         "verification_failed": frozenset({"evidence"}),
         "verification_passed": frozenset({"evidence"}),
         "start_postmortem": frozenset({"postmortem"}),
@@ -163,8 +186,8 @@ class IncidentRuntime:
             incident = await work.incidents.get(incident_id)
             if incident is None:
                 raise IncidentNotFoundError(incident_id)
-            run = await work.runs.get(run_id)
-            if run is None or run.incident_id != incident_id:
+            run = await work.runs.get_for_incident(run_id, incident_id)
+            if run is None:
                 raise RunNotFoundError(run_id)
             self._assert_supported_state(incident.state, run.state)
             return IncidentView(
@@ -184,13 +207,15 @@ class IncidentRuntime:
                 command.incident_id, command.command_id, payload_hash
             )
             if replayed is not None:
+                # Exact persisted retries return their historical result before current
+                # state validation; they never execute or reapply the reviewed command.
                 return replayed
 
             incident = await work.incidents.get(command.incident_id)
             if incident is None:
                 raise IncidentNotFoundError(command.incident_id)
-            run = await work.runs.get(command.run_id)
-            if run is None or run.incident_id != command.incident_id:
+            run = await work.runs.get_for_incident(command.run_id, command.incident_id)
+            if run is None:
                 raise RunNotFoundError(command.run_id)
             return await self._apply(work, command, payload_hash, incident, run)
 
@@ -251,14 +276,14 @@ class IncidentRuntime:
             transition = self._workflow.transition(command.transition_id)
         except InvalidWorkflowError as error:
             raise InvalidTransitionError(str(error)) from error
-        self._validate(command, transition, incident.state)
+        self._validate(command, transition, incident.state, incident.version)
         now = self._clock()
         incident_state, run_state = self._reduce(
             command, transition, incident.state, run.state, now
         )
         decision = DecisionDraft(
             decision_id=self._id_factory("dec"),
-            document=self._decision_document(command, transition, now),
+            document=self._decision_document(command, transition, now, incident.state),
             decided_at=now,
             run_id=command.run_id,
             turn_id=command.turn_id,
@@ -289,6 +314,16 @@ class IncidentRuntime:
                 run_state=run_state,
                 created_at=now,
             )
+        extra_events = tuple(
+            EventDraft(
+                event_id=extra.event_id,
+                kind=extra.kind,
+                payload={**extra.payload, "decision_id": decision.decision_id},
+                occurred_at=extra.occurred_at,
+                turn_id=extra.turn_id,
+            )
+            for extra in command.extra_events
+        )
         return await work.persist_transition(
             command_id=command.command_id,
             payload_sha256=payload_hash,
@@ -299,13 +334,14 @@ class IncidentRuntime:
             incident_state=incident_state,
             run_state=run_state,
             decision=decision,
-            events=(event,),
+            events=(event, *extra_events),
             snapshot=snapshot,
+            dispatch_id=command.dispatch_id,
         )
 
     async def reconstruct(self, incident_id: str, run_id: str) -> IncidentView:
         async with self._unit_of_work() as work:
-            replay = await work.load_replay(run_id)
+            replay = await work.load_replay(run_id, incident_id=incident_id)
             if replay.snapshot is None:
                 raise IncidentRuntimeError("replay requires an initial snapshot")
             if replay.snapshot.incident_id != incident_id or replay.snapshot.run_id != run_id:
@@ -314,6 +350,20 @@ class IncidentRuntime:
             run_state = dict(replay.snapshot.run_state)
             replayed_transitions = 0
             for event in replay.events:
+                if event.kind == "investigation_result":
+                    patch = event.payload.get("incident_patch")
+                    if patch is not None:
+                        if (
+                            not isinstance(patch, Mapping)
+                            or set(patch) != {"hypotheses", "evidence"}
+                            or not isinstance(patch["hypotheses"], list)
+                            or not isinstance(patch["evidence"], list)
+                        ):
+                            raise IncidentRuntimeError(
+                                f"event '{event.event_id}' has an invalid incident patch"
+                            )
+                        incident_state.update(patch)
+                    continue
                 if event.kind != "state_change":
                     continue
                 event_incident = event.payload.get("incident_state")
@@ -326,10 +376,11 @@ class IncidentRuntime:
             self._assert_supported_state(incident_state, run_state)
             if replay.incident.incident_id != incident_id or replay.run.incident_id != incident_id:
                 raise IncidentNotFoundError(incident_id)
-            replayed_version = replay.snapshot.version + replayed_transitions
+            replayed_run_version = replay.snapshot.version + replayed_transitions
+            # A completed final-turn result advances incident context without a run transition.
             if (
-                replay.incident.version != replayed_version
-                or replay.run.version != replayed_version
+                replay.incident.version < replayed_run_version
+                or replay.run.version != replayed_run_version
                 or replay.incident.state != incident_state
                 or replay.run.state != run_state
             ):
@@ -342,7 +393,7 @@ class IncidentRuntime:
                 incident_state=incident_state,
                 run_state=run_state,
                 incident_version=replay.incident.version,
-                run_version=replay.run.version,
+                run_version=replayed_run_version,
             )
 
     def _assert_supported_state(
@@ -362,6 +413,7 @@ class IncidentRuntime:
         command: IncidentCommand,
         transition: Transition,
         state: Mapping[str, Any],
+        incident_version: int,
     ) -> None:
         if state.get("state") != transition.source:
             raise InvalidTransitionError(
@@ -378,8 +430,27 @@ class IncidentRuntime:
             or re.fullmatch(r"[a-z][a-z0-9_-]{2,63}", command.actor_reference.principal_id) is None
         ):
             raise PreconditionFailedError("actor reference is invalid")
+        if (
+            command.expected_incident_version is not None
+            and command.expected_incident_version != incident_version
+        ):
+            raise IncidentStaleWriteError("incident snapshot changed during investigation")
         if transition.requires_approval and (command.actor != "human" or not command.approval):
             raise ApprovalRequiredError(transition.transition_id)
+        if command.approval and not transition.requires_approval:
+            raise PreconditionFailedError("approval is not valid for this transition")
+        if transition.requires_approval or transition.transition_id == "reject_mitigation":
+            if command.expected_incident_version is None:
+                raise MissingIncidentVersionError("human review requires an incident version")
+            if (
+                type(command.expected_incident_version) is not int
+                or command.expected_incident_version < 0
+            ):
+                raise PreconditionFailedError(
+                    "human review requires a nonnegative incident version"
+                )
+            if command.expected_incident_version != incident_version:
+                raise IncidentStaleWriteError("reviewed incident version is stale")
         if transition.outcomes:
             if command.outcome is None and len(transition.outcomes) == 1:
                 pass
@@ -425,10 +496,24 @@ class IncidentRuntime:
                 raise PreconditionFailedError(
                     "propose_mitigation requires a hypothesis with supporting evidence"
                 )
-        if transition_id in {"apply_mitigation", "reject_mitigation"} and not state.get(
-            "mitigation_strategy"
-        ):
-            raise PreconditionFailedError(f"{transition_id} requires mitigation_strategy")
+            patch = inputs.get("incident_patch")
+            strategy = patch.get("mitigation_strategy") if isinstance(patch, Mapping) else None
+            if (
+                not isinstance(strategy, Mapping)
+                or strategy.get("approval_status") != "pending"
+                or not self._artifact_id(strategy.get("mitigation_id"), "mit")
+            ):
+                raise PreconditionFailedError(
+                    "propose_mitigation requires a new pending mitigation artifact"
+                )
+        if transition_id in {"apply_mitigation", "reject_mitigation"}:
+            strategy = state.get("mitigation_strategy")
+            if not isinstance(strategy, Mapping) or not self._artifact_id(
+                strategy.get("mitigation_id"), "mit"
+            ):
+                raise PreconditionFailedError(
+                    f"{transition_id} requires an identified mitigation_strategy"
+                )
         if transition_id in {"verification_failed", "verification_passed"} and not state.get(
             "evidence"
         ):
@@ -439,8 +524,19 @@ class IncidentRuntime:
                 raise PreconditionFailedError(
                     f"{transition_id} requires a mitigation verification check"
                 )
-        if transition_id == "close_incident" and not state.get("postmortem"):
-            raise PreconditionFailedError("close_incident requires a postmortem")
+        if transition_id == "close_incident":
+            postmortem = state.get("postmortem")
+            if not isinstance(postmortem, Mapping) or not self._artifact_id(
+                postmortem.get("postmortem_id"), "pm"
+            ):
+                raise PreconditionFailedError("close_incident requires an identified postmortem")
+
+    @staticmethod
+    def _artifact_id(value: Any, prefix: str) -> bool:
+        return (
+            isinstance(value, str)
+            and re.fullmatch(rf"{re.escape(prefix)}_[a-z0-9_-]{{1,60}}", value) is not None
+        )
 
     def _reduce(
         self,
@@ -525,10 +621,28 @@ class IncidentRuntime:
             raise PreconditionFailedError("closed incidents require a postmortem")
 
     def _decision_document(
-        self, command: IncidentCommand, transition: Transition, now: datetime
+        self,
+        command: IncidentCommand,
+        transition: Transition,
+        now: datetime,
+        incident_state: Mapping[str, Any],
     ) -> dict[str, Any]:
         outcome = command.outcome or (transition.outcomes[0] if transition.outcomes else None)
         actor_reference = asdict(command.actor_reference) if command.actor_reference else None
+        approval = None
+        if command.approval:
+            approval = {
+                "approved": True,
+                "actor_reference": actor_reference,
+                "recorded_at": now.isoformat(),
+                "reviewed_incident_version": command.expected_incident_version,
+            }
+            if transition.transition_id == "apply_mitigation":
+                strategy = incident_state["mitigation_strategy"]
+                approval["mitigation_id"] = strategy["mitigation_id"]
+            elif transition.transition_id == "close_incident":
+                postmortem = incident_state["postmortem"]
+                approval["postmortem_id"] = postmortem["postmortem_id"]
         return {
             "workflow_id": self._workflow.workflow_id,
             "workflow_version": self._workflow.version,
@@ -537,15 +651,7 @@ class IncidentRuntime:
             "outcome": outcome,
             "actor": command.actor,
             "actor_reference": actor_reference,
-            "approval": (
-                {
-                    "approved": True,
-                    "actor_reference": actor_reference,
-                    "recorded_at": now.isoformat(),
-                }
-                if command.approval
-                else None
-            ),
+            "approval": approval,
             "reason": f"accepted named transition {transition.source} -> {transition.target}",
             # What the human said when they decided. An audit that can name who
             # approved a mitigation but not why still cannot explain the choice.

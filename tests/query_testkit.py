@@ -108,6 +108,10 @@ class MemoryUnits:
         async def get(self, run_id):
             return self._outer._runs.get(run_id)
 
+        async def get_for_incident(self, run_id, incident_id):
+            run = self._outer._runs.get(run_id)
+            return run if run is not None and run.incident_id == incident_id else None
+
         async def list_ids(self, incident_id):
             return tuple(
                 run_id

@@ -10,7 +10,7 @@
 # constrained to the canonical values; it can never expand the authenticated grant.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:run-command:1.0.0
+$id: urn:sre-agent:schema:run-command:2.0.0
 title: RunCommand
 type: object
 additionalProperties: false
@@ -48,6 +48,12 @@ properties:
         type: [string, "null"]
         maxLength: 200
         default: null
+  expected_incident_version:
+    type: integer
+    minimum: 0
+    description: >-
+      Exact incident-detail version reviewed by the human. A changed incident snapshot
+      conflicts; a workflow version does not identify the approved artifact.
   turn_id:
     type: [string, "null"]
     pattern: '^turn_[a-z0-9]{8,32}$'
@@ -108,6 +114,16 @@ allOf:
         authorization:
           properties:
             action: { const: run.approve }
+  - if:
+      properties:
+        command:
+          enum: [approve_mitigation, reject_mitigation, request_changes]
+      required: [command]
+    then:
+      required: [expected_incident_version]
+    else:
+      not:
+        required: [expected_incident_version]
   - if:
       properties:
         command:

@@ -3,11 +3,12 @@
 import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Any, Self
+from typing import Any, Literal, Self, cast
 
 from sqlalchemy import String, bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from sre_agent.incident.persistence import (
     DecisionDraft,
@@ -169,6 +170,22 @@ class PostgresRunRepository:
         )
         return _run(row) if row else None
 
+    async def get_for_incident(self, run_id: str, incident_id: str) -> RunRecord | None:
+        row = (
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT * FROM incident.runs "
+                        "WHERE run_id=:run_id AND incident_id=:incident_id"
+                    ),
+                    {"run_id": run_id, "incident_id": incident_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return _run(cast(Mapping[str, Any], row)) if row else None
+
     async def add(
         self, run_id: str, incident_id: str, state: JsonDocument, *, now: datetime
     ) -> RunRecord:
@@ -325,6 +342,8 @@ class PostgresIncidentUnitOfWork:
         self._database = database
         self._session: AsyncSession | None = None
         self._transaction: Any = None
+        self._dispatch_connection: AsyncConnection | None = None
+        self._dispatch_lock_name_held: str | None = None
 
     async def __aenter__(self) -> Self:
         self._session = self._database.sessions()
@@ -343,7 +362,10 @@ class PostgresIncidentUnitOfWork:
         try:
             await self._transaction.__aexit__(exc_type, exc, traceback)
         finally:
-            await self._session.close()
+            try:
+                await self._release_dispatch_lock()
+            finally:
+                await self._session.close()
 
     def _require_session(self) -> AsyncSession:
         if self._session is None:
@@ -380,6 +402,332 @@ class PostgresIncidentUnitOfWork:
             {"key": f"{incident_id}:{command_id}"},
         )
 
+    async def commit(self) -> None:
+        """Commit the current unit; the dedicated dispatch connection remains held."""
+        assert self._session is not None and self._transaction is not None
+        await self._transaction.__aexit__(None, None, None)
+        self._transaction = self._session.begin()
+        await self._transaction.__aenter__()
+
+    @staticmethod
+    def _dispatch_lock_name(incident_id: str, run_id: str) -> str:
+        return f"incident-investigation:{incident_id}:{run_id}"
+
+    async def _lock_incident_run(self, incident_id: str, run_id: str) -> tuple[Any, Any]:
+        session = self._require_session()
+        incident = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT version FROM incident.incidents "
+                        "WHERE incident_id=:incident_id FOR UPDATE"
+                    ),
+                    {"incident_id": incident_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        run = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT version FROM incident.runs "
+                        "WHERE run_id=:run_id AND incident_id=:incident_id FOR UPDATE"
+                    ),
+                    {"run_id": run_id, "incident_id": incident_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if incident is None or run is None:
+            raise IncidentStaleWriteError(f"missing incident run: {incident_id}/{run_id}")
+        return incident, run
+
+    async def _lock_run_event_sequence(self, run_id: str) -> None:
+        await self._require_session().execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:run_id, 146))"),
+            {"run_id": run_id},
+        )
+
+    async def _dispatch_events(self, run_id: str) -> list[Mapping[str, Any]]:
+        session = self._require_session()
+        rows = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT payload FROM incident.run_events "
+                        "WHERE run_id=:run_id AND kind='dispatch_receipt' ORDER BY sequence"
+                    ),
+                    {"run_id": run_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [cast(Mapping[str, Any], row["payload"]) for row in rows]
+
+    async def _append_run_events(
+        self,
+        incident_id: str,
+        run_id: str,
+        *,
+        decision: DecisionDraft,
+        events: Sequence[EventDraft],
+    ) -> tuple[RunEvent, ...]:
+        session = self._require_session()
+        if decision.run_id not in (None, run_id) or not events:
+            raise ValueError("dispatch records require one run decision and at least one event")
+        if any(event.kind not in {"dispatch_receipt", "investigation_result"} for event in events):
+            raise ValueError(
+                "investigation dispatch may append only safe result and receipt events"
+            )
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:run_id, 146))"),
+            {"run_id": run_id},
+        )
+        await session.execute(
+            text("""INSERT INTO incident.decisions
+                (decision_id, incident_id, run_id, turn_id, document, decided_at)
+                VALUES (:decision_id, :incident_id, :run_id, :turn_id,
+                        CAST(:document AS jsonb), :decided_at)"""),
+            {
+                "decision_id": decision.decision_id,
+                "incident_id": incident_id,
+                "run_id": run_id,
+                "turn_id": decision.turn_id,
+                "document": _document(decision.document),
+                "decided_at": decision.decided_at,
+            },
+        )
+        last_sequence = await session.scalar(
+            text(
+                "SELECT COALESCE(MAX(sequence), -1) FROM incident.run_events WHERE run_id=:run_id"
+            ),
+            {"run_id": run_id},
+        )
+        stored: list[RunEvent] = []
+        for sequence, draft in enumerate(events, start=int(last_sequence) + 1):
+            payload = dict(draft.payload)
+            payload.setdefault("decision_id", decision.decision_id)
+            row = (
+                (
+                    await session.execute(
+                        text("""INSERT INTO incident.run_events
+                            (event_id, incident_id, run_id, turn_id, sequence,
+                             kind, payload, occurred_at)
+                            VALUES (:event_id, :incident_id, :run_id, :turn_id, :sequence,
+                                    :kind, CAST(:payload AS jsonb), :occurred_at) RETURNING *"""),
+                        {
+                            "event_id": draft.event_id,
+                            "incident_id": incident_id,
+                            "run_id": run_id,
+                            "turn_id": draft.turn_id,
+                            "sequence": sequence,
+                            "kind": draft.kind,
+                            "payload": _document(payload),
+                            "occurred_at": draft.occurred_at,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            stored.append(_event(cast(Mapping[str, Any], row)))
+        await session.execute(
+            text("UPDATE incident.runs SET updated_at=:updated_at WHERE run_id=:run_id"),
+            {"updated_at": max(event.occurred_at for event in events), "run_id": run_id},
+        )
+        return tuple(stored)
+
+    async def claim_run_dispatch(
+        self,
+        incident_id: str,
+        run_id: str,
+        *,
+        intent_decision: DecisionDraft,
+        intent_event: EventDraft,
+        interrupted_decision: DecisionDraft,
+        interrupted_event: EventDraft,
+    ) -> Literal["claimed", "active", "complete", "interrupted"]:
+        lock_name = self._dispatch_lock_name(incident_id, run_id)
+        if self._dispatch_connection is not None:
+            raise RuntimeError("unit of work already holds a dispatch lock")
+        connection = await self._database.engine.connect()
+        self._dispatch_connection = connection
+        try:
+            acquired = await connection.scalar(
+                text("SELECT pg_try_advisory_lock(hashtextextended(:lock_name, 147))"),
+                {"lock_name": lock_name},
+            )
+            if acquired:
+                self._dispatch_lock_name_held = lock_name
+            await connection.commit()
+        except BaseException as error:
+            self._dispatch_connection = None
+            self._dispatch_lock_name_held = None
+            try:
+                await connection.invalidate(error)
+            finally:
+                await connection.close()
+            raise
+        if not acquired:
+            self._dispatch_connection = None
+            await connection.close()
+            return "active"
+        await self._lock_run_event_sequence(run_id)
+        await self._lock_incident_run(incident_id, run_id)
+        receipts = [
+            item.get("dispatch_receipt")
+            for item in await self._dispatch_events(run_id)
+            if isinstance(item, Mapping)
+        ]
+        terminal = any(
+            isinstance(receipt, Mapping)
+            and receipt.get("dispatch_id") == run_id
+            and receipt.get("phase") == "outcome"
+            and receipt.get("status") in {"success", "confirmed_failure", "unknown"}
+            for receipt in receipts
+        )
+        if terminal:
+            return "complete"
+        pending = any(
+            isinstance(receipt, Mapping)
+            and receipt.get("dispatch_id") == run_id
+            and receipt.get("phase") == "intent"
+            and receipt.get("status") == "pending"
+            for receipt in receipts
+        )
+        if pending or receipts:
+            await self._append_run_events(
+                incident_id,
+                run_id,
+                decision=interrupted_decision,
+                events=(interrupted_event,),
+            )
+            await self.commit()
+            return "interrupted"
+        await self._append_run_events(
+            incident_id, run_id, decision=intent_decision, events=(intent_event,)
+        )
+        await self.commit()
+        return "claimed"
+
+    async def complete_run_dispatch(
+        self,
+        incident_id: str,
+        run_id: str,
+        *,
+        decision: DecisionDraft,
+        events: Sequence[EventDraft],
+        expected_incident_version: int | None = None,
+        incident_patch: JsonDocument | None = None,
+    ) -> bool:
+        await self._lock_run_event_sequence(run_id)
+        incident, _run = await self._lock_incident_run(incident_id, run_id)
+        receipts = [
+            item.get("dispatch_receipt")
+            for item in await self._dispatch_events(run_id)
+            if isinstance(item, Mapping)
+        ]
+        if any(
+            isinstance(receipt, Mapping)
+            and receipt.get("dispatch_id") == run_id
+            and receipt.get("phase") == "outcome"
+            and receipt.get("status") in {"success", "confirmed_failure", "unknown"}
+            for receipt in receipts
+        ):
+            return False
+        if not any(
+            isinstance(receipt, Mapping)
+            and receipt.get("dispatch_id") == run_id
+            and receipt.get("phase") == "intent"
+            and receipt.get("status") == "pending"
+            for receipt in receipts
+        ):
+            return False
+        if (
+            expected_incident_version is not None
+            and int(incident["version"]) != expected_incident_version
+        ):
+            raise IncidentStaleWriteError(f"stale investigation result: {incident_id}/{run_id}")
+        terminal_events = [
+            receipt
+            for event in events
+            if event.kind == "dispatch_receipt"
+            and isinstance((receipt := event.payload.get("dispatch_receipt")), Mapping)
+            and receipt.get("dispatch_id") == run_id
+            and receipt.get("phase") == "outcome"
+            and receipt.get("status") in {"success", "confirmed_failure", "unknown"}
+        ]
+        if len(terminal_events) != 1:
+            raise ValueError("a completed dispatch must append one terminal receipt")
+        if incident_patch is not None:
+            if (
+                expected_incident_version is None
+                or set(incident_patch) != {"hypotheses", "evidence"}
+                or not isinstance(incident_patch["hypotheses"], list)
+                or not isinstance(incident_patch["evidence"], list)
+            ):
+                raise ValueError(
+                    "event-only dispatch patches require hypothesis and evidence lists"
+                )
+            if terminal_events[0].get("status") != "success":
+                raise ValueError("event-only dispatch patches require a success receipt")
+            patch_events = [
+                event
+                for event in events
+                if event.kind == "investigation_result"
+                and event.payload.get("incident_patch") == incident_patch
+            ]
+            if len(patch_events) != 1:
+                raise ValueError("event-only dispatch patch must be recorded in its result event")
+            updated_at = max(event.occurred_at for event in events)
+            updated = await self._require_session().execute(
+                text("""UPDATE incident.incidents
+                    SET state=state || CAST(:incident_patch AS jsonb),
+                        version=version+1, updated_at=:updated_at
+                    WHERE incident_id=:incident_id AND version=:expected_version
+                    RETURNING version"""),
+                {
+                    "incident_id": incident_id,
+                    "incident_patch": _document(incident_patch),
+                    "expected_version": expected_incident_version,
+                    "updated_at": updated_at,
+                },
+            )
+            if updated.scalar_one_or_none() is None:
+                raise IncidentStaleWriteError(f"stale investigation result: {incident_id}/{run_id}")
+        await self._append_run_events(incident_id, run_id, decision=decision, events=events)
+        return True
+
+    async def release_run_dispatch(self, incident_id: str, run_id: str) -> None:
+        lock_name = self._dispatch_lock_name(incident_id, run_id)
+        if self._dispatch_lock_name_held not in (None, lock_name):
+            raise RuntimeError("unit of work holds a different dispatch lock")
+        await self._release_dispatch_lock()
+
+    async def _release_dispatch_lock(self) -> None:
+        connection, self._dispatch_connection = self._dispatch_connection, None
+        lock_name, self._dispatch_lock_name_held = self._dispatch_lock_name_held, None
+        if connection is None:
+            return
+        try:
+            if lock_name is not None:
+                await connection.execute(
+                    text("SELECT pg_advisory_unlock(hashtextextended(:lock_name, 147))"),
+                    {"lock_name": lock_name},
+                )
+                await connection.commit()
+        except DBAPIError as error:
+            await connection.invalidate(error)
+        except BaseException:
+            await connection.invalidate()
+            raise
+        finally:
+            await connection.close()
+
     async def persist_transition(
         self,
         *,
@@ -394,6 +742,7 @@ class PostgresIncidentUnitOfWork:
         decision: DecisionDraft,
         events: Sequence[EventDraft],
         snapshot: SnapshotDraft | None = None,
+        dispatch_id: str | None = None,
     ) -> TransitionResult:
         session = self._require_session()
         await self.lock_command(incident_id, command_id)
@@ -410,6 +759,42 @@ class PostgresIncidentUnitOfWork:
             snapshot.incident_state != incident_state or snapshot.run_state != run_state
         ):
             raise ValueError("snapshot state must match the committed transition state")
+        await self._lock_run_event_sequence(run_id)
+        if dispatch_id is not None:
+            if dispatch_id != run_id:
+                raise IncidentStaleWriteError("investigation dispatch identity does not match run")
+            receipts = [
+                item.get("dispatch_receipt")
+                for item in await self._dispatch_events(run_id)
+                if isinstance(item, Mapping)
+            ]
+            if any(
+                isinstance(receipt, Mapping)
+                and receipt.get("dispatch_id") == dispatch_id
+                and receipt.get("phase") == "outcome"
+                and receipt.get("status") in {"success", "confirmed_failure", "unknown"}
+                for receipt in receipts
+            ):
+                raise IncidentStaleWriteError("investigation dispatch is already terminal")
+            if not any(
+                isinstance(receipt, Mapping)
+                and receipt.get("dispatch_id") == dispatch_id
+                and receipt.get("phase") == "intent"
+                and receipt.get("status") == "pending"
+                for receipt in receipts
+            ):
+                raise IncidentStaleWriteError("investigation dispatch intent is missing")
+            terminal_receipts = [
+                receipt
+                for event in events
+                if event.kind == "dispatch_receipt"
+                and isinstance((receipt := event.payload.get("dispatch_receipt")), Mapping)
+                and receipt.get("dispatch_id") == dispatch_id
+                and receipt.get("phase") == "outcome"
+                and receipt.get("status") == "success"
+            ]
+            if len(terminal_receipts) != 1:
+                raise ValueError("a dispatch transition must append its success receipt")
         updated_at = decision.decided_at
         incident_row = (
             (
@@ -462,10 +847,6 @@ class PostgresIncidentUnitOfWork:
                 "document": _document(decision.document),
                 "decided_at": decision.decided_at,
             },
-        )
-        await session.execute(
-            text("SELECT pg_advisory_xact_lock(hashtextextended(:run_id, 146))"),
-            {"run_id": run_id},
         )
         last_sequence = await session.scalar(
             text(
@@ -565,14 +946,8 @@ class PostgresIncidentUnitOfWork:
         )
         return _snapshot(row)
 
-    async def load_replay(self, run_id: str) -> ReplayRecord:
+    async def load_replay(self, run_id: str, *, incident_id: str) -> ReplayRecord:
         session = self._require_session()
-        incident_id = await session.scalar(
-            text("SELECT incident_id FROM incident.runs WHERE run_id=:run_id"),
-            {"run_id": run_id},
-        )
-        if incident_id is None:
-            raise RuntimeError(f"incident run is unavailable: {run_id}")
         incident_row = (
             (
                 await session.execute(
@@ -584,17 +959,20 @@ class PostgresIncidentUnitOfWork:
             .mappings()
             .one_or_none()
         )
+        if incident_row is None:
+            raise RuntimeError(f"incident replay aggregate is unavailable: {run_id}")
         run_row = (
             (
                 await session.execute(
-                    text("SELECT * FROM incident.runs WHERE run_id=:run_id FOR SHARE"),
-                    {"run_id": run_id},
+                    text("""SELECT * FROM incident.runs
+                    WHERE run_id=:run_id AND incident_id=:incident_id FOR SHARE"""),
+                    {"run_id": run_id, "incident_id": incident_id},
                 )
             )
             .mappings()
             .one_or_none()
         )
-        if incident_row is None or run_row is None:
+        if run_row is None:
             raise RuntimeError(f"incident replay aggregate is unavailable: {run_id}")
         snapshot = await self.snapshots.latest(run_id)
         sequence = snapshot.event_sequence if snapshot else -1
