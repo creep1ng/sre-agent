@@ -20,8 +20,8 @@
           "router": null
         },
         "credited_model": {
-          "availability": "available",
-          "value": "openai/gpt-4o-2024-08-06"
+          "availability": "unavailable",
+          "value": null
         },
         "credited_provider": {
           "availability": "available",

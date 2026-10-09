@@ -16,8 +16,8 @@ class AvailableRequestedAssignment(BaseModel):
     availability: Literal["available"]
     alias: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$", max_length=64)]
     model: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$", max_length=200)]
-    provider: Annotated[str, Field(pattern=r"^[a-z][a-z0-9._-]{0,63}$", max_length=64)]
-    router: Annotated[str, Field(min_length=1, max_length=64)]
+    provider: Annotated[str, Field(min_length=1, max_length=100)]
+    router: Annotated[str, Field(min_length=1, max_length=100)]
 
 
 class UnavailableRequestedAssignment(BaseModel):

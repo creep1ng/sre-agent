@@ -24,8 +24,8 @@
           "value": "openai/gpt-4o-2024-08-06"
         },
         "credited_provider": {
-          "availability": "available",
-          "value": "openrouter"
+          "availability": "unavailable",
+          "value": null
         },
         "attribution_status": "unavailable",
         "consumption": null,

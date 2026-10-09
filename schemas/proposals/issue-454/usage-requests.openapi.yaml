@@ -152,8 +152,8 @@ components:
                       availability: { const: available }
                       alias: { type: string, minLength: 1, maxLength: 128 }
                       model: { type: string, pattern: '^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$' }
-                      provider: { type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$' }
-                      router: { type: string, minLength: 1, maxLength: 64 }
+                      provider: { type: string, minLength: 1, maxLength: 100 }
+                      router: { type: string, minLength: 1, maxLength: 100 }
                   - type: object
                     additionalProperties: false
                     required: [availability, alias, model, provider, router]

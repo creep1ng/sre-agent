@@ -74,6 +74,7 @@ test("request conformance covers honest evidence states and rejects leakage", as
   const byName = new Map(cases.map((fixture) => [fixture.name, fixture]));
   const positive = [
     `positive/usage.requests.available.positive.v${version}.fixture.json`,
+    `positive/usage.requests.requested-identifiers-boundary.positive.v${version}.fixture.json`,
     `positive/usage.requests.partial.positive.v${version}.fixture.json`,
     `positive/usage.requests.unavailable.positive.v${version}.fixture.json`,
     `positive/usage.requests.legacy.positive.v${version}.fixture.json`,
