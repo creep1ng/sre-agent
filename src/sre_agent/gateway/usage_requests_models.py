@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -94,8 +94,47 @@ class UnsupportedNavigation(BaseModel):
     status: Literal["unsupported"]
 
 
+def _attribution_json_schema(schema: dict[str, Any]) -> None:
+    """Publish the runtime validator's evidence states to OpenAPI consumers too."""
+    names = tuple(schema["properties"])
+
+    def condition(properties: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {**dict.fromkeys(names, {}), **properties},
+        }
+
+    def availability(field: str, state: str) -> dict[str, Any]:
+        values = (
+            ("alias", "model", "provider", "router")
+            if field == "requested_assignment"
+            else ("value",)
+        )
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"availability": {"const": state}, **dict.fromkeys(values, {})},
+        }
+
+    fields = ("requested_assignment", "credited_model", "credited_provider")
+    rules = []
+    for status in ("available", "legacy", "unavailable", "partial"):
+        state = "available" if status in {"available", "partial"} else "unavailable"
+        required = fields if status != "partial" else ("requested_assignment",)
+        expected = condition({field: availability(field, state) for field in required})
+        if status == "partial":
+            expected["anyOf"] = [
+                condition({field: availability(field, "unavailable")}) for field in fields[1:]
+            ]
+        rules.append({"if": condition({"attribution_status": {"const": status}}), "then": expected})
+    schema["allOf"] = rules
+
+
 class UsageRequestItem(BaseModel):
-    model_config = ConfigDict(strict=True, extra="forbid")
+    model_config = ConfigDict(
+        strict=True, extra="forbid", json_schema_extra=_attribution_json_schema
+    )
 
     request_id: UUID
     month: Annotated[str, Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")]

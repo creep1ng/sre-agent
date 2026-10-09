@@ -346,7 +346,9 @@ class ResponsesService:  # noqa: E305
                                      stage, consumption=consumption, **facts)
         try:
             append_response = getattr(self.audit, "append_response", None)
-            if attribution is not None and callable(append_response):
+            if attribution is not None:
+                if not callable(append_response):
+                    raise RuntimeError("atomic response attribution storage unavailable")
                 await append_response(event, attribution)
             else:
                 await self.audit.append(event)
