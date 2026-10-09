@@ -1,5 +1,5 @@
 {
-  "source_commit": "a93e41debded202a64e8034b89b6cb3da946e97e",
+  "source_commit": "ed99ca51586509ee6d857e84f66703a7a9042416",
   "captured_at_utc": "2026-10-03T22:43:00Z",
   "command": "docker compose --profile checks run --build --rm -v ${PWD}/docs/evidence/issue-423-grant-precreate-walkthrough.py:/tmp/issue-423-probe.py:ro python-checks python /tmp/issue-423-probe.py",
   "capture_command": "docker run --rm -v ${PWD}:/work sre-agent-e2e npx playwright screenshot --viewport-size=1500,1100 --full-page file:///work/issue-423-capture.tmp.html /work/docs/evidence/issue-423-grant-precreate-capture.png",
@@ -8,14 +8,21 @@
   "file": "issue-423-grant-precreate-capture.png",
   "transcript": "issue-423-grant-precreate-walkthrough.json",
   "sanitized": true,
-  "asserts": "CA8 automatic asserts active in docs/evidence/issue-423-grant-precreate-walkthrough.py (assert_transcript checks all 12 cases on status plus error_code plus grant_rows plus idempotency_bindings; summary to stderr; sys.exit(1) on any violation). Asserted containerized run exits 0 with 12/12 cases passed; stdout transcript JSON is byte-identical to the captured transcript, so the PNG (a rendering of probe stdout) is unchanged.",
-  "negative_control": "Scratch copy outside the repo with one corrupted expectation ('valid create' expected 404 instead of 201) run with the identical containerized invocation exits 1 and reports 4 violations naming expected versus actual; the scratch file was never committed.",
-  "transcript_source": "Refreshed 2026-10-07T16:09:28Z from the asserted run (exit 0, admitted creates on bare invoke per the #480 GRANT_ADMITTED_ACTIONS matrix); live stdout is byte-identical to the previous transcript because the transcript records statuses and counts but not the action string, confirming the 201 tail holds again. PNG pixels unchanged, kept honestly without recapture.",
   "sha256": "9350044587028e0ccb26e55a86d78bceaeedfcf981638bdacfdb16ace20e9e41",
   "size": "1500x1897",
   "visual_inspection": "Chromium rendering of the actual probe stdout: 12 cases (404x4 missing/inactive refs with zero rows/bindings, 403 restricted caller, 201 valid create, 201 idempotent replay, 409 duplicate active tuple, 201 replay-principal setup, 201 stable replay after principal deactivated, 201 replay-resource setup, 201 stable replay after resource deactivated). No API key, Authorization header, request payload, or personal data shown; all identities are synthetic probe data.",
-  "source_note": "The container image was rebuilt from the source_commit tree; the working tree was clean apart from this evidence refresh at run time, and no guard logic changed. This evidence commit records the refreshed probe run in this provenance file; the transcript JSON and capture PNG are byte-identical carries.",
+  "source_note": "Capture provenance restored from commit 6f95b0a3dab53ff1d23d8326ebbffb63e2d142c0: the container image was built from the source_commit tree, with behavior files clean at run time. The October 3 PNG and transcript are unchanged. The later asserted probe run is recorded separately in verification; it is not a recapture.",
   "checks_image": "sre-agent-python-checks:latest",
   "capture_image": "sre-agent-e2e (Playwright Chromium v1.63.0)",
-  "database": "python-checks-db (PostgreSQL 17.4 on tmpfs)"
+  "database": "python-checks-db (PostgreSQL 17.4 on tmpfs)",
+  "verification": {
+    "source_commit": "a93e41debded202a64e8034b89b6cb3da946e97e",
+    "verified_at_utc": "2026-10-07T16:09:28Z",
+    "recorded_in_commit": "aaba8d4f7f42f2fc2bff024df5796a380b94c49c",
+    "asserts": "CA8 automatic asserts active in docs/evidence/issue-423-grant-precreate-walkthrough.py (assert_transcript checks all 12 cases on status plus error_code plus grant_rows plus idempotency_bindings; summary to stderr; sys.exit(1) on any violation). Asserted containerized run exits 0 with 12/12 cases passed; stdout transcript JSON is byte-identical to the captured transcript, so the PNG (a rendering of probe stdout) is unchanged.",
+    "negative_control": "Scratch copy outside the repo with one corrupted expectation ('valid create' expected 404 instead of 201) run with the identical containerized invocation exits 1 and reports 4 violations naming expected versus actual; the scratch file was never committed.",
+    "transcript_source": "Refreshed 2026-10-07T16:09:28Z from the asserted run (exit 0, admitted creates on bare invoke per the #480 GRANT_ADMITTED_ACTIONS matrix); live stdout is byte-identical to the previous transcript because the transcript records statuses and counts but not the action string, confirming the 201 tail holds again. PNG pixels unchanged, kept honestly without recapture.",
+    "source_note": "The container image was rebuilt from the verification source_commit tree; the working tree was clean apart from this evidence refresh at run time, and no guard logic changed. This evidence commit records the refreshed probe run in this provenance file; the transcript JSON and capture PNG are byte-identical carries.",
+    "attribution": "Historical verification reported by the PR author; this metadata correction does not claim a new execution or screenshot capture."
+  }
 }
