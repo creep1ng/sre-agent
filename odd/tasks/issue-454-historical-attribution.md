@@ -450,3 +450,23 @@ merge,closure or human acceptance. Source scope verified;humanreview pending.
 Engram mirror unavailable (unregistered runtime identity). Initial app attachment
 timeouts resolved: list_artifacts confirmed577/579; attach_artifact confirmed578.
 All eleven drafts are attached. Backend CA1–CA11 verified;human review pending.
+
+## Pre-merge repair review (2026-10-09)
+
+- R1: reset request_attributions in the earliest capture fixture (#571),
+  then inherit through #572–#579 without rewriting existing history.
+  Frozen #571/#572/#573: 1774 passed, 1 paid-provider smoke skipped each.
+- R2: exact delivery/security metadata and ready-for-review status on all
+  eleven cuts; independent human acceptance and merge remain pending.
+- R3: #579 reproduction must mount this tracker explicitly read-only;
+  the old unmounted command failed; the mounted command exited successfully.
+- R4: map each open review thread to concrete corrections and evidence;
+  automated review is not human approval. Resolve only verified corrections.
+- R5: failure-first canonical OpenRouter HTTP/PG test reproduced missing
+  verified credits after empty output (HTTP502). Preserve verified identities
+  on that error; never infer identities on pre-verification failures.
+  The parameterized E2E preserves success/error artifacts separately.
+- Receipts are controlled integrations, not live-provider acceptance.
+  Current app attachment inspection is unavailable; previous attachment
+  receipts cannot be independently reconfirmed in this repair session.
+- Engram mirror unavailable: no registered runtime session identity.
