@@ -1,3 +1,6 @@
+> Historical predecessor evidence: source 2a8a359. Current repair proof is in
+> the bounded follow-up PR; these receipts do not certify the modified error path.
+
 # Issue 454 — historical request attribution evidence
 
 Status: **implemented and locally verified; ready for independent human review**.
