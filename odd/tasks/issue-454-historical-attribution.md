@@ -472,5 +472,6 @@ All eleven drafts are attached. Backend CA1–CA11 verified;human review pending
 - Engram mirror unavailable: no registered runtime session identity.
 Malformed canonical identity also reproduced RED (1 failed, 2 controls passed);
 validate the model before credit propagation so the error remains structured.
-CI contracts hit the observed15-minute timeout; #570 now allows25minutes,
+CI contracts exceeded15minutes; tooling alone measured1700.52seconds.
+#570 now allows60minutes for tooling plus all-release validation,
 without removing release checks. Current hosted rerun is pending, not accepted.
