@@ -1,0 +1,176 @@
+"""Authorization and persistence guard acceptance for request attribution."""
+
+from uuid import UUID
+
+import psycopg
+import pytest
+from fastapi.testclient import TestClient
+from issue454_support import (
+    ADMIN,
+    AUDIT_KEY,
+    CONSUMER,
+    DATABASE_URL,
+    OUTPUT,
+    PROMPT,
+    RESTRICTED,
+    ControlledProvider,
+    auth,
+    read_item,
+)
+from issue454_support import (
+    clean_history as clean_history,
+)
+from issue454_support import migrated_database as migrated_database
+from sqlalchemy import event
+
+from sre_agent.application import create_application
+from sre_agent.settings import Settings
+
+
+def test_request_attribution_read_rejects_unauthorized_and_invalid_filters() -> None:
+    provider = ControlledProvider()
+    app = create_application(
+        Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY), llm_provider=provider
+    )
+    with TestClient(app, raise_server_exceptions=False) as client:
+        for headers, status in (({}, 401), (auth(RESTRICTED), 403)):
+            response = client.get(
+                "/v1/usage/requests",
+                params={"request_id": "00000000-0000-0000-0000-000000000001"},
+                headers=headers,
+            )
+            assert response.status_code == status
+            assert set(response.json()) == {"error", "request_id", "retryable"}
+            assert set(response.json()["error"]) == {"code", "message"}
+            assert response.json()["error"]["code"] == (
+                "authentication_failed" if status == 401 else "resource_unavailable"
+            )
+            assert str(UUID(response.json()["request_id"])) == response.json()["request_id"]
+            assert response.json()["retryable"] is False
+            assert "items" not in response.text and "request_count" not in response.text
+            assert "triage-agent" not in response.text and ADMIN not in response.text
+        for params in (
+            {},
+            {"request_id": "not-a-uuid"},
+            {"request_id": "00000000-0000-0000-0000-000000000001", "month": "2026-09"},
+            {"month": "2026-09", "unexpected": "private"},
+        ):
+            response = client.get("/v1/usage/requests", params=params, headers=auth(ADMIN))
+            assert response.status_code == 422
+            assert "items" not in response.text
+        denied_response = client.post(
+            "/v1/responses",
+            headers=auth(RESTRICTED),
+            json={"model": "triage-agent", "input": PROMPT},
+        )
+        assert denied_response.status_code == 403
+        assert provider.requests == []
+        with psycopg.connect(DATABASE_URL) as connection:
+            has_snapshot_table = connection.execute(
+                "SELECT to_regclass('public.request_attributions') IS NOT NULL"
+            ).fetchone()[0]
+            rows = (
+                connection.execute("SELECT count(*) FROM request_attributions").fetchone()[0]
+                if has_snapshot_table
+                else 0
+            )
+        assert rows == 0
+
+
+def test_snapshot_is_append_only_and_audit_failure_rolls_back_response_acceptance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = ControlledProvider()
+    app = create_application(
+        Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY), llm_provider=provider
+    )
+    with TestClient(app) as client:
+        success = client.post(
+            "/v1/responses", headers=auth(CONSUMER), json={"model": "triage-agent", "input": PROMPT}
+        )
+        assert success.status_code == 200, success.text
+        request_id = success.json()["request_id"]
+        item = read_item(client, request_id)
+
+        # Storage-level guards, not a mocked repository, must reject mutations.
+        with psycopg.connect(DATABASE_URL) as connection, pytest.raises(psycopg.Error):
+            connection.execute(
+                "UPDATE request_attributions SET request_id = request_id WHERE request_id = %s",
+                (request_id,),
+            )
+        with psycopg.connect(DATABASE_URL) as connection, pytest.raises(psycopg.Error):
+            connection.execute(
+                "DELETE FROM request_attributions WHERE request_id = %s", (request_id,)
+            )
+        assert read_item(client, request_id) == item
+
+        from sre_agent.persistence.repositories import AuditRepository
+
+        async def fail_audit_append(*_args: object, **_kwargs: object) -> None:
+            raise OSError("synthetic persistence failure")
+
+        monkeypatch.setattr(AuditRepository, "append", fail_audit_append)
+        failed = client.post(
+            "/v1/responses", headers=auth(CONSUMER), json={"model": "triage-agent", "input": PROMPT}
+        )
+        assert failed.status_code == 503
+        assert set(failed.json()) == {"error", "request_id", "retryable"}
+        assert PROMPT not in failed.text and OUTPUT not in failed.text
+        with psycopg.connect(DATABASE_URL) as connection:
+            assert (
+                connection.execute(
+                    "SELECT count(*) FROM request_attributions WHERE request_id = %s",
+                    (failed.json()["request_id"],),
+                ).fetchone()[0]
+                == 0
+            )
+
+
+def test_persisted_request_read_outage_is_not_successful_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = ControlledProvider()
+    app = create_application(
+        Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY), llm_provider=provider
+    )
+    database = app.state.database
+
+    def fail_snapshot_query(_conn: object, _cursor: object, statement: str, *_args: object) -> None:
+        if "request_attributions" in statement:
+            raise psycopg.OperationalError("controlled read outage")
+
+    event.listen(database.engine.sync_engine, "before_cursor_execute", fail_snapshot_query)
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/v1/usage/requests",
+                params={"request_id": "00000000-0000-0000-0000-000000004541"},
+                headers=auth(ADMIN),
+            )
+            assert response.status_code == 503
+            assert set(response.json()) == {"error", "request_id", "retryable"}
+            assert "items" not in response.text and "request_count" not in response.text
+    finally:
+        event.remove(database.engine.sync_engine, "before_cursor_execute", fail_snapshot_query)
+
+
+def test_repeated_selector_and_unknown_query_are_closed_errors() -> None:
+    app = create_application(Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY))
+    with TestClient(app) as client:
+        repeated = client.get(
+            "/v1/usage/requests",
+            params=[
+                ("request_id", "00000000-0000-0000-0000-000000004542"),
+                ("request_id", "00000000-0000-0000-0000-000000004543"),
+            ],
+            headers=auth(ADMIN),
+        )
+        unknown = client.get(
+            "/v1/usage/requests",
+            params={"request_id": "00000000-0000-0000-0000-000000004542", "trace": "secret"},
+            headers=auth(ADMIN),
+        )
+        assert repeated.status_code == unknown.status_code == 422
+        for response in (repeated, unknown):
+            assert set(response.json()) == {"error", "request_id", "retryable"}
+            assert "items" not in response.text and "trace" not in response.text
