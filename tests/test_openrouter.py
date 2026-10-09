@@ -320,6 +320,8 @@ async def test_create_confirms_dated_selected_model_against_the_endpoint_catalog
         await client.aclose()
 
     assert result.model == request.model and result.text == "Recovered service health."
+    assert getattr(result, "credited_model", None) == selected_model
+    assert getattr(result, "credited_provider", None) == request.provider
     assert [item.url.path for item in requests] == [
         "/api/v1/responses",
         "/api/v1/models/z-ai/glm-5.3-flash/endpoints",
