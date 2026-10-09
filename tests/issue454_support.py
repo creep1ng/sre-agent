@@ -1,9 +1,11 @@
 """Shared E2E fixtures and evidence builders for issue #454 acceptance tests."""
 
 import asyncio
+import json
 import os
 import threading
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 import psycopg
@@ -195,3 +197,28 @@ def persist_audit_events(events: list[object]) -> None:
             await database.dispose()
 
     asyncio.run(persist())
+
+
+def expected_assignment(assignment: dict) -> dict:
+    return {
+        "availability": "available",
+        "alias": assignment["alias"],
+        "model": assignment["concrete_model"],
+        "provider": assignment["inference_provider"],
+        "router": assignment["router"],
+    }
+
+
+def record_artifact(name: str, observed: dict) -> None:
+    """Persist only explicitly selected safe observations after successful E2E assertions."""
+    text = (
+        json.dumps(
+            {"scenario": name, "evidence_kind": "controlled integration", "observed": observed},
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
+    for sensitive in (PROMPT, OUTPUT, ADMIN, AUDIT_KEY, "test-only-openrouter-credential"):
+        assert sensitive not in text, "sensitive evidence refused"
+    Path(f"/tmp/issue454-e2e-{name}.json").write_text(text, encoding="utf-8")

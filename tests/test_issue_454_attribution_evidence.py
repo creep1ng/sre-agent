@@ -18,9 +18,11 @@ from issue454_support import (
     OUTPUT,
     PROMPT,
     ControlledProvider,
+    expected_assignment,
     historical_response_event,
     persist_audit_events,
     read_item,
+    record_artifact,
 )
 from issue454_support import (
     DATABASE_URL as DATABASE_URL,
@@ -66,9 +68,9 @@ def test_alias_change_while_provider_is_in_flight_keeps_invocation_snapshot() ->
 
         thread = threading.Thread(target=invoke)
         thread.start()
-        assert entered.wait(timeout=5), "provider invocation was not reached"
-        assert provider.requests[0].model == first_assignment["concrete_model"]
         try:
+            assert entered.wait(timeout=5), "provider invocation was not reached"
+            assert provider.requests[0].model == first_assignment["concrete_model"]
             changed = client.put(
                 "/v1/model-aliases/triage-agent/assignment",
                 headers=auth(ADMIN),
@@ -86,8 +88,16 @@ def test_alias_change_while_provider_is_in_flight_keeps_invocation_snapshot() ->
             response = result[0]
             assert response.status_code == 200, response.text
             item = read_item(client, response.json()["request_id"])
-            assert item["requested_assignment"]["model"] == first_assignment["concrete_model"]
+            assert item["requested_assignment"] == expected_assignment(first_assignment)
             assert item["requested_assignment"]["model"] != replacement["concrete_model"]
+            record_artifact(
+                "alias-race",
+                {
+                    "request_id": item["request_id"],
+                    "historical_assignment": item["requested_assignment"],
+                    "current_model": changed.json()["concrete_model"],
+                },
+            )
         finally:
             release.set()
             thread.join(timeout=10)
@@ -198,6 +208,15 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read() -> N
             assert (
                 secret not in repr(item) and OUTPUT not in repr(item) and PROMPT not in repr(item)
             )
+            record_artifact(
+                "canonical",
+                {
+                    "request_id": item["request_id"],
+                    "requested_model": item["requested_assignment"]["model"],
+                    "credited_model": item["credited_model"],
+                    "credited_provider": item["credited_provider"],
+                },
+            )
             Path("/tmp/issue454-canonical-adapter-artifact.json").write_text(
                 json.dumps(
                     {
@@ -233,7 +252,17 @@ def test_provider_timeout_records_assignment_but_no_credited_identity() -> None:
         assert item["credited_model"] == {"availability": "unavailable", "value": None}
         assert item["credited_provider"] == {"availability": "unavailable", "value": None}
         assert item["attribution_status"] == "partial"
-        assert item["consumption"] is None or item["consumption"]["availability"] == "unavailable"
+        assert item["consumption"]["availability"] == "unavailable"
+        record_artifact(
+            "timeout",
+            {
+                "http_status": response.status_code,
+                "attribution_status": item["attribution_status"],
+                "credited_model": item["credited_model"],
+                "credited_provider": item["credited_provider"],
+                "consumption_availability": item["consumption"]["availability"],
+            },
+        )
 
 
 def test_legacy_audit_without_snapshot_is_explicitly_legacy() -> None:
@@ -261,6 +290,14 @@ def test_legacy_audit_without_snapshot_is_explicitly_legacy() -> None:
         }
         assert item["credited_model"] == {"availability": "unavailable", "value": None}
         assert item["credited_provider"] == {"availability": "unavailable", "value": None}
+        record_artifact(
+            "legacy",
+            {
+                "request_id": item["request_id"],
+                "attribution_status": item["attribution_status"],
+                "requested_assignment": item["requested_assignment"],
+            },
+        )
 
 
 def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
@@ -291,6 +328,15 @@ def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
         assert january.json()["items"][0]["request_id"] == str(request_id)
         assert january.json()["items"][0]["month"] == "2000-01"
         assert february.json()["items"] == []
+        record_artifact(
+            "month-boundary",
+            {
+                "request_id": str(request_id),
+                "january_count": len(january.json()["items"]),
+                "canonical_month": january.json()["items"][0]["month"],
+                "february_count": len(february.json()["items"]),
+            },
+        )
 
 
 def test_append_only_injected_store_cannot_accept_invocation_without_snapshot() -> None:
@@ -319,10 +365,23 @@ def test_append_only_injected_store_cannot_accept_invocation_without_snapshot() 
         assert PROMPT not in response.text and OUTPUT not in response.text
         assert not writes, "non-atomic response audit must not be accepted on its own"
         with psycopg.connect(DATABASE_URL) as connection:
-            for query in (
-                "SELECT count(*) FROM request_attributions WHERE request_id = %s",
-                "SELECT count(*) FROM audit_events WHERE correlation->>'request_id' = %s",
+            counts = {}
+            for name, query in (
+                ("snapshots", "SELECT count(*) FROM request_attributions WHERE request_id = %s"),
+                (
+                    "audits",
+                    "SELECT count(*) FROM audit_events WHERE correlation->>'request_id' = %s",
+                ),
             ):
-                assert (
-                    connection.execute(query, (response.json()["request_id"],)).fetchone()[0] == 0
-                )
+                count = connection.execute(query, (response.json()["request_id"],)).fetchone()[0]
+                assert count == 0
+                counts[name] = count
+        record_artifact(
+            "append-only-store",
+            {
+                "http_status": response.status_code,
+                "error": response.json()["error"]["code"],
+                "standalone_writes": len(writes),
+                "persisted_counts": counts,
+            },
+        )

@@ -18,6 +18,7 @@ from issue454_support import (
     ControlledProvider,
     auth,
     read_item,
+    record_artifact,
 )
 from issue454_support import (
     clean_history as clean_history,
@@ -42,12 +43,13 @@ def test_request_attribution_read_rejects_unauthorized_and_invalid_filters() -> 
             Path("schemas/releases/2.8.0/json-schema/http/error-envelope.schema.json").read_text()
         )
         registry = Registry().with_resource(error["$id"], Resource.from_contents(error))
-        denied = client.get("/v1/audit-events", params={"request_id": str(UUID(int=1))})
-        assert denied.status_code == 401
-        schema = runtime["paths"]["/v1/audit-events"]["get"]["responses"]["401"]["content"][
-            "application/json"
-        ]["schema"]
-        Draft202012Validator(schema, registry=registry).validate(denied.json())
+        for path in ("/v1/audit-events", "/v1/usage/requests"):
+            denied = client.get(path, params={"request_id": str(UUID(int=1))})
+            assert denied.status_code == 401
+            schema = runtime["paths"][path]["get"]["responses"]["401"]["content"][
+                "application/json"
+            ]["schema"]
+            Draft202012Validator(schema, registry=registry).validate(denied.json())
         for headers, status in (({}, 401), (auth(RESTRICTED), 403)):
             response = client.get(
                 "/v1/usage/requests",
@@ -90,6 +92,14 @@ def test_request_attribution_read_rejects_unauthorized_and_invalid_filters() -> 
                 else 0
             )
         assert rows == 0
+        record_artifact(
+            "denied-read",
+            {
+                "request_status": denied_response.status_code,
+                "provider_calls": len(provider.requests),
+                "snapshot_count": rows,
+            },
+        )
 
 
 def test_snapshot_is_append_only_and_audit_failure_rolls_back_response_acceptance(
@@ -151,6 +161,23 @@ def test_snapshot_is_append_only_and_audit_failure_rolls_back_response_acceptanc
                 ).fetchone()[0]
                 == 0
             )
+            audit_count = connection.execute(
+                "SELECT count(*) FROM audit_events WHERE event_id = ANY(%s)", (appended,)
+            ).fetchone()[0]
+            snapshot_count = connection.execute(
+                "SELECT count(*) FROM request_attributions WHERE request_id = %s",
+                (failed.json()["request_id"],),
+            ).fetchone()[0]
+        record_artifact(
+            "post-insert-rollback",
+            {
+                "failure_status": failed.status_code,
+                "inserted_before_failure": len(appended),
+                "audit_survivors": audit_count,
+                "snapshot_survivors": snapshot_count,
+                "historical_item_after_rejected_mutations": item["requested_assignment"],
+            },
+        )
 
 
 def test_persisted_request_read_outage_is_not_successful_empty(
@@ -177,6 +204,10 @@ def test_persisted_request_read_outage_is_not_successful_empty(
             assert response.status_code == 503
             assert set(response.json()) == {"error", "request_id", "retryable"}
             assert "items" not in response.text and "request_count" not in response.text
+            record_artifact(
+                "storage-outage",
+                {"http_status": response.status_code, "error": response.json()["error"]["code"]},
+            )
     finally:
         event.remove(database.engine.sync_engine, "before_cursor_execute", fail_snapshot_query)
 
@@ -197,7 +228,23 @@ def test_repeated_selector_and_unknown_query_are_closed_errors() -> None:
             params={"request_id": "00000000-0000-0000-0000-000000004542", "trace": "secret"},
             headers=auth(ADMIN),
         )
-        assert repeated.status_code == unknown.status_code == 422
-        for response in (repeated, unknown):
+        body = client.request(
+            "GET",
+            "/v1/usage/requests",
+            headers=auth(ADMIN),
+            params={"request_id": "00000000-0000-0000-0000-000000004542"},
+            json={"unsupported": "synthetic-read-content"},
+        )
+        assert repeated.status_code == unknown.status_code == body.status_code == 422
+        for response in (repeated, unknown, body):
             assert set(response.json()) == {"error", "request_id", "retryable"}
             assert "items" not in response.text and "trace" not in response.text
+        record_artifact(
+            "closed-read",
+            {
+                "repeated_status": repeated.status_code,
+                "unknown_status": unknown.status_code,
+                "body_status": body.status_code,
+                "body_error": body.json(),
+            },
+        )

@@ -225,3 +225,28 @@ components:
                       properties: { availability: { const: unavailable } }
                     credited_provider:
                       properties: { availability: { const: unavailable } }
+              - if:
+                  properties:
+                    attribution_status: { const: partial }
+                then:
+                  properties:
+                    requested_assignment:
+                      properties: { availability: { const: available } }
+                  anyOf:
+                    - properties:
+                        credited_model:
+                          properties: { availability: { const: unavailable } }
+                    - properties:
+                        credited_provider:
+                          properties: { availability: { const: unavailable } }
+              - if:
+                  properties:
+                    attribution_status: { const: unavailable }
+                then:
+                  properties:
+                    requested_assignment:
+                      properties: { availability: { const: unavailable } }
+                    credited_model:
+                      properties: { availability: { const: unavailable } }
+                    credited_provider:
+                      properties: { availability: { const: unavailable } }
