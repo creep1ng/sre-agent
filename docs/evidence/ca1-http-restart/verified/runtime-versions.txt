@@ -1,0 +1,4 @@
+Python 3.12.14
+PostgreSQL 17.4 on x86_64-pc-linux-musl, compiled by gcc (Alpine 14.2.0) 14.2.0, 64-bit
+Docker client 29.8.2 server 29.8.2
+Docker Compose version 5.6.0

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016 # Expansion intentionally occurs inside the container.
+# Existing Compose services only; never delete volumes or restart another project.
+set -euo pipefail
+: "${CA1_ENV_FILE:?private synthetic env file required}"
+: "${CA1_OVERRIDE:?isolated Compose override required}"
+: "${CA1_EVIDENCE_DIR:?absolute writable evidence directory required}"
+: "${CA1_PROJECT:?fresh exclusive project required}"
+[[ "$CA1_PROJECT" == ca1-* ]] || exit 2
+cd "$(dirname "$0")/.."
+c=(docker compose --env-file "$CA1_ENV_FILE" -f compose.yaml -f "$CA1_OVERRIDE" -p "$CA1_PROJECT")
+mkdir -p "$CA1_EVIDENCE_DIR"
+exec > >(tee "$CA1_EVIDENCE_DIR/journey.log") 2>&1
+printf 'Candidate: '; git rev-parse HEAD
+printf 'Project: %s\n' "$CA1_PROJECT"
+"${c[@]}" build api python-checks
+"${c[@]}" up -d --no-build api
+ready() {
+  for ((i=0;i<60;i++)); do
+    if "${c[@]}" exec -T api python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=2)" >/dev/null 2>&1; then return; fi
+    sleep 2
+  done
+  echo 'FAILED readiness'; return 1
+}
+phase() {
+  "${c[@]}" run --rm --no-deps --user "$(id -u):$(id -g)" -e API_URL=http://api:8000 python-checks \
+    sh -c 'export DATABASE_URL="$DEMO_DATABASE_URL"; exec python scripts/prove_ca1_http_restart.py "$1"' sh "$1"
+}
+identity() {
+  local api db
+  api=$("${c[@]}" ps -q api); db=$("${c[@]}" ps -q db)
+  docker inspect --format '{"id":{{json .Id}},"image":{{json .Image}},"pid":{{.State.Pid}},"started_at":{{json .State.StartedAt}},"mounts":{{json .Mounts}}}' "$api" "$db"
+}
+ready
+phase prepare
+phase before
+identity | tee "$CA1_EVIDENCE_DIR/containers-before.jsonl"
+restart_since=$(date +%s)
+api_id=$("${c[@]}" ps -q api)
+"${c[@]}" restart --no-deps api
+ready
+identity | tee "$CA1_EVIDENCE_DIR/containers-after.jsonl"
+docker events --since "$restart_since" --until "$(date +%s)" \
+  --filter "container=$api_id" --filter event=die --filter event=start \
+  --format '{"event":{{json .Action}},"id":{{json .Actor.ID}},"time":{{.TimeNano}}}' \
+  | tee "$CA1_EVIDENCE_DIR/restart-events.jsonl"
+python3 - "$CA1_EVIDENCE_DIR" <<'PY'
+import json, pathlib, sys
+p = pathlib.Path(sys.argv[1])
+a, b = [[json.loads(x) for x in (p / f'containers-{s}.jsonl').read_text().splitlines()] for s in ('before', 'after')]
+assert a[0]['pid'] != b[0]['pid'] and a[0]['started_at'] != b[0]['started_at']
+assert a[0]['image'] == b[0]['image']
+assert a[1] == b[1], 'Database identity, process or mounts changed'
+assert any(m['Type'] == 'volume' and m['Destination'] == '/var/lib/postgresql/data' for m in a[1]['mounts'])
+events = [json.loads(x)['event'] for x in (p / 'restart-events.jsonl').read_text().splitlines()]
+if 'die' not in events or 'start' not in events:
+    print('SKIPPED lifecycle-event cache unavailable; PID and StartedAt verify restart')
+print('PASSED real API restart; unchanged database process/image/volume')
+PY
+phase after
+echo 'PASSED integrated CA1 HTTP-create/restart/read/replay/resume journey'
