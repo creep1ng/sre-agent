@@ -78,7 +78,7 @@ evidence is not a paid/live external call; hosted CI is not human acceptance.
   sanitized actual screenshot, exact SHA/environment/preparation/commands and
   expected-vs-observed matrix. Clearly identify controlled provider and pending
   independent human review. Checks: repeat reproduction and inspect artifacts.
-- [x] **A454-7 — Prepare review-ready draft delivery.**
+- [ ] **A454-7 — Prepare review-ready draft delivery.**
   Cohesive PRs within size policy or explicit exception; Refs #454/143 only.
   Request Codex GitHub code review for every PR, fix P0/P1, check candidate/CI and
   attach PRs. No merge/closure or invented human acceptance. Checks: remote readback.
@@ -447,5 +447,6 @@ Consumer gaps preauthored5ae7e37 before fix2b79302,RED2/GREEN63;UUID P1 false
 CA1–CA11 matrix:docs/evidence/issue-454-historical-attribution.md;drafts569–577
 plus bounded evidence/tracking follow-ups. Sole size exception570;no UI143,
 merge,closure or human acceptance. Source scope verified;humanreview pending.
-Engram mirror unavailable (unregistered runtime identity). App attach577 attempted
-but not confirmed after tool hang;new draft attachment calls still required.
+Engram mirror unavailable (unregistered runtime identity). App attachments577–579
+were called but remain unconfirmed after timeouts;A454-7 stays open for that
+platform-only confirmation. Backend CA1–CA11 are verified/reviewable on GitHub.

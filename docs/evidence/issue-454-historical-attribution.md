@@ -39,7 +39,12 @@ docker compose --env-file .env --env-file .env.worktree --profile checks run --n
 docker compose --env-file .env --env-file .env.worktree --profile checks run --no-deps --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_issue_454_attribution_evidence.py::test_canonical_openrouter_evidence_survives_http_persistence_and_read && cat /tmp/issue454-canonical-adapter-artifact.json' > /tmp/issue454-canonical-proof.log
 docker compose --env-file .env --env-file .env.worktree --profile checks run --no-deps --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_issue_454_attribution_evidence.py tests/test_issue_454_attribution_guards.py && for artifact in /tmp/issue454-e2e-*.json; do cat "$artifact"; done' > /tmp/issue454-scenario-proof.log
 docker compose --env-file .env --env-file .env.worktree --profile checks run --build --no-deps --rm harness sh -c 'npm --prefix schemas/tooling test && npm --prefix schemas/tooling run validate:releases && node schemas/tooling/release.mjs conformance --consumer issue-454 --release 2.8.0'
+docker compose --env-file .env --env-file .env.worktree --profile checks stop python-checks-db
+docker compose --env-file .env --env-file .env.worktree --profile checks rm -f python-checks-db
 ```
+
+Cleanup stops/removes only the isolated checks DB; preserve the shared project
+network so unrelated services are not affected. Repeated runs reuse that network.
 
 On the tested host only, Docker's default pools were exhausted. The optional local
 `/tmp/sre-agent-issue454-network.yaml` had the exact public contents below; select
