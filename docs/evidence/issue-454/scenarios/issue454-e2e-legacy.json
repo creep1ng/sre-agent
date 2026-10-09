@@ -1,0 +1,15 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "attribution_status": "legacy",
+    "request_id": "00000000-0000-0000-0000-000000004540",
+    "requested_assignment": {
+      "alias": null,
+      "availability": "unavailable",
+      "model": null,
+      "provider": null,
+      "router": null
+    }
+  },
+  "scenario": "legacy"
+}
