@@ -78,7 +78,7 @@ evidence is not a paid/live external call; hosted CI is not human acceptance.
   sanitized actual screenshot, exact SHA/environment/preparation/commands and
   expected-vs-observed matrix. Clearly identify controlled provider and pending
   independent human review. Checks: repeat reproduction and inspect artifacts.
-- [x] **A454-7 — Prepare review-ready draft delivery.**
+- [ ] **A454-7 — Prepare review-ready delivery (current readback pending).**
   Cohesive PRs within size policy or explicit exception; Refs #454/143 only.
   Request Codex GitHub code review for every PR, fix P0/P1, check candidate/CI and
   attach PRs. No merge/closure or invented human acceptance. Checks: remote readback.
