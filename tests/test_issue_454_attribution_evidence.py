@@ -230,10 +230,15 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
                 secret not in repr(item) and OUTPUT not in repr(item) and PROMPT not in repr(item)
             )
             record_artifact(
-                "canonical-empty-output" if empty_output else "canonical",
+                "canonical-invalid-model"
+                if not valid_model
+                else "canonical-empty-output"
+                if empty_output
+                else "canonical",
                 {
                     "http_status": created.status_code,
                     "empty_output": empty_output,
+                    "valid_model": valid_model,
                     "request_id": item["request_id"],
                     "requested_model": item["requested_assignment"]["model"],
                     "credited_model": item["credited_model"],
