@@ -110,11 +110,10 @@ def test_alias_change_while_provider_is_in_flight_keeps_invocation_snapshot() ->
                 assert restored.status_code == 200, restored.text
 
 
-@pytest.mark.parametrize(
-    "empty_output, valid_model", [(False, True), (True, True), (False, False)]
-)
+@pytest.mark.parametrize("empty_output, valid_model", [(False, True), (True, True), (False, False)])
 def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
-    empty_output: bool, valid_model: bool,
+    empty_output: bool,
+    valid_model: bool,
 ) -> None:
     """Controlled OpenRouter HTTP metadata flows through DB into the request read."""
     requested = "openai/gpt-4o-mini"
@@ -193,9 +192,9 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
                 headers=auth(CONSUMER),
                 json={"model": "triage-agent", "input": PROMPT},
             )
-            assert created.status_code == (
-                502 if empty_output or not valid_model else 200
-            ), created.text
+            assert created.status_code == (502 if empty_output or not valid_model else 200), (
+                created.text
+            )
             request_id = created.json()["request_id"]
             # Public response keeps requested model identity; credit is separate evidence.
             if empty_output or not valid_model:
