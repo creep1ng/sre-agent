@@ -193,7 +193,9 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
                 headers=auth(CONSUMER),
                 json={"model": "triage-agent", "input": PROMPT},
             )
-            assert created.status_code == (502 if empty_output or not valid_model else 200), created.text
+            assert created.status_code == (
+                502 if empty_output or not valid_model else 200
+            ), created.text
             request_id = created.json()["request_id"]
             # Public response keeps requested model identity; credit is separate evidence.
             if empty_output or not valid_model:
