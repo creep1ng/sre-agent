@@ -117,10 +117,15 @@ class OpenRouterProvider:
                 failure.kind,
                 retry_after=failure.retry_after,
                 consumption=_failure_consumption(body),
+                credited_model=selected_model,
+                credited_provider=request.provider,
             ) from None
         except ValidationError:
             raise ProviderFailure(
-                "invalid_response", consumption=_failure_consumption(body)
+                "invalid_response",
+                consumption=_failure_consumption(body),
+                credited_model=selected_model,
+                credited_provider=request.provider,
             ) from None
 
     async def _catalog_confirms_selected_model(
