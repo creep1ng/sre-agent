@@ -106,17 +106,29 @@ def test_snapshot_is_append_only_and_audit_failure_rolls_back_response_acceptanc
 
         from sre_agent.persistence.repositories import AuditRepository
 
-        async def fail_audit_append(*_args: object, **_kwargs: object) -> None:
-            raise OSError("synthetic persistence failure")
+        original_append = AuditRepository.append
+        appended: list[str] = []
 
-        monkeypatch.setattr(AuditRepository, "append", fail_audit_append)
+        async def fail_after_audit_append(repository, audit_event) -> None:
+            await original_append(repository, audit_event)
+            appended.append(str(audit_event.event_id))
+            raise OSError("synthetic failure after real audit insert and flush")
+
+        monkeypatch.setattr(AuditRepository, "append", fail_after_audit_append)
         failed = client.post(
             "/v1/responses", headers=auth(CONSUMER), json={"model": "triage-agent", "input": PROMPT}
         )
         assert failed.status_code == 503
+        assert appended, "the controlled failure must occur after a real audit insert"
         assert set(failed.json()) == {"error", "request_id", "retryable"}
         assert PROMPT not in failed.text and OUTPUT not in failed.text
         with psycopg.connect(DATABASE_URL) as connection:
+            assert (
+                connection.execute(
+                    "SELECT count(*) FROM audit_events WHERE event_id = ANY(%s)", (appended,)
+                ).fetchone()[0]
+                == 0
+            )
             assert (
                 connection.execute(
                     "SELECT count(*) FROM request_attributions WHERE request_id = %s",
