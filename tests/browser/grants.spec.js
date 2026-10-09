@@ -37,6 +37,7 @@ function principalsPayload() {
   return {
     items: [
       { principal_id: "admin-human", kind: "human", display_name: "Admin human", status: "active" },
+      { principal_id: "demo-human", kind: "human", display_name: "Demo human", status: "active" },
       { principal_id: "incident-harness", kind: "agent", display_name: "Incident harness", status: "active" },
       { principal_id: "retired-harness", kind: "agent", display_name: "Retired", status: "inactive" },
     ],
@@ -49,7 +50,11 @@ function catalogPayload() {
   // Real contract shape: the catalog never enumerates administrative_control
   // (CatalogRepository.CATALOG_TYPES excludes it), so this fixture contains
   // only catalog types. Seeded admin resources reach the create form through
-  // the page's manual seeded-admin options, asserted below.
+  // the page's manual seeded-admin options, asserted below. Resource
+  // identities below reuse real contract data: triage-agent (seeds routing),
+  // grafana-mcp/query-prometheus (mcp/owner.py), demo-incident-response@1.0.0
+  // (bok/owner.py DEMO_BUNDLES), incident-response (incident/workflow.py +
+  // agent/api/authorization.v1.yaml), demo-skill@1.0.0 (skill id@version shape).
   return {
     items: [
       {
@@ -74,11 +79,70 @@ function catalogPayload() {
         source_ref: "retired-model",
         discoverability: { display_name: "Retired model", visibility: "private", description: "", tags: [] },
       },
+      {
+        resource_type: "mcp_server",
+        resource_id: "grafana-mcp",
+        owner_id: "mcp-platform",
+        status: "active",
+        source: "mcp",
+        source_ref: "grafana-mcp",
+        discoverability: { display_name: "Grafana MCP", visibility: "private", description: "", tags: [] },
+      },
+      {
+        resource_type: "mcp_tool",
+        resource_id: "query-prometheus",
+        owner_id: "mcp-platform",
+        status: "active",
+        source: "mcp",
+        source_ref: "query-prometheus",
+        discoverability: { display_name: "Query prometheus", visibility: "private", description: "", tags: [] },
+      },
+      {
+        resource_type: "skill",
+        resource_id: "demo-skill@1.0.0",
+        owner_id: "admin-human",
+        status: "active",
+        source: "skill",
+        source_ref: "demo-skill@1.0.0",
+        discoverability: { display_name: "Demo skill", visibility: "private", description: "", tags: [] },
+      },
+      {
+        resource_type: "bok_collection",
+        resource_id: "demo-incident-response@1.0.0",
+        owner_id: "bok-platform",
+        status: "active",
+        source: "bok",
+        source_ref: "demo-incident-response@1.0.0",
+        discoverability: { display_name: "Incident Response Basics", visibility: "private", description: "", tags: [] },
+      },
+      {
+        resource_type: "incident_workflow",
+        resource_id: "incident-response",
+        owner_id: "papiarcacamilo",
+        status: "active",
+        source: "incident_workflow",
+        source_ref: "incident-response@1.0.0",
+        discoverability: { display_name: "Incident response workflow", visibility: "private", description: "", tags: [] },
+      },
     ],
     limit: 100,
     truncated: false,
   };
 }
+
+// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:342-352.
+// The browser spec asserts the page offers exactly these per-type sets.
+const EXPECTED_ADMITTED_ACTIONS = {
+  "llm_model": ["admin.read", "admin.write", "invoke"],
+  "mcp_server": ["admin.write", "mcp.discovery", "mcp.invoke"],
+  "mcp_tool": ["admin.write", "mcp.discovery", "mcp.invoke"],
+  "skill": ["admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"],
+  "bok_collection": ["admin.write", "bok.discovery", "bok.search", "bok.read"],
+  "incident_workflow": ["run.start", "run.read", "run.command", "run.approve", "run.read_context"],
+  "administrative_control": ["admin.read", "admin.write"],
+};
+
+const REJECTED_LEGACY_ACTIONS = ["authenticate", "export", "persist", "read_metadata", "redact"];
 
 const SEEDED_ADMIN_RESOURCE_VALUES = [
   "administrative_control/principals",
@@ -381,22 +445,23 @@ async function connectWithGrantRoutes(page, postStatus) {
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(catalogPayload()) }),
   );
   const posted = [];
-  let createdSeen = false;
+  let createdBody = null;
   const createdGrant = () =>
     grantItem({
-      grant_id: "grant-incident-harness-invoke-triage-agent",
-      principal_id: "incident-harness",
-      action: "invoke",
-      resource: { resource_type: "llm_model", resource_id: "triage-agent" },
+      grant_id: createdBody?.grant_id ?? "grant-incident-harness-invoke-triage-agent",
+      principal_id: createdBody?.principal_id ?? "incident-harness",
+      action: createdBody?.action ?? "invoke",
+      resource: createdBody?.resource ?? { resource_type: "llm_model", resource_id: "triage-agent" },
     });
   await page.route("**/api/v1/grants**", async (route) => {
     if (route.request().method() === "POST") {
+      const body = JSON.parse(route.request().postData() ?? "{}");
       posted.push({
-        body: JSON.parse(route.request().postData() ?? "{}"),
+        body,
         idempotencyKey: await route.request().headerValue("idempotency-key"),
       });
       if (postStatus === 201) {
-        createdSeen = true;
+        createdBody = body;
         await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify(createdGrant()) });
       } else {
         await route.fulfill({
@@ -410,13 +475,19 @@ async function connectWithGrantRoutes(page, postStatus) {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(grantPayload(createdSeen ? [createdGrant()] : [])),
+      body: JSON.stringify(grantPayload(createdBody ? [createdGrant()] : [])),
     });
   });
   await page.fill("#api-key", "sre_s1_placeholder_key_for_seam_fulfillment");
   await page.click("#connect-button");
   await expect(page.locator("#create-grant-button")).toBeEnabled();
   return { posted };
+}
+
+async function actionOptions(page) {
+  return page.locator("#create-action option").evaluateAll((options) =>
+    options.map((option) => option.value).filter((value) => value !== ""),
+  );
 }
 
 test("create flow posts a real grant body, announces 201 and refreshes without reload", async ({ page }) => {
@@ -434,13 +505,21 @@ test("create flow posts a real grant body, announces 201 and refreshes without r
   }
   await expect(page.locator("#create-resource option[value='administrative_control/grants'][data-manual-source='seeded-admin-resource']")).toHaveCount(1);
   await expect(page.locator("#create-resource option[value='llm_model/retired-model']")).toHaveCount(0);
-  await expect(page.locator("#create-action option")).toHaveCount(8);
   await page.click("#create-grant-button");
   await expect(page.locator("#create-dialog")).toBeVisible();
+  // Per-type selector: with no resource chosen the action select offers no
+  // admitted action and blocks submit until a resource is picked.
+  expect(await actionOptions(page)).toEqual([]);
   await page.fill("#create-grant-id", "grant-incident-harness-invoke-triage-agent");
   await page.selectOption("#create-principal", "incident-harness");
-  await page.selectOption("#create-action", "invoke");
   await page.selectOption("#create-resource", "llm_model/triage-agent");
+  // llm_model admits exactly admin.read/admin.write/invoke; the legacy flat
+  // actions (authenticate/export/persist/read_metadata/redact) are absent.
+  expect(await actionOptions(page)).toEqual(EXPECTED_ADMITTED_ACTIONS["llm_model"]);
+  for (const rejected of REJECTED_LEGACY_ACTIONS) {
+    await expect(page.locator(`#create-action option[value='${rejected}']`)).toHaveCount(0);
+  }
+  await page.selectOption("#create-action", "invoke");
   await page.click("#create-submit");
   await expect(page.locator("#live-region")).toContainText(
     "Grant grant-incident-harness-invoke-triage-agent ready (201 created or stable replay).",
@@ -468,10 +547,11 @@ test("duplicate grant keeps the dialog with 409 wording and adds no row", async 
   await expect(page.locator("#create-dialog")).toBeVisible();
   await page.fill("#create-grant-id", "grant-admin-human-admin-read-grants");
   await page.selectOption("#create-principal", "admin-human");
-  await page.selectOption("#create-action", "admin.read");
   // administrative_control/grants comes from the manual seeded-admin options
   // (the catalog fixture carries no administrative_control entry).
   await page.selectOption("#create-resource", "administrative_control/grants");
+  expect(await actionOptions(page)).toEqual(EXPECTED_ADMITTED_ACTIONS["administrative_control"]);
+  await page.selectOption("#create-action", "admin.read");
   await page.click("#create-submit");
   await expect(page.locator("#create-error-title")).toHaveText("Grant already exists (409 duplicate)");
   await expect(page.locator("#create-dialog")).toBeVisible();
@@ -525,8 +605,9 @@ test("create then revoke keeps the same filter and the revoked row", async ({ pa
   await page.click("#create-grant-button");
   await page.fill("#create-grant-id", "grant-incident-harness-invoke-triage-agent");
   await page.selectOption("#create-principal", "incident-harness");
-  await page.selectOption("#create-action", "invoke");
   await page.selectOption("#create-resource", "llm_model/triage-agent");
+  expect(await actionOptions(page)).toEqual(EXPECTED_ADMITTED_ACTIONS["llm_model"]);
+  await page.selectOption("#create-action", "invoke");
   await page.click("#create-submit");
   const row = page.locator("[data-grant-row='grant-incident-harness-invoke-triage-agent']");
   await expect(row).toContainText("active");
@@ -547,4 +628,51 @@ test("create then revoke keeps the same filter and the revoked row", async ({ pa
   if (process.env.GRANTS_INTEGRATED_CAPTURE) {
     await page.screenshot({ path: process.env.GRANTS_INTEGRATED_CAPTURE, fullPage: true });
   }
+});
+
+test("action selector rebuilds per resource type and creates run.* on incident_workflow", async ({ page }) => {
+  const { posted } = await connectWithGrantRoutes(page, 201);
+  const cases = [
+    ["llm_model/triage-agent", EXPECTED_ADMITTED_ACTIONS["llm_model"]],
+    ["mcp_server/grafana-mcp", EXPECTED_ADMITTED_ACTIONS["mcp_server"]],
+    ["mcp_tool/query-prometheus", EXPECTED_ADMITTED_ACTIONS["mcp_tool"]],
+    ["skill/demo-skill@1.0.0", EXPECTED_ADMITTED_ACTIONS["skill"]],
+    ["bok_collection/demo-incident-response@1.0.0", EXPECTED_ADMITTED_ACTIONS["bok_collection"]],
+    ["incident_workflow/incident-response", EXPECTED_ADMITTED_ACTIONS["incident_workflow"]],
+    ["administrative_control/grants", EXPECTED_ADMITTED_ACTIONS["administrative_control"]],
+  ];
+  await page.click("#create-grant-button");
+  await expect(page.locator("#create-dialog")).toBeVisible();
+  for (const [resourceValue, expected] of cases) {
+    await page.selectOption("#create-resource", resourceValue);
+    expect(await actionOptions(page)).toEqual(expected);
+    for (const rejected of REJECTED_LEGACY_ACTIONS) {
+      await expect(page.locator(`#create-action option[value='${rejected}']`)).toHaveCount(0);
+    }
+  }
+  // incident_workflow offers zero legacy actions and only the five run.* actions;
+  // bare invoke and admin.read are absent so a non-admitted combo cannot be picked.
+  await page.selectOption("#create-resource", "incident_workflow/incident-response");
+  await expect(page.locator("#create-action option[value='invoke']")).toHaveCount(0);
+  await expect(page.locator("#create-action option[value='admin.read']")).toHaveCount(0);
+  await expect(page.locator("#create-action option[value='run.start']")).toHaveCount(1);
+  await page.fill("#create-grant-id", "grant-demo-human-run-start-incident-response");
+  await page.selectOption("#create-principal", "demo-human");
+  await page.selectOption("#create-action", "run.start");
+  if (process.env.GRANTS_PER_TYPE_CAPTURE) {
+    await page.screenshot({ path: process.env.GRANTS_PER_TYPE_CAPTURE, fullPage: true });
+  }
+  await page.click("#create-submit");
+  await expect(page.locator("#live-region")).toContainText(
+    "Grant grant-demo-human-run-start-incident-response ready (201 created or stable replay).",
+  );
+  await expect(page.locator("[data-grant-row='grant-demo-human-run-start-incident-response']")).toHaveCount(1);
+  expect(posted).toHaveLength(1);
+  expect(posted[0].body).toEqual({
+    grant_id: "grant-demo-human-run-start-incident-response",
+    principal_id: "demo-human",
+    action: "run.start",
+    resource: { resource_type: "incident_workflow", resource_id: "incident-response" },
+    effect: "allow",
+  });
 });

@@ -42,10 +42,21 @@ const revokeErrorDetail = document.getElementById("revoke-error-detail");
 const revokeSubmit = document.getElementById("revoke-submit");
 const revokeCancel = document.getElementById("revoke-cancel");
 
-// Action selector is a frontend-only guide from the audit action vocabulary;
-// the backend admits only exact per-type actions (#480 matrix), so unknown
-// selections fail closed with 422 and nothing is created.
-const GRANT_ACTIONS = new Set(["authenticate", "export", "invoke", "persist", "read_metadata", "redact", "admin.read", "admin.write"]);
+// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:342-352 (#480).
+// Frontend-only guide: the backend admits only these exact per-type actions
+// and rejects anything else with 422 without mutation. Keep in sync manually;
+// drift mitigation: tests/browser/grants.spec.js asserts the exact per-type
+// sets below, and live per-type 201 probes fail if this mirror drifts.
+// Bare `invoke` is kept only where the backend admits it (llm_model, skill).
+const GRANT_ADMITTED_ACTIONS = {
+  llm_model: ["admin.read", "admin.write", "invoke"],
+  mcp_server: ["admin.write", "mcp.discovery", "mcp.invoke"],
+  mcp_tool: ["admin.write", "mcp.discovery", "mcp.invoke"],
+  skill: ["admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"],
+  bok_collection: ["admin.write", "bok.discovery", "bok.search", "bok.read"],
+  incident_workflow: ["run.start", "run.read", "run.command", "run.approve", "run.read_context"],
+  administrative_control: ["admin.read", "admin.write"],
+};
 // Seeded administrative-control resources (mirrors seeds.ADMIN_RESOURCES).
 // The catalog never enumerates administrative_control by design
 // (CatalogRepository.CATALOG_TYPES excludes it), so the catalog response alone
@@ -133,10 +144,45 @@ function showCreateError(error) {
   announce(`${title}. ${detail}`);
 }
 
+function selectedCreateResourceType() {
+  const selected = createResource.selectedOptions[0];
+  const datasetType = text(selected?.dataset.resourceType);
+  if (datasetType) return datasetType;
+  const raw = createResource.value;
+  const slash = raw.indexOf("/");
+  return slash > 0 ? raw.slice(0, slash) : "";
+}
+
+function admittedActionsFor(resourceType) {
+  return GRANT_ADMITTED_ACTIONS[resourceType] ?? [];
+}
+
+function rebuildActionOptions() {
+  const resourceType = selectedCreateResourceType();
+  const admitted = admittedActionsFor(resourceType);
+  const previous = createAction.value;
+  createAction.replaceChildren();
+  if (admitted.length === 0) {
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Select a resource first…";
+    createAction.append(placeholder);
+    createAction.value = "";
+    return;
+  }
+  for (const action of admitted) {
+    const option = document.createElement("option");
+    option.value = action;
+    option.textContent = action;
+    createAction.append(option);
+  }
+  createAction.value = admitted.includes(previous) ? previous : admitted[0];
+}
+
 function resetCreateOptions() {
   resetOptions(createPrincipal, "Select an active principal…");
   resetOptions(createResource, "Select an active resource…");
-  createAction.value = "invoke";
+  rebuildActionOptions();
 }
 
 function closeCreateDialog() {
@@ -153,7 +199,6 @@ function validateCreateFields() {
   const problems = [];
   const idOk = GRANT_ID_RE.test(grantId);
   const principalOk = principalId.length > 0;
-  const actionOk = GRANT_ACTIONS.has(action);
   let resourceType = text(selectedResource?.dataset.resourceType);
   let resourceId = text(selectedResource?.dataset.resourceId);
   if (!resourceType || !resourceId) {
@@ -164,6 +209,10 @@ function validateCreateFields() {
       resourceId = raw.slice(slash + 1);
     }
   }
+  // Defense in depth: the UI only offers admitted actions per resource type,
+  // and validation rejects anything outside that admitted set so a
+  // non-admitted combo can never be submitted. The backend still returns 422.
+  const actionOk = admittedActionsFor(resourceType).includes(action);
   const resourceOk = resourceType.length > 0 && resourceId.length > 0;
   createGrantId.setAttribute("aria-invalid", String(!idOk));
   createPrincipal.setAttribute("aria-invalid", String(!principalOk));
@@ -565,12 +614,19 @@ revokeForm.addEventListener("submit", async (event) => {
   }
 });
 
+createResource.addEventListener("change", () => {
+  rebuildActionOptions();
+  createResource.removeAttribute("aria-invalid");
+  createAction.removeAttribute("aria-invalid");
+});
+
 createButton.addEventListener("click", () => {
   hideCreateError();
   createGrantId.removeAttribute("aria-invalid");
   createPrincipal.removeAttribute("aria-invalid");
   createAction.removeAttribute("aria-invalid");
   createResource.removeAttribute("aria-invalid");
+  rebuildActionOptions();
   if (!createInFlight) {
     pendingIdempotencyKey = null;
     pendingCreateBodyKey = null;
@@ -620,6 +676,7 @@ createForm.addEventListener("submit", async (event) => {
     const createdId = text(created?.grant_id) || checked.body.grant_id;
     createDialog.close();
     createForm.reset();
+    rebuildActionOptions();
     pendingIdempotencyKey = null;
     pendingCreateBodyKey = null;
     // POST alone never proves success; only the authoritative refresh does.
