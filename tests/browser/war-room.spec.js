@@ -62,6 +62,61 @@ function snapshotPayload(version = 4) {
   };
 }
 
+function kindsPage() {
+  // Synthetic correlation identifiers: the contract requires a UUID
+  // request_id (never null) on human_command and denial events, while other
+  // kinds keep the historical null. These stay mocked transport fixtures.
+  const base = (sequence, kind, summary, actor, requestId = null) => ({
+    event_id: `evt_kinds00${sequence}`,
+    kind,
+    sequence,
+    state: "investigating",
+    summary,
+    actor,
+    turn_id: null,
+    task_id: null,
+    request_id: requestId,
+    occurred_at: "2026-08-24T14:12:00Z",
+  });
+  const human = { type: "human", reference: { reference_version: "1.0.0", principal_id: "demo-human" } };
+  return {
+    events: [
+      base(0, "human_command", "Approved the flag rollback.", human, "11111111-1111-4111-8111-111111111111"),
+      base(1, "mitigation_proposed", "Proposed the flag rollback.", { type: "agent", reference: null }),
+      base(2, "denial", "Denied the risky restart.", human, "22222222-2222-4222-8222-222222222222"),
+      base(3, "state_change", "Executed successfully.", { type: "system", reference: null }),
+    ],
+    next_cursor: "seq:3",
+    has_more: false,
+  };
+}
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+test("kindsPage mock keeps contract-required correlation on externally correlated events", () => {
+  for (const event of kindsPage().events) {
+    if (event.kind === "human_command" || event.kind === "denial") {
+      expect(event.request_id).toMatch(uuidPattern);
+    } else {
+      expect(event.request_id).toBeNull();
+    }
+  }
+});
+
+test("labels execution state per contractual event kind", async ({ page }) => {
+  await mockApi(page, { pages: [kindsPage()], snapshot: snapshotPayload() });
+  await openWarRoom(page);
+
+  const items = page.locator(".war-room__event");
+  await expect(items).toHaveCount(4);
+  await expect(items.nth(0)).toContainText("Comando registrado");
+  await expect(items.nth(0)).toContainText("demo-human");
+  await expect(items.nth(1)).toContainText("Proposed · Not executed");
+  await expect(items.nth(2)).toContainText("Blocked · Denied");
+  await expect(items.nth(3)).toContainText("Record");
+  await expect(items.nth(3).locator(".ma-badge").nth(1)).toHaveText("Record");
+});
+
 function errorPayload(code, message) {
   return {
     error: { code, message },

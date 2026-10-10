@@ -22,6 +22,23 @@ const eventKindTones = Object.freeze({
   run_terminated: "success",
 });
 
+// Presentational only, derived exclusively from the contractual event kind
+// (issue #40 CA1). There is no outcome field: human_command is recorded,
+// kinds are proposals, denial was blocked, anything else stays neutral.
+const eventExecutionKinds = Object.freeze({
+  executed: Object.freeze({ label: "Comando registrado", tone: "success" }),
+  proposed: Object.freeze({ label: "Proposed · Not executed", tone: "warning" }),
+  blocked: Object.freeze({ label: "Blocked · Denied", tone: "critical" }),
+  neutral: Object.freeze({ label: "Record", tone: "info" }),
+});
+
+function eventExecutionKind(kind) {
+  if (kind === "human_command") return "executed";
+  if (kind === "denial") return "blocked";
+  if (typeof kind === "string" && kind.endsWith("_proposed")) return "proposed";
+  return "neutral";
+}
+
 const state = {
   incidentId: null,
   runId: null,
@@ -245,6 +262,11 @@ function renderEvents(events, { append } = {}) {
     badge.className = "ma-badge";
     badge.dataset.tone = eventKindTones[event.kind] ?? "info";
     badge.textContent = event.kind;
+    const execution = eventExecutionKinds[eventExecutionKind(event.kind)];
+    const executionBadge = document.createElement("span");
+    executionBadge.className = "ma-badge";
+    executionBadge.dataset.tone = execution.tone;
+    executionBadge.textContent = execution.label;
     const summary = document.createElement("strong");
     summary.textContent = event.summary ?? "Evento registrado.";
     const meta = document.createElement("span");
@@ -252,7 +274,7 @@ function renderEvents(events, { append } = {}) {
     const eventState = typeof event.state === "string" && event.state ? event.state : "—";
     meta.textContent =
       `${actorLabel(event.actor)} · ${formatTimestamp(event.occurred_at)} · seq ${event.sequence} · estado ${eventState}`;
-    item.append(badge, summary, meta);
+    item.append(badge, executionBadge, summary, meta);
     nodes["timeline-list"].append(item);
     state.eventCount += 1;
   });

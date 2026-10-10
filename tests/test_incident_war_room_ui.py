@@ -73,6 +73,13 @@ def test_war_room_selects_an_explicit_run_without_merging_timelines() -> None:
     assert "cross" not in lowered
 
 
+def test_war_room_labels_execution_state_from_event_kind() -> None:
+    for label in ("Comando registrado", "Proposed · Not executed", "Blocked · Denied", "Record"):
+        assert label in JAVASCRIPT
+    assert "eventExecutionKind" in JAVASCRIPT
+    assert "outcome" not in JAVASCRIPT.lower() or "no outcome" in JAVASCRIPT.lower()
+
+
 def test_war_room_uses_design_system_tokens() -> None:
     assert "var(--ma-" in STYLES
     assert "ma-badge" in HTML
