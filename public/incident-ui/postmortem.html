@@ -60,6 +60,24 @@
         <div class="ma-panel__header"><h2 class="ma-panel__title">Borrador mínimo</h2></div>
         <div class="ma-panel__body"><dl class="war-room__facts" id="artifact-sections"></dl></div>
       </section>
+      <section id="provenance-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Procedencia por run</h2></div>
+        <div class="ma-panel__body">
+          <label class="ma-field" for="run-select"><span class="ma-field__label">Run</span>
+          <select id="run-select" class="ma-input"></select></label>
+          <ol id="provenance-list" class="war-room__events"></ol>
+        </div>
+      </section>
+      <section id="review-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Revisión local no persistida</h2></div>
+        <form id="review-form" class="ma-panel__body war-room__form">
+          <label class="ma-field" for="review-note"><span class="ma-field__label">Nota de revisión</span>
+          <textarea id="review-note" class="ma-input" maxlength="2000" rows="3"></textarea></label>
+          <p class="ma-muted">El guardado real llega con #335. Recargar descarta esta nota.</p>
+          <button class="ma-button ma-button--secondary" type="submit">Anotar en esta sesión</button>
+          <p class="ma-muted" id="review-saved" hidden>Nota visible solo en esta sesión.</p>
+        </form>
+      </section>
     </main>
     <script type="module" src="/public/incident-ui/postmortem.js"></script>
   </body>
