@@ -27,6 +27,34 @@ const principals = await controlApi.listPrincipals();
 The store is closure-backed memory only. Reloading the page clears it. Application code MUST NOT
 copy bearer credentials into URLs, cookies, Web Storage, fixtures, telemetry, or logs.
 
+## Shared session
+
+[ADR-009](adrs/ADR-009-browser-shared-session.md) moves the key into one `SharedWorker` per origin
+and profile, `public/api/session-worker.js`, which also loads `runtime-config.js` (keep that file to
+the config assignment). A page hands the key over once and keeps an opaque token that changes with
+every generation. Pages move to it in the next leaves of #486.
+
+```js
+import { connectSharedSession, createAdministrativeApiClient } from "/public/api/client.js";
+
+const session = connectSharedSession();
+session.subscribe(({ token, phase, principalId, reason }) => render(token, phase));
+session.setCredential(keyEnteredOnce);
+const controlApi = createAdministrativeApiClient({ session });
+```
+
+- `phase` is `connecting`, `anonymous`, `validating` or `active`.
+- Setting a key, logging out and a 401 of the current generation each create a new token in every
+  page, so the caller of that 401 sees `stale_session`. A request whose token is not current is
+  refused, and a response that returns under an earlier token rejects with `stale_session`: drop
+  it, and check the token before any write.
+- The worker forwards only `/v1/` paths of the API base, `GET`, `POST`, `PUT` and `DELETE`, and the
+  `Accept`, `Content-Type` and `Idempotency-Key` headers; anything else is `not_allowed`.
+- URL parameters only select what to read, such as a deep link or a filter; a mutation always
+  needs an action inside the page.
+
+`tests/browser/shared-session.spec.js` proves these rules in the packaged browser lane.
+
 ## Topology
 
 ```mermaid
@@ -50,7 +78,7 @@ replace `runtime-config.js`, but `apiBaseUrl` deliberately accepts only a same-o
 
 This topology does not enable CORS. The proxy removes upstream CORS response headers and rejects
 requests marked `Sec-Fetch-Site: cross-site`. Its Content Security Policy limits `connect-src` to
-the same origin.
+the same origin and forbids framing with `frame-ancestors 'none'`.
 
 CSRF does not rely on a token because authentication has no ambient browser credential: the client
 uses an explicit in-memory `Authorization: Bearer` header, sends `credentials: "omit"`, and the
@@ -68,6 +96,8 @@ cross-origin API access requires a new threat-model decision.
 | Hidden or absent resource | `not_found` | 404 |
 | Concurrency or idempotency conflict | `conflict` | 409 |
 | Fetch cannot obtain a response | `network` | none |
+| The session changed, or is not active, before the response could apply | `stale_session` | none |
+| The shared session refused the path, method or headers | `not_allowed` | none |
 
 The adapter never returns an error response as successful data, so callers cannot show a false
 confirmation after 409. Other HTTP failures use `api` and retain the server error code when safe.

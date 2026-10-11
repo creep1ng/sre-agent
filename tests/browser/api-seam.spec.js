@@ -138,7 +138,9 @@ test("browser client consumes the real administrative API without fixture fallba
     code: null,
     retryable: true,
   });
-  expect(evidence.storageValues).not.toEqual(expect.arrayContaining(Object.values(credentials)));
+  for (const credential of Object.values(credentials)) {
+    expect(evidence.storageValues.join("\n")).not.toContain(credential);
+  }
 });
 
 test("client rejects cross-origin-normalized bases and invalid success bodies", async ({ page }) => {

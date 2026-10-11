@@ -28,6 +28,8 @@ Authoritative decisions: [ADR-004](../../schemas/adrs/ADR-004-grants.md),
 - Authorization uses only an active, exact direct grant before model routing or provider calls.
 - The gateway writes accepted audit metadata before releasing an outcome; providers do not decide
   grants and the YAML catalogs are read-only evidence.
+- Pages on the shared browser session ([ADR-009](../adrs/ADR-009-browser-shared-session.md)) leave
+  the human key in one `SharedWorker` per origin and profile; the others keep per-page stores.
 
 ## Current controls
 
@@ -37,6 +39,7 @@ Authoritative decisions: [ADR-004](../../schemas/adrs/ADR-004-grants.md),
 | Resource hiding | Current | Missing and unauthorized resources both return `403 resource_unavailable` before routing. |
 | Audit durability | Current | Metadata-only audit is append-only and failure suppresses result release. |
 | Catalog integrity | Current | `tests/test_security_catalogs.py` validates seeded identities and catalog structure. |
+| Browser session | Partial | ADR-009 core: key in worker memory, allow-listed forwarding, generation-checked responses and `frame-ancestors 'none'` (`tests/browser/shared-session.spec.js`); pages move to it in later leaves of #486. |
 
 ## Runtime evidence locators
 
@@ -61,6 +64,9 @@ runtimes exist.
   detail until a proven redaction implementation exists.
 - Future MCP and administrative runtimes have no executable authorization evidence yet.
 - Catalogs can drift from behavior; structural tests and cataloged runtime locators expose drift.
+- On a page using the shared session, an injected script cannot read the stored key, but while the
+  page is open it can send requests through the worker, capture the next key typed, force a logout
+  or replace the session in every page. Output encoding and the CSP remain the XSS defense.
 
 ## Exclusions
 
