@@ -219,9 +219,51 @@ services:
       ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+      PLAYWRIGHT_HELD_URL: http://web-held
+      PLAYWRIGHT_HOLD_CONTROL: http://hold-upstream:8001
     depends_on:
       web:
         condition: service_healthy
+      web-held:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime]
+
+  # Race tests of #486: the web image in front of tests/browser/support/hold-upstream.mjs.
+  hold-upstream:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: docker/e2e.Dockerfile
+    command: ["node", "tests/browser/support/hold-upstream.mjs"]
+    environment:
+      HOLD_UPSTREAM_TARGET: api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8001/held').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks: [runtime]
+
+  web-held:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    environment:
+      API_UPSTREAM: hold-upstream:8000
+    depends_on:
+      hold-upstream:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
     restart: "no"
     networks: [runtime]
 
