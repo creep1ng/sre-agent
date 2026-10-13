@@ -1,0 +1,16 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { createSchemaRegistry, loadReleaseDirectory } from '/workspace/schemas/tooling/lib/schema-validation.mjs';
+const { schemas } = await loadReleaseDirectory('/workspace/schemas/releases/2.7.0', 'all');
+const validate = createSchemaRegistry(schemas).getSchema('urn:sre-agent:schema:audit-event:2.7.0');
+const events = (await readFile('/capture/audit-events-full.jsonl', 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+const results = events.map(event => {
+  const valid = validate(event);
+  return { event_id: event.event_id, request_id: event.correlation.request_id,
+    response_status: event.response_status, stage: event.stage,
+    validation: valid ? 'passed' : 'failed', errors: valid ? [] : structuredClone(validate.errors) };
+});
+await writeFile('/capture/audit-ajv-schema-results.jsonl', results.map(result => JSON.stringify(result)).join('\n') + '\n');
+console.log(JSON.stringify({ validator: 'repository Ajv2020 + formats', rows: results.length,
+  passed: results.filter(result => result.validation === 'passed').length,
+  failed: results.filter(result => result.validation === 'failed').length }));
+if (results.some(result => result.validation === 'failed')) process.exitCode = 1;
