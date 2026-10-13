@@ -14,6 +14,7 @@ is available; AWS is explicitly blocked until #494's connection producer is inte
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 python scripts/setup_sre.py
 ```
 

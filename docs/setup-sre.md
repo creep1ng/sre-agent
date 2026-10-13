@@ -25,7 +25,10 @@ OTel has its **own lifecycle**, separate from SRE. Prepare the local environment
 with `python scripts/demo_env.py up`; it creates the pinned checkout and MCP
 caller token. `demo_env.py` requires PyYAML as documented in its own guide.
 Secure `.demo-state/grafana-mcp.env` to mode0600, owned by the setup caller.
-This is initial secret provisioning, not a recurring SRE grant/setup step.
+After the files exist, use `chmod 600 .env .demo-state/grafana-mcp.env`
+(adjust the token path if `DEMO_STATE_DIR` is elsewhere). Both files must belong
+to the setup caller. This is initial secret provisioning, not a recurring
+SRE grant/setup step.
 Run `python scripts/demo_env.py verify` to verify the actual OTel composition.
 Setup consumes that prepared internal network/token; it never starts, resets,
 stops or destroys OTel and never imports files from another branch/worktree.
