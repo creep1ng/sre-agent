@@ -17,19 +17,20 @@ this split on 2026-10-13. Route: direct; no SDD or new behavior.
   and current main behavior. No minification or arbitrary artifact truncation.
 - Count additions plus deletions against each PR's actual declared base.
 - A feature branch does not exempt its eventual main integration from size policy.
-- A contract-only exception is a separate pending decision, not authorization.
+- On 2026-10-13 the maintainer authorized `size:exception-update-contract`
+  exclusively for the new contract PR. Every other PR remains at most 400 lines.
 
 ## Tasks and acceptance checks
 
 - [x] **F454-1 — Inventory the actual accumulated candidate.**
   Compare live Git refs and Projects, enumerate complete changes and conflicts.
-- [ ] **F454-2 — Establish the feature and bounded design delivery.**
+- [x] **F454-2 — Establish the feature and bounded design delivery.**
   Start feature at current main; preserve the accumulated source. Make #569's
   role explicit without overwriting or hiding source intended for later PRs.
 - [ ] **F454-3 — Partition complete cohesive units.**
   Separate contract, capture, selection, read projection, provider/E2E scenarios,
-  evidence, and historical tracking. No blanket size exception. Resolve the
-  indivisible generated-contract policy choice before publishing that cut.
+  evidence, and historical tracking. No blanket size exception. Apply the
+  indivisible generated-contract exception only to its explicitly authorized PR.
 - [ ] **F454-4 — Reconcile main and verify the complete candidate.**
   Preserve consumption-policy provenance AND atomic attribution capture; retain
   both alert_triage and request_attributions in existing isolated DB resets.
@@ -52,14 +53,16 @@ Observed accumulated delta: 317 files, 13,753 additions + 124 deletions.
 Conflicts: gateway/responses.py and two incident DB fixture resets. The main-only
 investigation/external-effects fixture also needs the new attribution-table reset.
 The generated contract includes a 2,508-line schema and a 1,015-line fixture;
-arbitrary line fragments are not cohesive accepted delivery. Contract-only
-exception decision pending. All source and remote PRs remain preserved.
-Local feature and planning branches start at the verified main baseline.
+arbitrary line fragments are not cohesive accepted delivery. The maintainer
+authorized the exact contract-only label above, not an aggregate exception.
+Feature codex/feature-454 is published at the verified main baseline. Draft #596
+contains the design and initial plan (318 lines); #569 remains a draft/provenance
+reference. All original source and remote PRs remain preserved.
 
 Memory mirror: PENDING. No authoritative registered runtime session identity;
 agent-attributed Engram writes are forbidden. Observation 9911 is an older
 producer plan, not current scope or verification authority.
 
-Next: publish the baseline feature and planning draft, then finish the cohesive
-split when the contract decision is resolved. The eventual main integration
+Next: reconcile the accumulated source with main, verify it, and publish the
+remaining cohesive drafts. The eventual main integration
 requires its own accepted, size-compliant route; no aggregate exception exists.
