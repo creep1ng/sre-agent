@@ -1,0 +1,9 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "provider_calls": 0,
+    "request_status": 403,
+    "snapshot_count": 0
+  },
+  "scenario": "denied-read"
+}

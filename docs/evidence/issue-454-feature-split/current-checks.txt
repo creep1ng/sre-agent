@@ -1,0 +1,11 @@
+Source: 0bfadf958f941ec61889daef4e207c2284801aa4
+Base main: ef6b328fe75494a9b77d9ddd9a330cbaa22ac1b6
+Ruff: PASS; format: 263 files PASS
+Existing integration checks: 82 passed, 2 warnings, 212.15 seconds
+Attribution repeat: 13 passed, 6.39 seconds; real HTTP/SQL demo PASS; Alembic PASS
+Contract 2.8.0: 222 artifacts, 18 checks PASS; focused contract scenarios: 2 PASS
+PASS: 57 actual changed Python blobs parsed at recorded cut SHAs. Syntax only; incomplete prefixes are not standalone deployments.
+Full Python suite: 1847 passed, 1 optional live-provider skip, 2 warnings, 515.23 seconds; Alembic PASS. Hosted CI and human review remain separate.
+Initial demo after unrelated incident fixtures returned401; repeat immediately after attribution fixtures passed.
+No live/paid provider, external network, main merge, or issue closure.
+Lockfile PASS; import boundaries:5 kept/0 broken; configured mypy:12 source files PASS.

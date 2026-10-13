@@ -8,8 +8,13 @@ from uuid import uuid4
 
 import httpx
 import psycopg
+from audit_contract import authentication_event_valid, canonical_event, contract_validator
 
 with httpx.Client(timeout=10, trust_env=False) as client:
+    version = client.get("http://api:8000/openapi.json").json()["info"][
+        "x-sre-agent-contract-version"
+    ]
+    validator, _ = contract_validator(version)
     before = client.get("http://grafana-mcp:8000/__count").json()
     forward_before = client.get("http://issue30-fault-proxy:8000/__stats").json()
     start = datetime.now(UTC).isoformat()
@@ -47,6 +52,29 @@ OR (response_status=401 AND reason_code='authentication_failed'))
 AND occurred_at >= %s::timestamptz AND occurred_at < %s::timestamptz""",
         (start, end),
     ).fetchone()[0]
+events = [canonical_event(row[0], validator.schema["required"]) for row in rows]
+methods_before, methods_after = before["mcp_methods"], after["mcp_methods"]
+checks = {
+    "http_contract": response.status_code == 401
+    and body["error"] == {"code": "authentication_failed", "message": "Authentication failed."}
+    and body["retryable"] is False,
+    "zero_mcp_activity": all(
+        methods_before.get(k, 0) == methods_after.get(k, 0)
+        for k in methods_before.keys() | methods_after.keys()
+    )
+    and before["upstream_attempts"] == after["upstream_attempts"]
+    and before["reset_epoch"] == after["reset_epoch"]
+    and before.get("total_http_requests", 0) == after.get("total_http_requests", 0),
+    "zero_forwarding": all(
+        forward_before["forwarded_methods"].get(k, 0)
+        == forward_after["forwarded_methods"].get(k, 0)
+        for k in forward_before["forwarded_methods"].keys()
+        | forward_after["forwarded_methods"].keys()
+    ),
+    "complete_authentication_event": len(events) == 1
+    and authentication_event_valid(events[0], validator, body["request_id"], start, end),
+}
+passed = all(checks.values())
 out = {
     "tested_sha": os.environ["TESTED_SHA"],
     "scenario": "separate repeat of CA2_invalid_credential",
@@ -57,7 +85,10 @@ out = {
     "window_start": start,
     "window_end": end,
     "status_observed": response.status_code,
-    "actual_public_body": body,
+    "actual_public_body": body if checks["http_contract"] else None,
+    "contract_version": version,
+    "checks": checks,
+    "audit_events": events if passed else [],
     "counter_before": before,
     "counter_after": after,
     "forward_before": forward_before,
@@ -68,7 +99,7 @@ out = {
     "authentication_row_count_in_window": auth_rows,
     "terminal_event_required": 1,
     "terminal_event_observed": len(rows),
-    "terminal_event_requirement": "passed" if len(rows) == 1 else "failed",
+    "terminal_event_requirement": "passed" if passed else "failed",
     "sanitized": True,
 }
 Path("/capture/401-reproduction.json").write_text(json.dumps(out, indent=2) + "\n")
@@ -76,12 +107,12 @@ print(
     json.dumps(
         {
             "status": response.status_code,
-            "public_body": body,
+            "public_body": out["actual_public_body"],
             "tools_call_delta": out["tools_call_delta"],
             "all_operation_sql_row_count": len(rows),
             "terminal_event_requirement": out["terminal_event_requirement"],
         }
     )
 )
-if len(rows) != 1:
+if not passed:
     raise SystemExit(1)

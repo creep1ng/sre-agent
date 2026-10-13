@@ -1,0 +1,11 @@
+{
+  "target": "urn:sre-agent:schema:usage-requests:2.8.0",
+  "version": "2.8.0",
+  "group": "usage-requests-projection",
+  "data": {
+    "filter": {},
+    "items": []
+  },
+  "rule": "oneOf",
+  "status": "negative"
+}
