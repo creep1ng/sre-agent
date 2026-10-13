@@ -27,7 +27,7 @@ this split on 2026-10-13. Route: direct; no SDD or new behavior.
 - [x] **F454-2 — Establish the feature and bounded design delivery.**
   Start feature at current main; preserve the accumulated source. Make #569's
   role explicit without overwriting or hiding source intended for later PRs.
-- [ ] **F454-3 — Partition complete cohesive units.**
+- [x] **F454-3 — Partition complete cohesive units.**
   Separate contract, capture, selection, read projection, provider/E2E scenarios,
   evidence, and historical tracking. No blanket size exception. Apply the
   indivisible generated-contract exception only to its explicitly authorized PR.
@@ -66,3 +66,10 @@ producer plan, not current scope or verification authority.
 Next: reconcile the accumulated source with main, verify it, and publish the
 remaining cohesive drafts. The eventual main integration
 requires its own accepted, size-compliant route; no aggregate exception exists.
+
+Partition verified: 13 cohesive cuts; only contract is above 400 lines. Every
+original runtime/test/schema/script file is accounted for and matches source
+0bfadf958f941ec61889daef4e207c2284801aa4. Current 82 E2E checks, repeated13 attribution
+checks, real HTTP/SQL and contract222-artifact validation pass. Initial demo401
+after unrelated fixtures is recorded; correct-fixture repeat passes. Full Python
+suite is still running; hosted CI and independent human acceptance remain pending.
