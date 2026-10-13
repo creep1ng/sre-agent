@@ -1,0 +1,13 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "error": "audit_unavailable",
+    "http_status": 503,
+    "persisted_counts": {
+      "audits": 0,
+      "snapshots": 0
+    },
+    "standalone_writes": 0
+  },
+  "scenario": "append-only-store"
+}

@@ -13,7 +13,11 @@ ROOT = Path(__file__).parents[1]
 
 @pytest.fixture(scope="module")
 def overlay() -> dict[str, object]:
-    return yaml.safe_load((ROOT / "compose.mcp.yaml").read_text())
+    class ComposeLoader(yaml.SafeLoader):
+        pass
+
+    ComposeLoader.add_constructor("!override", lambda loader, node: loader.construct_sequence(node))
+    return yaml.load((ROOT / "compose.mcp.yaml").read_text(), Loader=ComposeLoader)
 
 
 def test_overlay_confines_endpoint_token_and_boundary(overlay: dict[str, object]) -> None:
@@ -26,7 +30,7 @@ def test_overlay_confines_endpoint_token_and_boundary(overlay: dict[str, object]
     assert seed["environment"] == {"DATABASE_URL": "${DATABASE_URL:?DATABASE_URL is required}"}
     assert "GRAFANA_MCP_TOKEN" not in str(overlay)
     assert "MCP_GRAFANA_SERVER_TOKEN" not in str(overlay)
-    assert api["networks"] == ["runtime", "mcp-boundary"]
+    assert api["networks"] == ["runtime", "mcp-boundary", "mcp-consumer"]
     assert overlay["networks"]["mcp-boundary"] == {
         "name": "sre-mcp-boundary",
         "external": True,

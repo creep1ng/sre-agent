@@ -1,7 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { createSchemaRegistry, loadReleaseDirectory } from '/workspace/schemas/tooling/lib/schema-validation.mjs';
-const { schemas } = await loadReleaseDirectory('/workspace/schemas/releases/2.7.0', 'all');
-const validate = createSchemaRegistry(schemas).getSchema('urn:sre-agent:schema:audit-event:2.7.0');
+const version = process.env.SRE_AGENT_CONTRACT_VERSION || '2.7.0';
+if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Invalid contract release');
+const { schemas } = await loadReleaseDirectory(`/workspace/schemas/releases/${version}`, 'all');
+const validate = createSchemaRegistry(schemas).getSchema(`urn:sre-agent:schema:audit-event:${version}`);
 const events = (await readFile('/capture/audit-events-full.jsonl', 'utf8')).trim().split('\n').map(line => JSON.parse(line));
 const results = events.map(event => {
   const valid = validate(event);

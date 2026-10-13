@@ -1,0 +1,150 @@
+{
+  "after": {
+    "filter": {
+      "request_id": "9c71d2d1-26c7-43fa-bac7-2254a0dbe5c6"
+    },
+    "items": [
+      {
+        "attribution_status": "available",
+        "consumption": {
+          "availability": "complete",
+          "billed_usd": "0.0012300",
+          "currency": "USD",
+          "input_tokens": 5,
+          "output_tokens": 7,
+          "precision": "exact",
+          "pricing_context": {
+            "observed_at": "2026-09-10T14:00:00Z",
+            "price_version": "openrouter:2026-09-10T14:00:00Z"
+          },
+          "source": "openrouter",
+          "total_tokens": 12
+        },
+        "credited_model": {
+          "availability": "available",
+          "value": "openai/gpt-4o-mini"
+        },
+        "credited_provider": {
+          "availability": "available",
+          "value": "openai"
+        },
+        "month": "2026-10",
+        "navigation": {
+          "status": "unsupported"
+        },
+        "request_id": "9c71d2d1-26c7-43fa-bac7-2254a0dbe5c6",
+        "requested_assignment": {
+          "alias": "triage-agent",
+          "availability": "available",
+          "model": "openai/gpt-4o-mini",
+          "provider": "openai",
+          "router": "openrouter"
+        }
+      }
+    ]
+  },
+  "before": {
+    "filter": {
+      "request_id": "9c71d2d1-26c7-43fa-bac7-2254a0dbe5c6"
+    },
+    "items": [
+      {
+        "attribution_status": "available",
+        "consumption": {
+          "availability": "complete",
+          "billed_usd": "0.0012300",
+          "currency": "USD",
+          "input_tokens": 5,
+          "output_tokens": 7,
+          "precision": "exact",
+          "pricing_context": {
+            "observed_at": "2026-09-10T14:00:00Z",
+            "price_version": "openrouter:2026-09-10T14:00:00Z"
+          },
+          "source": "openrouter",
+          "total_tokens": 12
+        },
+        "credited_model": {
+          "availability": "available",
+          "value": "openai/gpt-4o-mini"
+        },
+        "credited_provider": {
+          "availability": "available",
+          "value": "openai"
+        },
+        "month": "2026-10",
+        "navigation": {
+          "status": "unsupported"
+        },
+        "request_id": "9c71d2d1-26c7-43fa-bac7-2254a0dbe5c6",
+        "requested_assignment": {
+          "alias": "triage-agent",
+          "availability": "available",
+          "model": "openai/gpt-4o-mini",
+          "provider": "openai",
+          "router": "openrouter"
+        }
+      }
+    ]
+  },
+  "current_alias_model": "anthropic/claude-3.5-haiku",
+  "historical_unchanged": true,
+  "negatives": {
+    "forbidden": {
+      "body": {
+        "error": {
+          "code": "resource_unavailable",
+          "message": "Administrative read is not authorized."
+        },
+        "request_id": "6f1d2157-0528-41bc-8750-5e878cd3a557",
+        "retryable": false
+      },
+      "status": 403
+    },
+    "multiple_selectors": {
+      "body": {
+        "error": {
+          "code": "validation_error",
+          "message": "Exactly one bounded usage selector is required."
+        },
+        "request_id": "f419311e-2354-486f-b6d0-a60bf5f40e64",
+        "retryable": false
+      },
+      "status": 422
+    },
+    "unauthenticated": {
+      "body": {
+        "error": {
+          "code": "authentication_failed",
+          "message": "Authentication failed."
+        },
+        "request_id": "142a66e1-a569-40e7-8d2e-74b346e15166",
+        "retryable": false
+      },
+      "status": 401
+    },
+    "unbounded": {
+      "body": {
+        "error": {
+          "code": "validation_error",
+          "message": "Exactly one bounded usage selector is required."
+        },
+        "request_id": "7655a80d-f38e-44ec-8d7b-d4512a507a52",
+        "retryable": false
+      },
+      "status": 422
+    }
+  },
+  "postgres_snapshot": {
+    "credited_model": "openai/gpt-4o-mini",
+    "credited_provider": "openai",
+    "request_id": "9c71d2d1-26c7-43fa-bac7-2254a0dbe5c6",
+    "requested_alias": "triage-agent",
+    "requested_model": "openai/gpt-4o-mini",
+    "requested_provider": "openai"
+  },
+  "provider": "controlled-test-double; no live/paid provider",
+  "request_id": "9c71d2d1-26c7-43fa-bac7-2254a0dbe5c6",
+  "tested_sha": "2a8a3599095bf363ee9c3fa8be4bf89756381813",
+  "transport": "real HTTP over loopback"
+}

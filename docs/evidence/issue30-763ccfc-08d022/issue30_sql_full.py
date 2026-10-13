@@ -6,16 +6,12 @@ import os
 from pathlib import Path
 
 import psycopg
-from jsonschema import Draft202012Validator, FormatChecker
-from referencing import Registry, Resource
+from audit_contract import authentication_event_valid, canonical_event, contract_validator
 
 capture = Path("/capture")
 replay = json.loads((capture / "issue30-live-replay.json").read_text())
-schema_dir = Path("/candidate/schemas/releases/2.7.0/json-schema")
-schemas = [json.loads(p.read_text()) for p in schema_dir.rglob("*.json")]
-registry = Registry().with_resources((s["$id"], Resource.from_contents(s)) for s in schemas)
-schema = next(s for s in schemas if s["$id"] == "urn:sre-agent:schema:audit-event:2.7.0")
-validator = Draft202012Validator(schema, registry=registry, format_checker=FormatChecker())
+validator, schema_dir = contract_validator(os.getenv("SRE_AGENT_CONTRACT_VERSION", "2.7.0"))
+schema = validator.schema
 ids = [item["request_id"] for item in replay["cases"].values() if item.get("request_id")]
 start, end = replay["started_at"], replay["ended_at"]
 invalid = replay["cases"]["CA2_invalid_credential"]
@@ -54,25 +50,7 @@ GROUP BY operation,stage,response_status ORDER BY operation,stage,response_statu
     ).fetchall()
 
 
-def canonical_event(row):
-    # SQL NULL is the absent representation for optional DTO object columns.
-    # Preserve every non-null field, every required root field and every value;
-    # in particular retain required reason_code=null. Never fix retryable/cause.
-    def walk(value, path=()):
-        if isinstance(value, dict):
-            return {
-                k: walk(v, path + (k,))
-                for k, v in value.items()
-                if v is not None or (not path and k in schema["required"])
-            }
-        if isinstance(value, list):
-            return [walk(v, path) for v in value]
-        return value
-
-    return walk(row)
-
-
-events = [canonical_event(row) for row in rows]
+events = [canonical_event(row, schema["required"]) for row in rows]
 safe = json.dumps({"rows": rows, "events": events}, ensure_ascii=True)
 secrets = [
     os.getenv(k, "")
@@ -119,6 +97,14 @@ for name, values in [
     ("audit-schema-results.jsonl", results),
 ]:
     (capture / name).write_text("".join(json.dumps(v, sort_keys=True) + "\n" for v in values))
+credential_events = [e for e in events if e["correlation"]["request_id"] == invalid["request_id"]]
+auth_valid = len(credential_events) == 1 and authentication_event_valid(
+    credential_events[0],
+    validator,
+    invalid["request_id"],
+    invalid["window_start"],
+    invalid["window_end"],
+)
 summary = {
     "tested_sha": replay["tested_sha"],
     "schema_id": schema["$id"],
@@ -148,7 +134,7 @@ summary = {
         "same_request_id_all_database_count": outside,
         "authentication_matches_in_replay_window": auth,
         "terminal_event_required_by_runtime_audit_evidence": 1,
-        "terminal_event_requirement": "passed" if sum(r[3] for r in missing) == 1 else "failed",
+        "terminal_event_requirement": "passed" if auth_valid else "failed",
         "unchanged_legacy_runner_expected_mcp_invoke_rows": 0,
     },
     "all_operation_stage_counts_in_replay_window": all_operations,

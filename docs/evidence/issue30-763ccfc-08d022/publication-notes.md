@@ -36,3 +36,12 @@ contract, lockfile, historical evidence or issue-30 delivery-file changes. The
 frozen candidates and actual execution SHAs are retained; the first PR records
 the new base, and subsequent PRs target the preceding review branch. The recorded
 1823-test run does not claim to cover those new tests or a hosted merge candidate.
+
+## Review correction boundary
+
+The earlier AST-equality statement describes the original formatted publication,
+not the later authorized observer correction. [Portable instructions](reproduce-review.md)
+separate delivery/runtime checkouts and build tagged images. Corrected observers
+validate complete authentication events plus HTTP/counters; original helpers, run
+records, snapshots and both earlier manifests stay in their original Git history.
+New verification and mock-only checks are linked separately from the PR body.
