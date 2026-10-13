@@ -171,3 +171,8 @@ confirmed cause; ListCommands denied by IAM (not expanded), malformed JSON local
 probe corrected. Explicit prepare now pulls locked image, preserves token; live
 GREEN anonymous MCP401 via SSM18092, no token access in E2E. Report07 is partial.
 User authorized exactly1h extension; owner CLI updates persisted expiry records.
+One-hour extension observed: expiry2026-10-14T01:21:22UTC (20:21 Bogotá).
+Transport slice16 uses native SSM and private Unix socket; container joins only
+prepared internal MCP network, mounts only pipe code/socket, no token/provider/AWS
+credentials, no host port. Pinned existing Python image, never implicit pull.
+Lint/format pass; full API transport E2E still pending private handoff/client slice.
