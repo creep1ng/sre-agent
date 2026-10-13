@@ -1,7 +1,8 @@
 # ADR-009: Shared in-memory browser session coordinated by a SharedWorker
 
-- **Status:** Proposed. It becomes Accepted when the maintainer approves it in the pull request
-  that introduces it.
+- **Status:** Accepted for the MVP by the maintainer on 2026-10-12, in
+  [#486](https://github.com/creep1ng/sre-agent/issues/486#issuecomment-6128807717), with the
+  continuity limit of section 9 as an explicit cut of CA1.
 - **Issue:** [#486](https://github.com/creep1ng/sre-agent/issues/486) (HT-WEB-SHARED-SESSION),
   first of four leaves.
 - **Location:** `docs/adrs/`, not `schemas/adrs/`. This decision evolves the browser–API seam
@@ -207,7 +208,7 @@ introduces the worker, and the Web Storage assertion then fails on any single st
 |---|---|---|
 | 1 | This record | None; it fixes the rules the next leaves prove |
 | 2 | Worker, protocol and client adapter; seam document, threat model, Web Storage assertion and proxy CSP | CA4–CA6: late success, error, retry and 401 of A after A→B, A→logout and A→B→A; simultaneous changes from two tabs; loss of the worker |
-| 3 | Principals and war room on the shared session, on the packaged stack | CA1–CA3, CA7, CA8: continuity across tabs and reloads; change between two principals and between two keys of one principal; invalid key; global logout with Back/Forward and a suspended tab; secrets inspection; a mutation accepted before logout |
+| 3 | Principals and war room on the shared session, on the packaged stack | CA1–CA3, CA7, CA8: continuity across tabs and reloads, except a reload of the only tab (section 9); change between two principals and between two keys of one principal; invalid key; global logout with Back/Forward and a suspended tab; secrets inspection; a mutation accepted before logout |
 | 4 | Remaining surfaces, triage guards joined to the shared generation, full run on the final SHA | CA2 regression of the triage deep link, and every criterion again on the final SHA |
 
 Identity and authorization are proven over real HTTP, with two principals holding different
