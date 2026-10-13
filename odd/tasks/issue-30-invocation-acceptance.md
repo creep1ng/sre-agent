@@ -125,7 +125,7 @@ mirror was reread; local progress remains authoritative for this resumed work.
   evidence; fix only helper formatting, preserving semantics and captured results.
 - [x] T12: Validate exact candidates and size against their actual bases; record
   current artifact checks separately from the 763ccfc integrated execution.
-- [ ] T13: Publish authorized codex branches and open/attach three PRs; verify
+- [x] T13: Publish authorized codex branches and open/attach three PRs; verify
   remote head/base/body readback. Leave human review, runtime corrections and #30 open.
 
 T11/T12 observed: three exact artifact candidates rendered and checked: documentary
@@ -150,3 +150,20 @@ runtime/schema/lock/delivery file changes. Preserve frozen candidate SHAs and
 execution receipts. Record current base in PR1, keep subsequent PRs stacked, and
 do not credit the recorded suite as execution of the newly added tests. Hosted
 merge-candidate checks and human review remain pending.
+
+T13 observed (2026-10-13): PR598 documentation → PR599 verification helpers →
+PR600 integrated evidence opened through the authorized GitHub app connection,
+all attached to this task, open/non-draft and unmerged. Native REST readback checks
+actual heads/bases/bodies and size (182/291/301 lines at initial publication), all
+without conflicts; local trusted metadata policy and initial hosted pr-governance
+passed. Public receipt preserves that initial readback; final follow-up adds only
+publication bookkeeping/URL receipt and the new file-integrity manifest. Hosted
+functional checks and human acceptance remain distinct, not inferred from metadata.
+Issue30 stays open with its original body; runtime/schema/existing expectations
+and every historical capture/result/SHA remain unchanged. No backend correction,
+merge, issue closure or automatic approval label was applied. Review URLs:
+https://github.com/creep1ng/sre-agent/pull/598
+https://github.com/creep1ng/sre-agent/pull/599
+https://github.com/creep1ng/sre-agent/pull/600
+Next: human review of these bounded units; separately approve the three minimum
+runtime fixes and repeat the integrated schema/presence failures after correction.
