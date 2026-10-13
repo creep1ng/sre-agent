@@ -15,6 +15,7 @@ const CONSUMERS = ["issue-10", "issue-11", "issue-13", "issue-14", "harness", "u
 const contractLevel = (version) => version.split(".").slice(0, 2).map(Number);
 const consumersForVersion = (version) => {
   const [major, minor] = contractLevel(version);
+  if (major === 2 && minor >= 8) return [...consumersForVersion("2.7.0"), "issue-454"];
   if (major === 2 && minor >= 5) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6", "issue-187", "issue-333"];
   if (major === 2 && minor >= 4) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6", "issue-187"];
   if (major === 2 && minor >= 3) return [...CONSUMERS, "issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6"];
@@ -37,9 +38,10 @@ const POLICY = {
   "issue-184-t5": ["release", "issue-184.alias-mutation-contract", "alias-mutation-contract", "fixtures/positive/control.audit.aliases-assignment-replace-allow.positive.v{version}.fixture.json"],
   "issue-184-t6": ["release", "issue-184.catalog-contract", "catalog-contract", "fixtures/positive/control.audit.catalog-create-allow.positive.v{version}.fixture.json"],
   "issue-187": ["release", "issue-187.mcp-audit-contract", "mcp-audit-contract", "fixtures/positive/audit.mcp.discovery.positive.v{version}.fixture.json"],
-  "issue-333": ["release", "issue-333.usage-read-contract", "usage-read-contract", "fixtures/positive/usage.read.positive.v{version}.fixture.json"]
+  "issue-333": ["release", "issue-333.usage-read-contract", "usage-read-contract", "fixtures/positive/usage.read.positive.v{version}.fixture.json"],
+  "issue-454": ["release", "issue-454.historical-request-contract", "historical-request-contract", "fixtures/positive/usage.requests.available.positive.v{version}.fixture.json"]
 };
-const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6", "issue-187", "issue-333"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
+const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "issue-184-t2", "issue-184-t3", "issue-184-t5", "issue-184-t6", "issue-187", "issue-333", "issue-454"].includes(consumer) ? `npm --prefix schemas/tooling run conformance -- --consumer ${consumer} --release ${version}` : `npm --prefix schemas/tooling run conformance -- --consumer ${consumer}`;
 const versionedPolicy = (version) => Object.fromEntries(Object.entries(POLICY).map(([consumer, values]) => [consumer, values.map((value) => value.replaceAll("1.0.0", version).replaceAll("{version}", version))]));
 const sorted = (value) => Array.isArray(value) ? value.map(sorted) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])])) : value;
 const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`, canonical = (value) => JSON.stringify(sorted(value));
@@ -205,6 +207,51 @@ async function validateUsageReadContract(root, version) {
   return { operations: 1, status: "passed" };
 }
 
+async function validateHistoricalRequestContract(root, version) {
+  const [control, usageRead] = await Promise.all([
+    parsed(join(root, "openapi/control-plane.yaml")),
+    parsed(join(root, "openapi/usage-read.yaml")),
+  ]);
+  const { schemas, fixtures } = await loadReleaseDirectory(root, "usage-requests-projection");
+  const schemaId = `urn:sre-agent:schema:usage-requests:${version}`;
+  const schema = schemas.find(({ $id }) => $id === schemaId);
+  const route = (document) => document.paths?.["/v1/usage/requests"]?.get;
+  const controlRoute = route(control), standaloneRoute = route(usageRead);
+  const expectedSelectors = ["incident_id", "month", "request_id"];
+  const expectedFixtures = [
+    [`positive/usage.requests.available.positive.v${version}.fixture.json`, "positive"],
+    [`positive/usage.requests.partial.positive.v${version}.fixture.json`, "positive"],
+    [`positive/usage.requests.unavailable.positive.v${version}.fixture.json`, "positive"],
+    [`positive/usage.requests.legacy.positive.v${version}.fixture.json`, "positive"],
+    [`negative/usage.requests.credit-without-evidence.negative.v${version}.fixture.json`, "negative"],
+    [`negative/usage.requests.conflicting-availability.negative.v${version}.fixture.json`, "negative"],
+    [`negative/usage.requests.extra-content.negative.v${version}.fixture.json`, "negative"],
+    [`negative/usage.requests.navigation-destination.negative.v${version}.fixture.json`, "negative"],
+    [`negative/usage.requests.multiple-selectors.negative.v${version}.fixture.json`, "negative"],
+    [`negative/usage.requests.no-selector.negative.v${version}.fixture.json`, "negative"],
+    [`negative/usage.requests.oversized-items.negative.v${version}.fixture.json`, "negative"],
+  ];
+  const routeSelectors = (operation) => operation?.parameters
+    ?.filter(({ in: location }) => location === "query")
+    .map(({ name }) => name).sort();
+  for (const [name, status] of expectedFixtures) {
+    const fixture = fixtures.find(({ name: fixtureName }) => fixtureName === name);
+    if (!fixture || fixture.status !== status) throw new Error(`Historical request contract lacks ${status} conformance fixture ${name}`);
+  }
+  if (control.info?.version !== version || usageRead.info?.version !== version || !schema || !controlRoute || !standaloneRoute) throw new Error("Historical request publication is missing a versioned schema or canonical/standalone route");
+  if (canonical(routeSelectors(controlRoute)) !== canonical(expectedSelectors) || canonical(routeSelectors(standaloneRoute)) !== canonical(expectedSelectors)) throw new Error("Historical request route selectors are not the exact bounded selector set");
+  for (const operation of [controlRoute, standaloneRoute]) {
+    if (operation["x-maximum-evidence-rows"] !== 1000 || canonical(operation["x-required-query-one-of"]) !== canonical(["request_id", "incident_id", "month"]) || operation["x-reject-unknown-query-parameters"] !== true || canonical(operation["x-governed-scope"]) !== canonical({ action: "admin.read", resource_type: "administrative_control", resource_id: "usage" })) throw new Error("Historical request route is missing its bounded selector or governed-read contract");
+    if (operation.responses?.["200"]?.content?.["application/json"]?.schema?.$ref !== schemaId) throw new Error("Historical request route does not return its versioned response schema");
+    for (const status of ["401", "403", "413", "422", "503"]) if (operation.responses?.[status]?.content?.["application/json"]?.schema?.$ref !== `urn:sre-agent:schema:error-envelope:${version}`) throw new Error(`Historical request ${status} response is not typed by the release error envelope`);
+  }
+  const comparable = (operation) => ({ parameters: operation.parameters, responses: operation.responses, maximum: operation["x-maximum-evidence-rows"], selectors: operation["x-required-query-one-of"], scope: operation["x-governed-scope"] });
+  if (canonical(comparable(controlRoute)) !== canonical(comparable(standaloneRoute))) throw new Error("Canonical and standalone historical request routes have drifted");
+  if (schema.type !== "object" || schema.additionalProperties !== false || schema.properties?.items?.maxItems !== 1000 || schema.properties?.items?.items?.properties?.navigation?.properties?.status?.const !== "unsupported") throw new Error("Historical request schema must be closed, bounded, and explicit about unsupported navigation");
+  validateFixtures(schemas, expectedFixtures.map(([name]) => fixtures.find(({ name: fixtureName }) => fixtureName === name)));
+  return { fixtures: expectedFixtures.length, status: "passed" };
+}
+
 const ACTIONS = {
   "fixtures-transport": (root) => validateGroup("all", root),
   "schema-persistence": (root) => Promise.all(["identity", "model-resource", "policy"].map((group) => validateGroup(group, root))),
@@ -220,7 +267,8 @@ const ACTIONS = {
   "alias-mutation-contract": (root, version) => validateAliasMutationContract(root, version),
   "catalog-contract": (root, version) => validateCatalogContract(root, version),
   "mcp-audit-contract": (root, version) => validateMcpAuditContract(root, version),
-  "usage-read-contract": (root, version) => validateUsageReadContract(root, version)
+  "usage-read-contract": (root, version) => validateUsageReadContract(root, version),
+  "historical-request-contract": (root, version) => validateHistoricalRequestContract(root, version)
 };
 
 export async function validateCoverage(root = release) {
@@ -249,7 +297,7 @@ async function inventory(root, version, includeEvidence = true) {
 }
 async function semanticHashes(root, version) { const outputs = [join(tooling, `.tmp/evidence-control-${version}.yaml`), join(tooling, `.tmp/evidence-responses-${version}.yaml`)]; try { await Promise.all([runReleaseOpenapi("control-plane", outputs[0], version), runReleaseOpenapi("responses", outputs[1], version)]); const documents = await Promise.all(outputs.map(readContractFile)); return { control_plane: digest(canonical(normalizeOpenapi(documents[0]))), responses: digest(canonical(normalizeOpenapi(documents[1]))), combined_projection: digest(canonical(combineOpenapi(...documents))) }; } finally { await Promise.all(outputs.map((path) => rm(path, { force: true }))); } }
 async function evidenceObject(root, version, results) { const packageJson = JSON.parse(await readFile(join(tooling, "package.json"))), inputs = await inventory(root, version, false), semantics = await semanticHashes(root, version); semantics.adrs = digest(canonical(inputs.adrs)); semantics.fixtures = digest(canonical(inputs.fixtures)); return { contract_version: version, inputs_sha256: digest(canonical(inputs)), semantics, results: [...results, { consumer: "governance", action: "ownership-and-adrs", status: "passed" }], toolchain: { node: packageJson.engines.node, ajv: packageJson.devDependencies.ajv, redocly: packageJson.devDependencies["@redocly/cli"], yaml: packageJson.devDependencies.yaml } }; }
-const PREVIOUS_RELEASE = { "1.1.0": "1.0.0", "1.2.0": "1.1.0", "1.3.0": "1.2.0", "1.4.0": "1.3.0", "2.0.0": "1.4.0", "2.1.0": "2.0.0", "2.2.0": "2.1.0", "2.3.0": "2.2.0", "2.4.0": "2.3.0", "2.5.0": "2.4.0", "2.6.0": "2.5.0", "2.7.0": "2.6.0" };
+const PREVIOUS_RELEASE = { "1.1.0": "1.0.0", "1.2.0": "1.1.0", "1.3.0": "1.2.0", "1.4.0": "1.3.0", "2.0.0": "1.4.0", "2.1.0": "2.0.0", "2.2.0": "2.1.0", "2.3.0": "2.2.0", "2.4.0": "2.3.0", "2.5.0": "2.4.0", "2.6.0": "2.5.0", "2.7.0": "2.6.0", "2.8.0": "2.7.0" };
 const baseline = (version) => version === "1.0.0" ? { previous_release: null, previous_major: null, compatibility: "initial-publication" } : version === "2.0.0" ? { previous_release: "1.4.0", previous_major: "1.0.0", compatibility: "breaking" } : PREVIOUS_RELEASE[version] ? { previous_release: PREVIOUS_RELEASE[version], previous_major: version.startsWith("2.") ? "2.0.0" : "1.0.0", compatibility: "additive" } : null;
 async function manifestObject(root, version) { return { contract_version: version, status: "immutable", baseline: baseline(version), dialects: { json_schema: "https://json-schema.org/draft/2020-12/schema", openapi: "3.1.0" }, inventory: await inventory(root, version, true) }; }
 export function assertImmutableManifest(existing, candidate) { if (canonical(existing) !== canonical(candidate)) throw new Error(`Release ${existing?.contract_version ?? "artifact"} is immutable; publish a new version instead of rewriting it`); }
