@@ -94,6 +94,11 @@ configuration, inspect dumps, headers or logs.
 
 Partial setup may leave this project's services/data in place. Correct the cause
 and rerun the **same command**; it converges. No global cleanup is a recovery step.
+When inspecting Compose manually, use the same `SRE_SETUP_PROJECT`, private
+`--env-file`, `compose.yaml`, `compose.mcp.yaml` and the generated
+`DEMO_STATE_DIR/sre-setup/SRE_SETUP_PROJECT.json` layer. Set `DEMO_STATE_DIR`
+explicitly for those manual commands; do not fall back to an unrelated default
+project from historical examples. Never print `docker compose config`.
 For seed route drift use the existing [routing reconciliation](../README.md#when-a-changed-env-route-does-not-take-effect), not volume deletion.
 
 ## Bounded reviewer journey

@@ -88,3 +88,8 @@ no production-source byte changed since tested155fc26 (git diff verified).
 S618-5 publication in progress; human review remains required. S618-4 partial:
 local real OTel fail/reset blocked by disk, AWS by unintegrated494; no paid enable.
 Next: publish final docs/results, request human review; do not merge/close618.
+
+Post-refactor exact focused rerun13passed1live-skip6.61s. Skip reason: explicit
+RUN_OPENROUTER_LIVE_SMOKE=1 required (not authorized/enabled). Removed historical
+README curl-secret argv example; manual Compose diagnostics explicitly keep the
+canonical project/layers, never an unrelated default project. Source unchanged.

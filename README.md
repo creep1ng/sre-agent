@@ -83,15 +83,12 @@ routing expectations. A missing enable flag or provider/audit secret produces a 
 
 ### Verify one authorized response
 
-With `INCIDENT_HARNESS_API_KEY` already loaded by your local secret-management workflow, send one
-bounded request directly to the API. Do not paste or commit the credential.
-
-```bash
-curl -i http://localhost:8000/v1/responses \
-  -H "Authorization: Bearer ${INCIDENT_HARNESS_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"triage-agent","input":"Summarize the incident."}'
-```
+Use a private HTTP client/secret-management workflow against the URL printed by
+setup. Do not place credentials in command arguments (`curl -H` would expose them
+to process inspection). Paid requests require explicit `SRE_ENABLE_PAID_LLM=1`
+and an API-owned provider key; setup itself never sends a model request.
+See the [bounded operator journey](docs/setup-sre.md#bounded-reviewer-journey)
+for safe credential handling, run readback and denial evidence.
 
 An authorized, correctly routed request returns `200` with a completed text item at
 `output[0].content[0].text`. The gateway validates OpenRouter's completed Responses envelope and
