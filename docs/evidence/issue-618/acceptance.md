@@ -1,7 +1,8 @@
 # Issue 618 acceptance matrix — 2026-10-13
 
 This is partial feature-branch delivery, **not full issue acceptance**. No merge,
-issue closure, AWS operation or paid LLM call was performed. Project midnight.agent
+issue closure or paid LLM call was performed. Separate AWS launch was explicitly
+authorized and verified below; it is not SRE AWS/MCP acceptance. Project midnight.agent
 was consulted live (issue OPEN/Todo). Human acceptance and final integrated main
 reproduction are still required; successful containers/CI do not satisfy an OKR.
 
@@ -23,29 +24,38 @@ reproduction are still required; successful containers/CI do not satisfy an OKR.
   tables/function; complete preserved suite now passes:1848 passed,1 live-smoke skip,2 deprecation warnings (468.59s). Do not cite initial
   CI as green. No existing test or runtime authorization boundary was weakened.
 
+- [Real AWS bootstrap report](05-aws-bootstrap.txt): explicit launch, 2h scheduled
+  expiry, no inbound security-group rules, SSM tunnel, storefront/Grafana HTTP200.
+  Real producer has 25 services, no MCP; initialize /mcp HTTP404. Current SRE
+  AWS mode still fails closed; owner CLI has no fail/reset operation.
+- Hosted CI run38465270699 passed all technical jobs for PR624 head39b8a2c,
+  including contracts, Compose and production browser; draft/human gates remain.
+
 ## Criteria (every CA accounted for)
 
 | CA | Status | Evidence / remaining acceptance |
 | --- | --- | --- |
 | CA1 | Partial | Canonical command prepares controlled local stack and URLs. Final clean **integrated main** checkout pending; no branch/worktree instruction is an operator prerequisite. |
 | CA2 | Verified, controlled | IDs/key hashes/grants/incidents unchanged on repeat; audit retained; revoked grant/inactive catalog fail closed; occupied-port/MCP outage recovery and stop/restart. |
-| CA3 | Blocked/partial | Prepared private local network/token consumed; real OTel not executed here. AWS blocked before mutation: #494 producer PRs495–513 not integrated; no invented export/interface. |
+| CA3 | Blocked/partial | Prepared private local network/token consumed. Real AWS infrastructure verified separately; producer lacks MCP and connection export, PR513 unmerged. Current setup rejects AWS; governed real metric/log connection remains unverified. |
 | CA4 | Verified, controlled | Operator triage/run grants; independent direct investigator MCP discovery/invocation and existing LLM seed grant; restricted403. No human-grant inheritance or agent approval grant. |
 | CA5 | Verified, controlled | Schema/services/readiness and governed metric/log connectivity; invalid/missing input, occupied port and destination outage nonzero with bounded recovery. Empty data is connection-only proof. |
-| CA6 | Verified, local | Private inputs; no keys/headers/payloads in reports/media/arguments; actual harness secret absence/upstream DNS denial. No AWS resources, network-access expansion or paid default calls. |
+| CA6 | Verified, local | Private inputs; no keys/headers/payloads in reports/media/arguments; actual harness secret absence/upstream DNS denial. SRE setup creates no AWS resources or paid calls by default; separate AWS launch explicitly authorized, ingress empty, scheduled 2h expiry. No IAM bootstrap. |
 | CA7 | Partial | Current API controlled triage→investigate start→state/events→audit + denial verified. Independent reviewer, real OTel fail/reset signal changes, and any explicitly enabled live LLM demonstration pending. |
 | CA8 | Partial | README/operator guide, fresh reports/screenshots, pinned container commands and first/repeat/error/recovery results published. Final main SHA and human reproduction pending. |
 
 ## Environment and reproduction
 
 Docker29.9.0 / Compose5.6.0, Linux; pinned Python3.12/PostgreSQL17.4 images, uv.lock.
-Synthetic owned MCP fixture, no real OTel/AWS/model. Ignored owner-only .env from
+Controlled SRE journey uses synthetic owned MCP fixture, no live model.
+Separate real AWS bootstrap is recorded in report05; it does not prove SRE readiness. Ignored owner-only .env from
 .env.example, private token and pre-created internal fixture network. Runtime/consumer
 CIDRs10.253.161.48/28 and10.253.161.64/28 avoid exhausted default pools; checks uses
 10.253.161.0/28. No foreign container/network was stopped or deleted.
 
-Host has3.9GB free vs OTel's documented15GB requirement. Real OTel deployment and
-fail/reset were **not attempted**; no global pruning or credential discovery used.
+Host has3.9GB free vs OTel's documented15GB requirement. Local real OTel deployment and
+fail/reset were **not attempted**; separate AWS deployment succeeded but has no MCP.
+No global pruning or unauthorized credential discovery used.
 #494 remains OPEN; its remote acceptance cannot be replaced by a local fixture.
 
 See [operator guide](../../setup-sre.md) for normal setup/config/diagnosis/stop and

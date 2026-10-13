@@ -1,0 +1,22 @@
+Real AWS bootstrap observation — 2026-10-13
+Producer: user-authorized rapid-meadow scripts/otel_ec2.py (not integrated main).
+Session: dedicated otel-demo operator, us-east-1; producer identity guard passed.
+Commands: python3 "$OTEL" status; up; connect --local-port 18091 --remote-port 8090.
+Initial status: {"state":"absent"}; initial connect exit 2, no shared session.
+User explicitly authorized launch and AWS consumption; up exit 0.
+Created: 2026-10-13T22:21:22Z. Expiry: 2026-10-14T00:21:22Z (default 2h).
+Observed state: running. Security group ingress: []. Scheduler: ENABLED.
+Schedule expression: at(2026-10-14T00:21:22).
+SSM tunnel opened on local port 18091. No public HTTP connection used.
+Initial storefront probe: HTTP000 while cloud-init was running.
+Final cloud-init: done; SSM diagnostic command Success, no stderr.
+Scoped Docker listing: 25 OTel services running; healthchecks shown healthy.
+GET http://127.0.0.1:18091/ -> HTTP200 (curl exit0).
+Producer Compose config lists 25 services, no grafana-mcp. No stopped grafana-mcp found.
+GET /grafana/api/health -> HTTP200; POST /mcp initialize -> HTTP404.
+Producer owner CLI exposes up/status/extend/connect/down; no fail/reset command.
+Current setup_config.py explicitly rejects SRE_OTEL_MODE=aws before Docker.
+Projects rechecked: #618 Todo; #494 In progress, PR513 OPEN/unmerged.
+Infrastructure/storefront proof only: SRE AWS/MCP readiness NOT verified.
+No fail/reset, paid LLM call, IAM bootstrap, main integration or acceptance claim.
+Instance/account/public endpoint/session identifiers omitted from this report.

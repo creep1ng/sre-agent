@@ -7,7 +7,8 @@ or manual grants; distinguish installation/readiness from functional acceptance.
 ## Authority / constraints
 - User authorized implementation, current gh reads, branches/pushes/draft PRs in
   creep1ng/sre-agent. Latest goal authorizes merge only after all CA verified;
-  no premature merge/closure, AWS operations or paid LLM calls authorized.
+  no premature issue closure or paid LLM calls. Explicit AWS operations and
+  necessary pre-verification integration merges are now authorized.
 - User requires feature branches and several PRs, each <=400 additions+deletions.
 - Direct route: orchestrate existing Compose, seed and domain APIs; no SDD selected.
 - GitHub Projects consulted live: midnight.agent #8, issue618 OPEN / Todo.
@@ -16,8 +17,9 @@ or manual grants; distinguish installation/readiness from functional acceptance.
   observe RED then GREEN/refactor. Runner: Docker Compose and real HTTP/PostgreSQL.
 - RDD off; do not change configuration. Preserve existing runtime/test boundaries.
 - Engram mirror pending: runtime supplies no registered session ID; writes forbidden.
-- #494 OPEN; AWS producer PRs495–513 not integrated. Fail closed in AWS mode;
-  no guessed interface, file copying, deployment or IAM/network modification.
+- #494 OPEN; producer PRs495–513 unmerged. User explicitly authorized extending
+  producer MCP/fail/reset and SSM token transfer to local0600 API-only storage.
+  Keep zero public ingress, no IAM creation, no token argv/stdout/evidence.
 
 ## Tasks / acceptance checks
 - [x] S618-1 Provision demo operator workflow/triage and investigator direct MCP
@@ -30,6 +32,9 @@ or manual grants; distinguish installation/readiness from functional acceptance.
   investigation state/events/audit, plus OTel fail/reset signals (CA7/8).
 - [x] S618-5 Publish <=400-line feature-branch PR slices with real screenshots,
   tested/base SHA, reproduction, risks/rollback and CA matrix; request human review.
+
+- [ ] S618-6 Extend producer MCP/SSM private connection and owned fail/reset;
+  test-first real E2E, then consume its contract from SRE (CA3/6/7).
 
 ## Remaining acceptance gates
 CA1 final main-integrated clean checkout, CA3 real AWS consuming #494, CA7 independent
@@ -126,3 +131,20 @@ Asked for producer-extension scope, suitable local/authorized target, and ordere
 main integration required byCA1. No AWS credentials/session inspected or reused.
 Next: continue producer/real verification on scoped answers; keep goal active.
 Engram mirror/session summary remains blocked by missing authoritative runtimeID.
+
+User now authorizes necessary OTel Demo AWS operations and integration merges
+before final main verification. No paid call, IAM bootstrap or foreign cleanup.
+User supplied rapid-meadow scripts/otel_ec2.py; explicit operator guard verified.
+Status absent; user approved up: running,2h TTL,scheduled expiry00:21:22UTC.
+Live Projects rechecked618 Todo/494 In progress. CI38465270699 all technical
+jobs SUCCESS at62439b8a2c; draft governance/human acceptance still pending.
+SSM18091->8090 open; ingress empty; cloud-init done, storefront HTTP200.
+Real scoped listing lacks grafana-mcp; sanitized report05 records remaining gap.
+Real Compose25services/no MCP (including stopped); Grafana200, MCP initialize404.
+Owner CLI lacks fail/reset; SRE aws rejected. CA3/7 remain incomplete, not accepted.
+Next: resolve producer MCP/lifecycle contract, then validate SRE and integrate main.
+
+User approved producer extension and private SSM token handoff. Test-first E2E
+will cover actual transport, API-only secret access, fail/reset signal recovery.
+No new IAM/public port; preserve TTL and producer lifecycle. Evidence slice05
+separated from prior4, screenshot captured/inspected (UID correction after EACCES).
