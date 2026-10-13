@@ -1,0 +1,10 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "canonical_month": "2000-01",
+    "february_count": 0,
+    "january_count": 1,
+    "request_id": "7444d145-53ee-4973-bf98-c523abdf7974"
+  },
+  "scenario": "month-boundary"
+}
