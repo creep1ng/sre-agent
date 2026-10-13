@@ -271,3 +271,155 @@ def test_canonical_openrouter_evidence_survives_http_persistence_and_read(
             )
     finally:
         asyncio.run(upstream.aclose())
+
+
+def test_provider_timeout_records_assignment_but_no_credited_identity() -> None:
+    provider = ControlledProvider(failure="timeout")
+    app = create_application(
+        Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY), llm_provider=provider
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/responses",
+            headers=auth(CONSUMER),
+            json={"model": "triage-agent", "input": PROMPT},
+        )
+        assert response.status_code == 504
+        item = read_item(client, response.json()["request_id"])
+        assert item["requested_assignment"]["availability"] == "available"
+        assert item["credited_model"] == {"availability": "unavailable", "value": None}
+        assert item["credited_provider"] == {"availability": "unavailable", "value": None}
+        assert item["attribution_status"] == "partial"
+        assert item["consumption"]["availability"] == "unavailable"
+        record_artifact(
+            "timeout",
+            {
+                "http_status": response.status_code,
+                "attribution_status": item["attribution_status"],
+                "credited_model": item["credited_model"],
+                "credited_provider": item["credited_provider"],
+                "consumption_availability": item["consumption"]["availability"],
+            },
+        )
+
+
+def test_legacy_audit_without_snapshot_is_explicitly_legacy() -> None:
+    request_id = UUID("00000000-0000-0000-0000-000000004540")
+    legacy = historical_response_event(request_id, datetime(2026, 9, 1, tzinfo=UTC))
+
+    async def persist() -> None:
+        database = Database(DATABASE_URL)
+        try:
+            await PostgresAuditStore(database.sessions).append(legacy)
+        finally:
+            await database.dispose()
+
+    asyncio.run(persist())
+    app = create_application(Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY))
+    with TestClient(app) as client:
+        item = read_item(client, str(request_id))
+        assert item["attribution_status"] == "legacy"
+        assert item["requested_assignment"] == {
+            "availability": "unavailable",
+            "alias": None,
+            "model": None,
+            "provider": None,
+            "router": None,
+        }
+        assert item["credited_model"] == {"availability": "unavailable", "value": None}
+        assert item["credited_provider"] == {"availability": "unavailable", "value": None}
+        record_artifact(
+            "legacy",
+            {
+                "request_id": item["request_id"],
+                "attribution_status": item["attribution_status"],
+                "requested_assignment": item["requested_assignment"],
+            },
+        )
+
+
+def test_duplicate_audit_rows_use_earliest_month_at_boundary_once() -> None:
+    """A two-event month boundary produces one item in the canonical UTC month."""
+    provider = ControlledProvider()
+    app = create_application(
+        Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY), llm_provider=provider
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/v1/responses", headers=auth(CONSUMER), json={"model": "triage-agent", "input": PROMPT}
+        )
+        assert response.status_code == 200, response.text
+        request_id = UUID(response.json()["request_id"])
+        boundary = datetime(2000, 1, 31, 23, 59, 59, 999999, tzinfo=UTC)
+        next_month = datetime(2000, 2, 1, 0, 0, 0, tzinfo=UTC)
+        earlier = historical_response_event(request_id, boundary)
+        later = historical_response_event(request_id, next_month)
+        persist_audit_events([earlier, later])
+
+        january = client.get("/v1/usage/requests", params={"month": "2000-01"}, headers=auth(ADMIN))
+        february = client.get(
+            "/v1/usage/requests", params={"month": "2000-02"}, headers=auth(ADMIN)
+        )
+        assert january.status_code == february.status_code == 200
+        assert january.json()["filter"] == {"month": "2000-01"}
+        assert len(january.json()["items"]) == 1
+        assert january.json()["items"][0]["request_id"] == str(request_id)
+        assert january.json()["items"][0]["month"] == "2000-01"
+        assert february.json()["items"] == []
+        record_artifact(
+            "month-boundary",
+            {
+                "request_id": str(request_id),
+                "january_count": len(january.json()["items"]),
+                "canonical_month": january.json()["items"][0]["month"],
+                "february_count": len(february.json()["items"]),
+            },
+        )
+
+
+def test_append_only_injected_store_cannot_accept_invocation_without_snapshot() -> None:
+    """Real API/DB must fail closed if its injected store cannot capture atomically."""
+    provider = ControlledProvider()
+    writes: list[str] = []
+
+    class AppendOnlyStore:
+        async def append(self, audit_event) -> None:
+            writes.append(str(audit_event.event_id))
+            await PostgresAuditStore(injected.state.database.sessions).append(audit_event)
+
+    injected = create_application(
+        Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY),
+        llm_provider=provider,
+        audit_store=AppendOnlyStore(),
+    )
+    with TestClient(injected) as client:
+        response = client.post(
+            "/v1/responses", headers=auth(CONSUMER), json={"model": "triage-agent", "input": PROMPT}
+        )
+        assert len(provider.requests) == 1
+        assert response.status_code == 503, response.text
+        assert response.json()["error"]["code"] == "audit_unavailable"
+        assert set(response.json()) == {"error", "request_id", "retryable"}
+        assert PROMPT not in response.text and OUTPUT not in response.text
+        assert not writes, "non-atomic response audit must not be accepted on its own"
+        with psycopg.connect(DATABASE_URL) as connection:
+            counts = {}
+            for name, query in (
+                ("snapshots", "SELECT count(*) FROM request_attributions WHERE request_id = %s"),
+                (
+                    "audits",
+                    "SELECT count(*) FROM audit_events WHERE correlation->>'request_id' = %s",
+                ),
+            ):
+                count = connection.execute(query, (response.json()["request_id"],)).fetchone()[0]
+                assert count == 0
+                counts[name] = count
+        record_artifact(
+            "append-only-store",
+            {
+                "http_status": response.status_code,
+                "error": response.json()["error"]["code"],
+                "standalone_writes": len(writes),
+                "persisted_counts": counts,
+            },
+        )
