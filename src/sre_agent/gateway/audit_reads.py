@@ -532,7 +532,7 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
             "description": description,
             "content": {
                 "application/json": {
-                    "schema": {"$ref": "urn:sre-agent:schema:error-envelope:2.7.0"}
+                    "schema": {"$ref": "urn:sre-agent:schema:error-envelope:2.8.0"}
                 }
             },
         }

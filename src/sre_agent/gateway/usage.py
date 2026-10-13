@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gateway.usage_requests import read_requests
+from sre_agent.gateway.usage_requests_models import UsageRequestsResponse
 from sre_agent.governance.dto import AuthorizationDenialCause
 from sre_agent.persistence.models import AuditEventRow
 
@@ -193,12 +195,27 @@ class UsageReadProjection:
         month: str | None = None,
     ) -> dict[str, Any]:
         """Return one selector's aggregate or fail rather than silently truncating."""
+        rows, selected_filter, incident_ref = await self.select_evidence(
+            request_id=request_id, incident_id=incident_id, month=month
+        )
+        return self._aggregate(rows, selected_filter, incident_ref)
+
+    async def select_evidence(
+        self,
+        *,
+        request_id: UUID | None = None,
+        incident_id: str | None = None,
+        month: str | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, str], dict[str, Any] | None]:
+        """Select the authoritative bounded audit evidence shared by usage reads."""
         selectors = sum(value is not None for value in (request_id, incident_id, month))
         if selectors != 1:
             raise ValueError("exactly one usage selector is required")
 
         statement = select(
+            AuditEventRow.event_id.label("event_id"),
             AuditEventRow.occurred_at,
+            AuditEventRow.stage.label("stage"),
             AuditEventRow.correlation["request_id"].astext.label("request_id"),
             AuditEventRow.correlation["incident_ref"].label("incident_ref"),
             AuditEventRow.correlation["run_ref"].label("run_ref"),
@@ -249,14 +266,16 @@ class UsageReadProjection:
             selected_filter = {"month": month}
 
         statement = statement.order_by(
-            AuditEventRow.occurred_at.asc(), AuditEventRow.event_id.asc()
+            canonical_months.c.canonical_at.asc(),
+            request_ids.asc(),
+            AuditEventRow.occurred_at.asc(),
+            AuditEventRow.event_id.asc(),
         ).limit(self.MAX_ROWS + 1)
         async with self._sessions() as session:
             rows = (await session.execute(statement)).mappings().all()
         if len(rows) > self.MAX_ROWS:
             raise UsageReadLimitExceeded("usage scope exceeds the evidence row limit")
-
-        return self._aggregate(rows, selected_filter, incident_ref)
+        return rows, selected_filter, incident_ref
 
     @staticmethod
     def _month_range(month: str) -> tuple[datetime, datetime]:
@@ -297,21 +316,15 @@ class UsageReadProjection:
             month_key = row["canonical_at"].astimezone(UTC).strftime("%Y-%m")
             monthly_requests[month_key].add(request_key)
 
+        reconciled = cls._reconcile_requests(requests)
         known: list[dict[str, Any]] = []
         incomplete = 0
         unknown = 0
-        for evidence in requests.values():
-            consumption_values = {
-                json.dumps(row["consumption"], sort_keys=True, separators=(",", ":"))
-                if row["consumption"] is not None
-                else "null"
-                for row in evidence
-            }
-            incident_refs = {json.dumps(row["incident_ref"], sort_keys=True) for row in evidence}
-            if len(consumption_values) != 1 or len(incident_refs) != 1:
+        for request in reconciled.values():
+            if not request["consistent"]:
                 unknown += 1
                 continue
-            consumption = evidence[0]["consumption"]
+            consumption = request["consumption"]
             availability = consumption.get("availability") if consumption else None
             if availability == "complete":
                 known.append(consumption)
@@ -346,6 +359,28 @@ class UsageReadProjection:
                 "unknown": unknown,
             },
         }
+
+    @staticmethod
+    def _reconcile_requests(
+        requests: dict[str, list[dict[str, Any]]],
+    ) -> dict[str, dict[str, Any]]:
+        """Deduplicate request evidence and detect inconsistent per-request facts."""
+        reconciled: dict[str, dict[str, Any]] = {}
+        for request_key, evidence in requests.items():
+            consumption_values = {
+                json.dumps(row["consumption"], sort_keys=True, separators=(",", ":"))
+                if row["consumption"] is not None
+                else "null"
+                for row in evidence
+            }
+            incident_refs = {json.dumps(row["incident_ref"], sort_keys=True) for row in evidence}
+            consistent = len(consumption_values) == 1 and len(incident_refs) == 1
+            reconciled[request_key] = {
+                "consistent": consistent,
+                "consumption": evidence[0]["consumption"] if consistent else None,
+                "canonical_at": min(row["canonical_at"] for row in evidence),
+            }
+        return reconciled
 
     @classmethod
     def _totals(cls, known: list[dict[str, Any]], complete: bool) -> dict[str, Any]:
@@ -480,6 +515,43 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
         )
 
+    async def authorize_usage(request: Request) -> tuple[Any, Any, JSONResponse | None]:
+        """Share the governed authorization and audited denial path across usage reads."""
+        try:
+            context, evaluation = await authorize_governed_access(
+                projection._sessions,
+                request.headers.get("authorization"),
+                "admin.read",
+                "administrative_control",
+                "usage",
+            )
+        except AuthenticationFailed:
+            denied = await finish(
+                request,
+                status=401,
+                stage="authentication",
+                code="authentication_failed",
+                message="Authentication failed.",
+            )
+            return None, None, denied
+        except Exception:
+            denied = await finish(request, status=503, stage="audit", code="storage_unavailable")
+            return None, None, denied
+        if evaluation.decision.decision == "deny":
+            denied = await finish(
+                request,
+                status=403,
+                stage="authorization",
+                code="resource_unavailable",
+                message="Administrative read is not authorized.",
+                context=context,
+                decision=evaluation.decision,
+                authorization_denial_cause=evaluation.denial_cause,
+                resource_ref=("administrative_control", "usage"),
+            )
+            return None, None, denied
+        return context, evaluation, None
+
     class UsageReadRoute(APIRoute):
         def get_route_handler(self):
             route_handler = super().get_route_handler()
@@ -588,37 +660,9 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 message="The usage selector is invalid.",
             )
 
-        try:
-            _context, evaluation = await authorize_governed_access(
-                projection._sessions,
-                request.headers.get("authorization"),
-                "admin.read",
-                "administrative_control",
-                "usage",
-            )
-        except AuthenticationFailed:
-            return await finish(
-                request,
-                status=401,
-                stage="authentication",
-                code="authentication_failed",
-                message="Authentication failed.",
-            )
-        except Exception:
-            return await finish(request, status=503, stage="audit", code="storage_unavailable")
-
-        if evaluation.decision.decision == "deny":
-            return await finish(
-                request,
-                status=403,
-                stage="authorization",
-                code="resource_unavailable",
-                message="Administrative read is not authorized.",
-                context=_context,
-                decision=evaluation.decision,
-                authorization_denial_cause=evaluation.denial_cause,
-                resource_ref=("administrative_control", "usage"),
-            )
+        _context, evaluation, denial = await authorize_usage(request)
+        if denial is not None:
+            return denial
 
         try:
             result = await projection.read(**filters)
@@ -660,6 +704,128 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             stage="authorization",
             payload=UsageReadResponse.model_validate(result),
             context=_context,
+            decision=evaluation.decision,
+            resource_ref=("administrative_control", "usage"),
+        )
+
+    @router.get(
+        "/v1/usage/requests",
+        response_model=UsageRequestsResponse,
+        operation_id="readUsageRequests",
+        summary="Read bounded historical request attribution",
+        description=(
+            "Returns immutable persisted routing attribution and existing per-request "
+            "consumption evidence. Exactly one bounded selector is required. Missing "
+            "execution snapshots are never reconstructed from current aliases; historical "
+            "invocation rows are legacy and pre-invocation absence is unavailable."
+        ),
+        responses={
+            status: {
+                "description": description,
+                "content": {
+                    "application/json": {
+                        "schema": {"$ref": "urn:sre-agent:schema:error-envelope:2.8.0"}
+                    }
+                },
+            }
+            for status, description in {
+                401: "Authentication failed; no request data or counts are returned.",
+                403: "Administrative request reads are not authorized.",
+                413: "The selected evidence exceeds the explicit read bound.",
+                422: "The selector or body is missing, malformed, repeated, or unsupported.",
+                503: "Persisted request attribution could not be read.",
+            }.items()
+        },
+        openapi_extra={
+            "x-required-query-one-of": ["request_id", "incident_id", "month"],
+            "x-maximum-evidence-rows": UsageReadProjection.MAX_ROWS,
+            "x-reject-unknown-query-parameters": True,
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "usage",
+            },
+        },
+    )
+    async def read_usage_requests(
+        request: Request,
+        request_id: Annotated[UUID | None, Query(description="Response request UUID.")] = None,
+        incident_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
+        month: Annotated[str | None, Query(pattern=SUPPORTED_MONTH_PATTERN)] = None,
+        _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_usage_bearer)] = None,
+    ) -> UsageRequestsResponse | JSONResponse:
+        request.state.usage_request_id = uuid4()
+        supplied = list(request.query_params.multi_items())
+        supplied_names = [name for name, _ in supplied]
+        if (
+            await request.body()
+            or any(name not in selector_names for name in supplied_names)
+            or any(name in known_unbounded for name in supplied_names)
+            or len(supplied) != 1
+        ):
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="Exactly one bounded usage selector is required.",
+            )
+
+        filters: dict[str, Any] = {
+            name: value
+            for name, value in {
+                "request_id": request_id,
+                "incident_id": incident_id,
+                "month": month,
+            }.items()
+            if value is not None
+        }
+        if len(filters) != 1 or (
+            month is not None and re.fullmatch(SUPPORTED_MONTH_PATTERN, month) is None
+        ):
+            return await finish(
+                request,
+                status=422,
+                stage="validation",
+                code="validation_error",
+                message="The usage selector is invalid.",
+            )
+
+        context, evaluation, denial = await authorize_usage(request)
+        if denial is not None:
+            return denial
+        try:
+            result = await read_requests(projection, **filters)
+            response = UsageRequestsResponse.model_validate_json(json.dumps(result))
+        except UsageReadLimitExceeded:
+            return await finish(
+                request,
+                status=413,
+                stage="validation",
+                code="usage_scope_too_large",
+                message="The usage scope exceeds the read limit.",
+                context=context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
+        except Exception:
+            # Any malformed snapshot, consumption evidence, or storage failure is
+            # sanitized as unavailable rather than returning raw persisted data.
+            return await finish(
+                request,
+                status=503,
+                stage="audit",
+                code="storage_unavailable",
+                context=context,
+                decision=evaluation.decision,
+                resource_ref=("administrative_control", "usage"),
+            )
+        return await finish(
+            request,
+            status=200,
+            stage="authorization",
+            payload=response.model_dump(mode="json"),
+            context=context,
             decision=evaluation.decision,
             resource_ref=("administrative_control", "usage"),
         )

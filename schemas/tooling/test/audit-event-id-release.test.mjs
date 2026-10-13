@@ -81,7 +81,8 @@ test("2.7 is additive and immutable over the published 2.6 contract", async () =
   const cli = spawnSync(process.execPath, [fileURLToPath(new URL("../release.mjs", import.meta.url)), "validate", "--release", "2.7.0"], { encoding: "utf8" });
   assert.doesNotMatch(cli.stderr, /Usage:/);
   const published = await validatePublishedReleases(undefined, async (version) => ({ version }));
-  assert.equal(published.releases.at(-1), "2.7.0");
+  assert.ok(published.releases.includes("2.7.0"), "the tested historical release remains in the immutable release set");
+  assert.equal(published.releases.at(-1), "2.8.0");
 
   const api = await openApi("2.7.0");
   const manifest = parse(await readFile(new URL("../../releases/2.7.0/manifest.yaml", import.meta.url), "utf8"));
