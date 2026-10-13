@@ -4,16 +4,20 @@ import { expect, test } from "@playwright/test";
 // REAL backend. No route interception in this file: every request below reaches
 // the compose stack (web proxy + FastAPI + Postgres).
 //
-// Setup (not evidence): incidents are seeded through the same governed store
-// the HTTP suites use, run inside the checks container (see the PR body).
-// Each test owns its incident id via SEED_STAMP, so no test depends on order
-// or on residual data. Idempotency keys are minted by the UI per submit.
+// Setup (not evidence): incidents come from scripts/seed_review_durability.py,
+// run inside the checks container (see the PR body). Each test owns its
+// incident id via SEED_STAMP, so no test depends on order or on residual data.
+// The script converges on reruns, and the UI mints a fresh idempotency key per
+// submit, so keys are never shared between tests.
 //
 // What the real contract exposes for verification: the commands endpoint
 // answers 202/409, the incident detail carries the durable run state, and the
 // timeline lists the persisted decision events (one per accepted decision).
 // The accepted free-text reason lives in the decisions store covered by the
 // HTTP suite; here the UI must never lose the typed reason on a conflict.
+// There is deliberately no optimistic-version scenario: the command contract
+// carries no client-supplied expected version, so staleness is only observable
+// as "the state no longer admits this command" (409 run_conflict).
 //
 // Gate: these journeys need the live compose stack with seeded grants, so they
 // skip unless SRE_REAL_BACKEND=1 with REVIEW_API_KEY (a human credential holding
@@ -73,12 +77,11 @@ async function openReviewReal(page, incident, run) {
   await expect(page.locator("#actions-list button")).toHaveCount(3);
 }
 
-async function decideReal(page, comment) {
+async function startDecision(page, comment) {
   await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
   await page.locator("#decision-comment").fill(comment);
   const key = (await page.locator("#decision-key").textContent()) ?? "";
   expect(key).toMatch(/^[0-9a-f-]{10,}$/);
-  await page.locator("#decision-submit").click();
   return key.trim();
 }
 
@@ -87,7 +90,8 @@ test("resubmitting the accepted decision replays without duplicating it", async 
   const run = runFor(1);
   const comment = `Durability reason J1 ${STAMP}.`;
   await openReviewReal(page, incident, run);
-  const key = await decideReal(page, comment);
+  const key = await startDecision(page, comment);
+  await page.locator("#decision-submit").click();
   await expect(page.locator("#receipt-line")).toContainText("approve_mitigation", { timeout: 15000 });
 
   const replay = await apiPostCommand(request, incident, run, key, commandBody(comment));
@@ -102,51 +106,40 @@ test("resubmitting the accepted decision replays without duplicating it", async 
   expect(timeline.events[0].kind).toBe("state_change");
 });
 
-test("a conflicting reuse is rejected and the typed reason survives", async ({ page, request }) => {
+test("a stale page loses the race and keeps its reason after the real 409", async ({ browser, request }) => {
+  // Transition conflict through the UI, with fresh keys on both pages: page B
+  // advances the run first, so page A's submit is genuinely stale. This is a
+  // different conflict from reusing one idempotency key with other content
+  // (covered at HTTP level by test_a_retried_command_returns_the_same_state).
   const incident = incidentFor(2);
   const run = runFor(2);
-  const comment = `Durability reason J2 ${STAMP}.`;
-  await openReviewReal(page, incident, run);
-  const key = await decideReal(page, comment);
-  await expect(page.locator("#receipt-line")).toContainText("approve_mitigation", { timeout: 15000 });
+  const commentA = `Durability reason J2A ${STAMP}.`;
+  const primero = await browser.newPage();
+  const segundo = await browser.newPage();
+  try {
+    await openReviewReal(primero, incident, run);
+    await openReviewReal(segundo, incident, run);
+    await startDecision(primero, commentA);
+    await startDecision(segundo, `Durability reason J2B ${STAMP}.`);
 
-  const conflict = await apiPostCommand(request, incident, run, key, commandBody(`Changed reason ${STAMP}.`));
-  expect(conflict.status).toBe(409);
+    await segundo.locator("#decision-submit").click();
+    await expect(segundo.locator("#receipt-line")).toContainText("approve_mitigation", { timeout: 15000 });
 
-  const detail = await apiGetIncident(request, incident);
-  expect(detail.state).toBe("verifying");
-  const timeline = await apiGetTimeline(request, incident, run);
-  expect(timeline.events).toHaveLength(1);
+    await primero.locator("#decision-submit").click();
+    await expect(primero.locator("#error-409")).toBeVisible({ timeout: 15000 });
+    await expect(primero.locator("#decision-comment")).toHaveValue(commentA);
 
-  await expect(page.locator("#decision-comment")).toHaveValue(comment);
-  await page.locator("#refresh-button").click();
-  await expect(page.locator("#fact-state")).toContainText("verifying");
-});
+    const detail = await apiGetIncident(request, incident);
+    expect(detail.state).toBe("verifying");
+    const timeline = await apiGetTimeline(request, incident, run);
+    expect(timeline.events).toHaveLength(1);
 
-test("repeating the approval after the state advanced is rejected", async ({ page, request }) => {
-  // State-transition conflict, not optimistic versioning: the command contract
-  // carries no expected version, so staleness is only observable as "the state
-  // no longer admits this command". Uses a fresh key to separate it from the
-  // key-content conflict above.
-  const incident = incidentFor(4);
-  const run = runFor(4);
-  const comment = `Durability reason J4 ${STAMP}.`;
-  await openReviewReal(page, incident, run);
-  await decideReal(page, comment);
-  await expect(page.locator("#receipt-line")).toContainText("approve_mitigation", { timeout: 15000 });
-
-  const { randomUUID } = await import("node:crypto");
-  const late = await apiPostCommand(request, incident, run, randomUUID(), commandBody(comment));
-  expect(late.status).toBe(409);
-
-  const detail = await apiGetIncident(request, incident);
-  expect(detail.state).toBe("verifying");
-  const timeline = await apiGetTimeline(request, incident, run);
-  expect(timeline.events).toHaveLength(1);
-
-  await expect(page.locator("#decision-comment")).toHaveValue(comment);
-  await page.locator("#refresh-button").click();
-  await expect(page.locator("#fact-state")).toContainText("verifying");
+    await primero.locator("#refresh-button").click();
+    await expect(primero.locator("#fact-state")).toContainText("verifying");
+  } finally {
+    await primero.close();
+    await segundo.close();
+  }
 });
 
 test("reload and a second session read back the same accepted decision", async ({ page, browser, request }) => {
@@ -154,7 +147,8 @@ test("reload and a second session read back the same accepted decision", async (
   const run = runFor(3);
   const comment = `Durability reason J3 ${STAMP}.`;
   await openReviewReal(page, incident, run);
-  await decideReal(page, comment);
+  await startDecision(page, comment);
+  await page.locator("#decision-submit").click();
   await expect(page.locator("#receipt-line")).toContainText("approve_mitigation", { timeout: 15000 });
 
   const before = await apiGetTimeline(request, incident, run);
