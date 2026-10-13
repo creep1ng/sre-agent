@@ -47,7 +47,7 @@ above are built locally from the declared checkout/lockfiles, not unpullable cac
 The counter overlay already clears external=false; do not omit it or use global
 networks. Mount the **whole** VERIFY_DIR because the observers share audit_contract.py.
 Run commands independently: baseline replay exits 0, complete Python/Ajv validation
-exits 1 for four valid/five invalid events, and the corrected 401 observer exits 1
+exits 1 for zero valid/nine invalid events, and the corrected 401 observer exits 1
 for the missing terminal event. Those failures are not fixed or weakened here.
 
 A successful mocked authentication fixture certifies observer behavior only. A live

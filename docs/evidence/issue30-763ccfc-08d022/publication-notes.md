@@ -45,3 +45,8 @@ separate delivery/runtime checkouts and build tagged images. Corrected observers
 validate complete authentication events plus HTTP/counters; original helpers, run
 records, snapshots and both earlier manifests stay in their original Git history.
 New verification and mock-only checks are linked separately from the PR body.
+
+Post-NULL review supersedes complete-event conclusions only: previous 4/5 results
+used recursive JSON-null omission and remain phase-original records. Current
+observers retain explicit JSONB nulls and find 0 valid/9 invalid, including422;
+the approved context omission remains unchanged. See the separate follow-up unit.

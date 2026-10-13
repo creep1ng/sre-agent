@@ -123,8 +123,8 @@ summary = {
     "schema_failed": sum(r["validation"] == "failed" for r in results),
     "storage_representation": "complete SQL columns, including SQL NULL, retained separately",
     "contract_representation": (
-        "SQL NULL in optional fields omitted; required root fields and all non-null fields "
-        "preserved; no field values repaired"
+        "Only optional top-level SQL NULL omitted; required root NULLs and all JSONB values "
+        "preserved, including explicit nested NULLs; no field values repaired"
     ),
     "invalid_credential": {
         "request_id": invalid["request_id"],

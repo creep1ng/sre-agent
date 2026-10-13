@@ -21,19 +21,8 @@ def contract_validator(version="2.7.0"):
 
 
 def canonical_event(row, required):
-    # Optional SQL NULL means absence; preserve required root NULLs and all values.
-    def walk(value, path=()):
-        if isinstance(value, dict):
-            return {
-                k: walk(v, path + (k,))
-                for k, v in value.items()
-                if v is not None or (not path and k in required)
-            }
-        if isinstance(value, list):
-            return [walk(v, path) for v in value]
-        return value
-
-    return walk(row)
+    # Only top-level optional SQL NULL means absence; JSONB values stay exact.
+    return {k: v for k, v in row.items() if v is not None or k in required}
 
 
 def authentication_event_valid(event, validator, request_id, start, end):
