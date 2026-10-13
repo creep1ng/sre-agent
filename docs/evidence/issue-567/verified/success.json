@@ -1,0 +1,95 @@
+{
+  "scenario": "success",
+  "evidence_kind": "controlled integration",
+  "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+  "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+  "environment": {
+    "python": "3.12.14",
+    "postgres": "17.4",
+    "fastapi": "0.115.12",
+    "httpx": "0.28.1",
+    "sqlalchemy": "2.0.52",
+    "psycopg": "3.2.6"
+  },
+  "expected_outcome": "success",
+  "observed_outcome": "success",
+  "initial_http": 201,
+  "read_http": 200,
+  "resume_http": 200,
+  "replay_http": 200,
+  "read_state": {
+    "run_id": "run_0547b9a5a5b21525",
+    "incident_id": "inc-effects-success",
+    "workflow_version": "1.0.0",
+    "status": "running",
+    "current_state": "investigating",
+    "pending_command": null,
+    "cursor": "seq:3",
+    "terminated_reason": null,
+    "updated_at": "2026-10-13T04:16:24.571583Z"
+  },
+  "receipts_before_replay": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_0547b9a5a5b21525",
+      "request_ids": [],
+      "mcp_request_ids": []
+    },
+    {
+      "phase": "outcome",
+      "status": "success",
+      "dispatch_id": "run_0547b9a5a5b21525",
+      "request_ids": [
+        "7adfbb0b-5815-4a0d-ba46-154803b4beb8",
+        "80d6cd5f-6c18-4313-8d97-709100c6990c"
+      ],
+      "result_status": "completed",
+      "mcp_request_ids": []
+    }
+  ],
+  "terminal_receipts": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_0547b9a5a5b21525",
+      "request_ids": [],
+      "mcp_request_ids": []
+    },
+    {
+      "phase": "outcome",
+      "status": "success",
+      "dispatch_id": "run_0547b9a5a5b21525",
+      "request_ids": [
+        "7adfbb0b-5815-4a0d-ba46-154803b4beb8",
+        "80d6cd5f-6c18-4313-8d97-709100c6990c"
+      ],
+      "result_status": "completed",
+      "mcp_request_ids": []
+    }
+  ],
+  "receiver_at_boundary": null,
+  "receiver_final": {
+    "counter": 1,
+    "operations": [
+      {
+        "sequence": 1,
+        "request_id": "80d6cd5f-6c18-4313-8d97-709100c6990c",
+        "incident_id": "inc-effects-success",
+        "run_id": "run_0547b9a5a5b21525",
+        "task_id": "task_7e9c600b306971d0",
+        "status": "applied"
+      }
+    ],
+    "discovery_calls": 1
+  },
+  "concurrent_http": [],
+  "outcome_insert_wait_observed": false,
+  "receiver_pid": 15,
+  "runtime_pids": [
+    21,
+    27
+  ],
+  "first_runtime_exit": -15,
+  "database_query": "SELECT payload FROM incident.run_events WHERE run_id = %s ORDER BY sequence"
+}

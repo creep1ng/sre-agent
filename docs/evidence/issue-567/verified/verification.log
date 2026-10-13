@@ -1,0 +1,74 @@
+E567 success: success; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.E567 reject: confirmed_failure; receiver operations=1 counter=0; read/resume/replay did not redispatch
+.E567 pre_dispatch: confirmed_failure; receiver operations=0 counter=0; read/resume/replay did not redispatch
+.E567 5xx: unknown; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.E567 loss: unknown; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.E567 timeout: unknown; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.E567 before_dispatch: unknown; receiver operations=0 counter=0; read/resume/replay did not redispatch
+.E567 before_effect: unknown; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.E567 after_effect: unknown; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.E567 before_commit: unknown; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.E567 concurrent: success; receiver operations=1 counter=1; read/resume/replay did not redispatch
+.
+11 passed in 151.35s (0:02:31)
+SQL_INSPECTION success: receiver counter=1, sent=1, runtime=success, result_events=1
+SQL_INSPECTION reject: receiver counter=0, sent=1, runtime=confirmed_failure, result_events=0
+SQL_INSPECTION pre_dispatch: receiver counter=0, sent=0, runtime=confirmed_failure, result_events=0
+SQL_INSPECTION 5xx: receiver counter=1, sent=1, runtime=unknown, result_events=0
+SQL_INSPECTION loss: receiver counter=1, sent=1, runtime=unknown, result_events=0
+SQL_INSPECTION timeout: receiver counter=1, sent=1, runtime=unknown, result_events=0
+SQL_INSPECTION before_dispatch: receiver counter=0, sent=0, runtime=unknown, result_events=0
+SQL_INSPECTION before_effect: receiver counter=1, sent=1, runtime=unknown, result_events=0
+SQL_INSPECTION after_effect: receiver counter=1, sent=1, runtime=unknown, result_events=0
+SQL_INSPECTION before_commit: receiver counter=1, sent=1, runtime=unknown, result_events=0
+SQL_INSPECTION concurrent: receiver counter=1, sent=1, runtime=success, result_events=1
+SQL_INSPECTION: persisted receiver and live runtime records agree for all scenarios
+All checks passed!
+254 files already formatted
+Resolved 93 packages in 0.91ms
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 91 files, 403 dependencies.
+------------------------------------
+
+Incident core does not use concrete adapters KEPT
+Governance does not use concrete adapters KEPT
+Persistence does not use delivery or composition KEPT
+Incident runtime and ports avoid framework dependencies KEPT
+Investigator reaches the gateway over HTTP only and cannot write state KEPT
+
+Contracts: 5 kept, 0 broken.
+Success: no issues found in 11 source files
+run api: OK (5 paths, 5 schemas, 6 positive and 8 negative examples)
+........................................................................ [ 16%]
+........................................................................ [ 32%]
+........................................................................ [ 48%]
+........................................................................ [ 65%]
+........................................................................ [ 81%]
+........................................................................ [ 97%]
+..........                                                               [100%]
+=============================== warnings summary ===============================
+tests/test_incident_investigator_http.py::test_http_investigate_uses_governed_llm_and_mcp_and_persists_the_result
+  /app/.venv/lib/python3.12/site-packages/websockets/legacy/__init__.py:6: DeprecationWarning: websockets.legacy is deprecated; see https://websockets.readthedocs.io/en/stable/howto/upgrade.html for upgrade instructions
+    warnings.warn(  # deprecated in 14.0 - 2024-11-09
+
+tests/test_incident_investigator_http.py::test_http_investigate_uses_governed_llm_and_mcp_and_persists_the_result
+  /app/.venv/lib/python3.12/site-packages/uvicorn/protocols/websockets/websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+    from websockets.server import WebSocketServerProtocol
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+442 passed, 2 warnings in 97.56s (0:01:37)
+No new upgrade operations detected.

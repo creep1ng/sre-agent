@@ -1,0 +1,94 @@
+{
+  "scenario": "after_effect",
+  "evidence_kind": "controlled integration",
+  "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+  "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+  "environment": {
+    "python": "3.12.14",
+    "postgres": "17.4",
+    "fastapi": "0.115.12",
+    "httpx": "0.28.1",
+    "sqlalchemy": "2.0.52",
+    "psycopg": "3.2.6"
+  },
+  "expected_outcome": "unknown",
+  "observed_outcome": "unknown",
+  "initial_http": null,
+  "read_http": 200,
+  "resume_http": 200,
+  "replay_http": 200,
+  "read_state": {
+    "run_id": "run_a1252dbe1bbffd04",
+    "incident_id": "inc-effects-after_effect",
+    "workflow_version": "1.0.0",
+    "status": "running",
+    "current_state": "investigating",
+    "pending_command": null,
+    "cursor": "seq:1",
+    "terminated_reason": null,
+    "updated_at": "2026-10-13T04:18:15.266826Z"
+  },
+  "receipts_before_replay": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_a1252dbe1bbffd04",
+      "request_ids": [],
+      "mcp_request_ids": []
+    }
+  ],
+  "terminal_receipts": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_a1252dbe1bbffd04",
+      "request_ids": [],
+      "mcp_request_ids": []
+    },
+    {
+      "phase": "outcome",
+      "status": "unknown",
+      "dispatch_id": "run_a1252dbe1bbffd04",
+      "reason_code": "producer_interrupted",
+      "request_ids": [],
+      "mcp_request_ids": []
+    }
+  ],
+  "receiver_at_boundary": {
+    "counter": 1,
+    "operations": [
+      {
+        "sequence": 1,
+        "request_id": "8c2074c1-c898-410a-8e98-b295eec29749",
+        "incident_id": "inc-effects-after_effect",
+        "run_id": "run_a1252dbe1bbffd04",
+        "task_id": "task_912807b4ef0dd6a0",
+        "status": "applied"
+      }
+    ],
+    "discovery_calls": 1
+  },
+  "receiver_final": {
+    "counter": 1,
+    "operations": [
+      {
+        "sequence": 1,
+        "request_id": "8c2074c1-c898-410a-8e98-b295eec29749",
+        "incident_id": "inc-effects-after_effect",
+        "run_id": "run_a1252dbe1bbffd04",
+        "task_id": "task_912807b4ef0dd6a0",
+        "status": "applied"
+      }
+    ],
+    "discovery_calls": 1
+  },
+  "concurrent_http": [],
+  "outcome_insert_wait_observed": false,
+  "receiver_pid": 183,
+  "runtime_pids": [
+    189,
+    195
+  ],
+  "first_runtime_exit": -9,
+  "database_query": "SELECT payload FROM incident.run_events WHERE run_id = %s ORDER BY sequence"
+}

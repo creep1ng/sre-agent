@@ -1,0 +1,413 @@
+[
+  {
+    "scenario": "success",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_0547b9a5a5b21525",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "80d6cd5f-6c18-4313-8d97-709100c6990c",
+        "incident_id": "inc-effects-success",
+        "run_id": "run_0547b9a5a5b21525",
+        "task_id": "task_7e9c600b306971d0",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_0547b9a5a5b21525",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "success",
+        "dispatch_id": "run_0547b9a5a5b21525",
+        "request_ids": [
+          "7adfbb0b-5815-4a0d-ba46-154803b4beb8",
+          "80d6cd5f-6c18-4313-8d97-709100c6990c"
+        ],
+        "result_status": "completed",
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 1
+  },
+  {
+    "scenario": "reject",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_0e2c1b84315a5262",
+    "receiver_counter_sql": 0,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "7e21e81a-e548-413d-9d96-204f58222c42",
+        "incident_id": "inc-effects-reject",
+        "run_id": "run_0e2c1b84315a5262",
+        "task_id": "task_783413bf784674d6",
+        "status": "rejected"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_0e2c1b84315a5262",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "confirmed_failure",
+        "dispatch_id": "run_0e2c1b84315a5262",
+        "reason_code": "governed_call_denied",
+        "request_ids": [
+          "9ffe8b23-2807-45d1-a0c1-1fcae8b3ffb9",
+          "7e21e81a-e548-413d-9d96-204f58222c42"
+        ],
+        "result_status": "denied",
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "pre_dispatch",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_381995c77457eb2e",
+    "receiver_counter_sql": 0,
+    "receiver_operations_sql": [],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_381995c77457eb2e",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "confirmed_failure",
+        "dispatch_id": "run_381995c77457eb2e",
+        "reason_code": "harness_not_configured",
+        "request_ids": [],
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "5xx",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_7c47ec71b5d39a70",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "6554e628-3bb8-4c5a-b448-72e49eaa5314",
+        "incident_id": "inc-effects-5xx",
+        "run_id": "run_7c47ec71b5d39a70",
+        "task_id": "task_e6a687d28ba6c5fa",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_7c47ec71b5d39a70",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "unknown",
+        "diagnostic": {
+          "kind": "transient",
+          "stage": "gateway_transport",
+          "request_id": "6554e628-3bb8-4c5a-b448-72e49eaa5314",
+          "turn_count": 0,
+          "http_status": 503,
+          "collected_evidence_count": 0
+        },
+        "dispatch_id": "run_7c47ec71b5d39a70",
+        "reason_code": "investigation_upstream_unavailable",
+        "request_ids": [
+          "830e0666-e7f5-40c8-b5f9-3f3874706b97",
+          "6554e628-3bb8-4c5a-b448-72e49eaa5314"
+        ],
+        "result_status": "upstream_unavailable",
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "loss",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_c70101e37dcab572",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "d288284a-e5b7-4191-9520-94f3b58b64ae",
+        "incident_id": "inc-effects-loss",
+        "run_id": "run_c70101e37dcab572",
+        "task_id": "task_07d9aac28b9f9f2c",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_c70101e37dcab572",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "unknown",
+        "diagnostic": {
+          "kind": "transient",
+          "stage": "gateway_transport",
+          "request_id": null,
+          "turn_count": 0,
+          "http_status": null,
+          "collected_evidence_count": 0
+        },
+        "dispatch_id": "run_c70101e37dcab572",
+        "reason_code": "investigation_upstream_unavailable",
+        "request_ids": [
+          "a20b6d17-f65f-4a33-815a-5715266b4cbf"
+        ],
+        "result_status": "upstream_unavailable",
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "timeout",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_e6eb85e1a78bee2c",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "9c379753-66b0-4a91-b6d3-07738b0e91a0",
+        "incident_id": "inc-effects-timeout",
+        "run_id": "run_e6eb85e1a78bee2c",
+        "task_id": "task_364f615b5a828606",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_e6eb85e1a78bee2c",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "unknown",
+        "diagnostic": {
+          "kind": "transient",
+          "stage": "gateway_transport",
+          "request_id": null,
+          "turn_count": 0,
+          "http_status": null,
+          "collected_evidence_count": 0
+        },
+        "dispatch_id": "run_e6eb85e1a78bee2c",
+        "reason_code": "investigation_upstream_unavailable",
+        "request_ids": [
+          "8c2deebb-ae4c-44e8-a57a-9b9791809994"
+        ],
+        "result_status": "upstream_unavailable",
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "before_dispatch",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_aee4403d4eadd699",
+    "receiver_counter_sql": 0,
+    "receiver_operations_sql": [],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_aee4403d4eadd699",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "unknown",
+        "dispatch_id": "run_aee4403d4eadd699",
+        "reason_code": "producer_interrupted",
+        "request_ids": [],
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "before_effect",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_3b5fc385840715e6",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "4eb58c92-e814-4502-bde8-6b315b7f310c",
+        "incident_id": "inc-effects-before_effect",
+        "run_id": "run_3b5fc385840715e6",
+        "task_id": "task_7afd33b7ce3fa9d5",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_3b5fc385840715e6",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "unknown",
+        "dispatch_id": "run_3b5fc385840715e6",
+        "reason_code": "producer_interrupted",
+        "request_ids": [],
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "after_effect",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_a1252dbe1bbffd04",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "8c2074c1-c898-410a-8e98-b295eec29749",
+        "incident_id": "inc-effects-after_effect",
+        "run_id": "run_a1252dbe1bbffd04",
+        "task_id": "task_912807b4ef0dd6a0",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_a1252dbe1bbffd04",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "unknown",
+        "dispatch_id": "run_a1252dbe1bbffd04",
+        "reason_code": "producer_interrupted",
+        "request_ids": [],
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "before_commit",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_257e9ec491e64293",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "952b56c3-d19e-43e4-98f9-53d38459e131",
+        "incident_id": "inc-effects-before_commit",
+        "run_id": "run_257e9ec491e64293",
+        "task_id": "task_cf6a5ba6f1ce7e7a",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_257e9ec491e64293",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "unknown",
+        "dispatch_id": "run_257e9ec491e64293",
+        "reason_code": "producer_interrupted",
+        "request_ids": [],
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 0
+  },
+  {
+    "scenario": "concurrent",
+    "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+    "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+    "run_id": "run_568c707e82778468",
+    "receiver_counter_sql": 1,
+    "receiver_operations_sql": [
+      {
+        "sequence": 1,
+        "request_id": "fdbc1a8c-661d-49e5-bedc-458e804bf393",
+        "incident_id": "inc-effects-concurrent",
+        "run_id": "run_568c707e82778468",
+        "task_id": "task_f662540ee394e812",
+        "status": "applied"
+      }
+    ],
+    "runtime_receipts_sql": [
+      {
+        "phase": "intent",
+        "status": "pending",
+        "dispatch_id": "run_568c707e82778468",
+        "request_ids": [],
+        "mcp_request_ids": []
+      },
+      {
+        "phase": "outcome",
+        "status": "success",
+        "dispatch_id": "run_568c707e82778468",
+        "request_ids": [
+          "6a680a71-a65e-4e29-999f-59539a4bf5ab",
+          "fdbc1a8c-661d-49e5-bedc-458e804bf393"
+        ],
+        "result_status": "completed",
+        "mcp_request_ids": []
+      }
+    ],
+    "runtime_result_count_sql": 1
+  }
+]

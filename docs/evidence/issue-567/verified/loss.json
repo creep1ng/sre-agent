@@ -1,0 +1,111 @@
+{
+  "scenario": "loss",
+  "evidence_kind": "controlled integration",
+  "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+  "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+  "environment": {
+    "python": "3.12.14",
+    "postgres": "17.4",
+    "fastapi": "0.115.12",
+    "httpx": "0.28.1",
+    "sqlalchemy": "2.0.52",
+    "psycopg": "3.2.6"
+  },
+  "expected_outcome": "unknown",
+  "observed_outcome": "unknown",
+  "initial_http": 201,
+  "read_http": 200,
+  "resume_http": 200,
+  "replay_http": 200,
+  "read_state": {
+    "run_id": "run_c70101e37dcab572",
+    "incident_id": "inc-effects-loss",
+    "workflow_version": "1.0.0",
+    "status": "running",
+    "current_state": "investigating",
+    "pending_command": null,
+    "cursor": "seq:2",
+    "terminated_reason": null,
+    "updated_at": "2026-10-13T04:17:19.711962Z"
+  },
+  "receipts_before_replay": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_c70101e37dcab572",
+      "request_ids": [],
+      "mcp_request_ids": []
+    },
+    {
+      "phase": "outcome",
+      "status": "unknown",
+      "diagnostic": {
+        "kind": "transient",
+        "stage": "gateway_transport",
+        "request_id": null,
+        "turn_count": 0,
+        "http_status": null,
+        "collected_evidence_count": 0
+      },
+      "dispatch_id": "run_c70101e37dcab572",
+      "reason_code": "investigation_upstream_unavailable",
+      "request_ids": [
+        "a20b6d17-f65f-4a33-815a-5715266b4cbf"
+      ],
+      "result_status": "upstream_unavailable",
+      "mcp_request_ids": []
+    }
+  ],
+  "terminal_receipts": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_c70101e37dcab572",
+      "request_ids": [],
+      "mcp_request_ids": []
+    },
+    {
+      "phase": "outcome",
+      "status": "unknown",
+      "diagnostic": {
+        "kind": "transient",
+        "stage": "gateway_transport",
+        "request_id": null,
+        "turn_count": 0,
+        "http_status": null,
+        "collected_evidence_count": 0
+      },
+      "dispatch_id": "run_c70101e37dcab572",
+      "reason_code": "investigation_upstream_unavailable",
+      "request_ids": [
+        "a20b6d17-f65f-4a33-815a-5715266b4cbf"
+      ],
+      "result_status": "upstream_unavailable",
+      "mcp_request_ids": []
+    }
+  ],
+  "receiver_at_boundary": null,
+  "receiver_final": {
+    "counter": 1,
+    "operations": [
+      {
+        "sequence": 1,
+        "request_id": "d288284a-e5b7-4191-9520-94f3b58b64ae",
+        "incident_id": "inc-effects-loss",
+        "run_id": "run_c70101e37dcab572",
+        "task_id": "task_07d9aac28b9f9f2c",
+        "status": "applied"
+      }
+    ],
+    "discovery_calls": 1
+  },
+  "concurrent_http": [],
+  "outcome_insert_wait_observed": false,
+  "receiver_pid": 99,
+  "runtime_pids": [
+    105,
+    111
+  ],
+  "first_runtime_exit": -15,
+  "database_query": "SELECT payload FROM incident.run_events WHERE run_id = %s ORDER BY sequence"
+}

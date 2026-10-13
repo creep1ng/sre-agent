@@ -1,0 +1,11 @@
+Full-stack tested HEAD
+100644 blob 5fb39616034dace352dd91fb7478d187e1042052	docs/design/issue-567-controlled-effects.md
+100644 blob e5c927ef8af9ac49b42af4c9305738d65b9515b5	tests/effect_receiver.py
+100644 blob 4f29eda88cdfadda77e6c22b00585edce2327803	tests/test_external_effects_e2e.py
+
+Receiver/design constituent HEAD
+100644 blob 5fb39616034dace352dd91fb7478d187e1042052	docs/design/issue-567-controlled-effects.md
+100644 blob e5c927ef8af9ac49b42af4c9305738d65b9515b5	tests/effect_receiver.py
+
+E2E constituent HEAD
+100644 blob 4f29eda88cdfadda77e6c22b00585edce2327803	tests/test_external_effects_e2e.py

@@ -1,0 +1,5 @@
+Docker client/server: 29.9.0/29.9.0
+5.6.0
+Verification state=exited exit=0 start=2026-10-13T04:16:13.976989743Z end=2026-10-13T04:20:35.050813676Z image=sha256:f40fde91b8ddda86d4b361c57ded6223a87d3ce3a619aedf61900d14e6a0082d
+Capture image=sha256:c390182b2bf7ca0fa8aa5dff17947a4647f5d311a6d07503a966cf837ad9741e
+Postgres image=sha256:7062a2109c4b51f3c792c7ea01e83ed12ef9a980886e3b3d380a7d2e5f6ce3f5

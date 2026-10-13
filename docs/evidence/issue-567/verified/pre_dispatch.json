@@ -1,0 +1,80 @@
+{
+  "scenario": "pre_dispatch",
+  "evidence_kind": "controlled integration",
+  "tested_sha": "8b4316ca77637fcbed3750bfeb2121d294469b7b",
+  "base_sha": "763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9",
+  "environment": {
+    "python": "3.12.14",
+    "postgres": "17.4",
+    "fastapi": "0.115.12",
+    "httpx": "0.28.1",
+    "sqlalchemy": "2.0.52",
+    "psycopg": "3.2.6"
+  },
+  "expected_outcome": "confirmed_failure",
+  "observed_outcome": "confirmed_failure",
+  "initial_http": 201,
+  "read_http": 200,
+  "resume_http": 200,
+  "replay_http": 200,
+  "read_state": {
+    "run_id": "run_381995c77457eb2e",
+    "incident_id": "inc-effects-pre_dispatch",
+    "workflow_version": "1.0.0",
+    "status": "running",
+    "current_state": "investigating",
+    "pending_command": null,
+    "cursor": "seq:2",
+    "terminated_reason": null,
+    "updated_at": "2026-10-13T04:16:52.968449Z"
+  },
+  "receipts_before_replay": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_381995c77457eb2e",
+      "request_ids": [],
+      "mcp_request_ids": []
+    },
+    {
+      "phase": "outcome",
+      "status": "confirmed_failure",
+      "dispatch_id": "run_381995c77457eb2e",
+      "reason_code": "harness_not_configured",
+      "request_ids": [],
+      "mcp_request_ids": []
+    }
+  ],
+  "terminal_receipts": [
+    {
+      "phase": "intent",
+      "status": "pending",
+      "dispatch_id": "run_381995c77457eb2e",
+      "request_ids": [],
+      "mcp_request_ids": []
+    },
+    {
+      "phase": "outcome",
+      "status": "confirmed_failure",
+      "dispatch_id": "run_381995c77457eb2e",
+      "reason_code": "harness_not_configured",
+      "request_ids": [],
+      "mcp_request_ids": []
+    }
+  ],
+  "receiver_at_boundary": null,
+  "receiver_final": {
+    "counter": 0,
+    "operations": [],
+    "discovery_calls": 0
+  },
+  "concurrent_http": [],
+  "outcome_insert_wait_observed": false,
+  "receiver_pid": 57,
+  "runtime_pids": [
+    63,
+    69
+  ],
+  "first_runtime_exit": -15,
+  "database_query": "SELECT payload FROM incident.run_events WHERE run_id = %s ORDER BY sequence"
+}

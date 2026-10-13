@@ -1,0 +1,5 @@
+Tested SHA: 8b4316ca77637fcbed3750bfeb2121d294469b7b
+Base SHA: 763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9
+Source clean: yes
+Container: e567-ca-01a1331e-verify-8b4316ca7763-attempt.Yo8L4B01
+Exit code: 0
