@@ -143,3 +143,10 @@ project was stopped again, without deleting data. New publication manifest and
 receipts are separate from original run evidence. User explicitly authorizes the
 GitHub app connection for branch/PR publication; gh authorization stays read-only
 for Project 8. Remote PR metadata and human review remain pending at this checkpoint.
+
+Publication-base discovery: live main advanced to ef6b328 during preparation.
+Native comparison reports only eight added #567 docs/helpers/tests; no relevant
+runtime/schema/lock/delivery file changes. Preserve frozen candidate SHAs and
+execution receipts. Record current base in PR1, keep subsequent PRs stacked, and
+do not credit the recorded suite as execution of the newly added tests. Hosted
+merge-candidate checks and human review remain pending.

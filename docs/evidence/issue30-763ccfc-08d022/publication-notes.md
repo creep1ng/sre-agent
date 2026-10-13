@@ -28,3 +28,11 @@ this report/actual results, using isolated local profiles without external asset
 They are not API browser runs, replacements for old PNGs, or proof of runtime fixes.
 Human evidence acceptance and approved implementation of the three reported audit
 corrections remain outstanding. PR publication does not authorize merge or closure.
+
+At publication, main advanced to `ef6b328fe75494a9b77d9ddd9a330cbaa22ac1b6`.
+The connector comparison from runtime SHA 763ccfc reports five commits and eight
+added #567 documentation/helper/test files only: no MCP runtime, audit schema,
+contract, lockfile, historical evidence or issue-30 delivery-file changes. The
+frozen candidates and actual execution SHAs are retained; the first PR records
+the new base, and subsequent PRs target the preceding review branch. The recorded
+1823-test run does not claim to cover those new tests or a hosted merge candidate.
