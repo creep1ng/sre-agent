@@ -12,8 +12,9 @@ the schema's fixed `openrouter` source is fixture metadata, not provider/billing
 
 #580 is integrated at `139d1cf2cf21c410b579c5c696c4a83c51b56388`; #330 is closed.
 Revalidated main base: `763ccfc3965cd21f2a9b8046f71b9112d9b7b2e9`.
-Live #567 remains open, Projects #8 Todo, no Sprint 5 commitment. No remote write,
-merge or issue closure is authorized. Human acceptance of #567 remains pending.
+Live #567 remains open, Projects #8 Todo, no Sprint 5 commitment. The user authorized
+publishing the three PRs and sanitized artifacts on a dedicated evidence branch.
+Merge and issue closure remain unauthorized; human acceptance is still pending.
 
 ## Environment
 
@@ -102,14 +103,15 @@ of a sent operation, cross-system atomicity or general external exactly-once.
 Sanitized: yes. Only synthetic IDs, bounded statuses and counter state are exported;
 no headers, prompts, model text, personal data, secrets or raw application logs.
 Video: Deferred: media storage unavailable; screenshot evidence is mandatory.
-No HTTPS evidence upload is authorized yet; local screenshot and artifacts are
-reviewable, but a future PR must publish real evidence links and obtain human review.
+HTTPS screenshot/artifact publication is authorized on a dedicated repository
+evidence branch, separate from the source stack. PRs must link the actual immutable
+artifact commit and obtain human review; authorization alone is not publication.
 Source is split into three local branches: `codex/issue-567-controlled-receiver`
 against main, `codex/issue-567-external-evidence` against the receiver branch, and
 `codex/issue-567-evidence-recipe` against the E2E branch. Each unit is below 400
 added-plus-deleted lines against that explicit base. The aggregate series exceeds
 400; do not publish it as one acceptance PR without explicit size approval.
-No PR or size-exception approval exists yet. If the host wrapper is interrupted,
+PR creation is authorized; no size-exception approval exists. If the host wrapper is interrupted,
 inspect/wait the container named in identity.txt; do not restart merely because
 the terminal handle disappeared. Only scoped stopping/cleanup is permitted.
 Cleanup, when desired, is limited to stopping this project's checks DB with Compose
