@@ -1,0 +1,17 @@
+{
+  "evidence_kind": "controlled integration",
+  "observed": {
+    "body_error": {
+      "error": {
+        "code": "validation_error",
+        "message": "Exactly one bounded usage selector is required."
+      },
+      "request_id": "df39fe69-b202-40ea-8564-7a53bd366b67",
+      "retryable": false
+    },
+    "body_status": 422,
+    "repeated_status": 422,
+    "unknown_status": 422
+  },
+  "scenario": "closed-read"
+}
