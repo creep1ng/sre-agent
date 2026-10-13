@@ -27,7 +27,7 @@ or manual grants; distinguish installation/readiness from functional acceptance.
   preserve IDs/key hashes/incidents/audit, record sanitized evidence (CA1/2/5/6/8).
 - [ ] S618-4 Publish operator guide and verify bounded API journey with deny,
   investigation state/events/audit, plus OTel fail/reset signals (CA7/8).
-- [ ] S618-5 Publish <=400-line feature-branch PR slices with real screenshots,
+- [x] S618-5 Publish <=400-line feature-branch PR slices with real screenshots,
   tested/base SHA, reproduction, risks/rollback and CA matrix; request human review.
 
 ## Remaining acceptance gates
@@ -85,11 +85,28 @@ branches (lease protected); final candidate contents identical after reapiling.
 Exact first slice plus incident persistence13passed9.85s. All PR diffs remain
 349/395/396/<400 lines, current bases confirmed. Actual Docker CLI E2E passed;
 no production-source byte changed since tested155fc26 (git diff verified).
-S618-5 publication in progress; human review remains required. S618-4 partial:
+S618-5 drafts620/621/622/624 published; human review remains required. S618-4 partial:
 local real OTel fail/reset blocked by disk, AWS by unintegrated494; no paid enable.
-Next: publish final docs/results, request human review; do not merge/close618.
+Next: independent human review and remaining live/main acceptance; do not merge/close618.
 
 Post-refactor exact focused rerun13passed1live-skip6.61s. Skip reason: explicit
 RUN_OPENROUTER_LIVE_SMOKE=1 required (not authorized/enabled). Removed historical
 README curl-secret argv example; manual Compose diagnostics explicitly keep the
 canonical project/layers, never an unrelated default project. Source unchanged.
+
+## Session delivery summary
+- Goal: implement618 setup and verify all eight CA without false live acceptance.
+- Instructions: explicit gh scope; feature slices<=400; strictTDD; no merge/closure,
+  AWS sessions/operations, paid calls, global cleanup or weakened existing tests.
+- Discoveries: domain lacked triage grant admission; replay hid inactive catalog;
+  TIME_WAIT caused false port conflict; own fixture must preserve public privileges.
+- Accomplished: canonical startup/config/readiness/stop, domain grants, controlled
+  CLI/API/store E2E and recovery, full1848pass1live-skip, guide/matrix/screenshots;
+  PR620/621/622/624. Hosted620unitgreen; otherCI pending/governance red observed.
+- Next Steps: human review, final integrated-main checkout, adequate realOTel
+  host+fail/reset signals, approved494 AWS producer/interface. No618closure.
+- Relevant Files: scripts/setup_sre.py,setup_config.py,provision_demo.py;
+  tests/test_demo_provision_http.py; scripts/verify_setup_{preflight,repeat}.py;
+  docs/setup-sre.md, docs/evidence/issue-618/, README.md, .env.example.
+- Engram: all writes/session summary forbidden without registered runtime ID;
+  this local recovery record remains authoritative pending the memory mirror.
