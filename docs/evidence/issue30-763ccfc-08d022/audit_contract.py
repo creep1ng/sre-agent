@@ -34,7 +34,8 @@ def authentication_event_valid(event, validator, request_id, start, end):
         and event["correlation"]["request_id"] == request_id
         and (event["operation"], event["action"])
         in {("mcp.invoke", "invoke"), ("credentials.authenticate", "authenticate")}
-        and "identity" not in event
+        # This random unknown credential can yield a credential HMAC, not a Principal.
+        and set(event.get("identity", {})) <= {"credential_ref"}
         and "redacted_content" not in event
         and "untrusted_input" not in event
         and datetime.fromisoformat(start)

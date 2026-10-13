@@ -56,6 +56,7 @@ events = [canonical_event(row[0], validator.schema["required"]) for row in rows]
 methods_before, methods_after = before["mcp_methods"], after["mcp_methods"]
 checks = {
     "http_contract": response.status_code == 401
+    and response.headers.get("WWW-Authenticate") == "Bearer"
     and body["error"] == {"code": "authentication_failed", "message": "Authentication failed."}
     and body["retryable"] is False,
     "zero_mcp_activity": all(
@@ -87,6 +88,7 @@ out = {
     "status_observed": response.status_code,
     "actual_public_body": body if checks["http_contract"] else None,
     "contract_version": version,
+    "bearer_challenge_valid": response.headers.get("WWW-Authenticate") == "Bearer",
     "checks": checks,
     "audit_events": events if passed else [],
     "counter_before": before,
