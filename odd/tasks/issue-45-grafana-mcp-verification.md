@@ -56,6 +56,12 @@ The integrated demo can query Grafana MCP directly, while the gateway has govern
 - `git diff --check` and structural review of network/credential boundaries
 - Real harness/container probes and two demo cycles, with unavailable checks stated explicitly
 
+## 2026-10-13 signal-capture split preparation
+
+- For the capture slice, enumerate failure modes before isolated code: a clean Prometheus error-only vector may be empty but mean zero; wrong datasource/window or Lucene syntax could yield a false signal; OpenSearch may nest `resource.service.name` or `_source`; stage totals can disagree with trace-level stalled orders; proxy response codes may be absent or malformed; an unsettled two-minute window can mix states; a redirect/timeout could contact an uncontracted endpoint; and raw log bodies, trace IDs, marker or bearer token could leak into the report. The first E2E test will assert actual public gateway HTTP requests and sanitized observed summaries, then run RED before source exists.
+- Separate capture from six-report chronological verification so each PR is a cohesive reviewable unit below 400 additions+deletions. Capture alone is not CA8 acceptance; the later verifier and two real cycles remain required.
+- Capture E2E observed RED 0/1 with the CLI absent, then GREEN 1/1 in a cached Node 22.14 harness container with no network. It exercised baseline/failure through eight public HTTP POSTs, sanitized summaries, and an unsettled-window refusal before gateway contact. The dated controlled report records command, fixture, results and pending real-cycle work; no real CA8 acceptance is claimed.
+
 ## Historical Recovery Progress (2026-09-24; not current proof)
 
 - Base fast-forwarded from `137b101` to integrated `origin/main` `3c7b4a3`, then rebased to `6eb5422` to obtain PR #376 instructions; untracked task/probe files were preserved.
