@@ -27,11 +27,11 @@ this split on 2026-10-13. Route: direct; no SDD or new behavior.
 - [x] **F454-2 — Establish the feature and bounded design delivery.**
   Start feature at current main; preserve the accumulated source. Make #569's
   role explicit without overwriting or hiding source intended for later PRs.
-- [ ] **F454-3 — Partition complete cohesive units.**
+- [x] **F454-3 — Partition complete cohesive units.**
   Separate contract, capture, selection, read projection, provider/E2E scenarios,
   evidence, and historical tracking. No blanket size exception. Apply the
   indivisible generated-contract exception only to its explicitly authorized PR.
-- [ ] **F454-4 — Reconcile main and verify the complete candidate.**
+- [x] **F454-4 — Reconcile main and verify the complete candidate.**
   Preserve consumption-policy provenance AND atomic attribution capture; retain
   both alert_triage and request_attributions in existing isolated DB resets.
   Run existing real HTTP/PostgreSQL E2E checks and relevant contract checks;
@@ -63,6 +63,18 @@ Memory mirror: PENDING. No authoritative registered runtime session identity;
 agent-attributed Engram writes are forbidden. Observation 9911 is an older
 producer plan, not current scope or verification authority.
 
-Next: reconcile the accumulated source with main, verify it, and publish the
-remaining cohesive drafts. The eventual main integration
-requires its own accepted, size-compliant route; no aggregate exception exists.
+Next: obtain human review and current hosted CI, then integrate the drafts
+bottom-up into the feature after applicable gates. App attachments and memory
+mirroring await their hosts; main integration requires a separate decision.
+
+Partition verified: 13 cohesive cuts; only contract is above 400 lines. Every
+original runtime/test/schema/script file is accounted for and matches source
+0bfadf958f941ec61889daef4e207c2284801aa4. Current 82 E2E checks, repeated13 attribution
+checks, real HTTP/SQL and contract222-artifact validation pass. Initial demo401
+after unrelated fixtures is recorded; correct-fixture repeat passes. Full Python
+suite passes1847/1opt-in paid skip; Alembic passes. Hosted CI and human acceptance remain pending.
+
+All 14 drafts were created; exact GitHub head/base/size/label readback PASS.
+App attachment calls did not return; confirmation remains pending.
+Current review index: docs/evidence/issue-454-feature-split/README.md; only #601
+has the explicitly authorized size:exception-update-contract label.
