@@ -1,0 +1,1 @@
+{"schema":"sre-agent.mcp45-3-cycle-verification/v1","status":"pass","cycles_verified":2,"failures":[],"cycles":[{"cycle":1,"phases":["baseline","failure","reset"]},{"cycle":2,"phases":["baseline","failure","reset"]}]}
