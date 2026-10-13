@@ -1,0 +1,16 @@
+Verified source tree: af54167b2905510c5f6e8d2263e2852f0fb36619
+Evidence kind: controlled integration; no paid/live call
+Ruff: All checks passed
+Formatting: 258 files already formatted
+HTTP/OpenRouter adapter/PostgreSQL/usage read E2E: 13 passed in 5.70s
+Empty-output RED: 1 failed, 1 success control passed; credits lost before fix
+Malformed canonical identity RED: 1 failed, 2 controls passed; validation escaped before fix
+Cut #571 399286f558633aed2adc2f887e6424302de146d4: 1774 passed, 1 skipped in 130.29s (0:02:10)
+Cut #572 265f47b3972b3148fdef6ca772b05d16cfe8fa34: 1774 passed, 1 skipped in 130.67s (0:02:10)
+Cut #573 c1a3f4b4c39ec5cb4253cda531493a39cc9d0509: 1774 passed, 1 skipped in 130.74s (0:02:10)
+One paid-provider smoke skipped in each full suite; no credentials used
+Hosted CI tracked independently; cancelled runs are not passing evidence
+Human acceptance and merge remain pending
+App attachment inspection unavailable; A454-7 remains unchecked
+Full configured integrated source4a5017d235d105a4bad05163e64ac2364fe8b4da:1787passed1paid-smoke skipped129.25s;Ruff/format/lock/imports/configured mypy/Alembic PASS
+Exact #579 sourcebc7d15ac988b251616368f31caf975c086768ffc:1787passed1paid-smoke skipped130.22s;all configured Python checks and Alembic PASS
