@@ -1,0 +1,14 @@
+{
+  "target": "urn:sre-agent:schema:usage-requests:2.8.0",
+  "version": "2.8.0",
+  "group": "usage-requests-projection",
+  "data": {
+    "filter": {
+      "request_id": "20000000-0000-4000-8000-000000000454",
+      "month": "2026-10"
+    },
+    "items": []
+  },
+  "rule": "additionalProperties",
+  "status": "negative"
+}

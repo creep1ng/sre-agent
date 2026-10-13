@@ -55,7 +55,8 @@ def migrated_database() -> None:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
         connection.execute(
-            "DROP TABLE IF EXISTS consumption_reservations, consumption_limit_policies, "
+            "DROP TABLE IF EXISTS request_attributions, consumption_reservations, "
+            "consumption_limit_policies, "
             "bok_section_chunks, bok_documents, "
             "bok_collection_versions, "
             "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
@@ -268,7 +269,7 @@ def migrated_database() -> None:
 @pytest.fixture(autouse=True)
 def isolated_mutations(migrated_database):
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("TRUNCATE TABLE audit_events")
+        connection.execute("TRUNCATE TABLE audit_events, request_attributions")
     try:
         yield
     finally:
@@ -831,7 +832,7 @@ def test_persisted_bok_audit_blocks_lossy_downgrade(client):
         # The blocked downgrade leaves the schema on the current head with the BoK
         # evidence that made it lossy still present.
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261007_01",
+            "20261009_01",
         )
         assert connection.execute(
             "SELECT count(*) FROM audit_events WHERE operation='bok.search'"
