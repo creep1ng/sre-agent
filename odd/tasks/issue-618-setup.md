@@ -75,5 +75,16 @@ by disk requirement, human reproduction pending. CA matrix acceptance.md account
 for all eight criteria and separates verified/partial/blocked surfaces.
 Hosted CI initialunit930passed1failed exposed own public-schema cleanup removing
 USAGE privileges. Existing tests preserved; new fixture now drops only tables and
-audit trigger function. Full suite recheck in progress; no green CI claim.
+audit trigger function. Full local suite1848passed1skip2warnings468.59s; no current hosted-green claim.
 Next: finish full suite, propagate fixture fix across feature slices, publish3/4.
+
+Final local verification: complete preserved suite1848passed1skip2deprecationwarnings
+468.59s; source tree1b63d2129e2e6923f134e22fcf01a7e20c7bc176. Original CI failed
+fixture isolation, corrected at first slice51315f6 and reapiled remaining own
+branches (lease protected); final candidate contents identical after reapiling.
+Exact first slice plus incident persistence13passed9.85s. All PR diffs remain
+349/395/396/<400 lines, current bases confirmed. Actual Docker CLI E2E passed;
+no production-source byte changed since tested155fc26 (git diff verified).
+S618-5 publication in progress; human review remains required. S618-4 partial:
+local real OTel fail/reset blocked by disk, AWS by unintegrated494; no paid enable.
+Next: publish final docs/results, request human review; do not merge/close618.

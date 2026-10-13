@@ -16,11 +16,11 @@ reproduction are still required; successful containers/CI do not satisfy an OKR.
 - [CLI repeat report](03-repeat.txt): first/repeated preparation, HTTP journey, stable
   data/audit, occupied port, owned MCP fixture outage/recovery, scoped stop/restart.
   Reproduced also from a Linux Docker container using the PR command.
-- Existing compatibility suite: **73 passed44.95s**. Source lint and format pass.
+- Existing compatibility suite: **73 passed44.95s**. Source lint and format pass; global source lint also passes.
   Harness container: provider/MCP secrets absent; direct upstream DNS denied.
 - Hosted initial CI failed incident persistence: new fixture dropped/recreated public
   schema and lost default usage privileges. Fixed to preserve schema, drop only test
-  tables/function; complete preserved suite is being reverified. Do not cite initial
+  tables/function; complete preserved suite now passes:1848 passed,1 live-smoke skip,2 deprecation warnings (468.59s). Do not cite initial
   CI as green. No existing test or runtime authorization boundary was weakened.
 
 ## Criteria (every CA accounted for)
@@ -50,6 +50,7 @@ fail/reset were **not attempted**; no global pruning or credential discovery use
 
 See [operator guide](../../setup-sre.md) for normal setup/config/diagnosis/stop and
 [CLI E2E runner](../../../scripts/verify_setup_repeat.py) for exact controlled journey.
+Full local suite tested source tree1b63d2129e2e6923f134e22fcf01a7e20c7bc176; subsequent report/tracker-only changes do not alter runtime/test source.
 Each draft PR supplies tested/base SHA, its <=400-line diff, containerized commands,
 a real Chromium capture and media-storage deferral. Stack into the feature branch
 only after review; do not merge a partial slice to main as complete #618 acceptance.
