@@ -6,25 +6,30 @@ and settlement. No live provider or management credential is involved.
 """
 
 import asyncio
+import hmac
 import json
 import os
 import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from hashlib import sha256
+from pathlib import Path
 
 import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator
 
 from sre_agent.application import create_application
 from sre_agent.gateway.endpoint_catalog import EndpointCatalogSnapshot, EndpointMetadata
 from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
-from sre_agent.governance.dto import Consumption, PricingContext
+from sre_agent.governance.dto import AllowDecisionEvidence, Consumption, PricingContext
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
+from sre_agent.persistence.repositories import AuditRepository
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
 
@@ -219,7 +224,8 @@ def reservations() -> list[tuple]:
     with psycopg.connect(DATABASE_URL) as connection:
         return connection.execute(
             "SELECT incident_id, token_exposure, usd_exposure, state, settled_tokens, "
-            "settled_usd_cost, period_start FROM consumption_reservations ORDER BY created_at"
+            "settled_usd_cost, period_start, policy_version "
+            "FROM consumption_reservations ORDER BY created_at"
         ).fetchall()
 
 
@@ -387,6 +393,271 @@ def test_ca5_denial_precedes_provider_and_records_metadata_only(
     assert "sensitive incident prompt" not in stored
     assert "sensitive provider output" not in stored
     assert reservations() == []
+
+
+def _expected_consumption_policy_ref(version: int) -> dict[str, object]:
+    """Calculate the published ADR-005 reference independently of AuditProjector."""
+    value = f"consumption-limits:1:version:{version}"
+    digest = hmac.new(
+        AUDIT_KEY.encode(),
+        f"sre-audit-v1\0policy\0{value}".encode(),
+        sha256,
+    ).hexdigest()
+    return {"algorithm": "hmac-sha-256", "key_version": 1, "digest": digest}
+
+
+def _validate_published_allow_decision(decision: dict[str, object]) -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "schemas/releases/2.5.0/json-schema/domain/audit-event.schema.json"
+    )
+    schema = json.loads(path.read_text())
+    Draft202012Validator(
+        {"$schema": schema["$schema"], "$defs": schema["$defs"], "$ref": "#/$defs/allowDecision"}
+    ).validate(decision)
+
+
+def test_ca5_http_events_preserve_effective_consumption_policy_reference(
+    ca_database: Database,
+) -> None:
+    provider = Provider(exact_usage(1))
+    gateway = Gateway(provider)
+    first_policy = gateway.put_policy(None, "100.00")
+    success = gateway.respond()
+    assert success.status_code == 200
+    second_policy = gateway.put_policy(None, "0.000000000001")
+    denied = gateway.respond()
+    assert denied.status_code == 429
+    assert provider.requests and len(provider.requests) == 1
+
+    request_ids = [success.json()["request_id"], denied.json()["request_id"]]
+    expected = {
+        request_ids[0]: _expected_consumption_policy_ref(1),
+        request_ids[1]: _expected_consumption_policy_ref(2),
+    }
+    with psycopg.connect(DATABASE_URL) as connection:
+        persisted = connection.execute(
+            "SELECT correlation ->> 'request_id', policy_decision, to_jsonb(audit_events) "
+            "FROM audit_events WHERE correlation ->> 'request_id' = ANY(%s::text[])",
+            (request_ids,),
+        ).fetchall()
+    assert len(persisted) == 2
+    for request_id, decision, event_json in persisted:
+        expected_ref = expected[request_id]
+        assert decision["decision"] == "allow"
+        assert decision["policy_ref"] == expected_ref
+        assert "grant_ref" in decision
+        AllowDecisionEvidence.model_validate(decision)
+        _validate_published_allow_decision(decision)
+        serialized = json.dumps(event_json)
+        assert "sensitive incident prompt" not in serialized
+        assert "sensitive provider output" not in serialized
+
+    async def recover() -> list[AllowDecisionEvidence]:
+        events = []
+        async with ca_database.sessions() as session:
+            for request_id in request_ids:
+                rows, has_more = await AuditRepository(session).query_filtered(
+                    request_id=request_id, limit=2
+                )
+                assert not has_more and len(rows) == 1
+                assert rows[0].policy_decision is not None
+                events.append(
+                    AllowDecisionEvidence.model_validate(
+                        rows[0].policy_decision.model_dump(mode="json")
+                    )
+                )
+        return events
+
+    recovered = asyncio.run(recover())
+    assert [event.policy_ref.model_dump(mode="json") for event in recovered] == [
+        expected[request_id] for request_id in request_ids
+    ]
+    print(
+        json.dumps(
+            {
+                "CA5": {
+                    "http_statuses": [success.status_code, denied.status_code],
+                    "policy_versions": [first_policy["version"], second_policy["version"]],
+                    "persisted_matches": True,
+                    "repository_matches": True,
+                    "audit_schema": "2.5.0/allowDecision",
+                }
+            },
+            sort_keys=True,
+        )
+    )
+
+
+@pytest.mark.parametrize("first_call_uncertain", [False, True])
+def test_ca8_utc_rollover_and_hot_policy_update_keep_inflight_admission(
+    ca_database: Database,
+    monkeypatch: pytest.MonkeyPatch,
+    first_call_uncertain: bool,
+) -> None:
+    from sre_agent.gateway import audit, responses
+
+    suffix = "uncertain" if first_call_uncertain else "settled"
+    year = 2026 + int(first_call_uncertain)
+    old_incident = f"ca8-before-{suffix}"
+    new_incident = f"ca8-after-{suffix}"
+    seed_incident(old_incident)
+    seed_incident(new_incident)
+    admitted = threading.Event()
+    release = threading.Event()
+
+    class FirstCallBlockedProvider(Provider):
+        async def create(self, request: ProviderRequest) -> ProviderResult:
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                admitted.set()
+                assert release.wait(timeout=10)
+                if first_call_uncertain:
+                    raise ProviderFailure("timeout", consumption=unknown_usage())
+            return ProviderResult(
+                response_id=f"resp_{len(self.requests):08d}",
+                model=request.model,
+                text="sensitive provider output",
+                provider=request.provider,
+                consumption=exact_usage(1),
+            )
+
+    now = [datetime(year, 1, 31, 23, 59, 59, tzinfo=UTC)]
+
+    class ControlledDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = now[0]
+            return value if tz else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(responses, "datetime", ControlledDateTime)
+    monkeypatch.setattr(audit, "datetime", ControlledDateTime)
+    provider = FirstCallBlockedProvider()
+    controlled_catalog = Catalog(replace(snapshot(endpoint()), observed_at=now[0]))
+    gateway = Gateway(provider, controlled_catalog)
+    first_policy = gateway.put_policy(11, "0.30")
+    first_result: list[object] = []
+    first = threading.Thread(
+        target=lambda: first_result.append(
+            gateway.respond(body=BODY | {"incident_id": old_incident})
+        )
+    )
+    first.start()
+    try:
+        assert admitted.wait(timeout=10)
+        before = reservations()
+        assert len(before) == 1 and before[0][3] == "reserved"
+        assert before[0][6] == datetime(year, 1, 1, tzinfo=UTC)
+
+        now[0] = datetime(year, 2, 1, 0, 0, 1, tzinfo=UTC)
+        second_policy = gateway.put_policy(12, "0.60")
+        second = gateway.respond(body=BODY | {"incident_id": new_incident})
+        assert second.status_code == 200
+    finally:
+        release.set()
+        first.join(timeout=10)
+    assert not first.is_alive() and len(first_result) == 1
+    assert first_result[0].status_code == (504 if first_call_uncertain else 200)
+    assert first_policy["version"] + 1 == second_policy["version"]
+    assert [request.max_output_tokens for request in provider.requests] == [
+        1,
+        2,
+    ]
+
+    # The old response is audited in February, but its linked reservation stays
+    # in January. It must not be charged again as February legacy usage.
+    third = gateway.respond()
+    fourth = gateway.respond()
+    fifth = gateway.respond()
+    exhausted = gateway.respond()
+    assert [third.status_code, fourth.status_code, fifth.status_code, exhausted.status_code] == [
+        200,
+        200,
+        200,
+        429,
+    ]
+    assert [request.max_output_tokens for request in provider.requests] == [1, 2, 3, 2, 1]
+
+    rows = reservations()
+    assert len(rows) == 5
+    old, new = rows[:2]
+    february = rows[2:]
+    assert old[6] == datetime(year, 1, 1, tzinfo=UTC)
+    assert old[3:6] == (
+        ("reserved", None, None)
+        if first_call_uncertain
+        else ("settled", 6, Decimal("0.1000000000000000"))
+    )
+    assert new[6] == datetime(year, 2, 1, tzinfo=UTC)
+    assert new[3:6] == ("settled", 6, Decimal("0.1000000000000000"))
+    assert old[0] == old_incident and new[0] == new_incident
+    assert [old[7], *(row[7] for row in rows[1:])] == [
+        first_policy["version"],
+        *([second_policy["version"]] * 4),
+    ]
+    assert all(
+        row[3] == "settled" and row[6] == datetime(year, 2, 1, tzinfo=UTC) for row in february
+    )
+    with psycopg.connect(DATABASE_URL) as connection:
+        periods = connection.execute(
+            "SELECT period_start, SUM(COALESCE(settled_usd_cost, 0)), "
+            "SUM(CASE WHEN state = 'reserved' THEN COALESCE(usd_exposure, 0) ELSE 0 END) "
+            "FROM consumption_reservations "
+            "GROUP BY period_start ORDER BY period_start"
+        ).fetchall()
+        old_audit_at = connection.execute(
+            "SELECT occurred_at FROM audit_events WHERE correlation ->> 'request_id' = %s",
+            (first_result[0].json()["request_id"],),
+        ).fetchone()[0]
+    assert periods == [
+        (
+            datetime(year, 1, 1, tzinfo=UTC),
+            Decimal("0") if first_call_uncertain else Decimal("0.1000000000000000"),
+            Decimal("0.3000000000000000") if first_call_uncertain else Decimal("0"),
+        ),
+        (datetime(year, 2, 1, tzinfo=UTC), Decimal("0.4000000000000000"), Decimal("0")),
+    ]
+    assert old_audit_at >= datetime(year, 2, 1, tzinfo=UTC)
+    with psycopg.connect(DATABASE_URL) as connection:
+        decisions = connection.execute(
+            "SELECT correlation ->> 'request_id', policy_decision FROM audit_events "
+            "WHERE correlation ->> 'request_id' = ANY(%s::text[])",
+            ([first_result[0].json()["request_id"], second.json()["request_id"]],),
+        ).fetchall()
+    references = {request_id: decision["policy_ref"] for request_id, decision in decisions}
+    for _, decision in decisions:
+        AllowDecisionEvidence.model_validate(decision)
+        _validate_published_allow_decision(decision)
+    assert references == {
+        first_result[0].json()["request_id"]: _expected_consumption_policy_ref(
+            first_policy["version"]
+        ),
+        second.json()["request_id"]: _expected_consumption_policy_ref(second_policy["version"]),
+    }
+    print(
+        json.dumps(
+            {
+                "CA8": {
+                    "utc_periods": [period[0].strftime("%Y-%m") for period in periods],
+                    "policy_versions": [first_policy["version"], second_policy["version"]],
+                    "audit_policy_versions": [first_policy["version"], second_policy["version"]],
+                    "output_caps": [request.max_output_tokens for request in provider.requests],
+                    "http_statuses": [
+                        first_result[0].status_code,
+                        second.status_code,
+                        third.status_code,
+                        fourth.status_code,
+                        fifth.status_code,
+                        exhausted.status_code,
+                    ],
+                    "settled_usd_by_period": [str(period[1]) for period in periods],
+                    "old_request_audited_after_rollover": True,
+                    "old_reservation": "reserved" if first_call_uncertain else "settled",
+                }
+            },
+            sort_keys=True,
+        )
+    )
 
 
 def test_ca6_exact_settlement_is_exact_and_uncertain_usage_stays_reserved(
