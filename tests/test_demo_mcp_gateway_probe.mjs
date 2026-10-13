@@ -74,7 +74,7 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       requests.push({ method: request.method, path: request.url, body, restricted });
       if (request.method === "POST" && restricted) {
         assert.equal(request.url, "/v1/mcp/tools/query_prometheus");
-        assert.deepEqual(body, { datasource_uid: "webstore-metrics", expr: "up",
+        assert.deepEqual(body, { datasource_uid: "webstore-metrics", expr: "count(traces_span_metrics_calls_total)",
           query_type: "instant", end_time: "now" });
         response.writeHead(invocationDenied.status ?? 403, { "Content-Type": "application/json" });
         response.end(JSON.stringify(invocationDenied.body ?? invocationDenied));
@@ -121,12 +121,12 @@ test("gateway smoke CLI validates queries and server-restricted discovery", asyn
       "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
       "GET /v1/mcp/discovery",
     ]);
-    assert.equal(requests[0].body.expr, "up", "restricted request reuses the fixed metric payload");
+    assert.equal(requests[0].body.expr, "count(traces_span_metrics_calls_total)", "restricted request reuses the fixed metric payload");
     assert.deepEqual(calls, ["POST /v1/mcp/tools/query_prometheus", "GET /v1/mcp/discovery",
       "POST /v1/mcp/tools/query_prometheus", "POST /v1/mcp/tools/query_elasticsearch",
       "GET /v1/mcp/discovery"]);
     assert.deepEqual(requests.filter(({ method, restricted }) => method === "POST" && !restricted).map(({ body }) => body), [
-      { datasource_uid: "webstore-metrics", expr: "up", query_type: "instant", end_time: "now" },
+      { datasource_uid: "webstore-metrics", expr: "count(traces_span_metrics_calls_total)", query_type: "instant", end_time: "now" },
       { datasource_uid: "webstore-logs", index: "otel-logs-*", query: "resource.service.name:checkout",
         start_time: "now-5m", end_time: "now", limit: 1 },
     ]);

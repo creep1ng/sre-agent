@@ -3,6 +3,7 @@
 # The external network and token file are created by the isolated demo
 # bootstrap. This file intentionally does not define or copy the upstream MCP
 # service, and it contains no credential value.
+# Harness network replacement uses !override (Compose 2.24.4+).
 services:
   api:
     env_file:
@@ -15,6 +16,12 @@ services:
     networks:
       - runtime
       - mcp-boundary
+      - mcp-consumer
+
+  # The harness can reach only the governed API. Without this internal network,
+  # its runtime bridge can reach the demo's host-published Grafana proxy.
+  harness:
+    networks: !override [mcp-consumer]
 
   mcp-seed:
     build:
@@ -33,3 +40,5 @@ networks:
   mcp-boundary:
     name: sre-mcp-boundary
     external: true
+  mcp-consumer:
+    internal: true
