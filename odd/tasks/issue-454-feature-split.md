@@ -63,9 +63,9 @@ Memory mirror: PENDING. No authoritative registered runtime session identity;
 agent-attributed Engram writes are forbidden. Observation 9911 is an older
 producer plan, not current scope or verification authority.
 
-Next: reconcile the accumulated source with main, verify it, and publish the
-remaining cohesive drafts. The eventual main integration
-requires its own accepted, size-compliant route; no aggregate exception exists.
+Next: obtain human review and current hosted CI, then integrate the drafts
+bottom-up into the feature after applicable gates. App attachments and memory
+mirroring await their hosts; main integration requires a separate decision.
 
 Partition verified: 13 cohesive cuts; only contract is above 400 lines. Every
 original runtime/test/schema/script file is accounted for and matches source
@@ -74,7 +74,7 @@ checks, real HTTP/SQL and contract222-artifact validation pass. Initial demo401
 after unrelated fixtures is recorded; correct-fixture repeat passes. Full Python
 suite passes1847/1opt-in paid skip; Alembic passes. Hosted CI and human acceptance remain pending.
 
-All 14 drafts were created; exact GitHub head/base/size/label readback is being
-verified. App attachment calls did not return and confirmation remains pending.
+All 14 drafts were created; exact GitHub head/base/size/label readback PASS.
+App attachment calls did not return; confirmation remains pending.
 Current review index: docs/evidence/issue-454-feature-split/README.md; only #601
 has the explicitly authorized size:exception-update-contract label.

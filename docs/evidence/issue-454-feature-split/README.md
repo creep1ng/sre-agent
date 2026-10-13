@@ -63,6 +63,6 @@ no new Alembic operations. Human acceptance and final main integration remain pe
 | observations | [#610](https://github.com/creep1ng/sre-agent/pull/610) | 353 |
 | repair | [#611](https://github.com/creep1ng/sre-agent/pull/611) | 229 |
 | history | [#612](https://github.com/creep1ng/sre-agent/pull/612) | 373 |
-| proof | [#613](https://github.com/creep1ng/sre-agent/pull/613) | 365 |
+| proof | [#613](https://github.com/creep1ng/sre-agent/pull/613) | 400 |
 
 The screenshot records the focused-proof phase; the receipt above adds the later full-suite result.
