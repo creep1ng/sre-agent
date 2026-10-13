@@ -166,3 +166,8 @@ Producer slice14 adds owned remote MCP/flags and loopback-only private token
 handoff. Reuses locked MCP image and original app Compose; never edits upstream.
 Lint/format pass; live GREEN requires installer/CLI slice next. Consumer E2E RED
 remains83-line slice06; source module has no token argv/stdout/log output.
+Producer prepare-mcp failed on legacy missing image. Read-only scoped inspection
+confirmed cause; ListCommands denied by IAM (not expanded), malformed JSON local
+probe corrected. Explicit prepare now pulls locked image, preserves token; live
+GREEN anonymous MCP401 via SSM18092, no token access in E2E. Report07 is partial.
+User authorized exactly1h extension; owner CLI updates persisted expiry records.
