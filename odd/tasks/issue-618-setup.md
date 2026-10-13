@@ -148,3 +148,17 @@ User approved producer extension and private SSM token handoff. Test-first E2E
 will cover actual transport, API-only secret access, fail/reset signal recovery.
 No new IAM/public port; preserve TTL and producer lifecycle. Evidence slice05
 separated from prior4, screenshot captured/inspected (UID correction after EACCES).
+
+S618-6 transport failure modes before implementation: absent MCP route; anonymous
+caller admitted; private token missing/unsafe; invalid authenticated initialize;
+session/header leakage; missing read-only metric/log tools; provider/network errors.
+First live E2E must reject anonymous initialize and then verify authenticated MCP
+initialize+discovery using private token input. It is transport-only, not signal
+recovery or SRE acceptance. Remaining governed query/fail/reset checks follow.
+Auto-review rejected a checks-container token read (API-only scope). No command
+executed. Removed all token access from external E2E: anonymous denial only;
+authenticated probes must use governed API, not a runner-held MCP credential.
+Observed real E2E RED: anonymous initialize HTTP404, exit1; token-free runner,
+only test-code mount, target existing SSM18091. Report06 records actual output.
+Ruff lint/format pass after correcting cache/config-file runner invocation.
+Production AWS contract not implemented yet; do not turn this RED into acceptance.
