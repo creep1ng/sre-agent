@@ -176,3 +176,8 @@ Transport slice16 uses native SSM and private Unix socket; container joins only
 prepared internal MCP network, mounts only pipe code/socket, no token/provider/AWS
 credentials, no host port. Pinned existing Python image, never implicit pull.
 Lint/format pass; full API transport E2E still pending private handoff/client slice.
+Live connect-mcp succeeded; local connection.json/token each0600. Relay mounts
+only pipe.py and transport socket, joins only internal sre-aws-mcp-boundary,
+no host ports, no MCP/provider/AWS env. Token handoff service stopped via owner
+SSM; retained token is not read by producer on reconnect. Contract state explicit.
+Next: consume contract in SRE; observe valid AWS config RED before source change.
