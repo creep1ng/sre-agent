@@ -346,7 +346,18 @@ GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
     "skill": frozenset({"admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"}),
     "bok_collection": frozenset({"admin.write", "bok.discovery", "bok.search", "bok.read"}),
     "incident_workflow": frozenset(
-        {"run.start", "run.read", "run.command", "run.approve", "run.read_context"}
+        {
+            "run.start",
+            "run.read",
+            "run.command",
+            "run.approve",
+            "run.read_context",
+            "alert.read",
+            "alert.triage",
+            "alert.dismiss",
+            "alert.associate",
+            "incident.declare",
+        }
     ),
     "administrative_control": frozenset({"admin.read", "admin.write"}),
 }
