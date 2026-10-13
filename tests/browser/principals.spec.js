@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, route, test, unroute } from "./support/session-routes.mjs";
 
 const connected = process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY === "1";
 
@@ -109,7 +109,7 @@ test("shows a hidden principal as not found without leaking data", async ({ page
 
 test("ignores a stale list response after the session is cleared", async ({ page }) => {
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
-  await page.route("**/api/v1/principals?limit=100", async (route) => {
+  await route(page, "**/api/v1/principals?limit=100", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.continue();
   });
@@ -120,7 +120,7 @@ test("ignores a stale list response after the session is cleared", async ({ page
   await page.waitForTimeout(2500);
   await expect(page.locator("[data-principal-row]")).toHaveCount(0);
   await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
-  await page.unroute("**/api/v1/principals?limit=100");
+  await unroute(page, "**/api/v1/principals?limit=100");
 });
 
 test("ignores a stale detail response after the session is cleared", async ({ page }) => {
@@ -128,7 +128,7 @@ test("ignores a stale detail response after the session is cleared", async ({ pa
   await page.fill("#api-key", adminKey);
   await page.click("#connect-button");
   await expect(page.locator("[data-principal-row='admin-human']")).toBeVisible({ timeout: 20_000 });
-  await page.route("**/api/v1/principals/admin-human", async (route) => {
+  await route(page, "**/api/v1/principals/admin-human", async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.continue();
   });
@@ -140,11 +140,11 @@ test("ignores a stale detail response after the session is cleared", async ({ pa
   await expect(page.locator("[data-principal-row]")).toHaveCount(0);
   await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
   await expect(page.locator("#page-error")).toBeHidden();
-  await page.unroute("**/api/v1/principals/admin-human");
+  await unroute(page, "**/api/v1/principals/admin-human");
 });
 
 test("surfaces an unreachable API as a recoverable offline state", async ({ page }) => {
-  await page.route("**/api/v1/principals**", (route) => route.abort("failed"));
+  await route(page, "**/api/v1/principals**", (route) => route.abort("failed"));
   await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
   await page.click("#connect-button");
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "offline", { timeout: 20_000 });

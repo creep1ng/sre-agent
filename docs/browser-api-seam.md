@@ -61,6 +61,9 @@ const controlApi = createAdministrativeApiClient({ session });
 
 `tests/browser/shared-session.spec.js` exercises these rules in the packaged browser lane; its races
 run through `web-held`, in front of `tests/browser/support/hold-upstream.mjs`, which holds answers.
+`page.route` never sees a SharedWorker's requests, so specs that cut or fake API responses, or delay
+them within one page, use `tests/browser/support/session-routes.mjs`: it intercepts `/api/v1/`
+requests for the whole browser through CDP, for the worker and for pages alike.
 
 ## Topology
 

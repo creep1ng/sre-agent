@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, route, test, unroute } from "./support/session-routes.mjs";
 // B1 CREATE: REAL=connected API; CONTROLLED=real API + route delay/offline only.
 const connected = process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY === "1";
 function apiKey(name) {
@@ -136,7 +136,7 @@ test("surfaces an aborted create as recoverable without false success", async ({
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
   await connect(page, adminKey);
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
-  await page.route("**/api/v1/principals", (route) => (route.request().method() === "POST" ? route.abort("failed") : route.continue()));
+  await route(page, "**/api/v1/principals", (route) => (route.request().method() === "POST" ? route.abort("failed") : route.continue()));
   const id = ephemeralId("e01");
   await openCreate(page, { id, name: `Ephemeral ${id}` });
   await page.click("#create-submit");
@@ -144,7 +144,7 @@ test("surfaces an aborted create as recoverable without false success", async ({
   await expect(page.locator("#create-principal-id")).toHaveValue(id);
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(0);
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} created.`);
-  await page.unroute("**/api/v1/principals");
+  await unroute(page, "**/api/v1/principals");
   await page.click("#create-submit");
   await expect(page.locator("#live-region")).toContainText(`Principal ${id} created.`, { timeout: 20_000 });
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
@@ -155,7 +155,7 @@ test("ignores a stale create response after the session is cleared", async ({ pa
   await connect(page, adminKey);
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
   const id = ephemeralId("f01");
-  await page.route("**/api/v1/principals", async (route) => {
+  await route(page, "**/api/v1/principals", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     await new Promise((r) => setTimeout(r, 1500));
     await route.continue();
@@ -170,7 +170,7 @@ test("ignores a stale create response after the session is cleared", async ({ pa
   await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
   await expect(page.locator("#page-error")).toBeHidden();
   await expect(page.locator("#live-region")).toHaveText("Session cleared.");
-  await page.unroute("**/api/v1/principals");
+  await unroute(page, "**/api/v1/principals");
 });
 test("successful create does not announce success when authoritative refresh fails", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
@@ -179,7 +179,7 @@ test("successful create does not announce success when authoritative refresh fai
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
   const id = ephemeralId("g01");
   let posts = 0;
-  await page.route("**/api/v1/principals**", (route) => (route.request().method() === "POST" ? (posts++, route.continue()) : route.abort("failed")));
+  await route(page, "**/api/v1/principals**", (route) => (route.request().method() === "POST" ? (posts++, route.continue()) : route.abort("failed")));
   await openCreate(page, { id, name: `Ephemeral ${id}` });
   await page.click("#create-submit");
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "offline", { timeout: 20_000 });
@@ -188,7 +188,7 @@ test("successful create does not announce success when authoritative refresh fai
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(0);
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} created.`);
   expect(posts).toBe(1);
-  await page.unroute("**/api/v1/principals**");
+  await unroute(page, "**/api/v1/principals**");
   await page.click("#refresh-button");
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} created.`);
@@ -200,7 +200,7 @@ test("keeps create locked across Escape/Cancel while POST is in flight", async (
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
   const id = ephemeralId("h01");
   let posts = 0;
-  await page.route("**/api/v1/principals", async (route) => {
+  await route(page, "**/api/v1/principals", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     posts++;
     await new Promise((r) => setTimeout(r, 1500));
@@ -225,5 +225,5 @@ test("keeps create locked across Escape/Cancel while POST is in flight", async (
   await expect(page.locator("#create-cancel")).toBeEnabled();
   await page.keyboard.press("Escape");
   await expect(page.locator("#create-dialog")).toBeHidden();
-  await page.unroute("**/api/v1/principals");
+  await unroute(page, "**/api/v1/principals");
 });

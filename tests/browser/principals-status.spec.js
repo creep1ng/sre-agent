@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, route, test, unroute } from "./support/session-routes.mjs";
 // B2 DEACTIVATE: REAL=connected API; CONTROLLED=real API + route delay/offline only.
 const connected = process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY === "1";
 function apiKey(name) {
@@ -200,14 +200,14 @@ test("surfaces failed status update without false success", async ({ page }) => 
   await connect(page, adminKey);
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
   await openDeactivate(page, id);
-  await page.route("**/api/**/status", (route) => (route.request().method() === "PUT" ? route.abort("failed") : route.continue()));
+  await route(page, "**/api/**/status", (route) => (route.request().method() === "PUT" ? route.abort("failed") : route.continue()));
   await page.click("#deactivate-submit");
   await expect(page.locator("#deactivate-error-title")).toHaveText("API unavailable", { timeout: 20_000 });
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1);
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} deactivated.`);
   await expect(page.locator("#deactivate-dialog")).toBeVisible();
   await expect(page.locator("#deactivate-submit")).toBeEnabled();
-  await page.unroute("**/api/**/status");
+  await unroute(page, "**/api/**/status");
   await page.click("#deactivate-submit");
   await expect(page.locator("#live-region")).toContainText(`Principal ${id} deactivated.`, { timeout: 20_000 });
   await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("inactive");
@@ -224,7 +224,7 @@ test("clears the session before a held status response arrives", async ({ page }
   let puts = 0;
   let putHeld = false;
   const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
-  await page.route(statusPut, async (route) => {
+  await route(page, statusPut, async (route) => {
     if (route.request().method() !== "PUT") return route.continue();
     puts += 1;
     putHeld = true;
@@ -250,7 +250,7 @@ test("clears the session before a held status response arrives", async ({ page }
   await expect(page.locator("#live-region")).toHaveText("Session cleared.");
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} deactivated.`);
   expect(puts).toBe(1);
-  await page.unroute(statusPut);
+  await unroute(page, statusPut);
 });
 test("drops a stale detail read that resolves after a confirmed deactivation", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
@@ -262,14 +262,14 @@ test("drops a stale detail read that resolves after a confirmed deactivation", a
   const detailGet = (url) => url.pathname === `/api/v1/principals/${id}`;
   const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
   let puts = 0;
-  await page.route(detailGet, async (route) => {
+  await route(page, detailGet, async (route) => {
     if (route.request().method() === "GET" && holdFirstGet) {
       holdFirstGet = false;
       await new Promise((r) => setTimeout(r, 2500));
     }
     await route.continue();
   });
-  await page.route(statusPut, async (route) => {
+  await route(page, statusPut, async (route) => {
     if (route.request().method() !== "PUT") return route.continue();
     puts += 1;
     await route.continue();
@@ -285,8 +285,8 @@ test("drops a stale detail read that resolves after a confirmed deactivation", a
   await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("inactive");
   await expect(page.locator(`[data-deactivate-principal='${id}']`)).toHaveCount(0);
   expect(puts).toBe(1);
-  await page.unroute(detailGet);
-  await page.unroute(statusPut);
+  await unroute(page, detailGet);
+  await unroute(page, statusPut);
 });
 test("locks retry when the refresh after a real 409 fails", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
@@ -306,12 +306,12 @@ test("locks retry when the refresh after a real 409 fails", async ({ page }) => 
   let puts = 0;
   const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
   const detailGet = (url) => url.pathname === `/api/v1/principals/${id}`;
-  await page.route(statusPut, async (route) => {
+  await route(page, statusPut, async (route) => {
     if (route.request().method() !== "PUT") return route.continue();
     puts += 1;
     await route.continue();
   });
-  await page.route(detailGet, (route) => {
+  await route(page, detailGet, (route) => {
     if (route.request().method() === "GET") return route.abort("failed");
     return route.continue();
   });
@@ -324,7 +324,7 @@ test("locks retry when the refresh after a real 409 fails", async ({ page }) => 
   await expect(page.locator("#deactivate-dialog")).toBeVisible();
   await page.waitForTimeout(500);
   expect(puts).toBe(1);
-  await page.unroute(detailGet);
+  await unroute(page, detailGet);
   await page.click("#deactivate-cancel");
   await expect(page.locator("#deactivate-dialog")).toBeHidden();
   await page.click(`[data-expand-principal='${id}']`);
@@ -336,7 +336,7 @@ test("locks retry when the refresh after a real 409 fails", async ({ page }) => 
   await expect(page.locator("#live-region")).toContainText(`Principal ${id} deactivated.`, { timeout: 20_000 });
   await expect(page.locator(`[data-principal-detail='${id}']`)).toContainText("inactive");
   expect(puts).toBe(2);
-  await page.unroute(statusPut);
+  await unroute(page, statusPut);
 });
 test("closes deactivate without retry when the refresh after 409 finds inactive", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
@@ -355,7 +355,7 @@ test("closes deactivate without retry when the refresh after 409 finds inactive"
   }, { key: adminKey, principalId: id });
   let puts = 0;
   const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
-  await page.route(statusPut, async (route) => {
+  await route(page, statusPut, async (route) => {
     if (route.request().method() !== "PUT") return route.continue();
     puts += 1;
     await route.continue();
@@ -367,5 +367,5 @@ test("closes deactivate without retry when the refresh after 409 finds inactive"
   await expect(page.locator(`[data-deactivate-principal='${id}']`)).toHaveCount(0);
   await page.waitForTimeout(500);
   expect(puts).toBe(1);
-  await page.unroute(statusPut);
+  await unroute(page, statusPut);
 });
