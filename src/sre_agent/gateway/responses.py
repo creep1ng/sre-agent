@@ -289,7 +289,11 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, status, "authorization",
                                       context=context, alias=request.model, decision=decision,
                                       reason=admission.denial_reason or "consumption_bounds_unavailable",
-                                      retryable=status in {429, 503, 504}, identifiers=identifiers)
+                                      retryable=status in {429, 503, 504}, identifiers=identifiers,
+                                      consumption_policy_version=(
+                                          None if admission.denial_reason == "policy_unavailable"
+                                          else admission.policy_version
+                                      ))
         try:
             provider_request = ProviderRequest(
                 input=request.input,
@@ -303,7 +307,8 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, 503, "routing", context=context,
                                       alias=request.model, decision=decision,
                                       reason="routing_unavailable", retryable=True,
-                                      identifiers=identifiers)
+                                      identifiers=identifiers,
+                                      consumption_policy_version=admission.policy_version)
         # Freeze the already-loaded alias assignment at the invocation boundary.
         # No database alias lookup is performed after this point.
         invocation_attribution = RequestAttribution.from_assignment(request_id, assignment)
@@ -323,7 +328,9 @@ class ResponsesService:  # noqa: E305
             return await self._finish(request_id, started, 200, "response", payload=payload,
                                       context=context, alias=request.model, decision=decision,
                                       assignment=assignment, identifiers=identifiers,
-                                      consumption=consumption, attribution=attribution)
+                                      consumption=consumption,
+                                      attribution=attribution,
+                                      consumption_policy_version=admission.policy_version)
         except ProviderFailure as failure:
             status, reason, code = {"timeout": (504, "upstream_failed", "upstream_timeout"),
                                     "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
@@ -339,7 +346,8 @@ class ResponsesService:  # noqa: E305
                                       attribution=invocation_attribution.with_credit(
                                           model=failure.credited_model,
                                           provider=failure.credited_provider,
-                                      ))
+                                      ),
+                                      consumption_policy_version=admission.policy_version)
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, consumption: Consumption | None = None,

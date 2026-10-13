@@ -24,10 +24,14 @@ class GatewayError(Exception):
         kind: Literal["denied", "transient", "rejected"],
         status: int | None = None,
         detail: str | None = None,
+        *,
+        request_id: UUID | None = None,
     ) -> None:
         super().__init__(detail or f"gateway {kind}" + (f" ({status})" if status else ""))
         self.kind = kind
         self.status = status
+        self.detail = detail
+        self.request_id = request_id
 
 
 class Gateway(Protocol):
@@ -66,10 +70,24 @@ class ToolResult:
     datasource_uid: str | None = None
     query: str | None = None
     time_window: str | None = None
+    request_id: UUID | None = None
 
 
 class EvidenceUnavailable(Exception):
     """The provider could not serve the requested tool."""
+
+    def __init__(
+        self,
+        message: str = "evidence unavailable",
+        *,
+        kind: Literal["denied", "transient", "rejected"] = "transient",
+        status: int | None = None,
+        request_id: UUID | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.status = status
+        self.request_id = request_id
 
 
 class EvidenceProvider(Protocol):

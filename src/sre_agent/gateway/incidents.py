@@ -90,19 +90,20 @@ class StateReadRaceError(Exception):
 
 
 async def consistent_run_state(
-    work: IncidentUnitOfWork, run_id: str
+    work: IncidentUnitOfWork, run_id: str, incident_id: str
 ) -> tuple[RunRecord, int] | None:
     """The run and the sequence of the last event it reflects, read as one consistent pair.
 
-    Every transition bumps the run version and appends its events in the same commit.
-    The run is read again after its events: if the version did not move, no transition
-    landed in between, so the cursor describes exactly the state returned and a consumer
-    polling from it neither skips nor re-applies an event. Events are read from the
-    latest snapshot on, which the runtime takes every few transitions.
+    A state transition bumps the run version; receipt-only appends update ``updated_at``
+    in the same transaction as their events. The run is read again after its events: if
+    neither marker moved, no write landed in between, so the cursor describes exactly
+    the state returned and a consumer polling from it neither skips nor re-applies an
+    event. Events are read from the latest snapshot on, which the runtime takes every
+    few transitions.
     """
 
     for _ in range(STATE_READ_ATTEMPTS):
-        run = await work.runs.get(run_id)
+        run = await work.runs.get_for_incident(run_id, incident_id)
         if run is None:
             return None
         snapshot = await work.snapshots.latest(run_id)
@@ -113,8 +114,12 @@ async def consistent_run_state(
                 sequence = page[-1].sequence
             if len(page) < EVENT_PAGE:
                 break
-        again = await work.runs.get(run_id)
-        if again is not None and again.version == run.version:
+        again = await work.runs.get_for_incident(run_id, incident_id)
+        if (
+            again is not None
+            and again.version == run.version
+            and again.updated_at == run.updated_at
+        ):
             return run, sequence
     raise StateReadRaceError(run_id)
 
@@ -210,14 +215,14 @@ class IncidentQueryService:
         try:
             async with self.units() as work:
                 if run_id is not None:
-                    run = await work.runs.get(run_id)
-                    if run is None or run.incident_id != incident_id:
+                    run = await work.runs.get_for_incident(run_id, incident_id)
+                    if run is None:
                         return None, self._error(request_id, 404, "run_not_found")
                     return run, None
                 run_ids = await work.runs.list_ids(incident_id)
                 if not run_ids:
                     return None, self._error(request_id, 404, "run_absent")
-                run = await work.runs.get(run_ids[-1])
+                run = await work.runs.get_for_incident(run_ids[-1], incident_id)
                 if run is None:
                     return None, self._error(request_id, 404, "run_not_found")
                 return run, None
@@ -238,7 +243,9 @@ class IncidentQueryService:
         try:
             async with self.units() as work:
                 run_ids = await work.runs.list_ids(incident_id)
-                fetched = [await work.runs.get(run_id) for run_id in run_ids]
+                fetched = [
+                    await work.runs.get_for_incident(run_id, incident_id) for run_id in run_ids
+                ]
             runs = [run for run in fetched if run is not None]
             payload = project_detail(record, runs, self.workflow)
         except UnsupportedWorkflowDataError:
@@ -365,8 +372,8 @@ class IncidentQueryService:
             return error
         try:
             async with self.units() as work:
-                found = await consistent_run_state(work, run_id)
-            if found is None or found[0].incident_id != incident_id:
+                found = await consistent_run_state(work, run_id, incident_id)
+            if found is None:
                 return self._error(request_id, 404, "run_not_found")
             run, sequence = found
             payload = project_run_state(run, self.workflow, event_sequence=sequence)

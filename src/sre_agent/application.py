@@ -31,6 +31,7 @@ from sre_agent.control.consumption_limits import (
 )
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
+from sre_agent.gateway.investigation import InvestigationRunDispatcher
 from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
 from sre_agent.gateway.runs import RunCommandService, RunStartService, commands_router, runs_router  # noqa: E501  # fmt: skip
 from sre_agent.incident.runtime import IncidentRuntime
@@ -58,6 +59,7 @@ def create_application(
     database = Database(runtime_settings.database_url)
     shared_provider_client = None
     shared_mcp_client = None
+    shared_investigator_client = None
     shared_endpoint_catalog_client = None
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
@@ -113,6 +115,17 @@ def create_application(
         )
     )
     incident_runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
+    if runtime_settings.investigator_gateway is not None:
+        shared_investigator_client = httpx.AsyncClient(
+            timeout=runtime_settings.investigator_gateway.timeout_seconds
+        )
+    investigation_dispatcher = InvestigationRunDispatcher(
+        database.sessions,
+        incident_runtime,
+        lambda: PostgresIncidentUnitOfWork(database),
+        runtime_settings.investigator_gateway,
+        http=shared_investigator_client,
+    )
     application.include_router(
         runs_router(
             RunStartService(
@@ -120,6 +133,7 @@ def create_application(
                 workflow,
                 incident_runtime,
                 lambda: PostgresIncidentUnitOfWork(database),
+                investigator=investigation_dispatcher,
             )
         )
     )
@@ -191,6 +205,8 @@ def create_application(
         application.add_event_handler("shutdown", shared_provider_client.aclose)
     if shared_endpoint_catalog_client is not None:
         application.add_event_handler("shutdown", shared_endpoint_catalog_client.aclose)
+    if shared_investigator_client is not None:
+        application.add_event_handler("shutdown", shared_investigator_client.aclose)
     if shared_mcp_client is not None:
         application.add_event_handler("shutdown", shared_mcp_client.aclose)
     return application

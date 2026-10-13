@@ -10,13 +10,13 @@ Existing usage accounting and audit navigation are not historical attribution.
 
 - Route: delegated direct Organic Driven Development; no SDD artifacts.
 - Branch: `codex/issue-454-historical-attribution`.
-- Current base: `23e1a42dd1f3c0ad98b76ee6f5f25906570d50c2` (fetched main).
+- Historical producer baseline: `23e1a42dd1f3c0ad98b76ee6f5f25906570d50c2` (fetched main).
   Main's #541 and #568 evidence/proof work retained without source conflicts.
   Rebased design-first provenance commit is `3adefc2`.
 - Live GitHub Projects consulted: midnight.agent; #454 Todo, #143 In progress.
 - Scope authority: #454 and approved comment 6073849454; #143 comment 6073854153.
 - Backend owner Ricardo/creep1ng; consumer UI belongs to Mario/Mariog89.
-- Authorized current gh session for this repository, branch publication, draft
+- Initial producer authorization: current gh session for this repository, branch publication, draft
   PRs and Codex GitHub review. No merge, issue closure, paid provider calls,
   new credentials, personal Mario branch, or unrelated remote destinations.
 - Immutable separate per-request snapshot; AuditEvent remains HMAC protected.

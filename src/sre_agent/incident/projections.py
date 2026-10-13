@@ -9,6 +9,7 @@ Timeline order always comes from one run's sequence (ADR-008).
 import re
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from sre_agent.incident.persistence import IncidentRecord, RunEvent, RunRecord, SnapshotRecord
 from sre_agent.incident.workflow import IncidentWorkflow
@@ -104,6 +105,24 @@ def event_summary(payload: Any) -> str:
         return TRANSITION_SUMMARIES[transition_id]
     if isinstance(transition_id, str):
         return f"Transition {transition_id} applied."
+    if isinstance(payload, dict):
+        receipt = payload.get("dispatch_receipt")
+        if isinstance(receipt, dict):
+            status = receipt.get("status")
+            if status == "pending":
+                return "Investigation dispatch started."
+            if status in {"success", "confirmed_failure", "unknown"}:
+                return f"Investigation dispatch ended: {status}."
+        outcome = payload.get("outcome")
+        action = outcome.get("action") if isinstance(outcome, dict) else None
+        summaries = {
+            "propose_hypothesis": "Investigation proposed a hypothesis.",
+            "propose_mitigation": "Investigation proposed a mitigation.",
+            "request_human": "Investigation requested human review.",
+            "conclude": "Investigation concluded.",
+        }
+        if isinstance(action, str) and action in summaries:
+            return summaries[action]
     return "Incident event recorded."
 
 
@@ -112,17 +131,22 @@ def project_event(event: RunEvent, decision_document: Any) -> dict[str, Any]:
     if actor not in ("human", "agent", "system"):
         raise MissingDecisionError(f"event '{event.event_id}' has no attributable actor")
     payload = event.payload if isinstance(event.payload, dict) else {}
-    state = payload.get("to")
+    state = payload.get("to", payload.get("state"))
+    raw_request_id = payload.get("request_id")
+    try:
+        request_id = str(UUID(raw_request_id)) if isinstance(raw_request_id, str) else None
+    except ValueError:
+        request_id = None
     return {
         "event_id": event.event_id,
-        "kind": "state_change",
+        "kind": event.kind,
         "sequence": event.sequence,
         "state": state if isinstance(state, str) else None,
         "summary": event_summary(payload),
         "actor": {"type": actor, "reference": actor_reference(decision_document)},
         "turn_id": event.turn_id,
         "task_id": gateway_task_id(event.turn_id),
-        "request_id": None,
+        "request_id": request_id,
         "occurred_at": utc_iso(event.occurred_at),
     }
 

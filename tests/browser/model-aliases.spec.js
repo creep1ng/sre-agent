@@ -808,17 +808,13 @@ test("sidebar covers the control plane without fictitious routes", async ({ page
   await expect(nav.locator("a[href='/public/admin/principals.html']")).toHaveText("Principals");
   const current = nav.locator("[aria-current='page']");
   await expect(current).toHaveText("Resources & aliases");
-  await expect(nav.locator("a[href*='grant' i]")).toHaveCount(0);
   await expect(nav.locator("a[href*='audit' i]")).toHaveCount(0);
   await expect(nav.getByRole("link", { name: "Audit & consumption" })).toHaveAttribute(
     "href", "/public/admin/consumption.html",
   );
-  for (const label of ["Grants"]) {
-    const item = nav.getByText(label, { exact: true });
-    await expect(item).toBeVisible();
-    await expect(item).toHaveAttribute("aria-disabled", "true");
-    expect(await item.evaluate((node) => node.tagName)).toBe("SPAN");
-  }
+  await expect(nav.getByRole("link", { name: "Grants" })).toHaveAttribute(
+    "href", "/public/admin/grants.html",
+  );
 });
 
 test("resources section frames aliases without fabricated catalog data", async ({ page }) => {

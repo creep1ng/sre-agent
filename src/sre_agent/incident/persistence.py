@@ -8,7 +8,7 @@ reimplementing or weakening those rules.
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Protocol, Self
+from typing import Any, Literal, Protocol, Self
 
 JsonDocument = Mapping[str, Any]
 
@@ -131,6 +131,8 @@ class IncidentRepository(Protocol):
 class RunRepository(Protocol):
     async def get(self, run_id: str) -> RunRecord | None: ...
 
+    async def get_for_incident(self, run_id: str, incident_id: str) -> RunRecord | None: ...
+
     async def add(
         self, run_id: str, incident_id: str, state: JsonDocument, *, now: datetime
     ) -> RunRecord: ...
@@ -163,12 +165,23 @@ class DecisionRepository(Protocol):
 
 
 class IncidentUnitOfWork(Protocol):
-    incidents: IncidentRepository
-    runs: RunRepository
-    events: EventRepository
-    snapshots: SnapshotRepository
-    text_context: TextContextRepository
-    decisions: DecisionRepository
+    @property
+    def incidents(self) -> IncidentRepository: ...
+
+    @property
+    def runs(self) -> RunRepository: ...
+
+    @property
+    def events(self) -> EventRepository: ...
+
+    @property
+    def snapshots(self) -> SnapshotRepository: ...
+
+    @property
+    def text_context(self) -> TextContextRepository: ...
+
+    @property
+    def decisions(self) -> DecisionRepository: ...
 
     async def __aenter__(self) -> Self: ...
 
@@ -179,6 +192,32 @@ class IncidentUnitOfWork(Protocol):
     ) -> TransitionResult | None: ...
 
     async def lock_command(self, incident_id: str, command_id: str) -> None: ...
+
+    async def claim_run_dispatch(
+        self,
+        incident_id: str,
+        run_id: str,
+        *,
+        intent_decision: DecisionDraft,
+        intent_event: EventDraft,
+        interrupted_decision: DecisionDraft,
+        interrupted_event: EventDraft,
+    ) -> Literal["claimed", "active", "complete", "interrupted"]: ...
+
+    async def complete_run_dispatch(
+        self,
+        incident_id: str,
+        run_id: str,
+        *,
+        decision: DecisionDraft,
+        events: Sequence[EventDraft],
+        expected_incident_version: int | None = None,
+        incident_patch: JsonDocument | None = None,
+    ) -> bool: ...
+
+    async def release_run_dispatch(self, incident_id: str, run_id: str) -> None: ...
+
+    async def commit(self) -> None: ...
 
     async def persist_transition(
         self,
@@ -194,9 +233,10 @@ class IncidentUnitOfWork(Protocol):
         decision: DecisionDraft,
         events: Sequence[EventDraft],
         snapshot: SnapshotDraft | None = None,
+        dispatch_id: str | None = None,
     ) -> TransitionResult: ...
 
-    async def load_replay(self, run_id: str) -> ReplayRecord: ...
+    async def load_replay(self, run_id: str, *, incident_id: str) -> ReplayRecord: ...
 
 
 class IncidentStaleWriteError(RuntimeError):

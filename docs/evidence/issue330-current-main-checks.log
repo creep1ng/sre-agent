@@ -1,0 +1,12 @@
+Current-main scoped verification (sanitized summary; isolated Compose project `issue330deliveryrebased23e`)
+
+Base: 23e1a42dd1f3c0ad98b76ee6f5f25906570d50c2
+Command: docker compose --env-file .env.example -p issue330deliveryrebased23e --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && ruff check --no-cache . && ruff format --check --no-cache . && python scripts/validate_run_api.py && pytest -q -p no:cacheprovider tests/test_incident*.py tests/test_investigator*.py tests/test_mcp*.py tests/test_import_boundaries.py tests/test_run_api_contract.py'
+
+Database isolation: PASS
+Ruff: PASS
+Ruff format: PASS (251 files already formatted)
+Run API validation: PASS (5 paths, 5 schemas, 6 positive, 8 negative examples)
+Pytest: PASS (440 passed, 2 third-party deprecation warnings, 58.75s)
+Compose cleanup: owned project removed; zero owned containers, volumes, networks.
+A previous pre-rebase run on base 878a0b2 used 249 formatted files; it is superseded by the current-main result above.

@@ -1,0 +1,9 @@
+{
+  "evidence_kind": "controlled integration",
+  "scenario": "real local HTTP application and isolated PostgreSQL, synthetic Responses upstream",
+  "before": {"malformed_twice_correlated_response_audits": 0, "unknown_reference_then_recovery_correlated_response_audits": 1},
+  "after": {"malformed_twice_correlated_response_audits": 2, "unknown_reference_then_recovery_correlated_response_audits": 2, "exact_start_replay_unchanged": true, "mcp_invocations": 0},
+  "repeat": "docker compose --env-file .env.example -p issue330codexproof --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q -s -p no:cacheprovider tests/test_incident_investigator_http.py::test_invalid_model_output_retains_all_governed_http_audits'",
+  "final_scoped_tests_passed": 442,
+  "external_provider_verified": false
+}

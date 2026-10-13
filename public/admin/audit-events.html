@@ -8,6 +8,7 @@
     <link rel="icon" href="/public/favicon.svg" />
     <link rel="stylesheet" href="/styles/design-system.css" />
     <link rel="stylesheet" href="/styles/principals.css" />
+    <link rel="stylesheet" href="/styles/model-aliases.css" />
   </head>
   <body>
     <a class="ma-skip-link" href="#event-list">Skip to audit events list</a>
@@ -26,6 +27,16 @@
           <p class="principals__subtitle">Browse metadata-only audit events through the real control-plane API.</p>
         </div>
       </header>
+      <div class="model-aliases__shell">
+        <nav class="model-aliases__nav" aria-label="Control plane">
+          <ul class="model-aliases__nav-list">
+            <li><a class="model-aliases__nav-link" href="/public/admin/principals.html">Principals</a></li>
+            <li><a class="model-aliases__nav-link" href="/public/admin/model-aliases.html">Resources &amp; aliases</a></li>
+            <li><a class="model-aliases__nav-link" href="/public/admin/grants.html">Grants</a></li>
+            <li><a class="model-aliases__nav-link is-current" href="/public/admin/consumption.html" aria-current="page">Audit &amp; consumption</a></li>
+          </ul>
+        </nav>
+        <div class="model-aliases__content">
       <section class="ma-panel principals__session" aria-labelledby="session-title">
         <div class="ma-panel__header"><div>
           <h2 id="session-title" class="ma-panel__title">API session</h2>
@@ -94,6 +105,8 @@
           </div>
         </div>
       </section>
+        </div>
+      </div>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
     </main>
     <script type="module" src="/public/admin/audit-events.js"></script>
