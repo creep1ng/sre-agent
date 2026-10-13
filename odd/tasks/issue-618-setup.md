@@ -6,7 +6,8 @@ or manual grants; distinguish installation/readiness from functional acceptance.
 
 ## Authority / constraints
 - User authorized implementation, current gh reads, branches/pushes/draft PRs in
-  creep1ng/sre-agent. No merge, closure, AWS operations or paid LLM calls.
+  creep1ng/sre-agent. Latest goal authorizes merge only after all CA verified;
+  no premature merge/closure, AWS operations or paid LLM calls authorized.
 - User requires feature branches and several PRs, each <=400 additions+deletions.
 - Direct route: orchestrate existing Compose, seed and domain APIs; no SDD selected.
 - GitHub Projects consulted live: midnight.agent #8, issue618 OPEN / Todo.
@@ -110,3 +111,18 @@ canonical project/layers, never an unrelated default project. Source unchanged.
   docs/setup-sre.md, docs/evidence/issue-618/, README.md, .env.example.
 - Engram: all writes/session summary forbidden without registered runtime ID;
   this local recovery record remains authoritative pending the memory mirror.
+
+## Goal resume — 2026-10-13
+User clarified runtime goal reference628 means618; pursue all CA, then merge.
+Historical no-merge notes are superseded only by this conditional authorization.
+Metadata Security corrected620/621/622/624; trusted base parser readback0errors
+all four. Drafts preserved; no review/acceptance claimed or protections bypassed.
+DockerDataRoot/var/lib/docker shares60GB root filesystem,3.0GB free; /tmp tmpfs
+not a replacement. No global/foreign cleanup. PyYAML host absent, available in
+existing checks image; avoid silent host install.
+494 latest513fa30491 guest.py deploys upstream compose+observability only, no
+owned MCP overlay/token/connection export; guide509 documents SSM8090 only.
+Asked for producer-extension scope, suitable local/authorized target, and ordered
+main integration required byCA1. No AWS credentials/session inspected or reused.
+Next: continue producer/real verification on scoped answers; keep goal active.
+Engram mirror/session summary remains blocked by missing authoritative runtimeID.
