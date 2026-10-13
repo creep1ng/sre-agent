@@ -11,7 +11,8 @@ this split on 2026-10-13. Route: direct; no SDD or new behavior.
 - Preserve source: `e0c7fe313ac07812273437b30c189d3f46859a5f`, the actual
   `codex/issue-454-design` branch; PR API metadata still reports its old head.
 - Live GitHub Projects consulted: midnight.agent / #454 Todo.
-- No merge into main, issue closure, paid provider calls, new credentials,
+- Initial draft scope excluded main integration; superseded by explicit approval below.
+- No issue closure, paid provider calls, new credentials,
   unrelated remote access, automatic size labels, or inherited size exceptions.
 - Keep all files, preauthored tests, provenance, immutable historical releases,
   and current main behavior. No minification or arbitrary artifact truncation.
@@ -63,9 +64,9 @@ Memory mirror: PENDING. No authoritative registered runtime session identity;
 agent-attributed Engram writes are forbidden. Observation 9911 is an older
 producer plan, not current scope or verification authority.
 
-Next: obtain human review and current hosted CI, then integrate the drafts
-bottom-up into the feature after applicable gates. App attachments and memory
-mirroring await their hosts; main integration requires a separate decision.
+Next: submit the assembled feature to main and wait for current hosted CI and
+governance before merging. App attachment confirmation and memory mirroring remain
+unavailable; neither is claimed complete.
 
 Partition verified: 13 cohesive cuts; only contract is above 400 lines. Every
 original runtime/test/schema/script file is accounted for and matches source
@@ -78,3 +79,26 @@ All 14 drafts were created; exact GitHub head/base/size/label readback PASS.
 App attachment calls did not return; confirmation remains pending.
 Current review index: docs/evidence/issue-454-feature-split/README.md; only #601
 has the explicitly authorized size:exception-update-contract label.
+
+## Approved integration — 2026-10-13
+
+The maintainer accepted all evidence and slices, requested their merge, then
+explicitly authorized the aggregate size exception and final main integration.
+This supersedes the initial no-main scope, not the no-paid-call/no-issue-closure
+boundaries. The contract retains its specifically requested exception label.
+
+- [x] **F454-6 — Integrate all fourteen approved slices into the feature.**
+  All PRs #596 and #601–#613 report merged. Assembled feature499ef81 has exactly
+  the reviewed final75dfec6 tree. GitHub required asynchronous merges without
+  rules bypass, and updated stack SHAs automatically; candidate trees were
+  checked against original cuts. #613 first merged into #612; its later769-line
+  aggregate contains both previously reviewed cuts, under the explicit aggregate
+  exception. #611 needed an ancestry-only base update; its actual cut remained229.
+  Every slice passed current governance before integration. Intermediate CI
+  failures were dependency-prefix tests/unused imports, not accepted main builds.
+- Main advanced to2f022e6 with unrelated MCP changes. A clean merge preserves
+  those changes; source and tests for #454 are unchanged. The final main PR
+  requires new hosted CI at its actual assembled candidate, not old-prefix CI.
+- Independent human acceptance and size exception are the explicit decisions
+  in this chat; no automatic approval/exception labels were added.
+- Persistent memory writes remain prohibited by absent runtime identity.
