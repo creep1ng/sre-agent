@@ -4,7 +4,7 @@ import json
 import os
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import psycopg
@@ -32,19 +32,43 @@ with httpx.Client(timeout=10, trust_env=False) as client:
     end = datetime.now(UTC).isoformat()
     after = client.get("http://grafana-mcp:8000/__count").json()
     forward_after = client.get("http://issue30-fault-proxy:8000/__stats").json()
-    body = response.json()
-    assert set(body) == {"error", "request_id", "retryable"}
-    assert set(body["error"]) == {"code", "message"}
-    assert key not in json.dumps(body)
+    parsed = True
+    try:
+        body = response.json()
+    except ValueError:
+        body, parsed = None, False
+    request_id = body.get("request_id") if isinstance(body, dict) else None
+    try:
+        UUID(request_id)
+    except (ValueError, TypeError, AttributeError):
+        request_id = None
+    public_shape = (
+        isinstance(body, dict)
+        and set(body) == {"error", "request_id", "retryable"}
+        and isinstance(body["error"], dict)
+        and set(body["error"]) == {"code", "message"}
+        and request_id is not None
+        and key not in json.dumps(body)
+    )
+
 with psycopg.connect(
     os.environ["DATABASE_URL"], options="-c default_transaction_read_only=on"
 ) as db:
-    rows = db.execute(
-        """SELECT to_jsonb(a) FROM audit_events a
+    rows = (
+        db.execute(
+            """SELECT to_jsonb(a) FROM audit_events a
 WHERE correlation->>'request_id'=%s
 AND occurred_at >= %s::timestamptz AND occurred_at < %s::timestamptz""",
-        (body["request_id"], start, end),
-    ).fetchall()
+            (request_id, start, end),
+        ).fetchall()
+        if request_id
+        else []
+    )
+    window_rows = db.execute(
+        "SELECT count(*) FROM audit_events WHERE occurred_at >= %s::timestamptz "
+        "AND occurred_at < %s::timestamptz",
+        (start, end),
+    ).fetchone()[0]
     auth_rows = db.execute(
         """SELECT count(*) FROM audit_events
 WHERE (stage='authentication' OR operation='credentials.authenticate'
@@ -55,7 +79,8 @@ AND occurred_at >= %s::timestamptz AND occurred_at < %s::timestamptz""",
 events = [canonical_event(row[0], validator.schema["required"]) for row in rows]
 methods_before, methods_after = before["mcp_methods"], after["mcp_methods"]
 checks = {
-    "http_contract": response.status_code == 401
+    "http_contract": public_shape
+    and response.status_code == 401
     and response.headers.get("WWW-Authenticate") == "Bearer"
     and body["error"] == {"code": "authentication_failed", "message": "Authentication failed."}
     and body["retryable"] is False,
@@ -73,7 +98,7 @@ checks = {
         | forward_after["forwarded_methods"].keys()
     ),
     "complete_authentication_event": len(events) == 1
-    and authentication_event_valid(events[0], validator, body["request_id"], start, end),
+    and authentication_event_valid(events[0], validator, request_id, start, end),
 }
 passed = all(checks.values())
 out = {
@@ -90,6 +115,9 @@ out = {
     "contract_version": version,
     "bearer_challenge_valid": response.headers.get("WWW-Authenticate") == "Bearer",
     "checks": checks,
+    "public_json_parsed": parsed,
+    "correlation_available": request_id is not None,
+    "all_operation_rows_in_window": window_rows,
     "audit_events": events if passed else [],
     "counter_before": before,
     "counter_after": after,
@@ -97,10 +125,10 @@ out = {
     "forward_after": forward_after,
     "tools_call_delta": after["mcp_methods"].get("tools/call", 0)
     - before["mcp_methods"].get("tools/call", 0),
-    "all_operation_sql_row_count": len(rows),
+    "all_operation_sql_row_count": len(rows) if request_id else None,
     "authentication_row_count_in_window": auth_rows,
     "terminal_event_required": 1,
-    "terminal_event_observed": len(rows),
+    "terminal_event_observed": len(rows) if request_id else None,
     "terminal_event_requirement": "passed" if passed else "failed",
     "sanitized": True,
 }
@@ -111,7 +139,7 @@ print(
             "status": response.status_code,
             "public_body": out["actual_public_body"],
             "tools_call_delta": out["tools_call_delta"],
-            "all_operation_sql_row_count": len(rows),
+            "all_operation_sql_row_count": len(rows) if request_id else None,
             "terminal_event_requirement": out["terminal_event_requirement"],
         }
     )
