@@ -20,6 +20,7 @@ const REVIEW_ACTIONS = Object.freeze({
 const state = {
   incidentId: null,
   runId: null,
+  incidentVersion: null,
   pending: null,
   idempotencyKey: null,
   generation: 0,
@@ -43,7 +44,7 @@ function cacheNodes() {
     "review", "loading-state", "credential-section", "credential-form",
     "credential-input", "credential-error", "command-status", "error-missing-id", "error-401",
     "error-403", "error-404", "error-409", "error-503", "context-section",
-    "fact-incident", "fact-run", "fact-state", "fact-workflow",
+    "fact-incident", "fact-run", "fact-incident-version", "fact-state", "fact-workflow",
     "actions-section", "actions-list", "actions-empty",
     "decision-section", "decision-title", "decision-form", "decision-comment",
     "decision-key", "decision-submit", "receipt-section", "receipt-line",
@@ -91,6 +92,7 @@ function availableActions(workflowVersion, currentState) {
 function renderContext(run, workflowVersion) {
   nodes["fact-incident"].textContent = state.incidentId;
   nodes["fact-run"].textContent = run.run_id;
+  nodes["fact-incident-version"].textContent = String(state.incidentVersion);
   nodes["fact-state"].textContent = `${run.current_state ?? "—"} · ${run.status ?? "—"}`;
   nodes["fact-workflow"].textContent = workflowVersion;
   nodes["context-section"].hidden = false;
@@ -142,6 +144,7 @@ function commandPayload(action, principalId) {
   const comment = nodes["decision-comment"].value.trim();
   return {
     command: action.command,
+    expected_incident_version: state.incidentVersion,
     actor: "human",
     actor_reference: { reference_version: "1.0.0", principal_id: principalId },
     turn_id: null,
@@ -166,6 +169,7 @@ async function loadAll() {
   if (state.submitting) return;
   const generation = (state.generation += 1);
   state.submissionComplete = false;
+  state.incidentVersion = null;
   setSubmitting(false);
   hideAll();
   nodes["loading-state"].hidden = false;
@@ -173,6 +177,11 @@ async function loadAll() {
   try {
     const detail = await client.getIncident(state.incidentId);
     if (generation !== state.generation) return;
+    if (!Number.isSafeInteger(detail.version) || detail.version < 0) {
+      showError("503");
+      return;
+    }
+    state.incidentVersion = detail.version;
     const run = (detail.runs ?? []).find((entry) => entry.run_id === state.runId) ?? null;
     if (run === null) {
       showError("404");
@@ -261,6 +270,7 @@ function submitCredential(event) {
 function forgetCredential() {
   state.generation += 1;
   state.pending = null;
+  state.incidentVersion = null;
   state.draftComments = {};
   state.idempotencyKey = null;
   state.submissionComplete = false;

@@ -351,6 +351,7 @@ def check_authorization_contract(schemas: dict[str, Any]) -> list[str]:
     props = command["properties"]["authorization"]["properties"]
     resource_props = props["resource"]["properties"]
     command_action_map = vocabulary["command_action_map"]
+    versioned_review_commands = {"approve_mitigation", "reject_mitigation", "request_changes"}
     declared_actions = set(props["action"].get("enum", []))
     expected_actions = set(command_action_map.values())
     if declared_actions != expected_actions:
@@ -372,6 +373,8 @@ def check_authorization_contract(schemas: dict[str, Any]) -> list[str]:
             "actor_reference": identity,
             "authorization": {"action": action, "resource": resource_assertion},
         }
+        if command_name in versioned_review_commands:
+            payload["expected_incident_version"] = 0
         if command_name == "propose_disposition":
             payload["disposition"] = "link"
         if not validator.is_valid(payload):
@@ -595,13 +598,16 @@ def check_decision_correlation(schemas: dict[str, dict]) -> list[str]:
         if request.get("method") != "POST" or not match:
             errors.append(f"correlation fixture '{path.name}' must use a scoped command endpoint")
             continue
+        body = request.get("body", {})
+        if body.get("command") in {"approve_mitigation", "reject_mitigation", "request_changes"}:
+            body["expected_incident_version"] = 0
         expected_outcome, expected_kind = expected_decisions[path.name]
         if fixture.get("outcome") != expected_outcome or event.get("kind") != expected_kind:
             errors.append(f"correlation fixture '{path.name}' changed its decision semantics")
         request_id = request.get("request_id")
         if not uuid_validator.is_valid(request_id):
             errors.append(f"correlation fixture '{path.name}' has an invalid request_id")
-        if not command_validator.is_valid(request.get("body")):
+        if not command_validator.is_valid(body):
             errors.append(f"correlation fixture '{path.name}' has an invalid command body")
         event_page = {"events": [event], "next_cursor": "fixture:1", "has_more": False}
         if not event_validator.is_valid(event_page):

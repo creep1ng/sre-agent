@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from os import environ
 
+from sre_agent.investigator.client import GatewaySettings
 from sre_agent.release import ReleaseMetadata
 
 
@@ -17,6 +18,7 @@ class Settings:
     grafana_mcp_endpoint: str | None = None
     grafana_mcp_token: str | None = field(default=None, repr=False)
     openrouter_management_key: str | None = field(default=None, repr=False)
+    investigator_gateway: GatewaySettings | None = field(default=None, repr=False)
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -35,6 +37,17 @@ class Settings:
             or environment.get("MCP_GRAFANA_SERVER_TOKEN")
             or None
         )
+        investigator_configured = any(
+            environment.get(name)
+            for name in (
+                "INVESTIGATOR_GATEWAY_URL",
+                "INVESTIGATOR_GATEWAY_API_KEY",
+                "INVESTIGATOR_MODEL_ALIAS",
+            )
+        )
+        investigator_gateway = (
+            GatewaySettings.from_environment(environment) if investigator_configured else None
+        )
         return cls(
             database_url,
             api_key,
@@ -44,4 +57,5 @@ class Settings:
             environment.get("GRAFANA_MCP_ENDPOINT") or None,
             mcp_token,
             openrouter_management_key=environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None,
+            investigator_gateway=investigator_gateway,
         )

@@ -119,7 +119,10 @@ def test_each_path_ends_with_its_status_and_no_tool(
     result = run(gateway, provider)
 
     assert (result.status, len(result.turns), provider.calls) == (status, turns, [])
-    assert gateway.replies == []
+    expected_left = int(
+        bool(replies) and isinstance(replies[0], GatewayError) and replies[0].kind == "transient"
+    )
+    assert len(gateway.replies) == expected_left
 
 
 def test_the_retry_explains_the_rejection_to_the_model() -> None:
@@ -141,12 +144,13 @@ def test_oversized_model_output_is_rejected_without_retaining_it() -> None:
     assert oversized not in str(result.model_dump())
 
 
-def test_a_transient_failure_repeats_the_same_turn() -> None:
+def test_a_transient_failure_is_not_replayed_without_effect_evidence() -> None:
     gateway = ScriptedGateway(TRANSIENT, HYPOTHESIS)
     result = run(gateway)
 
-    assert result.status == "completed" and len(result.turns) == 1
-    assert [call["task_id"] for call in gateway.calls] == ["task_00000000"] * 2
+    assert result.status == "upstream_unavailable" and not result.turns
+    assert [call["task_id"] for call in gateway.calls] == ["task_00000000"]
+    assert gateway.replies == [HYPOTHESIS]
 
 
 def test_the_step_budget_ends_the_run() -> None:

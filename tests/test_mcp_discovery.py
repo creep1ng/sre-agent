@@ -1,8 +1,10 @@
 import asyncio
 import json
+import logging
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
@@ -186,6 +188,10 @@ async def test_granted_discovery_returns_exactly_two_active_tools_without_upstre
     assert body["server"]["server_id"] == MCP_SERVER_ID
     assert [tool["tool_id"] for tool in body["tools"]] == list(MCP_TOOL_IDS)
     assert len(body["tools"]) == 2
+    assert [tool["input_schema"] for tool in body["tools"]] == [
+        mcp.PrometheusQuery.model_json_schema(),
+        mcp.ElasticsearchQuery.model_json_schema(),
+    ]
     assert "endpoint" not in body["server"]
     assert scopes == [
         (AUTHORIZATION, "mcp.discovery", "mcp_server", MCP_SERVER_ID),
@@ -238,6 +244,11 @@ async def test_discovery_filters_tools_by_each_principals_direct_invoke_grants(
         "Bearer partial": ["query_prometheus"],
         "Bearer empty": [],
     }
+    partial_tools = json.loads(responses["Bearer partial"].body)["tools"]
+    assert [tool["input_schema"] for tool in partial_tools] == [
+        mcp.PrometheusQuery.model_json_schema()
+    ]
+    assert all("query_elasticsearch" not in json.dumps(tool) for tool in partial_tools)
     assert "query_elasticsearch" not in responses["Bearer partial"].body.decode()
     assert "query_prometheus" not in responses["Bearer empty"].body.decode()
     assert scopes == [
@@ -532,7 +543,14 @@ async def test_allowed_invocation_uses_exact_scope_and_calls_transport_once(
     )
 
     assert response.status_code == 200
-    assert json.loads(response.body) == {"result_type": "vector", "result": [], "warnings": []}
+    payload = json.loads(response.body)
+    request_id = UUID(response.headers["X-Request-ID"])
+    assert response.headers["X-Request-ID"] == str(request_id)
+    assert payload == {
+        "result_type": "vector",
+        "result": [],
+        "warnings": [],
+    }
     assert scopes == [(AUTHORIZATION, "mcp.invoke", "mcp_tool", "query_prometheus")]
     assert client.calls == [
         (
@@ -545,6 +563,89 @@ async def test_allowed_invocation_uses_exact_scope_and_calls_transport_once(
             },
         )
     ]
+
+
+@pytest.mark.parametrize(
+    ("upstream", "expected_type", "expected_result", "expected_warnings"),
+    [
+        (
+            {"data": [1779400000, "1"], "warnings": ["synthetic warning marker"]},
+            "indeterminate",
+            [1779400000, "1"],
+            ["synthetic warning marker"],
+        ),
+        ({"data": [1779400000, "NaN"]}, "indeterminate", [1779400000, "NaN"], []),
+        ({"data": [1779400000, "Inf"]}, "indeterminate", [1779400000, "Inf"], []),
+        (
+            {"resultType": "scalar", "result": [1779400000, "1"], "warnings": []},
+            "scalar",
+            [1779400000, "1"],
+            [],
+        ),
+        (
+            {"resultType": "string", "result": [1779400000, "Inf"], "warnings": []},
+            "string",
+            [1779400000, "Inf"],
+            [],
+        ),
+        (
+            {
+                "resultType": "vector",
+                "result": [{"metric": {"service": "payments"}, "value": [1, "1"]}],
+                "warnings": [],
+            },
+            "vector",
+            [{"metric": {"service": "payments"}, "value": [1, "1"]}],
+            [],
+        ),
+        (
+            {
+                "resultType": "matrix",
+                "result": [{"metric": {"service": "payments"}, "values": [[1, "1"]]}],
+                "warnings": [],
+            },
+            "matrix",
+            [{"metric": {"service": "payments"}, "values": [[1, "1"]]}],
+            [],
+        ),
+    ],
+)
+def test_prometheus_result_mapping_preserves_ambiguous_samples_and_existing_types(
+    upstream: dict[str, Any],
+    expected_type: str,
+    expected_result: Any,
+    expected_warnings: list[str],
+) -> None:
+    raw = {"content": [{"type": "text", "text": json.dumps(upstream)}]}
+
+    result = mcp.MCPGatewayService._map_result("query_prometheus", raw)
+
+    assert result == {
+        "result_type": expected_type,
+        "result": expected_result,
+        "warnings": expected_warnings,
+    }
+
+
+@pytest.mark.parametrize(
+    "upstream",
+    [
+        {"data": [True, "1"]},
+        {"data": [1779400000, 1]},
+        {"data": [1779400000, "x" * 257]},
+        {"data": [float("inf"), "1"]},
+        {"resultType": "vector", "result": [1779400000, "1"]},
+        {"data": [], "warnings": ["warning"] * 17},
+        {"data": [], "warnings": ["x" * 501]},
+    ],
+)
+def test_prometheus_result_mapping_fails_closed_for_malformed_or_unbounded_samples(
+    upstream: dict[str, Any],
+) -> None:
+    raw = {"content": [{"type": "text", "text": json.dumps(upstream)}]}
+
+    with pytest.raises(mcp.MCPUpstreamInvalid):
+        mcp.MCPGatewayService._map_result("query_prometheus", raw)
 
 
 @pytest.mark.asyncio
@@ -663,6 +764,108 @@ async def test_upstream_failures_have_closed_errors_and_one_call(
     assert response.status_code == status
     assert json.loads(response.body)["error"]["code"] == code
     assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("failure", "expected_reason"),
+    [
+        ("initialization", "mcp_initialization_invalid"),
+        ("rpc_response", "mcp_rpc_response_invalid"),
+        ("rpc_error", "mcp_rpc_error"),
+        ("tool_error", "mcp_tool_error"),
+        ("content", "mcp_content_invalid"),
+        ("result", "mcp_result_invalid"),
+    ],
+)
+async def test_invalid_mcp_failure_reason_is_logged_as_bounded_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failure: str,
+    expected_reason: str,
+) -> None:
+    audit = RecordingAudit()
+    methods: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        rpc = json.loads(request.content)
+        method = rpc["method"]
+        methods.append(method)
+        if method == "initialize":
+            result: Any = "invalid" if failure == "initialization" else {}
+            return httpx.Response(
+                200,
+                json={"jsonrpc": "2.0", "id": rpc["id"], "result": result},
+            )
+        if method == "notifications/initialized":
+            return httpx.Response(202)
+        if failure == "rpc_response":
+            return httpx.Response(200, text="PRIVATE-RAW-UPSTREAM-DETAIL")
+        if failure == "rpc_error":
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": rpc["id"],
+                    "error": {"code": -1, "message": "PRIVATE-RAW-UPSTREAM-DETAIL"},
+                },
+            )
+        if failure == "tool_error":
+            result = {
+                "isError": True,
+                "content": [{"type": "text", "text": "PRIVATE-RAW-UPSTREAM-DETAIL"}],
+            }
+        elif failure == "content":
+            result = {"content": [{"type": "image", "data": "PRIVATE-RAW-UPSTREAM-DETAIL"}]}
+        else:
+            result = {
+                "content": [{"type": "text", "text": '{"data":"PRIVATE-RAW-UPSTREAM-DETAIL"}'}]
+            }
+        return httpx.Response(
+            200,
+            json={"jsonrpc": "2.0", "id": rpc["id"], "result": result},
+        )
+
+    monkeypatch.setattr(mcp, "authorize_governed_access", _allow)
+    caplog.set_level(logging.WARNING, logger="sre_agent.gateway.mcp")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        upstream = mcp.GrafanaMCPClient(http, "http://grafana-mcp:8000/mcp", "synthetic-token")
+        service = mcp.MCPGatewayService(
+            MemorySessions(MemoryOwner()),
+            upstream,
+            audit=audit,
+            projector=AuditProjector(b"mcp-audit-key"),
+            owner_repository_factory=lambda session: session,
+        )
+        response = await service.invoke(
+            "query_prometheus",
+            {
+                "datasource_uid": "webstore-metrics",
+                "expr": "up",
+                "query_type": "instant",
+                "end_time": "now",
+            },
+            AUTHORIZATION,
+        )
+
+    public = json.loads(response.body)
+    assert response.status_code == 502
+    assert public["error"]["code"] == "upstream_invalid"
+    assert public["retryable"] is False
+    assert len(audit.events) == 1
+    event = audit.events[0].model_dump(mode="json")
+    assert event["response_status"] == 502
+    assert event["reason_code"] == "upstream_invalid"
+    assert "PRIVATE-RAW-UPSTREAM-DETAIL" not in json.dumps(event)
+    assert "PRIVATE-RAW-UPSTREAM-DETAIL" not in caplog.text
+    assert [record.getMessage() for record in caplog.records] == [
+        f"mcp_upstream_invalid request_id={public['request_id']} reason={expected_reason}"
+    ]
+    assert methods == (
+        ["initialize"]
+        if failure == "initialization"
+        else ["initialize", "notifications/initialized", "tools/call"]
+    )
 
 
 async def _allow(*_args: Any) -> tuple[PrincipalContext, AuthorizationEvaluation]:

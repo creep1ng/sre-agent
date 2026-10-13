@@ -165,9 +165,8 @@ def test_the_loop_runs_over_http_with_labeled_fixture_evidence() -> None:
     result = asyncio.run(investigate(request(), gateway, FixtureEvidenceProvider()))
 
     assert result.status == "completed" and len(result.turns) == 2
-    assert [(item.source, str(item.request_id)) for item in result.evidence] == [
-        ("fixture", REPLY["request_id"])
-    ]
+    assert [(item.source, item.request_id) for item in result.evidence] == [("fixture", None)]
+    assert [str(request_id) for request_id in result.request_ids] == [REPLY["request_id"]] * 2
 
 
 def test_a_gateway_denial_blocks_the_run_after_one_call() -> None:

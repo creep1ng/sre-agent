@@ -79,7 +79,11 @@ paths:
       operationId: sendRunCommand
       description: >-
         Idempotent on Idempotency-Key. The command must be permitted by the workflow
-        from the run's current state; otherwise 409. Human-only.
+        from the run's current state; otherwise 409. Human-only. Mitigation review commands
+        require the exact incident-detail version reviewed; stale versions return 409. A fresh
+        review without `expected_incident_version` returns 422. For compatibility, an exact
+        retry of a committed pre-version review may omit that field; it returns only the stored
+        historical result and does not reapply the approval to current state.
       parameters:
         - { $ref: '#/components/parameters/IncidentId' }
         - { $ref: '#/components/parameters/RunId' }
@@ -88,7 +92,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: 'urn:sre-agent:schema:run-command:1.0.0' }
+            schema: { $ref: 'urn:sre-agent:schema:run-command:2.0.0' }
       responses:
         '202':
           description: Command accepted; run state advances

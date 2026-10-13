@@ -4,8 +4,11 @@ The bounded investigation loop of issue #185, decided in
 [ADR-007](adrs/ADR-007-harness.md) and specified in
 `openspec/changes/issue-185-investigator-harness/`. It lives in
 `src/sre_agent/investigator/`, takes an incident context and an objective, talks to the
-gateway through `POST /v1/responses` and returns a validated result. It never writes
-incident state: the incident runtime applies the result (#35).
+gateway through governed Responses and MCP endpoints, and returns a validated result.
+The loop remains stateless; on an `investigate` run start, the application composition
+root dispatches it after the initial `start_investigation` transition and applies its
+result through the incident runtime/unit of work. Other start objectives and read-only
+resume do not dispatch this producer.
 
 ## Configuration
 
@@ -13,7 +16,7 @@ incident state: the incident runtime applies the result (#35).
 |---|---|
 | `INVESTIGATOR_GATEWAY_URL` | Gateway base URL, for example `http://api:8000` |
 | `INVESTIGATOR_GATEWAY_API_KEY` | Key of a gateway principal, such as the seeded `incident-harness` |
-| `INVESTIGATOR_MODEL_ALIAS` | Governed model alias, for example `triage-agent` |
+| `INVESTIGATOR_MODEL_ALIAS` | Seeded logical model alias, `triage-agent` |
 
 Those are the only values the harness reads. It holds no provider or MCP secret; the
 provider key stays in the gateway's own environment. Changing the gateway or the alias is
@@ -21,19 +24,50 @@ a configuration change.
 
 ## Results
 
-Each run ends with one `terminated_reason` of `run-state`:
+The investigator's internal result status describes the bounded loop:
 
 | Status | When |
 |---|---|
 | `completed` | The model proposed a cited hypothesis, a mitigation or a conclusion |
-| `needs_human` | The model asked for a person, or the gateway answered an unexpected status or body |
+| `needs_human` | The model explicitly requested human review, or the gateway rejected the response contract |
 | `invalid_output` | Two consecutive answers were not one valid action or cited unknown evidence |
 | `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool |
-| `upstream_unavailable` | The gateway failed twice (network, timeout or 5xx), or a tool failed |
+| `pre_dispatch_rejected` | The MCP gateway rejected the tool request with HTTP 422 before upstream dispatch |
+| `upstream_unavailable` | A gateway or tool call was unavailable, timed out, or returned a retryable error |
 | `max_steps` | Six turns passed without a final answer |
 
-The limits (6 steps, 45 s per gateway call, 10 s per tool, one retry of each kind) are
-fixed in the change's `design.md`.
+The limits (6 steps, 45 s per gateway call, 10 s per tool) are fixed in the change's
+`design.md`. A timeout, network error, or 5xx is not automatically retried: the remote
+call may have completed even when its response was lost.
+
+The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
+before a governed call, followed by one terminal `success`, `confirmed_failure`, or
+`unknown` outcome. Pending is not terminal; a concurrent idempotent start leaves an
+active dispatch alone. On a subsequent exact idempotent start replay after a process
+interruption, a still-pending receipt becomes `unknown`. Terminal outcomes are immutable
+on replay, so the service never repeats an ambiguous external call. Receipt metadata contains only correlation IDs and bounded
+status/reason codes, not prompts, model output, credentials, or raw tool arguments.
+An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs before the
+upstream tool call, so no external effect was dispatched. Transient or ambiguous failures
+remain `unknown`.
+
+A cited hypothesis maps to the existing `continue_investigation` transition. A proposed
+mitigation uses the existing `propose_mitigation` preconditions and creates a pending,
+identified artifact. `request_human` and `conclude` have no transition in this workflow;
+their validated result is recorded without inventing a domain-state transition.
+
+Governed MCP discovery includes the JSON Schema generated from each tool's strict runtime
+input model, but only for tools with a direct invocation grant. The investigator passes
+those schemas to the model; the gateway still validates every invocation against the same
+models before any upstream call.
+
+When a cited hypothesis is the valid answer on the last allowed turn, there is no budget
+for `continue_investigation`. The runtime records the validated hypothesis and its evidence
+references with the successful dispatch receipt as one event-only result; it does not
+fabricate another turn or change incident state. Runtime transitions and dispatch receipts
+share a run-scoped PostgreSQL transaction lock. A transition emitted by an investigator
+must still see that dispatch's pending intent before it can update incident state, so a
+late provider response cannot replace a terminal `unknown` receipt.
 
 ## Skills
 

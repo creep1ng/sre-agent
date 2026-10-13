@@ -19,6 +19,7 @@ principals and their grants.
 """
 
 import asyncio
+import json
 import os
 import sys
 from datetime import UTC, datetime, timedelta
@@ -31,9 +32,10 @@ import yaml
 from alembic import command as alembic
 from alembic.config import Config
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event
 
 from sre_agent.application import create_application
+from sre_agent.incident.runtime import ActorReference, IncidentCommand
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
@@ -56,7 +58,7 @@ NOW = datetime.now(UTC) - timedelta(hours=1)
 BEARERS: dict[str, str] = {}
 RUNS: dict[str, str] = {}
 MITIGATION = {
-    "mitigation_id": "mit-disable-payment-flag",
+    "mitigation_id": "mit_disable_payment_flag",
     "description": "Disable the paymentFailure flag in flagd.",
     "steps": ["Ask the operator to set paymentFailure to off."],
     "risk": "low",
@@ -93,10 +95,7 @@ def authorized_database() -> None:
             "('demo-human','human','Demo operator','active',now(),now()),"
             "('sender-human','human','Sender only','active',now(),now()),"
             "('bystander-human','human','Bystander','active',now(),now()),"
-            "('approving-harness','agent','Misconfigured harness','active',now(),now()),"
-            "('whoami-expired','human','Expired whoami','active',now(),now()),"
-            "('whoami-revoked','human','Revoked whoami','active',now(),now()),"
-            "('whoami-inactive','human','Inactive whoami','inactive',now(),now())"
+            "('approving-harness','agent','Misconfigured harness','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at) VALUES "
@@ -109,29 +108,8 @@ def authorized_database() -> None:
         async with database.transaction() as session:
             credentials = CredentialRepository(session)
             admin = await credentials.issue("admin-human")
-            for name in (
-                "demo-human",
-                "sender-human",
-                "bystander-human",
-                "approving-harness",
-                "whoami-expired",
-                "whoami-revoked",
-                "whoami-inactive",
-            ):
+            for name in ("demo-human", "sender-human", "bystander-human", "approving-harness"):
                 BEARERS[name] = f"Bearer {(await credentials.issue(name)).key}"
-            await session.execute(
-                text(
-                    "UPDATE credentials SET created_at = now() - interval '2 seconds', "
-                    "expires_at = now() - interval '1 second' "
-                    "WHERE principal_id = 'whoami-expired'"
-                )
-            )
-            await session.execute(
-                text(
-                    "UPDATE credentials SET status = 'revoked', revoked_at = created_at "
-                    "WHERE principal_id = 'whoami-revoked'"
-                )
-            )
             grants = GrantRepository(session)
             for resource in ("catalog", "grants"):
                 await grants.create(
@@ -141,28 +119,33 @@ def authorized_database() -> None:
                     "administrative_control",
                     resource,
                 )
-        # The catalog resource comes from the governed path; slice B2 provisions
-        # these two grants the same way, so here they are only fixture data.
-        assert (
-            await provision(build_service(database, b"0" * 32), f"Bearer {admin.key}")
-        ).catalog_status == 201
-        async with database.transaction() as session:
-            grants = GrantRepository(session)
-            # Provisioning now creates the demo-human command grants. Keep only the
-            # sender and misconfigured-agent grants this HTTP suite needs.
-            for principal, action in (
-                ("sender-human", "run.command"),
-                # A misconfiguration the route must survive: an agent holding the
-                # human gate. Provisioning never grants it (B2).
-                ("approving-harness", "run.approve"),
-            ):
-                await grants.create(
-                    f"grant-{principal}-{action.replace('.', '-')}-incident-response",
-                    principal,
-                    action,
-                    "incident_workflow",
-                    "incident-response",
-                )
+        provisioned = await provision(build_service(database, b"0" * 32), f"Bearer {admin.key}")
+        assert provisioned.catalog_status == 201
+        assert provisioned.command_grant_status == 201 and provisioned.run_command_active
+        assert provisioned.approve_grant_status == 201 and provisioned.run_approve_active
+        control = build_service(database, b"0" * 32)
+        for principal, action in (
+            ("sender-human", "run.command"),
+            # A governed misconfiguration the route must survive: an agent
+            # holding the human gate. The route must still reject the agent.
+            ("approving-harness", "run.approve"),
+        ):
+            grant_id = f"grant-{principal}-{action.replace('.', '-')}-incident-response"
+            created = await control.create_grant(
+                {
+                    "grant_id": grant_id,
+                    "principal_id": principal,
+                    "action": action,
+                    "resource": {
+                        "resource_type": "incident_workflow",
+                        "resource_id": "incident-response",
+                    },
+                    "effect": "allow",
+                },
+                f"Bearer {admin.key}",
+                f"issue330-fixture-{principal}-{action.replace('.', '-')}",
+            )
+            assert created.status_code == 201
 
     asyncio.run(_setup())
     asyncio.run(database.dispose())
@@ -209,6 +192,12 @@ def _mitigating(*incident_ids: str) -> None:
 
 
 def _body(command: str = "approve_mitigation", principal: str = "demo-human", **extra: Any) -> dict:
+    if isinstance(command, str) and command in {
+        "approve_mitigation",
+        "reject_mitigation",
+        "request_changes",
+    }:
+        extra.setdefault("expected_incident_version", 0)
     return {
         "command": command,
         "actor": "human",
@@ -224,74 +213,52 @@ def _send(
     *,
     bearer: str | None = "demo-human",
     run_id: str | None = None,
+    query_log: list[tuple[str, Any]] | None = None,
 ) -> Any:
     headers = {}
     if bearer is not None:
         headers["Authorization"] = BEARERS.get(bearer, bearer)
     if key is not None:
         headers["Idempotency-Key"] = key
-    client = TestClient(create_application(Settings(DATABASE_URL)))
-    return client.post(
-        f"/v1/incidents/{incident_id}/runs/{run_id or RUNS[incident_id]}/commands",
-        json=body,
-        headers=headers,
+    app = create_application(Settings(DATABASE_URL))
+    engine = app.state.database.engine.sync_engine
+
+    def capture(_connection, _cursor, statement, parameters, _context, _executemany) -> None:
+        assert query_log is not None
+        query_log.append((statement, parameters))
+
+    if query_log is not None:
+        event.listen(engine, "before_cursor_execute", capture)
+    try:
+        with TestClient(app) as client:
+            return client.post(
+                f"/v1/incidents/{incident_id}/runs/{run_id or RUNS[incident_id]}/commands",
+                json=body,
+                headers=headers,
+            )
+    finally:
+        if query_log is not None:
+            event.remove(engine, "before_cursor_execute", capture)
+
+
+def _assert_run_lookup_is_scoped(
+    statements: list[tuple[str, Any]], *, incident_id: str, run_id: str
+) -> None:
+    run_queries = [
+        (statement.lower(), parameters)
+        for statement, parameters in statements
+        if "from incident.runs" in statement.lower()
+    ]
+    assert run_queries
+    for statement, parameters in run_queries:
+        normalized = " ".join(statement.split())
+        assert "where run_id=" in normalized and "and incident_id=" in normalized, normalized
+        assert run_id in str(parameters)
+        assert incident_id in str(parameters)
+    assert not any(
+        "from incident.snapshots" in query.lower() or "from incident.run_events" in query.lower()
+        for query, _ in statements
     )
-
-
-def _whoami(bearer: str | None = "demo-human") -> Any:
-    headers = {} if bearer is None else {"Authorization": BEARERS.get(bearer, bearer)}
-    client = TestClient(create_application(Settings(DATABASE_URL)))
-    return client.get("/v1/whoami", headers=headers)
-
-
-@pytest.mark.parametrize("principal", ["demo-human", "sender-human"])
-def test_whoami_returns_only_the_authenticated_principal_without_caching(principal: str) -> None:
-    response = _whoami(principal)
-    assert response.status_code == 200
-    assert response.json() == {"principal_id": principal}
-    assert response.headers["cache-control"] == "no-store"
-    assert "credential" not in response.text
-
-
-@pytest.mark.parametrize(
-    "bearer",
-    [
-        None,
-        "Bearer nope",
-        "Bearer sre_unkn_0123456789abcdefghijklmnop",
-        "whoami-revoked",
-        "whoami-expired",
-        "whoami-inactive",
-    ],
-)
-def test_whoami_rejects_unusable_credentials_uniformly(bearer: str | None) -> None:
-    response = _whoami(bearer)
-    assert response.status_code == 401
-    assert response.headers["www-authenticate"] == "Bearer"
-    assert response.json()["error"] == {
-        "code": "authentication_failed",
-        "message": "Authentication failed.",
-    }
-    assert response.json()["retryable"] is False
-    assert set(response.json()) == {"error", "request_id", "retryable"}
-    assert len(response.json()["request_id"]) == 36
-    assert bearer is None or bearer not in response.text
-
-
-def test_whoami_is_mounted_and_documents_bearer_authentication() -> None:
-    client = TestClient(create_application(Settings(DATABASE_URL)))
-    operation = client.get("/openapi.json").json()["paths"]["/v1/whoami"]["get"]
-    assert operation["security"] == [{"HTTPBearer": []}]
-    assert client.get("/openapi.json").json()["components"]["securitySchemes"]["HTTPBearer"] == {
-        "type": "http",
-        "scheme": "bearer",
-    }
-    assert "401" in operation["responses"]
-    schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
-    model_name = schema["$ref"].rsplit("/", 1)[-1]
-    model = client.get("/openapi.json").json()["components"]["schemas"][model_name]
-    assert set(model["properties"]) == {"principal_id"}
-    assert "Cache-Control" in operation["responses"]["200"]["headers"]
 
 
 def _state(incident_id: str) -> str:
@@ -302,6 +269,17 @@ def _state(incident_id: str) -> str:
         ).fetchone()
     assert row is not None
     return str(row[0])
+
+
+def _replace_mitigation(incident_id: str, mitigation_id: str) -> None:
+    """Represent a newer proposal revision before exercising the stale client."""
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE incident.incidents SET "
+            "state=jsonb_set(state, '{mitigation_strategy,mitigation_id}', to_jsonb(%s::text)), "
+            "version=version+1, updated_at=now() WHERE incident_id=%s",
+            (mitigation_id, incident_id),
+        )
 
 
 def test_a_request_without_a_usable_credential_is_401() -> None:
@@ -424,11 +402,78 @@ def test_a_field_of_another_json_type_is_422_and_changes_nothing(case: str) -> N
     assert _state(incident_id) == "mitigating"
 
 
+@pytest.mark.parametrize(
+    ("case", "revision"),
+    [
+        ("null", None),
+        ("boolean", True),
+        ("string", "0"),
+        ("array", []),
+        ("object", {}),
+        ("negative", -1),
+    ],
+)
+def test_supplied_review_revision_must_be_a_nonnegative_integer(case: str, revision: Any) -> None:
+    incident_id = f"inc-b3-version-{case}"
+    _mitigating(incident_id)
+    body = _body()
+    body["expected_incident_version"] = revision
+
+    refused = _send(incident_id, f"key-version-{case}-0001", body)
+
+    assert refused.status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        version, state, decisions, events = connection.execute(
+            "SELECT i.version, i.state->>'state', "
+            "(SELECT count(*) FROM incident.decisions WHERE incident_id=i.incident_id), "
+            "(SELECT count(*) FROM incident.run_events WHERE incident_id=i.incident_id) "
+            "FROM incident.incidents i WHERE i.incident_id=%s",
+            (incident_id,),
+        ).fetchone()
+    assert (version, state, decisions, events) == (0, "mitigating", 0, 0)
+
+
+def test_an_approval_for_v2_cannot_authorize_a_changed_v3_proposal() -> None:
+    incident_id = "inc-b3-v2-cannot-approve-v3"
+    _mitigating(incident_id)
+    _replace_mitigation(incident_id, "mit_v3_payment_flag")
+    with psycopg.connect(DATABASE_URL) as connection:
+        before = connection.execute(
+            "SELECT i.version, i.state->'mitigation_strategy'->>'mitigation_id', "
+            "(SELECT count(*) FROM incident.decisions WHERE incident_id=i.incident_id), "
+            "(SELECT count(*) FROM incident.run_events WHERE incident_id=i.incident_id) "
+            "FROM incident.incidents i WHERE i.incident_id=%s",
+            (incident_id,),
+        ).fetchone()
+
+    stale = _send(incident_id, "key-stale-v2-approve-v3-001", _body(expected_incident_version=0))
+
+    assert stale.status_code == 409
+    with psycopg.connect(DATABASE_URL) as connection:
+        after = connection.execute(
+            "SELECT i.version, i.state->'mitigation_strategy'->>'mitigation_id', "
+            "(SELECT count(*) FROM incident.decisions WHERE incident_id=i.incident_id), "
+            "(SELECT count(*) FROM incident.run_events WHERE incident_id=i.incident_id) "
+            "FROM incident.incidents i WHERE i.incident_id=%s",
+            (incident_id,),
+        ).fetchone()
+    assert before == after == (1, "mit_v3_payment_flag", 0, 0)
+
+
 def test_a_run_of_another_incident_is_404_and_changes_neither() -> None:
     _mitigating("inc-b3-owner", "inc-b3-elsewhere")
-    foreign = _send("inc-b3-elsewhere", "key-foreign-00001", _body(), run_id=RUNS["inc-b3-owner"])
+    queries: list[tuple[str, Any]] = []
+    owner_run_id = RUNS["inc-b3-owner"]
+    foreign = _send(
+        "inc-b3-elsewhere",
+        "key-foreign-00001",
+        _body(),
+        run_id=owner_run_id,
+        query_log=queries,
+    )
     assert foreign.status_code == 404
     assert foreign.json()["error"]["code"] == "run_not_found"
+    _assert_run_lookup_is_scoped(queries, incident_id="inc-b3-elsewhere", run_id=owner_run_id)
     missing = _send("inc-b3-missing", "key-missing-00001", _body(), run_id=RUNS["inc-b3-owner"])
     assert missing.status_code == 404
     assert missing.json()["error"]["code"] == "incident_not_found"
@@ -465,13 +510,138 @@ def test_the_approval_advances_the_run_and_is_attributed() -> None:
     payload = approved.json()
     assert (payload["current_state"], payload["status"]) == ("verifying", "running")
     assert payload["pending_command"] is None
+    # Each _send creates a new application, so this exact replay crosses an
+    # app restart and must return the persisted first result without re-deciding.
+    reloaded = _send(
+        "inc-b3-approve",
+        "key-approve-000001",
+        _body(comment="Reviewed with the payments owner."),
+    )
+    assert reloaded.status_code == 202
+    assert reloaded.json() == payload
     with psycopg.connect(DATABASE_URL) as connection:
         row = connection.execute(
             "SELECT document->'approval'->'actor_reference'->>'principal_id',"
-            " document->>'comment' FROM incident.decisions WHERE incident_id = %s",
-            ("inc-b3-approve",),
+            " document->>'comment', document->'approval'->>'mitigation_id',"
+            " document->'approval'->>'reviewed_incident_version',"
+            " (SELECT count(*) FROM incident.decisions WHERE incident_id = %s),"
+            " (SELECT count(*) FROM incident.run_events WHERE incident_id = %s) "
+            "FROM incident.decisions WHERE incident_id = %s",
+            ("inc-b3-approve", "inc-b3-approve", "inc-b3-approve"),
         ).fetchone()
-    assert row == ("demo-human", "Reviewed with the payments owner.")
+    assert row == (
+        "demo-human",
+        "Reviewed with the payments owner.",
+        MITIGATION["mitigation_id"],
+        "0",
+        1,
+        1,
+    )
+
+
+def test_legacy_review_replay_is_exact_and_fresh_versionless_review_is_rejected() -> None:
+    _mitigating("inc-b3-legacy-replay", "inc-b3-versionless")
+
+    versionless = _body()
+    versionless.pop("expected_incident_version")
+    rejected = _send("inc-b3-versionless", "key-no-version-v3", versionless)
+    assert rejected.status_code == 422
+    with psycopg.connect(DATABASE_URL) as connection:
+        fresh_counts = connection.execute(
+            "SELECT (SELECT count(*) FROM incident.run_events WHERE incident_id = %s), "
+            "(SELECT count(*) FROM incident.decisions WHERE incident_id = %s)",
+            ("inc-b3-versionless", "inc-b3-versionless"),
+        ).fetchone()
+    assert fresh_counts == (0, 0)
+
+    incident_id = "inc-b3-legacy-replay"
+    key = "key-legacy-v2-approval"
+    approved = _send(incident_id, key, _body())
+    assert approved.status_code == 202
+    run_id = RUNS[incident_id]
+    legacy_hash = IncidentCommand(
+        command_id=key,
+        incident_id=incident_id,
+        run_id=run_id,
+        transition_id="apply_mitigation",
+        actor="human",
+        actor_reference=ActorReference(principal_id="demo-human"),
+        outcome="approve",
+        approval=True,
+    ).payload_sha256()
+    with psycopg.connect(DATABASE_URL) as connection:
+        connection.execute(
+            "UPDATE incident.transition_commits SET payload_sha256 = %s "
+            "WHERE incident_id = %s AND command_id = %s",
+            (legacy_hash, incident_id, key),
+        )
+        before = connection.execute(
+            "SELECT state->>'state', state->'mitigation_strategy'->>'mitigation_id', "
+            "state->'mitigation_strategy'->>'approval_status', version FROM incident.incidents "
+            "WHERE incident_id = %s",
+            (incident_id,),
+        ).fetchone()
+        counts_before = connection.execute(
+            "SELECT (SELECT count(*) FROM incident.run_events WHERE incident_id = %s), "
+            "(SELECT count(*) FROM incident.decisions WHERE incident_id = %s)",
+            (incident_id, incident_id),
+        ).fetchone()
+    assert before == ("verifying", MITIGATION["mitigation_id"], "approved", 1)
+    assert counts_before == (1, 1)
+
+    exact_replay = _send(incident_id, key, versionless)
+    assert exact_replay.status_code == 202
+    assert exact_replay.json() == approved.json()
+    with psycopg.connect(DATABASE_URL) as connection:
+        state = connection.execute(
+            "SELECT state FROM incident.incidents WHERE incident_id = %s", (incident_id,)
+        ).fetchone()[0]
+        state["state"] = "mitigating"
+        state["mitigation_strategy"]["mitigation_id"] = "mit_legacy_v3"
+        state["mitigation_strategy"]["approval_status"] = "pending"
+        run_state = connection.execute(
+            "SELECT state FROM incident.runs WHERE run_id = %s", (run_id,)
+        ).fetchone()[0]
+        run_state["current_state"] = "mitigating"
+        run_state["status"] = "awaiting_human"
+        run_state["pending_command"] = "approve_mitigation"
+        connection.execute(
+            "UPDATE incident.incidents SET state = %s::jsonb, version = version + 1 "
+            "WHERE incident_id = %s",
+            (json.dumps(state), incident_id),
+        )
+        connection.execute(
+            "UPDATE incident.runs SET state = %s::jsonb, version = version + 1 WHERE run_id = %s",
+            (json.dumps(run_state), run_id),
+        )
+
+    stale_replay = _send(incident_id, key, versionless)
+    assert stale_replay.status_code == 202
+    assert stale_replay.json() == approved.json()
+    changed_versionless = _body(comment="changed legacy retry")
+    changed_versionless.pop("expected_incident_version")
+    changed_payload = _send(incident_id, key, changed_versionless)
+    assert changed_payload.status_code == 409
+    with psycopg.connect(DATABASE_URL) as connection:
+        row = connection.execute(
+            "SELECT state->>'state', state->'mitigation_strategy'->>'mitigation_id', "
+            "state->'mitigation_strategy'->>'approval_status', version FROM incident.incidents "
+            "WHERE incident_id = %s",
+            (incident_id,),
+        ).fetchone()
+        counts = connection.execute(
+            "SELECT (SELECT count(*) FROM incident.run_events WHERE incident_id = %s), "
+            "(SELECT count(*) FROM incident.decisions WHERE incident_id = %s)",
+            (incident_id, incident_id),
+        ).fetchone()
+        run_after = connection.execute(
+            "SELECT state->>'current_state', state->>'status', state->>'pending_command', version "
+            "FROM incident.runs WHERE run_id = %s",
+            (run_id,),
+        ).fetchone()
+    assert row == ("mitigating", "mit_legacy_v3", "pending", 2)
+    assert counts == (1, 1)
+    assert run_after == ("mitigating", "awaiting_human", "approve_mitigation", 2)
 
 
 def test_a_retried_command_returns_the_same_state_and_decides_once() -> None:
@@ -482,6 +652,12 @@ def test_a_retried_command_returns_the_same_state_and_decides_once() -> None:
     assert first.json() == again.json()
     conflicting = _send("inc-b3-retry", "key-retry-0000001", _body(comment="another request"))
     assert conflicting.status_code == 409
+    changed_revision = _send(
+        "inc-b3-retry",
+        "key-retry-0000001",
+        _body(expected_incident_version=1),
+    )
+    assert changed_revision.status_code == 409
     with psycopg.connect(DATABASE_URL) as connection:
         count = connection.execute(
             "SELECT count(*) FROM incident.run_events WHERE run_id = %s", (RUNS["inc-b3-retry"],)

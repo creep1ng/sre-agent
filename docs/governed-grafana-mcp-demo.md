@@ -161,6 +161,14 @@ jq '{error_code: .error.code, request_id}' \
   "$MCP_CAPTURE_DIR/discovery-denied.json"
 ```
 
+The published MCP 1.0.0 result contract preserves a timestamp/value pair as
+`result_type: "indeterminate"` when the upstream omits its type discriminator.
+The value remains a string (including values such as `"NaN"` or `"Inf"`); the
+gateway does not guess `scalar` versus `string` or convert it to a number. The
+same schema continues to accept explicitly typed scalar/string pairs and
+vector/matrix object results. The synthetic untyped-pair example is
+`schemas/mcp/1.0.0/examples/query-prometheus-indeterminate-result.json`.
+
 The seeded `demo-human` has both tool grants; `restricted-harness` has no
 discovery grant and must get 403. On a **fresh disposable stack only**, create
 two additional synthetic Principals through the administrative API. Supply
