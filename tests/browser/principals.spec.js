@@ -109,13 +109,16 @@ test("shows a hidden principal as not found without leaking data", async ({ page
 
 test("ignores a stale list response after the session is cleared", async ({ page }) => {
   const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  let held = false;
   await route(page, "**/api/v1/principals?limit=100", async (route) => {
+    held = true;
     await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.continue();
   });
   await page.fill("#api-key", adminKey);
   await page.click("#connect-button");
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "loading", { timeout: 20_000 });
+  await expect.poll(() => held).toBe(true);
   await page.click("#disconnect-button");
   await page.waitForTimeout(2500);
   await expect(page.locator("[data-principal-row]")).toHaveCount(0);
@@ -144,10 +147,16 @@ test("ignores a stale detail response after the session is cleared", async ({ pa
 });
 
 test("surfaces an unreachable API as a recoverable offline state", async ({ page }) => {
-  await route(page, "**/api/v1/principals**", (route) => route.abort("failed"));
+  let validations = 0;
+  await route(page, "**/api/v1/**", (route) => {
+    if (route.request().url().endsWith("/v1/whoami")) validations += 1;
+    return route.abort("failed");
+  });
   await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
   await page.click("#connect-button");
   await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "offline", { timeout: 20_000 });
   await expect(page.locator("#page-error-title")).toHaveText("API unavailable");
   await expect(page.locator("[data-principal-row]")).toHaveCount(0);
+  await page.click("#refresh-button");
+  await expect.poll(() => validations).toBe(2);
 });

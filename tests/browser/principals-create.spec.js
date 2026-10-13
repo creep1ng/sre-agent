@@ -80,6 +80,10 @@ test("disables submit while creating and rejects a conflicting retry token", asy
   await expect(page.locator("#page-error")).toBeHidden();
 });
 test("keeps form data on invalid input and proves a real 422", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
+  await connect(page, adminKey);
+  await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
   await page.click("#create-button");
   await page.fill("#create-principal-id", "BAD ID");
   await page.fill("#create-display-name", `Keep ${Date.now()}`);
@@ -88,10 +92,6 @@ test("keeps form data on invalid input and proves a real 422", async ({ page }) 
   await expect(page.locator("#create-principal-id")).toHaveValue("BAD ID");
   await expect(page.locator("#create-dialog")).toBeVisible();
   await page.keyboard.press("Escape");
-  test.skip(!connected, "requires the connected control-plane API for the 422 proof");
-  const adminKey = apiKey("ADMIN_HUMAN_API_KEY");
-  await connect(page, adminKey);
-  await expect(page.locator("#principals-page")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
   const probe = await page.evaluate(async (key) => {
     const { ApiClientError, createAdministrativeApiClient, createMemoryCredentialStore } = await import("/public/api/client.js");
     const store = createMemoryCredentialStore();
@@ -116,13 +116,8 @@ test("blocks create for invalid and restricted credentials without data", async 
   const restrictedKey = apiKey("RESTRICTED_HARNESS_API_KEY");
   await connect(page, "sre_admn_0123456789abcdefghij");
   await expect(page.locator("#page-error-title")).toHaveText("Authentication required", { timeout: 20_000 });
-  const badId = ephemeralId("d01");
-  await openCreate(page, { id: badId, name: `Ephemeral ${badId}` });
-  await page.click("#create-submit");
-  await expect(page.locator("#create-error-title")).toHaveText("Authentication required", { timeout: 20_000 });
-  await expect(page.locator(`[data-principal-row='${badId}']`)).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  await page.click("#disconnect-button");
+  // The shared session never validated the key, so no action is offered (ADR-009, section 7).
+  await expect(page.locator("#create-button")).toBeDisabled();
   await connect(page, restrictedKey);
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable", { timeout: 20_000 });
   const deniedId = ephemeralId("d02");
@@ -164,7 +159,7 @@ test("ignores a stale create response after the session is cleared", async ({ pa
   await page.click("#create-submit");
   await expect(page.locator("#create-submit")).toBeDisabled();
   await page.waitForTimeout(300);
-  await page.click("#disconnect-button");
+  await page.locator("#disconnect-button").dispatchEvent("click"); // the modal blocks the pointer while the POST is held
   await page.waitForTimeout(2500);
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(0);
   await expect(page.locator("#principal-count")).toHaveText("Not loaded.");
