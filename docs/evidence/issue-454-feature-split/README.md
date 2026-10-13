@@ -20,7 +20,7 @@ The 82-test run passed; its following demo returned401 after unrelated fixture
 credentials. Repeating the 13 attribution scenarios immediately before the demo
 passed and emitted this real HTTP/SQL proof. No source change or test was added.
 Older issue-454 images/receipts remain original historical evidence, not fresh CI.
-Full Python verification and hosted CI are separate; consult the current PR receipt.
+Full Python verification: 1847 passed, 1 opt-in paid smoke skipped; Alembic PASS. Hosted CI and human review are separate.
 
 ## Repeat the complete candidate
 
@@ -45,3 +45,24 @@ Wait until pg_isready succeeds before the checks command. Retain stdout before
 Expected: unchanged historical assignment after reassignment; closed 401/403/422;
 verified canonical credits on output rejection but none for invalid identities;
 no new Alembic operations. Human acceptance and final main integration remain pending.
+
+## Review order
+
+| Cut | PR | Additions + deletions |
+| --- | --- | ---: |
+| plan | [#596](https://github.com/creep1ng/sre-agent/pull/596) | 318 |
+| contract | [#601](https://github.com/creep1ng/sre-agent/pull/601) | 10272 |
+| preauthored | [#602](https://github.com/creep1ng/sre-agent/pull/602) | 380 |
+| canonical | [#603](https://github.com/creep1ng/sre-agent/pull/603) | 273 |
+| guards | [#604](https://github.com/creep1ng/sre-agent/pull/604) | 250 |
+| capture | [#605](https://github.com/creep1ng/sre-agent/pull/605) | 354 |
+| selection | [#606](https://github.com/creep1ng/sre-agent/pull/606) | 130 |
+| credits | [#607](https://github.com/creep1ng/sre-agent/pull/607) | 344 |
+| read | [#608](https://github.com/creep1ng/sre-agent/pull/608) | 320 |
+| demo | [#609](https://github.com/creep1ng/sre-agent/pull/609) | 370 |
+| observations | [#610](https://github.com/creep1ng/sre-agent/pull/610) | 353 |
+| repair | [#611](https://github.com/creep1ng/sre-agent/pull/611) | 229 |
+| history | [#612](https://github.com/creep1ng/sre-agent/pull/612) | 373 |
+| proof | [#613](https://github.com/creep1ng/sre-agent/pull/613) | 365 |
+
+The screenshot records the focused-proof phase; the receipt above adds the later full-suite result.

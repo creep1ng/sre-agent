@@ -31,7 +31,7 @@ this split on 2026-10-13. Route: direct; no SDD or new behavior.
   Separate contract, capture, selection, read projection, provider/E2E scenarios,
   evidence, and historical tracking. No blanket size exception. Apply the
   indivisible generated-contract exception only to its explicitly authorized PR.
-- [ ] **F454-4 — Reconcile main and verify the complete candidate.**
+- [x] **F454-4 — Reconcile main and verify the complete candidate.**
   Preserve consumption-policy provenance AND atomic attribution capture; retain
   both alert_triage and request_attributions in existing isolated DB resets.
   Run existing real HTTP/PostgreSQL E2E checks and relevant contract checks;
@@ -72,4 +72,9 @@ original runtime/test/schema/script file is accounted for and matches source
 0bfadf958f941ec61889daef4e207c2284801aa4. Current 82 E2E checks, repeated13 attribution
 checks, real HTTP/SQL and contract222-artifact validation pass. Initial demo401
 after unrelated fixtures is recorded; correct-fixture repeat passes. Full Python
-suite is still running; hosted CI and independent human acceptance remain pending.
+suite passes1847/1opt-in paid skip; Alembic passes. Hosted CI and human acceptance remain pending.
+
+All 14 drafts were created; exact GitHub head/base/size/label readback is being
+verified. App attachment calls did not return and confirmation remains pending.
+Current review index: docs/evidence/issue-454-feature-split/README.md; only #601
+has the explicitly authorized size:exception-update-contract label.
