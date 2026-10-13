@@ -60,9 +60,7 @@ async def _seed(database_url: str, stamp: str) -> None:
                 incident_id=incident_id,
                 severity="sev2",
                 impact="Checkout failing at payment.",
-                mitigation_strategy=dict(
-                    MITIGATION, created_at=now.isoformat()
-                ),
+                mitigation_strategy=dict(MITIGATION, created_at=now.isoformat()),
                 updated_at=now.isoformat(),
             )
             async with PostgresIncidentUnitOfWork(database) as work:
