@@ -44,7 +44,9 @@ KEYS = {
 def test_demo_permissions_converge_and_http_journey_remains_governed():
     with psycopg.connect(URL, autocommit=True) as conn:
         conn.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        conn.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
+        for (table,) in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'"):
+            conn.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
+        conn.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", URL)
     command.upgrade(cfg, "head")
