@@ -1,0 +1,8 @@
+missing-key: rejected before Docker mutation; sanitized
+duplicate-prefix: rejected before Docker mutation; sanitized
+route: rejected before Docker mutation; sanitized
+injection: rejected before Docker mutation; sanitized
+project: rejected before Docker mutation; sanitized
+mode: rejected before Docker mutation; sanitized
+aws-blocked: rejected before Docker mutation; sanitized
+port: rejected before Docker mutation; sanitized
