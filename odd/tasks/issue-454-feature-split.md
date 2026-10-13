@@ -37,9 +37,9 @@ this split on 2026-10-13. Route: direct; no SDD or new behavior.
   both alert_triage and request_attributions in existing isolated DB resets.
   Run existing real HTTP/PostgreSQL E2E checks and relevant contract checks;
   retain exact command/environment/SHA/output. Do not claim old CI is current.
-- [ ] **F454-5 — Publish drafts and independently read back the split.**
+- [x] **F454-5 — Publish drafts and independently read back the split.**
   Attach every new PR. Record base, head, size, dependencies, actual checks,
-  pending integration and human review. No final main merge authorization.
+  pending integration and human review. Initial drafts did not authorize main; superseded by the later explicit decision.
 
 ## Verification boundaries
 
@@ -65,8 +65,7 @@ agent-attributed Engram writes are forbidden. Observation 9911 is an older
 producer plan, not current scope or verification authority.
 
 Next: submit the assembled feature to main and wait for current hosted CI and
-governance before merging. App attachment confirmation and memory mirroring remain
-unavailable; neither is claimed complete.
+governance before merging. App attachments are confirmed; persistent memory mirroring remains unavailable.
 
 Partition verified: 13 cohesive cuts; only contract is above 400 lines. Every
 original runtime/test/schema/script file is accounted for and matches source
@@ -76,7 +75,8 @@ after unrelated fixtures is recorded; correct-fixture repeat passes. Full Python
 suite passes1847/1opt-in paid skip; Alembic passes. Hosted CI and human acceptance remain pending.
 
 All 14 drafts were created; exact GitHub head/base/size/label readback PASS.
-App attachment calls did not return; confirmation remains pending.
+Initial App attachment calls did not return. Later retries confirmed all fourteen
+slice attachments and final main PR #616 on 2026-10-13.
 Current review index: docs/evidence/issue-454-feature-split/README.md; only #601
 has the explicitly authorized size:exception-update-contract label.
 
@@ -102,3 +102,7 @@ boundaries. The contract retains its specifically requested exception label.
 - Independent human acceptance and size exception are the explicit decisions
   in this chat; no automatic approval/exception labels were added.
 - Persistent memory writes remain prohibited by absent runtime identity.
+
+Final main PR: https://github.com/creep1ng/sre-agent/pull/616. All App attachments
+are now confirmed. Hosted CI for the final actual candidate is pending; final
+merge identity will be recorded in the PR after observed success.
