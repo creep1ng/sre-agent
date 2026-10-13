@@ -10,7 +10,7 @@ const REPORT_SCHEMA = "sre-agent.mcp45-query-smoke/v1";
 const REPORT_PHASE = "gateway-query-smoke";
 const GATEWAY_RESPONSE_TIMEOUT_MS = 35_000;
 const METRIC_QUERY = {
-  datasource_uid: "webstore-metrics", expr: "up", query_type: "instant", end_time: "now",
+  datasource_uid: "webstore-metrics", expr: "count(traces_span_metrics_calls_total)", query_type: "instant", end_time: "now",
 };
 const LOG_QUERY = {
   datasource_uid: "webstore-logs", index: "otel-logs-*", query: "resource.service.name:checkout",

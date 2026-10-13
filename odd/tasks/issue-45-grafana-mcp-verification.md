@@ -56,6 +56,13 @@ The integrated demo can query Grafana MCP directly, while the gateway has govern
 - `git diff --check` and structural review of network/credential boundaries
 - Real harness/container probes and two demo cycles, with unavailable checks stated explicitly
 
+## 2026-10-13 current-main integration (PR preparation)
+
+- GitHub Project #8 still lists #45 as Todo, with CA1–CA8 open. Current `main` already contains staged P3–P7 probe work; the older live candidate was preserved locally and must not overwrite its stricter discovery, redirect, witness, or inventory guards.
+- Before the live-query correction, observed failure modes: the fixture-only `up` expression may return no vector in the pinned demo; an updated fixture might pass while the real source remains stale; changing the request could accidentally alter restricted known-ID payload/order, redirect policy, or sanitized report; and a valid 403 may be falsely counted as zero MCP traffic if the counter is blind or ambient traffic contaminates an aggregate RX interval. Update the existing HTTP/CLI E2E expectation first, observe RED, then make the minimum query correction and retain all guards. Live proof must use the actual current-main probe, an isolated denied-request interval, a separate positive packet-capture control, and matching request IDs.
+- Current-main query RED: the worktree Compose runner could not allocate a new Docker network (all default pools subnetted); no stack was started. A cached Node harness with `--network none` then failed 1/3 on the old `up` payload after the E2E expectation was updated first. The one-line source fix returned GREEN 3/3, with syntax checks for source/test and shell check for the live runner.
+- Live probe/counter: the first aggregate MCP RX approach failed its zero assertion because 66 background bytes arrived during denial. The exact current-main probe source with the corrected query then passed using the packet-filtered API→MCP HTTP counter: same denied request `2557cbb0-478a-4d64-bcf9-1b8e7c98cd92`, zero POST attempts in its isolated interval, two POST attempts in the subsequent allowed interval, metric/log HTTP 200 and one result each, restricted discovery 403, matching denial audit, and offline reconciliation `pass`. The dated report records the executed script hash, SSM ID, environment, and limitations; the gateway runtime was not fully rebuilt from current `main`. Keep CA4–CA8 and final human acceptance open.
+
 ## Historical Recovery Progress (2026-09-24; not current proof)
 
 - Base fast-forwarded from `137b101` to integrated `origin/main` `3c7b4a3`, then rebased to `6eb5422` to obtain PR #376 instructions; untracked task/probe files were preserved.
