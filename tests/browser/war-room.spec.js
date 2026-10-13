@@ -115,6 +115,9 @@ test("labels execution state per contractual event kind", async ({ page }) => {
   await expect(items.nth(2)).toContainText("Blocked · Denied");
   await expect(items.nth(3)).toContainText("Record");
   await expect(items.nth(3).locator(".ma-badge").nth(1)).toHaveText("Record");
+  // Registration is informational, never a success claim: the recorded-command
+  // badge must not reuse the success tone of completed states.
+  await expect(items.nth(0).locator(".ma-badge").nth(1)).toHaveAttribute("data-tone", "info");
 });
 
 function errorPayload(code, message) {

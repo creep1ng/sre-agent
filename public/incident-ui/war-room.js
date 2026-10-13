@@ -26,7 +26,7 @@ const eventKindTones = Object.freeze({
 // (issue #40 CA1). There is no outcome field: human_command is recorded,
 // kinds are proposals, denial was blocked, anything else stays neutral.
 const eventExecutionKinds = Object.freeze({
-  executed: Object.freeze({ label: "Comando registrado", tone: "success" }),
+  executed: Object.freeze({ label: "Comando registrado", tone: "info" }),
   proposed: Object.freeze({ label: "Proposed · Not executed", tone: "warning" }),
   blocked: Object.freeze({ label: "Blocked · Denied", tone: "critical" }),
   neutral: Object.freeze({ label: "Record", tone: "info" }),
