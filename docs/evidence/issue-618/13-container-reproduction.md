@@ -42,8 +42,15 @@ Only reviewed source should receive local Docker control. Set the caller's
 Docker configuration to the local Unix socket, never an ambient remote context.
 
 ```sh
-docker build -f docker/otel-owner.Dockerfile -t sre618-owner:2.36.49 .
 docker compose --env-file .demo-state/aws-container/sre.env -p sre618-review -f compose.yaml build api
+docker run --rm --user "$(id -u):$(id -g)" --group-add 967 -e HOME=/tmp \
+  --entrypoint docker \
+  --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+  --mount type=bind,source=/usr/bin/docker,target=/usr/bin/docker,readonly \
+  --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-buildx,target=/usr/lib/docker/cli-plugins/docker-buildx,readonly \
+  -w "$PWD" sre618-review-api:latest --host unix:///var/run/docker.sock \
+  build -f docker/otel-owner.Dockerfile -t sre618-owner:2.36.49 .
 docker run --rm --network host --user "$(id -u):$(id -g)" --group-add 967 \
   -e HOME=/tmp -e "SRE_OWNER_PRIVATE_DIR=$OTEL_OWNER_PRIVATE_DIR" --entrypoint python \
   --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
@@ -71,3 +78,7 @@ This is feature-candidate evidence, not final-main or independent reviewer
 execution. Old suite1908pass remains compatibility evidence for unchanged
 production runtime; new-hook live evidence is this run. Current-head CI/review
 must be evaluated separately. Sanitized: yes.
+
+Replay correction: the owner build now runs inside API tooling so every demo
+command uses Compose/run. Historical report13 is unchanged. Same builder was
+executed successfully for report17; no owner credentials mounted to the builder.
