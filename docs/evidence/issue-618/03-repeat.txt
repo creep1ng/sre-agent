@@ -1,0 +1,67 @@
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP connectivity ready; AWS blocked (#494); functional acceptance NOT tested
+setup: API http://127.0.0.1:18618; web http://127.0.0.1:18619
+setup: paid LLM disabled
+POST /v1/alerts/al-setup-88f84c13837b/triage/commands -> HTTP 403
+POST /v1/alerts/al-setup-88f84c13837b/triage/commands -> HTTP 200
+POST /v1/alerts/al-setup-88f84c13837b/triage/commands -> HTTP 201
+POST /v1/incidents/inc-0c3f2399df411a01a4897b0ded5f6595/runs -> HTTP 201
+GET /v1/incidents/inc-0c3f2399df411a01a4897b0ded5f6595/runs/run_123abfe04e0ad15c -> HTTP 200
+GET /v1/incidents/inc-0c3f2399df411a01a4897b0ded5f6595/runs/run_123abfe04e0ad15c -> HTTP 403
+GET /v1/incidents/inc-0c3f2399df411a01a4897b0ded5f6595/runs/run_123abfe04e0ad15c/events -> HTTP 200
+GET /v1/incidents/inc-0c3f2399df411a01a4897b0ded5f6595/runs/run_123abfe04e0ad15c/events -> HTTP 403
+GET /v1/audit-events?principal_id=demo-human -> HTTP 200
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP connectivity ready; AWS blocked (#494); functional acceptance NOT tested
+setup: API http://127.0.0.1:18618; web http://127.0.0.1:18619
+setup: paid LLM disabled
+REPEAT: stable principals/credential hashes/grants/incidents; audit retained
+ Container sre-618-fresh-web-1 Stopping
+ Container sre-618-fresh-web-1 Stopped
+setup: WEB_PORT occupied; choose a free port in private config and rerun
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP connectivity ready; AWS blocked (#494); functional acceptance NOT tested
+setup: API http://127.0.0.1:18618; web http://127.0.0.1:18619
+setup: paid LLM disabled
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: OTel/MCP destination not ready; run demo_env.py verify; no OTel reset was attempted
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP connectivity ready; AWS blocked (#494); functional acceptance NOT tested
+setup: API http://127.0.0.1:18618; web http://127.0.0.1:18619
+setup: paid LLM disabled
+setup: SRE stopped; data/OTel/foreign projects preserved
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP connectivity ready; AWS blocked (#494); functional acceptance NOT tested
+setup: API http://127.0.0.1:18618; web http://127.0.0.1:18619
+setup: paid LLM disabled
+CONTROLLED INTEGRATION PASS; OTel signals/AWS/paid LLM/human review NOT EXECUTED

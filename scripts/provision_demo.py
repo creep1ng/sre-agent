@@ -9,7 +9,7 @@ import asyncio
 import os
 import sys
 
-from provision_incident_workflow import _granted, build_service, provision
+from provision_incident_workflow import CATALOG_BODY, _granted, build_service, provision
 
 
 def demo_grants():
@@ -43,7 +43,16 @@ def demo_grants():
 
 
 async def provision_demo(service, bearer):
+    from sre_agent.persistence.repositories import CatalogRepository
+
     existing = await provision(service, bearer)
+    async with service.sessions() as session:
+        catalog = await CatalogRepository(session).get("incident_workflow", "incident-response")
+    if catalog is None or any(
+        getattr(catalog, name) != CATALOG_BODY[name]
+        for name in ("status", "owner_id", "source", "source_ref")
+    ):
+        raise RuntimeError("workflow catalog conflict; retain state and review through domain API")
     if not all(
         (
             existing.catalog_status == 201,

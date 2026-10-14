@@ -157,4 +157,18 @@ def test_demo_permissions_converge_and_http_journey_remains_governed():
             assert all(key not in str(error) for key in KEYS.values())
         else:
             raise AssertionError("revoked grant must not be restored")
+        with psycopg.connect(URL) as conn:
+            conn.execute(
+                "UPDATE grants SET status='active' WHERE grant_id='grant-setup-human-alert-read'"
+            )
+            conn.execute(
+                "UPDATE resources SET status='inactive' WHERE "
+                "resource_type='incident_workflow' AND resource_id='incident-response'"
+            )
+        try:
+            asyncio.run(prepare())
+        except RuntimeError as error:
+            assert "workflow" in str(error)
+        else:
+            raise AssertionError("inactive workflow must not be presented as ready")
     print("CA2/4/6: convergence, real triage/run reads, audit and denial passed (no LLM).")
