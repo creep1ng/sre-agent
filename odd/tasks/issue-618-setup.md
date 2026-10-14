@@ -210,3 +210,35 @@ reviewed parents, fresh CI required at each new head; all diffs stay <=400 lines
 New demo one-hour extension explicitly authorized, scheduled termination required.
 Final-main validation and independent human reproduction remain pending.
 Engram mirror pending: runtime session identity unavailable; writes prohibited.
+
+## Live integration checkpoint (2026-10-14 03:08 UTC)
+#637 accepted explicitly; synced current head3ad87ea5, size206, fresh CI38504366525.
+620 merged normally e689173f with current Quality/governance SUCCESS; remaining
+ordered integration handle21254 waits fresh CI for621 before any further merge.
+Tail synced6347395273a/63581465752/6367cccda6c; component code unchanged,
+tracker-only conflicts resolved, earlier notes preserved in Git history.
+New demo extension1h explicitly approved and executed; expiry04:28:03UTC,
+connection refreshed via owned SSM handle83320. No IAM/public ingress change.
+Fresh standalone clone /tmp/sre618-final-main with clean tracked tree and new
+private .env from public example, no worktree source/config copying. Final
+producer state /tmp/sre618-final-private; selected free176/192/208 CIDRs under
+10.253.161/24. Main-source fetch and owner connection wait final integration.
+Engram mirror pending; runtime identity absent, writes prohibited.
+
+## Main validation checkpoint (2026-10-14 03:41 UTC)
+All accepted SRE slices620/621/622/624/626/627/633/634/635/636/637 merged normally,
+current-head Quality/governance green, each <=400; main220cd4625f1e7c9f719aedab71d0232e6ee40e73.
+Fresh standalone clone tracked-clean, new private inputs, owner connection created
+by mainCLI. Real fulljourney67808 exit0: baseline14/0/6, failure148/32/0/proxy500x13,
+recovery134/0/8/proxy200x8; triage/run/read/events/audit and denial passed. Repeat
+state digest stable/audit retained. Owner-only temporary credential holder deleted.
+Initial E2E omitted AWS mode in private config made from older example; earlyexit1,
+no setup/flags performed. Corrected initial inputs, source unchanged, no fakepass.
+Eight preflight negatives passed in isolated no-network/no-socket container; actual
+harness secret absence/direct MCP/external denial passed. API/web actualHTTP200.
+Disconnected startup1; main --down0 retained volumes/protected project. Reconnect
+owner handle18726; canonical same-source restart20165 exit0. Producer not stopped.
+Report15/capture/reproduction/matrix PR pending; no runtime changes in this slice.
+Main CI38506237062 pending behind older own main38505834128 cleanup; no bypass.
+Independent human final-main reproduction and real local OTel remain unexecuted.
+Engram mirror pending: runtime session identity absent, writes prohibited.

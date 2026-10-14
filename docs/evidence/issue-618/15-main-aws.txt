@@ -1,0 +1,102 @@
+Final integrated-main verification — 2026-10-14 UTC
+SHA: 220cd4625f1e7c9f719aedab71d0232e6ee40e73
+Standalone fresh clone /tmp/sre618-final-main; tracked git status clean.
+Initial secrets created from public example, no worktree/config copying or extra grants/SQL edits.
+Owner MCP connection produced directly by this main SHA, private0600 state outside checkout.
+Project sre-618-final-main; ports18648/18649/18650; boundary/runtime/consumer176/192/208 under10.253.161/24.
+Linux, Docker29.9.0/Compose5.6.0, pinned Python3.12/PostgreSQL17.4, uv.lock.
+API runtime built from main; owner pinned official AWS CLI2.36.49 image distribution.
+Parent API runner mounts no AWS credential holder; only owner child receives it.
+No paid LLM calls; no new IAM or inbound rules. Explicit1h owner extension expires04:28:03UTC.
+
+Actual container E2E stdout:
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18648; web http://127.0.0.1:18649
+setup: paid LLM disabled
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+baseline: calls=14.0, errors=0.0, completed_orders=6, proxy200=6, proxy500=0
+owner fail completed; no token or command payload printed
+waiting150s: isolate declared failure's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+failure: calls=148.0, errors=32.0, completed_orders=0, proxy200=0, proxy500=13
+POST /v1/alerts/al-aws-setup-f5b84c8c78ef/triage/commands HTTP403
+POST /v1/alerts/al-aws-setup-f5b84c8c78ef/triage/commands HTTP200
+POST /v1/alerts/al-aws-setup-f5b84c8c78ef/triage/commands HTTP201
+POST /v1/incidents/inc-1beca21e55060fbda3069b2591906732/runs HTTP201
+GET /v1/incidents/inc-1beca21e55060fbda3069b2591906732/runs/run_33c3b5ea505448a4 HTTP200
+GET /v1/incidents/inc-1beca21e55060fbda3069b2591906732/runs/run_33c3b5ea505448a4 HTTP403
+GET /v1/incidents/inc-1beca21e55060fbda3069b2591906732/runs/run_33c3b5ea505448a4/events HTTP200
+GET /v1/incidents/inc-1beca21e55060fbda3069b2591906732/runs/run_33c3b5ea505448a4/events HTTP403
+GET /v1/audit-events HTTP200
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18648; web http://127.0.0.1:18649
+setup: paid LLM disabled
+REPEAT: domain state/credential digest unchanged; audit retained
+owner reset completed; no token or command payload printed
+waiting150s: isolate recovery's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+recovery: calls=134.0, errors=0.0, completed_orders=8, proxy200=8, proxy500=0
+REAL AWS JOURNEY PASS; paid inference, independent human/main acceptance NOT verified
+
+Actual terminal exit0. Generic runner final message cannot attest checkout; the recorded clean Git SHA above does.
+Owner temporary credentials deleted; holder absence verified.
+API ready HTTP200; actual web HTTP200.
+
+Main invalid-input checks (no network, no Docker socket or secrets):
+missing-key: rejected before Docker mutation; sanitized
+duplicate-prefix: rejected before Docker mutation; sanitized
+route: rejected before Docker mutation; sanitized
+injection: rejected before Docker mutation; sanitized
+project: rejected before Docker mutation; sanitized
+mode: rejected before Docker mutation; sanitized
+aws-blocked: rejected before Docker mutation; sanitized
+port: rejected before Docker mutation; sanitized
+
+Main actual harness:
+harness: MCP/provider/AWS secret variables absent
+harness: direct MCP transport unreachable
+harness: direct external transport unreachable
+
+Main disconnected stop:
+Disconnected canonical startup exit1, actionable AWS blocked diagnostic; no AWS operation.
+setup: SRE stopped; data/OTel/foreign projects preserved
+STOP PASS: selected SRE containers absent; volumes retained; protected active project IDs/states unchanged; owner demo not stopped.
+
+Initial verification attempt failed before setup/flags: config prepared from earlier main example omitted AWS mode. Corrected initial private inputs, no source change; no failure claimed successful.
+Independent human guide reproduction remains pending. Local real OTel remains not executed (host lacks15GB); controlled local and real AWS are separate.
+Main hosted CI38506237062 pending at capture; PR candidate technical CI was green before each normal merge.
+Sanitized: yes. Synthetic workflow IDs/statuses/counts only, no credentials, headers or raw remote logs.
+
+Same main canonical restart after owner reconnect (actual exit0):
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18648; web http://127.0.0.1:18649
+setup: paid LLM disabled
+
+Actual main run status=running; workflow current_state is a separate field. HTTP start/read/events are not successful LLM inference; paid disabled.
