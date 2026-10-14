@@ -198,3 +198,15 @@ the earlier tracker remains in reviewed ancestor51315f6. Only this tracking file
 conflicted (add/add); runtime/tests from the reviewed permissions slice were not
 rewritten. Incoming main adds already-reviewed producer/static files. Re-run
 current candidate CI before integrating; no final-main acceptance is inferred.
+
+## Accepted expired-stop integration (2026-10-14 UTC)
+Maintainer explicitly accepted #637 scope/evidence, not final-main reproduction.
+Real E2E RED expired stop exit1, GREEN selected containers removed while volumes
+and active project retained; startup still rejects expired producer connections.
+Merged reviewed parent history; only this tracker conflicted. Earlier tracker
+versions remain in Git history; implementation and E2E changes are unchanged.
+Producer stack merged through #632; main c07db658. SRE slices synchronized with
+reviewed parents, fresh CI required at each new head; all diffs stay <=400 lines.
+New demo one-hour extension explicitly authorized, scheduled termination required.
+Final-main validation and independent human reproduction remain pending.
+Engram mirror pending: runtime session identity unavailable; writes prohibited.

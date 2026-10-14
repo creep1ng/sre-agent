@@ -200,6 +200,9 @@ python scripts/setup_sre.py --down
 ```
 
 Stops only the selected SRE project, retaining its volumes/incidents/audit.
+It does not require a live MCP connection, an unexpired AWS contract, the MCP
+token or the producer network. Private SRE configuration and local Docker remain
+required; checkout ownership is checked before removing this project's containers.
 OTel stays running; stop it separately through `demo_env.py down` when intended.
 Do not use `down -v`, global pruning, or AWS teardown as normal SRE recovery.
 

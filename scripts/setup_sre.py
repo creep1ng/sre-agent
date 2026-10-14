@@ -48,8 +48,17 @@ def request(base, path, key=None, body=None):
         ) from None
 
 
+def check_checkout(listing):
+    for row in listing:
+        labels = row.get("Labels", "")
+        if isinstance(labels, str):
+            labels = dict(part.split("=", 1) for part in labels.split(",") if "=" in part)
+        if labels.get("com.docker.compose.project.working_dir") != str(ROOT):
+            raise SetupError("project belongs to another checkout; choose a new SRE_SETUP_PROJECT")
+
+
 def setup(path, stop=False):
-    config = load_config(path)
+    config = load_config(path, stopping=stop)
     # Ignore ambient Compose/remote-Docker overrides. This entrypoint is Unix local only.
     env = {name: os.environ[name] for name in ("PATH", "HOME", "TMPDIR") if name in os.environ}
     env.update(config, DOCKER_HOST="unix:///var/run/docker.sock")
@@ -65,6 +74,38 @@ def setup(path, stop=False):
     except ValueError:
         raise SetupError("Docker Compose >=2.24.4 is required") from None
     run(["docker", "info", "--format", "{{.ServerVersion}}"], env, "Docker daemon preflight")
+    base = [
+        "docker",
+        "compose",
+        "--project-directory",
+        str(ROOT),
+        "--env-file",
+        str(path),
+        "-p",
+        config["SRE_SETUP_PROJECT"],
+        "-f",
+        str(ROOT / "compose.yaml"),
+    ]
+    if stop:
+        text = run(
+            [
+                "docker",
+                "ps",
+                "--all",
+                "--filter",
+                "label=com.docker.compose.project=" + config["SRE_SETUP_PROJECT"],
+                "--format",
+                "{{json .}}",
+            ],
+            env,
+            "scoped SRE ownership",
+        )
+        check_checkout([json.loads(line) for line in text.splitlines() if line.strip()])
+        # Base services need no MCP env_file. Orphans are confined to this checked
+        # project (e.g. the one-shot MCP seed); no volumes or owner resources go.
+        run(base + ["down", "--remove-orphans"], env, "scoped SRE stop")
+        print("setup: SRE stopped; data/OTel/foreign projects preserved")
+        return
     internal = run(
         [
             "docker",
@@ -129,17 +170,7 @@ def setup(path, stop=False):
         with overlay.open("x") as stream:
             stream.write(serialized)
         overlay.chmod(0o600)
-    compose = [
-        "docker",
-        "compose",
-        "--project-directory",
-        str(ROOT),
-        "--env-file",
-        str(path),
-        "-p",
-        config["SRE_SETUP_PROJECT"],
-        "-f",
-        str(ROOT / "compose.yaml"),
+    compose = base + [
         "-f",
         str(ROOT / "compose.mcp.yaml"),
         "-f",
@@ -159,16 +190,7 @@ def setup(path, stop=False):
         listing = [json.loads(line) for line in listing_text.splitlines() if line.strip()]
     if isinstance(listing, dict):
         listing = [listing]
-    for row in listing:
-        labels = row.get("Labels", "")
-        if isinstance(labels, str):
-            labels = dict(part.split("=", 1) for part in labels.split(",") if "=" in part)
-        if labels.get("com.docker.compose.project.working_dir") != str(ROOT):
-            raise SetupError("project belongs to another checkout; choose a new SRE_SETUP_PROJECT")
-    if stop:
-        run(compose + ["down"], env, "scoped SRE stop")
-        print("setup: SRE stopped; data/OTel/foreign projects preserved")
-        return
+    check_checkout(listing)
     owned_ports = {
         row["Service"]: {item["PublishedPort"] for item in row.get("Publishers", []) or []}
         for row in listing
