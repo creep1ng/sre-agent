@@ -1,0 +1,9 @@
+Real AWS producer validation — 2026-10-13
+prepare-mcp initially failed: locked MCP image absent in legacy deployment.
+Corrected explicit preparation to pull the existing digest-locked MCP image.
+prepare-mcp exit0: {"mcp":"prepared","signals":"not accepted","token":"private; not exported"}
+Anonymous E2E through approved SSM tunnel, no token/private files in runner:
+anonymous MCP initialize: HTTP401
+ANONYMOUS DENIAL PASS; authenticated SRE queries and signal recovery NOT verified
+No IAM, public ingress, token stdout or evidence payload added.
+Consumer setup, repeat, metric/log queries, fail/reset and human acceptance pending.
