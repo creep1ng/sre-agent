@@ -21,6 +21,22 @@ Main hosted CI is recorded separately; PR green is not asserted as main CI.
 local first/repeat, workflow/audit/denial, port conflict and prepared fixture
 outage/recovery/stop/restart. This is not real local OTel or signal recovery.
 
+## Fresh authorized reproduction on the current integrated main
+
+[Report17](17-resume-aws.txt) records new independent2h owner deployment and
+fresh SRE project on main `ca15e7ad27bf4577506631e1a4b117976b61541c`.
+Real baseline22calls/0errors/5orders; declared failure3.9calls/3.9errors/0orders,
+proxy500x5; recovery114calls/0errors/12orders/proxy200x12. Workflow/denial/audit,
+repeat/domain retention and actual new harness isolation passed. No paid inference.
+Disconnected start actually exited1; same owner reconnection preserved token/data,
+three governed queries returned200 before any API restart, then canonical exit0.
+Owner guard: ingress0, enabled targeted schedule, expiry2026-10-14T13:44:28UTC.
+Every temporary owner credential holder was removed after its operation/journey.
+The previous metrics502 is not erased or declared fixed: immediate reconnect did
+not reproduce it; longer-idle observation and producer root cause remain separate.
+Human reviewer has a distinct clean main checkout/private initial config; no
+reviewer setup/workflow was executed by the assistant. CA7 awaits actual results.
+
 ## Observed evidence
 
 - [HTTP/store report](01-provision.txt): triage200/declare201/start201, state/events200,

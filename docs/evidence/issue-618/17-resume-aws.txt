@@ -1,0 +1,94 @@
+Authorized fresh AWS main verification — 2026-10-14 UTC
+SHA ca15e7ad27bf4577506631e1a4b117976b61541c; standalone tracked-clean /tmp/sre618-final-main.
+No runtime/E2E implementation change, no new unit tests, no paid inference.
+New owner up actual exit0, default2h; expires2026-10-14T13:44:28UTC (08:44Bogota).
+Profile otel-demo/us-east-1, no new IAM/public inbound ports; private0600 AWS credential holder owner-child-only, removed after each owner operation/journey.
+Bootstrap finished,26 running services; locked MCP preparation exit0; native owner connection is a declared separate prerequisite.
+Fresh SRE inputs from public example: project sre-618-resume, ports18678/79/80; internal boundary/runtime/consumer0/16/32 all/28 under10.253.163/24, verified unused.
+API runner live-inspected: no owner AWS credential-holder mount. No worktree code/config copying or manual SQL/grant mutations.
+
+Actual full real journey stdout:
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18678; web http://127.0.0.1:18679
+setup: paid LLM disabled
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+baseline: calls=22.0, errors=0.0, completed_orders=5, proxy200=5, proxy500=0
+owner fail completed; no token or command payload printed
+waiting150s: isolate declared failure's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+failure: calls=3.9, errors=3.9, completed_orders=0, proxy200=0, proxy500=5
+POST /v1/alerts/al-aws-setup-7dacbf602e30/triage/commands HTTP403
+POST /v1/alerts/al-aws-setup-7dacbf602e30/triage/commands HTTP200
+POST /v1/alerts/al-aws-setup-7dacbf602e30/triage/commands HTTP201
+POST /v1/incidents/inc-ff3ead8cb27126155f61ddcfac5ed313/runs HTTP201
+GET /v1/incidents/inc-ff3ead8cb27126155f61ddcfac5ed313/runs/run_26e93561c7a06487 HTTP200
+GET /v1/incidents/inc-ff3ead8cb27126155f61ddcfac5ed313/runs/run_26e93561c7a06487 HTTP403
+GET /v1/incidents/inc-ff3ead8cb27126155f61ddcfac5ed313/runs/run_26e93561c7a06487/events HTTP200
+GET /v1/incidents/inc-ff3ead8cb27126155f61ddcfac5ed313/runs/run_26e93561c7a06487/events HTTP403
+GET /v1/audit-events HTTP200
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18678; web http://127.0.0.1:18679
+setup: paid LLM disabled
+REPEAT: domain state/credential digest unchanged; audit retained
+owner reset completed; no token or command payload printed
+waiting150s: isolate recovery's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+recovery: calls=114.0, errors=0.0, completed_orders=12, proxy200=12, proxy500=0
+REAL AWS JOURNEY PASS; paid inference, independent human/main acceptance NOT verified
+
+Full real journey actual exit0. Owner reset completed, temporary holder removed/absence verified. Generic verifier text cannot attest Git identity; recorded SHA/clean clone above does.
+
+Same-demo reconnect behavior (no API restart or token rotation):
+governed query_prometheus probe0 HTTP200
+governed query_prometheus probe1 HTTP200
+governed query_elasticsearch probe2 HTTP200
+setup: AWS blocked: missing/invalid/disconnected/expired private #494 connection; prepare/connect MCP through its owner CLI, then rerun. No AWS operation performed
+ACTUAL canonical container exit=1
+governed query_prometheus probe0 HTTP200
+governed query_prometheus probe1 HTTP200
+governed query_elasticsearch probe2 HTTP200
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18678; web http://127.0.0.1:18679
+setup: paid LLM disabled
+ACTUAL canonical container exit=0
+governed query_prometheus probe0 HTTP200
+governed query_prometheus probe1 HTTP200
+governed query_elasticsearch probe2 HTTP200
+
+Previous session metrics502 mcp_tool_error is historical real failure, not erased or claimed fixed. Immediate same-demo reconnect did not reproduce it; backend cause remains unconfirmed. A read-only longer-idle observation is separate/pending at this capture.
+Human reviewer prerequisites only prepared in separate clean clone, no reviewer setup/workflow executed by assistant. Actual human CA7 results still pending. Real local OTel not executed; prior report16 remains controlled local.
+Sanitized: yes. Only synthetic workflow IDs/statuses/counts, no credentials, headers or provider payloads/raw logs.
+
+Independent current owner guards: ingress0, enabled termination schedule targets owned instance only, deadline matches private producer tag13:44:28UTC; read-only diagnostic succeeded. Holder removed after operation.
+
+Actual new main harness isolation (container exit0):
+harness: MCP/provider/AWS secret variables absent
+harness: direct MCP transport unreachable
+harness: direct external transport unreachable

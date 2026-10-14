@@ -248,3 +248,118 @@ occupied-port and owned fixture-outage nonzero, stop/restart recovered with
 stable domain digest. New owned fixture/networks only, no AWS or real OTel call.
 Report16 is controlled local proof, not real local signals; 638 evidence expanded
 within400 lines, no source change; fresh CI/human review still required.
+
+Maintainer accepted #638 and volunteered to execute final-main guide personally;
+CA7 remains pending actual execution/results, not inferred from acceptance/"yo".
+Main CI38506237062 completed SUCCESS exact220cd462, alljobs; issue checkpoint
+published. Current638head5e4713be,348lines, freshCI38508667336 pending behind
+older own candidate cleanup; normal guarded merge waiter49390, no bypass.
+Owned controlled-local SRE stopped canonically after completed proof; own fixture
+stopped only, volumes retained. Real AWS main web stillHTTP200; noforeigncleanup.
+Main human-review environment and owned native connections remain until TTL.
+Authorized profile export can contain static credentials without SessionToken.
+Initial temporary owner-holder helper assumed it and failed KeyError before
+writing secrets or invoking AWS operations; empty own directory removed. Fixed
+local helper treats session token as optional, then E2E owner fail/reset passed.
+No credentials were printed; holder cleanup verified even on earlier E2E abort.
+638 merged normally ca15e7ad,348lines, current Quality/governance SUCCESS.
+Latest-main clone fetched clean; runtime/scripts/tests/Compose/dependency tree
+exactly unchanged from tested220cd462. Canonical latest-main attempt exited1
+AWSblocked: own SSM18726 had ended, contractdisconnected (expiry04:28:03UTC).
+Do not credit that retry as success; owner reconnect authorized within same TTL,
+no new demo/extension or resource allocation. Earlier fullmain220 proof remains
+valid; latest documentation-only mainCI38510816168 separate/inprogress.
+Latest-main recovered setup did NOT pass: reachedAPI/web then refusedready.
+Governed Prometheus up and checkout traffic502; Elasticsearch200. No successful
+latestretry claimed; rootcauseunconfirmed, existing historicalmain220proof valid.
+Owned readonlySSM49178 Success: Prometheusrunning/OOMfalse/exit0/rootdisk53%.
+No speculativeAPIrestart/grantchanges/rawlogs/secretread ornewAWSallocation.
+## Recovery summary
+Goal: deliver618/allCA; accepted code/evidence stack merged, issue stillOPEN.
+Instructions: <=400lines/PR, normalgates, paid0, ownAWSuntil04:28:03UTC only.
+Accomplished: realmain220 fullE2E+CIgreen, controlledlocalE2Egreen,638348merged.
+Remaining: confirmlatestmainCI38510816168; metrics502rootcause/recovery needs
+live authorizedenvironment afterTTL; humanreviewer user mustactuallyexecuteguide.
+Relevant: docs/setup-sre.md; docs/evidence/issue-618/acceptance.md and15/16reports;
+local /tmp/sre618-final-main trackedclean ca15e7ad; latest failure logs in/tmp.
+Memory mirror pending/prohibited: no authoritative runtime session identity.
+AfterTTL own35477/83320/42305 connections closed via original exact handles,
+network/token/data retained; no alternate session inspected/reused. Owner status
+39744 reported absent, no fresh deployment/extension. LatestmainCI contracts
+nowSUCCESS, compose-smoke running; independent human remainsunexecuted.
+Latestmain ca15e7ad CI38510816168 finalSUCCESS alltechnicaljobs/Quality. Published
+final lifecycle/CI issue checkpoint; no more authorized liveAWSenvironment.
+Remaining first current impasse: metrics502 rootcause/recovery needs authorized
+live destination; humanCA7 user hasnotexecuted/reported. Goal NOTcomplete.
+Continuation found618CLOSED/ProjectDone, contrary to intendedscope. Timeline
+ClosedEvent closer=PR638 proves automaticclosure atmerge04:19:43, nothumanproof.
+Cause: negated "doesnotclaimto close #618" stillmatchesGitHubclosingkeyword.
+Removedclosingreference from638body, reopened618, restoredpremergeProjectTodo;
+readbackOPEN/Todo and638closingIssuesReferences empty. Existingmergesunchanged.
+Prior turn progress (merged/proved/recordedCI); thisturn progress repairing
+unintendedauthoritativestate. No newAWSauthorization orhumanresults provided.
+Local ownedAPI diagnostic afterTTL (noAWSprobe): exactproject/checkout verified,
+bounded04:20–04:28:30 logs parsedinmemory onlywhitelisted enum counts retained.
+Four mcp_tool_error receipts, notmcp_result_invalid/transporterror. Publicgateway
+maps upstreamresult isError=true tothis enum. Nextlive investigation shouldtarget
+producer/Grafana/Prometheus toolerror, notspeculativeSDKparser/APIrestart fixes.
+Actualbackendcause stillunknown; no rawlogs/IDs/payloads/headers preserved.
+Asked once fornew authorized2h OTel otel-demo/us-east-1 plushumanavailability
+samewindow, scheduledtermination/noIAM/publicingress/paid0/owner-only0600.
+No approval yet; do notlaunch/probe/reuse ambientremoteaccess. Currentturn
+changedauthoritativestate andnarrowed502provenance; firstawaitnewscope, notcomplete.
+Secondcontinuation no newAWSauthorization/humanresults. Prior turn progress:
+repairedOPEN/Todo andclassifiedupstreamtoolerror. Reviewed realhistoricalbody
+before localhelperchange: oldline-anchoredclosureguard missedinline negation.
+Own /tmp partialPRhelper nowrequests authoritativeclosingIssuesReferences,
+refuses494/618auto-close refs andinlinekeyword forms; syntacticallycompiled,
+neverexecutesPRbody. No repositoryCI/runtime/testchange or remotePRmutation.
+Live502diagnosis andhumanCA7 stillneednew authorizedenvironment/actualresults;
+no live process/job wait claimed, no deployment started while approvalpending.
+Blocked audit: same mandatory live-environment authorization + independent human
+execution/results missing for three consecutive goal turns (original late502/TTL
+turn; continuation reopening/classifying; continuation guard hardening). All
+available bounded local repairs completed, CIterminalSUCCESS, demoabsent, no
+live authorized process to wait. No meaningful CA-completion work remains safe
+without explicit new live scope and actual human evidence. Set goal blocked,
+notcomplete; keep issue618OPEN, preserve existingimplementation/evidence.
+
+Resume2026-10-14: user explicitly authorized requestednew2h OTel otel-demo/
+us-east-1, scheduledtermination/noIAM/publicports/paid0/owner-only0600. Native
+SSM connection/MCPhandoff remain authorized, no ambientSSH/sessions. Resume
+blocked audit fresh; humanexecutionstillunreported. Diagnoseupstreammcp_tool_error
+first, then revalidate mainjourney; do notmarkCA7fromauthorization. Memorywrites
+stillprohibited: authoritative runtimeID absent; localtracker mirrorpending.
+New owned up1409 confirmedpending/expiry2026-10-14T13:44:28UTC (08:44Bogota),
+exact2h scheduledCLI, temporaryholderdeleted. Mainstillca15e7ad/clean unchanged.
+New state/tmp/sre618-resume-private, projectresume ports18678/79/80, boundary/
+runtime/consumer10.253.163.0/16/32 (all/28) verifiedunused; noforeigncleanup.
+Bootstrap diagnostic55697 ownedhandle retained; neverrestartjusttimeout.
+Bootstrap29433 terminalSuccess/finishedtrue. Runningservice count uncredited:
+localsanitizer wrongly requirednameprefix despite exactprojectlabel; corrected
+sanitizer only, no remotely deployedcodechange. Ownerprepare launched once next.
+Initialprivateportcheck sandboxdenied beforeinputscreated; escalated local
+freeportcheck succeeded thennewprivateconfigprepared, no otherprojectstouched.
+Newbootstrapfinished true26running (aftercorrectnamefilter). Ownerprepare67716
+exit0 credentialsremoved; nativeMCP35027connected private0600 state, expiry13:44.
+Real mainjourney78161 live: baseline22calls/0errors/5orders, ownerfailcalled;
+waitingdeclared150s window. Liveparentmountinspection noAWScredentialholder.
+Independent reviewer prerequisites only prepared: /tmp/sre618-human-main clean
+ca15e7ad, /tmp/sre618-reviewer-private/sre.env0600 frompublicexample, distinct
+projectreviewer/noexistingcontainersorvolumes; ports18688/89/90, CIDRs163.48/64.
+Assistant hasNOT executedreviewer'ssetup orworkflow; CA7 notinferred.
+OfficialpinnedGrafanaMCPv1.3.0 Prom toolsourcechecked: endTime supportsnow,
+instant doesnotrequirestartTime. No unsupportedold-releaseissueassumption used.
+Resumefullmain78161 exit0: baseline22/0/5, failure3.9/3.9/0/proxy500x5,
+recovery114/0/12/proxy200x12. Workflow/read/events/audit/403 andrepeatstable;
+ownerresetexecuted, temporaryholderdeleted. This isautomatednotCA7human.
+Before anypossiblecodefix, boundedreconnect behaviorcheckauthored: healthyup/
+traffic/logAPI200; ownerSSMdisconnect=>canonicalnonzero; sameownerreconnect=>
+canonical0+governedthreequeries200, no tokenrotation/SREdata loss. No production
+changeornewunit tests. Investigate observedbadlastsession ratherthanfakefix.
+Immediate sameDemo reconnect28527 terminal0: beforegovernedthreequeries200,
+disconnected canonicalACTUALexit1; owner96227 reconnectedtoken/dataretained,
+postreconnectqueries200 withoutAPIrestart; samecanonicalACTUALexit0 andthree
+queries200again. Previous502notreproduced, no rootcause/fix claim. Reviewer
+notifiedsetupcommand/freshprereqpaths/deadline08:44Bogota; requestedactualstep
+results separately, nohumanproofyet. Allnewwork sourceca15e7ad trackedclean.
