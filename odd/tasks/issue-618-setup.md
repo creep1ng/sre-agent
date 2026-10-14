@@ -198,3 +198,7 @@ Owner fail/reset, triage200/declare201/run201/read/events/audit200, restricted40
 repeat preserved domain state/credential digest/audit. No inference paid or claimed.
 Full current preserved suite1908passed1live-skip2warnings400.63s; tested integrated
 61a031c plus new public E2E script, no production change since live run/suite start.
+Real harness verification GREEN: no MCP/provider/AWS env, direct MCP and external
+transport unreachable. Current global Ruff GREEN. README/owner/setup guides now
+cover private AWS contract, scoped lifetime/stop, no default AWS/paid action;
+matrix separates feature verification, local controlled and main/human gates.

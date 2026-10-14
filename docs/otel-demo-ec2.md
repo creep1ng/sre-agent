@@ -150,6 +150,29 @@ revoke the current key, use the root `personal` profile to delete that key from
 `OTelDemoOperator`, then remove the local `[otel-demo]` credentials section.
 Never print, paste, or commit access-key secret material.
 
+## MCP and declared signal lifecycle (#618)
+
+`prepare-mcp` explicitly adds the digest-locked read-only Grafana MCP service and
+owned flag working copy. It converges current declared public Demo environment
+overrides for legacy instances without editing upstream or rotating the token.
+Use `connect-mcp` to consume that environment from SRE; see the
+[setup guide](setup-sre.md#prepared-aws-connection). MCP listens on remote loopback
+17800 only. Temporary token handoff listens on loopback17900, has a120s server-side
+lifetime and is stopped after transfer. Neither port opens public ingress.
+The local relay holds no MCP/provider/AWS keys and publishes no host port.
+
+The producer's `fail`/`reset` operations apply the manifest's declared flag/baseline
+and retain synthetic traffic. Read both metrics and logs through the governed SRE
+API after150s, as explained in [demo-signals](demo-signals.md); health alone is not
+signal recovery. `connect-mcp` only proves transport and denies anonymous callers;
+SRE readiness, user workflow acceptance and real signal recovery are separate.
+
+Token transfer uses SSM port forwarding, not secret-bearing Run Command output.
+AWS documents that [session-content logging is unavailable for port-forwarding
+sessions](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-logging.html).
+SSM API/session metadata may still be audited. Never print token payloads, request
+headers, owner credentials or private connection metadata into evidence.
+
 ## AWS references
 
 - [Scheduler confused-deputy protection](https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html)
