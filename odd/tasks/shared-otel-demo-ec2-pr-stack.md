@@ -63,4 +63,6 @@ operator template at 350 changed lines; offline container YAML parse passed at
 `698630568b9c5b6acc50e7f3ad1bce71ed5427a3`. Human review and AWS
 validation remain pending. PR #496 published the runtime and budget
 stacks at 206 changed lines; offline container readback passed at
-`a24f4391bb4edfcecf03626186f2e40ccb779a3c`.
+`a24f4391bb4edfcecf03626186f2e40ccb779a3c`. PR #503 published
+the no-apply-guarded bootstrap at 385 changed lines; full behavior checks
+remain pending in the next slice.
