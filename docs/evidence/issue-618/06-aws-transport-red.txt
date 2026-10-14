@@ -1,0 +1,2 @@
+anonymous MCP initialize: HTTP404
+verification: MCP authentication boundary absent/invalid; endpoint NOT accepted
