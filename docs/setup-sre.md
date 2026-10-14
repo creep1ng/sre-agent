@@ -37,7 +37,7 @@ stops or destroys OTel and never imports files from another branch/worktree.
 
 | Setting | Default / meaning |
 | --- | --- |
-| `SRE_OTEL_MODE` | `local`; `aws` fails explicitly until #494 is integrated |
+| `SRE_OTEL_MODE` | `local` or `aws`; AWS requires the private producer contract below |
 | `DEMO_STATE_DIR` | Absolute private state directory; defaults to this checkout's `.demo-state` |
 | `SRE_MCP_NETWORK` | `sre-mcp-boundary`; must already exist and be internal |
 | `SRE_SETUP_PROJECT` | `sre-demo`; use a unique `sre-…` name; never another checkout's project |
@@ -46,13 +46,48 @@ stops or destroys OTel and never imports files from another branch/worktree.
 | `SRE_ENABLE_PAID_LLM` | `0`; only explicit `1` plus API-owned `OPENROUTER_API_KEY` enables paid investigation calls |
 | `TRIAGE_AGENT_*`, `REMEDIATION_AGENT_*` | Existing seed assignments; aliases stay `triage-agent`/`remediation-agent` |
 
-AWS is **blocked/not integrated**, not ready or locally emulated. #494 owns its
-bootstrap, launcher, connection interface, TTL and budget. This command does not
-use AWS credentials, create IAM/resources/network rules, forward remote ports,
-or guess an AWS endpoint/export format. Once that producer lands, its approved
-connection interface needs integration and separate real acceptance here.
-Changing mode does not require editing YAML/code; unsupported AWS exits before
-any Docker mutation and leaves the local deployment untouched.
+## Prepared AWS connection
+
+#494 owns AWS identity/bootstrap, launch, TTL, budget and the private connection.
+Prepare the approved `otel-demo` profile and `OTEL_DEMO_EXPECTED_ACCOUNT_ID` as
+private host configuration; do not derive the expected account from observed STS.
+The host needs AWS CLI and Session Manager plugin in addition to Docker/Python.
+Use the [producer guide](otel-demo-ec2.md); no owner credentials reach SRE/harness.
+
+After the owner Demo is running and bootstrap has finished:
+
+```sh
+python scripts/otel_ec2.py prepare-mcp
+python scripts/otel_ec2.py connect-mcp
+```
+
+Keep the connection command running in a separate terminal. It prepares a
+private internal Docker network, a credential-free Unix-socket relay, and
+`.demo-state/aws/connection.json` plus `grafana-mcp.env`, each mode0600. Only the
+API consumes the MCP credential; the harness receives neither it nor AWS keys.
+No public inbound rule/port is added. SSM transfers the token without printing it
+or putting it in command arguments. Missing/conflicting state is not overwritten.
+If Docker pools are exhausted, pass an explicitly selected nonoverlapping private
+`--subnet` to `connect-mcp`; never prune unrelated networks to recover.
+
+Set these literal values in the private SRE env file (use the absolute directory
+reported by the owner, not a shell expression):
+
+```text
+SRE_OTEL_MODE=aws
+DEMO_STATE_DIR=/absolute/path/to/checkout/.demo-state/aws
+SRE_MCP_NETWORK=sre-aws-mcp-boundary
+```
+
+Then run the same SRE setup command below. No YAML/code/worktree file copying,
+manual database edits or additional grant scripts are required. SRE checks the
+versioned contract, connected state, expiry, destination and governed MCP calls;
+it never launches AWS or starts/restarts the owner connection implicitly.
+Disconnected/expired/invalid contracts fail closed; local mode stays independent.
+After extending expiry, reconnect through the owner CLI to refresh this private
+contract. For a different instance, use new private state rather than rotate an
+existing token unexpectedly. Feature/live acceptance is recorded separately in
+[the CA matrix](evidence/issue-618/acceptance.md); it is not a main-release claim.
 
 ## Start and repeat
 
@@ -93,7 +128,7 @@ configuration, inspect dumps, headers or logs.
 | Seed/permissions/migration stage fails | Inspect this project's status and domain state; preserve DB; resolve conflict through existing administrative APIs/runbooks then rerun |
 | OTel/MCP destination unavailable | Run OTel `verify`, correct its own environment, rerun SRE; no automatic reset |
 | Setup overlay or foreign-checkout conflict | Retain evidence/state; review configuration or choose a distinct project; no overwrite |
-| AWS blocked | Wait for #494 integration; local remains independent |
+| AWS contract missing/disconnected/expired | Prepare or reconnect through the owner CLI; preserve token/data; SRE never redeploys AWS |
 
 Partial setup may leave this project's services/data in place. Correct the cause
 and rerun the **same command**; it converges. No global cleanup is a recovery step.
@@ -136,9 +171,11 @@ against a prepared controlled fixture. These are evidence, not setup prerequisit
    and report completed/failure/unknown honestly, not just the HTTP start status.
 5. As `admin-human`, GET `/v1/audit-events?principal_id=demo-human`: expect200;
    inspect metadata only. Never capture prompt/output or private tokens.
-6. For real OTel signals use `python scripts/demo_env.py fail`, verify the change
-   using [demo-signals](demo-signals.md), then `python scripts/demo_env.py reset`
-   and verify recovery. Setup never injects the failure. This step cannot be
+6. For real OTel signals use `python scripts/demo_env.py fail` in local mode or
+   `python scripts/otel_ec2.py fail` in AWS mode; verify the change
+   using [demo-signals](demo-signals.md), then `python scripts/demo_env.py reset` (local) or
+   `python scripts/otel_ec2.py reset` (AWS), and verify recovery. Setup never injects
+   the failure. This step cannot be
    replaced by the controlled MCP fixture or healthy containers.
 
 Independent human reproduction from this guide, on the final integrated main SHA,
@@ -154,3 +191,12 @@ python scripts/setup_sre.py --down
 Stops only the selected SRE project, retaining its volumes/incidents/audit.
 OTel stays running; stop it separately through `demo_env.py down` when intended.
 Do not use `down -v`, global pruning, or AWS teardown as normal SRE recovery.
+
+For repeatable real AWS validation, `scripts/verify_setup_aws_journey.py` uses only
+API caller credentials, invokes owner fail/reset explicitly, waits150s per signal
+window, and prints only counts/statuses. It is not required for normal setup and
+never reads the MCP token or performs paid inference. Reports09 record observed
+behavior; independent human reproduction and final integrated-main proof remain
+separate acceptance gates. Stop SRE first with `--down`; Ctrl+C on `connect-mcp`
+then removes only its local relay, preserving OTel/network/token/data. AWS shutdown
+remains the producer's `down` or scheduled TTL, never SRE setup's responsibility.

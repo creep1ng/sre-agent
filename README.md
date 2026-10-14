@@ -10,7 +10,9 @@ Follow [the operator setup guide](docs/setup-sre.md) for host prerequisites,
 initial private secrets and the independently prepared OTel target. Create the ignored
 owner-only local environment file and replace every placeholder. Do not print keys.
 One command then prepares SRE (no worktrees, manual grants or test recipes). Local
-is available; AWS is explicitly blocked until #494's connection producer is integrated.
+is available. For AWS, prepare the [private owner connection](docs/setup-sre.md#prepared-aws-connection)
+first; the same SRE command consumes it without AWS credentials or paid defaults.
+[Acceptance status](docs/evidence/issue-618/acceptance.md) distinguishes tested feature behavior from the final main release.
 
 ```bash
 cp .env.example .env
