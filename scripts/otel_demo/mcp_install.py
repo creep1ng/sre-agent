@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .common import DIGESTS, MANIFEST, DemoError, _parse_datetime
+from .common import DEMO_ENV, DIGESTS, MANIFEST, DemoError, _parse_datetime
 from .guest import _digest_lock, _manifest_pin
 
 REMOTE = "/var/lib/otel-demo-sre"
@@ -41,6 +41,7 @@ def install_command():
     _, pin = _manifest_pin(MANIFEST)
     source = base64.b64encode(Path(__file__).with_name("mcp_guest.py").read_bytes()).decode()
     config = base64.b64encode(json.dumps(manifest_settings(), sort_keys=True).encode()).decode()
+    environment = base64.b64encode(DEMO_ENV.read_bytes()).decode()
     return f"""set -eu
 test \"$(git -C /opt/otel-demo rev-parse HEAD)\" = '{pin}'
 test ! -L {REMOTE}
@@ -50,6 +51,11 @@ if test -f {REMOTE}/settings.json; then
   cmp -s {REMOTE}/settings.json {REMOTE}/settings.candidate || exit 2
 fi
 install -m 0600 {REMOTE}/settings.candidate {REMOTE}/settings.json
+printf '%s' '{environment}' | base64 -d >{REMOTE}/demo.candidate
+if test -f {REMOTE}/demo.env; then
+  cmp -s {REMOTE}/demo.env {REMOTE}/demo.candidate || exit 2
+fi
+install -m 0600 {REMOTE}/demo.candidate {REMOTE}/demo.env
 printf '%s' '{source}' | base64 -d >{REMOTE}/guest.candidate
 install -m 0600 {REMOTE}/guest.candidate {REMOTE}/mcp_guest.py
 python3 {REMOTE}/mcp_guest.py prepare

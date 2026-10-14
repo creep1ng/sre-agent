@@ -181,3 +181,14 @@ only pipe.py and transport socket, joins only internal sre-aws-mcp-boundary,
 no host ports, no MCP/provider/AWS env. Token handoff service stopped via owner
 SSM; retained token is not read by producer on reconnect. Contract state explicit.
 Next: consume contract in SRE; observe valid AWS config RED before source change.
+SRE consumer RED with valid AWS contract exit1 (after correcting --env-file flag);
+GREEN same canonical command: API/web/schema/grants plus real governed MCP200,
+restricted403, paid disabled. Eight original preflight negatives remain GREEN.
+Raw MCP access not used for authenticated checks. Metrics vector(1)1series and
+logs *1document observed, but checkout signals absent. Public legacy demo.env
+lacks declared FRONTEND_PROXY_ADDR/K6_TARGET_URL; current producer/main have them.
+Next: owner-only legacy env convergence, observe fail/reset through governed API.
+Legacy owner's tracked demo.env had only3 values (no frontend/K6 target override).
+Current declared6-value file now installed as additional owned env layer; prepare
+converges only flagd/checkout/MCP/load-generator/collector, untouched upstream/token.
+Owner prepare exit0; wait for real traffic ingestion before accepting signals.
