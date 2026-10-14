@@ -19,7 +19,7 @@ OVERLAY = STATE / "compose.json"
 
 def compose(*args):
     command = ["docker", "compose", "-p", "otel-demo", "--project-directory", str(ROOT)]
-    for path in (ROOT / ".env", ROOT / "demo.env"):
+    for path in (ROOT / ".env", ROOT / "demo.env", STATE / "demo.env"):
         command += ["--env-file", str(path)]
     for path in (ROOT / "compose.yaml", ROOT / "compose.observability.yaml", OVERLAY):
         command += ["-f", str(path)]
@@ -111,6 +111,8 @@ def prepare():
         "flagd",
         "checkout",
         "grafana-mcp",
+        "load-generator",
+        "otel-collector",
     )
     print("owned AWS MCP prepared; token retained, upstream source untouched")
 
