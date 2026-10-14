@@ -45,6 +45,12 @@ reproduction are still required; successful containers/CI do not satisfy an OKR.
   committed runtime/test tree8aabe3853a0920113ef22a856d74331aa4eeaa47 unchanged.
   Current global Ruff passes; hosted evidence for old624 is not new-candidate CI.
 
+- [Containerized production API setup](11-container-setup.txt): canonical AWS
+  readiness exit0 on refreshed candidate9d6de74; no AWS credentials in the
+  orchestrator. Owner fail/reset container reproduction is still pending.
+- Maintainer accepted #634/#635 guide/evidence in chat and this was recorded on
+  both PRs. Independent final-main execution is not inferred from acceptance.
+
 ## Criteria (every CA accounted for)
 
 | CA | Status | Evidence / remaining acceptance |

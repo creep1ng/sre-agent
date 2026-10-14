@@ -212,3 +212,10 @@ human guide reproduction and final clean-main proof remain required before merge
 Live own handles: MCP owner54840, storefront69336; expiry01:21:22UTC/20:21Bogotá.
 Goal remains active618 (user correction of628); no paid inference or issue closure.
 Engram writes/summary forbidden (no registered runtime identity); local recovery retained.
+User accepted guide/evidence634/635; recorded explicitly on both GitHub PRs.
+This is not final main/reviewer execution or approval of other producer slices.
+Canonical setup observed GREEN inside production API imageec803 on candidate
+9d6de74, explicit local bind mounts and no AWS credentials. Earlier same-path
+-v mount failed exit2/empty code; --mount succeeded, report11 retains limitation.
+Owner fail/reset container reproduction, remaining hosted gates, ordered scoped
+integration and final main/human execution still pending. No full CA acceptance.

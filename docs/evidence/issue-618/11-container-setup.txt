@@ -1,0 +1,46 @@
+Containerized canonical setup — actual observation, 2026-10-14 UTC
+Tested candidate: 9d6de74dc0df4838234f870b105a549ac4ff8575
+Production API image: sha256:ec8034458c2335de791f50b1224e165bdc8cab6a07b1381236ecb6f4b6357877
+Linux Docker29.9.0 / Compose5.6.0; source runtime unchanged from8aabe385.
+
+Prerequisites: reviewed checkout, existing authorized owner connection, private
+AWS SRE configuration at .demo-state/aws/sre.env, generated sre-setup directory,
+local Docker socket and public Docker CLI/plugins. API-only configuration is
+mounted into the production API orchestrator, NEVER checks/harness. No AWS
+credentials are mounted. This container has local Docker control; it is not
+an isolation test. Use the reviewed source only. Existing scoped project/data
+are retained. The owner connection must remain running independently.
+
+Exact executed command (from the tested checkout):
+env -u DOCKER_CONTEXT DOCKER_HOST=unix:///var/run/docker.sock docker run --rm \
+  --network host --user "$(id -u):$(id -g)" --group-add 967 -e HOME=/tmp \
+  --entrypoint python \
+  --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
+  --mount "type=bind,source=$PWD/.demo-state/aws/sre-setup,target=$PWD/.demo-state/aws/sre-setup" \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+  --mount type=bind,source=/usr/bin/docker,target=/usr/bin/docker,readonly \
+  --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-compose,target=/usr/lib/docker/cli-plugins/docker-compose,readonly \
+  --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-buildx,target=/usr/lib/docker/cli-plugins/docker-buildx,readonly \
+  -w "$PWD" \
+  sha256:ec8034458c2335de791f50b1224e165bdc8cab6a07b1381236ecb6f4b6357877 \
+  "$PWD/scripts/setup_sre.py" --env-file "$PWD/.demo-state/aws/sre.env"
+
+Host-specific socket group967 and CLI/plugin locations must match prerequisites.
+Use explicit bind mounts: an earlier -v same-path attempt produced an empty
+source directory and exited2; it did NOT pass. No source copying workaround.
+
+Actual stdout; exit0:
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18628; web http://127.0.0.1:18629
+setup: paid LLM disabled
+
+This proves containerized setup/readiness on the feature candidate only.
+Containerized owner fail/reset reproduction, final main and independent reviewer
+execution remain pending. No paid inference or full #618 acceptance claimed.
+Sanitized: yes
