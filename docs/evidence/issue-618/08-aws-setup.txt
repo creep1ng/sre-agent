@@ -1,0 +1,18 @@
+Real AWS SRE setup — 2026-10-13 (America/Bogota)
+Before consumer implementation, valid private producer contract was rejected:
+setup: AWS blocked: #494 producer/connection interface is not integrated
+After implementation: python3 scripts/setup_sre.py --env-file <private-api-config>
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18628; web http://127.0.0.1:18629
+setup: paid LLM disabled
+Eight existing invalid preflight cases still rejected before Docker mutation.
+API-only MCP credential: consumer validates file metadata, not token contents.
+Real governed Prometheus vector(1): HTTP200, one series; logs *: HTTP200, one document.
+Checkout signals missing: legacy producer demo.env omits declared frontend/K6 targets.
+Signal recovery, repeat, final main and human acceptance remain pending.
