@@ -192,9 +192,9 @@ Legacy owner's tracked demo.env had only3 values (no frontend/K6 target override
 Current declared6-value file now installed as additional owned env layer; prepare
 converges only flagd/checkout/MCP/load-generator/collector, untouched upstream/token.
 Owner prepare exit0; wait for real traffic ingestion before accepting signals.
-Real AWS journey GREEN: baseline226calls/0errors/16orders/proxy200x16; failure
-52calls/12errors/0orders/proxy500x11; recovery26calls/0errors/4orders/proxy200x4.
-Owner fail/reset, triage200/declare201/run201/read/events/audit200, restricted403;
-repeat preserved domain state/credential digest/audit. No inference paid or claimed.
-Full current preserved suite1908passed1live-skip2warnings400.63s; tested integrated
-61a031c plus new public E2E script, no production change since live run/suite start.
+
+Integration reconciliation for PR620: retained the newer producer/main tracker;
+the earlier tracker remains in reviewed ancestor51315f6. Only this tracking file
+conflicted (add/add); runtime/tests from the reviewed permissions slice were not
+rewritten. Incoming main adds already-reviewed producer/static files. Re-run
+current candidate CI before integrating; no final-main acceptance is inferred.

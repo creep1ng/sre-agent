@@ -1,0 +1,11 @@
+networks:
+  runtime:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.253.147.0/28
+  mcp-boundary:
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.253.147.16/28
