@@ -238,3 +238,37 @@ Authorized expiry passed; real production-container setup rejects expired
 contract exit1 before Docker/AWS actions, report12. Historical imageec803 absent
 (exit125, not a setup check); rebuilt owned review API via pinnedDockerfile/lock
 exit0, observedimage5fdd8f59. No credential export/new launch/extra extension.
+User now explicitly approved new2h scheduled OTel demo inotel-demo/us-east-1
+and temporary0600 credential handoff toONLY ownerCLI container; deletion afterward.
+No newIAM/publicport/paidLLM. This supersedes waiting, not earlier expired evidence.
+Owner-container failure modes before implementation: missing/incompatible AWS
+binary/Python; wrong profile/account; absent/private credential; stdout leakage;
+unscheduled/budget-refused launch; foreign state reuse; insufficient Docker disk.
+Use pinned publicPython/AWSCLI stages, no credentials during build, source-only
+mounts for owner, no SRE/API/harness/checks access to temporary AWS credentials.
+Owner-only pinnedDocker tool offlineAWSversion2.36.49 verified; credentials0600
+exported ONLYnamedotel-demo profile toprivate/tmp holder and mounted ONLYowner.
+Owner container status absent, then up exit0/pending, scheduledexpiry03:28:03UTC
+(twohours, no extension). Public-onlyscripts/demo mounts; no SRE config/token.
+Old owned SSMhandles54840/69336 ended; contractdisconnected retained, no deletion.
+Current635head90f8b5a CI38495525684 running: lock/checks/staticGREEN, unit/contracts
+inprogress. Superseded headruns nowCANCELLED by workflow; none manually restarted.
+Containerized E2E owner-hook failure modes before change: absent/wrong private
+owner holder; absent/incompatible public owner image; wrong account/profile;
+owner Docker CLI unreachable; accidental AWS credential mount into API runner;
+owner operation failure/reset not attempted; signal window/traffic absent.
+Observed gap: existing E2E owner hook executes host CLI and cannot use the
+approved owner-only credential mount while all demo commands stay containerized.
+Add explicit optional owner-container hook; preserve legacy runner behavior and
+API-only token metadata. Runner references host holder path but never mounts or
+reads its contents; only child owner mounts publicsource + privateAWS holder.
+New bootstrap boot-finished probe returnedremote failure (not complete), not a
+launch failure. Cloud-init diagnostic observedInProgress/unknown, not reported
+ready. Native new storefront connection42305 started; HTTP readiness stillpending.
+Public-file Ruff passed; corrected configfilenameconfig.toml toproperpyproject.toml
+before applying repo settings. Ownerimagepullnever prevents implicit registrypull.
+New storefront18091 HTTP200 observed. Owner-container prepare-mcp exit0, token
+private/unexported, signals not accepted. New nativeMCP connection42839 started
+with separate stateaws-container/networkvalidation2/CIDR128/28. New SRE project
+sre-618-aws-container ports18638/18639/18640, CIDRs144/28 and160/28; old retained.
+No AWS credential holder is inside checkout or mounted into productionAPI runner.
