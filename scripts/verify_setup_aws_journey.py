@@ -25,7 +25,11 @@ def main():
     path = Path(sys.argv[1]).resolve()
     config = load_config(path)  # AWS path checks token metadata, not its contents.
     assert config["SRE_OTEL_MODE"] == "aws" and config.get("SRE_ENABLE_PAID_LLM", "0") == "0"
-    assert os.environ.get("OTEL_DEMO_EXPECTED_ACCOUNT_ID"), "explicit owner guard required"
+    owner_dir = os.environ.get("SRE_OWNER_PRIVATE_DIR")
+    if owner_dir:
+        assert Path(owner_dir).is_absolute(), "explicit absolute owner holder required"
+    else:
+        assert os.environ.get("OTEL_DEMO_EXPECTED_ACCOUNT_ID"), "explicit owner guard required"
     base = "http://127.0.0.1:" + config["API_PORT"]
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     sensitive = [v for k, v in config.items() if v and ("KEY" in k or "PASSWORD" in k)]
@@ -66,8 +70,36 @@ def main():
         assert result.returncode == 0, "canonical setup failed"
 
     def owner(action):
+        command = [sys.executable, str(ROOT / "scripts/otel_ec2.py"), action]
+        if owner_dir:
+            # Docker resolves the host holder; this runner never mounts/reads AWS keys.
+            command = [
+                "docker",
+                "--host",
+                "unix:///var/run/docker.sock",
+                "run",
+                "--rm",
+                "--pull",
+                "never",
+                "--user",
+                str(os.getuid()) + ":" + str(os.getgid()),
+                "--mount",
+                "type=bind,source=" + owner_dir + ",target=/run/owner,readonly",
+                "--mount",
+                "type=bind,source=" + str(ROOT / "scripts") + ",target=/work/scripts,readonly",
+                "--mount",
+                "type=bind,source=" + str(ROOT / "demo") + ",target=/work/demo,readonly",
+                "sre618-owner:2.36.49",
+                "-c",
+                "import os,runpy,sys; from pathlib import Path; "
+                "os.environ.update(line.split('=',1) for line in "
+                "Path('/run/owner/settings.env').read_text().splitlines()); "
+                "sys.argv=sys.argv[1:]; runpy.run_path(sys.argv[0],run_name='__main__')",
+                "/work/scripts/otel_ec2.py",
+                action,
+            ]
         result = subprocess.run(
-            [sys.executable, str(ROOT / "scripts/otel_ec2.py"), action],
+            command,
             capture_output=True,
             text=True,
             timeout=240,

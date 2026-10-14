@@ -178,6 +178,17 @@ against a prepared controlled fixture. These are evidence, not setup prerequisit
    the failure. This step cannot be
    replaced by the controlled MCP fixture or healthy containers.
 
+   After a fresh owner `up`/`prepare-mcp`, allow at least150 seconds for the
+   initial two-minute signal window. Before injecting a failure, require
+   nonempty checkout traffic/logs and a healthy baseline; empty results are
+   **not** success. If they remain empty, inspect only the selected owner's
+   status/ingestion and retain a pending result, not an invented baseline.
+   Read the query specifications in `demo-signals.md` through the governed API:
+   POST `/v1/mcp/tools/query_prometheus` (`datasource_uid: webstore-metrics`) and
+   `/v1/mcp/tools/query_elasticsearch` (`datasource_uid: webstore-logs`). Use the
+   human/investigator API identity in a private client. Do not use that older
+   guide's direct-token container recipe: #618 keeps the MCP token API-only.
+
 Independent human reproduction from this guide, on the final integrated main SHA,
 is required. Record any extra undocumented step as a gap before accepting #618.
 Live LLM proof needs separately authorized paid enablement; never run it implicitly.
