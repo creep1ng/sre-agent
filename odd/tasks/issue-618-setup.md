@@ -202,3 +202,13 @@ Real harness verification GREEN: no MCP/provider/AWS env, direct MCP and externa
 transport unreachable. Current global Ruff GREEN. README/owner/setup guides now
 cover private AWS contract, scoped lifetime/stop, no default AWS/paid action;
 matrix separates feature verification, local controlled and main/human gates.
+Published/attached new drafts626–635: evidence72,RED83,producer324/144/225/163/23,
+consumer121,real journey296,guide148 lines. No size exception or main merge.
+Main advanced to a6577404 (only public/frontend/browser/evidence relative to c3);
+local current-main-candidate merged it, no Python runtime/test/source diff versus
+8aabe38; canonical AWS setup rerun GREEN. Docs/journey captures inspected, no keys.
+Hosted current-head CI, containerized owner-operation reproduction, independent
+human guide reproduction and final clean-main proof remain required before merge.
+Live own handles: MCP owner54840, storefront69336; expiry01:21:22UTC/20:21Bogotá.
+Goal remains active618 (user correction of628); no paid inference or issue closure.
+Engram writes/summary forbidden (no registered runtime identity); local recovery retained.
