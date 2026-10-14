@@ -219,3 +219,11 @@ Canonical setup observed GREEN inside production API imageec803 on candidate
 -v mount failed exit2/empty code; --mount succeeded, report11 retains limitation.
 Owner fail/reset container reproduction, remaining hosted gates, ordered scoped
 integration and final main/human execution still pending. No full CA acceptance.
+Scoped question pending: authorize temporary0600 credential material for the
+explicit otel-demo session into ONLY owner CLI container, never API/harness/checks,
+with deletion after owner reproduction. No export/mount performed while awaiting.
+Current634 unit/static/checks/lock GREEN; contracts still IN_PROGRESS at01:06UTC.
+Latest635fbe1485 published217 changedlines; refreshed true reproduction metadata.
+Report11 Chromium screenshot captured/inspected with public-only mounts.
+Earliest current AWS evidence CI38492296238: contracts/Compose GREEN, browser
+IN_PROGRESS observed; other current gates remain pending, no merge attempted.
