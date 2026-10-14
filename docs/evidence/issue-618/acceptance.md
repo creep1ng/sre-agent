@@ -1,11 +1,25 @@
 # Issue 618 acceptance matrix — 2026-10-13
 
-This is partial feature-branch delivery, **not full issue acceptance**. No main merge,
-issue closure or paid LLM call was performed. Separate AWS launch was explicitly
-authorized. Feature-candidate SRE AWS/MCP and signal behavior are now verified
-below; main release and human acceptance are not complete. Project midnight.agent
-was consulted live (issue OPEN/Todo). Human acceptance and final integrated main
-reproduction are still required; successful containers/CI do not satisfy an OKR.
+Implementation and the reviewed dependency stack are integrated in main. This is
+**not full issue acceptance**: independent human reproduction remains pending.
+Project midnight.agent was consulted live (issue OPEN/Todo). No paid LLM call
+was performed; readiness and healthy containers do not satisfy an OKR.
+
+## Final integrated main
+
+[Actual report15](15-main-aws.txt) and [Chromium capture](15-main-aws.png) record
+one fresh standalone main checkout at `220cd4625f1e7c9f719aedab71d0232e6ee40e73`.
+First/repeated canonical setup, actual web/API200, workflow/denial/audit, real
+owner fail/reset and isolation passed. Baseline14calls/0errors/6orders;
+failure148calls/32errors/0orders/proxy500x13; recovery134calls/0errors/8orders.
+Disconnected startup failed closed; SRE-only stop retained volumes and the
+previous active project; reconnection/restart is recorded separately in report15.
+See [container reproduction](15-main-reproduction.md). All reviewed slices
+merged normally with current-head Quality/governance green and <=400 lines.
+Main hosted CI is recorded separately; PR green is not asserted as main CI.
+[Same-main controlled local report16](16-main-local-controlled.txt) verifies
+local first/repeat, workflow/audit/denial, port conflict and prepared fixture
+outage/recovery/stop/restart. This is not real local OTel or signal recovery.
 
 ## Observed evidence
 
@@ -47,7 +61,7 @@ reproduction are still required; successful containers/CI do not satisfy an OKR.
 
 - [Containerized production API setup](11-container-setup.txt): canonical AWS
   readiness exit0 on refreshed candidate9d6de74; no AWS credentials in the
-  orchestrator. Owner fail/reset container reproduction is still pending.
+  orchestrator. Owner fail/reset container reproduction passed in report13; final-main proof is report15.
 - Maintainer accepted #634/#635 guide/evidence in chat and this was recorded on
   both PRs. Independent final-main execution is not inferred from acceptance.
 
@@ -59,14 +73,14 @@ reproduction are still required; successful containers/CI do not satisfy an OKR.
 
 | CA | Status | Evidence / remaining acceptance |
 | --- | --- | --- |
-| CA1 | Partial | Canonical command prepares controlled local stack and URLs. Final clean **integrated main** checkout pending; no branch/worktree instruction is an operator prerequisite. |
-| CA2 | Verified, feature | Controlled and real AWS repeat: IDs/key hashes/grants/incidents unchanged on repeat; audit retained; revoked grant/inactive catalog fail closed; occupied-port/MCP outage recovery and stop/restart. |
-| CA3 | Partial release | Local prepared network/token consumption tested with controlled fixture; real local OTel not executed. AWS private producer contract, destination and governed real metric/log calls verified on integrated feature candidate. Producer/SRE main integration pending; modes are not conflated. |
-| CA4 | Verified, feature | Actual AWS-connected API operator triage/run grants; independent direct investigator MCP discovery/invocation and existing LLM seed grant; restricted403. No human-grant inheritance or agent approval grant. |
-| CA5 | Verified, feature | Actual AWS schema/services/readiness and governed metric/log connectivity; invalid/missing input, occupied port and destination outage nonzero with bounded recovery. Empty data is connection-only proof. |
-| CA6 | Verified, feature | Controlled/local and real AWS inputs; no keys/headers/payloads in reports/media/arguments; actual harness secret absence/upstream DNS denial. SRE setup creates no AWS resources or paid calls by default; separate AWS launch explicitly authorized, ingress empty, 2h default expiry explicitly extended1h; server-side Scheduler/guest expiry updated. No IAM bootstrap. |
+| CA1 | Verified main | Fresh standalone clean main220cd462: one canonical command prepares schema/seed/domain grants/API/web and URLs; no worktree imports or manual SQL/grants. |
+| CA2 | Verified main | Controlled and real AWS repeat: IDs/key hashes/grants/incidents unchanged on repeat; audit retained; revoked grant/inactive catalog fail closed; occupied-port/MCP outage recovery and stop/restart. |
+| CA3 | Partial local validation | Local prepared network/token consumption tested with controlled fixture also on main220cd462 (report16); real local OTel not executed. AWS private producer contract, destination and governed real metric/log calls verified on integrated feature candidate. Producer/SRE integrated and real AWS reproduced on main; real local OTel remains not executed, modes are not conflated. |
+| CA4 | Verified main | Actual AWS-connected API operator triage/run grants; independent direct investigator MCP discovery/invocation and existing LLM seed grant; restricted403. No human-grant inheritance or agent approval grant. |
+| CA5 | Verified main | Actual AWS schema/services/readiness and governed metric/log connectivity; invalid/missing input, occupied port and destination outage nonzero with bounded recovery. Empty data is connection-only proof. |
+| CA6 | Verified main | Controlled/local and real AWS inputs; no keys/headers/payloads in reports/media/arguments; actual harness secret absence/upstream DNS denial. SRE setup creates no AWS resources or paid calls by default; separate AWS launch explicitly authorized, ingress empty, 2h default expiry explicitly extended1h; server-side Scheduler/guest expiry updated. No IAM bootstrap. New separate2h demo explicitly extended1h to04:28:03UTC; temporary owner-only credential holder removed after the main journey. |
 | CA7 | Partial | Real API triage→investigate start→state/events→audit + denial and real owner fail/reset signals verified. No successful/paid LLM inference claimed. Independent reviewer following final-main guide remains required. |
-| CA8 | Partial | README/operator guide, fresh reports/screenshots, pinned container commands and first/repeat/error/recovery results published. Final main SHA and human reproduction pending. |
+| CA8 | Partial | README/operator guide, fresh reports/screenshots, pinned container commands and first/repeat/error/recovery results published. Main SHA/report15 now recorded; independent human reproduction remains pending. |
 
 ## Environment and reproduction
 
@@ -90,9 +104,9 @@ See [operator guide](../../setup-sre.md) for normal setup/config/diagnosis/stop 
 Earlier controlled suite source1b63d2129e2e6923f134e22fcf01a7e20c7bc176 remains
 historical. Current integrated compatibility and real AWS E2E source is identified above.
 Published drafts supply tested/base SHA, their <=400-line diff, containerized commands;
-new local slices still require publication/current hosted CI and review, alongside
-a real Chromium capture and media-storage deferral. Stack into the feature branch
-only after review; do not merge a partial slice to main as complete #618 acceptance.
+source slices were published, human-reviewed and normally integrated after fresh
+hosted CI. This new report/matrix slice needs review; no partial merge is full
+#618 acceptance.
 
 ## Risks / rollback / sanitization
 

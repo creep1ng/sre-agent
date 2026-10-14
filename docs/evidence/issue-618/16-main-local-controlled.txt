@@ -1,0 +1,83 @@
+Controlled local-mode verification on integrated main — 2026-10-14 UTC
+SHA220cd4625f1e7c9f719aedab71d0232e6ee40e73, same tracked-clean standalone clone.
+NOT real local OTel, signal recovery, AWS or successful LLM inference.
+Fixture tests/setup_mcp_fixture.py, private synthetic MCP token; no AWS credential.
+Project sre-618-main-local; fixture sre-618-fixture-main-local; ports18658/59/60.
+Internal boundary10.253.162.0/28, runtime16/28, consumer32/28, verified unused.
+New private initial config from current public example, paid0, no SQL/grant edits.
+Existing verify_setup_repeat.py in production API tooling, not new unit tests.
+
+Actual stdout:
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18658; web http://127.0.0.1:18659
+setup: paid LLM disabled
+POST /v1/alerts/al-setup-5a8dd7abda1c/triage/commands -> HTTP 403
+POST /v1/alerts/al-setup-5a8dd7abda1c/triage/commands -> HTTP 200
+POST /v1/alerts/al-setup-5a8dd7abda1c/triage/commands -> HTTP 201
+POST /v1/incidents/inc-cbb4d0eca2b2c43337e54b6c67522844/runs -> HTTP 201
+GET /v1/incidents/inc-cbb4d0eca2b2c43337e54b6c67522844/runs/run_6acd64caa45c6136 -> HTTP 200
+GET /v1/incidents/inc-cbb4d0eca2b2c43337e54b6c67522844/runs/run_6acd64caa45c6136 -> HTTP 403
+GET /v1/incidents/inc-cbb4d0eca2b2c43337e54b6c67522844/runs/run_6acd64caa45c6136/events -> HTTP 200
+GET /v1/incidents/inc-cbb4d0eca2b2c43337e54b6c67522844/runs/run_6acd64caa45c6136/events -> HTTP 403
+GET /v1/audit-events?principal_id=demo-human -> HTTP 200
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18658; web http://127.0.0.1:18659
+setup: paid LLM disabled
+REPEAT: stable principals/credential hashes/grants/incidents; audit retained
+ Container sre-618-main-local-web-1 Stopping
+ Container sre-618-main-local-web-1 Stopped
+setup: WEB_PORT occupied; choose a free port in private config and rerun
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18658; web http://127.0.0.1:18659
+setup: paid LLM disabled
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: OTel/MCP destination not ready; inspect selected OTel owner connection; no OTel reset was attempted
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18658; web http://127.0.0.1:18659
+setup: paid LLM disabled
+setup: SRE stopped; data/OTel/foreign projects preserved
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: local OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18658; web http://127.0.0.1:18659
+setup: paid LLM disabled
+CONTROLLED INTEGRATION PASS; OTel signals/AWS/paid LLM/human review NOT EXECUTED
+
+Actual terminal exit0. First/repeat workflow/denial/audit and stable data passed.
+Occupied port and owned fixture outage produced actionable nonzero; correction/restart converged.
+Only this task fixture was stopped/restarted; no real OTel/foreign resources affected.
+Independent human reproduction and real local OTel remain not executed.
+Sanitized: yes. Synthetic identifiers/statuses only, no credentials/headers/raw logs.
