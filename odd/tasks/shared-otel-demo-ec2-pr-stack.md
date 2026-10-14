@@ -36,7 +36,7 @@ RDD: disabled by the global setting; ordinary policy applies.
   slice with scoped operator access and containerized structural checks.
 - [x] **OTEL-PR-3** Publish the Scheduler/instance and monthly-budget
   infrastructure slices, preserving least-privilege references.
-- [ ] **OTEL-PR-4** Publish the account bootstrap/profile lifecycle with
+- [x] **OTEL-PR-4** Publish the account bootstrap/profile lifecycle with
   fail-closed identity and secret handling checks.
 - [ ] **OTEL-PR-5** Publish the pinned guest bootstrap and cost/deadline
   primitives with applicable checks.
@@ -65,4 +65,6 @@ validation remain pending. PR #496 published the runtime and budget
 stacks at 206 changed lines; offline container readback passed at
 `a24f4391bb4edfcecf03626186f2e40ccb779a3c`. PR #503 published
 the no-apply-guarded bootstrap at 385 changed lines; full behavior checks
-remain pending in the next slice.
+remain pending in the next slice. PR #504 published nine
+bootstrap fake-runner scenarios at 330 changed lines; pytest and Ruff passed
+at `c12407efe5578ab70c0773f0d17bfb90285bd57b`.
