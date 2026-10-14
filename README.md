@@ -6,14 +6,16 @@ routing, and every released response or denial is gated by metadata-only audit p
 
 ## Quick path
 
-Create the ignored local environment file, then replace every angle-bracket placeholder with
-your own value. Do not commit the file or print its API keys.
+Follow [the operator setup guide](docs/setup-sre.md) for host prerequisites,
+initial private secrets and the independently prepared OTel target. Create the ignored
+owner-only local environment file and replace every placeholder. Do not print keys.
+One command then prepares SRE (no worktrees, manual grants or test recipes). Local
+is available; AWS is explicitly blocked until #494's connection producer is integrated.
 
 ```bash
 cp .env.example .env
-docker compose run --rm migrate
-docker compose run --rm seed
-docker compose up --build --wait
+chmod 600 .env
+python scripts/setup_sre.py
 ```
 
 The required seed inputs are `ADMIN_HUMAN_API_KEY`, `DEMO_HUMAN_API_KEY`,
@@ -82,15 +84,12 @@ routing expectations. A missing enable flag or provider/audit secret produces a 
 
 ### Verify one authorized response
 
-With `INCIDENT_HARNESS_API_KEY` already loaded by your local secret-management workflow, send one
-bounded request directly to the API. Do not paste or commit the credential.
-
-```bash
-curl -i http://localhost:8000/v1/responses \
-  -H "Authorization: Bearer ${INCIDENT_HARNESS_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"triage-agent","input":"Summarize the incident."}'
-```
+Use a private HTTP client/secret-management workflow against the URL printed by
+setup. Do not place credentials in command arguments (`curl -H` would expose them
+to process inspection). Paid requests require explicit `SRE_ENABLE_PAID_LLM=1`
+and an API-owned provider key; setup itself never sends a model request.
+See the [bounded operator journey](docs/setup-sre.md#bounded-reviewer-journey)
+for safe credential handling, run readback and denial evidence.
 
 An authorized, correctly routed request returns `200` with a completed text item at
 `output[0].content[0].text`. The gateway validates OpenRouter's completed Responses envelope and
@@ -127,13 +126,13 @@ additional endpoint-catalog lookup and accepts the result only when the catalog 
 model/provider identity. A missing, ambiguous, or mismatched catalog entry fails closed rather than
 returning an unverified response.
 
-Remove every project-owned container, network, and volume with:
+Stop only SRE, preserving incidents/audit and the independent OTel environment:
 
 ```bash
-docker compose down -v --remove-orphans
+python scripts/setup_sre.py --down
 ```
 
-Re-running `docker compose up --build --wait` requires no undocumented recovery step. PostgreSQL data persists in a project-scoped volume until the explicit `down -v` teardown. Harness dependencies are locked into its image and copied to an ephemeral filesystem for each run; rebuilding the image is sufficient after a tooling lockfile change.
+Re-running `python scripts/setup_sre.py` converges without deleting data. PostgreSQL persists in its project-scoped volume. Destructive volume removal requires a separate, explicit data-disposal decision. Harness dependencies are locked into its image and copied to an ephemeral filesystem for each run; rebuilding the image is sufficient after a tooling lockfile change.
 
 ## Database lifecycle and rollback
 
