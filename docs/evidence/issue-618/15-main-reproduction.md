@@ -58,3 +58,20 @@ owner reset, workflow200/201, restricted403 and retained domain/audit state.
 The main report records observed values, initial input error, stop/recovery and
 remaining local-real/human/hosted-CI gates; no successful paid inference is claimed.
 Normal operators use `python scripts/setup_sre.py`, not this E2E as a prerequisite.
+
+## Separate controlled local check
+
+[Report16](16-main-local-controlled.txt) used the **same main SHA** and existing
+`verify_setup_repeat.py`, with a prepared `tests/setup_mcp_fixture.py` container
+aliased `grafana-mcp` on a new internal network. The synthetic private token is
+provided only to that owned fixture and API tooling. This is test preparation,
+never an operator prerequisite or real OTel/signals claim. Its private initial
+config follows the setup guide, local mode, ports18658/59/60, project
+`sre-618-main-local`, state `/tmp/sre618-main-local-private`, CIDRs0/16/32 under
+10.253.162/24, and `SRE_618_FIXTURE_CONTAINER=sre-618-fixture-main-local`.
+Use the same API `docker run` mounts above, omit the owner-holder environment,
+replace the state mount with `/tmp/sre618-main-local-private`, and invoke
+`$PWD/scripts/verify_setup_repeat.py /tmp/sre618-main-local-private/sre.env`.
+Expected/actual exit0, retained domain/audit; occupied-port and fixture-outage
+nonzero, bounded correction converges. The script stops only its explicit
+fixture and scoped SRE; it never deletes volumes or resets real OTel.

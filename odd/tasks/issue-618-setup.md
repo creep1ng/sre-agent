@@ -242,3 +242,9 @@ Report15/capture/reproduction/matrix PR pending; no runtime changes in this slic
 Main CI38506237062 pending behind older own main38505834128 cleanup; no bypass.
 Independent human final-main reproduction and real local OTel remain unexecuted.
 Engram mirror pending: runtime session identity absent, writes prohibited.
+
+Same main local controlled E2E4906 exit0: first/repeat/workflow/audit/denial,
+occupied-port and owned fixture-outage nonzero, stop/restart recovered with
+stable domain digest. New owned fixture/networks only, no AWS or real OTel call.
+Report16 is controlled local proof, not real local signals; 638 evidence expanded
+within400 lines, no source change; fresh CI/human review still required.

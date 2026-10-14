@@ -17,6 +17,9 @@ previous active project; reconnection/restart is recorded separately in report15
 See [container reproduction](15-main-reproduction.md). All reviewed slices
 merged normally with current-head Quality/governance green and <=400 lines.
 Main hosted CI is recorded separately; PR green is not asserted as main CI.
+[Same-main controlled local report16](16-main-local-controlled.txt) verifies
+local first/repeat, workflow/audit/denial, port conflict and prepared fixture
+outage/recovery/stop/restart. This is not real local OTel or signal recovery.
 
 ## Observed evidence
 
@@ -72,7 +75,7 @@ Main hosted CI is recorded separately; PR green is not asserted as main CI.
 | --- | --- | --- |
 | CA1 | Verified main | Fresh standalone clean main220cd462: one canonical command prepares schema/seed/domain grants/API/web and URLs; no worktree imports or manual SQL/grants. |
 | CA2 | Verified main | Controlled and real AWS repeat: IDs/key hashes/grants/incidents unchanged on repeat; audit retained; revoked grant/inactive catalog fail closed; occupied-port/MCP outage recovery and stop/restart. |
-| CA3 | Partial local validation | Local prepared network/token consumption tested with controlled fixture; real local OTel not executed. AWS private producer contract, destination and governed real metric/log calls verified on integrated feature candidate. Producer/SRE integrated and real AWS reproduced on main; real local OTel remains not executed, modes are not conflated. |
+| CA3 | Partial local validation | Local prepared network/token consumption tested with controlled fixture also on main220cd462 (report16); real local OTel not executed. AWS private producer contract, destination and governed real metric/log calls verified on integrated feature candidate. Producer/SRE integrated and real AWS reproduced on main; real local OTel remains not executed, modes are not conflated. |
 | CA4 | Verified main | Actual AWS-connected API operator triage/run grants; independent direct investigator MCP discovery/invocation and existing LLM seed grant; restricted403. No human-grant inheritance or agent approval grant. |
 | CA5 | Verified main | Actual AWS schema/services/readiness and governed metric/log connectivity; invalid/missing input, occupied port and destination outage nonzero with bounded recovery. Empty data is connection-only proof. |
 | CA6 | Verified main | Controlled/local and real AWS inputs; no keys/headers/payloads in reports/media/arguments; actual harness secret absence/upstream DNS denial. SRE setup creates no AWS resources or paid calls by default; separate AWS launch explicitly authorized, ingress empty, 2h default expiry explicitly extended1h; server-side Scheduler/guest expiry updated. No IAM bootstrap. New separate2h demo explicitly extended1h to04:28:03UTC; temporary owner-only credential holder removed after the main journey. |
