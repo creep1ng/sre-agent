@@ -192,49 +192,9 @@ Legacy owner's tracked demo.env had only3 values (no frontend/K6 target override
 Current declared6-value file now installed as additional owned env layer; prepare
 converges only flagd/checkout/MCP/load-generator/collector, untouched upstream/token.
 Owner prepare exit0; wait for real traffic ingestion before accepting signals.
-Real AWS journey GREEN: baseline226calls/0errors/16orders/proxy200x16; failure
-52calls/12errors/0orders/proxy500x11; recovery26calls/0errors/4orders/proxy200x4.
-Owner fail/reset, triage200/declare201/run201/read/events/audit200, restricted403;
-repeat preserved domain state/credential digest/audit. No inference paid or claimed.
-Full current preserved suite1908passed1live-skip2warnings400.63s; tested integrated
-61a031c plus new public E2E script, no production change since live run/suite start.
-Real harness verification GREEN: no MCP/provider/AWS env, direct MCP and external
-transport unreachable. Current global Ruff GREEN. README/owner/setup guides now
-cover private AWS contract, scoped lifetime/stop, no default AWS/paid action;
-matrix separates feature verification, local controlled and main/human gates.
-Published/attached new drafts626–635: evidence72,RED83,producer324/144/225/163/23,
-consumer121,real journey296,guide148 lines. No size exception or main merge.
-Main advanced to a6577404 (only public/frontend/browser/evidence relative to c3);
-local current-main-candidate merged it, no Python runtime/test/source diff versus
-8aabe38; canonical AWS setup rerun GREEN. Docs/journey captures inspected, no keys.
-Hosted current-head CI, containerized owner-operation reproduction, independent
-human guide reproduction and final clean-main proof remain required before merge.
-Live own handles: MCP owner54840, storefront69336; expiry01:21:22UTC/20:21Bogotá.
-Goal remains active618 (user correction of628); no paid inference or issue closure.
-Engram writes/summary forbidden (no registered runtime identity); local recovery retained.
-User accepted guide/evidence634/635; recorded explicitly on both GitHub PRs.
-This is not final main/reviewer execution or approval of other producer slices.
-Canonical setup observed GREEN inside production API imageec803 on candidate
-9d6de74, explicit local bind mounts and no AWS credentials. Earlier same-path
--v mount failed exit2/empty code; --mount succeeded, report11 retains limitation.
-Owner fail/reset container reproduction, remaining hosted gates, ordered scoped
-integration and final main/human execution still pending. No full CA acceptance.
-Scoped question pending: authorize temporary0600 credential material for the
-explicit otel-demo session into ONLY owner CLI container, never API/harness/checks,
-with deletion after owner reproduction. No export/mount performed while awaiting.
-Current634 unit/static/checks/lock GREEN; contracts still IN_PROGRESS at01:06UTC.
-Latest635fbe1485 published217 changedlines; refreshed true reproduction metadata.
-Report11 Chromium screenshot captured/inspected with public-only mounts.
-Earliest current AWS evidence CI38492296238: contracts/Compose GREEN, browser
-IN_PROGRESS observed; other current gates remain pending, no merge attempted.
-At01:12:59UTC, exact634head3ada494 run38492357802 completedSUCCESS:
-contracts, Compose, productionbrowser and Qualitygate allGREEN. 626–633 current
-technical Qualitygate alsoGREEN; draft governance stillFAILURE, no bypass.
-635currenthead7e6a5d3 is225 changedlines; CI38494023547 PENDING confirmed live.
-Previousheadfbe1485 CI38493766006 IN_PROGRESS, not evidence for currenthead.
-User credential-owner-container authorization still pending; no export performed.
-Expiry01:21:22UTC unchanged. No additional extension or final main acceptance.
-Authorized expiry passed; real production-container setup rejects expired
-contract exit1 before Docker/AWS actions, report12. Historical imageec803 absent
-(exit125, not a setup check); rebuilt owned review API via pinnedDockerfile/lock
-exit0, observedimage5fdd8f59. No credential export/new launch/extra extension.
+
+Integration reconciliation for PR620: retained the newer producer/main tracker;
+the earlier tracker remains in reviewed ancestor51315f6. Only this tracking file
+conflicted (add/add); runtime/tests from the reviewed permissions slice were not
+rewritten. Incoming main adds already-reviewed producer/static files. Re-run
+current candidate CI before integrating; no final-main acceptance is inferred.

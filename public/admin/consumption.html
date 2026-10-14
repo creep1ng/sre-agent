@@ -107,6 +107,18 @@
           <p id="result-month-note" class="ma-panel__description" hidden>UTC calendar month: <span id="summary-month" class="ma-mono"></span>. Backend-defined UTC calendar month.</p>
         </div>
       </section>
+      <section id="request-detail" class="ma-panel" aria-labelledby="request-detail-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="request-detail-title" class="ma-panel__title">Request detail</h2>
+          <p id="request-detail-status" class="ma-panel__description" aria-live="polite">Load consumption to see request detail.</p>
+        </div></div>
+        <div class="ma-panel__body">
+          <div id="request-detail-loading" class="principals__loading" aria-live="polite" hidden><span aria-hidden="true">…</span> Loading request detail…</div>
+          <p id="request-detail-empty" class="ma-panel__description" hidden>No request detail in this scope.</p>
+          <ul id="request-detail-list" hidden style="margin: 0; padding-left: 1.25rem; overflow-wrap: anywhere;"></ul>
+          <p id="request-detail-contract" class="ma-panel__description">Contract 2.8.0 readUsageRequests. Immutable snapshot; navigation unsupported per contract, no incident or run links.</p>
+        </div>
+      </section>
       <p id="live-region" class="ma-sr-only" aria-live="polite"></p>
         </div>
       </div>
