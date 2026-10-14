@@ -25,7 +25,7 @@ def compose(*args):
         command += ["-f", str(path)]
     done = subprocess.run(command + list(args), capture_output=True, timeout=180, check=False)
     if done.returncode:
-        raise RuntimeError("owned Demo operation failed; inspect scoped service state")
+        raise RuntimeError("owned Demo " + args[0] + " failed; inspect scoped service state")
 
 
 def settings():
@@ -99,6 +99,7 @@ def prepare():
         raise RuntimeError("owned overlay conflict; review before changing existing state")
     OVERLAY.write_text(serialized)
     OVERLAY.chmod(0o600)
+    compose("pull", "--policy", "missing", "grafana-mcp")
     compose(
         "up",
         "-d",
@@ -150,7 +151,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError):
+    except RuntimeError as error:
+        raise SystemExit(str(error)) from None
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError):
         raise SystemExit(
             "owned AWS operation failed; preserve resources and inspect scoped status"
         ) from None

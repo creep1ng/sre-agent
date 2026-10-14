@@ -15,6 +15,7 @@ from .common import (
     DemoError,
 )
 from .controller import DemoController
+from .mcp_install import flags, prepare
 
 
 def _duration(value: str) -> timedelta:
@@ -32,6 +33,9 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("up")
     sub.add_parser("status")
+    sub.add_parser("prepare-mcp")
+    sub.add_parser("fail")
+    sub.add_parser("reset")
     extend = sub.add_parser("extend")
     extend.add_argument("--hours", type=_duration, default=timedelta(hours=1))
     connect = sub.add_parser("connect")
@@ -58,6 +62,10 @@ def main(argv: list[str] | None = None) -> int:
             result = controller.up()
         elif args.action == "status":
             result = controller.status()
+        elif args.action == "prepare-mcp":
+            result = prepare(controller)
+        elif args.action in {"fail", "reset"}:
+            result = flags(controller, args.action)
         elif args.action == "extend":
             result = {"expires_at": controller.extend(extension=args.hours).isoformat()}
         elif args.action == "connect":
