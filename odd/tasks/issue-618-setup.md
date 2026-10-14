@@ -192,3 +192,9 @@ Legacy owner's tracked demo.env had only3 values (no frontend/K6 target override
 Current declared6-value file now installed as additional owned env layer; prepare
 converges only flagd/checkout/MCP/load-generator/collector, untouched upstream/token.
 Owner prepare exit0; wait for real traffic ingestion before accepting signals.
+
+Integration reconciliation for PR620: retained the newer producer/main tracker;
+the earlier tracker remains in reviewed ancestor51315f6. Only this tracking file
+conflicted (add/add); runtime/tests from the reviewed permissions slice were not
+rewritten. Incoming main adds already-reviewed producer/static files. Re-run
+current candidate CI before integrating; no final-main acceptance is inferred.

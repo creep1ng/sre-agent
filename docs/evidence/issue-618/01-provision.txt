@@ -1,0 +1,17 @@
+ Container sre-618-checks-python-checks-db-1 Running
+ Container sre-618-checks-python-checks-db-1 Waiting
+ Container sre-618-checks-python-checks-db-1 Healthy
+ Container sre-618-checks-python-checks-run-a5d75de0384e Creating
+ Container sre-618-checks-python-checks-run-a5d75de0384e Created
+RESTRICTED_HARNESS: POST /v1/alerts/al-setup-proof/triage/commands -> HTTP 403
+DEMO_HUMAN: POST /v1/alerts/al-setup-proof/triage/commands -> HTTP 200
+DEMO_HUMAN: POST /v1/alerts/al-setup-proof/triage/commands -> HTTP 201
+DEMO_HUMAN: POST /v1/incidents/inc-b7116409a935ad4550d4bbb17f0ceeea/runs -> HTTP 201
+DEMO_HUMAN: GET /v1/incidents/inc-b7116409a935ad4550d4bbb17f0ceeea/runs/run_2767af9d4872435a -> HTTP 200
+RESTRICTED_HARNESS: GET /v1/incidents/inc-b7116409a935ad4550d4bbb17f0ceeea/runs/run_2767af9d4872435a -> HTTP 403
+DEMO_HUMAN: GET /v1/incidents/inc-b7116409a935ad4550d4bbb17f0ceeea/runs/run_2767af9d4872435a/events -> HTTP 200
+RESTRICTED_HARNESS: GET /v1/incidents/inc-b7116409a935ad4550d4bbb17f0ceeea/runs/run_2767af9d4872435a/events -> HTTP 403
+ADMIN_HUMAN: GET /v1/audit-events?principal_id=demo-human -> HTTP 200
+CA2/4/6: convergence, real triage/run reads, audit and denial passed (no LLM).
+.
+1 passed in 9.59s
