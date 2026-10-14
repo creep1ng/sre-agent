@@ -1,8 +1,10 @@
 """Private, literal configuration contract for the local SRE setup entrypoint."""
 
+import json
 import os
 import re
 import stat
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -47,15 +49,46 @@ def literal_env(path):
     return values
 
 
+def aws_network(state):
+    try:
+        path = state / "connection.json"
+        private_file(path)
+        connection = json.loads(path.read_text())
+        if set(connection) != {
+            "version",
+            "mode",
+            "network",
+            "endpoint",
+            "instance_id",
+            "expires_at",
+            "state",
+        }:
+            raise ValueError
+        if (
+            type(connection["version"]) is not int
+            or connection["version"] != 1
+            or connection["mode"] != "aws"
+            or connection["state"] != "connected"
+            or connection["endpoint"] != "http://grafana-mcp:8000/mcp"
+            or not re.fullmatch(r"i-(?:[0-9a-f]{8}|[0-9a-f]{17})", connection["instance_id"])
+            or not re.fullmatch(r"sre-[a-z0-9_-]{3,55}", connection["network"])
+        ):
+            raise ValueError
+        expiry = datetime.fromisoformat(connection["expires_at"])
+        if expiry.tzinfo is None or expiry <= datetime.now(UTC):
+            raise ValueError
+    except (SetupError, OSError, ValueError, TypeError, KeyError):
+        raise SetupError(
+            "AWS blocked: missing/invalid/disconnected/expired private #494 connection; "
+            "prepare/connect MCP through its owner CLI, then rerun. No AWS operation performed"
+        ) from None
+    return connection["network"]
+
+
 def load_config(path):
     values = literal_env(path)
     mode = values.get("SRE_OTEL_MODE", "local")
-    if mode == "aws":
-        raise SetupError(
-            "AWS blocked: #494 producer/connection interface is not integrated; "
-            "no resources were launched. Select local or wait for #494"
-        )
-    if mode != "local":
+    if mode not in {"local", "aws"}:
         raise SetupError("SRE_OTEL_MODE must be local or aws")
     project = values.get("SRE_SETUP_PROJECT", "sre-demo")
     if not re.fullmatch(r"sre-[a-z0-9][a-z0-9_-]{0,40}", project):
@@ -100,11 +133,26 @@ def load_config(path):
     ):
         raise SetupError("DATABASE_URL must agree with POSTGRES_*; do not target another database")
     state = Path(values.get("DEMO_STATE_DIR", str(ROOT / ".demo-state"))).resolve()
-    token = literal_env(state / "grafana-mcp.env")
-    if set(token) != {"MCP_GRAFANA_SERVER_TOKEN"} or len(token["MCP_GRAFANA_SERVER_TOKEN"]) < 24:
-        raise SetupError("MCP token file must contain only a valid MCP_GRAFANA_SERVER_TOKEN")
-    network = values.get("SRE_MCP_NETWORK", "sre-mcp-boundary")
+    if mode == "aws":
+        network = aws_network(state)
+        if values.get("SRE_MCP_NETWORK", network) != network:
+            raise SetupError("AWS MCP network conflicts with private producer contract")
+        # The producer validated the private handoff; only API env_file consumes it.
+        private_file(state / "grafana-mcp.env")
+    else:
+        token = literal_env(state / "grafana-mcp.env")
+        if (
+            set(token) != {"MCP_GRAFANA_SERVER_TOKEN"}
+            or len(token["MCP_GRAFANA_SERVER_TOKEN"]) < 24
+        ):
+            raise SetupError("MCP token file must contain only a valid MCP_GRAFANA_SERVER_TOKEN")
+        network = values.get("SRE_MCP_NETWORK", "sre-mcp-boundary")
     if not re.fullmatch(r"[a-z][a-z0-9_-]{2,63}", network):
         raise SetupError("SRE_MCP_NETWORK must identify the prepared private MCP boundary")
-    values.update(SRE_OTEL_MODE=mode, SRE_SETUP_PROJECT=project, DEMO_STATE_DIR=str(state))
+    values.update(
+        SRE_OTEL_MODE=mode,
+        SRE_SETUP_PROJECT=project,
+        DEMO_STATE_DIR=str(state),
+        SRE_MCP_NETWORK=network,
+    )
     return values

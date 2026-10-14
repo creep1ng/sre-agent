@@ -79,7 +79,8 @@ def setup(path, stop=False):
     )
     if internal.strip() != "true":
         raise SetupError(
-            "MCP boundary must be an existing internal network; run demo_env.py up separately"
+            "MCP boundary must be an existing internal network; prepare selected OTel "
+            "through its owner CLI separately"
         )
     layer = {
         "networks": {"mcp-boundary": {"name": config.get("SRE_MCP_NETWORK", "sre-mcp-boundary")}},
@@ -238,13 +239,13 @@ def setup(path, stop=False):
             != 200
         ):
             raise SetupError(
-                "OTel/MCP destination not ready; run demo_env.py verify; "
+                "OTel/MCP destination not ready; inspect selected OTel owner connection; "
                 "no OTel reset was attempted"
             )
     if request(base, "/v1/mcp/discovery", config["RESTRICTED_HARNESS_API_KEY"])[0] != 403:
         raise SetupError("restricted identity unexpectedly allowed; review grants")
     print(
-        "setup: local OTel/MCP connectivity ready; AWS blocked (#494); "
+        "setup: " + config["SRE_OTEL_MODE"] + " OTel/MCP governed connectivity ready; "
         "functional acceptance NOT tested"
     )
     print("setup: API " + base + "; web http://127.0.0.1:" + config.get("WEB_PORT", "8080"))
