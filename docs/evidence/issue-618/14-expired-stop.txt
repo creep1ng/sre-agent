@@ -1,0 +1,45 @@
+Actual expired-owner SRE stop — test-first real Docker behavior
+Tested source: a8d568ba5fdd81e8cdf3933184a7d6e0070be5c6
+Fixture: original owned sre-618-aws remains after real producer expiry;
+same-checkout sre-618-aws-container is live and protected. Private config0600.
+No MCP token contents or AWS credentials read by this runner. No AWS operation.
+
+Failure modes enumerated before source change. Preauthored E2E observed RED:
+setup: AWS blocked: missing/invalid/disconnected/expired private #494 connection; prepare/connect MCP through its owner CLI, then rerun. No AWS operation performed
+selected stop exit=1
+Assertion: expired producer must not block SRE-only stop
+
+After scoped implementation, same E2E observed GREEN, exit0:
+setup: SRE stopped; data/OTel/foreign projects preserved
+selected stop exit=0
+EXPIRED STOP PASS: selected containers absent; volumes/protected project retained
+
+Startup is NOT relaxed: separate offline command without network/Docker socket
+still exited1 with the exact AWS blocked diagnostic on this expired contract.
+Public-source Ruff lint/format passed. Existing tests preserved; no new unit test.
+
+Repeatable fixture preparation: use only your owned projects at this checkout,
+prepare the old selected SRE once with a valid owner, then retain SRE and its
+private config past actual owner TTL. Keep a separate protected project active.
+The named fixtures are intentionally guarded; never substitute a foreign project.
+Current observed old fixture is now stopped; reproducing needs a prepared fixture,
+not a claim that rerunning against nonexistent containers exercises teardown.
+
+Production API tooling built from reviewed docker/api.Dockerfile/uv.lock;
+public Docker CLI/plugin paths and socket group967 match this tested host.
+Local Docker control is explicit; not total host isolation. Commands:
+docker compose --env-file .demo-state/aws/sre.env -p sre618-review -f compose.yaml build api
+docker run --rm --network host --user "$(id -u):$(id -g)" --group-add 967 \
+  -e HOME=/tmp --entrypoint python \
+  --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+  --mount type=bind,source=/usr/bin/docker,target=/usr/bin/docker,readonly \
+  --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-compose,target=/usr/lib/docker/cli-plugins/docker-compose,readonly \
+  -w "$PWD" sre618-review-api:latest \
+  "$PWD/scripts/verify_setup_expired_stop.py" "$PWD/.demo-state/aws/sre.env"
+
+Implementation checks exact selected project/checkout labels, uses base Compose
+down with scoped orphan removal, never removes volumes or producer resources.
+Observed expired-contract case is verified; missing-token/network cases are not
+separately executed or claimed. Final-main/human acceptance remain pending.
+Sanitized: yes
