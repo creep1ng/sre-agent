@@ -34,7 +34,7 @@ RDD: disabled by the global setting; ordinary policy applies.
   stack boundaries; confirm each proposed PR diff is at most 400 lines.
 - [x] **OTEL-PR-2** Publish independently valid IAM/network infrastructure
   slice with scoped operator access and containerized structural checks.
-- [ ] **OTEL-PR-3** Publish the Scheduler/instance and monthly-budget
+- [x] **OTEL-PR-3** Publish the Scheduler/instance and monthly-budget
   infrastructure slices, preserving least-privilege references.
 - [ ] **OTEL-PR-4** Publish the account bootstrap/profile lifecycle with
   fail-closed identity and secret handling checks.
@@ -61,4 +61,6 @@ fetched. No PR branch pushed yet. Next: sanitize and split in this isolated
 clone, then verify each candidate before publication. PR #495 published the
 operator template at 350 changed lines; offline container YAML parse passed at
 `698630568b9c5b6acc50e7f3ad1bce71ed5427a3`. Human review and AWS
-validation remain pending.
+validation remain pending. PR #496 published the runtime and budget
+stacks at 206 changed lines; offline container readback passed at
+`a24f4391bb4edfcecf03626186f2e40ccb779a3c`.
