@@ -51,6 +51,10 @@ reproduction are still required; successful containers/CI do not satisfy an OKR.
 - Maintainer accepted #634/#635 guide/evidence in chat and this was recorded on
   both PRs. Independent final-main execution is not inferred from acceptance.
 
+- [Actual expired AWS contract](12-expired-connection.txt): authorized expiry
+  passed, canonical command exits1 before any Docker/AWS action. Production
+  tooling rebuilt from pinned Dockerfile/uv.lock, without credentials in image.
+
 ## Criteria (every CA accounted for)
 
 | CA | Status | Evidence / remaining acceptance |

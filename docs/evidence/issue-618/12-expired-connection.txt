@@ -1,0 +1,32 @@
+Actual expired AWS connection rejection — 2026-10-14 UTC
+Source candidate: 7e6a5d364e79b2812f2874c1e5ccf2dee2e4a6eb
+Authorized expiry: 2026-10-14T01:21:22UTC; not extended again.
+No assertion of remote instance termination: only contract expiry is tested here.
+
+Production API image rebuilt from existing docker/api.Dockerfile and uv.lock:
+sha256:5fdd8f59a9fe3a257b51465867480b60f1782a4078c44acf731842614ab43212
+Private API configuration is excluded by .dockerignore; never copied into image.
+The runner is production API tooling, not checks/harness. No AWS credential,
+Docker socket or network is provided to the expired-contract invocation.
+
+Commands executed from the reviewed checkout, explicit local Docker daemon:
+env -u DOCKER_CONTEXT DOCKER_HOST=unix:///var/run/docker.sock docker compose \
+  --env-file .demo-state/aws/sre.env -p sre618-review -f compose.yaml build api
+env -u DOCKER_CONTEXT DOCKER_HOST=unix:///var/run/docker.sock docker run --rm \
+  --network none --user "$(id -u):$(id -g)" --entrypoint python \
+  --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" -w "$PWD" \
+  sre618-review-api:latest "$PWD/scripts/setup_sre.py" \
+  --env-file "$PWD/.demo-state/aws/sre.env"
+
+Actual: build exit0; canonical setup exit1, stdout:
+setup: AWS blocked: missing/invalid/disconnected/expired private #494 connection; prepare/connect MCP through its owner CLI, then rerun. No AWS operation performed
+
+Prior attempt using report11's historical local image digest was unavailable
+and exited125 in Docker, NOT the expected setup rejection. The commands above
+therefore build the reviewed production API instead of requiring an unpublished
+local image digest to exist on a new host. The earlier live readiness observation
+remains historical evidence, not a claim that its local image stays cached.
+
+This is real expired-contract preflight, not signal recovery, final-main or
+independent human acceptance. No export of AWS credentials or new AWS launch.
+Sanitized: yes
