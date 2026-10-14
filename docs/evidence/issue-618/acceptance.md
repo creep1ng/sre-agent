@@ -1,7 +1,9 @@
-# Issue 618 acceptance matrix — 2026-10-13
+# Issue 618 acceptance matrix — 2026-10-14
 
 Implementation and the reviewed dependency stack are integrated in main. This is
-**not full issue acceptance**: independent human reproduction remains pending.
+**bounded demo evidence**, not all-modes validation: human reproduction is now
+reported, and the maintainer explicitly deferred real local OTel outside the demo.
+See [human report18](18-human-review.txt); no paid inference is claimed.
 Project midnight.agent was consulted live (issue OPEN/Todo). No paid LLM call
 was performed; readiness and healthy containers do not satisfy an OKR.
 
@@ -37,7 +39,8 @@ not reproduce it; longer observation found the owner connection had ended, so no
 credited. Same-owner reconnection restored queries200/canonical0 without API
 restart; original producer tool-error cause remains unconfirmed.
 Human reviewer has a distinct clean main checkout/private initial config; no
-reviewer setup/workflow was executed by the assistant. CA7 awaits actual results.
+reviewer setup/workflow was executed by the assistant. Later personal reviewer
+results are recorded separately in report18, not attributed to this automated run.
 
 ## Observed evidence
 
@@ -93,12 +96,12 @@ reviewer setup/workflow was executed by the assistant. CA7 awaits actual results
 | --- | --- | --- |
 | CA1 | Verified main | Fresh standalone clean main220cd462: one canonical command prepares schema/seed/domain grants/API/web and URLs; no worktree imports or manual SQL/grants. |
 | CA2 | Verified main | Controlled and real AWS repeat: IDs/key hashes/grants/incidents unchanged on repeat; audit retained; revoked grant/inactive catalog fail closed; occupied-port/MCP outage recovery and stop/restart. |
-| CA3 | Partial local validation | Local prepared network/token consumption tested with controlled fixture also on main220cd462 (report16); real local OTel not executed. AWS private producer contract, destination and governed real metric/log calls verified on integrated feature candidate. Producer/SRE integrated and real AWS reproduced on main; real local OTel remains not executed, modes are not conflated. |
+| CA3 | Local real deferred by maintainer | Local prepared network/token consumption tested with controlled fixture also on main220cd462 (report16); real local OTel not executed. AWS private producer contract, destination and governed real metric/log calls verified on integrated feature candidate. Producer/SRE integrated and real AWS reproduced on main; real local OTel remains not executed, modes are not conflated. On2026-10-14 the maintainer explicitly deferred real local OTel outside the demo due to unavailable capacity; not marked executed/passed. |
 | CA4 | Verified main | Actual AWS-connected API operator triage/run grants; independent direct investigator MCP discovery/invocation and existing LLM seed grant; restricted403. No human-grant inheritance or agent approval grant. |
 | CA5 | Verified main | Actual AWS schema/services/readiness and governed metric/log connectivity; invalid/missing input, occupied port and destination outage nonzero with bounded recovery. Empty data is connection-only proof. |
 | CA6 | Verified main | Controlled/local and real AWS inputs; no keys/headers/payloads in reports/media/arguments; actual harness secret absence/upstream DNS denial. SRE setup creates no AWS resources or paid calls by default; separate AWS launch explicitly authorized, ingress empty, 2h default expiry explicitly extended1h; server-side Scheduler/guest expiry updated. No IAM bootstrap. New separate2h demo explicitly extended1h to04:28:03UTC; temporary owner-only credential holder removed after the main journey. |
-| CA7 | Partial | Real API triage→investigate start→state/events→audit + denial and real owner fail/reset signals verified. No successful/paid LLM inference claimed. Independent reviewer following final-main guide remains required. |
-| CA8 | Partial | README/operator guide, fresh reports/screenshots, pinned container commands and first/repeat/error/recovery results published. Main SHA/report15 now recorded; independent human reproduction remains pending. |
+| CA7 | Human verified (reported) | Report18: personal setup mainca15e7ad exit0/URLs, temp checkout/new database clarification, synthetic triage/declaration→run start→state/events, inspected discovery audit and denial; personal owner fail/reset with >=150s waits and nonempty logs/proxy failure/recovery. Dispatch unknown, no paid/successful inference; no incident/run audit correlation inferred. |
+| CA8 | Evidence updated; slice review pending | README/operator guide and reports15/17 record automated first/repeat/error/recovery; report18 records actual personal results, initial errors, bounded422 reproduction and the local-real deferral. Human evidence is not assistant output; this documentation slice requires normal review/CI before integration. |
 
 ## Environment and reproduction
 
@@ -110,12 +113,13 @@ recorded in reports05/07/08/09; only later reports prove governed behavior. Igno
 CIDRs10.253.161.48/28 and10.253.161.64/28 avoid exhausted default pools; checks uses
 10.253.161.0/28. No foreign container/network was stopped or deleted.
 
-Host has3.9GB free vs OTel's documented15GB requirement. Local real OTel deployment and
+The historical host had3.9GB free vs OTel's documented15GB requirement. Local real OTel deployment and
 fail/reset were **not attempted**; separate real AWS MCP deployment and fail/reset are verified.
 AWS bridge/runtime/consumer CIDRs10.253.161.80/28,96/28,112/28 are test-host choices,
 not defaults required for every operator.
 No global pruning or unauthorized credential discovery used.
-#494 remains OPEN; its remote acceptance cannot be replaced by a local fixture.
+#494 is now CLOSED (live GitHub check2026-10-14); historical open-state reports
+remain historical. Its remote evidence is not replaced by a local fixture.
 
 See [operator guide](../../setup-sre.md) for normal setup/config/diagnosis/stop and
 [CLI E2E runner](../../../scripts/verify_setup_repeat.py) for exact controlled journey.
@@ -123,7 +127,7 @@ Earlier controlled suite source1b63d2129e2e6923f134e22fcf01a7e20c7bc176 remains
 historical. Current integrated compatibility and real AWS E2E source is identified above.
 Published drafts supply tested/base SHA, their <=400-line diff, containerized commands;
 source slices were published, human-reviewed and normally integrated after fresh
-hosted CI. This new report/matrix slice needs review; no partial merge is full
+hosted CI. This human-report/matrix slice needs review; no partial merge is full
 #618 acceptance.
 
 ## Risks / rollback / sanitization

@@ -1,0 +1,63 @@
+Issue 618 — human CA7 review and bounded demo acceptance
+Recorded 2026-10-14; source: maintainer's personal report in the task conversation.
+This is a reviewer-reported record, not assistant-executed HTTP/SQL output.
+No new live run, successful inference or retrospective error diagnosis is claimed.
+
+HUMAN ENVIRONMENT / SETUP
+Integrated main SHA: ca15e7ad27bf4577506631e1a4b117976b61541c.
+Checkout: /tmp/sre618-human-main; initial config from the public example.
+The reviewer clarified use of the prepared temp checkout and a new database
+created through the initial setup. This supports human clean-environment scope;
+the later recorded setup exit alone does not prove a first clean startup.
+Command personally executed:
+python3 /tmp/sre618-human-main/scripts/setup_sre.py --env-file /tmp/sre618-reviewer-private/sre.env
+setup_exit=0; database, migrations, seed, MCP registry, permissions, API/web ready.
+API http://127.0.0.1:18688; web http://127.0.0.1:18689.
+Governed AWS OTel/MCP ready; paid LLM disabled.
+Automated first/repeat proof remains separately identified in reports15/17.
+
+HUMAN WORKFLOW / AUTHORIZATION
+Restricted triage403; human triage200; incident declaration201.
+Declaration used explicitly synthetic context, not an observed OTel alert.
+Investigation start201; human state/events200; restricted state/events403.
+Observed state investigating, dispatch started/ended with outcome unknown.
+No completed investigation, successful LLM inference or remediation claimed.
+Admin audit200: body personally inspected, two successful mcp.discovery /
+read_metadata events, active human identity, grant_matched, truncated=false.
+Those records prove MCP discovery, not specific incident/run correlation.
+CA7 requires audit consultation; stronger correlation is not inferred.
+
+HUMAN REAL AWS SIGNALS
+Reviewer personally waited at least150 seconds after both fail and reset.
+Baseline: nonempty traffic;28 checkout logs,7 completed orders, payments/order placed.
+Owner otel_ec2.py fail personally executed: flags=fail.
+Failure: traffic48;8 checkout logs, all PlaceOrder, no payments/completed orders;
+10 checkout proxy requests, all HTTP500.
+Owner otel_ec2.py reset personally executed: flags=reset, reset_exit=0.
+Recovery: traffic86, checkout errors0;28 logs,7 completed orders;
+10 checkout proxy requests, all HTTP200.
+Failure-phase numeric Prometheus error value was not supplied; not credited.
+These observed logs/proxy statuses demonstrate signal change/return separately
+from readiness or an empty Prometheus vector.
+
+INCIDENTS / EXTRA STEPS / CONTRACT CHECK
+Initial contract_validation_failed and upstream_timeout were reported.
+Expected account was configured from the private producer declaration; the
+assistant reconnected the producer. Both are published producer prerequisites /
+recovery operations, not extra SRE grant/SQL/setup scripts.
+Original validation error cause remains unconfirmed; escaping is only a hypothesis.
+Later reviewer reported valid instant queries returning HTTP200 with empty vectors;
+those do not prove nonempty signals or perpetual upstream availability.
+Deliberate query_type=range subsequently returned HTTP422,
+contract_validation_failed, retryable=false. This verifies current rejection only,
+not the historical error cause. No credential/header/private payload retained.
+
+SCOPE DECISION / LIMITATIONS
+Maintainer explicitly deferred real local OTel outside the demo because no machine
+with sufficient capacity is available. It was NOT executed or marked passed.
+CA3: controlled local contract verified; real AWS verified; real local deferred.
+CA7: human-reported bounded journey covered, without paid inference claim.
+CA8: this record and the matrix supersede the earlier pending-human statements;
+historical reports retain their original partial/failed outcomes.
+The deferred local-real validation remains follow-up scope, not all-modes success.
+No full issue closure or automatic closing reference is included in this slice.
