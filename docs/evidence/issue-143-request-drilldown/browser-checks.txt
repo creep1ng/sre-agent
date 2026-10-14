@@ -1,0 +1,20 @@
+C06 consumer drilldown — browser proof (offline static server, mocked transport, genuine Chromium pixels)
+Spec: tests/browser/consumption-request-drilldown.spec.js (3 tests) + existing seam tests/browser/consumption-client-seam.spec.js (1 test).
+
+Host command:
+npx playwright test --config=playwright.config.js tests/browser/consumption-request-drilldown.spec.js tests/browser/consumption-client-seam.spec.js
+Observed tail: "4 passed (15.9s)".
+
+Drilldown-only run:
+npx playwright test --config=playwright.config.js tests/browser/consumption-request-drilldown.spec.js
+Observed tail: "3 passed (7.0s)".
+
+Covered:
+- readUsageRequests seam requires exactly one selector; path /api/v1/usage/requests with exactly one of request_id/incident_id/month; forbidden from/to/cursor/page/offset/continuation_token/prompt/output/api_key/limit absent.
+- Aggregate selector maps to drilldown selector; rows show immutable alias/model/provider as published; legacy shows "Historical unavailable — no verifiable history (never reconstructed from current assignment)"; unavailable shows explicit unavailable; consumption null stays unavailable; navigation unsupported renders no links (0 anchors in list); no prompt/output leakage.
+- 401 "Authentication required" and 503 "Consumption unavailable" report distinctly with zero invented rows; aggregate summary stays visible on drilldown failure.
+
+Screenshot: docs/evidence/issue-143-request-drilldown/consumption-drilldown.png (200973 bytes, fullPage Chromium, sanitized placeholder only, no bearer value).
+Generation: CONSUMPTION_DRILLDOWN_SCREENSHOT=docs/evidence/issue-143-request-drilldown/consumption-drilldown.png npx playwright test --config=playwright.config.js tests/browser/consumption-request-drilldown.spec.js -g "renders immutable attribution"
+
+Sanitized: yes.
