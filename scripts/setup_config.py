@@ -85,7 +85,7 @@ def aws_network(state):
     return connection["network"]
 
 
-def load_config(path):
+def load_config(path, *, stopping=False):
     values = literal_env(path)
     mode = values.get("SRE_OTEL_MODE", "local")
     if mode not in {"local", "aws"}:
@@ -133,7 +133,10 @@ def load_config(path):
     ):
         raise SetupError("DATABASE_URL must agree with POSTGRES_*; do not target another database")
     state = Path(values.get("DEMO_STATE_DIR", str(ROOT / ".demo-state"))).resolve()
-    if mode == "aws":
+    if stopping:
+        # Local SRE teardown must not need a live producer or its private token.
+        network = values.get("SRE_MCP_NETWORK", "sre-mcp-boundary")
+    elif mode == "aws":
         network = aws_network(state)
         if values.get("SRE_MCP_NETWORK", network) != network:
             raise SetupError("AWS MCP network conflicts with private producer contract")

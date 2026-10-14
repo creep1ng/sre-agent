@@ -287,3 +287,30 @@ credential/configfiles+holderdeletedverifiedabsent, no contentsread duringcleanu
 Real report13/capture inspected; explicitnativeconnectprereq, no fakeCLIall-container
 claim. Guide correctedcold150s baseline andavoidlegacydirect-tokenrecipe; production
 source unchangedsince5e48ef4. Current63590f8b5a fulltechnicalCI38495525684 SUCCESS.
+Published/attached PR636 head23a69535, base90f8b5a,235changedlines; truecommands
+andnativeproducerconnection prerequisite explicit. Asked once forhumanreviewof
+remaining618/494stack plus636 before ordered integration; no mainreproduction
+inferred. TemporaryAWScredential holder alreadyremoved; nativeSSM42305/42839live.
+Resolved baseOID discrepancy: GraphQL495baseRefOidef5 differs baseRef.targeta657;
+actualmainref/fetcha657 unchanged. Do not infer mainadvance fromPR snapshotOID.
+636governancejob38498396813 failedglobalreconcile on unrelated540metadata; own
+636draftstatusFAILURE isexpected. Do not modify540 or weaken workflow/checks.
+Maintainer accepted remaining618/494stack and636 explicitly. Orderedintegration
+began withnormalmerge/exactheadguards/noadminbypass; 4950fbddb5f,4963c9cc4a0,
+503ebcb689f,504966a27d2,50594f3bd8e,50645122283,507b9d7dd60,508ae2ec009,
+5097929361b,510d8011c48 verifiedMERGED. Live guardedpipeline68157; checkpoints
+/tmp/sre618-merged-stack.jsonl, stops onheadchange/size>400/conflict/unavailablegates.
+AllsourcepreparationPRes accepted/greeentechnical markedready, humanreviewrecorded.
+New63623a69535 fulltechnicalCI38498396668 SUCCESS; stillnotfinalmainexecution.
+CA8audit discovery to verify before sourcechange: --down currentlycalls normal
+AWSconnectionvalidation, so expired/disconnected owner may block SRE-only stop.
+Failure modes before implementation: expired/disconnected MCP; missing token or
+network; foreigncheckoutproject; invalid private config; unintendedvolume removal;
+new active SRE/owner altered by stopping oldselectedproject. E2Efirst againstreal
+oldexpiredsre-618-aws, protectnewactiveproject/volumes. No AWSoperation/tokenread.
+Guardedpipeline68157 stoppedterminal at620CONFLICTING; producer495–513/628–632
+alreadymergednormally/headguards/cap, mainc07db658. Noforce/unreviewedheadmerge.
+Expired-stopE2E authored BEFOREproductionchange: REDselectedexit1 expiredproducer,
+thenGREEN15708 exit0/selectedcontainersabsent/volumes+newprotectedprojectretained.
+Start stillrequiresproducer; downusesbaseComposeonly/removeorphansscopedchecked
+project, localownership validated, noMCPtoken/network/expiryrequirement orAWScall.
