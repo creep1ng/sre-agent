@@ -34,8 +34,15 @@ uv.lock pin runtime dependencies; the owner Dockerfile pins AWS CLI2.36.49.
 `OTEL_OWNER_PRIVATE_DIR` is an explicit host path, never credential contents.
 
 ```sh
-docker build --target runtime -f docker/api.Dockerfile -t sre618-main-api:220cd462 .
-docker build -f docker/otel-owner.Dockerfile -t sre618-owner:2.36.49 .
+docker compose --env-file .env -p sre618-review -f compose.yaml build api
+docker run --rm --user "$(id -u):$(id -g)" --group-add 967 -e HOME=/tmp \
+  --entrypoint docker \
+  --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+  --mount type=bind,source=/usr/bin/docker,target=/usr/bin/docker,readonly \
+  --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-buildx,target=/usr/lib/docker/cli-plugins/docker-buildx,readonly \
+  -w "$PWD" sre618-review-api:latest --host unix:///var/run/docker.sock \
+  build -f docker/otel-owner.Dockerfile -t sre618-owner:2.36.49 .
 docker run --rm --network host --user "$(id -u):$(id -g)" --group-add 967 \
   -e HOME=/tmp -e "SRE_OWNER_PRIVATE_DIR=$OTEL_OWNER_PRIVATE_DIR" --entrypoint python \
   --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
@@ -44,11 +51,11 @@ docker run --rm --network host --user "$(id -u):$(id -g)" --group-add 967 \
   --mount type=bind,source=/usr/bin/docker,target=/usr/bin/docker,readonly \
   --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-compose,target=/usr/lib/docker/cli-plugins/docker-compose,readonly \
   --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-buildx,target=/usr/lib/docker/cli-plugins/docker-buildx,readonly \
-  -w "$PWD" sre618-main-api:220cd462 "$PWD/scripts/verify_setup_aws_journey.py" "$PWD/.env"
+  -w "$PWD" sre618-review-api:latest "$PWD/scripts/verify_setup_aws_journey.py" "$PWD/.env"
 docker run --rm --network none --user "$(id -u):$(id -g)" --entrypoint python \
   --mount "type=bind,source=$PWD/scripts,target=/work/scripts,readonly" \
   --mount "type=bind,source=$PWD/.env.example,target=/work/.env.example,readonly" \
-  sre618-main-api:220cd462 /work/scripts/verify_setup_preflight.py
+  sre618-review-api:latest /work/scripts/verify_setup_preflight.py
 ```
 
 The E2E invokes exactly the canonical setup on first/repeated start, then queries
@@ -75,3 +82,7 @@ replace the state mount with `/tmp/sre618-main-local-private`, and invoke
 Expected/actual exit0, retained domain/audit; occupied-port and fixture-outage
 nonzero, bounded correction converges. The script stops only its explicit
 fixture and scoped SRE; it never deletes volumes or resets real OTel.
+
+Replay correction: image preparation now uses Compose and an API tooling
+container for the owner build. Historical main report15 is unchanged; the same
+builder path was executed successfully for report17, without AWS credential mounts.

@@ -33,7 +33,9 @@ three governed queries returned200 before any API restart, then canonical exit0.
 Owner guard: ingress0, enabled targeted schedule, expiry2026-10-14T13:44:28UTC.
 Every temporary owner credential holder was removed after its operation/journey.
 The previous metrics502 is not erased or declared fixed: immediate reconnect did
-not reproduce it; longer-idle observation and producer root cause remain separate.
+not reproduce it; longer observation found the owner connection had ended, so no idle probe was
+credited. Same-owner reconnection restored queries200/canonical0 without API
+restart; original producer tool-error cause remains unconfirmed.
 Human reviewer has a distinct clean main checkout/private initial config; no
 reviewer setup/workflow was executed by the assistant. CA7 awaits actual results.
 

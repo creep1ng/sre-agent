@@ -363,3 +363,30 @@ postreconnectqueries200 withoutAPIrestart; samecanonicalACTUALexit0 andthree
 queries200again. Previous502notreproduced, no rootcause/fix claim. Reviewer
 notifiedsetupcommand/freshprereqpaths/deadline08:44Bogota; requestedactualstep
 results separately, nohumanproofyet. Allnewwork sourceca15e7ad trackedclean.
+Published/attached639 head7d577ad0,282lines, closingIssuesReferencesempty; new
+mainrealreport17/screenshot/reproduction/matrix, runtimeunchanged. Currenthead
+CI/reviewpending; mustnevercreditprevious639head ifnewidle/human evidencecommit.
+Longeridlechecker66553 confirmedlive, onlyread-onlyAPI, noflags/restarts;
+independenthuman resultsstillpending, reviewer setupnotexecutedbyassistant.
+
+Idle66553 terminal: noAPIprobe credited, SSM96227 ended and contractdisconnected
+before30mincheck; expiry stillfuture. Sameowner25196 reconnected withinapproved
+2h; postidleAPI43499 actual0/threequeries200 withoutAPIrestart/rotation. Prior502
+notreproduced; no backendcause/fix claim. No additionalAWSlaunch/extension.
+PRdemocommand audit founddirectdockerbuild notmatchingCompose/run policy. Fixed
+replaydocs13/15/17 only, preservedhistoricalreports; actualsamecontainerizedowner
+builder92764 exit0/noAWScredentialmount. EmbeddedGitattestationunavailable in
+builder (Gitnotinstalled), externalcheckoutSHAverification remainsauthoritative.
+PR639 replaydocs13/15/17 nowallCompose/run commands (nohostdockerbuild), current
+base339lines beforefinalidleappend. Historicalreports notrewritten. Actualowner
+containerbuilder passed; noAWScredentialholder mount. Longidle wasNOTpassed:
+checker66553 terminalunavailable becauseSSM96227 ended; onlyexacthandlepolled,
+owner25196 restoredsameconnectionwithinTTL. Postidle43499 actual0/allthree
+APIqueries200 withoutAPIrestart, no tokenrotation; furthercanonicalchecklive.
+No reviewercontainers observed atlastboundedprojectcheck; nohumanproofinferred.
+
+Initial639 CI38565265755 failedproduction-browser at existingauditEvents spec273:
+immediatecounterexpected1 butundefined afterclick; 122/123passed. NoCIgreenclaim.
+Sameunchangedspec70767 repeated20times/4workers againstactualmainweb:20passed
+9.9s. Source/testunchanged; no weakening/retries/skips orspeculativeUIpatch.
+New evidence/replayhead mustgetfreshCI; oldfailedrunretainedassuch.

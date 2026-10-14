@@ -23,8 +23,15 @@ mounts it; the API runner receives only its path. The observed holders were
 removed after each operation/journey. New runs require fresh authorized provision.
 
 ```sh
-docker build --target runtime -f docker/api.Dockerfile -t sre618-review-api:ca15e7ad .
-docker build -f docker/otel-owner.Dockerfile -t sre618-owner:2.36.49 .
+docker compose --env-file /tmp/sre618-resume-private/sre.env -p sre618-review -f compose.yaml build api
+docker run --rm --user "$(id -u):$(id -g)" --group-add 967 -e HOME=/tmp \
+  --entrypoint docker \
+  --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
+  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock \
+  --mount type=bind,source=/usr/bin/docker,target=/usr/bin/docker,readonly \
+  --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-buildx,target=/usr/lib/docker/cli-plugins/docker-buildx,readonly \
+  -w "$PWD" sre618-review-api:latest --host unix:///var/run/docker.sock \
+  build -f docker/otel-owner.Dockerfile -t sre618-owner:2.36.49 .
 docker run --rm --network host --user "$(id -u):$(id -g)" --group-add 967 \
   -e HOME=/tmp -e "SRE_OWNER_PRIVATE_DIR=$OTEL_OWNER_PRIVATE_DIR" --entrypoint python \
   --mount "type=bind,source=$(pwd -P),target=$PWD,readonly" \
@@ -33,7 +40,7 @@ docker run --rm --network host --user "$(id -u):$(id -g)" --group-add 967 \
   --mount type=bind,source=/usr/bin/docker,target=/usr/bin/docker,readonly \
   --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-compose,target=/usr/lib/docker/cli-plugins/docker-compose,readonly \
   --mount type=bind,source=/usr/lib/docker/cli-plugins/docker-buildx,target=/usr/lib/docker/cli-plugins/docker-buildx,readonly \
-  -w "$PWD" sre618-review-api:ca15e7ad "$PWD/scripts/verify_setup_aws_journey.py" \
+  -w "$PWD" sre618-review-api:latest "$PWD/scripts/verify_setup_aws_journey.py" \
   /tmp/sre618-resume-private/sre.env
 ```
 
@@ -55,3 +62,12 @@ Independent reviewer prerequisites were prepared in another clean main clone,
 with its own private initial configuration/new project/ports. Assistant did not
 execute that reviewer's setup or journey. Actual human CA7 results remain pending;
 real local OTel remains not executed and report16 remains explicitly controlled.
+
+Containerized owner build was actually executed successfully. Its tooling image
+lacks Git for embedded build-attestation metadata; checkout identity is verified
+externally, not claimed as embedded. No credential holder was mounted to builder.
+
+Candidate QA is separate: initial evidence head7d577ad CI failed one existing
+browser immediate counter assertion (122/123 passed). That unchanged spec
+subsequently passed20 local container repetitions; no test was edited/skipped
+or result rewritten. Updated evidence head requires fresh hosted CI.
