@@ -7,7 +7,8 @@ or manual grants; distinguish installation/readiness from functional acceptance.
 ## Authority / constraints
 - User authorized implementation, current gh reads, branches/pushes/draft PRs in
   creep1ng/sre-agent. Latest goal authorizes merge only after all CA verified;
-  no premature merge/closure, AWS operations or paid LLM calls authorized.
+  no premature issue closure or paid LLM calls. Explicit AWS operations and
+  necessary pre-verification integration merges are now authorized.
 - User requires feature branches and several PRs, each <=400 additions+deletions.
 - Direct route: orchestrate existing Compose, seed and domain APIs; no SDD selected.
 - GitHub Projects consulted live: midnight.agent #8, issue618 OPEN / Todo.
@@ -16,8 +17,9 @@ or manual grants; distinguish installation/readiness from functional acceptance.
   observe RED then GREEN/refactor. Runner: Docker Compose and real HTTP/PostgreSQL.
 - RDD off; do not change configuration. Preserve existing runtime/test boundaries.
 - Engram mirror pending: runtime supplies no registered session ID; writes forbidden.
-- #494 OPEN; AWS producer PRs495–513 not integrated. Fail closed in AWS mode;
-  no guessed interface, file copying, deployment or IAM/network modification.
+- #494 OPEN; producer PRs495–513 unmerged. User explicitly authorized extending
+  producer MCP/fail/reset and SSM token transfer to local0600 API-only storage.
+  Keep zero public ingress, no IAM creation, no token argv/stdout/evidence.
 
 ## Tasks / acceptance checks
 - [x] S618-1 Provision demo operator workflow/triage and investigator direct MCP
@@ -30,6 +32,9 @@ or manual grants; distinguish installation/readiness from functional acceptance.
   investigation state/events/audit, plus OTel fail/reset signals (CA7/8).
 - [x] S618-5 Publish <=400-line feature-branch PR slices with real screenshots,
   tested/base SHA, reproduction, risks/rollback and CA matrix; request human review.
+
+- [ ] S618-6 Extend producer MCP/SSM private connection and owned fail/reset;
+  test-first real E2E, then consume its contract from SRE (CA3/6/7).
 
 ## Remaining acceptance gates
 CA1 final main-integrated clean checkout, CA3 real AWS consuming #494, CA7 independent
@@ -126,3 +131,70 @@ Asked for producer-extension scope, suitable local/authorized target, and ordere
 main integration required byCA1. No AWS credentials/session inspected or reused.
 Next: continue producer/real verification on scoped answers; keep goal active.
 Engram mirror/session summary remains blocked by missing authoritative runtimeID.
+
+User now authorizes necessary OTel Demo AWS operations and integration merges
+before final main verification. No paid call, IAM bootstrap or foreign cleanup.
+User supplied rapid-meadow scripts/otel_ec2.py; explicit operator guard verified.
+Status absent; user approved up: running,2h TTL,scheduled expiry00:21:22UTC.
+Live Projects rechecked618 Todo/494 In progress. CI38465270699 all technical
+jobs SUCCESS at62439b8a2c; draft governance/human acceptance still pending.
+SSM18091->8090 open; ingress empty; cloud-init done, storefront HTTP200.
+Real scoped listing lacks grafana-mcp; sanitized report05 records remaining gap.
+Real Compose25services/no MCP (including stopped); Grafana200, MCP initialize404.
+Owner CLI lacks fail/reset; SRE aws rejected. CA3/7 remain incomplete, not accepted.
+Next: resolve producer MCP/lifecycle contract, then validate SRE and integrate main.
+
+User approved producer extension and private SSM token handoff. Test-first E2E
+will cover actual transport, API-only secret access, fail/reset signal recovery.
+No new IAM/public port; preserve TTL and producer lifecycle. Evidence slice05
+separated from prior4, screenshot captured/inspected (UID correction after EACCES).
+
+S618-6 transport failure modes before implementation: absent MCP route; anonymous
+caller admitted; private token missing/unsafe; invalid authenticated initialize;
+session/header leakage; missing read-only metric/log tools; provider/network errors.
+First live E2E must reject anonymous initialize and then verify authenticated MCP
+initialize+discovery using private token input. It is transport-only, not signal
+recovery or SRE acceptance. Remaining governed query/fail/reset checks follow.
+Auto-review rejected a checks-container token read (API-only scope). No command
+executed. Removed all token access from external E2E: anonymous denial only;
+authenticated probes must use governed API, not a runner-held MCP credential.
+Observed real E2E RED: anonymous initialize HTTP404, exit1; token-free runner,
+only test-code mount, target existing SSM18091. Report06 records actual output.
+Ruff lint/format pass after correcting cache/config-file runner invocation.
+Production AWS contract not implemented yet; do not turn this RED into acceptance.
+Producer slice14 adds owned remote MCP/flags and loopback-only private token
+handoff. Reuses locked MCP image and original app Compose; never edits upstream.
+Lint/format pass; live GREEN requires installer/CLI slice next. Consumer E2E RED
+remains83-line slice06; source module has no token argv/stdout/log output.
+Producer prepare-mcp failed on legacy missing image. Read-only scoped inspection
+confirmed cause; ListCommands denied by IAM (not expanded), malformed JSON local
+probe corrected. Explicit prepare now pulls locked image, preserves token; live
+GREEN anonymous MCP401 via SSM18092, no token access in E2E. Report07 is partial.
+User authorized exactly1h extension; owner CLI updates persisted expiry records.
+One-hour extension observed: expiry2026-10-14T01:21:22UTC (20:21 Bogotá).
+Transport slice16 uses native SSM and private Unix socket; container joins only
+prepared internal MCP network, mounts only pipe code/socket, no token/provider/AWS
+credentials, no host port. Pinned existing Python image, never implicit pull.
+Lint/format pass; full API transport E2E still pending private handoff/client slice.
+Live connect-mcp succeeded; local connection.json/token each0600. Relay mounts
+only pipe.py and transport socket, joins only internal sre-aws-mcp-boundary,
+no host ports, no MCP/provider/AWS env. Token handoff service stopped via owner
+SSM; retained token is not read by producer on reconnect. Contract state explicit.
+Next: consume contract in SRE; observe valid AWS config RED before source change.
+SRE consumer RED with valid AWS contract exit1 (after correcting --env-file flag);
+GREEN same canonical command: API/web/schema/grants plus real governed MCP200,
+restricted403, paid disabled. Eight original preflight negatives remain GREEN.
+Raw MCP access not used for authenticated checks. Metrics vector(1)1series and
+logs *1document observed, but checkout signals absent. Public legacy demo.env
+lacks declared FRONTEND_PROXY_ADDR/K6_TARGET_URL; current producer/main have them.
+Next: owner-only legacy env convergence, observe fail/reset through governed API.
+Legacy owner's tracked demo.env had only3 values (no frontend/K6 target override).
+Current declared6-value file now installed as additional owned env layer; prepare
+converges only flagd/checkout/MCP/load-generator/collector, untouched upstream/token.
+Owner prepare exit0; wait for real traffic ingestion before accepting signals.
+
+Integration reconciliation for PR620: retained the newer producer/main tracker;
+the earlier tracker remains in reviewed ancestor51315f6. Only this tracking file
+conflicted (add/add); runtime/tests from the reviewed permissions slice were not
+rewritten. Incoming main adds already-reviewed producer/static files. Re-run
+current candidate CI before integrating; no final-main acceptance is inferred.

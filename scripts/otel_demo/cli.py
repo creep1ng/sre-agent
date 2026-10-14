@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from datetime import timedelta
+from pathlib import Path
+
+from .aws import AwsCli
+from .common import (
+    EXPECTED_ACCOUNT_ENV,
+    OPERATOR_PROFILE,
+    OPERATOR_REGION,
+    ROOT,
+    DemoConfig,
+    DemoError,
+)
+from .controller import DemoController
+from .mcp_connection import connect as connect_mcp
+from .mcp_install import flags, prepare
+
+
+def _duration(value: str) -> timedelta:
+    try:
+        hours = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("duration must be in hours") from exc
+    if hours <= 0 or hours > 12:
+        raise argparse.ArgumentTypeError("duration must be greater than zero and at most 12 hours")
+    return timedelta(hours=hours)
+
+
+def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="action", required=True)
+    sub.add_parser("up")
+    sub.add_parser("status")
+    sub.add_parser("prepare-mcp")
+    sub.add_parser("fail")
+    sub.add_parser("reset")
+    mcp = sub.add_parser("connect-mcp")
+    mcp.add_argument("--state-dir", type=Path, default=ROOT / ".demo-state" / "aws")
+    mcp.add_argument("--network", default="sre-aws-mcp-boundary")
+    mcp.add_argument("--subnet")
+    mcp.add_argument("--local-port", type=int, default=18092)
+    extend = sub.add_parser("extend")
+    extend.add_argument("--hours", type=_duration, default=timedelta(hours=1))
+    connect = sub.add_parser("connect")
+    connect.add_argument("--local-port", type=int, default=8090)
+    connect.add_argument("--remote-port", type=int, default=8090)
+    sub.add_parser("down")
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _arguments(argv)
+    config = DemoConfig(
+        profile=OPERATOR_PROFILE,
+        region=OPERATOR_REGION,
+        expected_account_id=os.environ.get(EXPECTED_ACCOUNT_ENV),
+    )
+    controller = DemoController(
+        aws=AwsCli(profile=config.profile, region=config.region, config=config),
+        config=config,
+    )
+    try:
+        controller.aws.verify_identity()
+        if args.action == "up":
+            result = controller.up()
+        elif args.action == "status":
+            result = controller.status()
+        elif args.action == "prepare-mcp":
+            result = prepare(controller)
+        elif args.action in {"fail", "reset"}:
+            result = flags(controller, args.action)
+        elif args.action == "connect-mcp":
+            try:
+                connect_mcp(controller, args.state_dir, args.network, args.subnet, args.local_port)
+            except KeyboardInterrupt:
+                print(
+                    "owned MCP connection stopped; Demo, token and data preserved", file=sys.stderr
+                )
+                return 130
+            return 0
+        elif args.action == "extend":
+            result = {"expires_at": controller.extend(extension=args.hours).isoformat()}
+        elif args.action == "connect":
+            try:
+                controller.connect(local_port=args.local_port, remote_port=args.remote_port)
+            except KeyboardInterrupt:
+                print("SSM port-forwarding session interrupted", file=sys.stderr)
+                return 130
+            return 0
+        else:
+            controller.down()
+            return 0
+    except DemoError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    except (OSError, ValueError, KeyError):
+        print(
+            "private AWS configuration/transport unavailable; "
+            "preserve state and inspect owner status",
+            file=sys.stderr,
+        )
+        return 2
+    print(json.dumps(result, sort_keys=True))
+    return 0
