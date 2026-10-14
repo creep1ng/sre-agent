@@ -390,3 +390,15 @@ immediatecounterexpected1 butundefined afterclick; 122/123passed. NoCIgreenclaim
 Sameunchangedspec70767 repeated20times/4workers againstactualmainweb:20passed
 9.9s. Source/testunchanged; no weakening/retries/skips orspeculativeUIpatch.
 New evidence/replayhead mustgetfreshCI; oldfailedrunretainedassuch.
+
+2026-10-14 human acceptance documentation: explicit user directs matrix/public
+record update and defers real localOTel outside demo (insufficient machine).
+Direct route, docs only; report18 distinguishes personal report from automated
+output. Human mainca15 setup0/URLs, clean-temp/newDB clarification, workflow
+allowed/denied, inspected discoveryaudit, real ownerfail/reset with150s waits
+and nonempty changed/recovered logs/proxy recorded; unknown dispatch retained.
+Deliberate invalid queryrange HTTP422 verified, original422 causeunconfirmed.
+CA7 humanreported covered; CA3 localreal explicitlydeferred/notpassed. CA8
+updated subjectslice review/CI. Existing primaryworktree pendingnotes preserved.
+No AWS/newrun/code/tests/Compose mutation; no secrets or autoissueclosure.
+Runtimeidentity absent so Engram agentwrites unavailable; localrecord retained.
