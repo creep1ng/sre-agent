@@ -148,3 +148,53 @@ User approved producer extension and private SSM token handoff. Test-first E2E
 will cover actual transport, API-only secret access, fail/reset signal recovery.
 No new IAM/public port; preserve TTL and producer lifecycle. Evidence slice05
 separated from prior4, screenshot captured/inspected (UID correction after EACCES).
+
+S618-6 transport failure modes before implementation: absent MCP route; anonymous
+caller admitted; private token missing/unsafe; invalid authenticated initialize;
+session/header leakage; missing read-only metric/log tools; provider/network errors.
+First live E2E must reject anonymous initialize and then verify authenticated MCP
+initialize+discovery using private token input. It is transport-only, not signal
+recovery or SRE acceptance. Remaining governed query/fail/reset checks follow.
+Auto-review rejected a checks-container token read (API-only scope). No command
+executed. Removed all token access from external E2E: anonymous denial only;
+authenticated probes must use governed API, not a runner-held MCP credential.
+Observed real E2E RED: anonymous initialize HTTP404, exit1; token-free runner,
+only test-code mount, target existing SSM18091. Report06 records actual output.
+Ruff lint/format pass after correcting cache/config-file runner invocation.
+Production AWS contract not implemented yet; do not turn this RED into acceptance.
+Producer slice14 adds owned remote MCP/flags and loopback-only private token
+handoff. Reuses locked MCP image and original app Compose; never edits upstream.
+Lint/format pass; live GREEN requires installer/CLI slice next. Consumer E2E RED
+remains83-line slice06; source module has no token argv/stdout/log output.
+Producer prepare-mcp failed on legacy missing image. Read-only scoped inspection
+confirmed cause; ListCommands denied by IAM (not expanded), malformed JSON local
+probe corrected. Explicit prepare now pulls locked image, preserves token; live
+GREEN anonymous MCP401 via SSM18092, no token access in E2E. Report07 is partial.
+User authorized exactly1h extension; owner CLI updates persisted expiry records.
+One-hour extension observed: expiry2026-10-14T01:21:22UTC (20:21 Bogotá).
+Transport slice16 uses native SSM and private Unix socket; container joins only
+prepared internal MCP network, mounts only pipe code/socket, no token/provider/AWS
+credentials, no host port. Pinned existing Python image, never implicit pull.
+Lint/format pass; full API transport E2E still pending private handoff/client slice.
+Live connect-mcp succeeded; local connection.json/token each0600. Relay mounts
+only pipe.py and transport socket, joins only internal sre-aws-mcp-boundary,
+no host ports, no MCP/provider/AWS env. Token handoff service stopped via owner
+SSM; retained token is not read by producer on reconnect. Contract state explicit.
+Next: consume contract in SRE; observe valid AWS config RED before source change.
+SRE consumer RED with valid AWS contract exit1 (after correcting --env-file flag);
+GREEN same canonical command: API/web/schema/grants plus real governed MCP200,
+restricted403, paid disabled. Eight original preflight negatives remain GREEN.
+Raw MCP access not used for authenticated checks. Metrics vector(1)1series and
+logs *1document observed, but checkout signals absent. Public legacy demo.env
+lacks declared FRONTEND_PROXY_ADDR/K6_TARGET_URL; current producer/main have them.
+Next: owner-only legacy env convergence, observe fail/reset through governed API.
+Legacy owner's tracked demo.env had only3 values (no frontend/K6 target override).
+Current declared6-value file now installed as additional owned env layer; prepare
+converges only flagd/checkout/MCP/load-generator/collector, untouched upstream/token.
+Owner prepare exit0; wait for real traffic ingestion before accepting signals.
+
+Integration reconciliation for PR620: retained the newer producer/main tracker;
+the earlier tracker remains in reviewed ancestor51315f6. Only this tracking file
+conflicted (add/add); runtime/tests from the reviewed permissions slice were not
+rewritten. Incoming main adds already-reviewed producer/static files. Re-run
+current candidate CI before integrating; no final-main acceptance is inferred.

@@ -18,6 +18,10 @@ const scopeNote = document.getElementById("result-scope-note");
 const resultList = document.getElementById("result-list");
 const monthNote = document.getElementById("result-month-note");
 const monthValue = document.getElementById("summary-month");
+const requestDetailStatus = document.getElementById("request-detail-status");
+const requestDetailLoading = document.getElementById("request-detail-loading");
+const requestDetailEmpty = document.getElementById("request-detail-empty");
+const requestDetailList = document.getElementById("request-detail-list");
 const fields = {
   requestCount: document.getElementById("summary-request-count"),
   incidentRuns: document.getElementById("summary-incident-runs"),
@@ -93,6 +97,103 @@ function clearResult() {
   scopeNote.hidden = true;
   monthNote.hidden = true;
   statusLine.textContent = "Choose a filter and load consumption.";
+  clearRequestDetail("Load consumption to see request detail.");
+}
+
+function clearRequestDetail(message) {
+  requestDetailLoading.hidden = true;
+  requestDetailList.hidden = true;
+  requestDetailEmpty.hidden = true;
+  requestDetailList.replaceChildren();
+  if (typeof message === "string") requestDetailStatus.textContent = message;
+}
+
+// Contract 2.8.0 readUsageRequests allow-list only. No HMAC joins, no
+// prompt/output/headers/credentials, no incident/run links: navigation is
+// always { status: "unsupported" } per contract, so links are never rendered.
+// Null stays unavailable; no arithmetic, pricing, or temporal grouping here.
+function consumptionLine(consumption) {
+  if (consumption === null || consumption === undefined) return "Consumption unavailable";
+  const parts = [
+    `availability ${textOf(consumption.availability)}`,
+    `source ${textOf(consumption.source)}`,
+    `input ${textOf(consumption.input_tokens)}`,
+    `output ${textOf(consumption.output_tokens)}`,
+    `total ${textOf(consumption.total_tokens)}`,
+  ];
+  const billedMissing = consumption.billed_usd === null || consumption.billed_usd === undefined;
+  parts.push(billedMissing ? "Billed unavailable" : `Billed ${consumption.billed_usd} USD / exact`);
+  const pricing = consumption.pricing_context;
+  if (pricing !== null && pricing !== undefined) {
+    parts.push(`price ${textOf(pricing.price_version)} @ ${textOf(pricing.observed_at)}`);
+  }
+  return parts.join(" · ");
+}
+
+function attributionNote(status) {
+  if (status === "legacy")
+    return "Historical unavailable — no verifiable history (never reconstructed from current assignment).";
+  if (status === "unavailable")
+    return "Unavailable — no attribution snapshot (rejected before provider invocation).";
+  if (status === "partial") return "Partial — requested attribution is available; credited attribution is incomplete.";
+  return "Available — immutable snapshot as published.";
+}
+
+function renderRequestDetail(payload) {
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  requestDetailLoading.hidden = true;
+  requestDetailList.replaceChildren();
+  if (items.length === 0) {
+    requestDetailList.hidden = true;
+    requestDetailEmpty.hidden = false;
+    requestDetailStatus.textContent = "No request detail in this scope.";
+    announce("No request detail in this scope.");
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement("li");
+    row.setAttribute("data-request-row", String(item?.request_id ?? ""));
+    const title = document.createElement("p");
+    title.className = "ma-mono";
+    title.textContent = `Request ${textOf(item?.request_id)} · ${textOf(item?.month)} · ${textOf(item?.attribution_status)}`;
+    row.appendChild(title);
+    const note = document.createElement("p");
+    note.className = "ma-panel__description";
+    note.textContent = attributionNote(item?.attribution_status);
+    note.setAttribute("data-attribution-note", String(item?.attribution_status ?? ""));
+    row.appendChild(note);
+    const requested = item?.requested_assignment ?? {};
+    const requestedLine = document.createElement("p");
+    requestedLine.className = "ma-mono";
+    requestedLine.setAttribute("data-requested-assignment", requested.availability ?? "");
+    requestedLine.textContent =
+      requested.availability === "available"
+        ? `Alias ${textOf(requested.alias)} · Model ${textOf(requested.model)} · Provider ${textOf(requested.provider)} · Router ${textOf(requested.router)}`
+        : `Requested ${textOf(requested.availability)}`;
+    row.appendChild(requestedLine);
+    const creditedModel = item?.credited_model ?? {};
+    const creditedProvider = item?.credited_provider ?? {};
+    const creditedLine = document.createElement("p");
+    creditedLine.className = "ma-mono";
+    creditedLine.setAttribute("data-credited", `${creditedModel.availability ?? ""}/${creditedProvider.availability ?? ""}`);
+    creditedLine.textContent = `Credited model ${textOf(creditedModel.value)} (${textOf(creditedModel.availability)}) · provider ${textOf(creditedProvider.value)} (${textOf(creditedProvider.availability)})`;
+    row.appendChild(creditedLine);
+    const consumption = document.createElement("p");
+    consumption.className = "ma-mono";
+    consumption.setAttribute("data-consumption", String(item?.consumption === null ? "unavailable" : "present"));
+    consumption.textContent = consumptionLine(item?.consumption ?? null);
+    row.appendChild(consumption);
+    const navigation = document.createElement("p");
+    navigation.className = "ma-panel__description";
+    navigation.setAttribute("data-navigation", "unsupported");
+    navigation.textContent = "Navigation unsupported — no incident or run links per contract.";
+    row.appendChild(navigation);
+    requestDetailList.appendChild(row);
+  }
+  requestDetailList.hidden = false;
+  requestDetailEmpty.hidden = true;
+  requestDetailStatus.textContent = `Request detail loaded: ${items.length} bounded request${items.length === 1 ? "" : "s"}.`;
+  announce(requestDetailStatus.textContent);
 }
 
 function setActiveFilter(name) {
@@ -106,6 +207,7 @@ function setActiveFilter(name) {
   }
   hideError();
   clearResult();
+  clearRequestDetail("Load consumption to see request detail.");
   page.dataset.state = "idle";
   announce(`Filter: ${name}. Previous input and result cleared.`);
 }
@@ -169,6 +271,7 @@ sessionForm.addEventListener("submit", (event) => {
   sessionGeneration += 1;
   hideError();
   clearResult();
+  clearRequestDetail("Load consumption to see request detail.");
   page.dataset.state = "idle";
   announce("Session set. Choose a filter and load consumption.");
 });
@@ -178,6 +281,7 @@ disconnectButton.addEventListener("click", () => {
   credentialStore.clear();
   hideError();
   clearResult();
+  clearRequestDetail("Load consumption to see request detail.");
   page.dataset.state = "idle";
   announce("Session cleared.");
 });
@@ -192,6 +296,9 @@ queryForm.addEventListener("submit", async (event) => {
   monthNote.hidden = true;
   loadingState.hidden = false;
   statusLine.textContent = "Loading consumption…";
+  clearRequestDetail();
+  requestDetailLoading.hidden = false;
+  requestDetailStatus.textContent = "Loading request detail…";
   page.dataset.state = "loading";
   announce("Loading consumption.");
   const requestFilter = activeFilter;
@@ -200,6 +307,7 @@ queryForm.addEventListener("submit", async (event) => {
     if (generation !== sessionGeneration) return;
     loadingState.hidden = true;
     statusLine.textContent = "Choose a filter and load consumption.";
+    clearRequestDetail("Load consumption to see request detail.");
     page.dataset.state = "idle";
     showError("Choose exactly one valid filter", "Enter a value for the selected filter.");
     return;
@@ -214,6 +322,19 @@ queryForm.addEventListener("submit", async (event) => {
     const payload = await controlApi.readUsageConsumption(selector);
     if (generation !== sessionGeneration) return;
     renderSummary(payload, requestFilter, value);
+    try {
+      const detail = await controlApi.readUsageRequests(selector);
+      if (generation !== sessionGeneration) return;
+      renderRequestDetail(detail);
+    } catch (detailError) {
+      if (generation !== sessionGeneration) return;
+      requestDetailLoading.hidden = true;
+      requestDetailList.hidden = true;
+      requestDetailEmpty.hidden = true;
+      const [title, detailMessage] = describeError(detailError);
+      requestDetailStatus.textContent = `${title}. ${detailMessage}`;
+      announce(`Request detail: ${title}. ${detailMessage}`);
+    }
   } catch (error) {
     if (generation !== sessionGeneration) return;
     loadingState.hidden = true;
@@ -221,6 +342,7 @@ queryForm.addEventListener("submit", async (event) => {
     scopeNote.hidden = true;
     monthNote.hidden = true;
     statusLine.textContent = "Not loaded.";
+    clearRequestDetail("Request detail not loaded.");
     page.dataset.state = "error";
     const [title, detail] = describeError(error);
     showError(title, detail);
