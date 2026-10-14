@@ -31,7 +31,7 @@ INITIAL_STATE_PATH = (
     REPOSITORY_ROOT / "agent/fixtures/incidents/otel-payment-failure/initial-state.yaml"
 )
 MITIGATION = {
-    "mitigation_id": "mit-disable-payment-flag",
+    "mitigation_id": "mit_disable_payment_flag",
     "description": "Disable the paymentFailure flag in flagd.",
     "steps": ["Ask the operator to set paymentFailure to off."],
     "risk": "low",

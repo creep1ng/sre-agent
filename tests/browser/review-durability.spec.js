@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
 
 // Issue #41 slice 41b: durability verification of human decisions against the
-// REAL backend. No route interception in this file: every request below reaches
-// the compose stack (web proxy + FastAPI + Postgres).
+// REAL backend. Every request below reaches the compose stack (web proxy +
+// FastAPI + Postgres). The idempotency journey records the UI's own POST with
+// a passthrough route (no fulfill, no mock) so the replay reuses the exact
+// original payload; everything else goes direct with no interception at all.
 //
 // Setup (not evidence): incidents come from scripts/seed_review_durability.py,
 // run inside the checks container (see the PR body). Each test owns its
@@ -11,13 +13,15 @@ import { expect, test } from "@playwright/test";
 // submit, so keys are never shared between tests.
 //
 // What the real contract exposes for verification: the commands endpoint
-// answers 202/409, the incident detail carries the durable run state, and the
-// timeline lists the persisted decision events (one per accepted decision).
+// answers 202/409, review commands carry the reviewed `expected_incident_version`
+// (schema-required for approve/reject/request_changes), the incident detail
+// carries the durable run state, and the timeline lists the persisted decision
+// events (one per accepted decision).
 // The accepted free-text reason lives in the decisions store covered by the
 // HTTP suite; here the UI must never lose the typed reason on a conflict.
-// There is deliberately no optimistic-version scenario: the command contract
-// carries no client-supplied expected version, so staleness is only observable
-// as "the state no longer admits this command" (409 run_conflict).
+// There is deliberately no client-driven optimistic-version scenario beyond
+// the contract: staleness beyond idempotency is only observable as "the state
+// no longer admits this command" (409 run_conflict).
 //
 // Gate: these journeys need the live compose stack with seeded grants, so they
 // skip unless SRE_REAL_BACKEND=1 with REVIEW_API_KEY (a human credential holding
@@ -35,22 +39,28 @@ test.skip(!REAL, "needs the live compose stack: SRE_REAL_BACKEND=1 with REVIEW_A
 const incidentFor = (n) => `inc-41b-j${n}-${STAMP}`;
 const runFor = (n) => `run_41bj${n}001${STAMP.replace(/-/g, "")}`;
 
-function commandBody(comment) {
-  return {
-    command: "approve_mitigation",
-    actor: "human",
-    actor_reference: { reference_version: "1.0.0", principal_id: "demo-human" },
-    authorization: { action: "run.approve", resource: { type: "incident_workflow", id: "incident-response" } },
-    comment,
-  };
-}
-
 async function apiPostCommand(request, incident, run, key, body) {
   const response = await request.post(`${API}/v1/incidents/${incident}/runs/${run}/commands`, {
     headers: { Authorization: `Bearer ${KEY}`, "Idempotency-Key": key, "Content-Type": "application/json" },
     data: body,
   });
   return { status: response.status(), json: await response.json() };
+}
+
+// Records the UI's own command POST and lets it through untouched: the
+// returned payload is byte-for-byte what the backend accepted, so replaying it
+// proves idempotency instead of re-implementing the request.
+async function recordUiCommand(page) {
+  const seen = {};
+  await page.route("**/api/v1/incidents/**/commands", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      seen.key = request.headers()["idempotency-key"] ?? "";
+      seen.body = request.postDataJSON() ?? null;
+    }
+    await route.fallback();
+  });
+  return seen;
 }
 
 async function apiGetIncident(request, incident) {
@@ -90,11 +100,16 @@ test("resubmitting the accepted decision replays without duplicating it", async 
   const run = runFor(1);
   const comment = `Durability reason J1 ${STAMP}.`;
   await openReviewReal(page, incident, run);
+  const seen = await recordUiCommand(page);
   const key = await startDecision(page, comment);
   await page.locator("#decision-submit").click();
   await expect(page.locator("#receipt-line")).toContainText("approve_mitigation", { timeout: 15000 });
 
-  const replay = await apiPostCommand(request, incident, run, key, commandBody(comment));
+  expect(seen.key).toBe(key);
+  expect(seen.body).toMatchObject({ command: "approve_mitigation", comment });
+  expect(Number.isInteger(seen.body?.expected_incident_version)).toBe(true);
+
+  const replay = await apiPostCommand(request, incident, run, seen.key, seen.body);
   expect(replay.status).toBe(202);
   expect(replay.json.run_id).toBe(run);
   expect(replay.json.current_state).toBe("verifying");
