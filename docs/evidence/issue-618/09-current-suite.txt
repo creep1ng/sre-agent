@@ -1,0 +1,10 @@
+Current integrated compatibility run
+Source: 61a031cee953ddfa96ac73db1cd7a634436bd44a plus new E2E script.
+Command: docker compose --env-file .env --profile checks -p sre-618-checks -f compose.yaml -f <owned-IPAM-layer> run --build --rm python-checks pytest -q
+Environment: pinned project Dockerfile/uv.lock, isolated PostgreSQL17.4 tmpfs, IPAM10.253.161.0/28.
+Live OpenRouter smoke not enabled; actual AWS data verified separately by API E2E.
+  /app/.venv/lib/python3.12/site-packages/uvicorn/protocols/websockets/websockets_impl.py:17: DeprecationWarning: websockets.server.WebSocketServerProtocol is deprecated
+    from websockets.server import WebSocketServerProtocol
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1908 passed, 1 skipped, 2 warnings in 400.63s (0:06:40)

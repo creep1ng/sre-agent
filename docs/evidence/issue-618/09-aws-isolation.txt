@@ -1,0 +1,3 @@
+harness: MCP/provider/AWS secret variables absent
+harness: direct MCP transport unreachable
+harness: direct external transport unreachable

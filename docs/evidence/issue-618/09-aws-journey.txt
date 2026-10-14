@@ -1,0 +1,48 @@
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18628; web http://127.0.0.1:18629
+setup: paid LLM disabled
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+baseline: calls=226.0, errors=0.0, completed_orders=16, proxy200=16, proxy500=0
+owner fail completed; no token or command payload printed
+waiting150s: isolate declared failure's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+failure: calls=52.0, errors=12.0, completed_orders=0, proxy200=0, proxy500=11
+POST /v1/alerts/al-aws-setup-cce0189dec27/triage/commands HTTP403
+POST /v1/alerts/al-aws-setup-cce0189dec27/triage/commands HTTP200
+POST /v1/alerts/al-aws-setup-cce0189dec27/triage/commands HTTP201
+POST /v1/incidents/inc-68725c6bb5bfc08ef74127a552219a58/runs HTTP201
+GET /v1/incidents/inc-68725c6bb5bfc08ef74127a552219a58/runs/run_2e88ae25651be9cf HTTP200
+GET /v1/incidents/inc-68725c6bb5bfc08ef74127a552219a58/runs/run_2e88ae25651be9cf HTTP403
+GET /v1/incidents/inc-68725c6bb5bfc08ef74127a552219a58/runs/run_2e88ae25651be9cf/events HTTP200
+GET /v1/incidents/inc-68725c6bb5bfc08ef74127a552219a58/runs/run_2e88ae25651be9cf/events HTTP403
+GET /v1/audit-events HTTP200
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18628; web http://127.0.0.1:18629
+setup: paid LLM disabled
+REPEAT: domain state/credential digest unchanged; audit retained
+owner reset completed; no token or command payload printed
+waiting150s: isolate recovery's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+recovery: calls=26.0, errors=0.0, completed_orders=4, proxy200=4, proxy500=0
+REAL AWS JOURNEY PASS; paid inference, independent human/main acceptance NOT verified
