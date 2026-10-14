@@ -272,3 +272,18 @@ private/unexported, signals not accepted. New nativeMCP connection42839 started
 with separate stateaws-container/networkvalidation2/CIDR128/28. New SRE project
 sre-618-aws-container ports18638/18639/18640, CIDRs144/28 and160/28; old retained.
 No AWS credential holder is inside checkout or mounted into productionAPI runner.
+First fullycontainerized AWS journey90014 terminalexit1: governed readiness200,
+but baselinecalls0/errors0/orders0/proxy0. Realtraffic-window assertion correctly
+failed; noownerfail/reset executed or credited. Actualsource5e48ef4. PreserveRED
+/tmp/sre618-container-aws-journey.txt; diagnose onlynew owned demo, no fake signals.
+Healthdiagnostic initiallylocalimportfailed/noAWScall; correctedpublic/work import.
+Newhealthsession51715 saves exactSSMhandle/private diagdir before polling.
+Second fullycontainerized journey46097 exit0: baseline108calls/0errors/6orders,
+failure68calls/16errors/0orders/proxy500x9, recovery234calls/0errors/15orders/proxy200x14.
+Triage/run/read/events/audit +restricted403; repeatstable/auditretained. Ownerfail
+andreset actuallyraninseparateownercontainers. Parentinspection: noAWScredmount/env.
+Ownerguard13304 exit0 verifiedingress0/scheduledexpiry03:28:03UTC. Temporaryowner
+credential/configfiles+holderdeletedverifiedabsent, no contentsread duringcleanup.
+Real report13/capture inspected; explicitnativeconnectprereq, no fakeCLIall-container
+claim. Guide correctedcold150s baseline andavoidlegacydirect-tokenrecipe; production
+source unchangedsince5e48ef4. Current63590f8b5a fulltechnicalCI38495525684 SUCCESS.

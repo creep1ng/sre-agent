@@ -1,0 +1,59 @@
+Actual fully containerized AWS journey
+Tested source: 5e48ef4d0ec769615f2e332a7111c6607e1cd4ec
+New separately authorized2h demo; expiry2026-10-14T03:28:03UTC.
+Owner AWS credentials mounted ONLY in separate owner child; live parent mount/env inspection passed.
+Local Docker control is explicit, not total host isolation. No paid inference.
+Initial terminal attempt had zero traffic, exited1 and is NOT credited as success.
+After real ingestion yielded17 service series, same source was rerun below.
+
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18638; web http://127.0.0.1:18639
+setup: paid LLM disabled
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+baseline: calls=108.0, errors=0.0, completed_orders=6, proxy200=6, proxy500=0
+owner fail completed; no token or command payload printed
+waiting150s: isolate declared failure's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+failure: calls=68.0, errors=16.0, completed_orders=0, proxy200=0, proxy500=9
+POST /v1/alerts/al-aws-setup-fabb3d1fb1c0/triage/commands HTTP403
+POST /v1/alerts/al-aws-setup-fabb3d1fb1c0/triage/commands HTTP200
+POST /v1/alerts/al-aws-setup-fabb3d1fb1c0/triage/commands HTTP201
+POST /v1/incidents/inc-2c7108a2085bddd29625f062a363b1eb/runs HTTP201
+GET /v1/incidents/inc-2c7108a2085bddd29625f062a363b1eb/runs/run_80e6985dee4cfa60 HTTP200
+GET /v1/incidents/inc-2c7108a2085bddd29625f062a363b1eb/runs/run_80e6985dee4cfa60 HTTP403
+GET /v1/incidents/inc-2c7108a2085bddd29625f062a363b1eb/runs/run_80e6985dee4cfa60/events HTTP200
+GET /v1/incidents/inc-2c7108a2085bddd29625f062a363b1eb/runs/run_80e6985dee4cfa60/events HTTP403
+GET /v1/audit-events HTTP200
+setup: database ready
+setup: migrations ready
+setup: seed ready
+setup: MCP registry ready
+setup: demo permissions ready
+setup: API/web ready
+setup: aws OTel/MCP governed connectivity ready; functional acceptance NOT tested
+setup: API http://127.0.0.1:18638; web http://127.0.0.1:18639
+setup: paid LLM disabled
+REPEAT: domain state/credential digest unchanged; audit retained
+owner reset completed; no token or command payload printed
+waiting150s: isolate recovery's two-minute signal window
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_prometheus HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+POST /v1/mcp/tools/query_elasticsearch HTTP200
+recovery: calls=234.0, errors=0.0, completed_orders=15, proxy200=14, proxy500=0
+REAL AWS JOURNEY PASS; paid inference, independent human/main acceptance NOT verified
+
+Actual exit0. Final integrated-main and independent reviewer execution remain pending.
+Sanitized: yes
