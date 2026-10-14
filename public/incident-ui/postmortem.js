@@ -24,7 +24,7 @@ const PRESENTATION_FIXTURE = Object.freeze({
 const UNKNOWN = "Desconocido (no registrado)";
 const PENDING = "Pendiente";
 
-const state = { incidentId: null, runId: null, generation: 0, timelineSeq: 0 };
+const state = { incidentId: null, runId: null, generation: 0, timelineSeq: 0, cursor: null, hasMore: false, eventCount: 0, paging: false };
 
 const nodes = {};
 const credentialStore = createMemoryCredentialStore();
@@ -41,7 +41,7 @@ function cacheNodes() {
     "error-403", "error-404", "error-503", "context-section", "fact-incident",
     "fact-state", "fact-artifact", "fixture-banner",
     "artifact-section", "artifact-sections", "provenance-section", "run-select",
-    "provenance-list", "review-section", "review-form", "review-note",
+    "provenance-list", "timeline-count", "load-more", "review-section", "review-form", "review-note",
     "review-saved",
     "refresh-button", "forget-credential",
   ].forEach((id) => {
@@ -131,9 +131,9 @@ function renderRuns(detail, activeRunId) {
   if (activeRunId !== null) select.value = activeRunId;
 }
 
-function renderProvenance(events, runId) {
+function renderProvenance(events, runId, { append = false } = {}) {
   const list = nodes["provenance-list"];
-  list.replaceChildren();
+  if (!append) list.replaceChildren();
   events.forEach((event) => {
     const item = document.createElement("li");
     const summary = document.createElement("strong");
@@ -143,13 +143,32 @@ function renderProvenance(events, runId) {
     meta.textContent = `run ${runId} · seq ${event.sequence} · registro, no ejecucion confirmada`;
     item.append(summary, meta);
     list.append(item);
+    state.eventCount += 1;
   });
+  nodes["timeline-count"].textContent =
+    state.eventCount === 0 ? "Sin eventos para este run." : `${state.eventCount} evento(s)`;
   nodes["provenance-section"].hidden = false;
+}
+
+function clearTimeline() {
+  nodes["provenance-list"].replaceChildren();
+  nodes["timeline-count"].textContent = "";
+  nodes["load-more"].hidden = true;
+  nodes["load-more"].disabled = false;
+  state.cursor = null;
+  state.hasMore = false;
+  state.eventCount = 0;
+  state.paging = false;
+}
+
+function syncLoadMore() {
+  nodes["load-more"].hidden = !state.hasMore;
 }
 
 async function loadTimeline(runId) {
   const generation = state.generation;
   const request = (state.timelineSeq += 1);
+  clearTimeline();
   let page;
   try {
     page = await client.getIncidentTimeline(state.incidentId, { runId, limit: 50 });
@@ -162,6 +181,40 @@ async function loadTimeline(runId) {
   // new request that supersedes any earlier one for the same run.
   if (generation !== state.generation || request !== state.timelineSeq || runId !== state.runId) return;
   renderProvenance(page.events ?? [], runId);
+  state.cursor = page.next_cursor ?? null;
+  state.hasMore = page.has_more === true;
+  syncLoadMore();
+}
+
+async function loadMore() {
+  // Explicit continuation: the timeline contract is cursor-paginated, so the
+  // list must never present the first page as the complete provenance.
+  if (state.paging || !state.hasMore || state.runId === null) return;
+  const generation = state.generation;
+  const request = state.timelineSeq;
+  const runId = state.runId;
+  const after = state.cursor;
+  state.paging = true;
+  nodes["load-more"].disabled = true;
+  let page;
+  try {
+    page = await client.getIncidentTimeline(state.incidentId, { runId, after, limit: 50 });
+  } catch (error) {
+    if (generation !== state.generation || request !== state.timelineSeq || runId !== state.runId) return;
+    throw error;
+  } finally {
+    if (generation === state.generation && request === state.timelineSeq && runId === state.runId) {
+      state.paging = false;
+      nodes["load-more"].disabled = false;
+    }
+  }
+  // A page that arrives after the run changed, or superseded by a reselect,
+  // is dropped instead of mixing another run into the current list.
+  if (generation !== state.generation || request !== state.timelineSeq || runId !== state.runId) return;
+  renderProvenance(page.events ?? [], runId, { append: true });
+  state.cursor = page.next_cursor ?? null;
+  state.hasMore = page.has_more === true;
+  syncLoadMore();
 }
 
 async function loadAll() {
@@ -225,6 +278,12 @@ function forgetCredential() {
   state.generation += 1;
   state.runId = null;
   credentialStore.clear();
+  // Session-only review content belongs to the previous credential: leaving
+  // the note or its saved indicator visible would leak one operator's text
+  // into the next session on this page.
+  nodes["review-note"].value = "";
+  nodes["review-saved"].hidden = true;
+  clearTimeline();
   hideAll();
   nodes["credential-section"].hidden = false;
   nodes["postmortem"].dataset.state = "auth";
@@ -236,6 +295,9 @@ document.addEventListener("DOMContentLoaded", () => {
   nodes["forget-credential"].addEventListener("click", forgetCredential);
   nodes["credential-form"].addEventListener("submit", submitCredential);
   nodes["run-select"].addEventListener("change", selectRun);
+  nodes["load-more"].addEventListener("click", () => {
+    loadMore().catch((error) => showError(showKind(error)));
+  });
   nodes["review-form"].addEventListener("submit", saveNote);
   state.incidentId = new URLSearchParams(window.location.search).get("incident_id");
   if (!state.incidentId) {
