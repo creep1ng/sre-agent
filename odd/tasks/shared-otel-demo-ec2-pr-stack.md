@@ -67,4 +67,6 @@ stacks at 206 changed lines; offline container readback passed at
 the no-apply-guarded bootstrap at 385 changed lines; full behavior checks
 remain pending in the next slice. PR #504 published nine
 bootstrap fake-runner scenarios at 330 changed lines; pytest and Ruff passed
-at `c12407efe5578ab70c0773f0d17bfb90285bd57b`.
+at `c12407efe5578ab70c0773f0d17bfb90285bd57b`. PR #505 published
+policy-template checks at 239 changed lines; 17 offline pytest checks passed at
+`9265b864c501190d90c2e438774fa0312d7afa84`.
