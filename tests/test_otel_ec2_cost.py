@@ -134,7 +134,7 @@ class OTelEc2Tests(unittest.TestCase):
             controller.up(now=datetime(2026, 9, 28, 12, 0, tzinfo=UTC))
 
         names = [name for name, _, _ in aws.calls]
-        self.assertEqual(names, ["month_to_date_cost"])
+        self.assertEqual(names, ["find_shared_instance", "month_to_date_cost"])
         self.assertNotIn("run_instance", names)
 
     def test_up_blocks_when_account_monthly_budget_would_be_exceeded(self) -> None:
@@ -146,7 +146,7 @@ class OTelEc2Tests(unittest.TestCase):
             controller.up(now=datetime(2026, 9, 28, 12, 0, tzinfo=UTC))
 
         names = [name for name, _, _ in aws.calls]
-        self.assertEqual(names, ["month_to_date_cost"])
+        self.assertEqual(names, ["find_shared_instance", "month_to_date_cost"])
         self.assertNotIn("run_instance", names)
 
     def test_aws_cli_reads_account_wide_current_month_cost(self) -> None:

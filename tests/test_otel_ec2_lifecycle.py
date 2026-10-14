@@ -126,6 +126,45 @@ class OTelEc2Tests(unittest.TestCase):
         )
         self.assertNotIn("for file in compose.yaml compose.observability.yaml .env", user_data)
 
+    def test_up_reuses_existing_scheduled_session_without_new_launch(self) -> None:
+        aws = FakeAws()
+        aws.current_instance["launched"] = True
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        result = controller.up(now=datetime(2026, 9, 28, 13, 0, tzinfo=UTC))
+
+        self.assertEqual(result["instance_id"], "i-123")
+        names = [name for name, _, _ in aws.calls]
+        self.assertIn("termination_deadline", names)
+        self.assertNotIn("month_to_date_cost", names)
+        self.assertNotIn("run_instance", names)
+
+    def test_down_is_noop_when_shared_session_is_absent(self) -> None:
+        aws = FakeAws()
+        aws.current_instance = None
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        with patch("time.sleep") as sleeper:
+            controller.down()
+
+        self.assertNotIn("terminate_instance", [name for name, _, _ in aws.calls])
+        self.assertGreater(len([name for name, _, _ in aws.calls if name == "instance_status"]), 1)
+        self.assertEqual([call.args[0] for call in sleeper.call_args_list], [2, 4, 8, 16])
+
+    def test_down_retries_transient_absence_before_terminating(self) -> None:
+        aws = FakeAws()
+        status = aws.current_instance
+        controller = DemoController(aws=aws, config=DemoConfig())
+        with (
+            patch.object(aws, "instance_status", side_effect=[None, status]) as lookup,
+            patch("time.sleep") as sleeper,
+        ):
+            controller.down()
+
+        self.assertEqual(lookup.call_count, 2)
+        sleeper.assert_called_once_with(2)
+        self.assertIn("terminate_instance", [name for name, _, _ in aws.calls])
+
     def test_up_requires_scheduler_before_instance_launch(self) -> None:
         aws = FakeAws(scheduler_ready=False)
         controller = DemoController(aws=aws, config=DemoConfig())
@@ -272,7 +311,7 @@ class OTelEc2Tests(unittest.TestCase):
         controller.down()
 
         names = [name for name, _, _ in aws.calls]
-        self.assertEqual(names, ["scheduler_ready", "instance_status", "terminate_instance"])
+        self.assertEqual(names, ["instance_status", "scheduler_ready", "terminate_instance"])
         self.assertNotIn("delete_schedule", names)
 
     def test_ssm_wait_retries_only_invocation_does_not_exist(self) -> None:
