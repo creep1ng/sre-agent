@@ -1,0 +1,17 @@
+C06 consumer drilldown — containerized contract proof (real endpoint, controlled history)
+Base: origin/main c3cffb7 (producer #616 merged). Branch: feat/issue-143-request-drilldown.
+
+Command 1 (real FastAPI + PostgreSQL, seeded controlled history):
+docker compose --profile checks run --rm python-checks pytest -q tests/test_usage_read_acceptance.py tests/test_issue_454_attribution_guards.py
+Observed tail: "54 passed in 26.03s" (50 usage-read acceptance + 4 attribution guards).
+Covers: 401/403 with no counts, 422 for missing/malformed/repeated/unknown selectors, 503 for storage outage, no partial on 413/503.
+
+Command 2 (immutability: request -> alias reassignment keeps ORIGINAL attribution):
+docker compose --profile checks run --rm python-checks pytest -q tests/test_issue_454_attribution_evidence.py::test_alias_change_while_provider_is_in_flight_keeps_invocation_snapshot tests/test_issue_454_attribution_evidence.py::test_legacy_audit_without_snapshot_is_explicitly_legacy
+Observed tail: "2 passed in 4.46s".
+Assertion quoted: item["requested_assignment"] == expected_assignment(first_assignment) and item["requested_assignment"]["model"] != replacement["concrete_model"].
+Meaning: historical snapshot is immutable; legacy rows report attribution_status legacy with unavailable alias/model/provider (never reconstructed from current alias).
+
+Contract pinned: version 2.8.0, operationId readUsageRequests, response UsageRequestsResponse, x-required-query-one-of [request_id, incident_id, month], navigation status unsupported (no incident/run links), DTO allow-list only, no HMAC joins, no prompt/output/headers/credentials.
+
+Sanitized: yes. No API keys, prompts, outputs, or provider bodies in this file.
