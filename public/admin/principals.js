@@ -601,6 +601,10 @@ let sessionToken;
 let loadedToken = null;
 
 function followSession({ token, phase, principalId, reason }) {
+  // A suspended page shows nothing until the worker confirms its token (ADR-009, section 7); a
+  // different token then resets it below.
+  page.toggleAttribute("data-suspended", phase === "suspended");
+  if (phase === "suspended") return;
   const followed = typeof sessionToken === "string";
   if (token !== sessionToken) {
     [sessionToken, loadedToken] = [token, null];
@@ -609,6 +613,8 @@ function followSession({ token, phase, principalId, reason }) {
   sessionStatus.textContent = describeSession[phase](principalId, reason);
   createButton.disabled = phase !== "active";
   refreshButton.disabled = phase !== "active" && reason !== "unreachable";
+  // A blocked page has no session to use: only a reload connects it again.
+  for (const control of sessionForm.elements) control.disabled = phase === "blocked";
   if (phase === "active" && loadedToken !== token) {
     loadedToken = token;
     loadPrincipals();
@@ -623,6 +629,9 @@ function followSession({ token, phase, principalId, reason }) {
     showError({ kind: "authentication" });
   } else if (reason === "logout" && followed) {
     announce("Session cleared.");
+  } else if (phase === "blocked") {
+    page.dataset.state = "blocked";
+    emptyDetail.textContent = "Reload the page to connect again.";
   }
 }
 

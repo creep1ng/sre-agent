@@ -141,6 +141,22 @@ export function connectSharedSession({ pingTimeoutMs = 3000 } = {}) {
     });
   });
   setInterval(ping, 10_000);
+  // ADR-009, section 7: a page that enters the back/forward cache or is frozen is "suspended" and
+  // must paint nothing protected until the worker confirms its token again on its return. A page
+  // that becomes visible lets the worker revalidate the session.
+  const suspend = () => state.phase !== "blocked" && emit({ ...state, phase: "suspended" });
+  const confirm = () => {
+    if (state.phase !== "suspended") return;
+    port.postMessage({ type: "hello", version: SESSION_PROTOCOL });
+    ping();
+  };
+  addEventListener("pagehide", suspend);
+  document.addEventListener("freeze", suspend);
+  addEventListener("pageshow", (event) => event.persisted && confirm());
+  document.addEventListener("resume", confirm);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") command({ type: "visible" });
+  });
   connect();
   return session;
 }
