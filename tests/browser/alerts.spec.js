@@ -30,6 +30,8 @@ test("starting triage emits the handoff event and navigates with the alert id", 
   await page.locator("#alert-list button").first().waitFor({ timeout: 15000 });
   await page.locator("#alert-list button").first().click();
   const alertId = ((await page.locator("#detail-id").textContent()) ?? "").trim();
+  const service = ((await page.locator("#detail-service").textContent()) ?? "").trim();
+  expect(service).toMatch(/^[a-z][a-z0-9_-]{2,63}$/);
 
   // One synchronous turn: listeners run (feedback set, navigation queued)
   // before the browser commits to triage.html, so nothing races here.
@@ -50,7 +52,7 @@ test("starting triage emits the handoff event and navigates with the alert id", 
   expect(snapshot.feedbackVisible).toBe(true);
   expect(snapshot.feedbackText).toContain(alertId);
   expect(snapshot.feedbackText).toContain("No se creó ni asoció un incidente");
-  expect(snapshot.detail).toMatchObject({ alert_id: alertId, source: "hu-ops-01-alert-inbox" });
+  expect(snapshot.detail).toMatchObject({ alert_id: alertId, service, source: "hu-ops-01-alert-inbox" });
 
   await expect.poll(() => page.url(), { timeout: 15000 }).toContain(
     `/public/admin/triage.html?alert_id=${encodeURIComponent(alertId)}`,
