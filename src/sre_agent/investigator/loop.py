@@ -7,8 +7,10 @@ through their ports and returns a validated result. It never writes incident sta
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
+from functools import partial
 from secrets import token_hex
 from typing import TypeVar
 from uuid import UUID
@@ -23,6 +25,7 @@ from sre_agent.investigator.contract import (
     Outcome,
     PinnedSkill,
     RequestHuman,
+    SearchBoK,
     SkillPin,
     Status,
     ToolInvocation,
@@ -33,6 +36,8 @@ from sre_agent.investigator.contract import (
     unknown_references,
 )
 from sre_agent.investigator.ports import (
+    BoKFragment,
+    BoKSource,
     EvidenceProvider,
     EvidenceUnavailable,
     Gateway,
@@ -46,6 +51,8 @@ from sre_agent.investigator.prompt import assemble
 MAX_INPUT = 65_536
 MAX_OUTPUT = 65_536
 T = TypeVar("T")
+BOK_RESULTS = 5
+_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
 
 
 def _new_id(prefix: str) -> str:
@@ -83,6 +90,39 @@ async def _resolve(
     return resolved
 
 
+async def _search(source: BoKSource, ask: SearchBoK) -> list[BoKFragment]:
+    """Fragments of exactly the version asked for, with a locator inside #332's contract and
+    never more than asked; anything else is `rejected`, so no citation mixes versions."""
+    collection_id, version = ask.collection.split("@")
+    found = await source.search(collection_id, version, ask.query, BOK_RESULTS)
+    if len(found) > BOK_RESULTS or any(
+        (item.collection_id, item.version) != (collection_id, version)
+        or not (_ID.fullmatch(item.document_id) and _ID.fullmatch(item.section_id))
+        or not 0 <= item.chunk_index <= 1_000_000
+        for item in found
+    ):
+        raise GatewayError("rejected")
+    return found
+
+
+def _locator(item: BoKFragment) -> str:
+    """The producer's read of exactly this chunk (#332)."""
+    return (
+        f"/v1/bok/collections/{item.collection_id}/versions/{item.version}/chunks/"
+        f"{item.document_id}/{item.section_id}/{item.chunk_index}"
+    )
+
+
+def _bok_failure(error: GatewayError, collection: str) -> tuple[Status, str]:
+    """Named after the collection version, never after its content."""
+    if error.kind == "denied":
+        return "denied", f"bok collection unavailable: {collection}"
+    if error.kind == "transient":
+        reason = error.code or error.status or "network"
+        return "upstream_unavailable", f"bok search failed: {collection} ({reason})"
+    return "needs_human", f"bok answer rejected: {collection}"
+
+
 def _pinned(skill: ResolvedSkill) -> PinnedSkill:
     return PinnedSkill(
         skill_id=skill.skill_id,
@@ -108,6 +148,7 @@ async def investigate(
     new_id: Callable[[str], str] = _new_id,
     clock: Callable[[], datetime] = _now,
     skills: SkillSource | None = None,
+    bok: BoKSource | None = None,
 ) -> InvestigationResult:
     limits = limits or Limits()
     turns: list[Turn] = []
@@ -118,6 +159,8 @@ async def investigate(
     loaded: list[ResolvedSkill] = []
     if request.skills and skills is None:
         raise ValueError("a request that pins Skills needs a Skill source")
+    if request.bok_collections() and bok is None:
+        raise ValueError("a request that authorizes BoK collections needs a BoK source")
 
     def record_skill_ids(resolved: Sequence[ResolvedSkill]) -> None:
         for skill in resolved:
@@ -228,6 +271,8 @@ async def investigate(
             if len(reply.text) > MAX_OUTPUT:
                 raise InvalidOutput("output exceeds the 65536-character limit")
             action = parse_action(reply.text)
+            if isinstance(action, SearchBoK) and not request.bok_collections():
+                raise InvalidOutput("search_bok is not offered in this run")
             unknown = unknown_references(action, request, {item.evidence_id for item in evidence})
             if unknown:
                 raise InvalidOutput("unknown references: " + ", ".join(unknown))
@@ -238,6 +283,40 @@ async def investigate(
             feedback = str(error)
             continue
         feedback = None
+        if isinstance(action, SearchBoK):
+            ask = action
+            if bok is None or ask.collection not in request.bok_collections():
+                turns.append(turn)
+                return finish("denied", detail=f"bok collection not authorized: {ask.collection}")
+            try:
+                found = await _attempts(partial(_search, bok, ask), limits)
+            except GatewayError as error:
+                turns.append(turn)
+                if error.request_id is not None and error.request_id not in request_ids:
+                    request_ids.append(error.request_id)
+                status, detail = _bok_failure(error, ask.collection)
+                return finish(status, detail=detail)
+            collected = [
+                CollectedEvidence(
+                    evidence_id=new_id("ev"),
+                    source="bok",
+                    tool="bok.search",
+                    datasource_uid=ask.collection,
+                    query=_locator(item),
+                    summary=f"{item.title} ({item.source_ref}): {item.content}"[:8000],
+                    collected_at=clock(),
+                    request_id=reply.request_id,
+                )
+                for item in found
+            ]
+            evidence.extend(collected)
+            invocation = ToolInvocation(
+                tool="bok.search",
+                arguments={"collection": ask.collection, "query": ask.query},
+                result_summary=", ".join(item.evidence_id for item in collected) or "no results",
+            )
+            turns.append(turn.model_copy(update={"tool_invocation": invocation}))
+            continue
         if not isinstance(action, UseTool):
             turns.append(turn)
             if isinstance(action, RequestHuman):
@@ -342,12 +421,13 @@ async def _respond(
 
 
 async def _attempts(call: Callable[[], Awaitable[T]], limits: Limits) -> T:
-    """Retry only idempotent, read-only Skill resolution requests."""
+    """Retry only idempotent, read-only requests: Skill resolution and BoK search."""
     for attempt in range(limits.transient_retries + 1):
         try:
             return await asyncio.wait_for(call(), limits.gateway_timeout_seconds)
         except (GatewayError, TimeoutError) as raised:
-            error = raised if isinstance(raised, GatewayError) else GatewayError("transient")
+            timeout = GatewayError("transient", code="timeout")
+            error = raised if isinstance(raised, GatewayError) else timeout
             if error.kind != "transient" or attempt == limits.transient_retries:
                 raise error from None
     raise AssertionError("unreachable")
