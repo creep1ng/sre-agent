@@ -22,9 +22,9 @@ async function credential(request, principalId) {
 }
 
 // A page served with the production CSP, connected to the shared session.
-async function tab(context) {
+async function tab(context, origin = "") {
   const page = await context.newPage();
-  await page.goto("/index.html");
+  await page.goto(`${origin}/index.html`);
   await page.evaluate(async () => {
     const client = await import("/public/api/client.js");
     const session = client.connectSharedSession();
@@ -134,7 +134,7 @@ test("the worker forwards only allowed requests", async ({ context }) => {
     const worker = new SharedWorker("/public/api/session-worker.js", { name: "sre-agent-session" });
     const own = { port: worker.port, replies: [] };
     own.port.onmessage = ({ data }) => own.replies.push(data);
-    own.port.postMessage({ type: "hello" });
+    own.port.postMessage({ type: "hello", version: 1 });
     const wait = async (check) => {
       while (!check()) await new Promise((resolve) => setTimeout(resolve, 20));
     };
@@ -164,4 +164,206 @@ test("the worker forwards only allowed requests", async ({ context }) => {
   expect(verdicts.results).toEqual([...Array(9).fill("not_allowed"), "stale_session", 200]);
   expect(JSON.stringify(verdicts.own)).not.toContain(adminKey);
   expect(await state(t1)).toMatchObject({ phase: "active", principalId: "admin-human" });
+});
+
+test("the worker refuses an older page and steps down for a newer one", async ({ context }) => {
+  const t1 = await tab(context);
+  await set(t1, adminKey);
+  await reached(t1, "phase", "active");
+  const before = await state(t1);
+  const replies = await t1.evaluate(async () => {
+    const url = "/public/api/session-worker.js";
+    const { port } = new SharedWorker(url, { name: "sre-agent-session" });
+    const seen = [];
+    port.onmessage = ({ data }) => seen.push(data);
+    port.postMessage({ type: "hello", version: 0 });
+    port.postMessage({ type: "logout" });
+    const request = { id: 1, token: null, path: "/v1/whoami", method: "GET", headers: {} };
+    port.postMessage({ type: "request", ...request });
+    while (seen.length < 2) await new Promise((resolve) => setTimeout(resolve, 20));
+    port.postMessage({ type: "hello", version: 2 });
+    return seen;
+  });
+  expect(replies).toEqual([
+    { type: "hello", version: 1 },
+    { type: "response", id: 1, token: null, refused: "stale_session" },
+  ]);
+  expect(await call(t1, "listPrincipals")).toEqual(stale);
+  await reached(t1, "phase", "anonymous");
+  expect((await state(t1)).token.split(":")[0]).not.toBe(before.token.split(":")[0]);
+});
+
+test("a lost worker is replaced by an anonymous one", async ({ browser, context }) => {
+  const [t1, t2] = [await tab(context), await tab(context)];
+  await set(t1, adminKey);
+  await reached(t1, "phase", "active");
+  await reached(t2, "phase", "active");
+  const before = await state(t1);
+  const { targetInfo } = await (await context.newCDPSession(t1)).send("Target.getTargetInfo");
+  const cdp = await browser.newBrowserCDPSession();
+  const worker = (await cdp.send("Target.getTargets")).targetInfos.find(
+    (target) =>
+      target.type === "shared_worker" && target.browserContextId === targetInfo.browserContextId,
+  );
+  await cdp.send("Target.closeTarget", { targetId: worker.targetId });
+  for (const page of [t2, t1]) {
+    expect(await call(page, "listPrincipals")).toEqual(stale);
+    await reached(page, "phase", "anonymous");
+  }
+  const after = await state(t1);
+  expect(await state(t2)).toEqual(after);
+  expect(after.principalId).toBeNull();
+  expect(after.token.split(":")[0]).not.toBe(before.token.split(":")[0]);
+});
+
+// Races (S07–S13): hold-upstream, behind the web-held proxy, holds chosen answers until released.
+const heldOrigin = process.env.PLAYWRIGHT_HELD_URL;
+const control = process.env.PLAYWRIGHT_HOLD_CONTROL;
+const gate = async (request, action, data = {}) =>
+  (await request.post(`${control}/${action}`, { data })).json();
+const hold = (request, label, path, key) => gate(request, "hold", { label, path, key });
+const holding = (request, label) => expect.poll(() => gate(request, "held")).toContain(label);
+const release = (request, label, cut = false) => gate(request, "release", { label, cut });
+const start = (page, name, label) =>
+  page.evaluate(([method, slot]) => {
+    const outcomes = (window.harness.outcomes ??= {});
+    window.harness.api[method]().then(
+      (value) => (outcomes[slot] = { value }),
+      (error) => (outcomes[slot] = { kind: error.kind, status: error.status }),
+    );
+  }, [name, label]);
+const outcome = async (page, label) =>
+  (await page.waitForFunction((slot) => window.harness.outcomes?.[slot], label)).jsonValue();
+
+test.describe("races held by the test upstream", () => {
+  test.skip(!heldOrigin || !control, "requires web-held and hold-upstream from compose.yaml");
+
+  test("late success and error of A reach neither B nor a logout", async ({ context, request }) => {
+    const [a, b] = [await credential(request), await credential(request)];
+    const [t1, t2] = [await tab(context, heldOrigin), await tab(context, heldOrigin)];
+    await set(t1, a.key);
+    await reached(t2, "phase", "active");
+    await hold(request, "a-success", "/v1/whoami", a.key);
+    await hold(request, "a-error", "/v1/principals", a.key);
+    await start(t1, "getWhoAmI", "a-success");
+    await start(t1, "listPrincipals", "a-error");
+    await holding(request, "a-success");
+    await holding(request, "a-error");
+    await set(t2, b.key);
+    await reached(t1, "principalId", b.principalId);
+    const current = await state(t1);
+    await release(request, "a-success");
+    await release(request, "a-error");
+    expect(await outcome(t1, "a-success")).toEqual(stale);
+    expect(await outcome(t1, "a-error")).toEqual(stale);
+    expect(await state(t1)).toEqual(current);
+    await hold(request, "b-success", "/v1/whoami", b.key);
+    await start(t1, "getWhoAmI", "b-success");
+    await holding(request, "b-success");
+    await t2.evaluate(() => window.harness.session.logout());
+    await reached(t1, "reason", "logout");
+    const loggedOut = await state(t1);
+    await release(request, "b-success");
+    expect(await outcome(t1, "b-success")).toEqual(stale);
+    expect(await state(t1)).toEqual(loggedOut);
+  });
+
+  test("an answer of the first A is refused after A→B→A", async ({ context, request }) => {
+    const [a, b] = [await credential(request), await credential(request)];
+    const [t1, t2] = [await tab(context, heldOrigin), await tab(context, heldOrigin)];
+    await set(t1, a.key);
+    await reached(t2, "phase", "active");
+    await hold(request, "first-a", "/v1/whoami", a.key);
+    await start(t1, "getWhoAmI", "first-a");
+    await holding(request, "first-a");
+    await set(t2, b.key);
+    await reached(t1, "principalId", b.principalId);
+    await set(t2, a.key);
+    await reached(t1, "principalId", a.principalId);
+    const third = await state(t1);
+    await release(request, "first-a");
+    expect(await outcome(t1, "first-a")).toEqual(stale);
+    expect(await state(t1)).toEqual(third);
+  });
+
+  test("a late validation never overrides a later change", async ({ context, request }) => {
+    const [a, b] = [await credential(request), await credential(request)];
+    const [t1, t2] = [await tab(context, heldOrigin), await tab(context, heldOrigin)];
+    await hold(request, "validate-a", "/v1/whoami", a.key);
+    await set(t1, a.key);
+    await holding(request, "validate-a");
+    await reached(t2, "phase", "validating");
+    expect(await call(t2, "getWhoAmI")).toEqual(stale);
+    await set(t2, b.key);
+    await reached(t1, "principalId", b.principalId);
+    const chosen = await state(t1);
+    await release(request, "validate-a");
+    expect((await call(t1, "getWhoAmI")).value.principal_id).toBe(b.principalId);
+    expect(await state(t1)).toEqual(chosen);
+    await hold(request, "validate-b", "/v1/whoami", b.key);
+    await set(t1, b.key);
+    await holding(request, "validate-b");
+    await t2.evaluate(() => window.harness.session.logout());
+    await reached(t1, "reason", "logout");
+    const { token } = await state(t1);
+    await release(request, "validate-b");
+    await set(t2, a.key);
+    await reached(t1, "principalId", a.principalId);
+    const afterLogout = await t1.evaluate(
+      (old) => window.harness.states.slice(window.harness.states.findIndex((s) => s.token === old)),
+      token,
+    );
+    expect(afterLogout.map((s) => s.principalId)).not.toContain(b.principalId);
+    const counter = Number((await state(t1)).token.split(":")[1]);
+    await Promise.all([set(t1, b.key), set(t2, a.key)]);
+    const latest = expect.stringMatching(`:${counter + 2}$`);
+    const last = expect.objectContaining({ phase: "active", token: latest });
+    await expect.poll(async () => [await state(t1), await state(t2)]).toEqual([last, last]);
+    expect(await state(t2)).toEqual(await state(t1));
+  });
+
+  test("a late 401 of an earlier generation leaves the current session alone", async ({
+    context,
+    request,
+  }) => {
+    const [a, b] = [await credential(request), await credential(request)];
+    const [t1, t2] = [await tab(context, heldOrigin), await tab(context, heldOrigin)];
+    await set(t1, a.key);
+    await reached(t2, "phase", "active");
+    await admin(request, "DELETE", `/v1/credentials/${a.id}`);
+    await hold(request, "revoked-a", "/v1/whoami", a.key);
+    await start(t1, "getWhoAmI", "revoked-a");
+    await holding(request, "revoked-a");
+    await set(t2, b.key);
+    await reached(t1, "principalId", b.principalId);
+    const current = await state(t1);
+    await release(request, "revoked-a");
+    expect(await outcome(t1, "revoked-a")).toEqual(stale);
+    expect(await state(t1)).toEqual(current);
+  });
+
+  test("a cut answer is a network failure; an unanswered validation waits for retry", async ({
+    context,
+    request,
+  }) => {
+    const [a, b] = [await credential(request), await credential(request)];
+    const [t1, t2] = [await tab(context, heldOrigin), await tab(context, heldOrigin)];
+    await set(t1, b.key);
+    await reached(t2, "phase", "active");
+    const current = await state(t1);
+    await hold(request, "cut", "/v1/whoami", b.key);
+    await start(t1, "getWhoAmI", "cut");
+    await holding(request, "cut");
+    await release(request, "cut", true);
+    expect(await outcome(t1, "cut")).toEqual({ kind: "network", status: null });
+    expect(await state(t1)).toEqual(current);
+    await hold(request, "validate-cut", "/v1/whoami", a.key);
+    await set(t1, a.key);
+    await holding(request, "validate-cut");
+    await release(request, "validate-cut", true);
+    await reached(t2, "reason", "unreachable");
+    expect(await state(t2)).toMatchObject({ phase: "validating", principalId: null });
+    await t2.evaluate(() => window.harness.session.retry());
+    await reached(t1, "principalId", a.principalId);
+  });
 });

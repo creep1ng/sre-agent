@@ -43,7 +43,9 @@ session.setCredential(keyEnteredOnce);
 const controlApi = createAdministrativeApiClient({ session });
 ```
 
-- `phase` is `connecting`, `anonymous`, `validating` or `active`.
+- `phase` is `connecting`, `anonymous`, `validating`, `active` or `blocked`: the page and the worker
+  speak different protocol versions, or the worker never answers, so the site's pages need a
+  reload. A newer page makes an older worker step down, and its key goes with it.
 - Setting a key, logging out and a 401 of the current generation each create a new token in every
   page, so the caller of that 401 sees `stale_session`. A request whose token is not current is
   refused, and a response that returns under an earlier token rejects with `stale_session`: drop
@@ -52,8 +54,13 @@ const controlApi = createAdministrativeApiClient({ session });
   `Accept`, `Content-Type` and `Idempotency-Key` headers; anything else is `not_allowed`.
 - URL parameters only select what to read, such as a deep link or a filter; a mutation always
   needs an action inside the page.
+- A validation the API cannot answer stays `validating` with reason `unreachable` until
+  `session.retry()`.
+- A page whose ping gets no answer within three seconds treats the worker as lost and connects
+  again; if the worker was gone, the new one starts anonymous, with no fallback to an earlier key.
 
-`tests/browser/shared-session.spec.js` proves these rules in the packaged browser lane.
+`tests/browser/shared-session.spec.js` exercises these rules in the packaged browser lane; its races
+run through `web-held`, in front of `tests/browser/support/hold-upstream.mjs`, which holds answers.
 
 ## Topology
 

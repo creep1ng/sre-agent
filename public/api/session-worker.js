@@ -1,6 +1,7 @@
 // The browser session of this origin and profile (ADR-009): the API key lives only here.
 importScripts("/public/api/runtime-config.js");
 
+const PROTOCOL = 1;
 const METHODS = new Set(["GET", "POST", "PUT", "DELETE"]);
 const HEADERS = new Set(["accept", "content-type", "idempotency-key"]);
 const PATH = /^\/v1\/[\w\-.~!*'()%/]*(\?[\w\-.~!*'()%=&+]*)?$/;
@@ -53,7 +54,7 @@ async function validate() {
     publish();
   } else if (response?.status === 401) {
     change("anonymous", "invalid_credential");
-  } else {
+  } else if (phase === "validating") {
     reason = "unreachable";
     publish();
   }
@@ -90,16 +91,27 @@ async function forward(port, message) {
 onconnect = ({ ports: [port] }) => {
   port.onmessage = ({ data }) => {
     if (data?.type === "hello") {
+      port.postMessage({ type: "hello", version: PROTOCOL });
+      // A newer page means a newer deploy: this worker steps down and its key goes with it.
+      if (data.version > PROTOCOL) close();
+      if (data.version !== PROTOCOL) return;
       ports.add(port);
       port.postMessage(snapshot());
     } else if (!ports.has(port)) {
-      return;
+      // A page of another version gets no session: its requests are refused, nothing else runs.
+      if (data?.type === "request") forward(port, { ...data, token: null });
+    } else if (data?.type === "ping") {
+      port.postMessage({ type: "pong" });
     } else if (data?.type === "request") {
       forward(port, data);
     } else if (data?.type === "logout") {
       change("anonymous", "logout");
     } else if (data?.type === "set" && typeof data.credential === "string" && data.credential) {
       change("validating", null, data.credential);
+      validate();
+    } else if (data?.type === "retry" && phase === "validating") {
+      reason = null;
+      publish();
       validate();
     }
   };

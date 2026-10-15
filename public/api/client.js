@@ -6,6 +6,7 @@ const STATUS_KINDS = Object.freeze({
 });
 const credentialValues = new WeakMap();
 const sessionSenders = new WeakMap();
+const SESSION_PROTOCOL = 1;
 
 export class ApiClientError extends Error {
   constructor(kind, message, options = {}) {
@@ -40,11 +41,14 @@ const staleSession = () =>
 
 // One session per origin and profile, held by a SharedWorker (ADR-009). The page never reads
 // the key back: it keeps this state, whose token changes on every accepted change.
-export function connectSharedSession() {
+export function connectSharedSession({ pingTimeoutMs = 3000 } = {}) {
   const listeners = new Set();
   const pending = new Map();
   let state = Object.freeze({ token: null, phase: "connecting", principalId: null, reason: null });
   let sequence = 0;
+  let port = null;
+  let pingTimer = null;
+  let misses = 0;
 
   function emit({ token, phase, principalId, reason }) {
     state = Object.freeze({ token, phase, principalId, reason });
@@ -62,12 +66,48 @@ export function connectSharedSession() {
     else entry?.resolve(new Response(empty ? null : body, { status, headers }));
   }
 
-  const { port } = new SharedWorker("/public/api/session-worker.js", { name: "sre-agent-session" });
-  port.onmessage = ({ data }) => {
-    if (data?.type === "session") emit(data);
-    else if (data?.type === "response") settle(data);
-  };
-  port.postMessage({ type: "hello" });
+  // Pending requests of a lost or unusable worker never settle as success or error.
+  function abandon(phase, reason) {
+    clearTimeout(pingTimer);
+    pingTimer = null;
+    pending.forEach((entry) => entry.reject(staleSession()));
+    pending.clear();
+    emit({ token: null, phase, principalId: null, reason });
+  }
+
+  function connect() {
+    port?.close();
+    const worker = new SharedWorker("/public/api/session-worker.js", { name: "sre-agent-session" });
+    worker.onerror = () => abandon("blocked", "worker_failed");
+    port = worker.port;
+    port.onmessage = ({ data }) => {
+      if (data?.type === "pong") {
+        clearTimeout(pingTimer);
+        pingTimer = null;
+        misses = 0;
+      } else if (data?.type === "session") emit(data);
+      else if (data?.type === "response") settle(data);
+      else if (data?.type === "hello" && data.version !== SESSION_PROTOCOL) {
+        abandon("blocked", "version_mismatch");
+      }
+    };
+    port.postMessage({ type: "hello", version: SESSION_PROTOCOL });
+  }
+
+  // A worker that misses a ping is lost: the page connects again, and a dead worker's replacement
+  // starts anonymous. One that keeps missing (it failed to start) blocks the page.
+  function ping() {
+    if (pingTimer !== null || state.phase === "blocked") return;
+    pingTimer = setTimeout(() => {
+      misses += 1;
+      if (misses > 2) return abandon("blocked", "worker_failed");
+      abandon("connecting", "worker_lost");
+      connect();
+    }, pingTimeoutMs);
+    port.postMessage({ type: "ping" });
+  }
+
+  const command = (message) => state.phase !== "blocked" && port.postMessage(message);
 
   const session = Object.freeze({
     get state() {
@@ -81,20 +121,27 @@ export function connectSharedSession() {
       if (typeof value !== "string" || !/^[\x21-\x7e]+$/.test(value)) {
         throw new TypeError("A non-empty printable bearer credential is required.");
       }
-      port.postMessage({ type: "set", credential: value });
+      command({ type: "set", credential: value });
     },
     logout() {
-      port.postMessage({ type: "logout" });
+      command({ type: "logout" });
+    },
+    retry() {
+      command({ type: "retry" });
     },
   });
-  sessionSenders.set(session, (token, path, { method, headers, body }) =>
-    new Promise((resolve, reject) => {
+  sessionSenders.set(session, (token, path, { method, headers, body }) => {
+    if (state.phase === "blocked") return Promise.reject(staleSession());
+    return new Promise((resolve, reject) => {
       sequence += 1;
       pending.set(sequence, { resolve, reject });
       const message = { type: "request", id: sequence, token, path, method, body };
       port.postMessage({ ...message, headers: Object.fromEntries(headers) });
-    }),
-  );
+      ping();
+    });
+  });
+  setInterval(ping, 10_000);
+  connect();
   return session;
 }
 
