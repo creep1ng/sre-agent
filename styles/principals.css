@@ -10,6 +10,13 @@
   display: none !important;
 }
 
+/* ADR-009, section 7: a suspended page paints nothing until the session worker confirms it. A modal
+   dialog gets visibility: visible from the browser in the top layer, so it is hidden by name. */
+.principals[data-suspended],
+.principals[data-suspended] dialog {
+  visibility: hidden;
+}
+
 .principals__topbar {
   min-height: 4rem;
   display: flex;

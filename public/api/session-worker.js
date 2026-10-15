@@ -2,6 +2,9 @@
 importScripts("/public/api/runtime-config.js");
 
 const PROTOCOL = 1;
+// ADR-009, section 6: when a page connects or becomes visible again, an active session whose last
+// validation is older than this is checked again with whoami.
+const REVALIDATE_AFTER_MS = 60_000;
 const METHODS = new Set(["GET", "POST", "PUT", "DELETE"]);
 const HEADERS = new Set(["accept", "content-type", "idempotency-key"]);
 const PATH = /^\/v1\/[\w\-.~!*'()%/]*(\?[\w\-.~!*'()%=&+]*)?$/;
@@ -19,6 +22,8 @@ let phase = "anonymous";
 let reason = null;
 let principalId = null;
 let credential = null;
+let validatedAt = 0;
+let revalidating = false;
 
 const token = () => `${instance}:${counter}`;
 const snapshot = () => ({ type: "session", token: token(), phase, principalId, reason });
@@ -50,7 +55,7 @@ async function validate() {
   const identity = response?.status === 200 ? await response.json().catch(() => null) : null;
   if (generation !== counter) return;
   if (typeof identity?.principal_id === "string") {
-    [phase, reason, principalId] = ["active", null, identity.principal_id];
+    [phase, reason, principalId, validatedAt] = ["active", null, identity.principal_id, Date.now()];
     publish();
   } else if (response?.status === 401) {
     change("anonymous", "invalid_credential");
@@ -58,6 +63,19 @@ async function validate() {
     reason = "unreachable";
     publish();
   }
+}
+
+// A revoked key is found at the next request or revalidation, never at once. A revalidation that
+// cannot reach the API leaves the session as it is, and the next connection or visit tries again.
+async function revalidate() {
+  if (phase !== "active" || revalidating || Date.now() - validatedAt <= REVALIDATE_AFTER_MS) return;
+  revalidating = true;
+  const generation = counter;
+  const response = await call("/v1/whoami").catch(() => null);
+  revalidating = false;
+  if (generation !== counter) return;
+  if (response?.status === 200) validatedAt = Date.now();
+  else if (response?.status === 401) change("anonymous", "credential_rejected");
 }
 
 const permitted = ({ path, method, headers, body }) =>
@@ -97,11 +115,14 @@ onconnect = ({ ports: [port] }) => {
       if (data.version !== PROTOCOL) return;
       ports.add(port);
       port.postMessage(snapshot());
+      revalidate();
     } else if (!ports.has(port)) {
       // A page of another version gets no session: its requests are refused, nothing else runs.
       if (data?.type === "request") forward(port, { ...data, token: null });
     } else if (data?.type === "ping") {
       port.postMessage({ type: "pong" });
+    } else if (data?.type === "visible") {
+      revalidate();
     } else if (data?.type === "request") {
       forward(port, data);
     } else if (data?.type === "logout") {

@@ -43,9 +43,10 @@ session.setCredential(keyEnteredOnce);
 const controlApi = createAdministrativeApiClient({ session });
 ```
 
-- `phase` is `connecting`, `anonymous`, `validating`, `active` or `blocked`: the page and the worker
-  speak different protocol versions, or the worker never answers, so the site's pages need a
-  reload. A newer page makes an older worker step down, and its key goes with it.
+- `phase` is `connecting`, `anonymous`, `validating`, `active`, `suspended` or `blocked`. `blocked`
+  means the page and the worker speak different protocol versions, or the worker never answers,
+  so the site's pages need a reload. A newer page makes an older worker step down, and its key
+  goes with it.
 - Setting a key, logging out and a 401 of the current generation each create a new token in every
   page, so the caller of that 401 sees `stale_session`. A request whose token is not current is
   refused, and a response that returns under an earlier token rejects with `stale_session`: drop
@@ -56,6 +57,12 @@ const controlApi = createAdministrativeApiClient({ session });
   needs an action inside the page.
 - A page drops everything bound to an earlier token (data, details, dialogs, typed values) as soon
   as the token changes, and offers no protected action until the session is `active`.
+- A page entering the back/forward cache or being frozen (`pagehide`, `freeze`) is `suspended` and
+  shows nothing protected. On `pageshow` or `resume` it asks the worker again, and shows its content
+  once the token is confirmed, after a reset if the token changed.
+- When a page connects or becomes visible, the worker checks an active session with `whoami` again
+  if its last validation is older than 60 seconds; a 401 ends it in every page as
+  `credential_rejected`.
 - A validation the API cannot answer stays `validating` with reason `unreachable` until
   `session.retry()`.
 - A page whose ping gets no answer within three seconds treats the worker as lost and connects
