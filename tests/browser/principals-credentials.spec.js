@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, route, test, unroute } from "./support/session-routes.mjs";
 // C1 ISSUE: REAL=connected API; CONTROLLED=real API + route delay/offline only.
 const connected = process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY === "1";
 function apiKey(name) {
@@ -160,7 +160,7 @@ test("keeps one logical issuance across network retry and clears late secrets", 
   await page.click(`[data-issue-credential='${id}']`);
   const seenKeys = [];
   let credMode = "abort";
-  await page.route("**/api/**/credentials", async (route) => {
+  await route(page, "**/api/**/credentials", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     seenKeys.push(await route.request().headerValue("idempotency-key"));
     if (credMode === "abort") return route.abort("failed");
@@ -202,7 +202,7 @@ test("keeps one logical issuance across network retry and clears late secrets", 
   await expect(page.locator("#secret-dialog")).toBeVisible({ timeout: 20_000 });
   expect(seenKeys.length).toBe(4);
   expect(seenKeys.at(-1) !== seenKeys.at(-2)).toBe(true);
-  await page.unroute("**/api/**/credentials");
+  await unroute(page, "**/api/**/credentials");
 });
 test("keeps newer credential metadata when an older list read resolves late", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
@@ -217,7 +217,7 @@ test("keeps newer credential metadata when an older list read resolves late", as
   let holdNext = true;
   let failOnRelease = false;
   const credList = (url) => url.pathname === `/api/v1/principals/${id}/credentials`;
-  await page.route(credList, async (route) => {
+  await route(page, credList, async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     if (!holdNext) return route.continue();
     holdNext = false;
@@ -253,7 +253,7 @@ test("keeps newer credential metadata when an older list read resolves late", as
   await page.waitForTimeout(500);
   await expect(page.locator(`[data-credential-list='${id}']`).locator("li")).toHaveCount(1);
   await expect(page.locator(`[data-principal-detail='${id}']`)).not.toContainText("unavailable");
-  await page.unroute(credList);
+  await unroute(page, credList);
 });
 test("reloads credentials for expanded principals after principals refresh", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
@@ -278,7 +278,7 @@ test("reloads credentials for expanded principals after principals refresh", asy
   let firstReleased = false;
   let releaseFirst = null;
   const credList = (url) => url.pathname === `/api/v1/principals/${id}/credentials`;
-  await page.route(credList, async (route) => {
+  await route(page, credList, async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     getCount += 1;
     if (getCount === 1) {
@@ -317,7 +317,7 @@ test("reloads credentials for expanded principals after principals refresh", asy
   await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveCount(0);
   await expect(page.locator(`[data-principal-detail='${id}']`)).toBeVisible();
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1);
-  await page.unroute(credList);
+  await unroute(page, credList);
 });
 test("shows distinct list errors for invalid and restricted sessions", async ({ page }) => {
   test.skip(!connected, "requires the connected control-plane API");
@@ -340,7 +340,7 @@ test("shows distinct list errors for invalid and restricted sessions", async ({ 
   await openCredentials(page, id);
   const credList = (url) => url.pathname === `/api/v1/principals/${id}/credentials`;
   let fulfillNext = null;
-  await page.route(credList, async (route) => {
+  await route(page, credList, async (route) => {
     if (route.request().method() !== "GET" || fulfillNext === null) return route.continue();
     const replay = fulfillNext;
     fulfillNext = null;
@@ -364,5 +364,5 @@ test("shows distinct list errors for invalid and restricted sessions", async ({ 
   await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveText(/Access unavailable/, { timeout: 20_000 });
   await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveAttribute("data-error-kind", "authorization");
   await expect(page.locator(`[data-credential-list='${id}']`)).toHaveCount(0);
-  await page.unroute(credList);
+  await unroute(page, credList);
 });
