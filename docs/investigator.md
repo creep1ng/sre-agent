@@ -31,7 +31,7 @@ The investigator's internal result status describes the bounded loop:
 | `completed` | The model proposed a cited hypothesis, a mitigation or a conclusion |
 | `needs_human` | The model explicitly requested human review, or the gateway rejected the response contract |
 | `invalid_output` | Two consecutive answers were not one valid action or cited unknown evidence |
-| `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool |
+| `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool or BoK collection |
 | `pre_dispatch_rejected` | The MCP gateway rejected the tool request with HTTP 422 before upstream dispatch |
 | `upstream_unavailable` | A gateway or tool call was unavailable, timed out, or returned a retryable error |
 | `max_steps` | Six turns passed without a final answer |
@@ -77,6 +77,18 @@ before every model call and retry, without cache. The result lists each version 
 dependencies and resolution request id, naming its `skills.resolve` audit event; resuming passes the
 digest back. 401, 403 and 404 end the run as `denied`; a 5xx, network error or timeout, retried
 once, as `upstream_unavailable`; another body or digest as `needs_human`. Skills grant no tools.
+
+## BoK
+
+A run searches only the BoK collection versions it authorizes as `bok_collection` capabilities with
+action `bok.search`, each an exact `collection_id@version` (issue #34). The model asks with
+`{"action": "search_bok", "collection": "...", "query": "..."}`; the harness posts it, with the same
+key, to `POST /v1/bok/collections/{collection_id}/versions/{version}/search` for five fragments at
+most and with no cache, so a revoked grant stops the next search. Each fragment is evidence with
+`source: bok`, its collection version as `datasource_uid` and, as `query`, the producer's read of
+exactly that chunk. An empty search is an answer; 401 and 403 end the run as `denied`, and a 5xx,
+network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
+body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
 
 ## Deterministic demonstration
 
