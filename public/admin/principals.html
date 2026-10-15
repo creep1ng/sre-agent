@@ -41,7 +41,8 @@
         <div class="ma-panel__header">
           <div>
             <h2 id="session-title" class="ma-panel__title">API session</h2>
-            <p class="ma-panel__description">Bearer credential is kept in memory only and cleared on reload.</p>
+            <p class="ma-panel__description">One key for this browser session, kept in memory and shared with the other tabs that use it until all of them close.</p>
+            <p id="session-status" class="ma-panel__description" aria-live="polite">Connecting to the browser session…</p>
           </div>
         </div>
         <div class="ma-panel__body">

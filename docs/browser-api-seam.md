@@ -32,7 +32,7 @@ copy bearer credentials into URLs, cookies, Web Storage, fixtures, telemetry, or
 [ADR-009](adrs/ADR-009-browser-shared-session.md) moves the key into one `SharedWorker` per origin
 and profile, `public/api/session-worker.js`, which also loads `runtime-config.js` (keep that file to
 the config assignment). A page hands the key over once and keeps an opaque token that changes with
-every generation. Pages move to it in the next leaves of #486.
+every generation. Principals uses it; the other pages move to it in the next leaves of #486.
 
 ```js
 import { connectSharedSession, createAdministrativeApiClient } from "/public/api/client.js";
@@ -54,6 +54,8 @@ const controlApi = createAdministrativeApiClient({ session });
   `Accept`, `Content-Type` and `Idempotency-Key` headers; anything else is `not_allowed`.
 - URL parameters only select what to read, such as a deep link or a filter; a mutation always
   needs an action inside the page.
+- A page drops everything bound to an earlier token (data, details, dialogs, typed values) as soon
+  as the token changes, and offers no protected action until the session is `active`.
 - A validation the API cannot answer stays `validating` with reason `unreachable` until
   `session.retry()`.
 - A page whose ping gets no answer within three seconds treats the worker as lost and connects

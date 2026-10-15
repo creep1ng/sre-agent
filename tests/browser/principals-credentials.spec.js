@@ -141,13 +141,14 @@ test("distinguishes administrative 401 and 403 without partial credential data",
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });
   await openCredentials(page, id);
   await page.click(`[data-issue-credential='${id}']`);
+  await expect(page.locator("#issue-dialog")).toBeVisible();
   await page.evaluate((key) => {
     document.getElementById("api-key").value = key;
     document.getElementById("session-form").requestSubmit();
   }, "sre_admn_0123456789abcdefghij");
   await expect(page.locator("#page-error-title")).toHaveText("Authentication required", { timeout: 20_000 });
-  await page.click("#issue-submit");
-  await expect(page.locator("#issue-error-title")).toHaveText("Authentication required", { timeout: 20_000 });
+  // A new key is a new session: the dialog opened under the previous one is gone (ADR-009, section 11).
+  await expect(page.locator("#issue-dialog")).toBeHidden();
   await expect(page.locator("#secret-dialog")).toBeHidden();
 });
 test("keeps one logical issuance across network retry and clears late secrets", async ({ page }) => {
@@ -325,7 +326,7 @@ test("shows distinct list errors for invalid and restricted sessions", async ({ 
   const restrictedKey = apiKey("RESTRICTED_HARNESS_API_KEY");
   const id = await createActivePrincipal(page, adminKey, "c09");
   // Real backend envelopes captured first; replayed below so the UI maps
-  // genuine error payloads while the admin session stays usable. Note: this
+  // genuine error payloads, the 401 last because it ends the session. Note: this
   // list endpoint hides unauthorized callers as 404, never 403.
   // Current runtime denial for listCredentials is intentionally hidden as 404
   // resource_not_found; OpenAPI 2.2.0 still permits 403. This controlled response
@@ -346,12 +347,6 @@ test("shows distinct list errors for invalid and restricted sessions", async ({ 
     fulfillNext = null;
     await route.fulfill({ status: replay.status, contentType: "application/json", body: JSON.stringify(replay.body) });
   });
-  fulfillNext = bad;
-  await page.click(`[data-expand-principal='${id}']`);
-  await page.click(`[data-expand-principal='${id}']`);
-  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveText(/Authentication required/, { timeout: 20_000 });
-  await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveAttribute("data-error-kind", "authentication");
-  await expect(page.locator(`[data-credential-list='${id}']`)).toHaveCount(0);
   fulfillNext = denied;
   await page.click(`[data-expand-principal='${id}']`);
   await page.click(`[data-expand-principal='${id}']`);
@@ -364,5 +359,11 @@ test("shows distinct list errors for invalid and restricted sessions", async ({ 
   await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveText(/Access unavailable/, { timeout: 20_000 });
   await expect(page.locator(`[data-credentials-error='${id}']`)).toHaveAttribute("data-error-kind", "authorization");
   await expect(page.locator(`[data-credential-list='${id}']`)).toHaveCount(0);
+  // A 401 of the current session ends it in every page (ADR-009, section 6): no credential data stays.
+  fulfillNext = bad;
+  await page.click(`[data-expand-principal='${id}']`);
+  await page.click(`[data-expand-principal='${id}']`);
+  await expect(page.locator("#page-error-title")).toHaveText("Authentication required", { timeout: 20_000 });
+  await expect(page.locator(`[data-principal-row='${id}'], [data-credentials-error='${id}']`)).toHaveCount(0);
   await unroute(page, credList);
 });

@@ -39,7 +39,7 @@ Authoritative decisions: [ADR-004](../../schemas/adrs/ADR-004-grants.md),
 | Resource hiding | Current | Missing and unauthorized resources both return `403 resource_unavailable` before routing. |
 | Audit durability | Current | Metadata-only audit is append-only and failure suppresses result release. |
 | Catalog integrity | Current | `tests/test_security_catalogs.py` validates seeded identities and catalog structure. |
-| Browser session | Partial | ADR-009 core: key in worker memory, allow-listed forwarding, generation-checked responses and `frame-ancestors 'none'` (`tests/browser/shared-session.spec.js`); pages move to it in later leaves of #486. |
+| Browser session | Partial | ADR-009 core: key in worker memory, allow-listed forwarding, generation-checked responses and `frame-ancestors 'none'` (`tests/browser/shared-session.spec.js`); Principals is on it (`tests/browser/principals-session.spec.js`), the other pages follow in later leaves of #486. |
 
 ## Runtime evidence locators
 

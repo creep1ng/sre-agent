@@ -160,25 +160,32 @@ test("blocks deactivate for invalid/restricted credentials without false mutatio
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1);
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} deactivated.`);
   await expect(page.locator("#deactivate-dialog")).toBeVisible();
-  // UI submit with an invalid session (credential swap via JS to bypass modal
-  // backdrop; the PUT itself is real and must fail 401 without local mutation).
+  // A real 403 envelope, replayed on the admin session's own PUT: it stays in the dialog (ADR-009, section 6).
+  const forbidden = await page.evaluate(async ({ key, principalId }) => {
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${key}` };
+    const body = JSON.stringify({ status: "inactive", expected_updated_at: "2026-01-01T00:00:00Z" });
+    const response = await fetch(`/api/v1/principals/${principalId}/status`, { method: "PUT", headers, body });
+    return { status: response.status, body: await response.text() };
+  }, { key: restrictedKey, principalId: id });
+  expect(forbidden.status).toBe(403);
+  const statusPut = (url) => url.pathname === `/api/v1/principals/${id}/status`;
+  await route(page, statusPut, (route) => route.fulfill({ status: 403, contentType: "application/json", body: forbidden.body }));
+  await page.click("#deactivate-submit");
+  await expect(page.locator("#deactivate-error-title")).toHaveText("Access unavailable", { timeout: 20_000 });
+  await expect(page.locator("#deactivate-dialog")).toBeVisible();
+  await expect(page.locator("#session-status")).toHaveText("Signed in as admin-human.");
+  await unroute(page, statusPut);
+  // A key swapped in while the dialog is open is a new session: the dialog opened under the
+  // previous one closes, so nothing is submitted with it (ADR-009, section 11).
   await page.evaluate((key) => {
     document.getElementById("api-key").value = key;
     document.getElementById("session-form").requestSubmit();
   }, "sre_admn_0123456789abcdefghij");
   await expect(page.locator("#page-error-title")).toHaveText("Authentication required", { timeout: 20_000 });
-  await expect(page.locator("#deactivate-dialog")).toBeVisible();
-  await page.click("#deactivate-submit");
-  await expect(page.locator("#deactivate-error-title")).toHaveText("Authentication required", { timeout: 20_000 });
-  await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} deactivated.`);
-  await page.evaluate((key) => {
-    document.getElementById("api-key").value = key;
-    document.getElementById("session-form").requestSubmit();
-  }, restrictedKey);
+  await expect(page.locator("#deactivate-dialog")).toBeHidden();
+  await connect(page, restrictedKey);
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable", { timeout: 20_000 });
-  await expect(page.locator("#deactivate-dialog")).toBeVisible();
-  await page.click("#deactivate-submit");
-  await expect(page.locator("#deactivate-error-title")).toHaveText("Access unavailable", { timeout: 20_000 });
+  await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(0);
   await expect(page.locator("#live-region")).not.toContainText(`Principal ${id} deactivated.`);
   const still = await page.evaluate(async ({ key, principalId }) => {
     const { createAdministrativeApiClient, createMemoryCredentialStore } = await import("/public/api/client.js");
@@ -188,7 +195,6 @@ test("blocks deactivate for invalid/restricted credentials without false mutatio
     return (await client.getPrincipal(principalId)).status;
   }, { key: adminKey, principalId: id });
   expect(still).toBe("active");
-  await page.click("#deactivate-cancel");
   await page.click("#disconnect-button");
   await connect(page, adminKey);
   await expect(page.locator(`[data-principal-row='${id}']`)).toHaveCount(1, { timeout: 20_000 });

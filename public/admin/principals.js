@@ -1,7 +1,4 @@
-import {
-  createAdministrativeApiClient,
-  createMemoryCredentialStore,
-} from "/public/api/client.js";
+import { connectSharedSession, createAdministrativeApiClient } from "/public/api/client.js";
 
 const KINDS = new Set(["human", "agent"]);
 const STATUSES = new Set(["active", "inactive"]);
@@ -9,6 +6,7 @@ const STATUSES = new Set(["active", "inactive"]);
 const page = document.getElementById("principals-page");
 const sessionForm = document.getElementById("session-form");
 const apiKeyInput = document.getElementById("api-key");
+const sessionStatus = document.getElementById("session-status");
 const liveRegion = document.getElementById("live-region");
 const errorBox = document.getElementById("page-error");
 const errorTitle = document.getElementById("page-error-title");
@@ -53,8 +51,9 @@ const secretDialog = document.getElementById("secret-dialog");
 const secretValue = document.getElementById("secret-value");
 const secretClose = document.getElementById("secret-close");
 
-const credentialStore = createMemoryCredentialStore();
-const controlApi = createAdministrativeApiClient({ credentialStore });
+// The key lives in the browser's shared session (ADR-009): this page follows its state.
+const session = connectSharedSession();
+const controlApi = createAdministrativeApiClient({ session });
 const expanded = new Set();
 let currentItems = [];
 // Per-principal read version: every authoritative write of one Principal
@@ -530,37 +529,34 @@ rowsBody.addEventListener("click", async (event) => {
 sessionForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const value = apiKeyInput.value.trim();
-  if (!value) {
-    showError({ kind: "validation", message: "Enter an API key." });
-    return;
-  }
-  credentialStore.set(value);
   apiKeyInput.value = "";
-  announce("Session set. Loading principals.");
-  loadPrincipals();
+  try {
+    session.setCredential(value);
+  } catch {
+    showError({ kind: "validation", message: "Enter an API key." });
+  }
 });
 
-disconnectButton.addEventListener("click", () => {
-  // Invalidate any in-flight load before clearing: its late resolution must
-  // not repopulate administrative data under the cleared session. Do not
-  // start a replacement load: the cleared session has no credential, so a new
-  // request would only produce an authentication error and clobber the
-  // disconnected state the stale guard is meant to preserve.
+disconnectButton.addEventListener("click", () => session.logout());
+
+// A new generation drops everything bound to the previous one (ADR-009, section 11): its
+// late responses, data, details, dialogs and typed values. Requests already sent keep their
+// own locks until they settle.
+function resetView() {
   sessionGeneration += 1;
-  credentialStore.clear();
   expanded.clear();
   currentItems = [];
   principalVersions.clear();
   renderRows();
   hideError();
-  // Clear may close the UI and invalidate the generation, but it never
-  // clears the in-flight request state: a late POST must stay stale-blocked
-  // and must not enable a concurrent second create.
-  if (!createInFlight) {
-    pendingIdempotencyKey = null;
-    pendingCreateBodyKey = null;
-  }
+  // The retry token belongs to the old generation; a POST in flight keeps its own copy and its
+  // lock below, so no second create starts before it settles.
+  pendingIdempotencyKey = null;
+  pendingCreateBodyKey = null;
+  const hadDialog = document.querySelector("dialog[open]") !== null;
   if (createDialog?.open) createDialog.close();
+  createForm.reset();
+  issueForm.reset();
   hideCreateError();
   if (!createInFlight) {
     if (createSubmit) createSubmit.disabled = false;
@@ -591,8 +587,44 @@ disconnectButton.addEventListener("click", () => {
   emptyDetail.textContent = "Connect with an administrative API key to load the list.";
   countLine.textContent = "Not loaded.";
   page.dataset.state = "idle";
-  announce("Session cleared.");
-});
+  if (hadDialog) apiKeyInput.focus();
+}
+
+const describeSession = {
+  connecting: () => "Connecting to the browser session…",
+  anonymous: () => "No session.",
+  validating: (_, reason) => (reason ? "The API is unreachable; the key is not validated yet." : "Validating the API key…"),
+  active: (principalId) => `Signed in as ${principalId}.`,
+  blocked: () => "Session unavailable. Reload the page.",
+};
+let sessionToken;
+let loadedToken = null;
+
+function followSession({ token, phase, principalId, reason }) {
+  const followed = typeof sessionToken === "string";
+  if (token !== sessionToken) {
+    [sessionToken, loadedToken] = [token, null];
+    resetView();
+  }
+  sessionStatus.textContent = describeSession[phase](principalId, reason);
+  createButton.disabled = phase !== "active";
+  refreshButton.disabled = phase !== "active" && reason !== "unreachable";
+  if (phase === "active" && loadedToken !== token) {
+    loadedToken = token;
+    loadPrincipals();
+  } else if (phase === "validating") {
+    page.dataset.state = reason ? "offline" : "loading";
+    emptyDetail.textContent = reason ? "The key could not be validated. Retry." : "Validating the API key.";
+    if (reason) showError({ kind: "network" });
+    else hideError();
+  } else if (reason === "invalid_credential" || reason === "credential_rejected") {
+    page.dataset.state = "error";
+    emptyDetail.textContent = "Provide a valid API key.";
+    showError({ kind: "authentication" });
+  } else if (reason === "logout" && followed) {
+    announce("Session cleared.");
+  }
+}
 
 deactivateDialog.addEventListener("cancel", (event) => {
   if (statusInFlight) event.preventDefault();
@@ -749,9 +781,7 @@ issueForm.addEventListener("submit", async (event) => {
   }
 });
 
-refreshButton.addEventListener("click", () => {
-  loadPrincipals();
-});
+refreshButton.addEventListener("click", () => (session.state.phase === "active" ? loadPrincipals() : session.retry()));
 
 createButton.addEventListener("click", () => {
   hideCreateError();
@@ -834,4 +864,5 @@ createForm.addEventListener("submit", async (event) => {
   }
 });
 
-page.dataset.state = "idle";
+followSession(session.state);
+session.subscribe(followSession);
