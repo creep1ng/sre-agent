@@ -28,7 +28,7 @@ server {
     }
 
     location / {
-        add_header Content-Security-Policy "default-src 'self'; connect-src 'self'; object-src 'none'" always;
+        add_header Content-Security-Policy "default-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'" always;
         try_files $uri $uri/ =404;
     }
 }

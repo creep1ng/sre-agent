@@ -5,6 +5,7 @@ const STATUS_KINDS = Object.freeze({
   409: "conflict",
 });
 const credentialValues = new WeakMap();
+const sessionSenders = new WeakMap();
 
 export class ApiClientError extends Error {
   constructor(kind, message, options = {}) {
@@ -32,6 +33,69 @@ export function createMemoryCredentialStore() {
   });
   credentialValues.set(store, null);
   return store;
+}
+
+const staleSession = () =>
+  new ApiClientError("stale_session", "The session changed before this response applied.");
+
+// One session per origin and profile, held by a SharedWorker (ADR-009). The page never reads
+// the key back: it keeps this state, whose token changes on every accepted change.
+export function connectSharedSession() {
+  const listeners = new Set();
+  const pending = new Map();
+  let state = Object.freeze({ token: null, phase: "connecting", principalId: null, reason: null });
+  let sequence = 0;
+
+  function emit({ token, phase, principalId, reason }) {
+    state = Object.freeze({ token, phase, principalId, reason });
+    listeners.forEach((listener) => listener(state));
+  }
+
+  function settle({ id, token, refused, network, status, headers, body }) {
+    const entry = pending.get(id);
+    pending.delete(id);
+    const failure = (kind, message) => new ApiClientError(kind, message, { retryable: !!network });
+    const empty = [204, 205, 304].includes(status);
+    if (token !== state.token || refused === "stale_session") entry?.reject(staleSession());
+    else if (refused) entry?.reject(failure("not_allowed", "The session refused this request."));
+    else if (network) entry?.reject(failure("network", "The API could not be reached."));
+    else entry?.resolve(new Response(empty ? null : body, { status, headers }));
+  }
+
+  const { port } = new SharedWorker("/public/api/session-worker.js", { name: "sre-agent-session" });
+  port.onmessage = ({ data }) => {
+    if (data?.type === "session") emit(data);
+    else if (data?.type === "response") settle(data);
+  };
+  port.postMessage({ type: "hello" });
+
+  const session = Object.freeze({
+    get state() {
+      return state;
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    setCredential(value) {
+      if (typeof value !== "string" || !/^[\x21-\x7e]+$/.test(value)) {
+        throw new TypeError("A non-empty printable bearer credential is required.");
+      }
+      port.postMessage({ type: "set", credential: value });
+    },
+    logout() {
+      port.postMessage({ type: "logout" });
+    },
+  });
+  sessionSenders.set(session, (token, path, { method, headers, body }) =>
+    new Promise((resolve, reject) => {
+      sequence += 1;
+      pending.set(sequence, { resolve, reject });
+      const message = { type: "request", id: sequence, token, path, method, body };
+      port.postMessage({ ...message, headers: Object.fromEntries(headers) });
+    }),
+  );
+  return session;
 }
 
 export function apiBaseUrlFrom(runtime = globalThis) {
@@ -93,12 +157,17 @@ export function createAdministrativeApiClient({
   baseUrl = apiBaseUrlFrom(),
   credentialStore = createMemoryCredentialStore(),
   fetchImplementation = globalThis.fetch?.bind(globalThis),
+  session,
 } = {}) {
   if (typeof fetchImplementation !== "function") {
     throw new TypeError("A fetch implementation is required.");
   }
   if (!credentialValues.has(credentialStore)) {
     throw new TypeError("credentialStore must be created by createMemoryCredentialStore.");
+  }
+  const send = session === undefined ? null : sessionSenders.get(session);
+  if (session !== undefined && !send) {
+    throw new TypeError("session must be created by connectSharedSession.");
   }
   const normalizedBaseUrl = apiBaseUrlFrom({
     __SRE_AGENT_CONFIG__: { apiBaseUrl: baseUrl },
@@ -110,10 +179,12 @@ export function createAdministrativeApiClient({
     const requestHeaders = new Headers({ Accept: "application/json", ...headers });
     if (body !== undefined) requestHeaders.set("Content-Type", "application/json");
     if (credential) requestHeaders.set("Authorization", `Bearer ${credential}`);
+    const token = session?.state.token;
+    const transport = send ? (_, init) => send(token, path, init) : fetchImplementation;
 
     let response;
     try {
-      response = await fetchImplementation(`${normalizedBaseUrl}${path}`, {
+      response = await transport(`${normalizedBaseUrl}${path}`, {
         method,
         headers: requestHeaders,
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -123,6 +194,7 @@ export function createAdministrativeApiClient({
         referrerPolicy: "same-origin",
       });
     } catch (cause) {
+      if (cause instanceof ApiClientError) throw cause;
       throw new ApiClientError("network", "The API could not be reached.", {
         cause,
         retryable: true,
@@ -130,11 +202,16 @@ export function createAdministrativeApiClient({
     }
 
     let payload;
+    let invalid = null;
     try {
       payload = await responsePayload(response);
     } catch (cause) {
+      invalid = cause;
+    }
+    if (send && session.state.token !== token) throw staleSession();
+    if (invalid) {
       throw new ApiClientError("invalid_response", "The API returned an invalid response.", {
-        cause,
+        cause: invalid,
         status: response.status,
         retryable: true,
       });
