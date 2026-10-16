@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { switchConsoleCredential } from "./support/console-session.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://web";
 
@@ -78,13 +79,13 @@ test("stale command reads the winning version before explicit resubmission", asy
   expect(winner.body.expected_version).toBe(2);
 
   await page.locator("#submit-button").click();
-  await expect(page.locator("#page-error-title")).toHaveText("Conflict");
+  await expect(page.locator("#page-error-title")).toHaveText("Conflicto");
   await expectRecoveryRead(page, beforeStaleSubmit);
   await expect(page.locator("#result-status")).toHaveText("open");
   await expect(page.locator("#result-origin")).toHaveText("Manual");
   await expect(page.locator("#result-version")).toHaveText("2");
   await expect(page.locator("#expected-version")).toHaveValue("2");
-  await expect(page.locator("#result-summary")).toContainText("Recovered from backend");
+  await expect(page.locator("#result-summary")).toContainText("Recuperado del backend");
   await expect(page.locator("#alert-id")).toHaveValue(raceAlert);
   await expect(page.locator("#command-operation")).toHaveValue("triage_link");
   await expect(page.locator("#command-reason")).toHaveValue("Link after reviewing the current alert.");
@@ -141,7 +142,7 @@ test("stale declaration preserves selected severity for an explicit retry", asyn
   expect(winner.body.expected_version).toBe(2);
 
   await page.locator("#submit-button").click();
-  await expect(page.locator("#page-error-title")).toHaveText("Conflict");
+  await expect(page.locator("#page-error-title")).toHaveText("Conflicto");
   await expectRecoveryRead(page, beforeStaleSubmit);
   await expect(page.locator("#expected-version")).toHaveValue("2");
   await expect(page.locator("#command-operation")).toHaveValue("triage_declare");
@@ -195,13 +196,13 @@ test("stale-version recovery preserves the draft when a context reread is denied
   await page.locator("#command-reason").fill("Preserve operator context after denied read.");
 
   await page.locator("#submit-button").click();
-  await expect(page.locator("#page-error-title")).toHaveText("Conflict");
+  await expect(page.locator("#page-error-title")).toHaveText("Conflicto");
   await expect.poll(() =>
     page.context()["__triageRequests"].filter(({ pathname }) => pathname.endsWith("/triage/context")).length,
   ).toBe(2);
-  await expect(page.locator("#page-error-detail")).toContainText("read");
+  await expect(page.locator("#page-error-detail")).toContainText("leer");
   await expect(page.locator("#result-summary")).toHaveText(
-    "Current state could not be verified; no command was confirmed.",
+    "No se pudo verificar el estado actual; no se confirmó ningún comando.",
   );
   await expect(page.locator("#result-status")).toHaveText("—");
   await expect(page.locator("#result-origin")).toHaveText("—");
@@ -255,8 +256,7 @@ test("reconnecting with the same credential releases only the new generation whi
     await page.locator("#submit-button").click();
     await expect.poll(() => page.evaluate(() => globalThis.__triageGate.held)).toContain(alertA);
 
-    await page.locator("#api-key").fill(reconnectingKey);
-    await page.locator("#connect-button").click();
+    await switchConsoleCredential(page, reconnectingKey);
     await expect(page.locator("#submit-button")).toBeDisabled();
     await page.locator("#alert-id").fill(alertB);
     await expect(page.locator("#command-operation")).toBeEnabled();

@@ -20,7 +20,7 @@ export const VIEWS = Object.freeze({
     domain: "incidents",
     label: "Triage",
     path: "/public/admin/triage.html",
-    legacy: true,
+    module: "/public/admin/triage.js",
   },
   "war-room": {
     domain: "incidents",

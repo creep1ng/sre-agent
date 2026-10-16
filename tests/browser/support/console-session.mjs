@@ -20,3 +20,12 @@ export async function logoutConsole(page) {
   await page.locator("#disconnect-button").click();
   await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "anonymous");
 }
+
+// Changing identity while a session is active goes through the session menu, never a second form.
+export async function switchConsoleCredential(page, key) {
+  await page.locator("#session-chip").click();
+  await page.locator("#change-credential").click();
+  await page.locator("#api-key").fill(key);
+  await page.locator("#connect-button").click();
+  await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "active");
+}

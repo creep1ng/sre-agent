@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { answerWhoAmI, logoutConsole } from "./support/console-session.mjs";
 
 const COMMANDS_PATH = "/api/v1/alerts/al-journey-01/triage/commands";
 const CONTEXT_PATH = "/api/v1/alerts/al-journey-01/triage/context";
@@ -25,9 +26,11 @@ function stateResult(status, incident = null) {
 
 const json = (status, body) => ({ status, contentType: "application/json", body });
 
+// Triage reads through the console session: the key is entered once in the console.
 async function connect(page) {
   await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
   await page.click("#connect-button");
+  await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "active");
 }
 
 async function send(page, operation, configure = {}) {
@@ -84,6 +87,7 @@ test.beforeEach(async ({ page }) => {
       alert_id: "al-journey-01", triage_state: mockedState, allowed_actions: ALL_ACTIONS,
     }))),
   );
+  await answerWhoAmI(page);
   await page.goto("/public/admin/triage.html");
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "idle");
 });
@@ -110,7 +114,7 @@ test("sends open_triage without reason and syncs state", async ({ page }) => {
   await expect(page.locator("#result-origin")).toHaveText("—");
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
   await expect(page.locator("#expected-version")).toHaveValue("2");
-  await expect(page.locator("#triage-state")).toContainText("al-journey-01 is open (version 2), read from the API.");
+  await expect(page.locator("#triage-state")).toContainText("al-journey-01 está open (versión 2), según la API.");
 });
 
 test("sends dismiss and link with exact bodies", async ({ page }) => {
@@ -192,8 +196,8 @@ test("rejects a declaration without operator impact before sending", async ({ pa
   for (const value of ["", "   "]) {
     await page.fill("#command-impact", value);
     await page.click("#submit-button");
-    await expect(page.locator("#page-error-title")).toHaveText("Invalid request");
-    await expect(page.locator("#page-error-detail")).toContainText(/impact/i);
+    await expect(page.locator("#page-error-title")).toHaveText("Solicitud inválida");
+    await expect(page.locator("#page-error-detail")).toContainText(/impacto/i);
   }
   expect(requests).toBe(0);
 });
@@ -225,7 +229,7 @@ test("renders a missing severity as an invalid request", async ({ page }) => {
     "#alert-context-severity": DECLARATION_CONTEXT.severity,
     "#alert-context-confirmed": "yes",
   });
-  await expect(page.locator("#page-error-title")).toHaveText("Invalid request");
+  await expect(page.locator("#page-error-title")).toHaveText("Solicitud inválida");
 });
 
 test("switching operations drops stale fields before sending", async ({ page }) => {
@@ -261,18 +265,29 @@ test("switching operations drops stale fields before sending", async ({ page }) 
   expect(seen[1]).not.toHaveProperty("target_incident_id");
 });
 
-test("renders authentication, authorization, conflict and outage failures distinctly", async ({ page }) => {
-  let status = 401;
+test("a rejected credential on a command ends the console session without a decision", async ({ page }) => {
+  await page.route((url) => url.pathname === COMMANDS_PATH, (route) => route.fulfill(json(401, "{}")));
+  await connect(page);
+  await page.fill("#alert-id", "al-journey-01");
+  await send(page, "open_triage");
+  // ADR-009: a 401 of the current session ends it for every view, not only for triage.
+  await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "anonymous");
+  await expect(page.locator("#session-message")).toContainText("rechazó la credencial");
+  await expect(page.locator("#result-status")).toHaveText("—");
+  await expect(page.locator("#alert-id")).toHaveValue("");
+});
+
+test("renders authorization, not-found, conflict and outage failures distinctly", async ({ page }) => {
+  let status = 403;
   let body = "{}";
   await page.route((url) => url.pathname === COMMANDS_PATH, (route) =>
     route.fulfill(json(status, body)));
   await connect(page);
   const cases = [
-    [401, null, "Authentication required"],
-    [403, null, "Access unavailable"],
-    [404, null, "Not found"],
-    [409, "stale_version", "Conflict"],
-    [503, "storage_unavailable", "Service unavailable"],
+    [403, null, "Sin acceso"],
+    [404, null, "No encontrado"],
+    [409, "stale_version", "Conflicto"],
+    [503, "storage_unavailable", "Servicio no disponible"],
   ];
   for (let index = 0; index < cases.length; index += 1) {
     const [next, code, title] = cases[index];
@@ -296,7 +311,7 @@ test("surfaces network failure as offline without false state", async ({ page })
   await page.fill("#alert-id", "al-journey-01");
   await send(page, "open_triage");
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "offline");
-  await expect(page.locator("#page-error-title")).toHaveText("API unavailable");
+  await expect(page.locator("#page-error-title")).toHaveText("API no disponible");
   await expect(page.locator("#result-status")).toHaveText("—");
 });
 
@@ -317,13 +332,13 @@ test("context denial, storage failure and malformed projection fail closed witho
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
   await expect(page.locator("#submit-button")).toBeDisabled();
-  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expect(page.locator("#page-error-title")).toHaveText("Sin acceso");
   await page.locator("#command-form").evaluate((form) =>
     form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
   );
   expect(posts).toBe(0);
 
-  for (const [nextMode, title] of [["unavailable", "Service unavailable"], ["malformed", "Request failed"]]) {
+  for (const [nextMode, title] of [["unavailable", "Servicio no disponible"], ["malformed", "La solicitud falló"]]) {
     mode = nextMode;
     await page.fill("#alert-id", "");
     await page.fill("#alert-id", "al-journey-01");
@@ -356,7 +371,7 @@ test("a successful command refresh displays the newer authoritative context", as
   await send(page, "open_triage");
   await expect(page.locator("#result-version")).toHaveText("3");
   await expect(page.locator("#expected-version")).toHaveValue("3");
-  await expect(page.locator("#result-summary")).toContainText("Recovered from backend: open");
+  await expect(page.locator("#result-summary")).toContainText("Recuperado del backend: open");
   expect(reads).toBe(2);
 });
 
@@ -378,8 +393,8 @@ test("a confirmed command with a null refresh context keeps its result but disab
   await expect(page.locator("#result-summary")).toContainText("open");
   await expect(page.locator("#submit-button")).toBeDisabled();
   await expect(page.locator("#page-error")).toBeVisible();
-  await expect(page.locator("#page-error-title")).toHaveText("Request failed");
-  await expect(page.locator("#page-error-detail")).toContainText("confirmed");
+  await expect(page.locator("#page-error-title")).toHaveText("La solicitud falló");
+  await expect(page.locator("#page-error-detail")).toContainText("se confirmó");
   expect(reads).toBe(2);
 });
 
@@ -438,7 +453,7 @@ test("reload shows idle without invented state", async ({ page }) => {
   await expect(page.locator("#result-status")).toHaveText("dismissed");
   await page.reload();
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "idle");
-  await expect(page.locator("#result-summary")).toHaveText("No command sent yet.");
+  await expect(page.locator("#result-summary")).toHaveText("Aún no se envió ningún comando.");
   await expect(page.locator("#page-error")).toBeHidden();
   await expect(page.locator("#expected-version")).toHaveValue("1");
 });
@@ -454,7 +469,7 @@ test("stale version recovers with the current version", async ({ page }) => {
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
   await send(page, "triage_dismiss", { "#command-reason": "Not actionable." });
-  await expect(page.locator("#page-error-title")).toHaveText("Conflict");
+  await expect(page.locator("#page-error-title")).toHaveText("Conflicto");
   await expect(page.locator("#result-status")).toHaveText("—");
   await page.fill("#expected-version", "2");
   await page.click("#submit-button");
@@ -471,9 +486,9 @@ test("forbidden leaves no trace and reconnect recovers", async ({ page }) => {
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
   await send(page, "open_triage");
-  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expect(page.locator("#page-error-title")).toHaveText("Sin acceso");
   await expect(page.locator("#result-status")).toHaveText("—");
-  await page.click("#disconnect-button");
+  await logoutConsole(page);
   mode = "allow";
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
@@ -492,7 +507,7 @@ test("late response cannot overwrite a newer result", async ({ page }) => {
   await page.fill("#alert-id", "al-journey-01");
   await page.locator("#submit-button").click();
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "loading");
-  await page.click("#disconnect-button");
+  await logoutConsole(page);
   await connect(page);
   await page.fill("#alert-id", "al-journey-01");
   await page.click("#submit-button");

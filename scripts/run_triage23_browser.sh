@@ -9,4 +9,4 @@ for name in E2E_TRIAGE_API_KEY E2E_NOGRANT_API_KEY E2E_OP_NOREAD_API_KEY \
 done
 npx playwright test --config=playwright.production.config.js --workers=1 --reporter=json \
   > /artifacts/playwright.json
-node -e 'const r=JSON.parse(require("fs").readFileSync("/artifacts/playwright.json")); const s=r.stats; console.log("passed="+s.expected+" skipped="+s.skipped+" failed="+s.unexpected+" flaky="+s.flaky); if(s.expected!==54||s.skipped!==0||s.unexpected!==0||s.flaky!==0) process.exit(1)'
+node -e 'const r=JSON.parse(require("fs").readFileSync("/artifacts/playwright.json")); const s=r.stats; console.log("passed="+s.expected+" skipped="+s.skipped+" failed="+s.unexpected+" flaky="+s.flaky); if(s.expected!==55||s.skipped!==0||s.unexpected!==0||s.flaky!==0) process.exit(1)'

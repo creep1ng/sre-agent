@@ -1,12 +1,9 @@
-import {
-  ApiClientError,
-  createAdministrativeApiClient,
-  createMemoryCredentialStore,
-} from "/public/api/client.js";
+import { ApiClientError } from "/public/api/client.js";
+import { hrefFor } from "/public/console/routes.js";
+import { mountedView } from "/public/console/view.js";
 
+const view = mountedView();
 const page = document.getElementById("triage-page");
-const sessionForm = document.getElementById("session-form");
-const apiKeyInput = document.getElementById("api-key");
 const commandForm = document.getElementById("command-form");
 const alertInput = document.getElementById("alert-id");
 const versionInput = document.getElementById("expected-version");
@@ -25,7 +22,6 @@ const alertContextSeverityInput = document.getElementById("alert-context-severit
 const alertContextConfirmedInput = document.getElementById("alert-context-confirmed");
 const submitButton = document.getElementById("submit-button");
 const actionsStatus = document.getElementById("actions-status");
-const disconnectButton = document.getElementById("disconnect-button");
 const liveRegion = document.getElementById("live-region");
 const errorBox = document.getElementById("page-error");
 const errorTitle = document.getElementById("page-error-title");
@@ -42,8 +38,7 @@ const resultDecided = document.getElementById("result-decided");
 const resultOrigin = document.getElementById("result-origin");
 const resultResponsibleSystem = document.getElementById("result-responsible-system");
 
-const credentialStore = createMemoryCredentialStore();
-const controlApi = createAdministrativeApiClient({ credentialStore });
+const controlApi = view.client;
 let sessionGeneration = 0;
 let commandInFlight = false;
 let contextGeneration = 0;
@@ -63,8 +58,8 @@ const INCIDENT_ID_PATTERN = /^[a-z][a-z0-9_-]{2,63}$/;
 const text = (value) => (typeof value === "string" ? value : "");
 const DECISION_ORIGIN_LABELS = Object.freeze({
   manual: "Manual",
-  external_automatic: "External automatic",
-  unknown: "Unknown (legacy)",
+  external_automatic: "Automática externa",
+  unknown: "Desconocido (histórico)",
 });
 const announce = (message) => {
   liveRegion.textContent = message;
@@ -78,29 +73,29 @@ function newCommandKey() {
 
 function describeError(error, scope = "command") {
   if (error?.kind === "network")
-    return ["API unavailable", "The triage API could not be reached. Check the stack and retry."];
+    return ["API no disponible", "No se pudo contactar la API de triage. Revisa el stack y reintenta."];
   if (error?.kind === "authentication")
-    return ["Authentication required", "Provide a valid API key. Nothing else is confirmed."];
+    return ["Autenticación requerida", "Conecta la consola con una API key válida. No se confirmó nada más."];
   if (error?.kind === "authorization")
     return scope === "read"
-      ? ["Access unavailable", "This identity cannot read triage state."]
-      : ["Access unavailable", "The command cannot be confirmed for this identity."];
+      ? ["Sin acceso", "Esta identidad no puede leer el estado de triage."]
+      : ["Sin acceso", "El comando no se puede confirmar para esta identidad."];
   if (error?.kind === "not_found")
-    return ["Not found", "Unknown alert or target incident. Nothing was changed."];
+    return ["No encontrado", "Alerta o incidente destino desconocido. No se cambió nada."];
   if (error?.kind === "validation")
-    return ["Invalid request", text(error?.message) || "Review the command fields and try again."];
+    return ["Solicitud inválida", text(error?.message) || "Revisa los campos del comando e inténtalo de nuevo."];
   if (error?.kind === "conflict")
     return [
-      "Conflict",
-      text(error?.message) || "The version is stale or the command key was reused. Refresh state.",
+      "Conflicto",
+      text(error?.message) || "La versión está desactualizada o la clave del comando ya se usó. Actualiza el estado.",
     ];
   if (error?.kind === "api" && error?.status === 422)
-    return ["Invalid request", error?.message ?? "The command payload was rejected."];
+    return ["Solicitud inválida", error?.message ?? "La API rechazó el cuerpo del comando."];
   if (error?.kind === "api" && error?.code === "storage_unavailable")
-    return ["Service unavailable", error?.message ?? "The request was not completed. Retry."];
+    return ["Servicio no disponible", error?.message ?? "La solicitud no se completó. Reintenta."];
   if (error?.kind === "api")
-    return ["Request failed", error?.message ?? "Unexpected error. Nothing was changed."];
-  return ["Request failed", error?.message ?? "Unexpected error."];
+    return ["La solicitud falló", error?.message ?? "Error inesperado. No se cambió nada."];
+  return ["La solicitud falló", error?.message ?? "Error inesperado."];
 }
 
 function showError(error, scope = "command") {
@@ -116,12 +111,12 @@ function hideError() {
   errorDetail.textContent = "";
 }
 
-function invalidateEligibleIncidents(message = "Select triage_link to load backend-eligible incidents.") {
+function invalidateEligibleIncidents(message = "Elige triage_link para cargar los incidentes elegibles del backend.") {
   eligibleGeneration += 1;
   eligibleAlertId = "";
   eligibleSessionGeneration = 0;
   eligibleIncidents = null;
-  targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+  targetInput.replaceChildren(new Option("Elige un incidente elegible…", ""));
   targetInput.value = "";
   targetInput.disabled = true;
   targetListStatus.textContent = message;
@@ -140,14 +135,14 @@ function validEligibleResponse(response) {
 }
 
 function renderEligibleIncidents(items, selectedTarget = "") {
-  targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+  targetInput.replaceChildren(new Option("Elige un incidente elegible…", ""));
   for (const item of items) {
     targetInput.add(new Option(`${item.incident_id} · ${item.state}`, item.incident_id));
   }
   targetInput.value = items.some((item) => item.incident_id === selectedTarget) ? selectedTarget : "";
   targetListStatus.textContent = items.length === 0
-    ? "No eligible incidents were returned by the backend."
-    : `Showing up to 100 eligible incidents; this list may be incomplete (${items.length} returned).`;
+    ? "El backend no devolvió incidentes elegibles."
+    : `Se muestran hasta 100 incidentes elegibles; la lista puede estar incompleta (${items.length} devueltos).`;
 }
 
 function eligibleListIsCurrent(alertId = alertInput.value.trim()) {
@@ -172,10 +167,10 @@ async function loadEligibleIncidents({ force = false, preserveSelection = false,
   eligibleAlertId = "";
   eligibleSessionGeneration = 0;
   eligibleIncidents = null;
-  targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+  targetInput.replaceChildren(new Option("Elige un incidente elegible…", ""));
   targetInput.value = "";
   targetInput.disabled = true;
-  targetListStatus.textContent = "Loading eligible incidents from the backend…";
+  targetListStatus.textContent = "Cargando los incidentes elegibles del backend…";
   updateActionControls();
   try {
     const response = await controlApi.getEligibleIncidents(alertId);
@@ -183,7 +178,7 @@ async function loadEligibleIncidents({ force = false, preserveSelection = false,
       !sessionActive || alertInput.value.trim() !== alertId || contextAlertId !== alertId ||
       !allowedActions?.includes("triage_link") || operationInput.value !== "triage_link")
       return { ok: false, stale: true };
-    if (!validEligibleResponse(response)) throw new ApiClientError("invalid_response", "The API returned an invalid eligible-incident list.");
+    if (!validEligibleResponse(response)) throw new ApiClientError("invalid_response", "La API devolvió una lista de incidentes elegibles inválida.");
     eligibleAlertId = alertId;
     eligibleSessionGeneration = generation;
     eligibleIncidents = response.items;
@@ -198,10 +193,10 @@ async function loadEligibleIncidents({ force = false, preserveSelection = false,
     eligibleAlertId = "";
     eligibleSessionGeneration = 0;
     eligibleIncidents = null;
-    targetInput.replaceChildren(new Option("Select an eligible incident…", ""));
+    targetInput.replaceChildren(new Option("Elige un incidente elegible…", ""));
     targetInput.value = "";
     targetInput.disabled = true;
-    targetListStatus.textContent = "Could not load eligible incidents. No link target is available.";
+    targetListStatus.textContent = "No se pudieron cargar los incidentes elegibles. No hay destino para vincular.";
     updateActionControls();
     showError(error, "read");
     return { ok: false, error };
@@ -242,8 +237,8 @@ function clearActionProjection() {
   contextAlertId = "";
   allowedActions = null;
   actionsStatus.textContent = sessionActive
-    ? "Loading operations permitted by the backend…"
-    : "Connect and select an alert to load actions from the backend.";
+    ? "Cargando las operaciones que permite el backend…"
+    : "Conecta la consola y elige una alerta para cargar las acciones del backend.";
   updateActionControls();
 }
 
@@ -264,8 +259,8 @@ function isValidContext(item, alertId) {
 
 function renderContextState(alertId, state) {
   if (state === null) {
-    clearResultDisplay("No recorded decision for this alert.");
-    stateLine.textContent = `Alert ${alertId} has no recorded decision yet.`;
+    clearResultDisplay("Esta alerta no tiene una decisión registrada.");
+    stateLine.textContent = `La alerta ${alertId} aún no tiene una decisión registrada.`;
     versionInput.value = "1";
   } else {
     setResult(state.status, state, "recovered");
@@ -282,7 +277,7 @@ function setResult(operation, item, source = "live") {
     resultIncident.textContent = "—";
   } else {
     const link = document.createElement("a");
-    link.href = `/public/incident-ui/war-room.html?incident_id=${encodeURIComponent(incident)}`;
+    link.href = hrefFor("war-room", { incident_id: incident });
     link.textContent = incident;
     resultIncident.appendChild(link);
   }
@@ -299,21 +294,21 @@ function setResult(operation, item, source = "live") {
   versionInput.value = item.expected_version === undefined ? versionInput.value : String(item.expected_version);
   if (source === "recovered") {
     resultSummary.textContent =
-      `Recovered from backend: ${text(item.status)}` + (incident === "" ? "." : `, incident ${incident}.`);
+      `Recuperado del backend: ${text(item.status)}` + (incident === "" ? "." : `, incidente ${incident}.`);
     stateLine.textContent =
-      `Alert ${alertInput.value.trim()} is ${text(item.status)} (version ${String(item.expected_version)}), read from the API.`;
+      `La alerta ${alertInput.value.trim()} está ${text(item.status)} (versión ${String(item.expected_version)}), según la API.`;
   } else {
     resultSummary.textContent =
-      `${operation} applied: ${text(item.status)}` + (incident === "" ? "." : `, incident ${incident}.`);
+      `${operation} aplicada: ${text(item.status)}` + (incident === "" ? "." : `, incidente ${incident}.`);
     stateLine.textContent =
-      `Alert ${alertInput.value.trim()} is ${text(item.status)} (version ${String(item.expected_version)}).`;
+      `La alerta ${alertInput.value.trim()} está ${text(item.status)} (versión ${String(item.expected_version)}).`;
   }
   announce(resultSummary.textContent);
 }
 
 function clearResult() {
-  clearResultDisplay("No command sent yet.");
-  stateLine.textContent = "Connect to begin.";
+  clearResultDisplay("Aún no se envió ningún comando.");
+  stateLine.textContent = "Conecta la consola para empezar.";
   versionInput.value = "1";
   alertInput.value = "";
   reasonInput.value = "";
@@ -380,17 +375,17 @@ function buildBody(operation) {
   const versionText = versionInput.value.trim();
   const version = versionText === "" ? Number.NaN : Number(versionText);
   if (!Number.isInteger(version) || version < 1)
-    return { ok: false, message: "Enter the expected version from the current state." };
+    return { ok: false, message: "Escribe la versión esperada del estado actual." };
   const fields = OPERATION_FIELDS[operation];
   if (fields === undefined)
-    return { ok: false, message: "Select a supported operation." };
+    return { ok: false, message: "Elige una operación admitida." };
   const body = { operation, expected_version: version };
   const reason = reasonInput.value.trim();
   if (reason !== "" && fields.includes("reason")) body.reason = reason;
   const target = targetInput.value.trim();
   if (fields.includes("target_incident_id")) {
     if (!eligibleListIsCurrent() || !eligibleIncidents.some((item) => item.incident_id === target))
-      return { ok: false, message: "Select a target from the latest backend eligible-incidents list." };
+      return { ok: false, message: "Elige un destino de la última lista de incidentes elegibles del backend." };
     body.target_incident_id = target;
   }
   const severity = severityInput.value;
@@ -399,9 +394,9 @@ function buildBody(operation) {
   impactInput.setAttribute("aria-required", String(fields.includes("impact")));
   if (fields.includes("impact")) {
     if (impact.trim() === "")
-      return { ok: false, message: "Impact is required when declaring an incident." };
+      return { ok: false, message: "El impacto es obligatorio para declarar un incidente." };
     if (impact.length > 2000)
-      return { ok: false, message: "Impact must be no more than 2000 characters." };
+      return { ok: false, message: "El impacto admite como máximo 2000 caracteres." };
     body.impact = impact;
   }
   if (operation === "triage_declare") {
@@ -409,7 +404,7 @@ function buildBody(operation) {
     if (!alertContext.ok) {
       return {
         ok: false,
-        message: "Enter and confirm the actual alert service, summary, observed time, source, and severity.",
+        message: "Escribe y confirma el servicio, el resumen, la hora observada, la fuente y la severidad reales de la alerta.",
       };
     }
     body.alert_context = alertContext.context;
@@ -424,10 +419,10 @@ async function readTriageContext(
 ) {
   const requestGeneration = ++contextGeneration;
   const targetToPreserve = preserveTarget ? targetInput.value : "";
-  invalidateEligibleIncidents("Loading current alert permissions and eligible targets…");
+  invalidateEligibleIncidents("Cargando los permisos actuales de la alerta y los destinos elegibles…");
   contextAlertId = "";
   allowedActions = null;
-  actionsStatus.textContent = "Loading operations permitted by the backend…";
+  actionsStatus.textContent = "Cargando las operaciones que permite el backend…";
   updateActionControls();
   page.dataset.state = "loading";
   try {
@@ -437,27 +432,27 @@ async function readTriageContext(
       alertInput.value.trim() !== alertId || !sessionActive
     ) return { ok: false, stale: true };
     if (!isValidContext(item, alertId)) {
-      throw new ApiClientError("invalid_response", "The API returned an invalid triage context.");
+      throw new ApiClientError("invalid_response", "La API devolvió un contexto de triage inválido.");
     }
     if (confirmedCommand && item.triage_state === null) {
       contextAlertId = "";
       allowedActions = null;
-      actionsStatus.textContent = "The command result is confirmed, but no triage state was returned; further operations are disabled.";
+      actionsStatus.textContent = "El resultado del comando está confirmado, pero la API no devolvió estado de triage; las siguientes operaciones quedan deshabilitadas.";
       updateActionControls();
       page.dataset.state = "error";
       const error = new ApiClientError(
         "invalid_response",
-        "The command was confirmed, but backend context contains no triage state. Further operations are disabled.",
+        "El comando se confirmó, pero el contexto del backend no tiene estado de triage. Las siguientes operaciones quedan deshabilitadas.",
       );
-      stateLine.textContent = "The command result is confirmed; current operations are unavailable.";
+      stateLine.textContent = "El resultado del comando está confirmado; las operaciones actuales no están disponibles.";
       if (showReadError) showError(error, "read");
       return { ok: false, error };
     }
     contextAlertId = alertId;
     allowedActions = [...item.allowed_actions];
     actionsStatus.textContent = allowedActions.length === 0
-      ? "The backend currently permits no triage operations for this alert."
-      : "Enabled operations are permitted by the backend for this identity and alert.";
+      ? "El backend no permite ahora ninguna operación de triage para esta alerta."
+      : "Las operaciones habilitadas son las que el backend permite a esta identidad para esta alerta.";
     updateActionControls();
     renderContextState(alertId, item.triage_state);
     page.dataset.state = "ready";
@@ -465,7 +460,7 @@ async function readTriageContext(
     if (operationInput.value === "triage_link" && allowedActions.includes("triage_link")) {
       void loadEligibleIncidents({ preserveSelection: preserveTarget, selectedTarget: targetToPreserve });
     } else {
-      targetListStatus.textContent = "Eligible targets are available only for a backend-permitted triage_link.";
+      targetListStatus.textContent = "Los destinos elegibles solo aplican a un triage_link que el backend permite.";
     }
     return { ok: true, item };
   } catch (error) {
@@ -476,15 +471,15 @@ async function readTriageContext(
     contextAlertId = "";
     allowedActions = null;
     actionsStatus.textContent = preserveResult
-      ? "The command result is confirmed; permitted next operations could not be refreshed."
-      : "No operation is available until backend context can be read.";
+      ? "El resultado del comando está confirmado; no se pudieron actualizar las siguientes operaciones permitidas."
+      : "No hay operaciones disponibles hasta poder leer el contexto del backend.";
     updateActionControls();
-    if (!preserveResult) clearResultDisplay("Current state could not be verified; no command was confirmed.");
+    if (!preserveResult) clearResultDisplay("No se pudo verificar el estado actual; no se confirmó ningún comando.");
     page.dataset.state = error?.kind === "network" ? "offline" : "error";
     if (preserveResult) {
-      stateLine.textContent = "The command result is confirmed; current operations are unavailable.";
+      stateLine.textContent = "El resultado del comando está confirmado; las operaciones actuales no están disponibles.";
     } else {
-      stateLine.textContent = `Alert ${alertId} current state is unavailable.`;
+      stateLine.textContent = `El estado actual de la alerta ${alertId} no está disponible.`;
     }
     if (showReadError) showError(error, "read");
     return { ok: false, error };
@@ -498,15 +493,15 @@ async function refreshAfterConflict(alertId, generation) {
     page.dataset.state = "error";
     showError({
       kind: "conflict",
-      message: "The command version is stale. Current API state is shown; review the command context and submit again.",
+      message: "La versión del comando está desactualizada. Se muestra el estado actual de la API; revisa el contexto del comando y envíalo de nuevo.",
     });
   } else {
     const readError = refreshed.error;
     const [readTitle, readDetail] = describeError(readError, "read");
-    clearResultDisplay("Current state could not be verified; no command was confirmed.");
+    clearResultDisplay("No se pudo verificar el estado actual; no se confirmó ningún comando.");
     showError({
       kind: "conflict",
-      message: `The command version is stale. Current state could not be refreshed (${readTitle}: ${readDetail}). No command was retried or confirmed.`,
+      message: `La versión del comando está desactualizada. No se pudo actualizar el estado actual (${readTitle}: ${readDetail}). No se reintentó ni confirmó ningún comando.`,
     });
   }
 }
@@ -515,12 +510,12 @@ async function sendCommand() {
   if (commandInFlight) return;
   const alertId = alertInput.value.trim();
   if (alertId === "") {
-    showError({ kind: "validation", message: "Enter an alert identifier." });
+    showError({ kind: "validation", message: "Escribe el identificador de la alerta." });
     return;
   }
   const operation = operationInput.value;
   if (contextAlertId !== alertId || !allowedActions?.includes(operation)) {
-    showError({ kind: "validation", message: "Select an operation currently permitted by the backend." });
+    showError({ kind: "validation", message: "Elige una operación que el backend permita ahora." });
     updateActionControls();
     return;
   }
@@ -535,22 +530,20 @@ async function sendCommand() {
   updateActionControls();
   hideError();
   page.dataset.state = "loading";
-  announce(`Sending ${operation}.`);
+  announce(`Enviando ${operation}.`);
   try {
     const item = await controlApi.postTriageCommand(alertId, checked.body, idempotencyKey);
     if (generation !== sessionGeneration) return;
     page.dataset.state = "ready";
     setResult(operation, item ?? {});
-    const url = new URL(window.location.href);
-    url.searchParams.set("alert_id", alertId);
-    window.history.replaceState(null, "", url);
+    view.replaceParams({ alert_id: alertId });
     await readTriageContext(alertId, generation, { preserveResult: true, confirmedCommand: true });
   } catch (error) {
     if (generation !== sessionGeneration) return;
     if (error?.kind === "conflict" && error?.code === "stale_version") {
       await refreshAfterConflict(alertId, generation);
     } else if (error?.kind === "conflict" && error?.code === "destination_ineligible") {
-      invalidateEligibleIncidents("The destination is no longer eligible. Refreshing the list; choose a target again.");
+      invalidateEligibleIncidents("El destino ya no es elegible. Se actualiza la lista; elige un destino de nuevo.");
       await loadEligibleIncidents({ force: true });
       if (generation !== sessionGeneration || !sessionActive || alertInput.value.trim() !== alertId) return;
       page.dataset.state = "error";
@@ -559,7 +552,7 @@ async function sendCommand() {
       if (error?.kind === "authorization") {
         contextGeneration += 1;
         clearActionProjection();
-        actionsStatus.textContent = "The command was denied; reload backend permissions before retrying.";
+        actionsStatus.textContent = "El comando fue denegado; vuelve a cargar los permisos del backend antes de reintentar.";
       }
       page.dataset.state = error?.kind === "network" ? "offline" : "error";
       showError(error);
@@ -604,12 +597,12 @@ alertInput.addEventListener("input", () => {
   clearDeclarationContext();
   contextGeneration += 1;
   clearActionProjection();
-  clearResultDisplay("Loading current alert context from the backend.");
+  clearResultDisplay("Cargando el contexto actual de la alerta desde el backend.");
   versionInput.value = "1";
   if (!sessionActive) return;
   hideError();
   if (!/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) {
-    actionsStatus.textContent = "Enter a valid alert identifier to load backend-permitted operations.";
+    actionsStatus.textContent = "Escribe un identificador de alerta válido para cargar las operaciones que permite el backend.";
     page.dataset.state = "idle";
     return;
   }
@@ -632,45 +625,40 @@ function readContextForCurrentAlert() {
 
 async function recoverDecision(alertId) {
   if (!/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) {
-    showError({ kind: "validation", message: "Enter an alert identifier." }, "read");
+    showError({ kind: "validation", message: "Escribe el identificador de la alerta." }, "read");
     return;
   }
   hideError();
-  announce("Loading alert triage context and backend-authorized operations.");
+  announce("Cargando el contexto de triage de la alerta y las operaciones que autoriza el backend.");
   return readTriageContext(alertId, sessionGeneration);
 }
 
-sessionForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = apiKeyInput.value.trim();
-  if (!value) {
-    showError({ kind: "validation", message: "Enter an API key." });
-    return;
-  }
-  credentialStore.set(value);
-  apiKeyInput.value = "";
+// The console session replaces this view's own key. Its first activation recovers the alert in
+// the address, or the one left in the field; a credential change or a logout resets the form.
+let deepLinkPending = true;
+
+function startSession() {
   sessionGeneration += 1;
   sessionActive = true;
   contextGeneration += 1;
   commandInFlight = false;
   alertInput.disabled = false;
   clearActionProjection();
-  const deepLinkAlertId = pendingDeepLinkAlertId;
-  pendingDeepLinkAlertId = "";
+  const deepLinkAlertId = deepLinkPending ? alertInput.value.trim() : "";
+  deepLinkPending = false;
   clearResult();
-  if (deepLinkAlertId !== "") alertInput.value = deepLinkAlertId;
+  if (/^[a-z][a-z0-9_-]{2,63}$/.test(deepLinkAlertId)) alertInput.value = deepLinkAlertId;
   lastObservedAlertId = alertInput.value.trim();
   hideError();
   page.dataset.state = "idle";
-  stateLine.textContent = "Connected. Enter an alert and send a command.";
-  announce("Session set.");
+  stateLine.textContent = "Sesión activa. Escribe una alerta y envía un comando.";
   const alertId = alertInput.value.trim();
   if (alertId !== "") recoverDecision(alertId);
-});
+  else actionsStatus.textContent = "Escribe el ID de una alerta para cargar las operaciones que permite el backend.";
+}
 
-disconnectButton.addEventListener("click", () => {
+function endSession() {
   sessionGeneration += 1;
-  credentialStore.clear();
   sessionActive = false;
   contextGeneration += 1;
   commandInFlight = false;
@@ -679,18 +667,19 @@ disconnectButton.addEventListener("click", () => {
   hideError();
   page.dataset.state = "idle";
   clearResult();
-  pendingDeepLinkAlertId = "";
-  const url = new URL(window.location.href);
-  url.searchParams.delete("alert_id");
-  window.history.replaceState(null, "", url);
-  announce("Session cleared.");
-});
+  deepLinkPending = false;
+  view.replaceParams({ alert_id: null });
+}
 
-const initialAlertId = new URL(window.location.href).searchParams.get("alert_id") ?? "";
+const initialAlertId = view.params.get("alert_id") ?? "";
 if (/^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId)) alertInput.value = initialAlertId;
 lastObservedAlertId = alertInput.value.trim();
-let pendingDeepLinkAlertId = /^[a-z][a-z0-9_-]{2,63}$/.test(initialAlertId) ? initialAlertId : "";
 
 page.dataset.state = "idle";
 updateDeclarationContextControls();
 clearActionProjection();
+view.signal.addEventListener("abort", () => clearTimeout(contextTimer), { once: true });
+view.onSession((session) => {
+  if (session.phase === "active") startSession();
+  else if (sessionActive) endSession();
+});

@@ -37,7 +37,7 @@ test("human and read-only projections control the operation options for an unrec
     allowed_actions: ["open_triage", "triage_dismiss", "triage_link", "triage_declare"],
   });
   await connect(page, id, operator);
-  await expect(page.locator("#result-summary")).toHaveText("No recorded decision for this alert.");
+  await expect(page.locator("#result-summary")).toHaveText("Esta alerta no tiene una decisión registrada.");
   for (const operation of ["open_triage", "triage_dismiss", "triage_link", "triage_declare"])
     await expect(page.locator(`#command-operation option[value='${operation}']`)).toBeEnabled();
   await expect(page.locator("#submit-button")).toBeEnabled();
@@ -46,7 +46,7 @@ test("human and read-only projections control the operation options for an unrec
   expect(readOnly.status()).toBe(200);
   expect(await readOnly.json()).toEqual({ alert_id: id, triage_state: null, allowed_actions: [] });
   await connect(page, id, reader);
-  await expect(page.locator("#result-summary")).toHaveText("No recorded decision for this alert.");
+  await expect(page.locator("#result-summary")).toHaveText("Esta alerta no tiene una decisión registrada.");
   for (const operation of ["open_triage", "triage_dismiss", "triage_link", "triage_declare"])
     await expect(page.locator(`#command-operation option[value='${operation}']`)).toBeDisabled();
   await expect(page.locator("#submit-button")).toBeDisabled();

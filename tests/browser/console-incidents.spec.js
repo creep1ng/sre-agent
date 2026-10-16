@@ -125,8 +125,8 @@ test("el war room muestra el incidente en foco con su recorrido y la ubicación"
     "href",
     `/?view=decisions&incident_id=${INCIDENT}&run_id=${RUN}`,
   );
-  // Triage still opens as its own page; the step hands it the alert of this incident.
-  await expect(step(page, "Triage")).toHaveAttribute("href", "/public/admin/triage.html?alert_id=alt-payment-error-rate");
+  // The Triage step hands the view the alert of this incident.
+  await expect(step(page, "Triage")).toHaveAttribute("href", "/?view=triage&alert_id=alt-payment-error-rate");
   await expect(page).toHaveURL(`/?view=war-room&incident_id=${INCIDENT}&run_id=${RUN}`);
   for (const view of ["war-room", "decisions", "postmortem"]) {
     await expect(page.locator(`[data-console-nav="${view}"]`)).toHaveAttribute(

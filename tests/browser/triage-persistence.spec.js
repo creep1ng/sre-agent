@@ -37,8 +37,8 @@ async function declareAlert(page, alertId, key) {
   await page.locator("#command-impact").fill(DECLARATION_IMPACT);
 
   await page.locator("#submit-button").click();
-  await expect(page.locator("#page-error-title")).toHaveText("Invalid request");
-  await expect(page.locator("#page-error-detail")).toContainText(/alert context|service|source/i);
+  await expect(page.locator("#page-error-title")).toHaveText("Solicitud inválida");
+  await expect(page.locator("#page-error-detail")).toContainText(/servicio|fuente|severidad/i);
   expect(posts).toHaveLength(0);
 
   await page.locator("#alert-context-service").fill(ALERT_CONTEXT.service);
@@ -115,9 +115,9 @@ test("declare navigates to the authoritative incident across reload", async ({ p
   const alertId = `al-e2e-${stamp}`;
   await connectTriage(page, key);
   const { href, incidentId } = await declareAlert(page, alertId, key);
-  expect(href).toBe(`/public/incident-ui/war-room.html?incident_id=${incidentId}`);
+  expect(href).toBe(`/?view=war-room&incident_id=${incidentId}`);
+  // The war room opens in the same console document and session: no second key entry.
   await page.locator("#result-incident a").click();
-  await connectConsole(page, key);
   await expect(page.locator("#incident-focus-incident")).toHaveText(incidentId);
   await expect(page.locator("#fact-impact")).toHaveText(DECLARATION_IMPACT);
   await expect(page.locator("#fact-alert")).toHaveText(
