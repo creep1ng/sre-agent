@@ -66,7 +66,6 @@ def test_war_room_selects_an_explicit_run_without_merging_timelines() -> None:
     assert 'id="run-current"' in HTML
     assert "selectedRunId" in JAVASCRIPT
     assert "resolveRunId" in JAVASCRIPT
-    assert "estado ${" in JAVASCRIPT
     lowered = JAVASCRIPT.lower()
     assert "cross" not in lowered
 

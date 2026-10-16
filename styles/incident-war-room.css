@@ -111,34 +111,128 @@
   font-size: var(--ma-font-size-sm);
 }
 
+/* The timeline is the design system's ma-timeline with numbered markers: each event shows its
+   position, local time and offset since the run started, its type, the state it reached and who
+   acted. */
 .war-room__events {
+  margin: var(--ma-space-5) 0 var(--ma-space-4);
+}
+
+.war-room__events .ma-timeline__item {
+  grid-template-columns: 5rem 1.75rem minmax(0, 1fr);
+  min-height: 0;
+}
+
+.war-room__events .ma-timeline__item:not(:last-child)::after {
+  top: 1.75rem;
+  left: calc(5rem + var(--ma-space-3) + 0.875rem - 0.5px);
+}
+
+.war-room__events .ma-timeline__item:last-child .ma-timeline__content {
+  padding-bottom: 0;
+}
+
+.war-room__event-time {
   display: grid;
-  gap: 0;
-  list-style: none;
-  margin: 0 0 var(--ma-space-4);
-  padding: 0;
+  align-content: start;
+  justify-items: end;
+  gap: 0.1rem;
+  text-align: end;
 }
 
-.war-room__event {
-  display: grid;
-  justify-items: start;
-  gap: var(--ma-space-1);
-  border-left: 2px solid var(--ma-color-border-brand);
-  padding: var(--ma-space-3) 0 var(--ma-space-3) var(--ma-space-4);
+.war-room__event-time time {
+  color: var(--ma-color-text-primary);
 }
 
-.war-room__event + .war-room__event {
-  border-top: 1px solid var(--ma-color-border-subtle);
+.war-room__event-day,
+.war-room__event-offset {
+  font-family: var(--ma-font-body);
 }
 
-.war-room__event strong {
-  font-size: var(--ma-font-size-md);
-  line-height: var(--ma-line-height-heading);
+.war-room__event-day {
+  color: var(--ma-color-text-secondary);
+  font-weight: 600;
 }
 
-.war-room__event-meta {
-  color: var(--ma-color-text-tertiary);
+.war-room__event-marker {
+  width: 1.75rem;
+  height: 1.75rem;
+  color: var(--ma-color-text-inverse);
+  font-family: var(--ma-font-mono);
   font-size: var(--ma-font-size-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.war-room__event-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ma-space-1) var(--ma-space-3);
+}
+
+.war-room__event-head .ma-timeline__title {
+  font-size: var(--ma-font-size-md);
+  letter-spacing: -0.01em;
+}
+
+.war-room__event-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ma-space-2);
+  margin: var(--ma-space-2) 0 0;
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-sm);
+}
+
+.war-room__event-state .ma-icon {
+  color: var(--ma-color-text-tertiary);
+}
+
+.war-room__state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  border: 1px solid var(--ma-color-border-subtle);
+  border-radius: var(--ma-radius-xs);
+  background: var(--ma-color-bg-subtle);
+  color: var(--ma-color-text-primary);
+  padding: 0 var(--ma-space-2);
+  font-size: var(--ma-font-size-xs);
+  font-weight: 600;
+}
+
+.war-room__state[data-current] {
+  border-color: var(--ma-color-border-brand);
+  background: var(--ma-color-interactive-secondary-hover);
+}
+
+.war-room__event-now {
+  color: var(--ma-color-text-link);
+  font-size: var(--ma-font-size-xs);
+  font-weight: 600;
+}
+
+.war-room__event-actor {
+  margin: var(--ma-space-2) 0 0;
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-xs);
+}
+
+.war-room__event-actor .ma-icon {
+  display: inline-block;
+  margin-right: var(--ma-space-1);
+  vertical-align: -0.2em;
+}
+
+.war-room__event-actor strong {
+  color: var(--ma-color-text-primary);
+  font-weight: 600;
+}
+
+.war-room__event-actor .ma-mono {
+  color: var(--ma-color-text-tertiary);
 }
 
 .war-room__empty {

@@ -1,3 +1,4 @@
+import { RUN_LABELS, stateLabel } from "./incident-vocabulary.js";
 import { hrefFor } from "./routes.js";
 
 // The incident in focus. The band above the incident views shows the incident that the mounted
@@ -30,33 +31,11 @@ const STEP_BY_STATE = Object.freeze({
   }),
 });
 
-const STATE_LABELS = Object.freeze({
-  detected: "Detectado",
-  triage: "En triage",
-  dismissed: "Descartado",
-  linked: "Vinculado",
-  active: "Activo",
-  investigating: "Investigando",
-  mitigating: "Mitigando",
-  verifying: "Verificando",
-  resolved: "Resuelto",
-  postmortem: "En postmortem",
-  closed: "Cerrado",
-});
-
-const RUN_LABELS = Object.freeze({
-  running: "Run en curso",
-  awaiting_human: "Decisión pendiente",
-  completed: "Run completado",
-  terminated: "Run terminado",
-});
-
 const SEVERITY_TONES = Object.freeze({ sev1: "critical", sev2: "warning", sev3: "info", sev4: "info" });
 const PROGRESS_LABELS = Object.freeze({ done: "completado", current: "etapa actual", pending: "pendiente" });
 const SVG = "http://www.w3.org/2000/svg";
 
 const text = (value) => (typeof value === "string" && value !== "" ? value : null);
-const stateLabel = (state) => STATE_LABELS[state] ?? text(state) ?? "—";
 
 function formatTimestamp(value) {
   const parsed = new Date(value);

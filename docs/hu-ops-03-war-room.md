@@ -32,8 +32,10 @@ Frecuencia automática = bloqueo pendiente, no implementado.
 Franja del incidente en foco de la consola (título, estado, severidad,
 incident_id, run, versión y el recorrido Alerta → Postmortem, #487) y resumen
 (impacto, snapshot `v{version} (seq {event_sequence})`, alerta, approvals como
-responsables — sin owner contratado, documentado como brecha), timeline operativo de eventos (actor,
-fecha, secuencia, tipo, resumen; `seq` + cursor). Comentarios persistentes de
+responsables — sin owner contratado, documentado como brecha), timeline operativo de eventos del
+más antiguo al más reciente sobre `ma-timeline` (posición numerada, hora local con segundos y tiempo
+desde el primer evento del run, tipo y estado alcanzado en español con su significado, quién actuó y
+el resumen del backend; paginado con el cursor `seq`). Comentarios persistentes de
 usuario NO visibles: no existe API de comentarios (dependencia pendiente de
 #23); el timeline muestra eventos de la atención, no comentarios. Errores
 diferenciados 401/403/404/503 + falta de `incident_id` + timeline vacío;

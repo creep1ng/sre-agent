@@ -583,7 +583,7 @@ test("escapes untrusted summaries and hides out-of-projection fields", async ({ 
   for (const marker of ["MARKER-ARGS", "MARKER-RAW", "MARKER-PROMPT"]) {
     expect(body).not.toContain(marker);
   }
-  await expect(page.locator(".war-room__event")).toContainText("estado investigating");
+  await expect(page.locator(".war-room__event")).toContainText("Empieza en Investigando");
 });
 
 test("exposes no slice-40b controls on the read-only timeline", async ({ page }) => {
@@ -600,4 +600,143 @@ test("exposes no slice-40b controls on the read-only timeline", async ({ page })
   for (const label of labels) {
     expect(label).not.toMatch(/postmortem|mitigat|command|transition|start|close/i);
   }
+});
+
+// Reading the timeline: each event says where it sits in the run, its local time and the offset
+// since the run's first event, its type and the state it reached in Spanish, and who acted.
+test.describe("reading the timeline", () => {
+  test.use({ timezoneId: "America/Bogota" });
+
+  const SYSTEM = { type: "system", reference: null };
+  const AGENT = { type: "agent", reference: null };
+  const person = (principalId, displayName) => ({
+    type: "human",
+    reference: { reference_version: "1.0.0", principal_id: principalId, display_name: displayName },
+  });
+
+  function storyEvent(sequence, kind, state, summary, actor, occurredAt) {
+    return { ...eventPayload(sequence, summary, actor), kind, state, occurred_at: occurredAt };
+  }
+
+  const opening = {
+    events: [
+      storyEvent(0, "state_change", "triage", "Triage opened.", SYSTEM, "2026-08-24T14:10:00Z"),
+      storyEvent(1, "state_change", "active", "Incident declared.",
+        person("demo-operator", "Demo on-call engineer"), "2026-08-24T14:11:00Z"),
+      storyEvent(2, "state_change", "investigating", "Investigation started.", AGENT, "2026-08-24T14:11:30Z"),
+    ],
+    next_cursor: "seq:2",
+    has_more: true,
+  };
+  const closing = {
+    events: [
+      storyEvent(3, "evidence_collected", "investigating",
+        "Prometheus error rate query returned elevated values.", AGENT, "2026-08-24T14:15:00Z"),
+      storyEvent(4, "human_command", "mitigating", "Mitigation approved.",
+        person("demo-human", "Demo human"), "2026-08-24T14:21:00Z"),
+    ],
+    next_cursor: "seq:4",
+    has_more: false,
+  };
+
+  test("tells the run in order with local times, offsets, types and state changes", async ({ page }) => {
+    const detail = detailPayload();
+    detail.state = "mitigating";
+    detail.runs[0].current_state = "mitigating";
+    await mockApi(page, { detail, pages: [opening, closing], snapshot: snapshotPayload() });
+    await openWarRoom(page);
+
+    const list = page.getByRole("list", { name: "Eventos del run, del más antiguo al más reciente" });
+    const items = list.getByRole("listitem");
+    await expect(items).toHaveCount(3);
+    await expect(page.locator("#timeline-context")).toHaveText(
+      "Del más antiguo al más reciente · lunes, 24 de agosto de 2026 · hora local (UTC−5)",
+    );
+    await expect(page.locator("#run-select option")).toHaveText(["run_demo0001 · Run en curso · Mitigando"]);
+
+    const opened = items.nth(0);
+    for (const fragment of ["09:10:00", "inicio", "Triage opened.", "Cambio de estado",
+      "Empieza en En triage", "Se decide qué hacer con la alerta.", "Sistema"]) {
+      await expect(opened).toContainText(fragment);
+    }
+    const declared = items.nth(1);
+    await expect(declared).toContainText("09:11:00");
+    await expect(declared).toContainText("+1 min desde el inicio");
+    await expect(declared).toContainText("Estado: de En triage a Activo");
+    await expect(declared).toContainText("Incidente declarado; el war room está abierto.");
+    await expect(declared).toContainText("Persona · Demo on-call engineer (demo-operator)");
+    await expect(declared.locator("time")).toHaveAttribute("datetime", "2026-08-24T14:11:00Z");
+    await expect(declared.getByText("Incident declared.")).toHaveAttribute("lang", "en");
+    await expect(items.nth(2)).toContainText("+1 min 30 s desde el inicio");
+    await expect(items.nth(2)).toContainText("Estado: de Activo a Investigando");
+    await expect(items.nth(2)).toContainText("Agente");
+    await expect(list).not.toContainText("state_change");
+    // With events still to load, the run's latest state is not known yet.
+    await expect(list.getByText("Estado actual")).toHaveCount(0);
+
+    await page.locator("#load-more").click();
+    await expect(items).toHaveCount(5);
+    // The second page continues the first one's state: evidence keeps the run investigating.
+    const evidence = items.nth(3);
+    await expect(evidence).toContainText("Evidencia recogida");
+    await expect(evidence).toContainText("+5 min desde el inicio");
+    await expect(evidence).not.toContainText("Empieza en");
+    await expect(evidence).not.toContainText("Estado:");
+    const approved = items.nth(4);
+    await expect(approved).toContainText("Comando humano");
+    await expect(approved).toContainText("+11 min desde el inicio");
+    await expect(approved).toContainText("Estado: de Investigando a Mitigando");
+    await expect(approved).toContainText("Persona · Demo human (demo-human)");
+    await expect(approved).toContainText("Estado actual");
+    await expect(list.getByText("Estado actual")).toHaveCount(1);
+  });
+
+  test("starts the state story again on another run", async ({ page }) => {
+    const resumed = {
+      events: [storyEvent(0, "state_change", "investigating", "Investigation resumed.", AGENT,
+        "2026-08-24T15:00:00Z")],
+      next_cursor: "seq:0",
+      has_more: false,
+    };
+    const finished = { ...opening, has_more: false };
+    await mockRuns(page, {
+      detail: detailWithRuns("run_demo0001", "run_demo0002"),
+      runPages: { run_demo0001: [finished], run_demo0002: [resumed], __default: [resumed] },
+    });
+    await openWarRoom(page);
+
+    const items = page.getByRole("list", { name: "Eventos del run, del más antiguo al más reciente" })
+      .getByRole("listitem");
+    await expect(items.first()).toContainText("Empieza en Investigando");
+    await page.locator("#run-select").selectOption("run_demo0001");
+    await expect(items).toHaveCount(3);
+    await expect(items.first()).toContainText("Empieza en En triage");
+    // The other run's last state never leaks into this run's first event.
+    await page.locator("#run-select").selectOption("run_demo0002");
+    await expect(items).toHaveCount(1);
+    await expect(items.first()).toContainText("Empieza en Investigando");
+    await expect(items.first()).toContainText("inicio");
+  });
+
+  test("marks the day when the run crosses midnight", async ({ page }) => {
+    const overnight = {
+      events: [
+        storyEvent(0, "state_change", "investigating", "Investigation started.", AGENT, "2026-08-25T04:59:30Z"),
+        storyEvent(1, "evidence_collected", "investigating", "Logs collected.", AGENT, "2026-08-25T05:00:30Z"),
+      ],
+      next_cursor: "seq:1",
+      has_more: false,
+    };
+    await mockApi(page, { pages: [overnight], snapshot: snapshotPayload() });
+    await openWarRoom(page);
+
+    const items = page.getByRole("list", { name: "Eventos del run, del más antiguo al más reciente" })
+      .getByRole("listitem");
+    await expect(page.locator("#timeline-context")).toContainText("lunes, 24 de agosto de 2026");
+    await expect(items.nth(0)).toContainText("23:59:30");
+    await expect(items.nth(0)).not.toContainText("ago");
+    await expect(items.nth(1)).toContainText("mar, 25 de ago");
+    await expect(items.nth(1)).toContainText("00:00:30");
+    await expect(items.nth(1)).toContainText("+1 min desde el inicio");
+  });
 });
