@@ -10,7 +10,7 @@ def test_inbox_uses_local_sans_typography_without_changing_shared_components() -
     base_styles = (ROOT / "styles" / "base.css").read_text()
     shared_styles = (ROOT / "styles" / "components.css").read_text()
 
-    assert 'class="ma-eyebrow alert-inbox__eyebrow">Operaciones</p>' in html
+    assert 'class="ma-eyebrow alert-inbox__eyebrow">Atención a incidentes</p>' in html
     assert 'statusText.className = "ma-badge alert-list__status";' in javascript
     assert ".alert-inbox__eyebrow," in local_styles
     assert ".alert-list__status {\n  font-family: var(--ma-font-body);\n}" in local_styles

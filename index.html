@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Consola de midnight.agent: atención a incidentes y gobierno de recursos de IA en una sola experiencia."
+    />
+    <meta name="theme-color" content="#1e2749" />
+    <title>midnight.agent</title>
+    <link rel="icon" href="/public/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles/design-system.css" />
+    <link rel="stylesheet" href="/styles/console.css" />
+    <link rel="stylesheet" href="/styles/incident-alerts.css" />
+    <script src="/public/console/theme.js"></script>
+    <script type="module" src="/public/console/console.js"></script>
+  </head>
+  <body>
+    <a class="ma-skip-link" href="#console-content">Saltar al contenido</a>
+
+    <div class="console">
+      <aside class="console-sidebar" aria-label="Consola">
+        <a class="console-brand" href="/" aria-label="midnight.agent, inicio de la consola">
+          <img class="console-brand__logo console-brand__logo--light" src="/public/midnight-agent-logo-light.svg" alt="" width="168" height="32" />
+          <img class="console-brand__logo console-brand__logo--dark" src="/public/midnight-agent-logo-dark.svg" alt="" width="168" height="32" />
+        </a>
+
+        <nav class="console-nav" aria-label="Superficies">
+          <div>
+            <p class="console-nav__label" id="nav-incidents">Atención a incidentes</p>
+            <ul class="console-nav__group" aria-labelledby="nav-incidents">
+              <li>
+                <a class="console-nav__link" href="/?view=alerts" data-console-nav="alerts">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-inbox"></use></svg>Alertas
+                </a>
+              </li>
+              <li>
+                <a class="console-nav__link" href="/public/admin/triage.html" data-console-nav="triage">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-triage"></use></svg>Triage
+                </a>
+              </li>
+              <li>
+                <a class="console-nav__link" href="/public/incident-ui/war-room.html" data-console-nav="war-room">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-activity"></use></svg>War room
+                </a>
+              </li>
+              <li>
+                <a class="console-nav__link" href="/public/incident-ui/review.html" data-console-nav="decisions">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-decision"></use></svg>Decisiones
+                </a>
+              </li>
+              <li>
+                <a class="console-nav__link" href="/public/incident-ui/postmortem.html" data-console-nav="postmortem">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-postmortem"></use></svg>Postmortem
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="console-nav__label" id="nav-governance">Gobierno de IA</p>
+            <ul class="console-nav__group" aria-labelledby="nav-governance">
+              <li>
+                <a class="console-nav__link" href="/public/admin/principals.html" data-console-nav="principals">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-principal"></use></svg>Principals
+                </a>
+              </li>
+              <li>
+                <a class="console-nav__link" href="/public/admin/model-aliases.html" data-console-nav="resources">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-resources"></use></svg>Recursos y aliases
+                </a>
+              </li>
+              <li>
+                <a class="console-nav__link" href="/public/admin/grants.html" data-console-nav="grants">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-key"></use></svg>Grants
+                </a>
+              </li>
+              <li>
+                <a class="console-nav__link" href="/public/admin/audit-events.html" data-console-nav="audit">
+                  <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-audit"></use></svg>Auditoría y consumo
+                </a>
+              </li>
+            </ul>
+          </div>
+        </nav>
+
+        <div class="console-sidebar__footer">
+          <a class="console-sidebar__doc" href="/design-system.html">
+            Sistema de diseño
+            <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-book"></use></svg>
+          </a>
+          <div class="ma-segmented console-theme" role="group" aria-label="Tema de color">
+            <button class="ma-segmented__item" type="button" data-theme-option="light" aria-pressed="false">
+              <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-sun"></use></svg><span>Claro</span>
+            </button>
+            <button class="ma-segmented__item" type="button" data-theme-option="system" aria-pressed="false">
+              <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-system"></use></svg><span>Auto</span>
+            </button>
+            <button class="ma-segmented__item" type="button" data-theme-option="dark" aria-pressed="false">
+              <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-moon"></use></svg><span>Oscuro</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <div class="console-main">
+        <header class="console-topbar">
+          <nav aria-label="Ubicación">
+            <ol class="console-breadcrumb">
+              <li id="console-domain">Atención a incidentes</li>
+              <li><span id="console-surface" aria-current="location">Alertas</span></li>
+            </ol>
+          </nav>
+          <div class="console-topbar__actions">
+            <div class="console-session-control">
+              <button
+                class="console-session"
+                id="session-chip"
+                type="button"
+                aria-expanded="false"
+                aria-controls="session-menu"
+                data-phase="anonymous"
+              >
+                <span class="console-session__avatar" aria-hidden="true">
+                  <svg class="ma-icon console-session__icon--anonymous"><use href="/public/icons.svg#icon-lock"></use></svg>
+                  <svg class="ma-icon console-session__icon--active"><use href="/public/icons.svg#icon-human"></use></svg>
+                </span>
+                <span class="console-session__identity">
+                  <span class="console-session__principal" id="session-principal">Sin sesión</span>
+                  <span class="console-session__state" id="session-state">Conectar credencial</span>
+                </span>
+                <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-chevron-down"></use></svg>
+              </button>
+              <section class="console-popover" id="session-menu" aria-label="Sesión del navegador" hidden>
+                <div class="console-popover__body">
+                  <p class="ma-eyebrow">Sesión del navegador</p>
+                  <p class="ma-field__hint">
+                    Una sola credencial para toda la consola. Vive solo en la memoria de esta pestaña: al
+                    cambiarla o cerrar sesión, cada vista descarta sus datos. Un 403 bloquea solo la vista
+                    que lo recibe.
+                  </p>
+                </div>
+                <div class="console-popover__footer">
+                  <button class="ma-button ma-button--secondary ma-button--small" id="change-credential" type="button">
+                    <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-key"></use></svg>Cambiar credencial
+                  </button>
+                  <button class="ma-button ma-button--danger ma-button--small" id="disconnect-button" type="button">
+                    <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-logout"></use></svg>Cerrar sesión
+                  </button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </header>
+
+        <main class="console-content" id="console-content">
+          <section class="ma-panel console-session-panel" id="console-session" aria-labelledby="console-session-title" hidden>
+            <div class="ma-panel__body">
+              <form class="console-session-form" id="session-form" autocomplete="off">
+                <div>
+                  <h2 class="ma-panel__title" id="console-session-title">Conecta la consola</h2>
+                  <p class="ma-panel__description">
+                    Escribe tu API key una sola vez: todas las vistas la usan y se descarta al recargar.
+                  </p>
+                </div>
+                <div class="ma-field">
+                  <label class="ma-field__label" for="api-key">API key</label>
+                  <input
+                    class="ma-input ma-mono"
+                    id="api-key"
+                    name="api-key"
+                    type="password"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="sre_…"
+                  />
+                </div>
+                <div class="ma-button-row">
+                  <button class="ma-button ma-button--primary" id="connect-button" type="submit">Conectar</button>
+                  <button class="ma-button ma-button--secondary" id="session-retry" type="button" hidden>Reintentar</button>
+                  <button class="ma-button ma-button--ghost" id="session-cancel" type="button" hidden>Cancelar</button>
+                </div>
+              </form>
+              <p class="console-session-message" id="session-message" role="status"></p>
+            </div>
+          </section>
+
+          <div class="console-view" id="console-view" aria-live="off"></div>
+        </main>
+      </div>
+    </div>
+
+    <p class="ma-sr-only" id="console-live" aria-live="polite"></p>
+  </body>
+</html>

@@ -8,67 +8,14 @@
       content="Bandeja de alertas simuladas para iniciar el triage en midnight.agent."
     />
     <title>Alertas · midnight.agent</title>
-    <script>
-      (() => {
-        const storageKey = "midnight-agent-theme";
-        let theme = "light";
-
-        try {
-          const savedTheme = window.localStorage.getItem(storageKey);
-          if (savedTheme === "light" || savedTheme === "dark") {
-            theme = savedTheme;
-          } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            theme = "dark";
-          }
-        } catch {
-          if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            theme = "dark";
-          }
-        }
-
-        document.documentElement.dataset.theme = theme;
-      })();
-    </script>
-    <link rel="icon" href="/public/favicon.svg" />
-    <link rel="stylesheet" href="/styles/design-system.css" />
-    <link rel="stylesheet" href="/styles/incident-alerts.css" />
+    <!-- The inbox lives in the console; this page keeps its address and its markup. -->
+    <script src="/public/console/legacy-redirect.js" data-view="alerts"></script>
   </head>
   <body>
-    <a class="ma-skip-link" href="#alert-inbox">Saltar a la bandeja de alertas</a>
-
-    <header class="ops-shell__topbar">
-      <a class="ops-shell__brand" href="/" aria-label="midnight.agent — inicio">
-        <img
-          class="ops-shell__mark"
-          src="/public/midnight-agent-mark.svg"
-          alt=""
-          width="28"
-          height="28"
-        />
-        <span class="ma-display">midnight.agent</span>
-      </a>
-      <div class="ops-shell__context" role="group" aria-label="Controles y contexto de la vista">
-        <button
-          id="theme-toggle"
-          class="theme-switch"
-          type="button"
-          role="switch"
-          aria-checked="false"
-          aria-label="Cambiar a tema oscuro"
-        >
-          <span class="theme-switch__label" id="theme-switch-label">Claro</span>
-          <span class="theme-switch__track" aria-hidden="true">
-            <span class="theme-switch__thumb"></span>
-          </span>
-        </button>
-        <span class="ops-shell__context-label">Atención a incidentes</span>
-      </div>
-    </header>
-
     <main id="alert-inbox" class="alert-inbox" data-state="loading">
       <header class="alert-inbox__heading">
         <div>
-          <p class="ma-eyebrow alert-inbox__eyebrow">Operaciones</p>
+          <p class="ma-eyebrow alert-inbox__eyebrow">Atención a incidentes</p>
           <h1 class="alert-inbox__title">Alertas</h1>
           <p class="alert-inbox__subtitle">
             Identifica una señal relevante, revisa su contexto y decide cuál llevar a triage.
@@ -188,8 +135,7 @@
               <div>
                 <p class="alert-detail__next-label">Siguiente paso</p>
                 <p class="ma-muted">
-                  Sprint 1 solo acuerda la solicitud de triage; crear o asociar un incidente pertenece
-                  a HU-OPS-02.
+                  Triage abre esta alerta para descartarla, asociarla a un incidente o declarar uno nuevo.
                 </p>
               </div>
               <button id="start-triage" class="ma-button ma-button--primary" type="button">
@@ -213,7 +159,5 @@
         ni crea incidentes.
       </p>
     </main>
-
-    <script src="/public/incident-ui/alerts.js" defer></script>
   </body>
 </html>

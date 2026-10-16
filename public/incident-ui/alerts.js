@@ -1,7 +1,9 @@
+import { mountedView } from "../console/view.js";
+
 (() => {
   "use strict";
 
-  const THEME_STORAGE_KEY = "midnight-agent-theme";
+  const view = mountedView();
 
   const FIXTURE_PATHS = Object.freeze({
     default: "/public/fixtures/alerts.json",
@@ -57,42 +59,13 @@
       "start-triage",
       "triage-feedback",
       "triage-feedback-detail",
-      "theme-toggle",
-      "theme-switch-label",
     ].forEach((id) => {
       nodes[id] = byId(id);
     });
   }
 
-  function getCurrentTheme() {
-    return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-  }
-
-  function syncThemeSwitch() {
-    const isDark = getCurrentTheme() === "dark";
-    nodes["theme-toggle"].setAttribute("aria-checked", String(isDark));
-    nodes["theme-toggle"].setAttribute(
-      "aria-label",
-      isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro",
-    );
-    nodes["theme-switch-label"].textContent = isDark ? "Oscuro" : "Claro";
-  }
-
-  function toggleTheme() {
-    const nextTheme = getCurrentTheme() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = nextTheme;
-
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
-    } catch {
-      // El cambio de tema sigue funcionando aunque el navegador bloquee storage.
-    }
-
-    syncThemeSwitch();
-  }
-
   function getFixtureKey() {
-    const requested = new URLSearchParams(window.location.search).get("fixture");
+    const requested = view.params.get("fixture");
     return requested === "empty" ? "empty" : "default";
   }
 
@@ -312,7 +285,7 @@
   function openTriageForRequestedAlert(event) {
     const alertId = event.detail?.alert_id;
     if (typeof alertId !== "string" || !/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) return;
-    window.location.assign(`/public/admin/triage.html?alert_id=${encodeURIComponent(alertId)}`);
+    view.navigate("triage", { alert_id: alertId });
   }
 
   function showLoadError(error) {
@@ -355,12 +328,10 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    cacheNodes();
-    syncThemeSwitch();
-    nodes["theme-toggle"].addEventListener("click", toggleTheme);
-    nodes["start-triage"].addEventListener("click", emitTriageRequest);
-    document.addEventListener("midnight:triage-requested", openTriageForRequestedAlert);
-    loadAlerts();
+  cacheNodes();
+  nodes["start-triage"].addEventListener("click", emitTriageRequest);
+  document.addEventListener("midnight:triage-requested", openTriageForRequestedAlert, {
+    signal: view.signal,
   });
+  loadAlerts();
 })();
