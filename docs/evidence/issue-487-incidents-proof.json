@@ -2,7 +2,7 @@
   "issue": 487,
   "base": "http://web",
   "incidents": {
-    "declared": "inc-b6ffab880abaf0e9c17985264c61c2c2",
+    "declared": "inc-aebb006d7e785ce52f83598af722f7d8",
     "seeded": "inc-war-room-demo",
     "run": "run_warroomdemo01"
   },
@@ -18,7 +18,7 @@
     {
       "name": "triage declares the incident through the real API",
       "result": "PASS",
-      "detail": "inc-b6ffab880abaf0e9c17985264c61c2c2"
+      "detail": "inc-aebb006d7e785ce52f83598af722f7d8"
     },
     {
       "name": "the declaration is the only command so far",
@@ -28,7 +28,7 @@
     {
       "name": "the triage result opens the war room inside the console",
       "result": "PASS",
-      "detail": "?view=war-room&incident_id=inc-b6ffab880abaf0e9c17985264c61c2c2&run_id=run_b6ffab880abaf0e9c17985264c61c2c2"
+      "detail": "?view=war-room&incident_id=inc-aebb006d7e785ce52f83598af722f7d8&run_id=run_aebb006d7e785ce52f83598af722f7d8"
     },
     {
       "name": "the war room reuses the session: no second key and one document",
@@ -53,7 +53,7 @@
     {
       "name": "the declaration's run links Decisiones on the same incident",
       "result": "PASS",
-      "detail": "run_b6ffab880abaf0e9c17985264c61c2c2"
+      "detail": "run_aebb006d7e785ce52f83598af722f7d8"
     },
     {
       "name": "Back returns to Triage with the decision read again from the API",
@@ -75,6 +75,24 @@
       "name": "the navigation opens Decisiones on the incident in focus",
       "result": "PASS",
       "detail": "/?view=decisions&incident_id=inc-war-room-demo&run_id=run_warroomdemo01"
+    },
+    {
+      "name": "the timeline tells the run in order with the state each event reached",
+      "result": "PASS",
+      "detail": "Empieza en En triage | Estado: de En triage a Activo | Estado: de Activo a Investigando· Estado actual"
+    },
+    {
+      "name": "event types and actors read in Spanish",
+      "result": "PASS"
+    },
+    {
+      "name": "each event shows its local time and the offset since the run began",
+      "result": "PASS",
+      "detail": "Del más antiguo al más reciente · miércoles, 9 de septiembre de 2026 · hora local (UTC+0)"
+    },
+    {
+      "name": "Estado actual marks the incident's current state",
+      "result": "PASS"
     },
     {
       "name": "Decisiones opens on the same incident and run",
