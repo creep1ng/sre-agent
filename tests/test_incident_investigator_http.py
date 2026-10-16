@@ -63,6 +63,7 @@ SEED_ENV = {
     "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 NOW = datetime(2026, 10, 6, 12, tzinfo=UTC)
+BLOCKED = {"status": "awaiting_human", "pending_command": "escalate", "terminated_reason": "denied"}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -890,7 +891,8 @@ def test_denied_mcp_discovery_is_confirmed_without_provider_or_upstream_and_repl
         assert first.status_code == 201
         run_id = first.json()["run_id"]
         replay = _start(client, incident_id, "investigation-denied-0001")
-        assert replay.status_code == 200
+        assert replay.status_code == 200 and replay.json() == first.json()
+    assert {key: first.json()[key] for key in BLOCKED} == BLOCKED
     incident_state, event_payloads, decisions = _database_rows(incident_id, run_id)
     receipts = _receipts(event_payloads)
     assert llm.requests == [] and mcp.calls == []
@@ -903,7 +905,15 @@ def test_denied_mcp_discovery_is_confirmed_without_provider_or_upstream_and_repl
         ("outcome", "confirmed_failure"),
     ]
     assert receipts[-1]["request_ids"]
-    assert _active_state(run_id)[0]["current_state"] == "investigating"
+    assert [event["reason_code"] for event in event_payloads if "run_patch" in event] == [
+        "mcp_discovery_denied"
+    ]
+    assert (
+        decisions[-1]["reason"] == "authorization denied for a capability required by the objective"
+    )
+    run_state = _active_state(run_id)[0]
+    assert run_state["current_state"] == "investigating"
+    assert {key: run_state[key] for key in BLOCKED} == BLOCKED
 
 
 def test_mcp_contract_rejection_before_dispatch_is_confirmed_failure() -> None:
@@ -934,7 +944,9 @@ def test_mcp_contract_rejection_before_dispatch_is_confirmed_failure() -> None:
     ]
     assert receipts[-1]["reason_code"] == "investigation_mcp_contract_rejected"
     assert receipts[-1]["mcp_request_ids"]
-    assert _active_state(run_id)[0]["current_state"] == "investigating"
+    run_state = _active_state(run_id)[0]
+    # A contract rejection is no denial: the run is not blocked for a human.
+    assert (run_state["current_state"], run_state["status"]) == ("investigating", "running")
     with psycopg.connect(DATABASE_URL) as connection:
         audit_count = connection.execute(
             "SELECT count(*) FROM audit_events WHERE correlation ->> 'request_id' = %s",

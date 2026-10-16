@@ -113,6 +113,9 @@ def event_summary(payload: Any) -> str:
                 return "Investigation dispatch started."
             if status in {"success", "confirmed_failure", "unknown"}:
                 return f"Investigation dispatch ended: {status}."
+        patch = payload.get("run_patch")
+        if isinstance(patch, dict) and patch.get("terminated_reason") == "denied":
+            return "Authorization denied; the investigation waits for a human to escalate."
         outcome = payload.get("outcome")
         action = outcome.get("action") if isinstance(outcome, dict) else None
         summaries = {

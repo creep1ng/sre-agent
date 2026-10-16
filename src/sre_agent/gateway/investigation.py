@@ -21,6 +21,7 @@ from sre_agent.incident.runtime import (
     IncidentCommand,
     IncidentRuntime,
     IncidentView,
+    escalation,
 )
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
@@ -172,6 +173,7 @@ class InvestigationRunDispatcher:
                 status=status,
                 reason_code=f"mcp_discovery_{error.kind}",
                 request_ids=request_ids,
+                escalate="denied" if error.kind == "denied" else None,
             )
             return
 
@@ -214,6 +216,7 @@ class InvestigationRunDispatcher:
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
                 diagnostic=self._result_diagnostic(result),
+                escalate="denied",
             )
             return
         if result.status == "pre_dispatch_rejected":
@@ -470,29 +473,48 @@ class InvestigationRunDispatcher:
         mcp_request_ids: Sequence[UUID] = (),
         result_status: str | None = None,
         diagnostic: Mapping[str, Any] | None = None,
+        escalate: str | None = None,
     ) -> None:
         now = datetime.now(UTC)
+        events = [
+            self._receipt_event(
+                incident_id,
+                run_id,
+                actor_reference,
+                phase="outcome",
+                status=status,
+                reason_code=reason_code,
+                now=now,
+                request_ids=request_ids,
+                mcp_request_ids=mcp_request_ids,
+                result_status=result_status,
+                diagnostic=diagnostic,
+            )
+        ]
+        reason = "investigation dispatch outcome"
+        run_patch: dict[str, Any] | None = None
+        if escalate is not None:
+            # The incident keeps its state; the run waits for a human and is never retried.
+            reason, run_patch = escalation(escalate, now)
+            events.append(
+                EventDraft(
+                    event_id=f"evt_{token_hex(8)}",
+                    kind="escalation",
+                    payload={
+                        "state": "investigating",
+                        "reason_code": reason_code,
+                        "run_patch": run_patch,
+                        "request_id": str(request_ids[-1]) if request_ids else None,
+                    },
+                    occurred_at=now,
+                )
+            )
         await work.complete_run_dispatch(
             incident_id,
             run_id,
-            decision=self._decision(
-                incident_id, run_id, actor_reference, now, "investigation dispatch outcome"
-            ),
-            events=(
-                self._receipt_event(
-                    incident_id,
-                    run_id,
-                    actor_reference,
-                    phase="outcome",
-                    status=status,
-                    reason_code=reason_code,
-                    now=now,
-                    request_ids=request_ids,
-                    mcp_request_ids=mcp_request_ids,
-                    result_status=result_status,
-                    diagnostic=diagnostic,
-                ),
-            ),
+            decision=self._decision(incident_id, run_id, actor_reference, now, reason),
+            events=events,
+            run_patch=run_patch,
         )
 
     @classmethod

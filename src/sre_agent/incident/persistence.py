@@ -11,6 +11,8 @@ from datetime import datetime
 from typing import Any, Literal, Protocol, Self
 
 JsonDocument = Mapping[str, Any]
+# What a dispatch outcome may change in its run without a transition: never its workflow state.
+RUN_PATCH_FIELDS = frozenset({"status", "pending_command", "terminated_reason", "updated_at"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +215,7 @@ class IncidentUnitOfWork(Protocol):
         events: Sequence[EventDraft],
         expected_incident_version: int | None = None,
         incident_patch: JsonDocument | None = None,
+        run_patch: JsonDocument | None = None,
     ) -> bool: ...
 
     async def release_run_dispatch(self, incident_id: str, run_id: str) -> None: ...
