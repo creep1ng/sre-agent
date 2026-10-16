@@ -734,6 +734,12 @@ def _grant_receipt_from_any_run(incident_id: str) -> tuple[dict[str, Any], list[
     return {"run_id": run_id}, [row[0] for row in rows]
 
 
+def _context_turns(run_id: str) -> int:
+    with psycopg.connect(DATABASE_URL) as connection:
+        query = "SELECT count(*) FROM incident.text_context WHERE run_id=%s"
+        return int(connection.execute(query, (run_id,)).fetchone()[0])
+
+
 def _active_state(run_id: str) -> tuple[dict[str, Any], int]:
     with psycopg.connect(DATABASE_URL) as connection:
         row = connection.execute(
@@ -943,7 +949,7 @@ def test_mcp_contract_rejection_before_dispatch_is_confirmed_failure() -> None:
         ("outcome", "confirmed_failure"),
     ]
     assert receipts[-1]["reason_code"] == "investigation_mcp_contract_rejected"
-    assert receipts[-1]["mcp_request_ids"]
+    assert receipts[-1]["mcp_request_ids"] and _context_turns(run_id) == 1
     run_state = _active_state(run_id)[0]
     # A contract rejection is no denial: the run is not blocked for a human.
     assert (run_state["current_state"], run_state["status"]) == ("investigating", "running")
@@ -1473,7 +1479,7 @@ def test_final_turn_hypothesis_is_persisted_without_an_unavailable_transition() 
         for event in event_payloads
         if event.get("outcome", {}).get("action") == "propose_hypothesis"
     )
-    assert len(llm.requests) == 6 and len(mcp.calls) == 5
+    assert len(llm.requests) == 6 and len(mcp.calls) == 5 and _context_turns(run_id) == 6
     assert len(incident_state["hypotheses"]) == 1 and len(incident_state["evidence"]) == 5
     hypothesis = incident_state["hypotheses"][0]
     evidence = next(
@@ -1788,7 +1794,7 @@ def test_invalid_model_output_retains_all_governed_http_audits(recover: bool) ->
         assert _database_rows(incident_id, run_id) == before
 
     receipt = _receipts(before[1])[-1]
-    assert len(llm.requests) == 2 and mcp.calls == []
+    assert len(llm.requests) == 2 and mcp.calls == [] and _context_turns(run_id) == 2
     with psycopg.connect(DATABASE_URL) as connection:
         correlated = connection.execute(
             "SELECT count(*) FROM audit_events WHERE operation = 'responses.create' "

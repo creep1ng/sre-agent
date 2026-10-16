@@ -61,6 +61,13 @@ people, never a retry: an administrator must grant the denied capability again, 
 must answer the escalation. The `escalate` command is still refused
 (`src/sre_agent/incident/commands.py`), so a blocked run cannot be resumed yet.
 
+Every outcome with a harness result also writes, in the same transaction, the run's turns as
+its sensitive context: the input sent, the model output, the tool invocation when the tool
+answered and the gateway request id. `GET .../runs/{run_id}/context` reads them back only with
+`run.read_context`, which an administrator grants through the control plane; `run.read` is not
+enough, a run of another incident is 404, and state, events and timeline stay safe. A dispatch
+interrupted before its outcome leaves no context: its turns never came back.
+
 A cited hypothesis maps to the existing `continue_investigation` transition. A proposed
 mitigation uses the existing `propose_mitigation` preconditions and creates a pending,
 identified artifact. `request_human` and `conclude` have no transition in this workflow;

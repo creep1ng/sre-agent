@@ -21,6 +21,7 @@ from test_incident_investigator_http import (
     _add_agent_mcp_grants,
     _add_incident,
     _application,
+    _context_turns,
     _create_started_run_with_pending_receipt,
     _free_port,
     _grant_run_access,
@@ -122,6 +123,7 @@ def test_tool_grant_revoked_mid_run_blocks_the_run_for_a_human_without_retry() -
     # Every governed call used the one configured credential: no other identity was tried.
     assert len({row[4] for row in audits}) == 1
     assert escalation["request_id"] == receipt["request_ids"][-1] == audits[-1][5]
+    assert _context_turns(run_id) == 1, "the turn that asked for the tool is the run's context"
     last = timeline.json()["events"][-1]
     assert (last["kind"], last["state"], last["summary"]) == (
         "escalation",

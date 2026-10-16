@@ -32,6 +32,7 @@ from sre_agent.control.consumption_limits import (
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.gateway.investigation import InvestigationRunDispatcher
+from sre_agent.gateway.run_context import RunContextService, run_context_router
 from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
 from sre_agent.gateway.runs import RunCommandService, RunStartService, commands_router, runs_router  # noqa: E501  # fmt: skip
 from sre_agent.incident.runtime import IncidentRuntime
@@ -114,6 +115,10 @@ def create_application(
             )
         )
     )
+    context = RunContextService(
+        database.sessions, workflow, lambda: PostgresIncidentUnitOfWork(database)
+    )
+    application.include_router(run_context_router(context))
     incident_runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
     if runtime_settings.investigator_gateway is not None:
         shared_investigator_client = httpx.AsyncClient(

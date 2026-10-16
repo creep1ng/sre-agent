@@ -216,6 +216,7 @@ class IncidentUnitOfWork(Protocol):
         expected_incident_version: int | None = None,
         incident_patch: JsonDocument | None = None,
         run_patch: JsonDocument | None = None,
+        contexts: Sequence[TextContextRecord] = (),
     ) -> bool: ...
 
     async def release_run_dispatch(self, incident_id: str, run_id: str) -> None: ...
@@ -237,6 +238,7 @@ class IncidentUnitOfWork(Protocol):
         events: Sequence[EventDraft],
         snapshot: SnapshotDraft | None = None,
         dispatch_id: str | None = None,
+        contexts: Sequence[TextContextRecord] = (),
     ) -> TransitionResult: ...
 
     async def load_replay(self, run_id: str, *, incident_id: str) -> ReplayRecord: ...
