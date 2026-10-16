@@ -66,7 +66,7 @@ COMMANDS = (
         actor="human",
         actor_reference=OPERATOR,
         outcome="declare",
-        inputs={"severity": "sev2"},
+        inputs={"severity": "sev2", "impact": "Checkout failing at payment."},
     ),
     IncidentCommand(
         command_id="cmd_warroom_investigate",
