@@ -28,7 +28,7 @@ test.beforeEach(async ({ page }) => {
     if (essentialAssets.includes(path)) failedAssets.push(`${path}: request failed`);
   });
   assetFailures.set(page, failedAssets);
-  await page.goto("/index.html");
+  await page.goto("/design-system.html");
   for (const path of essentialAssets)
     await expect(page.locator(`link[href=".${path}"], script[src=".${path}"]`)).toHaveCount(1);
 });
