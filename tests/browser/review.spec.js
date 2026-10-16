@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { connectConsole, logoutConsole } from "./support/console-session.mjs";
 
 const INCIDENT = "inc-demo";
 const RUN = "run_demo0001";
@@ -48,8 +49,13 @@ async function openReview(page, detail) {
     await route.fulfill({ json: detail ?? detailPayload() });
   });
   await page.goto(`/public/incident-ui/review.html?incident_id=${INCIDENT}&run_id=${RUN}`);
-  await page.locator("#credential-input").fill("sre_demo_token_demo_0001");
-  await page.locator("#credential-form button[type=submit]").click();
+  await connectConsole(page);
+}
+
+// The console holds one session: changing identity is a logout and a new key, entered once.
+async function reconnectAs(page, key) {
+  await logoutConsole(page);
+  await connectConsole(page, key);
 }
 
 test("offers only the mitigating review actions for workflow 1.0.0", async ({ page }) => {
@@ -160,9 +166,7 @@ test("rejects and requests changes with contractual bodies", async ({ page }) =>
 test("uses the currently authenticated identity after changing credentials", async ({ page }) => {
   await openReview(page);
   const posted = await mockCommands(page, async () => ({ status: 202, json: acceptedPayload() }));
-  await page.locator("#forget-credential").click();
-  await page.locator("#credential-input").fill("sre_demo_token_second");
-  await page.locator("#credential-form button[type=submit]").click();
+  await reconnectAs(page, "sre_demo_token_second");
   await expect(page.locator("#actions-list button")).toHaveCount(3);
   await decide(page, "approve_mitigation");
 
@@ -182,7 +186,7 @@ test("does not submit an identity lookup made stale by clearing the credential",
   const posted = await mockCommands(page, async () => ({ status: 202, json: acceptedPayload() }));
   await page.locator('#actions-list button[data-command="approve_mitigation"]').click();
   await page.locator("#decision-submit").click();
-  await page.locator("#forget-credential").click();
+  await logoutConsole(page);
   release();
   await page.waitForTimeout(50);
   expect(posted).toHaveLength(0);
@@ -232,7 +236,7 @@ test("keeps one submitted action stable while identity and command requests are 
   });
 });
 
-test("keeps a dispatched command locked after forgetting and reauthenticating", async ({ page }) => {
+test("keeps a dispatched command locked after logging out and reconnecting", async ({ page }) => {
   await openReview(page);
   let releaseCommand = () => {};
   const commandGate = new Promise((resolve) => { releaseCommand = resolve; });
@@ -243,9 +247,7 @@ test("keeps a dispatched command locked after forgetting and reauthenticating", 
   await decide(page, "approve_mitigation");
   await expect.poll(() => posted.length).toBe(1);
 
-  await page.locator("#forget-credential").click();
-  await page.locator("#credential-input").fill("sre_demo_token_second");
-  await page.locator("#credential-form button[type=submit]").click();
+  await reconnectAs(page, "sre_demo_token_second");
   await expect(page.locator("#review")).toHaveAttribute("data-state", "auth");
   await expect(page.locator("#command-status")).toContainText("no se puede cancelar");
   await expect(page.locator("#actions-section")).toBeHidden();
@@ -258,7 +260,7 @@ test("keeps a dispatched command locked after forgetting and reauthenticating", 
   expect(posted).toHaveLength(1);
 });
 
-test("releases a forgotten command lock after an error and reloads with the new credential", async ({ page }) => {
+test("releases a command lock left by a logout after an error and reloads with the new credential", async ({ page }) => {
   await openReview(page);
   let releaseCommand = () => {};
   const commandGate = new Promise((resolve) => { releaseCommand = resolve; });
@@ -275,9 +277,7 @@ test("releases a forgotten command lock after an error and reloads with the new 
   await decide(page, "approve_mitigation");
   await expect.poll(() => posted.length).toBe(1);
 
-  await page.locator("#forget-credential").click();
-  await page.locator("#credential-input").fill("sre_demo_token_second");
-  await page.locator("#credential-form button[type=submit]").click();
+  await reconnectAs(page, "sre_demo_token_second");
   await expect(page.locator("#review")).toHaveAttribute("data-state", "auth");
   await expect(page.locator("#command-status")).toContainText("no se puede cancelar");
   await expect(page.locator("#actions-section")).toBeHidden();

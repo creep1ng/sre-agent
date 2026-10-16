@@ -4,6 +4,8 @@
 
 .war-room {
   width: min(100% - 2rem, 88rem);
+  display: grid;
+  gap: var(--ma-space-5);
   margin: 0 auto;
   padding: clamp(var(--ma-space-6), 4vw, var(--ma-space-10)) 0 var(--ma-space-12);
 }
@@ -13,7 +15,6 @@
   align-items: end;
   justify-content: space-between;
   gap: var(--ma-space-6);
-  margin-bottom: var(--ma-space-6);
 }
 
 .war-room__title {
@@ -32,14 +33,8 @@
   gap: var(--ma-space-3);
 }
 
-.war-room__error {
-  margin-bottom: var(--ma-space-5);
-}
-
-.war-room__credentials,
 .war-room__summary,
 .war-room__timeline {
-  margin-bottom: var(--ma-space-5);
   overflow: hidden;
 }
 
@@ -47,17 +42,6 @@
   display: grid;
   gap: var(--ma-space-3);
   max-width: 32rem;
-}
-
-.war-room__summary-header {
-  align-items: flex-start;
-}
-
-.war-room__badges {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--ma-space-2);
 }
 
 .war-room__facts {
@@ -201,10 +185,6 @@
 
   .war-room__facts > div:last-child {
     border-bottom: 0;
-  }
-
-  .war-room__badges {
-    justify-content: flex-start;
   }
 }
 

@@ -106,9 +106,10 @@ test("declared incident shows operator-confirmed alert context", async ({ page }
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
   const incidentId = await page.locator("#result-incident").textContent();
+  // The war room opens inside the console, which asks for the key once for every view.
   await page.goto(`${BASE}/public/incident-ui/war-room.html?incident_id=${incidentId.trim()}`);
-  await page.locator("#credential-input").fill(key);
-  await page.locator("#credential-form button[type=submit]").click();
+  await page.locator("#api-key").fill(key);
+  await page.locator("#connect-button").click();
   await expect(page.locator("#fact-alert")).toHaveText(
     "payments-api · sev2 · New payment attempts return errors.",
   );

@@ -88,18 +88,23 @@ async function declareAlert(page, alertId, key) {
   return { href, incidentId: normalizedIncidentId };
 }
 
+// The war room opens inside the console, which asks for the key once for every view.
+async function connectConsole(page, key) {
+  await page.locator("#api-key").fill(key);
+  await page.locator("#connect-button").click();
+}
+
 async function openWarRoom(page, incidentId, key) {
   await page.goto(`${BASE}/public/incident-ui/war-room.html?incident_id=${incidentId}`);
-  await page.locator("#credential-input").fill(key);
-  await page.locator("#credential-form button[type=submit]").click();
-  await expect(page.locator("#fact-id")).toHaveText(incidentId);
+  await connectConsole(page, key);
+  await expect(page.locator("#incident-focus-incident")).toHaveText(incidentId);
 }
 
 async function readFacts(page) {
   return {
-    id: await page.locator("#fact-id").textContent(),
-    state: await page.locator("#incident-state").textContent(),
-    version: await page.locator("#version-line").textContent(),
+    id: await page.locator("#incident-focus-incident").textContent(),
+    state: await page.locator("#incident-focus-state").textContent(),
+    version: await page.locator("#incident-focus-version").textContent(),
     impact: await page.locator("#fact-impact").textContent(),
   };
 }
@@ -112,18 +117,16 @@ test("declare navigates to the authoritative incident across reload", async ({ p
   const { href, incidentId } = await declareAlert(page, alertId, key);
   expect(href).toBe(`/public/incident-ui/war-room.html?incident_id=${incidentId}`);
   await page.locator("#result-incident a").click();
-  await page.locator("#credential-input").fill(key);
-  await page.locator("#credential-form button[type=submit]").click();
-  await expect(page.locator("#fact-id")).toHaveText(incidentId);
+  await connectConsole(page, key);
+  await expect(page.locator("#incident-focus-incident")).toHaveText(incidentId);
   await expect(page.locator("#fact-impact")).toHaveText(DECLARATION_IMPACT);
   await expect(page.locator("#fact-alert")).toHaveText(
     `${ALERT_CONTEXT.service} · ${ALERT_CONTEXT.severity} · ${ALERT_CONTEXT.summary}`,
   );
   const before = await readFacts(page);
   await page.reload();
-  await page.locator("#credential-input").fill(key);
-  await page.locator("#credential-form button[type=submit]").click();
-  await expect(page.locator("#fact-id")).toHaveText(incidentId);
+  await connectConsole(page, key);
+  await expect(page.locator("#incident-focus-incident")).toHaveText(incidentId);
   await expect(page.locator("#fact-alert")).toHaveText(
     `${ALERT_CONTEXT.service} · ${ALERT_CONTEXT.severity} · ${ALERT_CONTEXT.summary}`,
   );
@@ -141,7 +144,7 @@ test("second session reads the same persisted incident", async ({ browser }) => 
   const second = await browser.newContext();
   const reader = await second.newPage();
   await openWarRoom(reader, incidentId, key);
-  await expect(reader.locator("#fact-id")).toHaveText(incidentId);
+  await expect(reader.locator("#incident-focus-incident")).toHaveText(incidentId);
   await expect(reader.locator("#fact-impact")).toHaveText(DECLARATION_IMPACT);
   await second.close();
 });
@@ -149,17 +152,17 @@ test("second session reads the same persisted incident", async ({ browser }) => 
 test("unknown incident shows not-found without invented content", async ({ page }) => {
   const key = journeyKey("E2E_TRIAGE_API_KEY");
   await page.goto(`${BASE}/public/incident-ui/war-room.html?incident_id=inc-no-such-thing`);
-  await page.locator("#credential-input").fill(key);
-  await page.locator("#credential-form button[type=submit]").click();
+  await connectConsole(page, key);
   await expect(page.locator("#war-room")).toHaveAttribute("data-state", "error");
-  await expect(page.locator("#fact-id")).toBeEmpty();
+  await expect(page.locator("#incident-focus-incident")).toBeEmpty();
 });
 
 test("wrong credential shows authentication without incident data", async ({ page }) => {
   journeyKey("E2E_TRIAGE_API_KEY");
   await page.goto(`${BASE}/public/incident-ui/war-room.html?incident_id=inc-no-such-thing`);
-  await page.locator("#credential-input").fill("sre_admn_0123456789abcdefghij");
-  await page.locator("#credential-form button[type=submit]").click();
-  await expect(page.locator("#war-room")).toHaveAttribute("data-state", "error");
-  await expect(page.locator("#fact-id")).toBeEmpty();
+  await connectConsole(page, "sre_admn_0123456789abcdefghij");
+  // The console rejects the key before any incident read: the view stays without a session.
+  await expect(page.locator("#session-message")).toContainText("rechazó esa credencial");
+  await expect(page.locator("#war-room")).toHaveAttribute("data-state", "auth");
+  await expect(page.locator("#incident-focus-incident")).toBeEmpty();
 });

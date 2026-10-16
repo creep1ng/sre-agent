@@ -1,7 +1,8 @@
 # HU-OPS-03 — War room con estado y timeline compartido (issue #36)
 
-Ruta: `public/incident-ui/war-room.html?incident_id=…` (deep-link; #23 enlazará
-aquí cuando exista). Fuente única: API de consultas del dominio (#189).
+Ruta: vista de la consola `/?view=war-room&incident_id=…&run_id=…` (#487); la
+dirección `public/incident-ui/war-room.html?incident_id=…` abre la misma vista.
+Triage enlaza aquí el incidente declarado. Fuente única: API de consultas del dominio (#189).
 Solo lectura: sin transiciones, sin harness, sin API de comentarios.
 
 ## Contratos consumidos (#189)
@@ -21,24 +22,25 @@ el inicio y reemplaza el render (sin duplicados por construcción; `Cargar más`
 anexa por `next_cursor`). El run queda fijado desde `detail.runs` durante
 toda la paginación y el snapshot (el cursor `seq:N` solo vale dentro de un
 run); Actualizar re-deriva el último run y reinicia la paginación. Cada carga
-lleva una generación de sesión: olvidar/cambiar credencial o refrescar
+lleva una generación de sesión: cerrar sesión, cambiar credencial o refrescar
 invalida respuestas anteriores, que se descartan sin tocar el DOM. CA2 se
 cumple mediante este mecanismo documentado; no se promete ni finge push/SSE.
 Frecuencia automática = bloqueo pendiente, no implementado.
 
 ## Estructura
 
-Resumen (incident_id, estado, severidad/impacto, versión, snapshot
-`v{version} (seq {event_sequence})`, approvals como responsables — sin owner
-contratado, documentado como brecha), timeline operativo de eventos (actor,
+Franja del incidente en foco de la consola (título, estado, severidad,
+incident_id, run, versión y el recorrido Alerta → Postmortem, #487) y resumen
+(impacto, snapshot `v{version} (seq {event_sequence})`, alerta, approvals como
+responsables — sin owner contratado, documentado como brecha), timeline operativo de eventos (actor,
 fecha, secuencia, tipo, resumen; `seq` + cursor). Comentarios persistentes de
 usuario NO visibles: no existe API de comentarios (dependencia pendiente de
 #23); el timeline muestra eventos de la atención, no comentarios. Errores
 diferenciados 401/403/404/503 + falta de `incident_id` + timeline vacío;
 jamás fixtures como fallback ni contenido parcial en 403 (una denegación
-durante `Cargar más` retira el contenido protegido). Credencial solo en
-memoria (`createMemoryCredentialStore`, formulario propio, botón Olvidar);
-401 reabre el formulario.
+durante `Cargar más` retira el contenido protegido). La credencial es la
+de la sesión de la consola, solo en memoria de la pestaña (ADR-009): un 401
+cierra la sesión para todas las vistas y un 403 solo afecta a esta.
 
 ## Demo y evidencia
 

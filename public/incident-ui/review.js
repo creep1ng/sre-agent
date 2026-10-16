@@ -1,8 +1,5 @@
-import {
-  ApiClientError,
-  createAdministrativeApiClient,
-  createMemoryCredentialStore,
-} from "/public/api/client.js";
+import { ApiClientError } from "/public/api/client.js";
+import { mountedView } from "/public/console/view.js";
 
 // Acciones de revisión/mitigación del workflow 1.0.0, derivadas de
 // mitigation_approval y run-command.schema.yaml. Versión o estado
@@ -32,8 +29,8 @@ const state = {
 };
 
 const nodes = {};
-const credentialStore = createMemoryCredentialStore();
-const client = createAdministrativeApiClient({ credentialStore });
+const view = mountedView();
+const client = view.client;
 
 function byId(id) {
   return document.getElementById(id);
@@ -41,14 +38,13 @@ function byId(id) {
 
 function cacheNodes() {
   [
-    "review", "loading-state", "credential-section", "credential-form",
-    "credential-input", "credential-error", "command-status", "error-missing-id", "error-401",
+    "review", "loading-state", "command-status", "error-missing-id", "error-401",
     "error-403", "error-404", "error-409", "error-503", "context-section",
     "fact-incident", "fact-run", "fact-incident-version", "fact-state", "fact-workflow",
     "actions-section", "actions-list", "actions-empty",
     "decision-section", "decision-title", "decision-form", "decision-comment",
     "decision-key", "decision-submit", "receipt-section", "receipt-line",
-    "refresh-button", "forget-credential",
+    "refresh-button",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -56,14 +52,13 @@ function cacheNodes() {
 
 function hideAll() {
   [
-    "loading-state", "credential-section", "command-status", "error-missing-id", "error-401",
+    "loading-state", "command-status", "error-missing-id", "error-401",
     "error-403", "error-404", "error-409", "error-503", "context-section",
     "actions-section", "decision-section", "receipt-section",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
   nodes["refresh-button"].hidden = true;
-  nodes["forget-credential"].hidden = true;
 }
 
 function showError(kind) {
@@ -71,7 +66,7 @@ function showError(kind) {
   nodes[`error-${kind}`].hidden = false;
   nodes["review"].dataset.state = "error";
   nodes["refresh-button"].hidden = false;
-  if (kind === "401" || kind === "403") nodes["forget-credential"].hidden = false;
+  view.focusIncident(null);
 }
 
 function showKind(error) {
@@ -160,7 +155,7 @@ function commandPayload(action, principalId) {
 async function loadAll() {
   if (state.commandInFlight) {
     state.refreshAfterCommand = true;
-    nodes["forget-credential"].hidden = false;
+    nodes["error-401"].hidden = true;
     nodes["command-status"].textContent =
       "El comando ya se envió y no se puede cancelar. El estado actual se consultará cuando termine.";
     nodes["command-status"].hidden = false;
@@ -190,9 +185,9 @@ async function loadAll() {
     state.pending = null;
     renderContext(run, detail.workflow_version);
     renderActions(availableActions(detail.workflow_version, run.current_state));
+    view.focusIncident(detail, run.run_id);
     nodes["loading-state"].hidden = true;
     nodes["refresh-button"].hidden = false;
-    nodes["forget-credential"].hidden = false;
     nodes["review"].dataset.state = "ready";
   } catch (error) {
     if (generation !== state.generation) return;
@@ -252,22 +247,9 @@ async function submitDecision(event) {
   }
 }
 
-function submitCredential(event) {
-  event.preventDefault();
-  const value = nodes["credential-input"].value;
-  nodes["credential-input"].value = "";
-  try {
-    credentialStore.set(value);
-  } catch {
-    nodes["credential-error"].textContent = "Se requiere una API key no vacía.";
-    nodes["credential-error"].hidden = false;
-    return;
-  }
-  nodes["credential-error"].hidden = true;
-  loadAll();
-}
-
-function forgetCredential() {
+// La credencial vive en la sesión de la consola. Un cambio o cierre descarta el contexto
+// leído con la credencial anterior; un comando ya enviado conserva su bloqueo hasta terminar.
+function dropSession() {
   state.generation += 1;
   state.pending = null;
   state.incidentVersion = null;
@@ -276,9 +258,8 @@ function forgetCredential() {
   state.submissionComplete = false;
   state.refreshAfterCommand = false;
   if (!state.commandInFlight) setSubmitting(false);
-  credentialStore.clear();
   hideAll();
-  nodes["credential-section"].hidden = false;
+  nodes["error-401"].hidden = false;
   nodes["review"].dataset.state = "auth";
   if (state.commandInFlight) {
     nodes["command-status"].textContent =
@@ -287,22 +268,15 @@ function forgetCredential() {
   }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  cacheNodes();
-  nodes["refresh-button"].addEventListener("click", loadAll);
-  nodes["forget-credential"].addEventListener("click", forgetCredential);
-  nodes["credential-form"].addEventListener("submit", submitCredential);
-  nodes["decision-form"].addEventListener("submit", submitDecision);
-  const params = new URLSearchParams(window.location.search);
-  state.incidentId = params.get("incident_id");
-  state.runId = params.get("run_id");
-  if (!state.incidentId || !state.runId) {
-    hideAll();
-    nodes["error-missing-id"].hidden = false;
-    nodes["review"].dataset.state = "error";
-    return;
-  }
+cacheNodes();
+nodes["refresh-button"].addEventListener("click", loadAll);
+nodes["decision-form"].addEventListener("submit", submitDecision);
+state.incidentId = view.params.get("incident_id");
+state.runId = view.params.get("run_id");
+if (!state.incidentId || !state.runId) {
   hideAll();
-  nodes["credential-section"].hidden = false;
-  nodes["review"].dataset.state = "auth";
-});
+  nodes["error-missing-id"].hidden = false;
+  nodes["review"].dataset.state = "error";
+} else {
+  view.onSession((session) => (session.phase === "active" ? loadAll() : dropSession()));
+}

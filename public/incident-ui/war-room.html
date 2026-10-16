@@ -8,69 +8,14 @@
       content="War room de incidentes: estado y timeline compartidos desde el backend autoritativo."
     />
     <title>War room · midnight.agent</title>
-    <script>
-      (() => {
-        const storageKey = "midnight-agent-theme";
-        let theme = "light";
-
-        try {
-          const savedTheme = window.localStorage.getItem(storageKey);
-          if (savedTheme === "light" || savedTheme === "dark") {
-            theme = savedTheme;
-          } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            theme = "dark";
-          }
-        } catch {
-          if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-            theme = "dark";
-          }
-        }
-
-        document.documentElement.dataset.theme = theme;
-      })();
-    </script>
-    <script src="/public/api/runtime-config.js"></script>
-    <link rel="icon" href="/public/favicon.svg" />
-    <link rel="stylesheet" href="/styles/design-system.css" />
-    <link rel="stylesheet" href="/styles/incident-alerts.css" />
-    <link rel="stylesheet" href="/styles/incident-war-room.css" />
+    <!-- The war room lives in the console; this page keeps its address and its markup. -->
+    <script src="/public/console/legacy-redirect.js" data-view="war-room"></script>
   </head>
   <body>
-    <a class="ma-skip-link" href="#war-room">Saltar a la war room</a>
-
-    <header class="ops-shell__topbar">
-      <a class="ops-shell__brand" href="/" aria-label="midnight.agent — inicio">
-        <img
-          class="ops-shell__mark"
-          src="/public/midnight-agent-mark.svg"
-          alt=""
-          width="28"
-          height="28"
-        />
-        <span class="ma-display">midnight.agent</span>
-      </a>
-      <div class="ops-shell__context" role="group" aria-label="Controles y contexto de la vista">
-        <button
-          id="theme-toggle"
-          class="theme-switch"
-          type="button"
-          role="switch"
-          aria-checked="false"
-          aria-label="Cambiar a tema oscuro"
-        >
-          <span class="theme-switch__label" id="theme-switch-label">Claro</span>
-          <span class="theme-switch__track" aria-hidden="true">
-            <span class="theme-switch__thumb"></span>
-          </span>
-        </button>
-        <span class="ops-shell__context-label">Atención a incidentes</span>
-      </div>
-    </header>
-
     <main id="war-room" class="war-room" data-state="loading">
       <header class="war-room__heading">
         <div>
-          <p class="ma-eyebrow">Operaciones</p>
+          <p class="ma-eyebrow">Atención a incidentes</p>
           <h1 class="war-room__title">War room</h1>
           <p class="war-room__subtitle">
             Estado y timeline compartidos desde el backend autoritativo. Esta vista solo
@@ -81,9 +26,6 @@
           <button id="refresh-button" class="ma-button ma-button--secondary" type="button" hidden>
             Actualizar
           </button>
-          <button id="forget-credential" class="ma-button ma-button--ghost" type="button" hidden>
-            Olvidar credencial
-          </button>
         </div>
       </header>
 
@@ -92,55 +34,30 @@
         <span>Cargando incidente…</span>
       </div>
 
-      <section id="credential-section" class="ma-panel war-room__credentials" hidden>
-        <div class="ma-panel__header">
-          <div>
-            <h2 class="ma-panel__title">Credencial de lectura</h2>
-            <p class="ma-panel__description">
-              Se guarda solo en memoria del navegador y nunca en la URL ni en almacenamiento.
-            </p>
-          </div>
-        </div>
-        <form id="credential-form" class="ma-panel__body war-room__form">
-          <label class="ma-field" for="credential-input">
-            <span class="ma-field__label">API key (Bearer)</span>
-            <input
-              id="credential-input"
-              class="ma-input"
-              type="password"
-              autocomplete="off"
-              spellcheck="false"
-              required
-            />
-          </label>
-          <p id="credential-error" class="ma-field__error" hidden></p>
-          <button class="ma-button ma-button--primary" type="submit">Consultar incidente</button>
-        </form>
-      </section>
-
-      <div id="error-missing-id" class="ma-alert war-room__error" data-tone="warning" hidden>
-        <span aria-hidden="true">!</span>
+      <div id="error-missing-id" class="ma-alert" data-tone="warning" hidden>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
         <div>
-          <p class="ma-alert__title">Falta el identificador del incidente</p>
+          <p class="ma-alert__title">Ningún incidente en foco</p>
           <p class="ma-alert__detail">
-            Abre esta vista con <code>?incident_id=…</code>. La vista no inventa ni deduce
-            identificadores.
+            Abre el incidente desde el resultado de Triage o desde su franja de recorrido. La vista
+            no inventa ni deduce identificadores.
           </p>
         </div>
+        <a class="ma-button ma-button--secondary ma-button--small" href="/?view=alerts">Ir a Alertas</a>
       </div>
 
-      <div id="error-401" class="ma-alert war-room__error" data-tone="warning" hidden>
-        <span aria-hidden="true">!</span>
+      <div id="error-401" class="ma-alert" data-tone="warning" hidden>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
         <div>
           <p class="ma-alert__title">Autenticación requerida</p>
           <p class="ma-alert__detail">
-            Presenta una credencial válida. No se muestra ningún contenido del incidente.
+            Conecta la consola con una credencial válida. No se muestra ningún contenido del incidente.
           </p>
         </div>
       </div>
 
-      <div id="error-403" class="ma-alert war-room__error" data-tone="critical" hidden>
-        <span aria-hidden="true">!</span>
+      <div id="error-403" class="ma-alert" data-tone="critical" hidden>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
         <div>
           <p class="ma-alert__title">Sin acceso al incidente</p>
           <p class="ma-alert__detail">
@@ -149,8 +66,8 @@
         </div>
       </div>
 
-      <div id="error-404" class="ma-alert war-room__error" data-tone="warning" hidden>
-        <span aria-hidden="true">!</span>
+      <div id="error-404" class="ma-alert" data-tone="warning" hidden>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
         <div>
           <p class="ma-alert__title">Incidente no encontrado</p>
           <p class="ma-alert__detail">
@@ -160,8 +77,8 @@
         </div>
       </div>
 
-      <div id="error-503" class="ma-alert war-room__error" data-tone="critical" hidden>
-        <span aria-hidden="true">!</span>
+      <div id="error-503" class="ma-alert" data-tone="critical" hidden>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
         <div>
           <p class="ma-alert__title">Backend no disponible</p>
           <p class="ma-alert__detail">
@@ -172,26 +89,10 @@
       </div>
 
       <section id="summary-section" class="ma-panel war-room__summary" hidden>
-        <div class="ma-panel__header war-room__summary-header">
-          <div>
-            <p class="ma-eyebrow">Resumen del incidente</p>
-            <h2 id="incident-title" class="ma-panel__title"></h2>
-            <p id="version-line" class="ma-panel__description" aria-live="polite"></p>
-          </div>
-          <div class="war-room__badges">
-            <span id="incident-state" class="ma-badge"></span>
-            <span id="incident-severity" class="ma-badge"></span>
-          </div>
+        <div class="ma-panel__header">
+          <h2 class="ma-panel__title">Resumen del incidente</h2>
         </div>
         <dl class="war-room__facts">
-          <div>
-            <dt>Incident ID</dt>
-            <dd id="fact-id"></dd>
-          </div>
-          <div>
-            <dt>Severidad</dt>
-            <dd id="fact-severity"></dd>
-          </div>
           <div>
             <dt>Impacto</dt>
             <dd id="fact-impact"></dd>
@@ -244,11 +145,9 @@
       </section>
 
       <p class="war-room__developer-note">
-        Ruta reproducible: <code>?incident_id=…</code>. Fuente: API de consultas del
-        dominio de incidentes. Actualización manual con el botón Actualizar.
+        Fuente: API de consultas del dominio de incidentes. Actualización manual con el botón
+        Actualizar.
       </p>
     </main>
-
-    <script type="module" src="/public/incident-ui/war-room.js"></script>
   </body>
 </html>
