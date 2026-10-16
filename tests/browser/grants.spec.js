@@ -376,7 +376,8 @@ test("revoke asks for confirmation, revokes, and keeps the revoked row", async (
     await page.screenshot({ path: process.env.GRANTS_REVOKE_CONFIRM_CAPTURE, fullPage: true });
   }
   await page.locator("#revoke-submit").click();
-  expect(deleteUrls).toHaveLength(1);
+  // The route may see the DELETE after the click has returned, so wait for it instead of reading it at once.
+  await expect.poll(() => deleteUrls).toHaveLength(1);
   expect(deleteUrls[0]).toContain("/api/v1/grants/grant-admin-human-admin-read-principals");
   await expect(page.locator("#revoke-dialog")).toBeHidden();
   // CA2: revoke changes lifecycle without deleting traceability — the row
@@ -384,6 +385,8 @@ test("revoke asks for confirmation, revokes, and keeps the revoked row", async (
   await expect(row).toContainText("revoked");
   await expect(row).toHaveCount(1);
   await expect(page.locator("#live-region")).toContainText("revoked");
+  // With the revoke and its refresh done, still exactly one DELETE was sent.
+  expect(deleteUrls).toHaveLength(1);
   expect(await storageContents(page)).toEqual({ local: {}, session: {} });
   if (process.env.GRANTS_REVOKE_CAPTURE) {
     await page.screenshot({ path: process.env.GRANTS_REVOKE_CAPTURE, fullPage: true });
@@ -616,7 +619,8 @@ test("create then revoke keeps the same filter and the revoked row", async ({ pa
   await row.locator("[data-grant-revoke]").click();
   await expect(page.locator("#revoke-dialog")).toBeVisible();
   await page.locator("#revoke-submit").click();
-  expect(deleteUrls).toHaveLength(1);
+  // As above: the route may see the DELETE after the click has returned.
+  await expect.poll(() => deleteUrls).toHaveLength(1);
   await expect(page.locator("#revoke-dialog")).toBeHidden();
   // currentFilter kept: the revoke refresh reuses the create filter,
   // so the same row stays listed with the revoked badge.
@@ -625,6 +629,7 @@ test("create then revoke keeps the same filter and the revoked row", async ({ pa
   await expect(page.locator("#principal-filter")).toHaveValue("incident-harness");
   await expect(page.locator("#resource-filter")).toHaveValue("");
   await expect(page.locator("#live-region")).toContainText("revoked");
+  expect(deleteUrls).toHaveLength(1);
   if (process.env.GRANTS_INTEGRATED_CAPTURE) {
     await page.screenshot({ path: process.env.GRANTS_INTEGRATED_CAPTURE, fullPage: true });
   }
