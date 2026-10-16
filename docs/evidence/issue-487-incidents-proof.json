@@ -1,0 +1,115 @@
+{
+  "issue": 487,
+  "base": "http://web",
+  "incidents": {
+    "declared": "inc-6d2c0a70d02ff683d3ee87a737a3a8e0",
+    "seeded": "inc-war-room-demo",
+    "run": "run_warroomdemo01"
+  },
+  "checks": [
+    {
+      "name": "triage declares the incident through the real API",
+      "result": "PASS",
+      "detail": "inc-6d2c0a70d02ff683d3ee87a737a3a8e0"
+    },
+    {
+      "name": "the declaration is the only command so far",
+      "result": "PASS",
+      "detail": "POST /api/v1/alerts/al-487-mvabhnef/triage/commands"
+    },
+    {
+      "name": "the triage result opens the war room inside the console",
+      "result": "PASS",
+      "detail": "?view=war-room&incident_id=inc-6d2c0a70d02ff683d3ee87a737a3a8e0"
+    },
+    {
+      "name": "the band shows the declared incident",
+      "result": "PASS"
+    },
+    {
+      "name": "the band shows its authoritative state",
+      "result": "PASS"
+    },
+    {
+      "name": "the journey marks triage as declared",
+      "result": "PASS"
+    },
+    {
+      "name": "the declaration's run links Decisiones on the same incident",
+      "result": "PASS",
+      "detail": "run_6d2c0a70d02ff683d3ee87a737a3a8e0"
+    },
+    {
+      "name": "the band keeps the run the war room read",
+      "result": "PASS"
+    },
+    {
+      "name": "the run is kept in the address",
+      "result": "PASS"
+    },
+    {
+      "name": "the war room is the current step and the investigation stage",
+      "result": "PASS"
+    },
+    {
+      "name": "the navigation opens Decisiones on the incident in focus",
+      "result": "PASS",
+      "detail": "/?view=decisions&incident_id=inc-war-room-demo&run_id=run_warroomdemo01"
+    },
+    {
+      "name": "Decisiones opens on the same incident and run",
+      "result": "PASS"
+    },
+    {
+      "name": "an investigating run offers no review action",
+      "result": "PASS"
+    },
+    {
+      "name": "Postmortem opens on the same incident",
+      "result": "PASS"
+    },
+    {
+      "name": "Back and Forward restore each view in one document",
+      "result": "PASS"
+    },
+    {
+      "name": "the key was entered once for the whole journey",
+      "result": "PASS"
+    },
+    {
+      "name": "a reload restores Decisiones from the address after the key is entered again",
+      "result": "PASS"
+    },
+    {
+      "name": "logout empties the band and the view",
+      "result": "PASS"
+    },
+    {
+      "name": "the key is absent from the address and Web Storage",
+      "result": "PASS"
+    },
+    {
+      "name": "a principal without run.read gets the 403 state",
+      "result": "PASS"
+    },
+    {
+      "name": "the denied view shows no band",
+      "result": "PASS"
+    },
+    {
+      "name": "the 403 does not end the session",
+      "result": "PASS",
+      "detail": "op-nogrant"
+    },
+    {
+      "name": "navigating the console sent no command",
+      "result": "PASS"
+    },
+    {
+      "name": "no page errors",
+      "result": "PASS"
+    }
+  ],
+  "failures": [],
+  "pageErrors": []
+}
