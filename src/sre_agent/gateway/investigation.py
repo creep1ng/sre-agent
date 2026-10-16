@@ -14,6 +14,7 @@ from sre_agent.incident.persistence import (
     EventDraft,
     IncidentStaleWriteError,
     IncidentUnitOfWork,
+    TextContextRecord,
     TransitionResult,
 )
 from sre_agent.incident.runtime import (
@@ -204,6 +205,7 @@ class InvestigationRunDispatcher:
         request_ids.extend(result.request_ids)
         all_request_ids = _unique_ids(request_ids)
         mcp_request_ids = _unique_ids(result.mcp_request_ids)
+        contexts = self._contexts(incident_id, run_id, result)
         if result.status == "denied":
             await self._finish(
                 work,
@@ -217,6 +219,7 @@ class InvestigationRunDispatcher:
                 result_status=result.status,
                 diagnostic=self._result_diagnostic(result),
                 escalate="denied",
+                contexts=contexts,
             )
             return
         if result.status == "pre_dispatch_rejected":
@@ -231,6 +234,7 @@ class InvestigationRunDispatcher:
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
                 diagnostic=self._result_diagnostic(result),
+                contexts=contexts,
             )
             return
         if result.outcome is None or result.status not in {"completed", "needs_human"}:
@@ -245,6 +249,7 @@ class InvestigationRunDispatcher:
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
                 diagnostic=self._result_diagnostic(result),
+                contexts=contexts,
             )
             return
 
@@ -260,6 +265,7 @@ class InvestigationRunDispatcher:
                 result,
                 all_request_ids,
                 mcp_request_ids,
+                contexts,
             )
         except IncidentStaleWriteError:
             await self._finish(
@@ -272,6 +278,7 @@ class InvestigationRunDispatcher:
                 request_ids=all_request_ids,
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
+                contexts=contexts,
             )
         except Exception:
             await self._finish(
@@ -284,6 +291,7 @@ class InvestigationRunDispatcher:
                 request_ids=all_request_ids,
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
+                contexts=contexts,
             )
 
     async def _persist_result(
@@ -298,6 +306,7 @@ class InvestigationRunDispatcher:
         result: InvestigationResult,
         request_ids: Sequence[UUID],
         mcp_request_ids: Sequence[UUID],
+        contexts: tuple[TextContextRecord, ...],
     ) -> None:
         assert result.outcome is not None
         now = datetime.now(UTC)
@@ -341,6 +350,7 @@ class InvestigationRunDispatcher:
             principal,
             result,
             (outcome_event, receipt_event),
+            contexts,
         )
         if command is not None:
             await self.runtime.execute(command)
@@ -354,6 +364,7 @@ class InvestigationRunDispatcher:
             events=(outcome_event, receipt_event),
             expected_incident_version=expected_incident_version,
             incident_patch=incident_patch,
+            contexts=contexts,
         )
 
     def _runtime_command(
@@ -365,6 +376,7 @@ class InvestigationRunDispatcher:
         principal: PrincipalContext,
         result: InvestigationResult,
         events: Sequence[EventDraft],
+        contexts: tuple[TextContextRecord, ...],
     ) -> IncidentCommand | None:
         outcome = result.outcome
         patch: dict[str, Any] = {}
@@ -409,6 +421,7 @@ class InvestigationRunDispatcher:
             turn_id=result.turns[-1].turn_id if result.turns else None,
             inputs=inputs,
             extra_events=tuple(events),
+            contexts=contexts,
         )
 
     def _hypothesis_patch(
@@ -474,6 +487,7 @@ class InvestigationRunDispatcher:
         result_status: str | None = None,
         diagnostic: Mapping[str, Any] | None = None,
         escalate: str | None = None,
+        contexts: Sequence[TextContextRecord] = (),
     ) -> None:
         now = datetime.now(UTC)
         events = [
@@ -515,6 +529,7 @@ class InvestigationRunDispatcher:
             decision=self._decision(incident_id, run_id, actor_reference, now, reason),
             events=events,
             run_patch=run_patch,
+            contexts=contexts,
         )
 
     @classmethod
@@ -580,6 +595,27 @@ class InvestigationRunDispatcher:
             },
             occurred_at=now,
             turn_id=turn_id,
+        )
+
+    @staticmethod
+    def _contexts(
+        incident_id: str, run_id: str, result: InvestigationResult
+    ) -> tuple[TextContextRecord, ...]:
+        """Each turn as the run-context contract reads it, written with the run's outcome."""
+        return tuple(
+            TextContextRecord(
+                turn_id=turn.turn_id,
+                incident_id=incident_id,
+                run_id=run_id,
+                sequence=turn.sequence,
+                content=turn.model_dump(
+                    mode="json",
+                    include={"assembled_input", "model_output", "tool_invocation", "request_id"},
+                ),
+                occurred_at=turn.occurred_at,
+                task_id=turn.task_id,
+            )
+            for turn in result.turns
         )
 
     @staticmethod

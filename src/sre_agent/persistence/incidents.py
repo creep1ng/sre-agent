@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Literal, Self, cast
 
@@ -32,6 +33,17 @@ from sre_agent.persistence.database import Database
 
 def _document(value: JsonDocument) -> str:
     return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+
+def _storable(value: Any) -> Any:
+    """PostgreSQL jsonb cannot hold U+0000, so such text keeps U+FFFD in its place."""
+    if isinstance(value, str):
+        return value.replace("\x00", "\ufffd")
+    if isinstance(value, Mapping):
+        return {_storable(key): _storable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_storable(item) for item in value]
+    return value
 
 
 def _incident(row: Mapping[str, Any]) -> IncidentRecord:
@@ -628,6 +640,7 @@ class PostgresIncidentUnitOfWork:
         expected_incident_version: int | None = None,
         incident_patch: JsonDocument | None = None,
         run_patch: JsonDocument | None = None,
+        contexts: Sequence[TextContextRecord] = (),
     ) -> bool:
         await self._lock_run_event_sequence(run_id)
         incident, _run = await self._lock_incident_run(incident_id, run_id)
@@ -718,8 +731,19 @@ class PostgresIncidentUnitOfWork:
                     WHERE run_id=:run_id AND incident_id=:incident_id"""),
                 {"run_patch": _document(run_patch), "run_id": run_id, "incident_id": incident_id},
             )
+        await self._append_contexts(incident_id, run_id, contexts)
         await self._append_run_events(incident_id, run_id, decision=decision, events=events)
         return True
+
+    async def _append_contexts(
+        self, incident_id: str, run_id: str, contexts: Sequence[TextContextRecord]
+    ) -> None:
+        """The turns behind an outcome, written with it: the sensitive run context. A model
+        reply PostgreSQL cannot store must not take the outcome down with it."""
+        for context in contexts:
+            if (context.incident_id, context.run_id) != (incident_id, run_id):
+                raise ValueError("a turn context is written only with the run that produced it")
+            await self.text_context.append(replace(context, content=_storable(context.content)))
 
     async def release_run_dispatch(self, incident_id: str, run_id: str) -> None:
         lock_name = self._dispatch_lock_name(incident_id, run_id)
@@ -762,6 +786,7 @@ class PostgresIncidentUnitOfWork:
         events: Sequence[EventDraft],
         snapshot: SnapshotDraft | None = None,
         dispatch_id: str | None = None,
+        contexts: Sequence[TextContextRecord] = (),
     ) -> TransitionResult:
         session = self._require_session()
         await self.lock_command(incident_id, command_id)
@@ -899,6 +924,7 @@ class PostgresIncidentUnitOfWork:
                 .one()
             )
             stored_events.append(_event(row))
+        await self._append_contexts(incident_id, run_id, contexts)
         final_sequence = stored_events[-1].sequence if stored_events else int(last_sequence)
         stored_snapshot = await self._append_snapshot(
             incident_id,
