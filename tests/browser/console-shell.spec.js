@@ -151,18 +151,67 @@ test("una credencial rechazada no abre sesión ni se queda en la página", async
   await expect(page.locator("#api-key")).toHaveValue("");
 });
 
-test("si la API no responde, la validación se puede reintentar sin escribir la key otra vez", async ({ page }) => {
-  let available = false;
-  await mockWhoAmI(page, (route) => (available ? asPrincipal("demo-human")(route) : route.abort("failed")));
+test("si la API no responde, la validación se puede reintentar sin escribir la key otra vez", async ({ page }, testInfo) => {
+  let releaseRetry;
+  const pendingRetry = new Promise((resolve) => { releaseRetry = resolve; });
+  let attempts = 0;
+  const calls = await mockWhoAmI(page, async (route) => {
+    attempts += 1;
+    if (attempts === 1) return route.abort("failed");
+    if (attempts === 2) {
+      await pendingRetry;
+      return route.abort("failed");
+    }
+    return asPrincipal("demo-human")(route);
+  });
   await page.goto("/");
   await connect(page);
   await expect(page.locator("#session-message")).toHaveText(/No se pudo contactar la API/);
   await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "validating");
 
-  available = true;
+  try {
+    await page.locator("#session-retry").evaluate((button) => { button.click(); button.click(); });
+    await expect(page.locator("#session-message")).toHaveText("Validando la credencial con la API…");
+    await expect(page.locator("#session-retry")).toBeHidden();
+    await expect(page.locator("#connect-button")).toBeDisabled();
+    await expect.poll(() => calls.length).toBe(2);
+    await page.screenshot({ path: testInfo.outputPath("session-retry-pending.png") });
+  } finally {
+    releaseRetry();
+  }
+  await expect(page.locator("#session-message")).toHaveText(/No se pudo contactar la API/);
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.locator("#session-principal")).toHaveText("demo-human");
+  expect(calls).toEqual(Array(3).fill(`Bearer ${KEY}`));
+  await page.screenshot({ path: testInfo.outputPath("session-retry-recovered.png") });
 });
+
+for (const width of [320, 375]) {
+  test(`session controls remain reachable at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    if (!connected) await mockWhoAmI(page, asPrincipal("admin-human"));
+    await page.goto("/");
+    await connect(page, connected ? process.env.ADMIN_HUMAN_API_KEY : KEY);
+    await expect(page.locator("#session-principal")).toHaveText("admin-human");
+    await page.locator("#session-chip").click();
+    await page.screenshot({ path: testInfo.outputPath(`session-popover-${width}.png`) });
+    for (const id of ["session-menu", "change-credential", "disconnect-button"]) {
+      const bounds = await page.locator(`#${id}`).boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      expect(bounds.y).toBeGreaterThanOrEqual(0);
+      expect(bounds.y + bounds.height).toBeLessThanOrEqual(900);
+    }
+    await page.locator("#change-credential").click();
+    await expect(page.locator("#api-key")).toBeFocused();
+    await page.locator("#session-cancel").click();
+    await expect(page.locator("#session-chip")).toBeFocused();
+    await page.locator("#session-chip").click();
+    await page.locator("#disconnect-button").click();
+    await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "anonymous");
+  });
+}
 
 test("el tema elegido aplica a toda la consola y persiste al recargar", async ({ page }) => {
   await page.goto("/");

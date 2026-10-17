@@ -87,7 +87,10 @@ export function createTabSession() {
       invalidate("logout");
     },
     retry() {
-      if (state.phase === "validating") validate(state.token);
+      if (state.phase !== "validating" || !state.reason) return;
+      const token = state.token;
+      emit({ ...state, reason: null });
+      validate(token);
     },
   });
 }

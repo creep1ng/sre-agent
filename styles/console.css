@@ -368,6 +368,7 @@
 
 .console-popover {
   width: 24rem;
+  max-width: calc(100vw - 2 * var(--ma-space-4));
   position: absolute;
   z-index: 30;
   top: calc(100% + var(--ma-space-2));
@@ -386,6 +387,7 @@
 
 .console-popover__footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--ma-space-3);
   border-top: 1px solid var(--ma-color-border-subtle);
