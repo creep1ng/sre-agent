@@ -1,0 +1,1 @@
+{"evidence_kind": "controlled negative file input; not live producer", "expectation": "absence of evidence remains failure, not vacuous GREEN", "post_fix": {"artifact_written": true, "evidence_missing": true, "exit": 1, "rows": 0}, "pre_fix": {"artifact_written": false, "exit": 1}}
