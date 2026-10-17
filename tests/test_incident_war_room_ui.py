@@ -38,8 +38,6 @@ def test_war_room_reuses_the_browser_api_seam() -> None:
 def test_war_room_distinguishes_error_states_without_fixtures() -> None:
     for block in ("error-401", "error-403", "error-404", "error-503"):
         assert f'id="{block}"' in HTML
-    assert "midnight-agent-theme" in JAVASCRIPT
-    assert "localStorage.setItem" in JAVASCRIPT
     assert "incident_id" in JAVASCRIPT
     lowered = JAVASCRIPT.lower()
     assert "fixture" not in lowered
@@ -75,7 +73,7 @@ def test_war_room_selects_an_explicit_run_without_merging_timelines() -> None:
 
 def test_war_room_uses_design_system_tokens() -> None:
     assert "var(--ma-" in STYLES
-    assert "ma-badge" in HTML
+    assert "ma-badge" in JAVASCRIPT
     assert "ma-alert" in HTML
     assert "ma-button" in HTML
     assert "Sans" in STYLES or "ma-font-body" in STYLES

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { answerWhoAmI, connectConsole } from "./support/console-session.mjs";
 
 const INCIDENT = "inc-demo";
 
@@ -32,9 +33,9 @@ async function openPostmortem(page, status = 200) {
     if (status === 200) return route.fulfill({ json: detailPayload() });
     return route.fulfill({ status, json: { error: { code: "not_authorized" } } });
   });
+  await answerWhoAmI(page);
   await page.goto(`/public/incident-ui/postmortem.html?incident_id=${INCIDENT}`);
-  await page.locator("#credential-input").fill("sre_demo_token_demo_0001");
-  await page.locator("#credential-form button[type=submit]").click();
+  await connectConsole(page);
 }
 
 test("renders the minimum sections with explicit unknowns", async ({ page }) => {
@@ -56,8 +57,9 @@ test("reloads the same fixture and never closes", async ({ page }) => {
   await openPostmortem(page);
   await expect(page.locator("#artifact-sections")).toContainText("Resumen");
 
+  // The key lives only in this tab's memory: a reload asks for it again (ADR-009).
   await page.reload();
-  await expect(page.locator("#credential-section")).toBeVisible();
+  await expect(page.locator("#console-session")).toBeVisible();
   await expect(page.locator("#close-incident")).toHaveCount(0);
   const labels = await page.locator("button").allTextContents();
   for (const label of labels) {

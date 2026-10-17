@@ -39,7 +39,7 @@ function regionFrom(template, viewId) {
   return region;
 }
 
-export async function mountView({ host, viewId, view, params, session, navigate, replaceParams }) {
+export async function mountView({ host, viewId, view, params, session, navigate, replaceParams, focusIncident }) {
   const template = await templateFor(view.path);
   const controller = new AbortController();
   const { signal } = controller;
@@ -66,6 +66,10 @@ export async function mountView({ host, viewId, view, params, session, navigate,
     },
     replaceParams(next) {
       if (!signal.aborted) replaceParams(next);
+    },
+    // Shows the incident this view read in the console's focus band; null when it holds none.
+    focusIncident(detail, runId = null) {
+      if (!signal.aborted) focusIncident(viewId, detail, runId);
     },
   });
   sequence += 1;

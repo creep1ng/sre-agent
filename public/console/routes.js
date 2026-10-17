@@ -1,5 +1,6 @@
 // Canonical console routes. A view is addressed as /?view=<id>&<params>; parameters only select
-// what to read (ADR-009, section 12). `legacy` marks surfaces that still open as their own page.
+// what to read (ADR-009, section 12). `legacy` marks surfaces that still open as their own page;
+// `incident` marks views that read one incident and keep it in focus.
 export const DOMAINS = Object.freeze({
   incidents: "Atención a incidentes",
   governance: "Gobierno de IA",
@@ -25,19 +26,22 @@ export const VIEWS = Object.freeze({
     domain: "incidents",
     label: "War room",
     path: "/public/incident-ui/war-room.html",
-    legacy: true,
+    module: "/public/incident-ui/war-room.js",
+    incident: true,
   },
   decisions: {
     domain: "incidents",
     label: "Decisiones",
     path: "/public/incident-ui/review.html",
-    legacy: true,
+    module: "/public/incident-ui/review.js",
+    incident: true,
   },
   postmortem: {
     domain: "incidents",
     label: "Postmortem",
     path: "/public/incident-ui/postmortem.html",
-    legacy: true,
+    module: "/public/incident-ui/postmortem.js",
+    incident: true,
   },
   principals: {
     domain: "governance",

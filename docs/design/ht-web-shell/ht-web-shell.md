@@ -31,6 +31,7 @@ The web surfaces were ten separate pages under `public/admin/` and `public/incid
 | Old addresses | Every surface that moves into the console keeps its page as markup plus a redirect to its view, preserving read parameters. |
 | Session | One session per tab with the ADR-009 interface (`state`, `subscribe`, `setCredential`, `logout`, `retry`), validated by `GET /v1/whoami`. A 401 of the current generation ends it for every view; a 403 affects only the view that received it. The SharedWorker of #486 replaces `public/console/session.js` without touching the views. |
 | Views | A surface keeps its `<main>` markup and its module. Each mount evaluates a fresh module instance and aborts its listeners on exit, so the existing concurrency guards stay as they are. |
+| Incident in focus | War room, Decisiones and Postmortem show a band under their title with the incident the view read (severity, state, `incident_id`, run, version) and the journey Alerta → Triage → War room → Decisión → Postmortem with the same incident and run. The band never reads on its own and empties on an error, a 403 or the end of the session. Step progress follows the process stages of workflow 1.0.0; the navigation opens incident views on the incident in focus. |
 | Theme | One preference, `ma-theme` (Claro / Auto / Oscuro), shared with the catalog and applied before first paint. |
 | Language | Spanish across the console. |
 | Composition | The #57 wireframes stay: Principals with inline detail and tabs, Resources and aliases together, Grants with a dialog, Audit and consumption as one surface. |
@@ -43,7 +44,7 @@ The web surfaces were ten separate pages under `public/admin/` and `public/incid
 | Triage | `/?view=triage&alert_id=` | `public/admin/triage.html` |
 | War room | `/?view=war-room&incident_id=&run_id=` | `public/incident-ui/war-room.html` |
 | Decisiones | `/?view=decisions&incident_id=&run_id=` | `public/incident-ui/review.html` |
-| Postmortem | `/?view=postmortem&incident_id=` | `public/incident-ui/postmortem.html` |
+| Postmortem | `/?view=postmortem&incident_id=&run_id=` (the run only keeps the journey) | `public/incident-ui/postmortem.html` |
 | Principals | `/?view=principals` | `public/admin/principals.html` |
 | Recursos y aliases | `/?view=resources` | `public/admin/model-aliases.html` |
 | Grants | `/?view=grants` | `public/admin/grants.html` |
@@ -53,9 +54,11 @@ The web surfaces were ten separate pages under `public/admin/` and `public/incid
 
 1. Shell: console document, navigation, routes, single session, theme, catalog route, and the
    inbox as the first view.
-2. Incident response views, the incident focus band and the journey links.
-3. AI governance views in Spanish, with Audit and consumption as one surface.
-4. Cross-context integration: the governed AI resources and consumption of a run inside the war
+2. War room, Decisiones and Postmortem as views, the incident focus band and the journey links.
+3. Triage as a view in Spanish. It moved out of unit 2 because its copy and its nine browser suites
+   change together.
+4. AI governance views in Spanish, with Audit and consumption as one surface.
+5. Cross-context integration: the governed AI resources and consumption of a run inside the war
    room, and the return context from governance views.
 
 A reload of the only tab asks for the key again, as ADR-009 accepts for the MVP. Multi-tab

@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/styles/design-system.css" />
     <link rel="stylesheet" href="/styles/console.css" />
     <link rel="stylesheet" href="/styles/incident-alerts.css" />
+    <link rel="stylesheet" href="/styles/incident-war-room.css" />
     <script src="/public/console/theme.js"></script>
     <script type="module" src="/public/console/console.js"></script>
   </head>
@@ -184,6 +185,25 @@
               </form>
               <p class="console-session-message" id="session-message" role="status"></p>
             </div>
+          </section>
+
+          <section class="ma-card ma-incident-summary console-incident" id="incident-focus" aria-label="Incidente en foco" hidden>
+            <div class="console-incident__summary">
+              <div class="console-incident__badges">
+                <span class="ma-badge" id="incident-focus-severity"></span>
+                <span class="ma-badge" id="incident-focus-state"></span>
+              </div>
+              <p class="ma-incident-summary__title console-incident__title" id="incident-focus-title"></p>
+              <dl class="ma-incident-summary__meta console-incident__meta">
+                <div><dt>Incidente</dt><dd class="ma-mono" id="incident-focus-incident"></dd></div>
+                <div><dt>Run</dt><dd class="ma-mono" id="incident-focus-run"></dd></div>
+                <div><dt>Versión</dt><dd class="ma-mono" id="incident-focus-version"></dd></div>
+                <div><dt>Actualizado</dt><dd id="incident-focus-updated"></dd></div>
+              </dl>
+            </div>
+            <nav class="console-journey" aria-label="Recorrido del incidente">
+              <ol class="console-journey__steps" id="incident-focus-journey"></ol>
+            </nav>
           </section>
 
           <div class="console-view" id="console-view" aria-live="off"></div>

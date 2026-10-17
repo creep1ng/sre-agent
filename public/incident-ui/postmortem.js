@@ -1,8 +1,5 @@
-import {
-  ApiClientError,
-  createAdministrativeApiClient,
-  createMemoryCredentialStore,
-} from "/public/api/client.js";
+import { ApiClientError } from "/public/api/client.js";
+import { mountedView } from "/public/console/view.js";
 
 // Fixture de PRESENTACIÓN con la forma de $defs/postmortem
 // (incident-state.schema.yaml): estado real draft, sin versión ni endpoint
@@ -25,8 +22,8 @@ const PENDING = "Pendiente";
 const state = { incidentId: null, generation: 0 };
 
 const nodes = {};
-const credentialStore = createMemoryCredentialStore();
-const client = createAdministrativeApiClient({ credentialStore });
+const view = mountedView();
+const client = view.client;
 
 function byId(id) {
   return document.getElementById(id);
@@ -34,12 +31,11 @@ function byId(id) {
 
 function cacheNodes() {
   [
-    "postmortem", "loading-state", "credential-section", "credential-form",
-    "credential-input", "credential-error", "error-missing-id", "error-401",
+    "postmortem", "loading-state", "error-missing-id", "error-401",
     "error-403", "error-404", "error-503", "context-section", "fact-incident",
     "fact-state", "fact-artifact", "fixture-banner",
     "artifact-section", "artifact-sections",
-    "refresh-button", "forget-credential",
+    "refresh-button",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -47,13 +43,12 @@ function cacheNodes() {
 
 function hideAll() {
   [
-    "loading-state", "credential-section", "error-missing-id", "error-401",
+    "loading-state", "error-missing-id", "error-401",
     "error-403", "error-404", "error-503", "context-section", "artifact-section",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
   nodes["refresh-button"].hidden = true;
-  nodes["forget-credential"].hidden = true;
 }
 
 function showError(kind) {
@@ -61,7 +56,7 @@ function showError(kind) {
   nodes[`error-${kind}`].hidden = false;
   nodes["postmortem"].dataset.state = "error";
   nodes["refresh-button"].hidden = false;
-  if (kind === "401" || kind === "403") nodes["forget-credential"].hidden = false;
+  view.focusIncident(null);
 }
 
 function showKind(error) {
@@ -115,9 +110,9 @@ async function loadAll() {
     const detail = await client.getIncident(state.incidentId);
     if (generation !== state.generation) return;
     renderArtifact(detail);
+    view.focusIncident(detail);
     nodes["loading-state"].hidden = true;
     nodes["refresh-button"].hidden = false;
-    nodes["forget-credential"].hidden = false;
     nodes["postmortem"].dataset.state = "ready";
   } catch (error) {
     if (generation !== state.generation) return;
@@ -125,42 +120,21 @@ async function loadAll() {
   }
 }
 
-function submitCredential(event) {
-  event.preventDefault();
-  const value = nodes["credential-input"].value;
-  nodes["credential-input"].value = "";
-  try {
-    credentialStore.set(value);
-  } catch {
-    nodes["credential-error"].textContent = "Se requiere una API key no vacía.";
-    nodes["credential-error"].hidden = false;
-    return;
-  }
-  nodes["credential-error"].hidden = true;
-  loadAll();
-}
-
-function forgetCredential() {
+// La credencial vive en la sesión de la consola: sin sesión activa no queda nada leído.
+function dropSession() {
   state.generation += 1;
-  credentialStore.clear();
   hideAll();
-  nodes["credential-section"].hidden = false;
+  nodes["error-401"].hidden = false;
   nodes["postmortem"].dataset.state = "auth";
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  cacheNodes();
-  nodes["refresh-button"].addEventListener("click", loadAll);
-  nodes["forget-credential"].addEventListener("click", forgetCredential);
-  nodes["credential-form"].addEventListener("submit", submitCredential);
-  state.incidentId = new URLSearchParams(window.location.search).get("incident_id");
-  if (!state.incidentId) {
-    hideAll();
-    nodes["error-missing-id"].hidden = false;
-    nodes["postmortem"].dataset.state = "error";
-    return;
-  }
+cacheNodes();
+nodes["refresh-button"].addEventListener("click", loadAll);
+state.incidentId = view.params.get("incident_id");
+if (!state.incidentId) {
   hideAll();
-  nodes["credential-section"].hidden = false;
-  nodes["postmortem"].dataset.state = "auth";
-});
+  nodes["error-missing-id"].hidden = false;
+  nodes["postmortem"].dataset.state = "error";
+} else {
+  view.onSession((session) => (session.phase === "active" ? loadAll() : dropSession()));
+}

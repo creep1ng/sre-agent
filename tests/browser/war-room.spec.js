@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { answerWhoAmI, connectConsole, logoutConsole } from "./support/console-session.mjs";
 
 const INCIDENT = "inc-demo";
 
@@ -102,13 +103,14 @@ async function mockApi(page, { detail, pages, snapshot, failure = null } = {}) {
   });
 }
 
+// The war room reads through the console session: the key is entered once in the console.
 async function authenticate(page) {
-  await page.locator("#credential-input").fill("sre_demo_token_demo_0001");
-  await page.locator("#credential-form button[type=submit]").click();
+  await answerWhoAmI(page);
+  await connectConsole(page);
 }
 
 // Holds only the next paged timeline request; later ones pass through. Lets
-// a test forget, refresh or re-authenticate while that response is in flight,
+// a test log out, refresh or re-authenticate while that response is in flight,
 // then releases it.
 async function holdAfter(page) {
   let release = () => {};
@@ -129,7 +131,7 @@ async function holdAfter(page) {
 
 async function openWarRoom(page, incidentId = INCIDENT) {
   await page.goto(`/public/incident-ui/war-room.html?incident_id=${incidentId}`);
-  await expect(page.locator("#credential-section")).toBeVisible();
+  await expect(page.locator("#console-session")).toBeVisible();
   await authenticate(page);
 }
 
@@ -149,8 +151,8 @@ test("renders the persisted summary, version and first timeline page", async ({ 
   await mockApi(page, { pages: [pageOne, pageTwo], snapshot: snapshotPayload() });
   await openWarRoom(page);
 
-  await expect(page.locator("#incident-title")).toHaveText("Elevated error rate on paymentservice.");
-  await expect(page.locator("#version-line")).toContainText("Versión 4");
+  await expect(page.locator("#incident-focus-title")).toHaveText("Elevated error rate on paymentservice.");
+  await expect(page.locator("#incident-focus-version")).toHaveText("4");
   await expect(page.locator("#fact-snapshot")).toContainText("v4 (seq 1)");
   await expect(page.locator(".war-room__event")).toHaveCount(2);
   await expect(page.locator("#timeline-count")).toHaveText("2 eventos");
@@ -169,7 +171,7 @@ test("loads the second page without duplicating events", async ({ page }) => {
 test("refresh reconciles to the new backend version", async ({ page }) => {
   await mockApi(page, { pages: [pageOne, pageTwo], snapshot: snapshotPayload(4) });
   await openWarRoom(page);
-  await expect(page.locator("#version-line")).toContainText("Versión 4");
+  await expect(page.locator("#incident-focus-version")).toHaveText("4");
 
   await page.unroute("**/api/v1/incidents/**");
   await mockApi(page, {
@@ -178,7 +180,7 @@ test("refresh reconciles to the new backend version", async ({ page }) => {
     snapshot: snapshotPayload(5),
   });
   await page.locator("#refresh-button").click();
-  await expect(page.locator("#version-line")).toContainText("Versión 5");
+  await expect(page.locator("#incident-focus-version")).toHaveText("5");
   await expect(page.locator(".war-room__event")).toHaveCount(2);
 });
 
@@ -213,9 +215,15 @@ test("distinguishes 401, 403, 404 and 503 states", async ({ page }) => {
     await page.unroute("**/api/v1/incidents/**");
     await mockApi(page, { failure: { http, code, message: `${code} message` } });
     await page.goto(`/public/incident-ui/war-room.html?incident_id=${INCIDENT}`);
-    await authenticate(page);
+    await answerWhoAmI(page);
+    await page.locator("#api-key").fill("sre_demo_token_demo_0001");
+    await page.locator("#connect-button").click();
     await expect(page.locator(selector)).toBeVisible();
     await expect(page.locator("#summary-section")).toBeHidden();
+    if (http === 401) {
+      // A 401 ends the console session for every view instead of a page-local prompt.
+      await expect(page.locator("#session-message")).toContainText("rechazó la credencial");
+    }
   }
 });
 
@@ -245,8 +253,8 @@ test("two sessions render the same mocked version (shared persistence converges 
     await openWarRoom(page);
     await expect(page.locator('#war-room[data-state="ready"]')).toBeAttached();
   }
-  const expected = (await second.locator("#version-line").textContent()) ?? "";
-  await expect(first.locator("#version-line")).toHaveText(expected);
+  const expected = (await second.locator("#incident-focus-version").textContent()) ?? "";
+  await expect(first.locator("#incident-focus-version")).toHaveText(expected);
   await first.close();
   await second.close();
 });
@@ -305,14 +313,19 @@ test("denied loadMore clears protected content without partials", async ({ page 
     await page.locator("#load-more").click();
     await expect(page.locator(selector)).toBeVisible();
     await expect(page.locator("#summary-section")).toBeHidden();
+    await expect(page.locator("#incident-focus")).toBeHidden();
     if (canReauth) {
-      await expect(page.locator("#credential-section")).toBeVisible();
+      // A 401 ends the console session for every view; the key is entered again once.
+      await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "anonymous");
+      await expect(page.locator("#console-session")).toBeVisible();
       await page.unroute("**/api/v1/incidents/**");
       await mockApi(page, { pages: [pageOne, pageTwo], snapshot: snapshotPayload() });
       await authenticate(page);
       await expect(page.locator(".war-room__event")).toHaveCount(2);
     } else {
-      await expect(page.locator("#forget-credential")).toBeVisible();
+      // A 403 stays with this view: the session remains and the view offers a retry.
+      await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "active");
+      await expect(page.locator("#refresh-button")).toBeVisible();
     }
   }
 });
@@ -342,14 +355,14 @@ test("recovers the view after a 503 during loadMore", async ({ page }) => {
   await expect(page.locator(".war-room__event")).toHaveCount(2);
 });
 
-test("drops a stale delayed response after forgetting the credential", async ({ page }) => {
+test("drops a stale delayed response after logging out", async ({ page }) => {
   await mockApi(page, { pages: [pageOne, pageTwo], snapshot: snapshotPayload() });
   await openWarRoom(page);
   await expect(page.locator(".war-room__event")).toHaveCount(2);
   const release = await holdAfter(page);
   await page.locator("#load-more").click();
-  await page.locator("#forget-credential").click();
-  await expect(page.locator("#credential-section")).toBeVisible();
+  await logoutConsole(page);
+  await expect(page.locator("#console-session")).toBeVisible();
   const staleArrived = page.waitForResponse(
     (response) =>
       response.url().includes("/timeline") &&
@@ -357,9 +370,10 @@ test("drops a stale delayed response after forgetting the credential", async ({ 
   );
   release();
   await staleArrived;
-  await expect(page.locator("#credential-section")).toBeVisible();
+  await expect(page.locator("#console-session")).toBeVisible();
   await expect(page.locator("#timeline-section")).toBeHidden();
   await expect(page.locator(".war-room__event")).toHaveCount(0);
+  await expect(page.locator("#incident-focus")).toBeHidden();
 });
 
 test("a newer session paginates while the old request is still pending", async ({ page }) => {
@@ -368,7 +382,7 @@ test("a newer session paginates while the old request is still pending", async (
   await expect(page.locator(".war-room__event")).toHaveCount(2);
   const release = await holdAfter(page);
   await page.locator("#load-more").click();
-  await page.locator("#forget-credential").click();
+  await logoutConsole(page);
   await authenticate(page);
   await expect(page.locator(".war-room__event")).toHaveCount(2);
   // The new session must page while the old request is still held: the race
@@ -385,7 +399,7 @@ test("a newer session paginates while the old request is still pending", async (
   release();
   await staleArrived;
   await expect(page.locator(".war-room__event")).toHaveCount(3);
-  await expect(page.locator("#version-line")).toContainText("Versión 4");
+  await expect(page.locator("#incident-focus-version")).toHaveText("4");
   await expect(page.locator("#load-more")).toBeHidden();
   await expect(page.locator("#load-more")).toBeEnabled();
 });

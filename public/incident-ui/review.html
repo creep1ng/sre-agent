@@ -7,21 +7,17 @@
       name="description"
       content="Revisión humana de mitigación: acciones disponibles según el workflow."
     />
-    <title>Revisión de mitigación · midnight.agent</title>
-    <script src="/public/api/runtime-config.js"></script>
-    <link rel="icon" href="/public/favicon.svg" />
-    <link rel="stylesheet" href="/styles/design-system.css" />
-    <link rel="stylesheet" href="/styles/incident-alerts.css" />
-    <link rel="stylesheet" href="/styles/incident-war-room.css" />
+    <title>Decisiones · midnight.agent</title>
+    <!-- This surface lives in the console; this page keeps its address and its markup. -->
+    <script src="/public/console/legacy-redirect.js" data-view="decisions"></script>
   </head>
   <body>
-    <a class="ma-skip-link" href="#review">Saltar a la revisión</a>
     <main id="review" class="war-room" data-state="loading">
       <header class="war-room__heading">
         <div>
-          <p class="ma-eyebrow">Operaciones</p>
-          <h1 class="war-room__title">Revisión de mitigación</h1>
-          <p class="ma-subtle">
+          <p class="ma-eyebrow">Atención a incidentes</p>
+          <h1 class="war-room__title">Decisiones</h1>
+          <p class="war-room__subtitle">
             Acciones humanas disponibles según el workflow activo. Esta vista no
             ejecuta mitigaciones ni cierra incidentes.
           </p>
@@ -30,46 +26,40 @@
           <button id="refresh-button" class="ma-button ma-button--secondary" type="button" hidden>
             Actualizar
           </button>
-          <button id="forget-credential" class="ma-button ma-button--ghost" type="button" hidden>
-            Olvidar credencial
-          </button>
         </div>
       </header>
       <div id="loading-state" class="alert-loading" aria-live="polite" hidden>
         <span class="alert-loading__dot" aria-hidden="true"></span>
         <span>Cargando revisión…</span>
       </div>
-      <section id="credential-section" class="ma-panel war-room__credentials" hidden>
-        <div class="ma-panel__header"><h2 class="ma-panel__title">Credencial de lectura</h2></div>
-        <form id="credential-form" class="ma-panel__body war-room__form">
-          <label class="ma-field" for="credential-input">
-            <span class="ma-field__label">API key (Bearer)</span>
-            <input id="credential-input" class="ma-input" type="password" autocomplete="off" spellcheck="false" required />
-          </label>
-          <p id="credential-error" class="ma-field__error" hidden></p>
-          <button class="ma-button ma-button--primary" type="submit">Consultar revisión</button>
-        </form>
-      </section>
       <p id="command-status" class="ma-muted" role="status" aria-live="polite" hidden></p>
       <div id="error-missing-id" class="ma-alert" data-tone="warning" hidden>
-        <p class="ma-alert__title">Falta incident_id o run_id</p>
-        <p class="ma-alert__detail">Abre con <code>?incident_id=…&amp;run_id=…</code>.</p>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+        <div><p class="ma-alert__title">Ninguna decisión en foco</p>
+        <p class="ma-alert__detail">Abre Decisiones desde el war room o la franja de un incidente: así conserva su incidente y su run.</p></div>
+        <a class="ma-button ma-button--secondary ma-button--small" href="/?view=alerts">Ir a Alertas</a>
       </div>
       <div id="error-401" class="ma-alert" data-tone="warning" hidden>
-        <p class="ma-alert__title">Autenticación requerida</p>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+        <div><p class="ma-alert__title">Autenticación requerida</p>
+        <p class="ma-alert__detail">Conecta la consola con una credencial válida. No se muestra ningún contexto de la decisión.</p></div>
       </div>
       <div id="error-403" class="ma-alert" data-tone="critical" hidden>
-        <p class="ma-alert__title">Sin acceso a la revisión</p>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+        <div><p class="ma-alert__title">Sin acceso a la revisión</p></div>
       </div>
       <div id="error-404" class="ma-alert" data-tone="warning" hidden>
-        <p class="ma-alert__title">Incidente o run no encontrado</p>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+        <div><p class="ma-alert__title">Incidente o run no encontrado</p></div>
       </div>
       <div id="error-409" class="ma-alert" data-tone="warning" hidden>
-        <p class="ma-alert__title">Conflicto: el run cambió</p>
-        <p class="ma-alert__detail">Actualiza y revisa el estado contractual antes de reintentar.</p>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+        <div><p class="ma-alert__title">Conflicto: el run cambió</p>
+        <p class="ma-alert__detail">Actualiza y revisa el estado contractual antes de reintentar.</p></div>
       </div>
       <div id="error-503" class="ma-alert" data-tone="critical" hidden>
-        <p class="ma-alert__title">Backend no disponible</p>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+        <div><p class="ma-alert__title">Backend no disponible</p></div>
       </div>
       <section id="context-section" class="ma-panel" hidden>
         <div class="ma-panel__header"><h2 class="ma-panel__title">Contexto autoritativo</h2></div>
@@ -94,7 +84,7 @@
           <p class="ma-muted">Actor: humano · identidad resuelta por el servidor desde la credencial.</p>
           <label class="ma-field" for="decision-comment">
             <span class="ma-field__label">Motivo (opcional, máx. 2000)</span>
-            <textarea id="decision-comment" class="ma-input" maxlength="2000" rows="3"></textarea>
+            <textarea id="decision-comment" class="ma-textarea" maxlength="2000" rows="3"></textarea>
           </label>
           <p class="ma-muted">Clave de idempotencia: <code id="decision-key"></code></p>
           <button class="ma-button ma-button--primary" type="submit" id="decision-submit">Confirmar decisión</button>
@@ -108,6 +98,5 @@
         </div>
       </section>
     </main>
-    <script type="module" src="/public/incident-ui/review.js"></script>
   </body>
 </html>

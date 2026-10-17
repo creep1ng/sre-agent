@@ -1,18 +1,8 @@
-import {
-  ApiClientError,
-  createAdministrativeApiClient,
-  createMemoryCredentialStore,
-} from "/public/api/client.js";
+import { ApiClientError } from "/public/api/client.js";
+import { mountedView } from "/public/console/view.js";
 
-const THEME_STORAGE_KEY = "midnight-agent-theme";
+const view = mountedView();
 const TIMELINE_LIMIT = 50;
-
-const severityTones = Object.freeze({
-  sev1: "critical",
-  sev2: "warning",
-  sev3: "info",
-  sev4: "info",
-});
 
 const eventKindTones = Object.freeze({
   denial: "critical",
@@ -34,8 +24,7 @@ const state = {
 };
 
 const nodes = {};
-const credentialStore = createMemoryCredentialStore();
-const client = createAdministrativeApiClient({ credentialStore });
+const client = view.client;
 
 function byId(id) {
   return document.getElementById(id);
@@ -45,22 +34,12 @@ function cacheNodes() {
   [
     "war-room",
     "loading-state",
-    "credential-section",
-    "credential-form",
-    "credential-input",
-    "credential-error",
     "error-missing-id",
     "error-401",
     "error-403",
     "error-404",
     "error-503",
     "summary-section",
-    "incident-title",
-    "version-line",
-    "incident-state",
-    "incident-severity",
-    "fact-id",
-    "fact-severity",
     "fact-impact",
     "fact-snapshot",
     "fact-alert",
@@ -74,39 +53,9 @@ function cacheNodes() {
     "timeline-empty",
     "load-more",
     "refresh-button",
-    "forget-credential",
-    "theme-toggle",
-    "theme-switch-label",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
-}
-
-function getCurrentTheme() {
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-}
-
-function syncThemeSwitch() {
-  const isDark = getCurrentTheme() === "dark";
-  nodes["theme-toggle"].setAttribute("aria-checked", String(isDark));
-  nodes["theme-toggle"].setAttribute(
-    "aria-label",
-    isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro",
-  );
-  nodes["theme-switch-label"].textContent = isDark ? "Oscuro" : "Claro";
-}
-
-function toggleTheme() {
-  const nextTheme = getCurrentTheme() === "dark" ? "light" : "dark";
-  document.documentElement.dataset.theme = nextTheme;
-
-  try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
-  } catch {
-    // El cambio de tema sigue funcionando aunque el navegador bloquee storage.
-  }
-
-  syncThemeSwitch();
 }
 
 function formatTimestamp(timestamp) {
@@ -125,7 +74,6 @@ function formatTimestamp(timestamp) {
 function hideAll() {
   [
     "loading-state",
-    "credential-section",
     "error-missing-id",
     "error-401",
     "error-403",
@@ -137,22 +85,16 @@ function hideAll() {
     nodes[id].hidden = true;
   });
   nodes["refresh-button"].hidden = true;
-  nodes["forget-credential"].hidden = true;
 }
 
 function showError(kind, status) {
   hideAll();
   nodes[`error-${kind}`].hidden = false;
   nodes["war-room"].dataset.state = "error";
-  if (kind === "401") {
-    nodes["credential-section"].hidden = false;
-  }
   // Toda vista de error conserva una vía de recuperación: reintentar con
-  // Actualizar y, ante 401/403, cambiar u olvidar la credencial.
+  // Actualizar o, ante 401/403, cambiar la credencial desde la sesión de la consola.
   nodes["refresh-button"].hidden = false;
-  if (kind === "401" || kind === "403") {
-    nodes["forget-credential"].hidden = false;
-  }
+  view.focusIncident(null);
   console.error(`War room failed: HTTP ${status}`);
 }
 
@@ -187,17 +129,8 @@ function actorLabel(actor) {
   return String(actor.type ?? "sistema");
 }
 
+// Title, state, severity, identifiers and version head the view in the console's incident band.
 function renderSummary(detail, snapshot) {
-  nodes["incident-title"].textContent =
-    detail.alert?.summary ?? `Incidente ${detail.incident_id}`;
-  nodes["version-line"].textContent =
-    `Versión ${detail.version} · actualizado ${formatTimestamp(detail.updated_at)}`;
-  nodes["incident-state"].textContent = detail.state;
-  nodes["incident-state"].dataset.tone = "info";
-  nodes["incident-severity"].textContent = detail.severity ?? "sin severidad";
-  nodes["incident-severity"].dataset.tone = severityTones[detail.severity] ?? "info";
-  nodes["fact-id"].textContent = detail.incident_id;
-  nodes["fact-severity"].textContent = detail.severity ?? "—";
   nodes["fact-impact"].textContent = detail.impact ?? "—";
   if (snapshot) {
     nodes["fact-snapshot"].textContent =
@@ -323,6 +256,8 @@ async function loadAll() {
     if (generation !== state.generation) return;
     const runId = resolveRunId(detail);
     renderRunPicker(detail, runId);
+    // El run leído queda en la dirección para que el recorrido y la recarga lo conserven.
+    view.replaceParams({ run_id: runId });
     let timeline;
     try {
       timeline = await fetchTimeline({ runId });
@@ -346,10 +281,10 @@ async function loadAll() {
     state.version = detail.version;
     renderSummary(detail, snapshot);
     renderEvents(timeline.events ?? []);
+    view.focusIncident(detail, runId);
     nodes["load-more"].hidden = !state.hasMore;
     nodes["loading-state"].hidden = true;
     nodes["refresh-button"].hidden = false;
-    nodes["forget-credential"].hidden = false;
     nodes["war-room"].dataset.state = "ready";
   } catch (error) {
     if (generation !== state.generation) return;
@@ -398,49 +333,32 @@ function selectRun(event) {
   loadAll();
 }
 
-function submitCredential(event) {
-  event.preventDefault();
-  const value = nodes["credential-input"].value;
-  nodes["credential-input"].value = "";
-  try {
-    credentialStore.set(value);
-  } catch {
-    nodes["credential-error"].textContent = "Se requiere una API key no vacía.";
-    nodes["credential-error"].hidden = false;
+// La credencial vive en la sesión de la consola: una sesión activa carga el incidente y
+// cualquier cambio descarta lo leído con la credencial anterior.
+function applySession(session) {
+  if (session.phase === "active") {
+    loadAll();
     return;
   }
-  nodes["credential-error"].hidden = true;
-  loadAll();
-}
-
-function forgetCredential() {
   newGeneration();
-  credentialStore.clear();
   clearSessionData();
   hideAll();
-  nodes["credential-section"].hidden = false;
+  nodes["error-401"].hidden = false;
   nodes["war-room"].dataset.state = "auth";
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  cacheNodes();
-  syncThemeSwitch();
-  nodes["theme-toggle"].addEventListener("click", toggleTheme);
-  nodes["refresh-button"].addEventListener("click", loadAll);
-  nodes["run-select"].addEventListener("change", selectRun);
-  nodes["load-more"].addEventListener("click", loadMore);
-  nodes["forget-credential"].addEventListener("click", forgetCredential);
-  nodes["credential-form"].addEventListener("submit", submitCredential);
+cacheNodes();
+nodes["refresh-button"].addEventListener("click", loadAll);
+nodes["run-select"].addEventListener("change", selectRun);
+nodes["load-more"].addEventListener("click", loadMore);
 
-  const incidentId = new URLSearchParams(window.location.search).get("incident_id");
-  if (!incidentId) {
-    hideAll();
-    nodes["error-missing-id"].hidden = false;
-    nodes["war-room"].dataset.state = "error";
-    return;
-  }
-  state.incidentId = incidentId;
+const incidentId = view.params.get("incident_id");
+if (!incidentId) {
   hideAll();
-  nodes["credential-section"].hidden = false;
-  nodes["war-room"].dataset.state = "auth";
-});
+  nodes["error-missing-id"].hidden = false;
+  nodes["war-room"].dataset.state = "error";
+} else {
+  state.incidentId = incidentId;
+  state.selectedRunId = view.params.get("run_id");
+  view.onSession(applySession);
+}

@@ -1,3 +1,4 @@
+import { createIncidentFocus } from "./incident-focus.js";
 import { DEFAULT_VIEW, DOMAINS, hrefFor, routeFrom, viewById, viewForPath } from "./routes.js";
 import { createTabSession } from "./session.js";
 import { mountView } from "./view.js";
@@ -21,6 +22,8 @@ const chipState = byId("session-state");
 const menu = byId("session-menu");
 const changeButton = byId("change-credential");
 const disconnectButton = byId("disconnect-button");
+const incidentFocusBand = byId("incident-focus");
+const incidentFocus = createIncidentFocus(incidentFocusBand);
 
 const PHASE_LABELS = Object.freeze({
   anonymous: { identity: "Sin sesión", detail: "Conectar credencial" },
@@ -35,10 +38,16 @@ const REASON_MESSAGES = Object.freeze({
   network: "No se pudo contactar la API para validar la credencial.",
 });
 
-// The route table decides where each entry opens while surfaces move into the console.
-for (const link of document.querySelectorAll("[data-console-nav]")) {
-  link.href = hrefFor(link.dataset.consoleNav);
+// The route table decides where each entry opens while surfaces move into the console; incident
+// views open on the incident in focus, so returning to it never asks for its identifiers.
+function syncNavigation() {
+  for (const link of document.querySelectorAll("[data-console-nav]")) {
+    const viewId = link.dataset.consoleNav;
+    link.href = hrefFor(viewId, viewById(viewId)?.incident ? incidentFocus.params : {});
+  }
 }
+
+syncNavigation();
 
 let active = null;
 let renderId = 0;
@@ -117,6 +126,8 @@ async function renderNow(id, { focus }) {
   active?.unmount();
   active = null;
   markLocation(viewId, view);
+  incidentFocus.route(viewId, view, params);
+  syncNavigation();
   syncSession(session.state);
 
   if (!view || view.legacy) {
@@ -133,11 +144,25 @@ async function renderNow(id, { focus }) {
 
   host.setAttribute("aria-busy", "true");
   try {
-    const mounted = await mountView({ host, viewId, view, params, session, navigate, replaceParams });
+    const mounted = await mountView({
+      host,
+      viewId,
+      view,
+      params,
+      session,
+      navigate,
+      replaceParams,
+      focusIncident(fromViewId, detail, runId) {
+        incidentFocus.show(fromViewId, detail, runId);
+        syncNavigation();
+      },
+    });
     if (id !== renderId) {
       mounted.unmount();
       return;
     }
+    // The band heads an incident view's content, right under the view's own title.
+    if (view.incident) mounted.root.querySelector(":scope > header")?.after(incidentFocusBand);
     active = mounted;
     if (focus) focusView();
     announce(`${view.label} abierta.`);
@@ -266,6 +291,10 @@ document.addEventListener("click", (event) => {
 });
 
 session.subscribe((state) => {
+  if (state.phase !== "active") {
+    incidentFocus.clear();
+    syncNavigation();
+  }
   syncSession(state);
   if (state.phase === "active") announce(`Sesión activa como ${state.principalId}.`);
   else if (state.reason && REASON_MESSAGES[state.reason]) announce(REASON_MESSAGES[state.reason]);
