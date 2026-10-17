@@ -230,6 +230,29 @@ test("un incidente sin run no ofrece Decisión ni inventa un run", async ({ page
   await expect(page).toHaveURL(`/?view=war-room&incident_id=${INCIDENT}`);
 });
 
+test("cambiar a Decisiones sin run retira la franja y no conserva el run anterior", async ({ page }) => {
+  await mockIncident(page);
+  await answerWhoAmI(page);
+  // Decisiones reads an incident and one of its runs: without the run there is no read, so
+  // nothing stays in focus while that route is mounted.
+  await page.goto(`/?view=decisions&incident_id=${INCIDENT}`);
+  await connectConsole(page);
+  await expect(page.locator("#error-missing-id")).toBeVisible();
+  await expect(band(page)).toBeHidden();
+
+  // The war room reads the same incident, picks its latest run and shows it in the band.
+  await page.locator('[data-console-nav="war-room"]').click();
+  await expect(page.locator("#war-room")).toHaveAttribute("data-state", "ready");
+  await expect(band(page)).toBeVisible();
+  await expect(page.locator("#incident-focus-run")).toHaveText(RUN);
+
+  // Back to the run-less route: the band must not keep the run of the view that read it.
+  await page.goBack();
+  await expect(page.locator("#error-missing-id")).toBeVisible();
+  await expect(band(page)).toBeHidden();
+  await expect(page.locator("#incident-focus-run")).toBeEmpty();
+});
+
 test("la consola con un incidente en foco no tiene violaciones WCAG A/AA detectables", async ({ page }) => {
   await mockIncident(page);
   await openWarRoom(page);
