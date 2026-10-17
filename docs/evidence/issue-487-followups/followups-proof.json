@@ -1,0 +1,68 @@
+{
+  "issue": 487,
+  "base": "http://web",
+  "followups": {
+    "646-stale-band": {
+      "clearedAfterBack": true,
+      "seededRun": "run_warroomdemo01"
+    },
+    "647-deeplink-residue": {
+      "addressAfterCancel": "?view=triage",
+      "alertId": "al-t23-legacy"
+    },
+    "648-mobile-timeline": {
+      "tracks": [
+        28,
+        261
+      ],
+      "timeWidth": 48,
+      "contentWidth": 261
+    }
+  },
+  "checks": [
+    {
+      "name": "646 — Decisiones without a run starts with an empty band",
+      "result": "PASS"
+    },
+    {
+      "name": "646 — the war room then shows the seeded run in the band",
+      "result": "PASS"
+    },
+    {
+      "name": "646 — Back to the run-less route removes the band",
+      "result": "PASS"
+    },
+    {
+      "name": "646 — the band does not keep the previous run",
+      "result": "PASS"
+    },
+    {
+      "name": "647 — the address preloads the alert into Triage",
+      "result": "PASS"
+    },
+    {
+      "name": "647 — canceling before connecting leaves no alert_id in the address",
+      "result": "PASS"
+    },
+    {
+      "name": "647 — the alert field stays empty after connecting",
+      "result": "PASS"
+    },
+    {
+      "name": "648 — the timeline keeps two grid columns at 375px",
+      "result": "PASS",
+      "detail": "28 | 261"
+    },
+    {
+      "name": "648 — both the time and the content keep usable widths",
+      "result": "PASS",
+      "detail": "time=48.0 content=261.0"
+    },
+    {
+      "name": "no page errors",
+      "result": "PASS"
+    }
+  ],
+  "failures": [],
+  "pageErrors": []
+}
