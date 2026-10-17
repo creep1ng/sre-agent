@@ -13,6 +13,11 @@ behavior. Say so before showing them. As of October 17, 17:41 COT the command co
 before the demo: check the new SHA, rerun the affected commands once real, and update this
 runbook with that evidence — never swap the script silently.
 
+**Authoring limitation:** this runbook was assembled from the runs recorded in the cited
+evidence; it was NOT re-executed end to end from a clean checkout while authoring. The
+Sunday rehearsal below is the moment to confirm every command for real — do not mark that
+checklist passed until someone executes it and records the actual outputs.
+
 ## Checkouts and SHAs (one worktree per slice)
 
 ```sh
@@ -39,7 +44,7 @@ and `RESTRICTED_HARNESS_API_KEY` — compose interpolation carries them into the
 | --- | --- | --- |
 | 16:15–16:20 | Preflight: checkouts, `.env`, free host ports (web 8091, api 8011, postgres 5439) | estimated |
 | 16:20–16:23 | T1 stack up + provision + seed | provision and seed durations not recorded — plan for a few minutes |
-| 16:23–16:25 | T1 real spec 4/4 in the e2e container | recorded 4/4 in #652; test duration not recorded |
+| 16:23–16:25 | T1 real spec in the e2e container | recorded 4 passed in 7.8 s (run 39003786122, #652) |
 | 16:25–16:27 | T1 war room live journey + evidence capture | capture script: single shot |
 | 16:27–16:31 | T3 identical stack: postmortem fixture view | navigation only |
 | 16:31–16:36 | T2 fixture captures from the e2e container | durations not recorded — plan for a few minutes |
@@ -144,6 +149,22 @@ shows version 8 with the reason preserved and the approval unmarked. Podium sent
 - Do not open `review.html` directly in the podium browser: without the capture script's route
   mocks there is no console session, so the page will not reproduce these fixture states.
 
+## Sunday rehearsal (October 18) — operator checklist
+
+Run the Monday blocks above once today against the same pinned checkouts; the rehearsal is
+not marked passed by this document alone — someone must execute it and record real results.
+
+- [ ] Preflight at the pinned SHAs: builds done per checkout (tags `<folder>-…`), `.env` keys
+      present, ports 8091/8011/5439/4173 free, `docker ps` without sre-agent-37 leftovers.
+- [ ] T1 real flow with the port flags: provision (expect "201"), seed (expect the three
+      stamped incidents), real spec (expect 4 passed), live journey, capture PNG.
+- [ ] Captures land inside the pinned worktrees: note the head SHA beside each generated PNG
+      (T1 at `e69f3750`, T2 at `b3cac750`).
+- [ ] T3 shows the fixture banner; T2 walks the capture images as fixtures, never backend.
+- [ ] Record actual outputs and any failure verbatim (time, command, output); anything that
+      deviates from this runbook enters the demo notes for Monday; old runs are never
+      presented as new proof.
+
 ## Contingencies and known limits
 
 | Symptom | Cause | Recovery |
@@ -170,6 +191,7 @@ PO requests them.
 ## Evidence index (commits are the record)
 
 - T1 acceptance CI run on the #652 head: `https://github.com/creep1ng/sre-agent/actions/runs/39004116747`.
+- T1 real-spec record: `https://github.com/creep1ng/sre-agent/actions/runs/39003786122` (4 passed in 7.8 s, run ids recorded in #652).
 - T2 fixtures committed: `https://github.com/creep1ng/sre-agent/blob/b3cac7500425ab7d84b142e5c667153b1df360ec/docs/evidence/41-review-fixtures-postmortem-panel.png` (plus the other six at the same SHA).
 - T1 evidence PNG: `https://github.com/creep1ng/sre-agent/blob/e69f3750f59709d223f50864fb5b89c8d8edb0eb/docs/evidence/37-war-room-run-start.png`.
 - Scope decisions: #41 (commands contract) and #335 (postmortem cut), both October 16.
