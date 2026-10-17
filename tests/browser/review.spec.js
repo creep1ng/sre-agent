@@ -68,7 +68,7 @@ test("offers only the mitigating review actions for workflow 1.0.0", async ({ pa
   for (const command of ["approve_mitigation", "reject_mitigation", "request_changes"]) {
     await expect(page.locator(`#actions-list button[data-command="${command}"]`)).toHaveCount(1);
   }
-  for (const absent of ["cancel_run", "escalate", "propose_disposition", "close_incident"]) {
+  for (const absent of ["cancel_run", "escalate", "propose_disposition", "close_incident", "verification_passed", "verification_failed"]) {
     await expect(page.locator("#actions-list")).not.toContainText(absent);
   }
   await expect(page.locator("#fact-incident")).toHaveText(INCIDENT);
@@ -353,12 +353,187 @@ test("keeps drafts isolated per action", async ({ page }) => {
   await expect(page.locator("#decision-comment")).toHaveValue("Approve reason.");
 });
 
-test("exposes no close controls and no editable authority", async ({ page }) => {
+function runStatePayload(currentState, over = {}) {
+  return {
+    run_id: RUN,
+    incident_id: INCIDENT,
+    workflow_version: "1.0.0",
+    status: "awaiting_human",
+    current_state: currentState,
+    pending_command: null,
+    cursor: "seq:7",
+    terminated_reason: null,
+    updated_at: "2026-08-24T14:20:00Z",
+    ...over,
+  };
+}
+
+// Like openReview, but the detail responses read a live getter: refreshes after a
+// mocked command see the advanced version and state, like a real backend.
+async function openMutableReview(page, detailGetter) {
+  await page.route("**/api/v1/whoami", async (route) => {
+    const token = route.request().headers().authorization;
+    await route.fulfill({ json: { principal_id: token?.endsWith("second") ? "other-human" : "demo-human" } });
+  });
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const request = route.request();
+    if (request.method() === "POST" && request.url().includes("/commands")) {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: detailGetter() });
+  });
+  await page.goto(`/public/incident-ui/review.html?incident_id=${INCIDENT}&run_id=${RUN}`);
+  await connectConsole(page);
+}
+
+test("gates verification and closure actions to their contract states", async ({ page }) => {
+  const cases = [
+    ["verifying", ["verification_passed", "verification_failed"], ["close_incident"]],
+    ["resolved", [], ["verification_passed", "verification_failed", "close_incident"]],
+    ["postmortem", ["close_incident"], ["verification_passed", "verification_failed"]],
+    ["investigating", [], ["verification_passed", "verification_failed", "close_incident"]],
+    ["closed", [], ["verification_passed", "verification_failed", "close_incident"]],
+  ];
+  for (const [currentState, present, absent] of cases) {
+    await page.unroute("**/api/v1/whoami");
+    await page.unroute("**/api/v1/incidents/**");
+    await openReview(page, detailPayload(currentState));
+    for (const command of present) {
+      await expect(page.locator(`#actions-list button[data-command="${command}"]`)).toHaveCount(1);
+    }
+    for (const command of absent) {
+      await expect(page.locator(`#actions-list button[data-command="${command}"]`)).toHaveCount(0);
+    }
+  }
+});
+
+// Mocked end to end: the fixture backend advances the run through the contract
+// transitions (resolved to postmortem comes from the agent objective). It proves
+// the UI sequencing and draft durability, never a live transport.
+test("walks the fixture journey mitigating to closed with an explicit closure approval", async ({ page }) => {
+  let detail = detailPayload("mitigating");
+  const posted = await (async () => {
+    await openMutableReview(page, () => detail);
+    return mockCommands(page, async (count) => {
+      const nextState = ["verifying", "resolved", "closed"][count - 1];
+      detail = detailPayload(nextState);
+      detail.version += count;
+      return { status: 202, json: runStatePayload(nextState) };
+    });
+  })();
+
+  // mitigating → verifying happens through the published approval command.
+  await decide(page, "approve_mitigation", "Flag rollback done, watching error rate.");
+  await expect(page.locator("#receipt-line")).toContainText("verifying");
+  await page.locator("#refresh-button").click();
+  await expect(page.locator('#actions-list button[data-command="verification_passed"]')).toHaveCount(1);
+  await expect(page.locator('#actions-list button[data-command="close_incident"]')).toHaveCount(0);
+
+  // Verificación estable reaches resolved; the closure stays out of reach here.
+  await page.locator('#actions-list button[data-command="verification_passed"]').click();
+  await page.locator("#decision-comment").fill("Error rate flat for 20 minutes.");
+  await expect(page.locator("#decision-approval-row")).toBeHidden();
+  await page.locator("#decision-submit").click();
+  await expect(page.locator("#receipt-line")).toContainText("resolved");
+
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#actions-empty")).toBeVisible();
+  expect(posted).toHaveLength(2);
+
+  // resolved → postmortem is an agent objective; the backend reports it on refresh.
+  detail = detailPayload("postmortem");
+  detail.version += 3;
+  await page.locator("#refresh-button").click();
+  await expect(page.locator('#actions-list button[data-command="close_incident"]')).toHaveCount(1);
+
+  // The closure needs an explicit approval mark on this panel opening.
+  await page.locator('#actions-list button[data-command="close_incident"]').click();
+  await expect(page.locator("#decision-approval-row")).toBeVisible();
+  await expect(page.locator("#decision-submit")).toBeDisabled();
+  await page.locator("#decision-submit").click({ timeout: 300 }).catch(() => {});
+  expect(posted).toHaveLength(2);
+  await page.locator("#decision-comment").fill("Postmortem reviewed, closing incident.");
+  await page.locator("#decision-approval").check();
+  await page.locator("#decision-submit").click();
+
+  await expect(page.locator("#receipt-line")).toContainText("close_incident");
+  expect(posted).toHaveLength(3);
+  expect(posted[2].body).toMatchObject({
+    command: "close_incident",
+    actor: "human",
+    authorization: { action: "run.approve" },
+    expected_incident_version: detail.version,
+  });
+  expect(posted[1].body).toMatchObject({
+    command: "verification_passed",
+    authorization: { action: "run.command" },
+    expected_incident_version: 5,
+  });
+  for (const entry of posted) {
+    expect(entry.body.actor_reference).toEqual({ reference_version: "1.0.0", principal_id: "demo-human" });
+  }
+  const seen = (await page.locator("#review").textContent()) ?? "";
+  expect(seen).not.toMatch(/applied|ejecutada/i);
+
+  // A reload re-derives the closed state and never mutates by itself.
+  await page.reload();
+  await connectConsole(page);
+  await expect(page.locator("#actions-empty")).toBeVisible();
+  expect(posted).toHaveLength(3);
+});
+
+test("a stale-version 409 on closure keeps the reason and never resends it", async ({ page }) => {
+  let detail = detailPayload("postmortem");
+  await openMutableReview(page, () => detail);
+  const posted = await mockCommands(page, async (count) => {
+    if (count > 1) return { status: 202, json: runStatePayload("closed") };
+    detail.version += 1; // the backend and other actors advanced the incident
+    return { status: 409, json: { error: { code: "incident_version_conflict", message: "stale version" } } };
+  });
+  await page.locator('#actions-list button[data-command="close_incident"]').click();
+  await page.locator("#decision-comment").fill("Reviewed the postmortem draft, stable enough.");
+  await page.locator("#decision-approval").check();
+  await page.locator("#decision-submit").click();
+
+  await expect(page.locator("#error-409")).toBeVisible();
+  expect(posted).toHaveLength(1);
+  await page.locator("#refresh-button").click();
+  await expect(page.locator('#actions-list button[data-command="close_incident"]')).toHaveCount(1);
+  expect(posted).toHaveLength(1); // recovery is manual: no automatic resend
+
+  await page.locator('#actions-list button[data-command="close_incident"]').click();
+  await expect(page.locator("#decision-comment")).toHaveValue("Reviewed the postmortem draft, stable enough.");
+  await expect(page.locator("#decision-submit")).toBeDisabled(); // the approval starts unmarked
+  await page.locator("#decision-approval").check();
+  await page.locator("#decision-submit").click();
+  await expect(page.locator("#receipt-line")).toContainText("close_incident");
+  expect(posted).toHaveLength(2);
+  expect(posted[1].body.expected_incident_version).toBe(detail.version);
+});
+
+test("a 403 rejection renders no success state on closure", async ({ page }) => {
+  await openReview(page, detailPayload("postmortem"));
+  const posted = await mockCommands(page, async () => ({
+    status: 403,
+    json: { error: { code: "not_authorized", message: "no run.approve grant" } },
+  }));
+  await page.locator('#actions-list button[data-command="close_incident"]').click();
+  await page.locator("#decision-approval").check();
+  await page.locator("#decision-submit").click();
+
+  await expect(page.locator("#error-403")).toBeVisible();
+  await expect(page.locator("#receipt-section")).toBeHidden();
+  await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "active");
+  expect(posted).toHaveLength(1);
+});
+
+test("offers no closure or verification from mitigating and keeps authority fixed", async ({ page }) => {
   await openReview(page);
 
   await expect(page.locator('input[name="actor"], input[name="principal"]')).toHaveCount(0);
   const labels = await page.locator("button").allTextContents();
   for (const label of labels) {
-    expect(label).not.toMatch(/close|cierre|postmortem/i);
+    expect(label).not.toMatch(/close|cierre|postmortem|verific/i);
   }
 });

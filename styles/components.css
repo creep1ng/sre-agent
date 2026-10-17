@@ -345,6 +345,13 @@
   gap: var(--ma-space-2);
 }
 
+/* Explicit-approval rows: the checkbox sits on the text's line, never stacked. */
+.ma-field--check {
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-2);
+}
+
 .ma-field__label {
   color: var(--ma-color-text-primary);
   font-size: var(--ma-font-size-sm);
