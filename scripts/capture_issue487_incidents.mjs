@@ -2,7 +2,8 @@
 // PostgreSQL). The inbox hands an alert to Triage inside the console, where the key is entered
 // once, and its declaration opens the war room in the same session. The band then keeps a seeded
 // incident and its run across War room, Decisiones and Postmortem with Back/Forward, reload and
-// logout, and navigating never sends a command. A principal without run.read gets a 403 and no
+// logout, and navigating never sends a command. The war room timeline tells that run in order and
+// in Spanish, with the state each event reached. A principal without run.read gets a 403 and no
 // band. Keys come from the runner's environment and are never printed, stored or written.
 //
 // Containerized usage, on the stack of compose.triage23.yaml once inc-war-room-demo is seeded:
@@ -154,6 +155,46 @@ check(
   sidebarHref,
 );
 await tab.screenshot({ path: `${evidence}/issue-487-incidents-war-room.png` });
+
+// The timeline reads the seeded run in order, in Spanish, with the state each event reached.
+const events = tab
+  .getByRole("list", { name: "Eventos del run, del más antiguo al más reciente" })
+  .getByRole("listitem");
+const story = await events.allTextContents();
+const changes = (await events.locator(".war-room__event-state").allTextContents()).map((line) => line.trim());
+check(
+  "the timeline tells the run in order with the state each event reached",
+  changes.length === 3 &&
+    changes[0] === "Empieza en En triage" &&
+    changes[1] === "Estado: de En triage a Activo" &&
+    changes[2].startsWith("Estado: de Activo a Investigando"),
+  changes.join(" | "),
+);
+check(
+  "event types and actors read in Spanish",
+  story.length === 3 &&
+    story.every((item) => item.includes("Cambio de estado") && !item.includes("state_change")) &&
+    story[0].includes("Sistema") &&
+    story[1].includes("Persona · Demo on-call engineer (demo-operator)") &&
+    story[2].includes("Agente"),
+);
+const instants = await events.locator("time").evaluateAll((nodes) => nodes.map((node) => node.dateTime));
+check(
+  "each event shows its local time and the offset since the run began",
+  instants.length === 3 &&
+    instants.every((instant) => instant === "2026-09-09T12:00:00Z") &&
+    story[0].includes("inicio") &&
+    story.slice(1).every((item) => item.includes("+0 s desde el inicio")) &&
+    (await text(tab.locator("#timeline-context"))).startsWith("Del más antiguo al más reciente"),
+  await text(tab.locator("#timeline-context")),
+);
+check(
+  "Estado actual marks the incident's current state",
+  (await events.getByText("Estado actual").count()) === 1 &&
+    (await events.nth(2).getByText("Estado actual").count()) === 1 &&
+    (await text(tab.locator("#incident-focus-state"))) === "Investigando",
+);
+await tab.locator("#timeline-section").screenshot({ path: `${evidence}/issue-487-war-room-timeline.png` });
 
 await step(tab, "Decisión").click();
 await tab.locator("#review[data-state='ready']").waitFor();
