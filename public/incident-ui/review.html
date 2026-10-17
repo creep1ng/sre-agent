@@ -75,7 +75,7 @@
         <div class="ma-panel__header"><h2 class="ma-panel__title">Acciones disponibles</h2></div>
         <div class="ma-panel__body">
           <ul id="actions-list" class="war-room__events"></ul>
-          <p id="actions-empty" class="ma-muted" hidden>Este estado no admite revisión de mitigación.</p>
+          <p id="actions-empty" class="ma-muted" hidden>Este estado no admite una decisión humana ahora mismo.</p>
         </div>
       </section>
       <section id="decision-section" class="ma-panel" hidden>
@@ -86,6 +86,14 @@
             <span class="ma-field__label">Motivo (opcional, máx. 2000)</span>
             <textarea id="decision-comment" class="ma-textarea" maxlength="2000" rows="3"></textarea>
           </label>
+          <label class="ma-field ma-field--check" id="decision-approval-row" hidden>
+            <input id="decision-approval" name="explicit_close_approval" type="checkbox" />
+            <span class="ma-field__label">Confirmo el cierre del incidente tras revisar su postmortem.</span>
+          </label>
+          <p id="decision-hint" class="ma-muted" hidden>
+            El cierre lo valida el backend: estado postmortem, identidad del artefacto y su
+            revisión. Esta marca registra tu aprobación explícita antes del envío.
+          </p>
           <p class="ma-muted">Clave de idempotencia: <code id="decision-key"></code></p>
           <button class="ma-button ma-button--primary" type="submit" id="decision-submit">Confirmar decisión</button>
         </form>

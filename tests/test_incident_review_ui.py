@@ -24,14 +24,33 @@ def test_review_actions_match_the_published_workflow() -> None:
     assert approval["state"] == "mitigating"
     assert approval["actor"] == ["human"]
     assert set(approval["outcomes"]) == {"approve", "reject", "request_changes"}
+    stability = WORKFLOW["decision_points"]["stability_check"]
+    assert stability["state"] == "verifying"
+    assert stability["actor"] == ["human", "agent"]
+    assert set(stability["outcomes"]) == {"stable", "not_stable"}
     by_id = {transition["id"]: transition for transition in WORKFLOW["transitions"]}
     assert by_id["apply_mitigation"]["decision_point"] == "mitigation_approval"
     assert by_id["apply_mitigation"]["on_outcome"] == "approve"
     assert set(by_id["reject_mitigation"]["on_outcome"]) == {"reject", "request_changes"}
+    assert by_id["verification_passed"]["decision_point"] == "stability_check"
+    assert by_id["verification_passed"]["on_outcome"] == "stable"
+    assert by_id["verification_passed"]["to"] == "resolved"
+    assert by_id["verification_failed"]["decision_point"] == "stability_check"
+    assert by_id["verification_failed"]["on_outcome"] == "not_stable"
+    assert by_id["verification_failed"]["to"] == "investigating"
+    close = by_id["close_incident"]
+    assert close["from"] == "postmortem"
+    assert close["actor"] == ["human"]
+    assert close["requires_approval"] is True
     for command in ("approve_mitigation", "reject_mitigation", "request_changes"):
         assert command in COMMAND_SCHEMA["properties"]["command"]["enum"]
+    for command in ("verification_passed", "verification_failed", "close_incident"):
         assert command in JAVASCRIPT
-    for transition in ("apply_mitigation", "reject_mitigation"):
+        # run-command:2.1.0 is not published yet: the UI fixes stay under its
+        # published 2.0.0 envelope and the real adapter waits for the contract.
+        assert command not in COMMAND_SCHEMA["properties"]["command"]["enum"]
+    for transition in ("apply_mitigation", "reject_mitigation", "verification_passed",
+                       "verification_failed", "close_incident"):
         assert transition in JAVASCRIPT
 
 
@@ -39,9 +58,7 @@ def test_review_surface_stays_within_slice_scope() -> None:
     for block in ("actions-list", "actions-empty", "fact-run", "context-section"):
         assert block in HTML or block in JAVASCRIPT
     for forbidden in (
-        "close_incident",
         "start_postmortem",
-        "postmortem",
         "expected_version",
         "localStorage",
         "cancel_run",
@@ -65,3 +82,10 @@ def test_review_submit_uses_the_contractual_command_seam() -> None:
     for key in ("command: action.command", 'actor: "human"', '"run.approve"', '"run.command"'):
         assert key in JAVASCRIPT, key
     assert "applied" not in JAVASCRIPT
+
+def test_close_requires_the_explicit_visible_approval() -> None:
+    assert 'id="decision-approval"' in HTML
+    assert 'id="decision-approval-row"' in HTML
+    assert "decision-approval-row" in JAVASCRIPT
+    assert "decision-hint" in JAVASCRIPT
+    assert "explicit_close_approval" in HTML
