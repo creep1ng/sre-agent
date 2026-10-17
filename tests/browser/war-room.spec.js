@@ -602,6 +602,149 @@ test("exposes no slice-40b controls on the read-only timeline", async ({ page })
   }
 });
 
+// Slice #37 T1: start or resume the investigation over the runs contract. The mock
+// decides only what the store already knows: a created run enters detail exactly
+// once, and a replayed Idempotency-Key returns the stored run instead of another.
+const RUN_START_BODY = { workflow_version: "1.0.0", objective: "investigate" };
+
+function activeDetail() {
+  const detail = detailPayload();
+  detail.state = "active";
+  detail.runs = [];
+  return detail;
+}
+
+function runStatePayload(over = {}) {
+  return {
+    run_id: "run_new0001",
+    incident_id: INCIDENT,
+    workflow_version: "1.0.0",
+    status: "running",
+    current_state: "investigating",
+    pending_command: null,
+    cursor: "seq:1",
+    terminated_reason: null,
+    updated_at: "2026-08-24T14:12:00Z",
+    ...over,
+  };
+}
+
+async function mockRunSlice(page, model) {
+  const seen = { posts: [], states: 0 };
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/snapshot")) {
+      const snapshot = model.snapshot();
+      return snapshot
+        ? route.fulfill({ json: snapshot })
+        : route.fulfill({
+            status: 404,
+            json: errorPayload("snapshot_absent", "No snapshot exists for this run yet."),
+          });
+    }
+    if (url.pathname.endsWith("/timeline")) {
+      if (url.searchParams.get("run_id") === null) {
+        return route.fulfill({
+          status: 404,
+          json: errorPayload("run_absent", "This incident has no runs yet."),
+        });
+      }
+      return route.fulfill({ json: runPage("Investigación", [0, 1], "seq:1", false) });
+    }
+    if (url.pathname.endsWith("/runs")) {
+      seen.posts.push({
+        key: route.request().headers()["idempotency-key"] ?? "",
+        body: route.request().postDataJSON() ?? null,
+      });
+      return route.fulfill(await model.start());
+    }
+    if (url.pathname.includes("/runs/")) {
+      seen.states += 1;
+      return route.fulfill({ json: model.runState() });
+    }
+    return route.fulfill({ json: model.detail() });
+  });
+  return seen;
+}
+
+function storedRunModel(over = {}) {
+  const detail = over.detail ?? activeDetail();
+  let created = null;
+  return {
+    detail: () => detail,
+    snapshot: () => null,
+    runState: () => runStatePayload({ run_id: created ? created.run_id : "" }),
+    start: async () => {
+      if (over.hold) await over.hold;
+      if (created) return { status: 200, json: created };
+      created = runStatePayload();
+      detail.runs = [
+        {
+          run_id: created.run_id,
+          version: 5,
+          status: "running",
+          current_state: "investigating",
+          updated_at: created.updated_at,
+        },
+      ];
+      detail.state = "investigating";
+      detail.version = 5;
+      return { status: 201, json: created };
+    },
+  };
+}
+
+test("offers the investigation start only while the incident is active", async ({ page }) => {
+  const seen = await mockRunSlice(page, {
+    detail: () => activeDetail(),
+    snapshot: () => null,
+    runState: () => runStatePayload(),
+  });
+  await openWarRoom(page);
+  await expect(page.locator("#run-start")).toBeVisible();
+  await expect(page.locator("#timeline-empty")).toBeVisible();
+  await expect(page.locator("#run-state")).toBeHidden();
+
+  await page.unroute("**/api/v1/incidents/**");
+  await mockApi(page, { pages: [pageOne, pageTwo], snapshot: snapshotPayload() });
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#run-start")).toBeHidden();
+  expect(seen.posts).toHaveLength(0);
+});
+
+test("starts one investigation run with the pinned body and key", async ({ page }) => {
+  const seen = await mockRunSlice(page, storedRunModel());
+  await openWarRoom(page);
+  await page.locator("#run-start").click();
+
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  await expect(page.locator(".war-room__event").first()).toContainText("Investigación event 0.");
+  await expect(page.locator("#run-state")).toContainText("run_new0001 · Run en curso · Investigando");
+  expect(seen.posts).toHaveLength(1);
+  expect(seen.posts[0].body).toEqual(RUN_START_BODY);
+  expect(seen.posts[0].key).toMatch(/^run-start-inc-demo-[0-9a-f]{32}$/);
+  await expect(page.locator("#run-start")).toBeHidden();
+  await expect(page.locator("#run-select option")).toHaveCount(1);
+  // Neither the key nor the credential ever reaches the URL.
+  expect(page.url()).not.toContain(seen.posts[0].key);
+});
+
+test("reload keeps the started run without creating another", async ({ page }) => {
+  const seen = await mockRunSlice(page, storedRunModel());
+  await openWarRoom(page);
+  await page.locator("#run-start").click();
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  expect(seen.posts).toHaveLength(1);
+
+  // A reload re-derives the run from the stored detail; it never POSTs again.
+  await page.reload();
+  await authenticate(page);
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  await expect(page.locator("#run-select option")).toHaveCount(1);
+  await expect(page.locator("#run-state")).toContainText("run_new0001 · Run en curso");
+  expect(seen.posts).toHaveLength(1);
+});
+
 // Reading the timeline: each event says where it sits in the run, its local time and the offset
 // since the run's first event, its type and the state it reached in Spanish, and who acted.
 test.describe("reading the timeline", () => {
@@ -740,3 +883,4 @@ test.describe("reading the timeline", () => {
     await expect(items.nth(1)).toContainText("+1 min desde el inicio");
   });
 });
+

@@ -1,10 +1,11 @@
 """Static regression tests for the incident war room surface (HU-OPS-03, #36;
-timeline run selector slice HU-OPS-05 #40a).
+timeline run selector slice HU-OPS-05 #40a; run start/resume slice, issue #37).
 
-The war room is read-only: it navigates by incident_id, renders the
-authoritative detail/timeline/snapshot through the browser API seam and never
-applies transitions, starts the harness or synthesizes incidents. Behavioral
-coverage lives in tests/browser/war-room.spec.js.
+The war room navigates by incident_id and renders the authoritative
+detail/timeline/snapshot through the browser API seam. Over the runs contract it
+may start or resume the incident's investigation run with an idempotency key,
+and it never sends run commands, streams events, keeps a key in the URL or
+synthesizes incidents. Behavioral coverage lives in tests/browser/war-room.spec.js.
 """
 
 from pathlib import Path
@@ -47,7 +48,6 @@ def test_war_room_applies_no_transitions_or_lifecycle_controls() -> None:
     for forbidden in (
         "start-triage",
         "approve",
-        "resume",
         "start-harness",
         "lifecycle",
         "midnight:triage-requested",

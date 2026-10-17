@@ -334,5 +334,29 @@ export function createAdministrativeApiClient({
         },
       );
     },
+    startRun(incidentId, body, idempotencyKey) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs`,
+        {
+          method: "POST",
+          body,
+          headers: mutationHeaders(idempotencyKey),
+        },
+      );
+    },
+    getRun(incidentId, runId) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}`,
+      );
+    },
+    listRunEvents(incidentId, runId, { after, limit } = {}) {
+      const params = new URLSearchParams();
+      if (after) params.set("after", after);
+      if (limit !== undefined) params.set("limit", String(limit));
+      const query = params.toString();
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/events${query ? `?${query}` : ""}`,
+      );
+    },
   });
 }
