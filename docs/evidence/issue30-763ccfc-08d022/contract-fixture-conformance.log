@@ -1,0 +1,5 @@
+
+> @sre-agent/contract-tooling@0.0.0 conformance
+> node release.mjs conformance --consumer issue-187 --release 2.7.0
+
+Validated issue-187 via mcp-audit-contract.

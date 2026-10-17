@@ -121,9 +121,49 @@ CA4 documentation/recovery, read-only verification helpers, and captured evidenc
 GitHub main remains 763ccfc; Project 8 #30 remains OPEN/Todo. Engram's old task
 mirror was reread; local progress remains authoritative for this resumed work.
 
-- [ ] T11: Prepare focused local candidates, real rendered screenshots and PR
+- [x] T11: Prepare focused local candidates, real rendered screenshots and PR
   evidence; fix only helper formatting, preserving semantics and captured results.
-- [ ] T12: Validate exact candidates and size against their actual bases; record
+- [x] T12: Validate exact candidates and size against their actual bases; record
   current artifact checks separately from the 763ccfc integrated execution.
-- [ ] T13: Publish authorized codex branches and open/attach three PRs; verify
+- [x] T13: Publish authorized codex branches and open/attach three PRs; verify
   remote head/base/body readback. Leave human review, runtime corrections and #30 open.
+
+T11/T12 observed: three exact artifact candidates rendered and checked: documentary
+06d03bd, formatted helpers 5937d7a, evidence package 3a276f3. Actual Chromium
+captures inspected; no API/browser run is claimed. Docker artifact checks resolve
+35 source/line references, retain documentary SHA e52b150 and all four historical
+files, preserve original run artifacts and confirm both Python helper ASTs.
+Ruff check/format passed. Original helper source remains in commit ae97464.
+Formatted SQL/Ajv helpers re-read original IDs/window from the retained ready stack,
+producing four byte-identical outputs (4 valid/5 invalid). A new 401-only repeat
+73762dd7-4745-4c1c-9a9a-65db3e85d157 returned 401, zero tools calls and zero audit
+rows; presence check correctly exited 1. Runtime remained 763ccfc with identical
+API image; Compose start reran its existing seed/migration dependencies. Only this
+project was stopped again, without deleting data. New publication manifest and
+receipts are separate from original run evidence. User explicitly authorizes the
+GitHub app connection for branch/PR publication; gh authorization stays read-only
+for Project 8. Remote PR metadata and human review remain pending at this checkpoint.
+
+Publication-base discovery: live main advanced to ef6b328 during preparation.
+Native comparison reports only eight added #567 docs/helpers/tests; no relevant
+runtime/schema/lock/delivery file changes. Preserve frozen candidate SHAs and
+execution receipts. Record current base in PR1, keep subsequent PRs stacked, and
+do not credit the recorded suite as execution of the newly added tests. Hosted
+merge-candidate checks and human review remain pending.
+
+T13 observed (2026-10-13): PR598 documentation → PR599 verification helpers →
+PR600 integrated evidence opened through the authorized GitHub app connection,
+all attached to this task, open/non-draft and unmerged. Native REST readback checks
+actual heads/bases/bodies and size (182/291/301 lines at initial publication), all
+without conflicts; local trusted metadata policy and initial hosted pr-governance
+passed. Public receipt preserves that initial readback; final follow-up adds only
+publication bookkeeping/URL receipt and the new file-integrity manifest. Hosted
+functional checks and human acceptance remain distinct, not inferred from metadata.
+Issue30 stays open with its original body; runtime/schema/existing expectations
+and every historical capture/result/SHA remain unchanged. No backend correction,
+merge, issue closure or automatic approval label was applied. Review URLs:
+https://github.com/creep1ng/sre-agent/pull/598
+https://github.com/creep1ng/sre-agent/pull/599
+https://github.com/creep1ng/sre-agent/pull/600
+Next: human review of these bounded units; separately approve the three minimum
+runtime fixes and repeat the integrated schema/presence failures after correction.
