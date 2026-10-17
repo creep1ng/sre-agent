@@ -9,6 +9,7 @@ RUN npm ci --ignore-scripts
 # The runner contains only its test inputs. It never bind-mounts application
 # source or starts an API process; it consumes the candidate's Compose images.
 COPY playwright.production.config.js ./
+COPY playwright.docker.config.js ./
 COPY tests/browser ./tests/browser
 RUN chown -R pwuser:pwuser /e2e
 
