@@ -49,8 +49,13 @@ def test_review_actions_match_the_published_workflow() -> None:
         # run-command:2.1.0 is not published yet: the UI fixes stay under its
         # published 2.0.0 envelope and the real adapter waits for the contract.
         assert command not in COMMAND_SCHEMA["properties"]["command"]["enum"]
-    for transition in ("apply_mitigation", "reject_mitigation", "verification_passed",
-                       "verification_failed", "close_incident"):
+    for transition in (
+        "apply_mitigation",
+        "reject_mitigation",
+        "verification_passed",
+        "verification_failed",
+        "close_incident",
+    ):
         assert transition in JAVASCRIPT
 
 
@@ -82,6 +87,7 @@ def test_review_submit_uses_the_contractual_command_seam() -> None:
     for key in ("command: action.command", 'actor: "human"', '"run.approve"', '"run.command"'):
         assert key in JAVASCRIPT, key
     assert "applied" not in JAVASCRIPT
+
 
 def test_close_requires_the_explicit_visible_approval() -> None:
     assert 'id="decision-approval"' in HTML
