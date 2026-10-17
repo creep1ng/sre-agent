@@ -729,6 +729,23 @@ test("starts one investigation run with the pinned body and key", async ({ page 
   expect(page.url()).not.toContain(seen.posts[0].key);
 });
 
+test("a start in flight stays disabled and keyed for a second click", async ({ page }) => {
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const seen = await mockRunSlice(page, storedRunModel({ hold: gate }));
+  await openWarRoom(page);
+  await page.locator("#run-start").click();
+  await expect(page.locator("#run-start")).toBeDisabled();
+  // A second physical click cannot land while the action is in flight.
+  await page.locator("#run-start").click({ timeout: 400 }).catch(() => {});
+  release();
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  expect(seen.posts).toHaveLength(1);
+  expect(seen.posts[0].body).toEqual(RUN_START_BODY);
+});
+
 test("reload keeps the started run without creating another", async ({ page }) => {
   const seen = await mockRunSlice(page, storedRunModel());
   await openWarRoom(page);
@@ -744,6 +761,94 @@ test("reload keeps the started run without creating another", async ({ page }) =
   await expect(page.locator("#run-state")).toContainText("run_new0001 · Run en curso");
   expect(seen.posts).toHaveLength(1);
 });
+
+test("an awaiting decision offers resume and reuses the same run", async ({ page }) => {
+  const detail = detailPayload();
+  detail.runs[0].status = "awaiting_human";
+  const waiting = runStatePayload({
+    run_id: "run_demo0001",
+    status: "awaiting_human",
+    pending_command: "approve_mitigation",
+    cursor: "seq:4",
+  });
+  const seen = await mockRunSlice(page, {
+    detail: () => detail,
+    snapshot: () => snapshotPayload(),
+    runState: () => waiting,
+    start: () => Promise.resolve({ status: 200, json: waiting }),
+  });
+  await openWarRoom(page);
+
+  await expect(page.locator("#run-state")).toContainText(
+    "run_demo0001 · Decisión pendiente · Investigando",
+  );
+  await expect(page.locator("#run-pending")).toContainText("approve_mitigation");
+  await expect(page.locator("#run-start")).toBeHidden();
+  await page.locator("#run-resume").click();
+
+  await expect(page.locator("#run-select option")).toHaveCount(1);
+  await expect(page.locator("#run-state")).toContainText("Decisión pendiente");
+  expect(seen.posts).toHaveLength(1);
+  expect(seen.posts[0].body).toEqual({ ...RUN_START_BODY, resume_from_run_id: "run_demo0001" });
+});
+
+test("denied authorization never reads as completed or a plain ending", async ({ page }) => {
+  const detail = detailPayload();
+  detail.runs[0].status = "terminated";
+  await mockRunSlice(page, {
+    detail: () => detail,
+    snapshot: () => null,
+    runState: () =>
+      runStatePayload({ run_id: "run_demo0001", status: "terminated", terminated_reason: "denied" }),
+  });
+  await openWarRoom(page);
+
+  await expect(page.locator("#run-state")).toContainText(
+    "Autorización denegada, requiere intervención",
+  );
+  expect((await page.locator("#run-state").textContent()) ?? "").not.toMatch(/terminad|complet|exitos/i);
+  await expect(page.locator("#run-terminated")).toBeHidden();
+  await expect(page.locator("#run-resume")).toBeHidden();
+
+  // Any other ending keeps its explicit reason; only the denial is masked.
+  await page.unroute("**/api/v1/incidents/**");
+  await mockRunSlice(page, {
+    detail: () => detail,
+    snapshot: () => null,
+    runState: () =>
+      runStatePayload({
+        run_id: "run_demo0001",
+        status: "terminated",
+        terminated_reason: "max_steps",
+      }),
+  });
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#run-terminated")).toContainText("se agotó el presupuesto");
+});
+
+test("start failures surface their HTTP kind without success states", async ({ page }) => {
+  for (const [http, code, selector] of [
+    [401, "authentication_failed", "#error-401"],
+    [403, "not_authorized", "#error-403"],
+    [409, "run_conflict", "#error-409"],
+    [503, "storage_unavailable", "#error-503"],
+  ]) {
+    const seen = await mockRunSlice(page, {
+      detail: () => activeDetail(),
+      snapshot: () => null,
+      runState: () => runStatePayload(),
+      start: () => Promise.resolve({ status: http, json: errorPayload(code, `${code} moment.`) }),
+    });
+    await openWarRoom(page);
+    await page.locator("#run-start").click();
+
+    await expect(page.locator(selector)).toBeVisible();
+    await expect(page.locator("#summary-section")).toBeHidden();
+    expect(seen.posts).toHaveLength(1);
+    await page.unroute("**/api/v1/incidents/**");
+  }
+});
+
 
 // Reading the timeline: each event says where it sits in the run, its local time and the offset
 // since the run's first event, its type and the state it reached in Spanish, and who acted.
@@ -909,4 +1014,3 @@ test("the war room timeline stays readable at 375px", async ({ page }) => {
   expect((await time.boundingBox()).width).toBeGreaterThan(44);
   expect((await content.boundingBox()).width).toBeGreaterThan(44);
 });
-
