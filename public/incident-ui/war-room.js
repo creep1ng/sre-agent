@@ -11,6 +11,48 @@ import { mountedView } from "/public/console/view.js";
 const view = mountedView();
 const TIMELINE_LIMIT = 50;
 
+const OBJECTIVE = "investigate";
+const WORKFLOW_VERSION = "1.0.0";
+const START_KEY_STORAGE = "midnight-agent-run-start";
+
+const TERMINATION_REASONS = Object.freeze({
+  completed: "Investigación completada.",
+  max_steps: "Run terminado: se agotó el presupuesto de pasos del harness.",
+  needs_human: "Run terminado: hace falta intervención humana.",
+  invalid_output: "Run terminado: el harness entregó salidas inválidas.",
+  upstream_unavailable: "Run terminado: el proveedor no responde.",
+});
+
+function randomHex(bytes) {
+  const values = new Uint8Array(bytes);
+  globalThis.crypto.getRandomValues(values);
+  return Array.from(values, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+// La clave de idempotencia es una referencia opaca del par incidente/objetivo; no es la
+// credencial (esa vive solo en la memoria de la consola). sessionStorage la conserva en
+// esta pestaña —sobrevive a la recarga del flujo y nunca entra a la URL— mientras la
+// apertura está en vuelo; tras el éxito se descarta para que una investigación futura
+// no repita el run anterior. Sin storage disponible se acuña por intento y el botón
+// deshabilitado sigue cubriendo el doble clic.
+function storedRunKey(incidentId, { resume, clear } = {}) {
+  const suffix = resume === undefined ? "" : `:resume:${resume}`;
+  const storageKey = `${START_KEY_STORAGE}:${incidentId}${suffix}`;
+  try {
+    if (clear) {
+      window.sessionStorage.removeItem(storageKey);
+      return null;
+    }
+    const stored = window.sessionStorage.getItem(storageKey);
+    if (typeof stored === "string" && stored.length >= 8) return stored;
+    const minted = `run-${resume === undefined ? "start" : "resume"}-${incidentId}-${randomHex(16)}`;
+    window.sessionStorage.setItem(storageKey, minted);
+    return minted;
+  } catch {
+    return `run-${resume === undefined ? "start" : "resume"}-${incidentId}-${randomHex(16)}`;
+  }
+}
+
 const SVG = "http://www.w3.org/2000/svg";
 const clockFormat = new Intl.DateTimeFormat("es-CO", {
   hour: "2-digit",
@@ -38,6 +80,8 @@ const state = {
   cursor: null,
   hasMore: false,
   eventCount: 0,
+  // GET /runs/{run_id} del run en foco, para la franja de la investigación.
+  runState: null,
   // Posición de lectura del timeline pintado: el primer instante del run, el último estado
   // alcanzado y el último día local mostrado. «Cargar más» sigue desde ahí; otro run empieza de cero.
   startedAt: null,
@@ -62,6 +106,7 @@ function cacheNodes() {
     "error-401",
     "error-403",
     "error-404",
+    "error-409",
     "error-503",
     "summary-section",
     "fact-impact",
@@ -74,6 +119,12 @@ function cacheNodes() {
     "timeline-context",
     "run-select",
     "run-current",
+    "run-state",
+    "run-status-line",
+    "run-pending",
+    "run-terminated",
+    "run-start",
+    "run-resume",
     "timeline-list",
     "timeline-empty",
     "load-more",
@@ -103,6 +154,7 @@ function hideAll() {
     "error-401",
     "error-403",
     "error-404",
+    "error-409",
     "error-503",
     "summary-section",
     "timeline-section",
@@ -110,6 +162,9 @@ function hideAll() {
     nodes[id].hidden = true;
   });
   nodes["refresh-button"].hidden = true;
+  nodes["run-start"].hidden = true;
+  nodes["run-resume"].hidden = true;
+  nodes["run-state"].hidden = true;
 }
 
 function showError(kind, status) {
@@ -137,6 +192,7 @@ function clearSessionData() {
   state.cursor = null;
   state.hasMore = false;
   state.eventCount = 0;
+  state.runState = null;
   state.startedAt = null;
   state.lastState = null;
   state.lastDay = null;
@@ -416,6 +472,92 @@ function renderRunPicker(detail, activeRunId) {
   }
 }
 
+// Franja del run en foco: estado proyectado, comando pendiente y motivo de
+// terminación. `denied` nunca es terminado, completado ni exitoso.
+function renderRunState(runState) {
+  state.runState = runState;
+  if (!runState || runState.run_id !== state.runId) {
+    nodes["run-state"].hidden = true;
+    nodes["run-resume"].hidden = true;
+    return;
+  }
+  const status = typeof runState.status === "string" ? runState.status : null;
+  const statusLabel = RUN_LABELS[status] ?? status ?? "—";
+  if (runState.terminated_reason === "denied") {
+    nodes["run-status-line"].textContent =
+      `${state.runId} · Autorización denegada, requiere intervención.`;
+  } else {
+    nodes["run-status-line"].textContent =
+      `${state.runId} · ${statusLabel} · ${stateLabel(runState.current_state)}`;
+  }
+  const pending =
+    status === "awaiting_human" &&
+    typeof runState.pending_command === "string" &&
+    runState.pending_command !== ""
+      ? runState.pending_command
+      : null;
+  nodes["run-pending"].textContent = pending === null ? "" : `El run espera un comando: ${pending}.`;
+  nodes["run-pending"].hidden = pending === null;
+  const reason = runState.terminated_reason;
+  if (typeof reason === "string" && reason !== "" && reason !== "denied") {
+    nodes["run-terminated"].textContent = TERMINATION_REASONS[reason] ?? `Run terminado (${reason}).`;
+    nodes["run-terminated"].dataset.tone = reason === "completed" ? "success" : "warning";
+    nodes["run-terminated"].hidden = false;
+  } else {
+    nodes["run-terminated"].hidden = true;
+  }
+  nodes["run-resume"].hidden = status !== "awaiting_human";
+  nodes["run-state"].hidden = false;
+}
+
+let runActionInFlight = false;
+
+function showRunActionError(error) {
+  if (!(error instanceof ApiClientError)) {
+    showError("503", "desconocido");
+    return;
+  }
+  if (error.kind === "authentication") showError("401", error.status);
+  else if (error.kind === "authorization") showError("403", error.status);
+  else if (error.kind === "not_found") showError("404", error.status);
+  else if (error.status === 409) showError("409", error.status);
+  else showError("503", error.status ?? "desconocido");
+}
+
+// La clave del intento es estable: un doble clic o un reintento reenvía el mismo
+// POST y el servidor responde con el mismo run (200) en vez de crear otro. El
+// resultado de una acción que quedó obsoleta se descarta.
+async function beginRun(resumeRunId = null) {
+  if (runActionInFlight) return;
+  const resume = resumeRunId !== null && resumeRunId !== undefined;
+  if (resume && resumeRunId !== state.runId) return;
+  if (!resume && state.incidentState !== "active") return;
+  runActionInFlight = true;
+  nodes["run-start"].disabled = true;
+  nodes["run-resume"].disabled = true;
+  const generation = state.generation;
+  const body = resume
+    ? { workflow_version: WORKFLOW_VERSION, objective: OBJECTIVE, resume_from_run_id: resumeRunId }
+    : { workflow_version: WORKFLOW_VERSION, objective: OBJECTIVE };
+  try {
+    const created = await client.startRun(
+      state.incidentId,
+      body,
+      storedRunKey(state.incidentId, { resume: resume ? resumeRunId : undefined }),
+    );
+    if (generation !== state.generation) return;
+    if (!resume) storedRunKey(state.incidentId, { clear: true });
+    state.selectedRunId = created.run_id;
+  } catch (error) {
+    if (generation !== state.generation) return;
+    showRunActionError(error);
+    return;
+  } finally {
+    runActionInFlight = false;
+  }
+  if (generation === state.generation) loadAll();
+}
+
 async function fetchTimeline({ runId, after } = {}) {
   return client.getIncidentTimeline(state.incidentId, {
     runId,
@@ -458,6 +600,16 @@ async function loadAll() {
       if (!(error instanceof ApiClientError) || error.status !== 404) throw error;
       // Ausencia explícita de snapshot: se muestra sin snapshot, no es fatal.
     }
+    // La franja lee el run proyectado; un run que desaparece entre lecturas es
+    // ausencia explícita, y el resto de faltas va al manejo de error global.
+    let runState = null;
+    if (runId !== null) {
+      try {
+        runState = await client.getRun(state.incidentId, runId);
+      } catch (error) {
+        if (!(error instanceof ApiClientError) || error.status !== 404) throw error;
+      }
+    }
 
     if (generation !== state.generation) return;
     state.runId = runId;
@@ -468,6 +620,10 @@ async function loadAll() {
     renderSummary(detail, snapshot);
     renderEvents(timeline.events ?? []);
     view.focusIncident(detail, runId);
+    renderRunState(runState);
+    nodes["run-start"].hidden = state.incidentState !== "active";
+    nodes["run-start"].disabled = runActionInFlight;
+    nodes["run-resume"].disabled = runActionInFlight;
     nodes["load-more"].hidden = !state.hasMore;
     nodes["loading-state"].hidden = true;
     nodes["refresh-button"].hidden = false;
@@ -537,6 +693,8 @@ cacheNodes();
 nodes["refresh-button"].addEventListener("click", loadAll);
 nodes["run-select"].addEventListener("change", selectRun);
 nodes["load-more"].addEventListener("click", loadMore);
+nodes["run-start"].addEventListener("click", () => beginRun());
+nodes["run-resume"].addEventListener("click", () => beginRun(state.runId));
 
 const incidentId = view.params.get("incident_id");
 if (!incidentId) {

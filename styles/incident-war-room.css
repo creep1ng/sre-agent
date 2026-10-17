@@ -33,6 +33,22 @@
   gap: var(--ma-space-3);
 }
 
+/* Franja de la investigación: estado proyectado del run en foco y la acción de
+   reanudar. Vive junto al selector del run, dentro del panel del timeline. */
+.war-room__run-state {
+  display: grid;
+  gap: var(--ma-space-2);
+  justify-items: start;
+  margin-top: var(--ma-space-3);
+  padding: var(--ma-space-3) var(--ma-space-4);
+  border: 1px solid var(--ma-color-border-subtle);
+  border-radius: var(--ma-radius-md);
+}
+
+.war-room__run-state p {
+  margin: 0;
+}
+
 .war-room__summary,
 .war-room__timeline {
   overflow: hidden;
