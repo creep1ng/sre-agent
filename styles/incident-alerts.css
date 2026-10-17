@@ -421,6 +421,11 @@
   font-size: var(--ma-font-size-sm);
 }
 
+.alert-detail__footer .ma-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .alert-detail__next-label {
   color: var(--ma-color-text-primary);
   font-weight: 700;

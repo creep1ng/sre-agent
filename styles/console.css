@@ -1,0 +1,456 @@
+/* midnight.agent integrated console shell. Consumes semantic tokens only. */
+
+.console {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: var(--ma-sidebar-width) minmax(0, 1fr);
+}
+
+/* Spline Sans ships a 0.19em space: bold labels and tightly tracked headings read as one word.
+   Widen it for the body font and keep monospaced data on its own grid. */
+.console {
+  word-spacing: 0.08em;
+}
+
+.console
+  :is(
+    .ma-mono,
+    code,
+    kbd,
+    samp,
+    pre,
+    .ma-eyebrow,
+    .ma-badge,
+    .ma-stat__label,
+    .ma-stat__value,
+    .ma-table th,
+    .ma-timeline__time,
+    .ma-timeline__source,
+    .ma-resource__meta,
+    .console-nav__label,
+    .console-nav__meta,
+    .console-session__principal
+  ) {
+  word-spacing: normal;
+}
+
+.console [hidden] {
+  display: none !important;
+}
+
+/* Sidebar: one information architecture for incidents and AI governance */
+.console-sidebar {
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-right: 1px solid var(--ma-color-border-subtle);
+  background: var(--ma-color-bg-surface);
+  padding: var(--ma-space-5) var(--ma-space-4) var(--ma-space-4);
+}
+
+.console-brand {
+  display: flex;
+  align-items: center;
+  margin: 0 0 var(--ma-space-8);
+  padding: var(--ma-space-2) var(--ma-space-3);
+}
+
+.console-brand__logo {
+  width: 10.5rem;
+  height: auto;
+}
+
+.console-brand__logo--dark,
+:root[data-theme="dark"] .console-brand__logo--light {
+  display: none;
+}
+
+:root[data-theme="dark"] .console-brand__logo--dark {
+  display: block;
+}
+
+.console-nav {
+  display: grid;
+  gap: var(--ma-space-6);
+}
+
+.console-nav__group {
+  display: grid;
+  gap: var(--ma-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.console-nav__label {
+  margin: 0 0 var(--ma-space-2);
+  padding: 0 var(--ma-space-3);
+  color: var(--ma-color-text-tertiary);
+  font-family: var(--ma-font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.console-nav__link {
+  min-height: 2.25rem;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-3);
+  border-radius: var(--ma-radius-sm);
+  color: var(--ma-color-text-secondary);
+  padding: 0 var(--ma-space-3);
+  font-size: var(--ma-font-size-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color var(--ma-duration-fast) var(--ma-ease-standard),
+    color var(--ma-duration-fast) var(--ma-ease-standard);
+}
+
+.console-nav__link .ma-icon {
+  color: var(--ma-color-text-tertiary);
+}
+
+.console-nav__link:hover {
+  background: var(--ma-color-interactive-secondary);
+  color: var(--ma-color-text-primary);
+  text-decoration: none;
+}
+
+.console-nav__link[aria-current="page"] {
+  background: var(--ma-color-interactive-secondary);
+  color: var(--ma-color-text-primary);
+}
+
+.console-nav__link[aria-current="page"]::before {
+  width: 3px;
+  position: absolute;
+  top: 0.45rem;
+  bottom: 0.45rem;
+  left: 0;
+  border-radius: var(--ma-radius-round);
+  background: var(--ma-color-interactive-primary);
+  content: "";
+}
+
+.console-nav__link[aria-current="page"] .ma-icon {
+  color: var(--ma-color-text-link);
+}
+
+.console-nav__meta {
+  margin-left: auto;
+  color: var(--ma-color-text-tertiary);
+  font-family: var(--ma-font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.console-nav__meta[data-tone="critical"] {
+  color: var(--ma-color-critical-strong);
+}
+
+.console-sidebar__footer {
+  display: grid;
+  gap: var(--ma-space-4);
+  margin-top: auto;
+  border-top: 1px solid var(--ma-color-border-subtle);
+  padding: var(--ma-space-4) var(--ma-space-1) 0;
+}
+
+.console-sidebar__doc {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-xs);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.console-sidebar__doc:hover {
+  color: var(--ma-color-text-primary);
+}
+
+.console-theme {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.console-theme .ma-segmented__item {
+  min-width: 0;
+  padding-inline: var(--ma-space-2);
+}
+
+/* Topbar: location and the single browser session */
+.console-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.console-topbar {
+  min-height: 3.5rem;
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-4);
+  border-bottom: 1px solid var(--ma-color-border-subtle);
+  background: color-mix(in srgb, var(--ma-color-bg-canvas) 88%, transparent);
+  padding: 0 var(--ma-space-8);
+  backdrop-filter: blur(14px);
+}
+
+.console-breadcrumb {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-2);
+  margin: 0;
+  padding: 0;
+  color: var(--ma-color-text-tertiary);
+  font-size: var(--ma-font-size-sm);
+  list-style: none;
+}
+
+.console-breadcrumb li + li::before {
+  margin-right: var(--ma-space-2);
+  color: var(--ma-color-border-strong);
+  content: "/";
+}
+
+.console-breadcrumb [aria-current] {
+  color: var(--ma-color-text-primary);
+  font-weight: 700;
+}
+
+.console-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-3);
+  margin-left: auto;
+}
+
+.console-session {
+  min-height: var(--ma-control-height-md);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ma-space-3);
+  border: 1px solid var(--ma-color-border-subtle);
+  border-radius: var(--ma-radius-round);
+  background: var(--ma-color-bg-surface);
+  padding: 0 var(--ma-space-3) 0 var(--ma-space-2);
+  font-size: var(--ma-font-size-sm);
+}
+
+.console-session__avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ma-color-interactive-primary);
+  color: var(--ma-color-interactive-primary-text);
+}
+
+.console-session__identity {
+  display: grid;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.console-session__principal {
+  font-family: var(--ma-font-mono);
+  font-size: var(--ma-font-size-xs);
+  font-weight: 600;
+}
+
+.console-session__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--ma-color-success-strong);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.console-session__state::before {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.console-session__icon--active,
+.console-session[data-phase="active"] .console-session__icon--anonymous {
+  display: none;
+}
+
+.console-session[data-phase="active"] .console-session__icon--active {
+  display: block;
+}
+
+.console-session[data-phase="anonymous"] .console-session__avatar {
+  background: var(--ma-color-bg-subtle);
+  color: var(--ma-color-text-secondary);
+}
+
+.console-session[data-phase="anonymous"] .console-session__state {
+  color: var(--ma-color-text-tertiary);
+}
+
+.console-session[data-phase="validating"] .console-session__state {
+  color: var(--ma-color-warning-strong);
+}
+
+.console-session-control {
+  position: relative;
+}
+
+.console-session-panel .ma-panel__body {
+  display: grid;
+  gap: var(--ma-space-3);
+}
+
+.console-session-form {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(16rem, 1.2fr) auto;
+  align-items: end;
+  gap: var(--ma-space-4) var(--ma-space-6);
+}
+
+.console-session-message {
+  margin: 0;
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-sm);
+}
+
+.console-session-message:empty {
+  display: none;
+}
+
+.console-session-message[data-tone="critical"] {
+  color: var(--ma-color-critical-strong);
+  font-weight: 600;
+}
+
+.console-view {
+  min-width: 0;
+}
+
+/* A mounted surface fills the console content instead of laying out a page of its own. */
+.console-view > [data-console-view] {
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.console-view:focus,
+.console-view [tabindex="-1"]:focus {
+  outline: none;
+}
+
+.console-empty {
+  border: 1px dashed var(--ma-color-border-default);
+  border-radius: var(--ma-radius-lg);
+  background: var(--ma-color-bg-surface);
+}
+
+.console-popover {
+  width: 24rem;
+  max-width: calc(100vw - 2 * var(--ma-space-4));
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + var(--ma-space-2));
+  right: 0;
+  border: 1px solid var(--ma-color-border-subtle);
+  border-radius: var(--ma-radius-lg);
+  background: var(--ma-color-bg-raised);
+  box-shadow: var(--ma-shadow-md);
+}
+
+.console-popover__body {
+  display: grid;
+  gap: var(--ma-space-3);
+  padding: var(--ma-space-5);
+}
+
+.console-popover__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--ma-space-3);
+  border-top: 1px solid var(--ma-color-border-subtle);
+  padding: var(--ma-space-3) var(--ma-space-5);
+}
+
+/* Content: optional session panel above the mounted view */
+.console-content {
+  width: min(100%, 92rem);
+  display: grid;
+  gap: var(--ma-space-6);
+  margin: 0 auto;
+  padding: var(--ma-space-6) var(--ma-space-8) var(--ma-space-12);
+}
+
+/* Page header shared by every surface */
+.console-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--ma-space-4) var(--ma-space-8);
+}
+
+.console-page-header h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 2.4vw, 2rem);
+}
+
+.console-page-header p:last-child {
+  max-width: 62ch;
+  margin: var(--ma-space-2) 0 0;
+  color: var(--ma-color-text-secondary);
+}
+
+.console-page-header .ma-eyebrow {
+  margin-bottom: var(--ma-space-2);
+}
+
+@media (max-width: 72rem) {
+  .console-session-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 60rem) {
+  .console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .console-sidebar {
+    height: auto;
+    position: static;
+    border-right: 0;
+    border-bottom: 1px solid var(--ma-color-border-subtle);
+  }
+
+  .console-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .console-topbar,
+  .console-content {
+    padding-inline: var(--ma-space-4);
+  }
+}

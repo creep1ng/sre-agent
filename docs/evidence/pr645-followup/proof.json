@@ -1,0 +1,79 @@
+{
+  "tested_sha": "60b513c16f8c129a204ad442b755467cf43607b1",
+  "application_before_sha": "44f23f126e3790dbf7e7f9acec3f77fa385f7d4d",
+  "pr_base_observed": "c3ff209d1b45bd25b936c3c1bee79618bb1ad87b",
+  "default_branch_observed": "aa789d9c7e9fd589e817e58ee6d9aebc55de8c60",
+  "route": "direct",
+  "failure_modes_declared_before_code": [
+    "Overlapping retries can let a late error overwrite success.",
+    "A failed retry must remain recoverable without re-entering the credential.",
+    "Credential changes and logout must keep their existing generation guards.",
+    "The popover and both actions must stay operable at 320px and 375px."
+  ],
+  "before": {
+    "stats": {
+      "startTime": "2026-10-17T00:10:01.468Z",
+      "duration": 8637.077000000001,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 3,
+      "flaky": 0
+    },
+    "popover_left_px": {
+      "320": -80,
+      "375": -25
+    },
+    "governance_errors": [
+      "Complete section: Summary"
+    ]
+  },
+  "after": {
+    "production_browser_stats": {
+      "startTime": "2026-10-17T00:11:47.690Z",
+      "duration": 30864.091999999997,
+      "expected": 135,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "shell_checks": 16,
+    "shell_failures": 0
+  },
+  "evidence_boundary": {
+    "retry": "Mocked whoami network failures in the real browser and packaged nginx UI.",
+    "mobile": "Real whoami and PostgreSQL; change/cancel/logout exercised at each width.",
+    "alerts": "Repository fixture, not live alert ingestion."
+  },
+  "images": {
+    "web": "sha256:0d155ff8582def3f1e99e5002a8cce6e574ee28d8aa6210a4c7a26768ffaf0a9",
+    "e2e": "sha256:cfe2233811f74a5cd4aa72a2a983023f5ba6a3856fff487f575be4f1c3a2700f",
+    "api": "sha256:877b2dcbef86304e4ded1026edbc5bb302bc69beb6697b501ca86bac29ac4d04"
+  },
+  "lockfile_sha256": "e3d5ebea7d78c29dd293d600caa2b04bb39a1a0acd08f20656ece36dedbd0853",
+  "chain_merge_checks": {
+    "646": {
+      "head": "b4f2596f9639d7d12e66aa4ce3bc52db267495d1",
+      "exit_code": 0,
+      "merged_tree": "b260cbcc17fe56589120f2298e18d3e3d07dacb2"
+    },
+    "647": {
+      "head": "551a984997850b552a01a6d63c6788f5ebe0d562",
+      "exit_code": 0,
+      "merged_tree": "a8d209a4d9a64bab88e55723d57a1198526ddf24"
+    },
+    "648": {
+      "head": "4d742230fe32b7ce2d3675b91da006da6bf6c82b",
+      "exit_code": 0,
+      "merged_tree": "3e5bce296b3a15dfe6d85e30ed192c2edda93459"
+    }
+  },
+  "chain_limit": "Git merge-tree checks textual compatibility only; descendant runtimes and Daniel branches were not changed or retested.",
+  "capture_sha256": {
+    "retry-pending.png": "9dbeec13a65a0dd386ec3f533d33cd9cf1b1140a79080937bce348a10f0ff2f8",
+    "session-320-before.png": "378fcf0aa4da5f939cd72d3c2ca8033e8b0c47657e7bc41823c8f3ae9a4f8d49",
+    "session-320.png": "2013d891e5317188f0be92a8a1dbcb968e01e6acf8f925338199b84ab58e2e15",
+    "session-375.png": "d31a55b9788eaf8adab6fccde060c7d554261ea8e8e499af7a1d21b0b0a0b2fa",
+    "session-desktop-dark.png": "cf652e13823b0111067fd312865276426c672fd53ab20dea5997184a3c04c83a"
+  },
+  "human_review": "Pending independent review by Mario; no acceptance or merge performed."
+}

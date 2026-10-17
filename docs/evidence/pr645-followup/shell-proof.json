@@ -1,0 +1,76 @@
+{
+  "issue": 487,
+  "base": "http://web",
+  "checks": [
+    {
+      "name": "GET / is 200",
+      "result": "PASS",
+      "detail": "got 200"
+    },
+    {
+      "name": "GET / carries the same-origin CSP",
+      "result": "PASS"
+    },
+    {
+      "name": "incident response entries",
+      "result": "PASS",
+      "detail": "[\"Alertas\",\"Triage\",\"War room\",\"Decisiones\",\"Postmortem\"]"
+    },
+    {
+      "name": "AI governance entries",
+      "result": "PASS",
+      "detail": "[\"Principals\",\"Recursos y aliases\",\"Grants\",\"Auditoría y consumo\"]"
+    },
+    {
+      "name": "default view is Alertas and marked current",
+      "result": "PASS"
+    },
+    {
+      "name": "one main landmark",
+      "result": "PASS"
+    },
+    {
+      "name": "old alerts address opens the console view",
+      "result": "PASS",
+      "detail": "http://web/?view=alerts&fixture=empty"
+    },
+    {
+      "name": "old address keeps its read parameter",
+      "result": "PASS"
+    },
+    {
+      "name": "unknown view renders an explicit state",
+      "result": "PASS"
+    },
+    {
+      "name": "in-console navigation, Back and Forward keep one document",
+      "result": "PASS"
+    },
+    {
+      "name": "real whoami activates the console session",
+      "result": "PASS"
+    },
+    {
+      "name": "the key is absent from the address and Web Storage",
+      "result": "PASS"
+    },
+    {
+      "name": "the input no longer holds the key",
+      "result": "PASS"
+    },
+    {
+      "name": "theme persists across a reload",
+      "result": "PASS"
+    },
+    {
+      "name": "a reload of the only tab asks for the key again (ADR-009, section 9)",
+      "result": "PASS"
+    },
+    {
+      "name": "no page errors",
+      "result": "PASS"
+    }
+  ],
+  "failures": [],
+  "pageErrors": []
+}

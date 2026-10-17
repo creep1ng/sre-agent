@@ -59,7 +59,7 @@ An identical seed rerun prints `seed converged` and preserves stable IDs, counts
 grants, and credential hashes. Partial or incompatible seed-owned state fails atomically with a
 secret-free `seed_state_conflict` diagnostic.
 
-Open the web catalog at <http://127.0.0.1:8080>. API liveness and readiness are available at <http://127.0.0.1:8000/health/live> and <http://127.0.0.1:8000/health/ready>.
+Open the console at <http://127.0.0.1:8080>; the design-system catalog lives at <http://127.0.0.1:8080/design-system.html>. API liveness and readiness are available at <http://127.0.0.1:8000/health/live> and <http://127.0.0.1:8000/health/ready>.
 
 Run the contract harness as a one-shot profile:
 
@@ -161,7 +161,8 @@ database until an operator-approved migration or restore plan exists.
 | `src/sre_agent/harness/` | Contract and fixture harness boundary |
 | `src/sre_agent/gateway/` | HTTP gateway and health probes |
 | `schemas/` | Versioned contract authority and conformance tooling |
-| `index.html`, `styles/`, `scripts/`, `public/` | Existing static web catalog |
+| `index.html`, `public/console/` | Integrated console: incident response and AI governance in one document ([design](docs/design/ht-web-shell/ht-web-shell.md)) |
+| `design-system.html`, `styles/`, `scripts/`, `public/` | Design-system catalog and the surfaces mounted by the console |
 
 See [runtime boundaries](docs/architecture.md), the [operator incident journey](docs/design/ht-inc-07-ux-journey/ht-inc-07-ux-journey.md), and the [Codex worktree workflow](docs/codex-worktrees.md).
 
