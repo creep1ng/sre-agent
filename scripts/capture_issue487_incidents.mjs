@@ -1,9 +1,9 @@
 // Incident-in-focus proof for issue #487 against the isolated triage stack (nginx CSP, real API,
-// PostgreSQL). Triage declares an incident and its result opens the war room inside the console,
-// where the key is entered once; the band then keeps a seeded incident and its run across War room,
-// Decisiones and Postmortem with Back/Forward, reload and logout, and navigating never sends a
-// command. A principal without run.read gets a 403 and no band. Keys come from the runner's
-// environment and are never printed, stored or written to the proof.
+// PostgreSQL). The inbox hands an alert to Triage inside the console, where the key is entered
+// once, and its declaration opens the war room in the same session. The band then keeps a seeded
+// incident and its run across War room, Decisiones and Postmortem with Back/Forward, reload and
+// logout, and navigating never sends a command. A principal without run.read gets a 403 and no
+// band. Keys come from the runner's environment and are never printed, stored or written.
 //
 // Containerized usage, on the stack of compose.triage23.yaml once inc-war-room-demo is seeded:
 //   docker compose -f compose.triage23.yaml run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
@@ -56,22 +56,35 @@ const text = async (locator) => ((await locator.textContent()) ?? "").trim();
 const step = (page, label) => page.locator("#incident-focus-journey .console-journey__step", { hasText: label });
 const writes = () => apiCalls.filter((call) => call.method !== "GET");
 
-// 1. Triage declares a new incident: the only command of this proof.
+// 1. The inbox hands an alert to Triage inside the console, where the key is entered once; the
+//    declaration is the only command of this proof.
 const triage = await openTab();
-const alertId = `al-487-${Date.now().toString(36)}`;
-await triage.goto(`${base}/public/admin/triage.html`);
-await triage.fill("#api-key", operatorKey);
-await triage.click("#connect-button");
-await triage.fill("#alert-id", alertId);
+const alertId = "alert-cart-004";
+await triage.goto(`${base}/`);
+await triage.locator("#alert-inbox[data-state='ready']").waitFor();
+await triage.evaluate(() => {
+  window.__sameDocument = true;
+});
+await triage.locator(`#alert-list [data-alert-id="${alertId}"]`).click();
+await triage.locator("#start-triage").click();
+await triage.waitForURL(`${base}/?view=triage&alert_id=${alertId}`);
+check("the inbox hands its alert to Triage inside the console", (await triage.locator("#alert-id").inputValue()) === alertId);
+await connectConsole(triage, operatorKey);
 await triage.locator("#command-operation:not([disabled]) option[value='triage_declare']:not([disabled])").waitFor({
   state: "attached",
 });
+check(
+  "Triage speaks the console's language",
+  (await text(triage.locator("#triage-page h1"))) === "Triage" &&
+    (await text(triage.locator("#submit-button"))) === "Enviar comando" &&
+    (await text(triage.locator("#result-title"))) === "Resultado",
+);
 await triage.selectOption("#command-operation", "triage_declare");
 await triage.fill("#command-reason", "Issue 487 console journey proof.");
 await triage.selectOption("#command-severity", "sev3");
-await triage.fill("#command-impact", "Synthetic checkout errors for the console journey proof.");
-await triage.fill("#alert-context-service", "checkout-api");
-await triage.fill("#alert-context-summary", "Synthetic checkout errors for the console journey proof.");
+await triage.fill("#command-impact", "Synthetic cart errors for the console journey proof.");
+await triage.fill("#alert-context-service", "cart-service");
+await triage.fill("#alert-context-summary", "Synthetic cart errors for the console journey proof.");
 await triage.fill("#alert-context-observed-at", "2026-10-15T20:00:00Z");
 await triage.fill("#alert-context-source", "operator-confirmed synthetic report");
 await triage.selectOption("#alert-context-severity", "sev3");
@@ -86,17 +99,25 @@ check(
   commands.length === 1 && commands[0] === `POST /api/v1/alerts/${alertId}/triage/commands`,
   commands.join(", "),
 );
+// A tall viewport shows the whole view without stitching the console's sticky bars.
+await triage.setViewportSize({ width: 1440, height: 1900 });
+await triage.screenshot({ path: `${evidence}/issue-487-triage-declared.png` });
+await triage.setViewportSize({ width: 1440, height: 1000 });
 apiCalls.length = 0;
 
-// 2. The decision's link opens that incident's war room inside the console.
+// 2. The decision's link opens that incident's war room in the same document and session.
 await triage.click("#result-incident a");
 await triage.waitForURL(`${base}/?view=war-room&incident_id=${declared}`);
-check("the triage result opens the war room inside the console", true, new URL(triage.url()).search);
-await connectConsole(triage, operatorKey);
 await triage.locator("#war-room[data-state='ready']").waitFor();
+check("the triage result opens the war room inside the console", true, new URL(triage.url()).search);
+check(
+  "the war room reuses the session: no second key and one document",
+  apiCalls.every((call) => call.path !== "/api/v1/whoami") && (await triage.evaluate(() => window.__sameDocument)) === true,
+);
 check("the band shows the declared incident", (await text(triage.locator("#incident-focus-incident"))) === declared);
 check("the band shows its authoritative state", (await text(triage.locator("#incident-focus-state"))) === "Activo");
 check("the journey marks triage as declared", (await text(step(triage, "Triage"))).includes("Declarado"));
+check("the journey keeps the inbox alert", (await text(step(triage, "Alerta"))).includes(alertId));
 const declaredRun = await text(triage.locator("#incident-focus-run"));
 check(
   "the declaration's run links Decisiones on the same incident",
@@ -104,6 +125,10 @@ check(
     `/?view=decisions&incident_id=${declared}&run_id=${declaredRun}`,
   declaredRun,
 );
+await triage.screenshot({ path: `${evidence}/issue-487-triage-war-room.png` });
+await triage.goBack();
+await triage.locator("#result-summary", { hasText: "Recuperado del backend: declared" }).waitFor();
+check("Back returns to Triage with the decision read again from the API", (await text(triage.locator("#result-incident"))) === declared);
 await triage.close();
 
 // 3. A seeded incident with a run: one tab, one key, the whole journey.

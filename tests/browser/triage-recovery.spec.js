@@ -48,7 +48,7 @@ test("dismiss persists across reload and reads back from the API", async ({ page
   await page.reload();
   await expect(page.locator("#alert-id")).toHaveValue(alertId);
   await connectExisting(page, key);
-  await expect(page.locator("#result-summary")).toContainText("Recovered from backend");
+  await expect(page.locator("#result-summary")).toContainText("Recuperado del backend");
   expect(await readRecovery(page)).toEqual(before);
 });
 
@@ -64,7 +64,7 @@ test("second session reads the same dismiss from a direct URL", async ({ browser
   await reader.goto(`${BASE}/public/admin/triage.html?alert_id=${alertId}`);
   await reader.locator("#api-key").fill(key);
   await reader.locator("#connect-button").click();
-  await expect(reader.locator("#result-summary")).toContainText("Recovered from backend");
+  await expect(reader.locator("#result-summary")).toContainText("Recuperado del backend");
   expect(await readRecovery(reader)).toEqual(before);
   await reader.close();
 });
@@ -74,7 +74,7 @@ test("unknown alert shows no recorded decision without error", async ({ page }) 
   await page.goto(`${BASE}/public/admin/triage.html?alert_id=al-ca1-ghost-${SUFFIX}`);
   await page.locator("#api-key").fill(journeyKey("E2E_TRIAGE_API_KEY"));
   await page.locator("#connect-button").click();
-  await expect(page.locator("#result-summary")).toHaveText("No recorded decision for this alert.");
+  await expect(page.locator("#result-summary")).toHaveText("Esta alerta no tiene una decisión registrada.");
   await expect(page.locator("#page-error")).toBeHidden();
 });
 
@@ -83,7 +83,8 @@ test("wrong credential blocks the recovery read without data", async ({ page }) 
   await page.goto(`${BASE}/public/admin/triage.html?alert_id=al-ca1-dismiss-${SUFFIX}`);
   await page.locator("#api-key").fill("sre_bogus_00000000000000000000000000000000");
   await page.locator("#connect-button").click();
-  await expect(page.locator("#page-error-title")).toHaveText("Authentication required");
+  // The console rejects the key with whoami before triage reads anything.
+  await expect(page.locator("#session-message")).toContainText("rechazó esa credencial");
   await expect(page.locator("#result-status")).toHaveText("—");
 });
 

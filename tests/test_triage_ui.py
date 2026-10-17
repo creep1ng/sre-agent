@@ -41,7 +41,7 @@ def test_ui_builds_a_fresh_command_key_per_submit() -> None:
 
 def test_ui_sends_only_selected_operation_fields() -> None:
     assert "OPERATION_FIELDS" in JAVASCRIPT
-    assert "Select a supported operation." in JAVASCRIPT
+    assert "Elige una operación admitida." in JAVASCRIPT
     for operation in ("open_triage", "triage_dismiss", "triage_link", "triage_declare"):
         assert operation in JAVASCRIPT
     assert "open_triage: Object.freeze([])" in JAVASCRIPT

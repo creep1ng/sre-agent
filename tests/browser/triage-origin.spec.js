@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { logoutConsole } from "./support/console-session.mjs";
 
 const WEB = process.env.E2E_BASE_URL ?? "http://web";
 const API = process.env.E2E_API_BASE_URL ?? "http://api:8000";
@@ -30,7 +31,7 @@ async function connectForAlert(page, id, key) {
 }
 
 async function expectNoDecision(page) {
-  await expect(page.locator("#result-summary")).toHaveText("No recorded decision for this alert.");
+  await expect(page.locator("#result-summary")).toHaveText("Esta alerta no tiene una decisión registrada.");
   await expect(page.locator("#result-status")).toHaveText("—");
   await expect(page.locator("#result-origin")).toHaveText("—");
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
@@ -45,7 +46,7 @@ test("external producer dismissal is labeled from backend provenance after reloa
   await expect(page.locator("#command-operation option[value='triage_declare']")).toBeDisabled();
   await expect(page.locator("#command-operation option[value='triage_dismiss']")).toBeEnabled();
   await expect(page.locator("#command-operation option[value='triage_link']")).toBeEnabled();
-  await page.locator("#disconnect-button").click();
+  await logoutConsole(page);
   const response = await postCommand(request, producer, id, {
     operation: "triage_dismiss",
     expected_version: 1,
@@ -58,7 +59,7 @@ test("external producer dismissal is labeled from backend provenance after reloa
 
   await connectForAlert(page, id, operator);
   await expect(page.locator("#result-status")).toHaveText("dismissed");
-  await expect(page.locator("#result-origin")).toHaveText("External automatic");
+  await expect(page.locator("#result-origin")).toHaveText("Automática externa");
   await expect(page.locator("#result-responsible-system")).toHaveText("producer-e2e");
   await expect(page.locator("#submit-button")).toBeDisabled();
   await expect(page.locator("#api-key")).toHaveValue("");
@@ -72,9 +73,9 @@ test("external producer dismissal is labeled from backend provenance after reloa
   await page.reload();
   await page.locator("#api-key").fill(operator);
   await page.locator("#connect-button").click();
-  await expect(page.locator("#result-origin")).toHaveText("External automatic");
+  await expect(page.locator("#result-origin")).toHaveText("Automática externa");
   await expect(page.locator("#result-responsible-system")).toHaveText("producer-e2e");
-  await page.locator("#disconnect-button").click();
+  await logoutConsole(page);
   await expect(page.locator("#result-origin")).toHaveText("—");
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
 });
@@ -100,7 +101,7 @@ test("authorized external producer links to a real backend-eligible incident", a
   await connectForAlert(page, alert, operator);
   await expect(page.locator("#result-status")).toHaveText("linked");
   await expect(page.locator("#result-incident")).toContainText(incidentId);
-  await expect(page.locator("#result-origin")).toHaveText("External automatic");
+  await expect(page.locator("#result-origin")).toHaveText("Automática externa");
   await expect(page.locator("#result-responsible-system")).toHaveText("producer-e2e");
 });
 
@@ -140,7 +141,7 @@ test("legacy decision displays backend unknown without inferring from its actor"
   const id = requiredKey("E2E_TRIAGE_LEGACY_ALERT_ID");
   await connectForAlert(page, id, operator);
   await expect(page.locator("#result-status")).toHaveText("dismissed");
-  await expect(page.locator("#result-origin")).toHaveText("Unknown (legacy)");
+  await expect(page.locator("#result-origin")).toHaveText("Desconocido (histórico)");
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
 });
 

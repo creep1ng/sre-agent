@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { connectConsole, logoutConsole, switchConsoleCredential } from "./support/console-session.mjs";
 
 const BASE = process.env.E2E_BASE_URL ?? "http://127.0.0.1:8081";
 
@@ -16,8 +17,7 @@ async function connect(page, key) {
 }
 
 async function switchCredential(page, key) {
-  await page.locator("#api-key").fill(key);
-  await page.locator("#connect-button").click();
+  await switchConsoleCredential(page, key);
 }
 
 async function dismiss(page, alertId, reason) {
@@ -28,7 +28,7 @@ async function dismiss(page, alertId, reason) {
   await page.locator("#submit-button").click();
 }
 
-async function expectNeutralPanel(page, stateLine = "Connect to begin.") {
+async function expectNeutralPanel(page, stateLine = "Conecta la consola para empezar.") {
   await expect(page.locator("#result-operation")).toHaveText("—");
   await expect(page.locator("#result-status")).toHaveText("—");
   await expect(page.locator("#result-reason")).toHaveText("—");
@@ -38,7 +38,7 @@ async function expectNeutralPanel(page, stateLine = "Connect to begin.") {
   await expect(page.locator("#result-decided")).toHaveText("—");
   await expect(page.locator("#result-origin")).toHaveText("—");
   await expect(page.locator("#result-responsible-system")).toHaveText("—");
-  await expect(page.locator("#result-summary")).toHaveText("No command sent yet.");
+  await expect(page.locator("#result-summary")).toHaveText("Aún no se envió ningún comando.");
   await expect(page.locator("#triage-state")).toHaveText(stateLine);
   await expect(page.locator("#expected-version")).toHaveValue("1");
 }
@@ -55,7 +55,7 @@ test("clear session leaves a fully neutral panel", async ({ page }) => {
   await dismiss(page, alertId, "C3a isolation clear proof.");
   await expect(page.locator("#result-status")).toHaveText("dismissed");
   await expect(page.locator("#result-actor")).not.toHaveText("—");
-  await page.locator("#disconnect-button").click();
+  await logoutConsole(page);
   await expectNeutralPanel(page);
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "idle");
   await expect(page.locator("#page-error")).toBeHidden();
@@ -68,10 +68,10 @@ test("direct credential switch never shows the previous identity facts", async (
   await dismiss(page, alertA, "C3a isolation switch proof.");
   await expect(page.locator("#result-status")).toHaveText("dismissed");
   await switchCredential(page, grantless);
-  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expectNeutralPanel(page, "Sesión activa. Escribe una alerta y envía un comando.");
   const alertB = `al-c3a-switch-b-${Date.now().toString(36)}`;
   await page.locator("#alert-id").fill(alertB);
-  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expect(page.locator("#page-error-title")).toHaveText("Sin acceso");
   await expect(page.locator("#submit-button")).toBeDisabled();
   await expectNoDecisionFacts(page);
   await page.screenshot({ path: "docs/evidence/c3a-session-isolation.png", fullPage: true });
@@ -112,11 +112,11 @@ test("clear and switch reset the reusable command form", async ({ page }) => {
   await page.locator("#command-reason").fill("C3e form reset proof.");
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("linked");
-  await page.locator("#disconnect-button").click();
+  await logoutConsole(page);
   await expectNeutralPanel(page);
   await expectPristineForm(page);
-  await page.locator("#api-key").fill(full);
-  await page.locator("#connect-button").click();
+  // The console validates the new key before the view starts its session.
+  await connectConsole(page, full);
   await page.locator("#alert-id").fill(`al-c3e-form-b-${stamp}`);
   await expect(page.locator("#command-operation")).toBeEnabled();
   await page.locator("#command-operation").selectOption("triage_link");
@@ -135,10 +135,10 @@ test("clear and switch reset the reusable command form", async ({ page }) => {
   await page.locator("#submit-button").click();
   await expect(page.locator("#result-status")).toHaveText("declared");
   await switchCredential(page, grantless);
-  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expectNeutralPanel(page, "Sesión activa. Escribe una alerta y envía un comando.");
   await expectPristineForm(page);
   await page.locator("#alert-id").fill(`al-c3e-form-c-${stamp}`);
-  await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
+  await expect(page.locator("#page-error-title")).toHaveText("Sin acceso");
   await expect(page.locator("#submit-button")).toBeDisabled();
   await expectNoDecisionFacts(page);
   await expect(page.locator("#command-reason")).toHaveValue("");
@@ -156,17 +156,17 @@ test("first connect from a deep link recovers without inheriting form state", as
   await page.locator("#api-key").fill(full);
   await page.locator("#connect-button").click();
   await expect(page.locator("#result-status")).toHaveText("dismissed");
-  await expect(page.locator("#result-summary")).toContainText("Recovered from backend");
+  await expect(page.locator("#result-summary")).toContainText("Recuperado del backend");
   await expect(page.locator("#result-reason")).toHaveText("C3e deep-link seed reason.");
   await expect(page.locator("#command-reason")).toHaveValue("");
   await expect(page.locator("#command-target")).toHaveValue("");
   await expect(page.locator("#command-severity")).toHaveValue("");
   await switchCredential(page, grantless);
-  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expectNeutralPanel(page, "Sesión activa. Escribe una alerta y envía un comando.");
   await expectPristineForm(page);
 });
 
-test("clear before first connect cancels the deep-link recovery", async ({ page }) => {
+test("emptying the alert before the first connect cancels the deep-link recovery", async ({ page }) => {
   const { full } = journeyKeys();
   const stamp = Date.now().toString(36);
   const alertId = `al-c3e-deeplink-clear-${stamp}`;
@@ -175,13 +175,12 @@ test("clear before first connect cancels the deep-link recovery", async ({ page 
   await expect(page.locator("#result-status")).toHaveText("dismissed");
   await page.goto(`${BASE}/public/admin/triage.html?alert_id=${alertId}`);
   await expect(page.locator("#alert-id")).toHaveValue(alertId);
-  await page.locator("#disconnect-button").click();
-  await expectNeutralPanel(page);
-  await expectPristineForm(page);
+  // Without a session there is nothing to log out of: the operator drops the pre-filled alert.
+  await page.locator("#alert-id").fill("");
   await page.locator("#api-key").fill(full);
   await page.locator("#connect-button").click();
   await expect(page.locator("#triage-page")).toHaveAttribute("data-state", "idle");
-  await expectNeutralPanel(page, "Connected. Enter an alert and send a command.");
+  await expectNeutralPanel(page, "Sesión activa. Escribe una alerta y envía un comando.");
   await expectPristineForm(page);
-  await expect(page.locator("#result-summary")).toHaveText("No command sent yet.");
+  await expect(page.locator("#result-summary")).toHaveText("Aún no se envió ningún comando.");
 });

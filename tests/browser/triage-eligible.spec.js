@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { connectConsole, logoutConsole } from "./support/console-session.mjs";
 test.use({ video: "on" });
 
 const WEB = process.env.E2E_BASE_URL ?? "http://web";
@@ -74,7 +75,7 @@ async function beginInboxJourney(page, alertId, key) {
   await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
   await page.locator(`#alert-list [data-alert-id="${alertId}"]`).click();
   await page.locator("#start-triage").click();
-  await expect(page).toHaveURL(`${WEB}/public/admin/triage.html?alert_id=${alertId}`);
+  await expect(page).toHaveURL(`${WEB}/?view=triage&alert_id=${alertId}`);
   await expect(page.locator("#alert-id")).toHaveValue(alertId);
   expect(commandPosts).toHaveLength(0);
   await page.locator("#api-key").fill(key);
@@ -171,9 +172,7 @@ test("inbox event deep-links the same alert id and sends no triage command", asy
   await page.locator('#alert-list [data-alert-id="alert-checkout-001"]').click();
   await page.locator("#start-triage").click();
 
-  await expect(page).toHaveURL(
-    `${WEB}/public/admin/triage.html?alert_id=alert-checkout-001`,
-  );
+  await expect(page).toHaveURL(`${WEB}/?view=triage&alert_id=alert-checkout-001`);
   await expect(page.locator("#alert-id")).toHaveValue("alert-checkout-001");
   await expect.poll(() => commandPosts).toHaveLength(0);
 });
@@ -194,8 +193,8 @@ test("real bounded eligible list selects and links an incident from the UI", asy
   expect(items.length).toBeGreaterThan(0);
   expect(items.length).toBeLessThanOrEqual(100);
   expect(items[0]).toEqual({ incident_id: LINK_TARGET, state: "active" });
-  await expect(page.locator("#target-list-status")).toContainText(/up to 100/i);
-  await expect(page.locator("#target-list-status")).toContainText(/may be incomplete/i);
+  await expect(page.locator("#target-list-status")).toContainText(/hasta 100/i);
+  await expect(page.locator("#target-list-status")).toContainText(/puede estar incompleta/i);
   await expect(page.locator(`#command-target option[value="${LINK_TARGET}"]`)).toHaveCount(1);
   await page.locator("#command-target").selectOption(LINK_TARGET);
   await page.locator("#command-reason").fill("Link after choosing the backend-listed destination.");
@@ -224,7 +223,7 @@ test("real bounded eligible list selects and links an incident from the UI", asy
 });
 
 test("empty and failed eligible reads fail closed without hiding other permitted actions", async ({ page }) => {
-  let response = { status: 200, body: { items: [] }, message: /no eligible/i };
+  let response = { status: 200, body: { items: [] }, message: /no devolvió incidentes elegibles/i };
   const posts = [];
   page.on("request", (item) => {
     if (item.method() === "POST" && item.url().includes("/triage/commands")) posts.push(item.url());
@@ -242,10 +241,10 @@ test("empty and failed eligible reads fail closed without hiding other permitted
   await page.locator("#connect-button").click();
 
   const failures = [
-    { status: 200, body: { items: [] }, message: /no eligible/i },
-    { status: 403, body: { error: { code: "not_authorized", message: "Denied." } }, message: /could not load|access unavailable/i },
-    { status: 503, body: { error: { code: "storage_unavailable", message: "Unavailable." } }, message: /could not load|unavailable/i },
-    { status: 200, body: { items: [{ incident_id: "BAD ID", state: "closed" }] }, message: /invalid|could not load/i },
+    { status: 200, body: { items: [] }, message: /no devolvió incidentes elegibles/i },
+    { status: 403, body: { error: { code: "not_authorized", message: "Denied." } }, message: /no se pudieron cargar|sin acceso/i },
+    { status: 503, body: { error: { code: "storage_unavailable", message: "Unavailable." } }, message: /no se pudieron cargar|no disponible/i },
+    { status: 200, body: { items: [{ incident_id: "BAD ID", state: "closed" }] }, message: /inválida|no se pudieron cargar/i },
   ];
   for (const failure of failures) {
     response = failure;
@@ -257,7 +256,7 @@ test("empty and failed eligible reads fail closed without hiding other permitted
     await expect(page.locator("#command-target")).toBeDisabled();
     await expect(page.locator("#submit-button")).toBeDisabled();
     await expect(page.locator("#result-status")).toHaveText("—");
-    await expect(page.locator("#result-summary")).toHaveText("No recorded decision for this alert.");
+    await expect(page.locator("#result-summary")).toHaveText("Esta alerta no tiene una decisión registrada.");
     await page.locator("#command-operation").selectOption("triage_declare");
     await expect(page.locator("#command-operation")).toBeEnabled();
   }
@@ -303,9 +302,9 @@ test("late target lists cannot cross alert or session generations", async ({ pag
   await expect(page.locator('#command-target option[value="inc-current-list"]')).toHaveCount(1);
   await expect(page.locator('#command-target option[value="inc-held-list"]')).toHaveCount(0);
 
-  await page.locator("#disconnect-button").click();
-  await page.locator("#api-key").fill(reader);
-  await page.locator("#connect-button").click();
+  // The console validates the new key before the view starts its session.
+  await logoutConsole(page);
+  await connectConsole(page, reader);
   await page.locator("#alert-id").fill(alertB);
   await expect(page.locator("#command-operation")).toBeDisabled();
   releaseA({ items: [{ incident_id: "inc-held-list", state: "active" }] });
@@ -354,7 +353,7 @@ test("mocked destination_ineligible refresh shows no false link or automatic ret
   await page.locator("#command-target").selectOption(LINK_TARGET);
   await page.locator("#command-reason").fill("Do not link after the destination closes.");
   await page.locator("#submit-button").click();
-  await expect(page.locator("#page-error-title")).toHaveText("Conflict");
+  await expect(page.locator("#page-error-title")).toHaveText("Conflicto");
   await expect(page.locator("#result-status")).toHaveText("—");
   await expect.poll(() => listReads).toBe(2);
   await expect(page.locator("#command-target")).toBeEnabled();
@@ -374,16 +373,16 @@ test("mocked destination_ineligible refresh shows no false link or automatic ret
   await expect.poll(() => commandPosts).toBe(2);
   await expect.poll(() => thirdRefreshStarted).toBe(true);
 
-  await page.locator("#disconnect-button").click();
-  await page.locator("#api-key").fill(reader);
-  await page.locator("#connect-button").click();
+  // The console validates the new key before the view starts its session.
+  await logoutConsole(page);
+  await connectConsole(page, reader);
   const nextSessionAlert = alertId("new-session");
   await page.locator("#alert-id").fill(nextSessionAlert);
   await expect(page.locator("#actions-status")).toHaveText(
-    "The backend currently permits no triage operations for this alert.",
+    "El backend no permite ahora ninguna operación de triage para esta alerta.",
   );
   await expect(page.locator("#triage-state")).toContainText(
-    `Alert ${nextSessionAlert} has no recorded decision yet.`,
+    `La alerta ${nextSessionAlert} aún no tiene una decisión registrada.`,
   );
   releaseThirdRefresh({ items: [{ incident_id: LINK_TARGET, state: "active" }] });
   await heldRefreshResponse;

@@ -228,8 +228,14 @@ test("el tema elegido aplica a toda la consola y persiste al recargar", async ({
 test("Alertas entrega la alerta seleccionada a Triage sin copiar su ID", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await page.evaluate(() => {
+    window.__sameDocument = true;
+  });
   await page.getByRole("button", { name: "Iniciar triage" }).click();
-  await expect(page).toHaveURL(/alert_id=alert-checkout-001/);
+  await expect(page).toHaveURL("/?view=triage&alert_id=alert-checkout-001");
+  await expect(page.locator("#alert-id")).toHaveValue("alert-checkout-001");
+  await expect(page.locator("[data-console-nav][aria-current='page']")).toHaveText("Triage");
+  expect(await page.evaluate(() => window.__sameDocument)).toBe(true);
 });
 
 test("la consola no tiene violaciones WCAG A/AA detectables", async ({ page }) => {
