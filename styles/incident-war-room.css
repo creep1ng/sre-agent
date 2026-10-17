@@ -288,6 +288,16 @@
     padding-top: var(--ma-space-5);
   }
 
+  /* El reset móvil genérico del timeline pierde contra la geometría propia del war room: con el
+     mismo scope, la pista del marcador y la del contenido recuperan una columna usable cada una. */
+  .war-room__events .ma-timeline__item {
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+  }
+
+  .war-room__events .ma-timeline__item:not(:last-child)::after {
+    left: 0.875rem;
+  }
+
   .war-room__actions {
     width: 100%;
     flex-direction: column;

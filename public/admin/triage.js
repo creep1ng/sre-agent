@@ -645,7 +645,11 @@ function startSession() {
   alertInput.disabled = false;
   clearActionProjection();
   const deepLinkAlertId = deepLinkPending ? alertInput.value.trim() : "";
+  const deepLinkCanceled = deepLinkPending && deepLinkAlertId === "";
   deepLinkPending = false;
+  // Un deep link cancelado antes de conectar también sale de la dirección: Atrás no puede
+  // volver a precargar la alerta que la persona descartó.
+  if (deepLinkCanceled) view.replaceParams({ alert_id: null });
   clearResult();
   if (/^[a-z][a-z0-9_-]{2,63}$/.test(deepLinkAlertId)) alertInput.value = deepLinkAlertId;
   lastObservedAlertId = alertInput.value.trim();

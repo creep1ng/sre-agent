@@ -277,6 +277,8 @@ if (!state.incidentId || !state.runId) {
   hideAll();
   nodes["error-missing-id"].hidden = false;
   nodes["review"].dataset.state = "error";
+  // Sin run no hay lectura posible: la franja no conserva el incidente de una vista anterior.
+  view.focusIncident(null);
 } else {
   view.onSession((session) => (session.phase === "active" ? loadAll() : dropSession()));
 }
