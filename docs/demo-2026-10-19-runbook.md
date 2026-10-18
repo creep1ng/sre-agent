@@ -63,49 +63,57 @@ ls .env >/dev/null && echo "env present"                          # run inside t
 
 ## T1 — real investigation (#652 head `e69f3750`)
 
-Run from `../sre-demo-37`. Port flags are mandatory on every invocation of project
-`sre-agent-37` (the `.env` defaults differ — `POSTGRES_PORT=55433`, `API_PORT=8000`,
-`WEB_PORT=8080` — and silently recreate the db onto ports the main `sre-agent` stack owns).
+Run from `../sre-demo-37`. Every independent Compose invocation of project `sre-agent-37`
+must carry the port overrides ON the command line —
+`WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose …` — because command-line
+prefixes beat both the `.env` and a sourced environment. A one-time `export` is NOT
+sufficient: the block below sources `.env` for the credentials, and that reload re-sets
+`POSTGRES_PORT=55433` / `API_PORT=8000` / `WEB_PORT=8080` (the October-18 rehearsal hit the
+resulting bind failure against the main `sre-agent` stack).
 
 ```sh
-# Port overrides persist for every compose call in this shell (they beat the .env,
-# whose defaults are POSTGRES_PORT=55433 / API_PORT=8000 / WEB_PORT=8080).
-export WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439
+# Port overrides ride ON every compose invocation: command-line prefixes beat the
+# .env defaults (POSTGRES_PORT=55433 / API_PORT=8000 / WEB_PORT=8080) and any
+# sourced environment. Do NOT rely on a prior export — this block sources .env
+# for the credentials, and that reload resets those ports (the October-18
+# rehearsal hit the resulting bind failure against the main `sre-agent` stack).
 P=$(basename "$(pwd)")
 # 1) Stack up (recorded healthy in #652's acceptance runs)
-docker compose -p sre-agent-37 up -d --build db api web
-# 2) Provision grants once per fresh database (summary line: catalog 201 and five grants 201 active)
+WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 up -d --build db api web
+# 2) Provision grants once per fresh database (fresh-db summary: catalog 201 and
+#    five grants 201 active; on the persisted demo volume expect 409s — see the
+#    note below the block)
 set -a; source .env; set +a
-docker compose -p sre-agent-37 --profile checks run --rm \
+WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
   -e ADMIN_API_KEY="${ADMIN_HUMAN_API_KEY}" -e AUDIT_KEY_HEX="${AUDIT_HMAC_KEY}" \
   python-checks python scripts/provision_incident_workflow.py
 # 3) Seed the three stamped incidents (idempotent)
-docker compose -p sre-agent-37 --profile checks run --rm \
+WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
   -e SEED_STAMP=2026-10-19 \
   python-checks python scripts/seed_war_room_runs.py
 # 4) Seed and run the real acceptance spec on its OWN stamp: fresh ids are
 #    "active with no runs" by construction; the spec asserts #run-start visible
 #    first, so reused stamps that already carry runs fail by design.
-docker compose -p sre-agent-37 --profile checks run --rm \
+WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
   -e SEED_STAMP=2026-10-19-spec \
   python-checks python scripts/seed_war_room_runs.py
-docker compose -p sre-agent-37 --profile e2e run --rm \
+WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile e2e run --rm \
   -e SRE_REAL_BACKEND=1 -e SEED_STAMP=2026-10-19-spec \
   e2e npx playwright test --config=playwright.production.config.js \
   tests/browser/war-room-runs-real.spec.js
 # 5) Seed the presenter's own stamp for the live journey: clicking Iniciar needs a
 #    run-less incident; the spec's stamp already holds its run.
-docker compose -p sre-agent-37 --profile checks run --rm \
+WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
   -e SEED_STAMP=2026-10-19-live \
   python-checks python scripts/seed_war_room_runs.py
 # 6) Seed the capture's own stamp, then capture (the script waits for #run-start
 #    visible and derives inc-37-start-<stamp> from SEED_STAMP; evidence lands in
 #    this checkout at SHA e69f3750).
-docker compose -p sre-agent-37 --profile checks run --rm \
+WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
   -e SEED_STAMP=2026-10-19-cap \
   python-checks python scripts/seed_war_room_runs.py
@@ -114,6 +122,17 @@ docker run --rm -e PLAYWRIGHT_BASE_URL="http://host.docker.internal:8091" \
   -v "$PWD/docs/evidence:/e2e/docs/evidence" -v "$PWD/scripts:/e2e/scripts-capture:ro" \
   -w /e2e "${P}-e2e:latest" node scripts-capture/capture_issue37_war_room_runs.mjs
 ```
+
+**Provision result depends on the database state.** On a fresh database the recorded summary
+is "catalog 201 and five grants 201 active". The demo never deletes data, so on the persisted
+demo volume the same script can return **409 already-exists** for the catalog and grant
+writes; the October-18 rehearsal recorded that case, and its printed summary confirmed
+`run_read_active`, `run_start_active`, `run_command_active` and `run_approve_active` all
+`true`. Accept a 409 ONLY after reading the script's printed summary and confirming there
+that every required grant is present and active. A different conflict, a missing grant or an
+inactive one: stop the flow and record the real error. That printed summary is the only
+verification the harness documents for this step — this guide has no separate read-only
+inspection command for grants, so do not improvise SQL.
 
 Live podium journey: reuse step 5's seeded `2026-10-19-live` stamp, open
 `http://127.0.0.1:8091/public/incident-ui/war-room.html?incident_id=inc-37-start-2026-10-19-live`,
@@ -179,9 +198,11 @@ not marked passed by this document alone — someone must execute it and record 
 
 - [ ] Preflight at the pinned SHAs: builds done per checkout (tags `<folder>-…`), `.env` keys
       present, ports 8091/8011/5439/4173 free, `docker ps` without sre-agent-37 leftovers.
-- [ ] T1 real flow with the exported port flags: provision (expect "201"), then per-stamp
-      seeding — `…-spec` for the real spec (expect 4 passed), `…-live` for the presenter
-      journey, `…-cap` for the capture — three fresh stamps never reused across steps.
+- [ ] T1 real flow with the inline port prefixes on every compose call: provision (fresh db
+      prints the "201" summary; the persisted volume prints 409s whose summary must confirm
+      every grant active), then per-stamp seeding — `…-spec` for the real spec (expect 4
+      passed), `…-live` for the presenter journey, `…-cap` for the capture — three fresh
+      stamps never reused across steps.
 - [ ] Captures land inside the pinned worktrees: note the head SHA beside each generated PNG
       (T1 at `e69f3750`, T2 at `b3cac750`).
 - [ ] T3 shows the fixture banner; T2 walks the capture images as fixtures, never backend.
@@ -189,12 +210,24 @@ not marked passed by this document alone — someone must execute it and record 
       deviates from this runbook enters the demo notes for Monday; old runs are never
       presented as new proof.
 
+Recorded October-18 rehearsal outcome (real run on the persisted demo volume): the first
+attempt failed on infrastructure — the block's one-time `export` was overwritten by
+`set -a; source .env` (the `.env` carries `POSTGRES_PORT=55433`) and the e2e invocation
+recreated db/api/web toward the busy port; re-running every compose call with the inline
+port prefixes unblocked it. After that: the real spec passed 4/4 in 5.5 s on the fresh
+`-spec` stamp, the live journey created `run_07ee18b58985f600` (POST 201, the same run
+re-selected after reload) and the T1 capture recorded `run_c21e2276988d940d`; T2 regenerated
+all seven fixture captures tagged `fixture: "mocked-backend"` and T3 showed the fixture
+banner with `pm_demo0001 · draft`. The recovery does not excuse the failure above: the flow
+as amended NOW is what the Monday operator executes, and this runbook is only declared
+reproducible after that corrected flow runs end to end.
+
 ## Contingencies and known limits
 
 | Symptom | Cause | Recovery |
 | --- | --- | --- |
-| Ports clash / db recreated on wrong port | missing `WEB_PORT/API_PORT/POSTGRES_PORT` flags | stop the project, redo every compose call WITH the flags |
-| E2E container loses web reachability | compose.e2e.yaml overlay strips published ports | re-up WITHOUT the overlay: `docker compose -p sre-agent-37 up -d db api web`; in a new shell prefix `WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439` — the `.env` defaults (55433/8000/8080) recreate the db onto a port the main `sre-agent` stack already owns |
+| Ports clash / db recreated on wrong port | missing `WEB_PORT/API_PORT/POSTGRES_PORT` flags | stop the project, redo every compose call with the inline `WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439` prefix — on the command line, never as a prior `export` |
+| E2E container loses web reachability | compose.e2e.yaml overlay strips published ports | re-up WITHOUT the overlay: `WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 up -d db api web` — the prefix rides on the command even mid-block, because a sourced `.env` resets the ports (55433/8000/8080) onto ones the main `sre-agent` stack already owns |
 | Start / double-click tests fail with `#run-start` hidden | the stamped incidents already carry runs from an earlier rehearsal on this volume | seed and run the affected steps with a NEW `SEED_STAMP` (`…-spec` / `…-live` / `…-cap` per T1 below); never delete data, never use `down -v` |
 | Real spec fails once cold | first-run transient recorded on an untouched test | rerun once; second failure = inspect honestly, do not hand-wave |
 | `.env` key missing | operator lacks a secret | stop and pull the authorized `.env`; never echo keys |
