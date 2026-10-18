@@ -55,10 +55,50 @@ and `RESTRICTED_HARNESS_API_KEY` — compose interpolation carries them into the
 ## Preflight checks (do not skip)
 
 ```sh
-docker ps --format '{{.Names}} {{.Status}}' | grep sre-agent-37   # nothing expected yet
-git -C ../sre-demo-37 status --short && git -C ../sre-demo-41 status --short
-nc -z 127.0.0.1 8091 || echo "port 8091 free"                     # also 8011, 5439, 4173
-ls .env >/dev/null && echo "env present"                          # run inside the worktree dir
+# Run from anywhere. Compare the real check-out SHAs; stop on any mismatch.
+a37=$(git -C "$HOME/sre-demo-37" rev-parse HEAD) || exit 1
+case "$a37" in
+  e69f3750*) echo "T1 checkout OK: $a37 (expected e69f3750...)" ;;
+  *) echo "T1 checkout DIFFERS: got $a37, expected e69f3750... - identify what changed before continuing"; exit 1 ;;
+esac
+a41=$(git -C "$HOME/sre-demo-41" rev-parse HEAD) || exit 1
+case "$a41" in
+  b3cac750*) echo "T2 checkout OK: $a41 (expected b3cac750...)" ;;
+  *) echo "T2 checkout DIFFERS: got $a41, expected b3cac750... - identify what changed before continuing"; exit 1 ;;
+esac
+# Worktree state: empty is expected; print anything found and inspect it - do not delete or stage it here.
+s37=$(git -C "$HOME/sre-demo-37" status --porcelain) || exit 1
+[ -n "$s37" ] && { echo "T1 worktree state (inspect before continuing):"; printf '%s\n' "$s37"; } || echo "T1 worktree clean"
+s41=$(git -C "$HOME/sre-demo-41" status --porcelain) || exit 1
+[ -n "$s41" ] && { echo "T2 worktree state (inspect before continuing):"; printf '%s\n' "$s41"; } || echo "T2 worktree clean"
+# Demo containers: report only, never stop them automatically.
+if docker ps -a --filter name=sre-agent-37 --format '{{.Names}} {{.Status}}' | grep -q .; then
+  docker ps -a --filter name=sre-agent-37 --format '{{.Names}} {{.Status}}'
+  echo "--> demo containers exist: inspect them before continuing (do not stop them automatically)"
+else
+  echo "no demo containers for project sre-agent-37"
+fi
+# Ports: one printed result per port; the block fails if ANY of the four is busy.
+ports_busy=0
+for p in 8091 8011 5439 4173; do
+  case "$p" in
+    8091) name="web";;
+    8011) name="api";;
+    5439) name="postgres";;
+    4173) name="e2e-static-check";;
+  esac
+  if nc -z 127.0.0.1 "$p" 2>/dev/null; then
+    echo "port $p ($name) BUSY - resolve before continuing"; ports_busy=1
+  else
+    echo "port $p ($name) free"
+  fi
+done
+if [ "$ports_busy" -ne 0 ]; then
+  echo "STOP: one or more demo ports are busy - resolve before continuing (never with down -v)"; exit 1
+fi
+echo "Ports: all four free (8091 web / 8011 api / 5439 postgres / 4173 e2e-static-check)"
+[ -f "$HOME/sre-demo-37/.env" ] && echo "T1 .env present" || { echo "T1 .env missing - pull the authorized one; never echo keys"; exit 1; }
+[ -f "$HOME/sre-demo-41/.env" ] && echo "T2 .env present" || { echo "T2 .env missing - pull the authorized one; never echo keys"; exit 1; }
 ```
 
 ## T1 — real investigation (#652 head `e69f3750`)
