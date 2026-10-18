@@ -63,6 +63,18 @@ ls .env >/dev/null && echo "env present"                          # run inside t
 
 ## T1 — real investigation (#652 head `e69f3750`)
 
+**Monday stamps — the rehearsal stamps are consumed.** The stamps the October-18 rehearsals
+already seeded and exercised — `2026-10-19-spec`, `2026-10-19-live` and `2026-10-19-cap`,
+plus their `-r2` variants — carry persisted runs on the demo volume, so reusing any of them
+fails by design (`#run-start` hidden for the real spec, runs already attached to the
+presenter journey). For the demo use the fresh stamps `2026-10-19-spec-mon`,
+`2026-10-19-live-mon` and `2026-10-19-cap-mon`, verified against the seed script's required
+pattern `^[a-z0-9-]{4,32}$`; the commands below already carry them. Keep each stamp only in
+its own step, coherent between its seed and the spec, journey or capture executed against
+it. If another rehearsal consumes the `-mon` stamps too, seed with a different, unused
+suffix — never delete volumes or data to force clean incidents. The `-mon` sequence has not
+been executed yet; its first real run is the Monday flow itself.
+
 Run from `../sre-demo-37`. Every independent Compose invocation of project `sre-agent-37`
 must carry the port overrides ON the command line —
 `WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose …` — because command-line
@@ -98,27 +110,27 @@ WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --
 #    first, so reused stamps that already carry runs fail by design.
 WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
-  -e SEED_STAMP=2026-10-19-spec \
+  -e SEED_STAMP=2026-10-19-spec-mon \
   python-checks python scripts/seed_war_room_runs.py
 WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile e2e run --rm \
-  -e SRE_REAL_BACKEND=1 -e SEED_STAMP=2026-10-19-spec \
+  -e SRE_REAL_BACKEND=1 -e SEED_STAMP=2026-10-19-spec-mon \
   e2e npx playwright test --config=playwright.production.config.js \
   tests/browser/war-room-runs-real.spec.js
 # 5) Seed the presenter's own stamp for the live journey: clicking Iniciar needs a
 #    run-less incident; the spec's stamp already holds its run.
 WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
-  -e SEED_STAMP=2026-10-19-live \
+  -e SEED_STAMP=2026-10-19-live-mon \
   python-checks python scripts/seed_war_room_runs.py
 # 6) Seed the capture's own stamp, then capture (the script waits for #run-start
 #    visible and derives inc-37-start-<stamp> from SEED_STAMP; evidence lands in
 #    this checkout at SHA e69f3750).
 WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
-  -e SEED_STAMP=2026-10-19-cap \
+  -e SEED_STAMP=2026-10-19-cap-mon \
   python-checks python scripts/seed_war_room_runs.py
 docker run --rm -e PLAYWRIGHT_BASE_URL="http://host.docker.internal:8091" \
-  -e DEMO_HUMAN_API_KEY="${DEMO_HUMAN_API_KEY}" -e SEED_STAMP=2026-10-19-cap \
+  -e DEMO_HUMAN_API_KEY="${DEMO_HUMAN_API_KEY}" -e SEED_STAMP=2026-10-19-cap-mon \
   -v "$PWD/docs/evidence:/e2e/docs/evidence" -v "$PWD/scripts:/e2e/scripts-capture:ro" \
   -w /e2e "${P}-e2e:latest" node scripts-capture/capture_issue37_war_room_runs.mjs
 ```
@@ -134,11 +146,11 @@ inactive one: stop the flow and record the real error. That printed summary is t
 verification the harness documents for this step — this guide has no separate read-only
 inspection command for grants, so do not improvise SQL.
 
-Live podium journey: reuse step 5's seeded `2026-10-19-live` stamp, open
-`http://127.0.0.1:8091/public/incident-ui/war-room.html?incident_id=inc-37-start-2026-10-19-live`,
+Live podium journey: reuse step 5's seeded `2026-10-19-live-mon` stamp, open
+`http://127.0.0.1:8091/public/incident-ui/war-room.html?incident_id=inc-37-start-2026-10-19-live-mon`,
 connect the session with the demo human key, click *Iniciar investigación*, show the run strip,
 then reload the tab — the created run stays selected (the real spec asserts this).
-`inc-37-double-2026-10-19-live` demonstrates the double-click idempotence; `inc-37-restricted-2026-10-19-live`
+`inc-37-double-2026-10-19-live-mon` demonstrates the double-click idempotence; `inc-37-restricted-2026-10-19-live-mon`
 with the restricted key shows the 403 with no success state.
 
 **Real-recorded vs not:** start with reload persistence, double-click idempotence and the
