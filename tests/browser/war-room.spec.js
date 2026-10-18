@@ -740,3 +740,29 @@ test.describe("reading the timeline", () => {
     await expect(items.nth(1)).toContainText("+1 min desde el inicio");
   });
 });
+
+test("the war room timeline stays readable at 375px", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await mockApi(page, { pages: [pageOne] });
+  await openWarRoom(page);
+
+  const item = page.locator(".war-room__events .ma-timeline__item").first();
+  await expect(item).toBeVisible();
+
+  // The design system's mobile reset rules the marker track and one content track; the war
+  // room's three-column desktop geometry must not win at this width.
+  const columns = await item.evaluate((node) =>
+    getComputedStyle(node).gridTemplateColumns.split(" ").map((track) => Number.parseFloat(track)),
+  );
+  expect(columns).toHaveLength(2);
+  expect(columns[0]).toBeLessThanOrEqual(44);
+
+  const time = item.locator(".ma-timeline__time");
+  const content = item.locator(".ma-timeline__content");
+  for (const node of [time, content]) {
+    expect(await node.evaluate((el) => getComputedStyle(el).gridColumnStart)).toBe("2");
+  }
+  // Time and content are wide enough to read, not squeezed into the marker column.
+  expect((await time.boundingBox()).width).toBeGreaterThan(44);
+  expect((await content.boundingBox()).width).toBeGreaterThan(44);
+});
