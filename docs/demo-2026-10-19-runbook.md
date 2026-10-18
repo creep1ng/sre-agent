@@ -64,11 +64,16 @@ ls .env >/dev/null && echo "env present"                          # run inside t
 ## T1 — real investigation (#652 head `e69f3750`)
 
 Run from `../sre-demo-37`. Port flags are mandatory on every invocation of project
-`sre-agent-37` (the `.env` maps `POSTGRES_PORT=5439` differently and recreates the db).
+`sre-agent-37` (the `.env` defaults differ — `POSTGRES_PORT=55433`, `API_PORT=8000`,
+`WEB_PORT=8080` — and silently recreate the db onto ports the main `sre-agent` stack owns).
 
 ```sh
+# Port overrides persist for every compose call in this shell (they beat the .env,
+# whose defaults are POSTGRES_PORT=55433 / API_PORT=8000 / WEB_PORT=8080).
+export WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439
+P=$(basename "$(pwd)")
 # 1) Stack up (recorded healthy in #652's acceptance runs)
-WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 up -d --build db api web
+docker compose -p sre-agent-37 up -d --build db api web
 # 2) Provision grants once per fresh database (summary line: catalog 201 and five grants 201 active)
 set -a; source .env; set +a
 docker compose -p sre-agent-37 --profile checks run --rm \
@@ -80,23 +85,41 @@ docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
   -e SEED_STAMP=2026-10-19 \
   python-checks python scripts/seed_war_room_runs.py
-# 4) Real acceptance spec (recorded in #652: 4 passed; the keys flow in via compose interpolation)
-P=$(basename "$(pwd)")
+# 4) Seed and run the real acceptance spec on its OWN stamp: fresh ids are
+#    "active with no runs" by construction; the spec asserts #run-start visible
+#    first, so reused stamps that already carry runs fail by design.
+docker compose -p sre-agent-37 --profile checks run --rm \
+  -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
+  -e SEED_STAMP=2026-10-19-spec \
+  python-checks python scripts/seed_war_room_runs.py
 docker compose -p sre-agent-37 --profile e2e run --rm \
-  -e SRE_REAL_BACKEND=1 -e SEED_STAMP=2026-10-19 \
+  -e SRE_REAL_BACKEND=1 -e SEED_STAMP=2026-10-19-spec \
   e2e npx playwright test --config=playwright.production.config.js \
   tests/browser/war-room-runs-real.spec.js
-# 5) Evidence capture PNG (committed evidence exists at this SHA already)
+# 5) Seed the presenter's own stamp for the live journey: clicking Iniciar needs a
+#    run-less incident; the spec's stamp already holds its run.
+docker compose -p sre-agent-37 --profile checks run --rm \
+  -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
+  -e SEED_STAMP=2026-10-19-live \
+  python-checks python scripts/seed_war_room_runs.py
+# 6) Seed the capture's own stamp, then capture (the script waits for #run-start
+#    visible and derives inc-37-start-<stamp> from SEED_STAMP; evidence lands in
+#    this checkout at SHA e69f3750).
+docker compose -p sre-agent-37 --profile checks run --rm \
+  -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
+  -e SEED_STAMP=2026-10-19-cap \
+  python-checks python scripts/seed_war_room_runs.py
 docker run --rm -e PLAYWRIGHT_BASE_URL="http://host.docker.internal:8091" \
-  -e DEMO_HUMAN_API_KEY="${DEMO_HUMAN_API_KEY}" -e SEED_STAMP=2026-10-19 \
+  -e DEMO_HUMAN_API_KEY="${DEMO_HUMAN_API_KEY}" -e SEED_STAMP=2026-10-19-cap \
   -v "$PWD/docs/evidence:/e2e/docs/evidence" -v "$PWD/scripts:/e2e/scripts-capture:ro" \
   -w /e2e "${P}-e2e:latest" node scripts-capture/capture_issue37_war_room_runs.mjs
 ```
 
-Live podium journey: open `http://127.0.0.1:8091/public/incident-ui/war-room.html?incident_id=inc-37-start-2026-10-19`,
+Live podium journey: reuse step 5's seeded `2026-10-19-live` stamp, open
+`http://127.0.0.1:8091/public/incident-ui/war-room.html?incident_id=inc-37-start-2026-10-19-live`,
 connect the session with the demo human key, click *Iniciar investigación*, show the run strip,
 then reload the tab — the created run stays selected (the real spec asserts this).
-`inc-37-double-2026-10-19` demonstrates the double-click idempotence; `inc-37-restricted-2026-10-19`
+`inc-37-double-2026-10-19-live` demonstrates the double-click idempotence; `inc-37-restricted-2026-10-19-live`
 with the restricted key shows the 403 with no success state.
 
 **Real-recorded vs not:** start with reload persistence, double-click idempotence and the
@@ -156,8 +179,9 @@ not marked passed by this document alone — someone must execute it and record 
 
 - [ ] Preflight at the pinned SHAs: builds done per checkout (tags `<folder>-…`), `.env` keys
       present, ports 8091/8011/5439/4173 free, `docker ps` without sre-agent-37 leftovers.
-- [ ] T1 real flow with the port flags: provision (expect "201"), seed (expect the three
-      stamped incidents), real spec (expect 4 passed), live journey, capture PNG.
+- [ ] T1 real flow with the exported port flags: provision (expect "201"), then per-stamp
+      seeding — `…-spec` for the real spec (expect 4 passed), `…-live` for the presenter
+      journey, `…-cap` for the capture — three fresh stamps never reused across steps.
 - [ ] Captures land inside the pinned worktrees: note the head SHA beside each generated PNG
       (T1 at `e69f3750`, T2 at `b3cac750`).
 - [ ] T3 shows the fixture banner; T2 walks the capture images as fixtures, never backend.
@@ -170,7 +194,8 @@ not marked passed by this document alone — someone must execute it and record 
 | Symptom | Cause | Recovery |
 | --- | --- | --- |
 | Ports clash / db recreated on wrong port | missing `WEB_PORT/API_PORT/POSTGRES_PORT` flags | stop the project, redo every compose call WITH the flags |
-| E2E container loses web reachability | compose.e2e.yaml overlay strips published ports | `docker compose -p sre-agent-37 up -d db api web` (no overlay) restores them |
+| E2E container loses web reachability | compose.e2e.yaml overlay strips published ports | re-up WITHOUT the overlay: `docker compose -p sre-agent-37 up -d db api web`; in a new shell prefix `WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439` — the `.env` defaults (55433/8000/8080) recreate the db onto a port the main `sre-agent` stack already owns |
+| Start / double-click tests fail with `#run-start` hidden | the stamped incidents already carry runs from an earlier rehearsal on this volume | seed and run the affected steps with a NEW `SEED_STAMP` (`…-spec` / `…-live` / `…-cap` per T1 below); never delete data, never use `down -v` |
 | Real spec fails once cold | first-run transient recorded on an untouched test | rerun once; second failure = inspect honestly, do not hand-wave |
 | `.env` key missing | operator lacks a secret | stop and pull the authorized `.env`; never echo keys |
 | Cross-view navigation quirks (war room → decisions/postmortem back-link, per-tab credential) | pre-#486/#654 state in these checkouts | use the deep-links of this guide; note #654 (Mario) is open, not merged |
