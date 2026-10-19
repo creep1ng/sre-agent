@@ -6,6 +6,11 @@ import {
   STATE_DESCRIPTIONS,
   stateLabel,
 } from "/public/console/incident-vocabulary.js";
+import {
+  evidenceItem,
+  hypothesisBlock,
+  readReasoning,
+} from "/public/console/incident-reasoning.js";
 import { hrefFor } from "/public/console/routes.js";
 import { mountedView } from "/public/console/view.js";
 
@@ -131,6 +136,15 @@ function cacheNodes() {
     "timeline-empty",
     "load-more",
     "refresh-button",
+    "reasoning-section",
+    "reasoning-forbidden",
+    "reasoning-unavailable",
+    "reasoning-empty",
+    "hypothesis-block",
+    "hypothesis-content",
+    "evidence-block",
+    "evidence-title",
+    "evidence-list",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -159,6 +173,7 @@ function hideAll() {
     "error-409",
     "error-503",
     "summary-section",
+    "reasoning-section",
     "timeline-section",
   ].forEach((id) => {
     nodes[id].hidden = true;
@@ -186,6 +201,7 @@ function newGeneration() {
 }
 
 function clearSessionData() {
+  renderReasoning(null);
   nodes["timeline-list"].replaceChildren();
   nodes["timeline-context"].textContent = "";
   nodes["load-more"].disabled = false;
@@ -518,6 +534,41 @@ function renderRunState(runState) {
   nodes["run-state"].hidden = false;
 }
 
+// What the incident recorded from the investigation, only for run.read_context readers (the
+// mitigation is read and decided in Decisiones). A refusal or a failed read is its own state
+// inside the panel; the rest of the view stands.
+function renderReasoning(result) {
+  [
+    "reasoning-forbidden", "reasoning-unavailable", "reasoning-empty",
+    "hypothesis-block", "evidence-block",
+  ].forEach((id) => {
+    nodes[id].hidden = true;
+  });
+  ["hypothesis-content", "evidence-list"].forEach((id) => {
+    nodes[id].replaceChildren();
+  });
+  nodes["reasoning-section"].hidden = result === null;
+  if (result === null) return;
+  if (result.kind !== "ok") {
+    nodes[result.kind === "forbidden" ? "reasoning-forbidden" : "reasoning-unavailable"].hidden = false;
+    return;
+  }
+  const hypotheses = result.reasoning.hypotheses.filter((item) => item && typeof item === "object");
+  const evidence = result.reasoning.evidence.filter((item) => item && typeof item === "object");
+  let cited = new Set();
+  if (hypotheses.length === 0) {
+    nodes["reasoning-empty"].hidden = false;
+  } else {
+    const { block, current } = hypothesisBlock(hypotheses);
+    cited = new Set(Array.isArray(current.supporting_evidence) ? current.supporting_evidence : []);
+    nodes["hypothesis-content"].append(block);
+    nodes["hypothesis-block"].hidden = false;
+  }
+  evidence.forEach((item) => nodes["evidence-list"].append(evidenceItem(item, cited)));
+  nodes["evidence-title"].textContent = `Evidencia recolectada (${evidence.length})`;
+  nodes["evidence-block"].hidden = evidence.length === 0;
+}
+
 let runActionInFlight = false;
 
 function showRunActionError(error) {
@@ -618,6 +669,7 @@ async function loadAll() {
         if (!(error instanceof ApiClientError) || error.status !== 404) throw error;
       }
     }
+    const reasoning = runId === null ? null : await readReasoning(client, state.incidentId, runId);
 
     if (generation !== state.generation) return;
     state.runId = runId;
@@ -629,6 +681,7 @@ async function loadAll() {
     renderEvents(timeline.events ?? []);
     view.focusIncident(detail, runId);
     renderRunState(runState);
+    renderReasoning(reasoning);
     nodes["run-start"].hidden = state.incidentState !== "active";
     nodes["run-start"].disabled = runActionInFlight;
     nodes["run-resume"].disabled = runActionInFlight;

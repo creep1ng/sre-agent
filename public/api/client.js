@@ -377,6 +377,12 @@ export function createAdministrativeApiClient({
         `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}`,
       );
     },
+    // Sensitive context (run.read_context): turns and the incident's recorded reasoning.
+    getRunContext(incidentId, runId) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/context`,
+      );
+    },
     listRunEvents(incidentId, runId, { after, limit } = {}) {
       const params = new URLSearchParams();
       if (after) params.set("after", after);

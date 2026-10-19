@@ -128,6 +128,41 @@
         </section>
       </section>
 
+      <section id="reasoning-section" class="ma-panel reasoning" aria-labelledby="reasoning-title" hidden>
+        <div class="ma-panel__header">
+          <div>
+            <h2 id="reasoning-title" class="ma-panel__title">Razonamiento del agente</h2>
+            <p class="ma-panel__description">
+              Lo que el agente registró en el incidente: la hipótesis actual y la evidencia que reunió.
+            </p>
+          </div>
+        </div>
+        <div id="reasoning-forbidden" class="ma-alert reasoning__notice" data-tone="warning" hidden>
+          <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+          <div>
+            <p class="ma-alert__title">Sin permiso para ver el razonamiento</p>
+            <p class="ma-alert__detail">
+              Esta identidad sigue el run, pero no tiene <code>run.read_context</code>: la
+              hipótesis, la evidencia y la mitigación no se muestran.
+            </p>
+          </div>
+        </div>
+        <p id="reasoning-unavailable" class="ma-muted reasoning__notice" hidden>
+          No se pudo leer el razonamiento del agente. Reintenta con Actualizar.
+        </p>
+        <p id="reasoning-empty" class="ma-muted reasoning__notice" hidden>
+          El agente todavía no registra una hipótesis para este incidente.
+        </p>
+        <section id="hypothesis-block" class="war-room__section" hidden>
+          <h3>Hipótesis actual</h3>
+          <div id="hypothesis-content"></div>
+        </section>
+        <section id="evidence-block" class="war-room__section" hidden>
+          <h3 id="evidence-title">Evidencia recolectada</h3>
+          <ol id="evidence-list" class="reasoning__evidence-list"></ol>
+        </section>
+      </section>
+
       <section id="timeline-section" class="ma-panel war-room__timeline" hidden>
         <div class="ma-panel__header">
           <div>
