@@ -22,6 +22,7 @@ from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import Principal
 from sre_agent.incident.persistence import IncidentStaleWriteError, IncidentUnitOfWork
 from sre_agent.incident.postmortem import (
+    REVIEW_OUTCOMES,
     InvalidPostmortemError,
     PostmortemRecord,
     validate_content,
@@ -31,9 +32,16 @@ from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
 
-WRITE_ACTION = "run.command"
+WRITE_ACTION, REVIEW_ACTION, READ_ACTION, CONTENT_ACTION = (
+    "run.command",
+    "run.approve",
+    "run.read",
+    "run.read_context",
+)
+MAX_COMMENT = 2000
 DENIED = ("not_authorized", "The principal is not authorized for this postmortem operation.")
 NOT_OPEN = ("postmortem_not_open", "The incident is not in the postmortem state.")
+NOT_FOUND = ("postmortem_not_found", "The incident has no persisted postmortem.")
 CONFLICT = ("postmortem_version_conflict", "The postmortem changed; reload the current version.")
 UNKNOWN_EVENT = ("unknown_event_reference", "A cited event does not exist in this incident.")
 
@@ -157,6 +165,72 @@ class PostmortemService:
         assert record is not None
         return JSONResponse(project(record, with_content=False), 201 if version == 0 else 200)
 
+    async def review(self, incident_id: str, body: Any, authorization: str | None) -> JSONResponse:
+        request_id = uuid4()
+        version = body.get("version") if isinstance(body, dict) else None
+        comment = body.get("comment") if isinstance(body, dict) else None
+        if (
+            re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None
+            or not isinstance(body, dict)
+            or not {"version", "outcome"} <= set(body) <= {"version", "outcome", "comment"}
+            or type(version) is not int
+            or version < 1
+            or body["outcome"] not in REVIEW_OUTCOMES
+            or (
+                comment is not None and (not isinstance(comment, str) or len(comment) > MAX_COMMENT)
+            )
+        ):
+            return error_envelope(request_id, 422)
+        principal, error = await self._human(request_id, authorization, REVIEW_ACTION)
+        if error is not None:
+            return error
+        assert principal is not None
+        try:
+            async with self.units() as work:
+                record = await work.postmortems.get(incident_id, lock=True)
+                incident = await work.incidents.get(incident_id)
+                if incident is None:
+                    return error_envelope(request_id, 404)
+                if incident.state.get("state") != "postmortem":
+                    return error_envelope(request_id, 409, NOT_OPEN)
+                if record is None:
+                    return error_envelope(request_id, 404, NOT_FOUND)
+                if record.version != version:
+                    return error_envelope(request_id, 409, CONFLICT)
+                await work.postmortems.review(
+                    record.postmortem_id,
+                    version=version,
+                    outcome=body["outcome"],
+                    reviewer_id=principal.principal_id,
+                    comment=comment,
+                    now=self.clock(),
+                )
+                record = await work.postmortems.get(incident_id)
+        except Exception:
+            return error_envelope(request_id, 503)
+        assert record is not None
+        return JSONResponse(project(record, with_content=False), 201)
+
+    async def read(self, incident_id: str, authorization: str | None) -> JSONResponse:
+        request_id = uuid4()
+        if re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None:
+            return error_envelope(request_id, 422)
+        _, allowed, error = await self._principal(
+            request_id, authorization, (READ_ACTION, CONTENT_ACTION)
+        )
+        if error is not None:
+            return error
+        try:
+            async with self.units() as work:
+                if await work.incidents.get(incident_id) is None:
+                    return error_envelope(request_id, 404)
+                record = await work.postmortems.get(incident_id)
+        except Exception:
+            return error_envelope(request_id, 503)
+        if record is None:
+            return error_envelope(request_id, 404, NOT_FOUND)
+        return JSONResponse(project(record, with_content=CONTENT_ACTION in allowed), 200)
+
 
 def postmortems_router(service: PostmortemService) -> APIRouter:
     router = APIRouter()
@@ -168,5 +242,17 @@ def postmortems_router(service: PostmortemService) -> APIRouter:
         except ValueError:
             body = None
         return await service.write(incident_id, body, request.headers.get("authorization"))
+
+    @router.post("/v1/incidents/{incident_id}/postmortem/reviews")
+    async def review_postmortem(incident_id: str, request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+        except ValueError:
+            body = None
+        return await service.review(incident_id, body, request.headers.get("authorization"))
+
+    @router.get("/v1/incidents/{incident_id}/postmortem")
+    async def read_postmortem(incident_id: str, request: Request) -> JSONResponse:
+        return await service.read(incident_id, request.headers.get("authorization"))
 
     return router

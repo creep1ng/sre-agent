@@ -189,6 +189,14 @@ def _put(content: Any, expected_version: int, who: str = "demo") -> Any:
     )
 
 
+def _review(version: int, outcome: str = "approved", **extra: Any) -> Any:
+    return _client().post(
+        f"/v1/incidents/{INCIDENT_ID}/postmortem/reviews",
+        json={"version": version, "outcome": outcome, **extra},
+        headers=_headers(),
+    )
+
+
 def test_resolved_to_postmortem_reserves_the_artifact_id() -> None:
     asyncio.run(_transition("verification_passed", FACTS["verify_run"], outcome="stable"))
     assert _incident()[0]["state"] == "resolved"
@@ -239,7 +247,7 @@ def test_citations_must_name_real_events_of_this_incident() -> None:
     assert _sql("SELECT count(*) FROM incident.postmortems") == [(0,)]
 
 
-def test_create_stores_the_reserved_id_and_a_retry_does_not_duplicate() -> None:
+def test_create_survives_a_restart_and_a_retry_does_not_duplicate() -> None:
     content = _content(FACTS["verified_event"], FACTS["started_event"])
     created = _put(content, 0)
     assert created.status_code == 201, created.text
@@ -249,6 +257,10 @@ def test_create_stores_the_reserved_id_and_a_retry_does_not_duplicate() -> None:
     assert body["updated_by"] == "demo-human" and "content" not in body
 
     assert _put(content, 0).status_code == 409  # retried create: no second artifact
+    reread = _client().get(f"/v1/incidents/{INCIDENT_ID}/postmortem", headers=_headers())
+    assert reread.status_code == 200
+    assert (reread.json()["postmortem_id"], reread.json()["version"]) == (FACTS["pm_id"], 1)
+    assert reread.json()["content"] == content
     assert _sql("SELECT count(*) FROM incident.postmortems") == [(1,)]
 
 
@@ -259,3 +271,47 @@ def test_a_stale_edit_conflicts_and_a_current_one_advances() -> None:
     assert stale.status_code == 409
     assert stale.json()["error"]["code"] == "postmortem_version_conflict"
     assert _sql("SELECT max(version) FROM incident.postmortem_revisions") == [(2,)]
+
+
+def test_progress_readers_get_no_text_and_cannot_write() -> None:
+    seen = _client().get(f"/v1/incidents/{INCIDENT_ID}/postmortem", headers=_headers("watcher"))
+    assert seen.status_code == 200
+    assert seen.json()["content_included"] is False and "content" not in seen.json()
+    for fragment in ("Checkout", "timeout", "revenue", "config"):
+        assert fragment not in seen.text
+    assert _put(_content(FACTS["verified_event"], FACTS["started_event"]), 2, "watcher").status_code == 403  # noqa: E501  # fmt: skip
+
+
+def test_close_requires_an_approved_review_of_the_current_version() -> None:
+    assert _review(1).status_code == 409  # the reviewer saw an older version
+    assert _review(2, reviewer_id="admin-human").status_code == 422
+    approved = _review(2, comment="Accurate and complete.")
+    assert approved.status_code == 201
+    review = approved.json()["review"]
+    assert (review["status"], review["reviewed_version"]) == ("approved", 2)
+    assert review["reviewer_id"] == "demo-human"
+    # Editing after the review voids it for the new version.
+    assert _put(_content(FACTS["verified_event"], FACTS["started_event"]), 2).status_code == 200
+    state, version = _incident()
+    with pytest.raises(PreconditionFailedError):
+        asyncio.run(
+            _transition(
+                "close_incident", FACTS["pm_run"], approval=True, expected_incident_version=version
+            )  # noqa: E501  # fmt: skip
+        )
+    assert _incident() == (state, version)
+
+    assert _review(3).status_code == 201
+    asyncio.run(
+        _transition(
+            "close_incident", FACTS["pm_run"], approval=True, expected_incident_version=version
+        )  # noqa: E501  # fmt: skip
+    )
+    assert _incident()[0]["state"] == "closed"
+    approval = _sql(
+        "SELECT document->'approval' FROM incident.decisions WHERE incident_id=%s "
+        "AND document->>'transition_id'='close_incident'",
+        INCIDENT_ID,
+    )[0][0]
+    assert (approval["postmortem_id"], approval["postmortem_version"]) == (FACTS["pm_id"], 3)
+    assert approval["actor_reference"]["principal_id"] == "demo-human"

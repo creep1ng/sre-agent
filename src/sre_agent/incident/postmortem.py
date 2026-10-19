@@ -15,6 +15,7 @@ from typing import Any
 MAX_TEXT = 4000
 MAX_ITEMS = 50
 CERTAINTY = frozenset({"confirmed", "probable", "hypothesis", "unknown"})
+REVIEW_OUTCOMES = frozenset({"approved", "changes_requested"})
 EVENT_ID_PATTERN = r"^evt_[a-z0-9_-]{1,60}$"
 # The #43 CA2 minimum. Every section is required; what is not known is declared
 # in `unknowns` or graded `unknown`, never left out.

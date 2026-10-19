@@ -114,3 +114,27 @@ class PostgresPostmortemRepository:
             {**values, "content": json.dumps(content, sort_keys=True), "actor_id": actor_id},
         )
         return version
+
+    async def review(
+        self,
+        postmortem_id: str,
+        *,
+        version: int,
+        outcome: str,
+        reviewer_id: str,
+        comment: str | None,
+        now: datetime,
+    ) -> None:
+        await self._session.execute(
+            text("""INSERT INTO incident.postmortem_reviews
+              (postmortem_id, version, outcome, reviewer_id, comment, reviewed_at)
+              VALUES (:postmortem_id, :version, :outcome, :reviewer_id, :comment, :now)"""),
+            {
+                "postmortem_id": postmortem_id,
+                "version": version,
+                "outcome": outcome,
+                "reviewer_id": reviewer_id,
+                "comment": comment,
+                "now": now,
+            },
+        )
