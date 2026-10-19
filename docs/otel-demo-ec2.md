@@ -188,9 +188,9 @@ With `fail` applied, Place Order leaves you on the cart (`POST /api/checkout`
 answers 500; the store shows no error banner). After `reset` it reaches
 "Your order is complete!". With a console session, the Alertas view polls
 `GET /v1/alerts` every 15 s; the rule reads a 2-minute window of span metrics
-that reach Prometheus about once a minute, so `checkout payment calls failing`
-appears one to two minutes after `fail` and clears two to three minutes after
-`reset`.
+that reach Prometheus about once a minute. Measured on 2026-10-19:
+`checkout payment calls failing` fired about 70 s after the first failed payment
+and cleared about 95 s after `reset`.
 
 ## AWS references
 
