@@ -277,13 +277,18 @@ class IncidentRuntime:
         except InvalidWorkflowError as error:
             raise InvalidTransitionError(str(error)) from error
         self._validate(command, transition, incident.state, incident.version)
+        postmortem_version = None
+        if transition.transition_id == "close_incident":
+            postmortem_version = await self._reviewed_postmortem_version(work, incident)
         now = self._clock()
         incident_state, run_state = self._reduce(
             command, transition, incident.state, run.state, now
         )
         decision = DecisionDraft(
             decision_id=self._id_factory("dec"),
-            document=self._decision_document(command, transition, now, incident.state),
+            document=self._decision_document(
+                command, transition, now, incident.state, postmortem_version
+            ),
             decided_at=now,
             run_id=command.run_id,
             turn_id=command.turn_id,
@@ -531,6 +536,24 @@ class IncidentRuntime:
             ):
                 raise PreconditionFailedError("close_incident requires an identified postmortem")
 
+    async def _reviewed_postmortem_version(
+        self, work: IncidentUnitOfWork, incident: IncidentRecord
+    ) -> int:
+        """The `pm_` id in the state is a reservation, not proof: read the durable artifact.
+
+        The row lock makes an edit landing during the close wait, so the approval
+        recorded below always names the version a human actually reviewed.
+        """
+
+        record = await work.postmortems.get(incident.incident_id, lock=True)
+        if record is None or record.postmortem_id != incident.state["postmortem"]["postmortem_id"]:
+            raise PreconditionFailedError("close_incident requires the persisted postmortem")
+        if not record.approved:
+            raise PreconditionFailedError(
+                "close_incident requires an approved review of the current postmortem version"
+            )
+        return record.version
+
     @staticmethod
     def _artifact_id(value: Any, prefix: str) -> bool:
         return (
@@ -553,6 +576,10 @@ class IncidentRuntime:
         if not isinstance(patch, Mapping) or not set(patch) <= allowed_patch:
             raise PreconditionFailedError("incident_patch contains unsupported fields")
         incident.update(patch)
+        if transition.transition_id == "start_postmortem" and not incident.get("postmortem"):
+            # Reserve the artifact identity with the transition, so every path into
+            # `postmortem` (run objective or command) leaves the id close_incident reads.
+            incident["postmortem"] = {"postmortem_id": self._id_factory("pm")}
         incident["state"] = transition.target
         incident["updated_at"] = now.isoformat()
         if transition.target in self._DECLARED_STATES:
@@ -626,6 +653,7 @@ class IncidentRuntime:
         transition: Transition,
         now: datetime,
         incident_state: Mapping[str, Any],
+        postmortem_version: int | None = None,
     ) -> dict[str, Any]:
         outcome = command.outcome or (transition.outcomes[0] if transition.outcomes else None)
         actor_reference = asdict(command.actor_reference) if command.actor_reference else None
@@ -643,6 +671,7 @@ class IncidentRuntime:
             elif transition.transition_id == "close_incident":
                 postmortem = incident_state["postmortem"]
                 approval["postmortem_id"] = postmortem["postmortem_id"]
+                approval["postmortem_version"] = postmortem_version
         return {
             "workflow_id": self._workflow.workflow_id,
             "workflow_version": self._workflow.version,

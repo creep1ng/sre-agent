@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Protocol, Self
 
+from sre_agent.incident.postmortem import PostmortemRecord
+
 JsonDocument = Mapping[str, Any]
 
 
@@ -164,6 +166,10 @@ class DecisionRepository(Protocol):
     async def get(self, decision_id: str) -> DecisionRecord | None: ...
 
 
+class PostmortemRepository(Protocol):
+    async def get(self, incident_id: str, *, lock: bool = False) -> PostmortemRecord | None: ...
+
+
 class IncidentUnitOfWork(Protocol):
     @property
     def incidents(self) -> IncidentRepository: ...
@@ -182,6 +188,9 @@ class IncidentUnitOfWork(Protocol):
 
     @property
     def decisions(self) -> DecisionRepository: ...
+
+    @property
+    def postmortems(self) -> PostmortemRepository: ...
 
     async def __aenter__(self) -> Self: ...
 
