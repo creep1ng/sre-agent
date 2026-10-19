@@ -28,6 +28,24 @@ def demo_grants():
             "resource": workflow,
             "effect": "allow",
         }
+    # The operator approves a mitigation it can read: the reasoning (hypothesis, evidence,
+    # mitigation) and the postmortem text are behind run.read_context, apart from run.read.
+    # The postmortem draft asks the model as the operator, through the triage-agent alias.
+    for grant_id, action, resource in (
+        ("grant-demo-human-run-read-context-incident-response", "run.read_context", workflow),
+        (
+            "grant-demo-human-invoke-triage-agent",
+            "invoke",
+            {"resource_type": "llm_model", "resource_id": "triage-agent"},
+        ),
+    ):
+        yield {
+            "grant_id": grant_id,
+            "principal_id": "demo-human",
+            "action": action,
+            "resource": resource,
+            "effect": "allow",
+        }
     for action, kind, resource in (
         ("mcp.discovery", "mcp_server", "grafana-mcp"),
         ("mcp.invoke", "mcp_tool", "query_prometheus"),
@@ -40,6 +58,18 @@ def demo_grants():
             "resource": {"resource_type": kind, "resource_id": resource},
             "effect": "allow",
         }
+
+
+async def _already_active(service, body):
+    """The same authority is already active, whatever grant id an operator gave it by hand."""
+    from sre_agent.persistence.repositories import GrantRepository
+
+    resource = body["resource"]
+    async with service.sessions() as session:
+        found = await GrantRepository(session).find_active(
+            body["principal_id"], body["action"], resource["resource_type"], resource["resource_id"]
+        )
+    return found is not None
 
 
 async def provision_demo(service, bearer):
@@ -69,8 +99,12 @@ async def provision_demo(service, bearer):
         raise RuntimeError("workflow provisioning conflict; inspect existing workflow/grants")
     for body in demo_grants():
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
-        if response.status_code != 201 or not await _granted(service, body):
-            raise RuntimeError("demo grant conflict: " + body["grant_id"])
+        if response.status_code == 201 and await _granted(service, body):
+            continue
+        # 409: the authority exists already. Active is convergence; revoked fails closed.
+        if response.status_code == 409 and await _already_active(service, body):
+            continue
+        raise RuntimeError("demo grant conflict: " + body["grant_id"])
 
 
 async def main():

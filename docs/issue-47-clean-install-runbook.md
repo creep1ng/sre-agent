@@ -274,18 +274,21 @@ and registers the demo MCP server, its two tools and the `demo-human` MCP grants
 which is the governed registry the MCP read path needs (the complete J7 run
 additionally requires the MCP/OTel overlay from the setup guide). The second prints
 `demo permissions converged; restricted identity unchanged` and adds the
-`incident-response` workflow catalog plus 12 grants through the governed API: 4
-`run.*` and the 5 triage actions (`alert.read`, `alert.triage`, `alert.dismiss`,
-`alert.associate`, `incident.declare`) for `demo-human`, and 3 MCP grants for
-`incident-harness`. Check the count evolution (16 core, 19 after the MCP seed, 31
-after provisioning) and the active `demo-human` grants:
+`incident-response` workflow catalog plus 14 grants through the governed API: 5
+`run.*` (including `run.read_context`, so the operator reads the hypothesis, evidence,
+mitigation and postmortem text it approves), `invoke` on the `triage-agent` alias (the
+postmortem draft) and the 5 triage actions (`alert.read`, `alert.triage`,
+`alert.dismiss`, `alert.associate`, `incident.declare`) for `demo-human`, and 3 MCP
+grants for `incident-harness`. A grant someone already created by hand for the same
+authority converges; a revoked one fails closed. Check the count evolution (16 core, 19
+after the MCP seed, 33 after provisioning) and the active `demo-human` grants:
 
 ```sh
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM grants"'
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM grants WHERE principal_id = '\''demo-human'\'' AND status = '\''active'\''"'
 ```
 
-Expected: `31` and `12`. Both commands are safe to rerun; the provisioners converge
+Expected: `33` and `14`. Both commands are safe to rerun; the provisioners converge
 instead of duplicating. Now prove triage no longer answers 403 for the demo key
 (the base install answers `403` here):
 
