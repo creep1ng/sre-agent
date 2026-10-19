@@ -6,12 +6,16 @@ stronger claims. Demo slice ownership: T1 investigation (Daniel, #37/#651/#652),
 (Daniel, #41/#653), T3 postmortem slice (producer Camilo, consumer Daniel, #43/#335).
 
 **Hard rule at the podium:** the T2 fixture surface and the T3 view do not prove a backend
-behavior. Say so before showing them. As of October 17, 17:41 COT the command contract
-`run-command:2.1.0` is unpublished; on the release-candidate exploration (recorded in issue
-#42/#52 vs `main aa789d9c`) the commands `verification_passed` and `close_incident` return
-**422** on the published envelope `run-command:2.0.0`. If Camilo publishes the contract
-before the demo: check the new SHA, rerun the affected commands once real, and update this
-runbook with that evidence — never swap the script silently.
+behavior. Say so before showing them. The command contract `run-command:2.1.0` is published
+for review only, as PR #658 (`feat/run-command-verification-close` @ `d2ef2597`); it is not
+merged to `main`, whose tip shows no 2.1.0 schema. #653 is now rebased onto that branch
+(head `00a2056e`) and its UI-payload guard already points at
+`agent/schemas/run-command-2.1.0.schema.yaml`. On `main` the commands still answer on the
+published envelope `run-command:2.0.0` — the October 17, 17:41 COT exploration (recorded in
+issue #42/#52 vs `main aa789d9c`) got **422** for `verification_passed` and `close_incident`.
+If the contract merges before the demo: check the merged `main` SHA, rerun the affected
+commands once real, and update this runbook with that evidence — never swap the script
+silently.
 
 **Authoring limitation:** this runbook was assembled from the runs recorded in the cited
 evidence; it was NOT re-executed end to end from a clean checkout while authoring. The
@@ -22,12 +26,24 @@ checklist passed until someone executes it and records the actual outputs.
 
 ```sh
 git fetch origin
-git worktree add ../sre-demo-37 e69f3750f59709d223f50864fb5b89c8d8edb0eb   # T1, PR #652 head
-git worktree add ../sre-demo-41 b3cac7500425ab7d84b142e5c667153b1df360ec  # T2, PR #653 head
+git worktree add ../sre-demo-37 7d45039f3f0eb683c89f198338d0bb5e1531b6eb   # T1, PR #652 head
+git worktree add ../sre-demo-41 b3cac7500425ab7d84b142e5c667153b1df360ec  # T2, PR #653 recorded-fixture sha
 # T3 uses the T1 checkout (its postmortem view equals main's at that SHA).
 docker compose --profile checks build python-checks
 docker compose --profile e2e build e2e
 ```
+
+Run the two `git worktree add` lines from the main clone `$HOME/sre-agent`, so `../sre-demo-37`
+and this guide's `$HOME/sre-demo-37` resolve to the same physical checkouts. Pin
+reconciliation, verified October 18, 22:01 COT: the old T1 pin `e69f3750` was replaced by
+PR #652's current head `7d45039f` — the war-room journey files (`public/incident-ui/war-room.html`,
+`public/incident-ui/war-room.js`, `scripts/seed_war_room_runs.py`,
+`tests/browser/war-room-runs-real.spec.js`, `scripts/capture_issue37_war_room_runs.mjs`)
+are byte-identical to the tree revalidated that same day (`f8d72303`; record linked in the
+evidence index), and both `sre-demo-37-*:latest` images were rebuilt at the new pin. The T2
+pin keeps the recorded-fixture SHA `b3cac750`: PR #653's review head `00a2056e` (rebased onto
+the unmerged contract PR #658, `d2ef2597`) does not change the fixture capture spec or the
+seven fixture states.
 
 Run the image builds from each worktree (`docker compose --profile checks build python-checks`
 and `docker compose --profile e2e build e2e`); the images have no fixed tag, they are named
@@ -58,8 +74,8 @@ and `RESTRICTED_HARNESS_API_KEY` — compose interpolation carries them into the
 # Run from anywhere. Compare the real check-out SHAs; stop on any mismatch.
 a37=$(git -C "$HOME/sre-demo-37" rev-parse HEAD) || exit 1
 case "$a37" in
-  e69f3750*) echo "T1 checkout OK: $a37 (expected e69f3750...)" ;;
-  *) echo "T1 checkout DIFFERS: got $a37, expected e69f3750... - identify what changed before continuing"; exit 1 ;;
+  7d45039f*) echo "T1 checkout OK: $a37 (current #652 head; the old runbook pin e69f3750 is obsolete)";;
+  *) echo "T1 checkout UNEXPECTED: got $a37, expected 7d45039f (the current #652 head) - identify what changed before continuing"; exit 1 ;;
 esac
 a41=$(git -C "$HOME/sre-demo-41" rev-parse HEAD) || exit 1
 case "$a41" in
@@ -101,11 +117,12 @@ echo "Ports: all four free (8091 web / 8011 api / 5439 postgres / 4173 e2e-stati
 [ -f "$HOME/sre-demo-41/.env" ] && echo "T2 .env present" || { echo "T2 .env missing - pull the authorized one; never echo keys"; exit 1; }
 ```
 
-## T1 — real investigation (#652 head `e69f3750`)
+## T1 — real investigation (#652 head `7d45039f`)
 
 **Monday stamps — the rehearsal stamps are consumed.** The stamps the October-18 rehearsals
 already seeded and exercised — `2026-10-19-spec`, `2026-10-19-live` and `2026-10-19-cap`,
-plus their `-r2` variants — carry persisted runs on the demo volume, so reusing any of them
+plus their `-r2` variants and the October-18 19:25 COT revalidation's `-rb` set
+(`…-spec-rb`, `…-probe-rb`, `…-cap-rb`) — carry persisted runs on the demo volume, so reusing any of them
 fails by design (`#run-start` hidden for the real spec, runs already attached to the
 presenter journey). For the demo use the fresh stamps `2026-10-19-spec-mon`,
 `2026-10-19-live-mon` and `2026-10-19-cap-mon`, verified against the seed script's required
@@ -113,7 +130,8 @@ pattern `^[a-z0-9-]{4,32}$`; the commands below already carry them. Keep each st
 its own step, coherent between its seed and the spec, journey or capture executed against
 it. If another rehearsal consumes the `-mon` stamps too, seed with a different, unused
 suffix — never delete volumes or data to force clean incidents. The `-mon` sequence has not
-been executed yet; its first real run is the Monday flow itself.
+been executed yet; its first real run is the Monday flow itself (still unused as of Sunday
+October 18, 22:01 COT).
 
 Run from `../sre-demo-37`. Every independent Compose invocation of project `sre-agent-37`
 must carry the port overrides ON the command line —
@@ -164,7 +182,7 @@ WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --
   python-checks python scripts/seed_war_room_runs.py
 # 6) Seed the capture's own stamp, then capture (the script waits for #run-start
 #    visible and derives inc-37-start-<stamp> from SEED_STAMP; evidence lands in
-#    this checkout at SHA e69f3750).
+#    this checkout at SHA 7d45039f).
 WEB_PORT=8091 API_PORT=8011 POSTGRES_PORT=5439 docker compose -p sre-agent-37 --profile checks run --rm \
   -e DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}" \
   -e SEED_STAMP=2026-10-19-cap-mon \
@@ -193,10 +211,11 @@ then reload the tab — the created run stays selected (the real spec asserts th
 `inc-37-double-2026-10-19-live-mon` demonstrates the double-click idempotence; `inc-37-restricted-2026-10-19-live-mon`
 with the restricted key shows the 403 with no success state.
 
-**Real-recorded vs not:** start with reload persistence, double-click idempotence and the
-restricted 403 are real (spec, containerized). **Resuming an existing investigation run and a
-409 conflict stay covered by mock specs only** — say it if asked; do not demo them as backend
-behavior. #42's exploration additionally observed that with the LLM disabled a run ends
+**Real-recorded vs not:** start with reload persistence, double-click idempotence, the
+restricted 403 and the spec's own 404/401 case are real (spec, containerized; revalidated on
+the `-spec-rb` stamp October 18 — record in the evidence index). **Resuming an existing
+investigation run and a 409 conflict stay covered by mock specs only** — say it if asked; do
+not demo them as backend behavior. #42's exploration additionally observed that with the LLM disabled a run ends
 `unknown / investigation_needs_human` while still `running` — the investigation strip of the
 T1 branch does not change that (out of demo scope; known presenter answer below).
 
@@ -213,7 +232,7 @@ restart survival, no versioning, no human review recorded** — the producer (Ca
 persisted artifact contract; consumer-side work cannot assume a transport. No file edits make
 this view "real"; it stays fixture by design.
 
-## T2 — decisions as fixtures (#653 head `b3cac750`)
+## T2 — decisions as fixtures (recorded-fixture sha `b3cac750`; review head `00a2056e`)
 
 Run from `../sre-demo-41`. This produces fresh fixture captures and screenshots of the UI
 states — it does **not** touch any backend. The seven PNGs already committed at this SHA are
@@ -237,7 +256,9 @@ approval unchecked with the submit disabled; `conflict` shows the 409 alert; `co
 shows version 8 with the reason preserved and the approval unmarked. Podium sentences:
 
 - "This is the sanctioned contract state gating, proved with fixtures; the transport is not
-  exercised — on `main e5c542d7` these commands return 422 (recorded run in issue #42)."
+  exercised — on the recorded exploration base `main aa789d9c` these commands return 422
+  (recorded run in issue #42); the merged-main situation is unchanged while PR #658 stays
+  unmerged."
 - If the contract landed: run one real command from the ticketed checkout and replace this
   table row after that run; do not silently reuse the fixture captures.
 - Do not open `review.html` directly in the podium browser: without the capture script's route
@@ -256,7 +277,7 @@ not marked passed by this document alone — someone must execute it and record 
       passed), `…-live` for the presenter journey, `…-cap` for the capture — three fresh
       stamps never reused across steps.
 - [ ] Captures land inside the pinned worktrees: note the head SHA beside each generated PNG
-      (T1 at `e69f3750`, T2 at `b3cac750`).
+      (T1 at `7d45039f`, T2 at `b3cac750`).
 - [ ] T3 shows the fixture banner; T2 walks the capture images as fixtures, never backend.
 - [ ] Record actual outputs and any failure verbatim (time, command, output); anything that
       deviates from this runbook enters the demo notes for Monday; old runs are never
@@ -273,6 +294,16 @@ all seven fixture captures tagged `fixture: "mocked-backend"` and T3 showed the 
 banner with `pm_demo0001 · draft`. The recovery does not excuse the failure above: the flow
 as amended NOW is what the Monday operator executes, and this runbook is only declared
 reproducible after that corrected flow runs end to end.
+
+A second pass of the same flow — the T1 revalidation — ran October 18, 19:25–19:36 COT at the
+#652 head (tested tree `f8d72303`, head `7d45039f`): real spec 4 passed in 10.1 s on
+`-spec-rb`; probes started a run (`201`), replayed the same POST with the same
+`Idempotency-Key` (`200`, identical `run_id`, no second run), read the incident (`200`), got
+the restricted harness `403` without leaking run ids, and the unknown-incident `404`; the
+captured run was `run_700e2780f1e2cd15` and the PNG is in the evidence index; cleanup at
+19:36 COT freed the ports without `-v`. That record separates its own two recovered
+infrastructure incidents (a missing `.env`, then two compose calls without the inline port
+prefixes) from the successful result. The `-mon` stamps stayed untouched through all of it.
 
 ## Contingencies and known limits
 
@@ -304,7 +335,16 @@ PO requests them.
 - T1 real-spec record: `https://github.com/creep1ng/sre-agent/actions/runs/39003786122` (4 passed in 7.8 s, run ids recorded in #652).
 - T2 fixtures committed: `https://github.com/creep1ng/sre-agent/blob/b3cac7500425ab7d84b142e5c667153b1df360ec/docs/evidence/41-review-fixtures-postmortem-panel.png` (plus the other six at the same SHA).
 - T1 evidence PNG: `https://github.com/creep1ng/sre-agent/blob/e69f3750f59709d223f50864fb5b89c8d8edb0eb/docs/evidence/37-war-room-run-start.png`.
+- T1 revalidation record (October 18, 19:25–19:36 COT; tested tree `f8d72303`, #652 head
+  `7d45039f`): `https://github.com/creep1ng/sre-agent/blob/7d45039f3f0eb683c89f198338d0bb5e1531b6eb/docs/evidence/37-war-room-runs-revalidated.md`.
+- T1 revalidated capture:
+  `https://github.com/creep1ng/sre-agent/blob/7d45039f3f0eb683c89f198338d0bb5e1531b6eb/docs/evidence/37-war-room-run-start-revalidated.png`
+  (201,803 bytes; sha256 `65bd13d1d4810ca12f887d0bd2610c5c3ee37d6a87b8b0851ae749d1a6d662b0`).
+- Under review, unmerged: `run-command:2.1.0` schema in PR #658 top commit —
+  `https://github.com/creep1ng/sre-agent/blob/d2ef2597c41077923d78edc83c25a4e2724912e4/agent/schemas/run-command-2.1.0.schema.yaml`.
 - Scope decisions: #41 (commands contract) and #335 (postmortem cut), both October 16.
 
 Nothing here claims real-accepted verification/closure criteria for #41/#43: those wait for
-the unpublished `run-command:2.1.0` and the producer's persisted artifact, plus human review.
+the unmerged `run-command:2.1.0` (PR #658) and the producer's persisted artifact (T3
+consumer pending, #335), plus human review. The T3 view stays the `pm_demo0001` fixture until
+that consumer lands.
