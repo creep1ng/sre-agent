@@ -78,6 +78,10 @@
       </section>
       <section id="editor-section" class="ma-panel" hidden>
         <div class="ma-panel__header"><div><h2 class="ma-panel__title">Redactar y guardar</h2><p id="editor-basis" class="ma-panel__description"></p></div></div>
+        <div class="ma-panel__body">
+          <button id="agent-draft" class="ma-button ma-button--secondary" type="button">Generar borrador con el agente</button>
+          <p id="agent-status" role="status" aria-live="polite" hidden></p>
+        </div>
         <form id="editor-form" class="ma-panel__body war-room__form">
           <label class="ma-field" for="pm-summary"><span class="ma-field__label">Resumen</span><textarea id="pm-summary" class="ma-textarea" rows="2"></textarea></label>
           <label class="ma-field" for="pm-impact"><span class="ma-field__label">Impacto conocido</span><textarea id="pm-impact" class="ma-textarea" rows="2"></textarea></label>

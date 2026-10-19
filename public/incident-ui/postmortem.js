@@ -28,6 +28,9 @@ const CODE_MESSAGES = Object.freeze({
   invalid_postmortem: "El contenido no cumple el mínimo del postmortem:",
   unknown_event_reference: "Una cita no corresponde a un evento guardado de este incidente.",
 });
+// The agent drafts through the governed gateway with an existing alias: the caller's grants,
+// consumption and audit apply, and a human still edits, saves and approves (#43 CA1, CA4).
+const AGENT_ALIAS = "triage-agent";
 const FIELDS = ["summary", "impact", "cause", "certainty", "strategy", "timeline", "actions_taken", "verification", "pending", "unknowns"];
 
 const state = { incidentId: null, runId: null, generation: 0, busy: false, startKey: null, baseVersion: 0, notice: null, reviewNotice: null };
@@ -49,6 +52,7 @@ function cacheNodes() {
     "refresh-button", "start-postmortem", "start-status", "editor-section", "editor-form", "editor-basis",
     "save-postmortem", "save-status", ...FIELDS.map((key) => `pm-${key}`), "review-section", "review-title",
     "review-form", "review-comment", "approve-postmortem", "request-changes", "review-status", "close-hint", "decisions-link",
+    "agent-draft", "agent-status",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -58,7 +62,7 @@ function hideAll() {
   [
     "loading-state", "error-missing-id", "error-401",
     "error-403", "error-404", "error-503", "context-section", "artifact-section", "empty-section",
-    "editor-section", "start-status", "save-status", "review-section", "review-status", "close-hint",
+    "editor-section", "start-status", "save-status", "review-section", "review-status", "close-hint", "agent-status",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
@@ -86,7 +90,9 @@ function showKind(error) {
 
 function outcomeMessage(error) {
   if (!(error instanceof ApiClientError)) return "No se pudo confirmar la operación; actualiza antes de reintentar.";
-  const known = CODE_MESSAGES[error.code] ?? "El backend no completó la operación; actualiza antes de reintentar.";
+  const known =
+    CODE_MESSAGES[error.code] ??
+    (error.kind === "authorization" ? CODE_MESSAGES.not_authorized : "El backend no completó la operación; actualiza antes de reintentar.");
   const detail = error.code === "invalid_postmortem" ? ` ${error.message}` : "";
   return `HTTP ${error.status ?? "sin respuesta"}${error.code ? ` · ${error.code}` : ""}. ${known}${detail}`;
 }
@@ -98,7 +104,7 @@ function showStatus(id, text) {
 
 function setBusy(busy) {
   state.busy = busy;
-  ["start-postmortem", "save-postmortem", "approve-postmortem", "request-changes", "refresh-button"].forEach((id) => {
+  ["start-postmortem", "save-postmortem", "approve-postmortem", "request-changes", "agent-draft", "refresh-button"].forEach((id) => {
     nodes[id].disabled = busy;
   });
 }
@@ -227,7 +233,7 @@ function fillForm(content) {
     nodes[`pm-${key}`].value = content[key] ?? "";
   });
   nodes["pm-cause"].value = content.cause?.statement ?? "";
-  nodes["pm-certainty"].value = content.cause?.certainty ?? "unknown";
+  nodes["pm-certainty"].value = Object.hasOwn(CERTAINTY_LABELS, content.cause?.certainty ?? "") ? content.cause.certainty : "unknown";
   ["timeline", "actions_taken", "pending", "unknowns"].forEach((key) => {
     nodes[`pm-${key}`].value = lines(content[key]);
   });
@@ -309,6 +315,8 @@ async function loadAll() {
     const events = detail.state === "postmortem" && record === null ? await storedEvents(detail) : [];
     if (generation !== state.generation) return;
     state.workflowVersion = detail.workflow_version;
+    state.detail = detail;
+    state.postmortemRun = (detail.runs ?? []).find((run) => run?.current_state === "postmortem")?.run_id;
     state.startKey = `postmortem-start-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
     render(detail, record);
     renderEditor(detail, record, events);
@@ -382,6 +390,78 @@ async function reviewPostmortem(outcome) {
   }
 }
 
+// What the agent may use: the incident read, every stored event and, when this identity can read
+// them, the agent turns of each run. Only stored, contract-valid event ids may be cited.
+async function agentPrompt(detail) {
+  const runs = (detail.runs ?? []).map((run) => run?.run_id).filter((id) => typeof id === "string");
+  const read = (runId) => client.getIncidentTimeline(state.incidentId, { runId, limit: 200 });
+  const events = (await Promise.all(runs.map(read))).flatMap((page) => page.events ?? []);
+  const contexts = await Promise.all(runs.map((runId) => client.getRunContext(state.incidentId, runId).catch(() => null)));
+  const outputs = contexts.flatMap((context) => context?.turns ?? []).map((turn) => turn.model_output).filter(Boolean);
+  const citable = events.filter((event) => CITABLE.test(event.event_id ?? ""));
+  const row = (event) => [event.event_id, event.kind, event.state, event.actor?.type, event.occurred_at, event.summary].join(" | ");
+  const facts = { incident_id: detail.incident_id, state: detail.state, severity: detail.severity, impact: detail.impact, alert: detail.alert };
+  const input = [
+    "Draft the minimum postmortem of this incident for a human reviewer, in Spanish. Use only the facts below; never invent events, actions or causes.",
+    "Answer with only a JSON object with exactly the keys summary, impact, timeline, cause, strategy, actions_taken, verification, pending, unknowns.",
+    'summary, impact, strategy, verification: short nonblank text. cause: {"statement": text, "certainty": "confirmed"|"probable"|"hypothesis"|"unknown"}.',
+    'timeline (at least one): list of {"event_id": a citable id, "description": text}, the key moments in order.',
+    "actions_taken: same shape, only actions taken on the service (such as an approved mitigation), each with the citable event that confirms it. Do not repeat workflow steps; an approval is not an execution.",
+    "pending and unknowns: lists of text. Declare what is not known instead of guessing.",
+    `Incident: ${JSON.stringify(facts)}`,
+    `Citable events (event_id | kind | state | actor | occurred_at | summary):\n${citable.map(row).join("\n")}`,
+    `Agent turns of this incident (truncated):\n${outputs.map((text) => String(text).slice(0, 2000)).join("\n---\n") || "none"}`,
+  ].join("\n\n");
+  return { input: input.slice(0, 60000), citable: new Set(citable.map((event) => event.event_id)) };
+}
+
+function parseDraft(response, citable) {
+  const text = (response?.output ?? []).flatMap((item) => item?.content ?? []).map((part) => part?.text ?? "").join("");
+  let draft;
+  try {
+    draft = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  } catch {
+    return null;
+  }
+  if (!draft || typeof draft !== "object" || !SECTIONS.every(([key]) => key in draft)) return null;
+  let dropped = 0;
+  const keep = (items) =>
+    (Array.isArray(items) ? items : []).filter((item) => citable.has(item?.event_id) || ((dropped += 1), false));
+  return { draft: { ...draft, timeline: keep(draft.timeline), actions_taken: keep(draft.actions_taken) }, dropped };
+}
+
+async function agentDraft() {
+  if (state.busy) return;
+  const generation = state.generation;
+  setBusy(true);
+  showStatus("agent-status", `Pidiendo un borrador al agente (alias ${AGENT_ALIAS}) por el gateway gobernado; puede tardar hasta 3 minutos…`);
+  try {
+    const { input, citable } = await agentPrompt(state.detail);
+    const body = { model: AGENT_ALIAS, input, incident_id: state.incidentId, ...(state.postmortemRun ? { run_id: state.postmortemRun } : {}) };
+    const response = await client.createResponse(body);
+    if (generation !== state.generation) return;
+    const parsed = parseDraft(response, citable);
+    if (!parsed) {
+      showStatus("agent-status", "La respuesta del agente no es un borrador válido; el formulario no cambió.");
+      return;
+    }
+    fillForm(parsed.draft);
+    const cost = response.metadata?.consumption?.billed_usd;
+    const dropped = parsed.dropped ? ` ${parsed.dropped} ${parsed.dropped === 1 ? "cita descartada" : "citas descartadas"}: no son eventos guardados.` : "";
+    showStatus(
+      "agent-status",
+      `Borrador del agente (${AGENT_ALIAS} → ${response.model}, request ${response.request_id}${cost ? `, USD ${cost}` : ""}). ` +
+        `No está guardado: revísalo, corrígelo y guárdalo; la aprobación sigue siendo humana.${dropped}`,
+    );
+  } catch (error) {
+    if (generation !== state.generation) return;
+    const grant = error?.kind === "authorization" ? ` Requiere el grant invoke sobre llm_model/${AGENT_ALIAS}.` : "";
+    showStatus("agent-status", `${outcomeMessage(error)}${grant} El formulario no cambió.`);
+  } finally {
+    setBusy(false);
+  }
+}
+
 // La credencial vive en la sesión de la consola: sin sesión activa no queda nada leído.
 function dropSession() {
   state.generation += 1;
@@ -396,6 +476,7 @@ nodes["start-postmortem"].addEventListener("click", startPostmortem);
 nodes["editor-form"].addEventListener("submit", savePostmortem);
 nodes["approve-postmortem"].addEventListener("click", () => reviewPostmortem("approved"));
 nodes["request-changes"].addEventListener("click", () => reviewPostmortem("changes_requested"));
+nodes["agent-draft"].addEventListener("click", agentDraft);
 state.incidentId = view.params.get("incident_id");
 state.runId = view.params.get("run_id");
 if (!state.incidentId) {
