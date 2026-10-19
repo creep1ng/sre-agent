@@ -380,7 +380,8 @@ import { mountedView } from "../console/view.js";
       nodes["fixture-label"].textContent = `GET /v1/alerts · ${formatTimestamp(payload.evaluated_at)}`;
       showAlerts(payload.alerts.map((alert) => fromLive(alert, payload.evaluated_at)));
     } catch (error) {
-      if (view.signal.aborted) return;
+      // A 401 already ended the session (locked state); do not paint an error over it.
+      if (view.signal.aborted || view.session.phase !== "active") return;
       const [title, detail] = describeLiveError(error);
       showLoadError(error, title, detail, "Alertas en vivo no disponibles");
     }
