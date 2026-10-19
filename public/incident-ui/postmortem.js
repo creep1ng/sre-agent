@@ -17,7 +17,19 @@ const EMPTY_DETAILS = Object.freeze({
   postmortem: "El postmortem está abierto, sin contenido persistido todavía.",
 });
 
-const state = { incidentId: null, runId: null, generation: 0 };
+// Backend refusals of a write, as the operator reads them; the HTTP status and code always show.
+const CODE_MESSAGES = Object.freeze({
+  run_conflict: "El incidente cambió de estado; actualiza antes de reintentar.",
+  not_authorized: "Tu identidad no está autorizada para esta operación.",
+  postmortem_version_conflict:
+    "El postmortem cambió desde que lo cargaste. Tu borrador sigue en el formulario: cópialo, actualiza y vuelve a aplicarlo.",
+  postmortem_not_open: "El incidente ya no está en postmortem: el artefacto es de solo lectura.",
+  invalid_postmortem: "El contenido no cumple el mínimo del postmortem:",
+  unknown_event_reference: "Una cita no corresponde a un evento guardado de este incidente.",
+});
+const FIELDS = ["summary", "impact", "cause", "certainty", "strategy", "timeline", "actions_taken", "verification", "pending", "unknowns"];
+
+const state = { incidentId: null, runId: null, generation: 0, busy: false, startKey: null, baseVersion: 0, notice: null };
 
 const nodes = {};
 const view = mountedView();
@@ -33,7 +45,8 @@ function cacheNodes() {
     "error-403", "error-404", "error-503", "context-section", "fact-incident",
     "fact-state", "fact-artifact", "fact-version", "fact-review", "fact-runs", "fact-updated",
     "artifact-section", "artifact-sections", "empty-section", "empty-detail", "content-restricted",
-    "refresh-button",
+    "refresh-button", "start-postmortem", "start-status", "editor-section", "editor-form", "editor-basis",
+    "save-postmortem", "save-status", ...FIELDS.map((key) => `pm-${key}`),
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -43,10 +56,12 @@ function hideAll() {
   [
     "loading-state", "error-missing-id", "error-401",
     "error-403", "error-404", "error-503", "context-section", "artifact-section", "empty-section",
+    "editor-section", "start-status", "save-status",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
   nodes["artifact-sections"].replaceChildren();
+  nodes["editor-form"].reset();
   nodes["refresh-button"].hidden = true;
 }
 
@@ -64,6 +79,25 @@ function showKind(error) {
   if (error.kind === "authorization") return "403";
   if (error.kind === "not_found") return "404";
   return "503";
+}
+
+function outcomeMessage(error) {
+  if (!(error instanceof ApiClientError)) return "No se pudo confirmar la operación; actualiza antes de reintentar.";
+  const known = CODE_MESSAGES[error.code] ?? "El backend no completó la operación; actualiza antes de reintentar.";
+  const detail = error.code === "invalid_postmortem" ? ` ${error.message}` : "";
+  return `HTTP ${error.status ?? "sin respuesta"}${error.code ? ` · ${error.code}` : ""}. ${known}${detail}`;
+}
+
+function showStatus(id, text) {
+  nodes[id].textContent = text ?? "";
+  nodes[id].hidden = !text;
+}
+
+function setBusy(busy) {
+  state.busy = busy;
+  ["start-postmortem", "save-postmortem", "refresh-button"].forEach((id) => {
+    nodes[id].disabled = busy;
+  });
 }
 
 function formatTimestamp(value) {
@@ -141,7 +175,93 @@ function render(detail, record) {
   nodes["empty-detail"].textContent =
     EMPTY_DETAILS[detail.state] ??
     `El incidente está en «${stateLabel(detail.state)}». El postmortem se abre cuando el incidente queda resuelto.`;
+  nodes["start-postmortem"].hidden = detail.state !== "resolved";
   nodes["empty-section"].hidden = false;
+}
+
+// State changes the incident stored, in order: the only events a draft may cite. Ids outside the
+// citation contract (triage writes its declaration as evt-…) are left out instead of failing the save.
+const CITABLE = /^evt_[a-z0-9_-]{1,60}$/;
+async function storedEvents(detail) {
+  const runs = (Array.isArray(detail.runs) ? detail.runs : []).filter((run) => typeof run?.run_id === "string");
+  const pages = await Promise.all(
+    runs.map((run) => client.getIncidentTimeline(state.incidentId, { runId: run.run_id, limit: 200 })),
+  );
+  return pages
+    .flatMap((page) => (Array.isArray(page.events) ? page.events : []))
+    .filter((event) => event.kind === "state_change" && CITABLE.test(event.event_id ?? ""))
+    .sort((left, right) => String(left.occurred_at).localeCompare(String(right.occurred_at)));
+}
+
+// A first draft from what the incident recorded. An approved mitigation is cited as approved, not
+// as executed; the cause stays a hypothesis because the hypothesis text is not part of this read.
+function draftFrom(detail, events) {
+  const [proposed, applied, verified] = ["mitigating", "verifying", "resolved"].map((target) =>
+    events.filter((event) => event.state === target).at(-1),
+  );
+  const alert = detail.alert;
+  return {
+    summary: alert ? `${alert.summary} (${alert.service}, ${detail.severity ?? alert.severity}).` : `Incidente ${state.incidentId}.`,
+    impact: detail.impact ?? "Impacto no registrado.",
+    timeline: events.map((event) => ({ event_id: event.event_id, description: `${stateLabel(event.state)}: ${event.summary}` })),
+    cause: proposed
+      ? { statement: `La investigación sustentó con evidencia una hipótesis antes de proponer la mitigación (${proposed.event_id}).`, certainty: "hypothesis" }
+      : { statement: "Causa no establecida.", certainty: "unknown" },
+    strategy: proposed ? `Mitigación propuesta por la investigación (${proposed.event_id}).` : "Sin estrategia registrada.",
+    actions_taken: applied
+      ? [{ event_id: applied.event_id, description: "Mitigación aprobada por una persona; ejecución humana o simulada, fuera del agente." }]
+      : [],
+    verification: verified ? `Estabilidad verificada por una persona (${verified.event_id}).` : "Sin verificación registrada.",
+    pending: [],
+    unknowns: proposed ? [] : ["Causa raíz."],
+  };
+}
+
+function fillForm(content) {
+  const lines = (items) =>
+    (Array.isArray(items) ? items : []).map((item) => (typeof item === "string" ? item : `${item.event_id} | ${item.description}`)).join("\n");
+  ["summary", "impact", "strategy", "verification"].forEach((key) => {
+    nodes[`pm-${key}`].value = content[key] ?? "";
+  });
+  nodes["pm-cause"].value = content.cause?.statement ?? "";
+  nodes["pm-certainty"].value = content.cause?.certainty ?? "unknown";
+  ["timeline", "actions_taken", "pending", "unknowns"].forEach((key) => {
+    nodes[`pm-${key}`].value = lines(content[key]);
+  });
+}
+
+function formContent() {
+  const value = (key) => nodes[`pm-${key}`].value.trim();
+  const items = (key) => value(key).split("\n").map((line) => line.trim()).filter(Boolean);
+  const cited = (key) =>
+    items(key).map((line) => {
+      const [eventId, ...rest] = line.split("|");
+      return { event_id: eventId.trim(), description: rest.join("|").trim() };
+    });
+  return {
+    summary: value("summary"),
+    impact: value("impact"),
+    timeline: cited("timeline"),
+    cause: { statement: value("cause"), certainty: nodes["pm-certainty"].value },
+    strategy: value("strategy"),
+    actions_taken: cited("actions_taken"),
+    verification: value("verification"),
+    pending: items("pending"),
+    unknowns: items("unknowns"),
+  };
+}
+
+// Only the postmortem state takes writes, and never over text this identity cannot read.
+function renderEditor(detail, record, events) {
+  if (detail.state !== "postmortem" || (record !== null && record.content_included !== true)) return;
+  state.baseVersion = record ? record.version : 0;
+  fillForm(record ? record.content : draftFrom(detail, events));
+  nodes["editor-basis"].textContent = record
+    ? `Editas la versión ${record.version}; guardar crea la versión ${record.version + 1} y su revisión queda pendiente.`
+    : "Borrador prellenado desde el incidente y sus eventos guardados; guardar crea la versión 1.";
+  showStatus("save-status", state.notice);
+  state.notice = null;
+  nodes["editor-section"].hidden = false;
 }
 
 function validRecord(record) {
@@ -167,7 +287,12 @@ async function loadAll() {
       showError("503");
       return;
     }
+    const events = detail.state === "postmortem" && record === null ? await storedEvents(detail) : [];
+    if (generation !== state.generation) return;
+    state.workflowVersion = detail.workflow_version;
+    state.startKey = `postmortem-start-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
     render(detail, record);
+    renderEditor(detail, record, events);
     view.focusIncident(detail, focusRun(detail));
     nodes["loading-state"].hidden = true;
     nodes["refresh-button"].hidden = false;
@@ -175,6 +300,45 @@ async function loadAll() {
   } catch (error) {
     if (generation !== state.generation) return;
     showError(showKind(error));
+  }
+}
+
+// start_postmortem through the objective route; one key per read, so a retry never opens twice.
+async function startPostmortem() {
+  if (state.busy) return;
+  const generation = state.generation;
+  setBusy(true);
+  showStatus("start-status", "Abriendo el postmortem…");
+  try {
+    const body = { workflow_version: state.workflowVersion, objective: "postmortem" };
+    await client.startRun(state.incidentId, body, state.startKey);
+    if (generation !== state.generation) return;
+    setBusy(false);
+    await loadAll();
+  } catch (error) {
+    if (generation === state.generation) showStatus("start-status", outcomeMessage(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function savePostmortem(event) {
+  event.preventDefault();
+  if (state.busy) return;
+  const generation = state.generation;
+  setBusy(true);
+  showStatus("save-status", "Guardando…");
+  try {
+    const body = { expected_version: state.baseVersion, content: formContent() };
+    const saved = await client.putPostmortem(state.incidentId, body);
+    if (generation !== state.generation) return;
+    state.notice = `Versión ${saved.version} guardada por ${saved.updated_by}. Su revisión queda pendiente.`;
+    setBusy(false);
+    await loadAll();
+  } catch (error) {
+    if (generation === state.generation) showStatus("save-status", outcomeMessage(error));
+  } finally {
+    setBusy(false);
   }
 }
 
@@ -188,6 +352,8 @@ function dropSession() {
 
 cacheNodes();
 nodes["refresh-button"].addEventListener("click", loadAll);
+nodes["start-postmortem"].addEventListener("click", startPostmortem);
+nodes["editor-form"].addEventListener("submit", savePostmortem);
 state.incidentId = view.params.get("incident_id");
 state.runId = view.params.get("run_id");
 if (!state.incidentId) {
