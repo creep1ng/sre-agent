@@ -79,9 +79,9 @@ Measured on 2026-10-19: see the table in [Rehearsal record](#rehearsal-record).
 | 3:00 | Card → Iniciar triage. Reason, severity sev1, impact; tick "Confirmo…"; Enviar comando. | `declared` + `inc-…` link; the alert context (service, summary, time, source, severity) is prefilled. |
 | 4:00 | War room → Iniciar investigación. Talk about identity, grants, alias, audit while it runs. | 1.5-3 min (91-118 s in the rehearsal). "Hipótesis actual" with confidence, "Evidencia recolectada (3-5)" with the real queries, "Ir a Decisiones". |
 | 7:00 | Ir a Decisiones: read "Mitigación propuesta" (steps, risk, verification) → Aprobar mitigación (+ comment). | Receipt `approve_mitigation … verifying`; war room approvals show "Aprobado". |
-| 8:00 | Operator applies it: `otel_ec2.py reset`; store Place Order. | "Your order is complete!" after ~11-15 s; the card leaves the inbox after 64-95 s. |
+| 8:00 | Operator applies it: `otel_ec2.py reset`; store Place Order. | "Your order is complete!" after ~11-15 s; the card leaves the inbox after 58-122 s (no need to wait for it). |
 | 9:30 | Decisiones → Verificación estable. | Run `resolved`. |
-| 10:00 | Postmortem → Abrir postmortem → Generar borrador con el agente. | Draft in 43-58 s, "Borrador del agente (triage-agent → deepseek/…, USD 0.001…)". |
+| 10:00 | Postmortem → Abrir postmortem → Generar borrador con el agente. | Draft in 43-68 s, "Borrador del agente (triage-agent → deepseek/…, USD 0.001…)". |
 | 11:00 | Edit one field → Guardar versión → Aprobar versión 1 → Decisiones link. | Version 1, review "Aprobada", close hint. |
 | 12:00 | Decisiones (postmortem run) → Cerrar incidente → tick the explicit approval → submit. | Receipt `close_incident … closed`; Postmortem shows "Cerrado". |
 | 13:00 | Governance segment. | See below. |
@@ -114,8 +114,8 @@ whole workspace). Revoke `shop-bok-incident` → next BoK search 403.
 
 ## Budget
 
-OpenRouter key usage went from USD 0.0628 to USD 0.0767 during the whole rehearsal (USD 0.014:
-four investigation starts, two agent drafts, governance calls and probes). The demo itself needs one
+OpenRouter key usage went from USD 0.0628 to USD 0.0801 during the whole rehearsal (USD 0.017:
+five investigation starts, three agent drafts, governance calls and probes). The demo itself needs one
 investigation (USD 0.002-0.005), one draft (~USD 0.0012-0.0015) and two governance calls
 (~USD 0.00002): under USD 0.01.
 
@@ -129,7 +129,7 @@ python3 scripts/otel_ec2.py down                                    # or let the
 
 ## Rehearsal record
 
-Executed 2026-10-19 11:42Z-13:01Z by the maintainer's rehearsal session, through the real console
+Executed 2026-10-19 11:42Z-13:11Z by the maintainer's rehearsal session, through the real console
 (Playwright in the repository e2e image, `--network host`, as demo-human), with each state
 transition confirmed through the API. Evidence: [docs/evidence/demo-2026-10-19/](evidence/demo-2026-10-19/)
 and the two #691 captures in [docs/evidence/issue-672/](evidence/issue-672/).
@@ -139,7 +139,8 @@ and the two #691 captures in [docs/evidence/issue-672/](evidence/issue-672/).
 | 1 | main `f8d1190`, click-only | Alert 101 s after `fail`; declared; investigation ended `unknown` after 2 min 42 s: with only the error-ratio summary the model queried `service.name` / `{service="checkout"}`, found nothing, low-confidence wrong hypothesis. Fixed by #691. |
 | 2 | `f8d1190` + evidence sentence typed into the summary | First LLM call 503 `upstream_unavailable` → `unknown` in ~1 s. Fallback (new incident through the two triage commands) → `mitigating` in 118 s → approve → reset → store paid 14 s later, alert gone after 65 s → resolved → agent draft 43 s (USD 0.00117) → v1 approved → **closed**. |
 | 3 | #691 head `73cfdf1` (= main after #691), click-only | Alert 55 s after `fail`; declared; `mitigating` in 91 s, hypothesis "Checkout's PaymentService/Charge calls are failing at a 100% error rate" (high, 4 evidence items); approve → `verifying` (approvals 1) → reset → store paid 11 s later, alert gone after 77 s → `resolved` → postmortem run → agent draft 58 s (USD 0.0015) → v1 approved → close (submit disabled until the checkbox) → **closed**. |
-| Gov | `73cfdf1` build | 10 resources; `remediation-agent` → GLM 5.3 Flash/deepinfra; two principals, credentials and 9 grants in the UI; the access matrix exactly as in the segment above (MCP Prometheus 17 series vs 403, Elasticsearch 1 doc vs 403, BoK 200 vs 403, Skill 200 vs 404, other alias 403, admin 403); two allowed LLM calls 200; audit allow/deny rows; consumption per request; budget 0 → 429, restored; revoke → 403. |
+| 4 (final) | **main `281e779`** on a fresh instance brought up from zero, click-only | Alert 41 s after `fail`; declared; `mitigating` in 101 s (hypothesis: 50% errors on PaymentService/Charge, likely the payment dependency; medium); approve → `verifying` → reset → store paid 11 s later, alert gone after 122 s → `resolved` → agent draft 68 s (USD 0.0015; one citation dropped as not a stored event) → v1 approved → **closed** 13:11:09Z. Captures in `docs/evidence/demo-2026-10-19/` come from this run. |
+| Gov | `73cfdf1` build (same tree as `281e779`) | 10 resources; `remediation-agent` → GLM 5.3 Flash/deepinfra; two principals, credentials and 9 grants in the UI; the access matrix exactly as in the segment above (MCP Prometheus 17 series vs 403, Elasticsearch 1 doc vs 403, BoK 200 vs 403, Skill 200 vs 404, other alias 403, admin 403); two allowed LLM calls 200; audit allow/deny rows; consumption per request; budget 0 → 429, restored; revoke → 403. |
 
 Bring-up from zero (`up` → store 200 → `prepare-mcp` → detached `connect-mcp` → `setup_sre.py`
 → BoK/Skills → TTL +1 h), measured 12:48:17Z-12:56:32Z: guest bootstrap until the store answered
