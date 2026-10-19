@@ -293,6 +293,9 @@ export function createAdministrativeApiClient({
     getWhoAmI() {
       return request("/v1/whoami");
     },
+    listAlerts() {
+      return request("/v1/alerts");
+    },
     postTriageCommand(alertId, body, idempotencyKey) {
       return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage/commands`, {
         method: "POST",

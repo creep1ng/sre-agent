@@ -29,8 +29,11 @@ test("cancelar el deep link de una alerta antes de conectar la retira de la dire
   expect(reads).toEqual([]);
 
   // Leaving Triage and coming back: the canceled alert cannot return through the address.
+  await page.route("**/api/v1/alerts", (route) =>
+    route.fulfill({ json: { evaluated_at: "2026-10-19T04:00:00Z", rules: [], alerts: [] } }),
+  );
   await page.locator('[data-console-nav="alerts"]').click();
-  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "empty");
   await page.goBack();
   await expect(page.locator("[data-console-view='triage'] #alert-id")).toHaveValue("");
   expect(new URL(page.url()).searchParams.has("alert_id")).toBe(false);
