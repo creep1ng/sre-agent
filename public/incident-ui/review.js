@@ -1,15 +1,24 @@
 import { ApiClientError } from "/public/api/client.js";
 import { mountedView } from "/public/console/view.js";
 
-// Acciones de revisión/mitigación del workflow 1.0.0, derivadas de
-// mitigation_approval y run-command.schema.yaml. Versión o estado
-// desconocidos no ofrecen nada. El envío llega en el slice 41a-2.
+// Acciones humanas del workflow 1.0.0, derivadas de los decision points publicados
+// (mitigation_approval, stability_check) y de las transiciones de incident-response.yaml.
+// La verificación y el cierre reutilizan la senda de comandos existente; su forma exacta
+// queda sujeta al contrato run-command:2.1.0, que aún no está publicado (adaptación
+// real pendiente, se documenta en el PR). Versión o estado desconocidos no ofrecen nada.
 const REVIEW_ACTIONS = Object.freeze({
   "1.0.0": Object.freeze({
     mitigating: Object.freeze([
-      { command: "approve_mitigation", transition: "apply_mitigation", outcome: "approve", label: "Aprobar mitigación" },
-      { command: "reject_mitigation", transition: "reject_mitigation", outcome: "reject", label: "Rechazar mitigación" },
-      { command: "request_changes", transition: "reject_mitigation", outcome: "request_changes", label: "Solicitar corrección" },
+      { command: "approve_mitigation", transition: "apply_mitigation", outcome: "approve", label: "Aprobar mitigación", authorization: "run.approve" },
+      { command: "reject_mitigation", transition: "reject_mitigation", outcome: "reject", label: "Rechazar mitigación", authorization: "run.approve" },
+      { command: "request_changes", transition: "reject_mitigation", outcome: "request_changes", label: "Solicitar corrección", authorization: "run.command" },
+    ]),
+    verifying: Object.freeze([
+      { command: "verification_passed", transition: "verification_passed", outcome: "stable", label: "Verificación estable", authorization: "run.command" },
+      { command: "verification_failed", transition: "verification_failed", outcome: "not_stable", label: "Verificación no estable", authorization: "run.command" },
+    ]),
+    postmortem: Object.freeze([
+      { command: "close_incident", transition: "close_incident", outcome: null, label: "Cerrar incidente", authorization: "run.approve", approval: true },
     ]),
   }),
 });
@@ -43,7 +52,9 @@ function cacheNodes() {
     "fact-incident", "fact-run", "fact-incident-version", "fact-state", "fact-workflow",
     "actions-section", "actions-list", "actions-empty",
     "decision-section", "decision-title", "decision-form", "decision-comment",
-    "decision-key", "decision-submit", "receipt-section", "receipt-line",
+    "decision-key", "decision-submit", "decision-approval", "decision-approval-row",
+    "decision-hint",
+    "receipt-section", "receipt-line",
     "refresh-button",
   ].forEach((id) => {
     nodes[id] = byId(id);
@@ -115,6 +126,7 @@ function setSubmitting(submitting) {
   nodes["refresh-button"].disabled = submitting;
   nodes["decision-submit"].disabled = submitting;
   nodes["decision-comment"].disabled = submitting;
+  nodes["decision-approval"].disabled = submitting;
   nodes["actions-list"].querySelectorAll("button").forEach((button) => {
     button.disabled = submitting || state.submissionComplete;
   });
@@ -128,9 +140,21 @@ function openDecision(action) {
   nodes["decision-title"].textContent = action.label;
   nodes["decision-comment"].value = state.draftComments[action.command] ?? "";
   nodes["decision-key"].textContent = state.idempotencyKey;
-  nodes["decision-submit"].disabled = false;
+  // El cierre exige una aprobación marcada en cada apertura: reabrir y confirmar
+  // por accidente no puede cerrar el incidente ni heredar una revisión previa.
+  nodes["decision-approval"].checked = false;
+  nodes["decision-approval-row"].hidden = !action.approval;
+  nodes["decision-hint"].hidden = !action.approval;
+  syncApprovalGate(action);
   nodes["receipt-section"].hidden = true;
   nodes["decision-section"].hidden = false;
+}
+
+// La casilla es la aprobación explícita y visible del cierre; el botón no se
+// habilita hasta que el usuario la marca en esta apertura del panel.
+function syncApprovalGate(action) {
+  nodes["decision-approval-row"].hidden = !action?.approval;
+  nodes["decision-submit"].disabled = state.submitting || Boolean(action?.approval && !nodes["decision-approval"].checked);
 }
 
 // The identity is freshly resolved from this credential for each command; it
@@ -146,7 +170,7 @@ function commandPayload(action, principalId) {
     disposition: null,
     comment: comment ? comment.slice(0, 2000) : null,
     authorization: {
-      action: action.command === "request_changes" ? "run.command" : "run.approve",
+      action: action.authorization,
       resource: { type: "incident_workflow", id: "incident-response" },
     },
   };
@@ -243,6 +267,7 @@ async function submitDecision(event) {
       }
     } else if (generation === state.generation) {
       setSubmitting(false);
+      syncApprovalGate(state.pending);
     }
   }
 }
@@ -271,6 +296,7 @@ function dropSession() {
 cacheNodes();
 nodes["refresh-button"].addEventListener("click", loadAll);
 nodes["decision-form"].addEventListener("submit", submitDecision);
+nodes["decision-approval"].addEventListener("change", () => syncApprovalGate(state.pending));
 state.incidentId = view.params.get("incident_id");
 state.runId = view.params.get("run_id");
 if (!state.incidentId || !state.runId) {
