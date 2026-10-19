@@ -9,6 +9,7 @@ from typing import Any
 from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
+from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.identity import router as identity_router
@@ -199,19 +200,18 @@ def create_application(
             runtime_settings.grafana_mcp_endpoint,
             runtime_settings.grafana_mcp_token,
         )
+    mcp_service = None
     if configured_mcp_client is not None and runtime_settings.audit_hmac_key:
         mcp_store = audit_store or PostgresAuditStore(database.sessions)
         mcp_projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
-        application.include_router(
-            mcp_router(
-                MCPGatewayService(
-                    database.sessions,
-                    configured_mcp_client,
-                    audit=mcp_store,
-                    projector=mcp_projector,
-                )
-            )
+        mcp_service = MCPGatewayService(
+            database.sessions,
+            configured_mcp_client,
+            audit=mcp_store,
+            projector=mcp_projector,
         )
+        application.include_router(mcp_router(mcp_service))
+    application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:
