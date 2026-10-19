@@ -18,13 +18,17 @@
           <p class="ma-eyebrow">Atención a incidentes</p>
           <h1 class="war-room__title">War room</h1>
           <p class="war-room__subtitle">
-            Estado y timeline compartidos desde el backend autoritativo. Esta vista solo
-            consulta: no aplica transiciones ni crea incidentes.
+            Estado y timeline compartidos desde el backend autoritativo. Esta vista consulta,
+            y puede iniciar o reanudar la investigación del incidente con una clave de
+            idempotencia; nunca crea incidentes.
           </p>
         </div>
         <div class="war-room__actions">
           <button id="refresh-button" class="ma-button ma-button--secondary" type="button" hidden>
             Actualizar
+          </button>
+          <button id="run-start" class="ma-button ma-button--primary" type="button" hidden>
+            Iniciar investigación
           </button>
         </div>
       </header>
@@ -88,6 +92,17 @@
         </div>
       </div>
 
+      <div id="error-409" class="ma-alert" data-tone="warning" hidden>
+        <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+        <div>
+          <p class="ma-alert__title">Conflicto con el estado del incidente</p>
+          <p class="ma-alert__detail">
+            La operación choca con el estado actual del incidente o del run. Actualiza la
+            vista y revisa el estado antes de repetir la acción.
+          </p>
+        </div>
+      </div>
+
       <section id="summary-section" class="ma-panel war-room__summary" hidden>
         <div class="ma-panel__header">
           <h2 class="ma-panel__title">Resumen del incidente</h2>
@@ -129,6 +144,15 @@
             </label>
             <p id="run-current" class="ma-sr-only" aria-live="polite"></p>
           </div>
+          <section id="run-state" class="war-room__run-state" hidden>
+            <p id="run-status-line" class="ma-muted" aria-live="polite"></p>
+            <p id="run-pending" class="ma-muted" aria-live="polite" hidden></p>
+            <p id="run-terminated" class="ma-alert war-room__termination" data-tone="critical" hidden></p>
+            <a id="run-decide" class="ma-button ma-button--primary" hidden>Ir a Decisiones</a>
+            <button id="run-resume" class="ma-button ma-button--secondary" type="button" hidden>
+              Reanudar
+            </button>
+          </section>
           <ol
             id="timeline-list"
             class="ma-timeline war-room__events"
