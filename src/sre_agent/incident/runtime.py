@@ -18,6 +18,7 @@ from sre_agent.incident.persistence import (
     IncidentUnitOfWork,
     RunRecord,
     SnapshotDraft,
+    TextContextRecord,
     TransitionResult,
 )
 from sre_agent.incident.workflow import IncidentWorkflow, InvalidWorkflowError, Transition
@@ -73,6 +74,7 @@ class IncidentCommand:
     turn_id: str | None = None
     inputs: Mapping[str, Any] | None = None
     extra_events: tuple[EventDraft, ...] = ()
+    contexts: tuple[TextContextRecord, ...] = ()
 
     def payload_sha256(self) -> str:
         payload = asdict(self)
@@ -87,6 +89,8 @@ class IncidentCommand:
         else:
             # Keep pre-existing command hashes stable when no side events are attached.
             payload.pop("extra_events")
+        # The turns travel with the dispatch's result events, which the hash already covers.
+        payload.pop("contexts")
         if self.expected_incident_version is None:
             # Additive fields must not invalidate idempotent retries from older clients.
             payload.pop("expected_incident_version")
@@ -356,6 +360,7 @@ class IncidentRuntime:
             events=(event, *extra_events),
             snapshot=snapshot,
             dispatch_id=command.dispatch_id,
+            contexts=command.contexts,
         )
 
     async def reconstruct(self, incident_id: str, run_id: str) -> IncidentView:
