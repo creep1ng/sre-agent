@@ -59,7 +59,8 @@ not be verified only by its fixing owner.
 
 - Objective: from the stable entry, reach delivered surfaces with visible navigation and return without
   losing context or identity.
-- Preconditions: J1 done; demo keys from the seed.
+- Preconditions: J1 done; demo keys from the seed; the runbook section "Optional: provision a
+  triage-capable operator" run after the last reset (without it, step 4 answers "Sin acceso").
 - Steps:
   1. Open `/` and enter the console (catalog at `/design-system.html`).
   2. Enter Operations with the demo key once and confirm the session is per tab.
