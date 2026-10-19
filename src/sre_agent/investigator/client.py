@@ -396,7 +396,16 @@ class MCPGatewayClient:
             kind=kind,
             status=status,
             request_id=_response_request_id(response),
+            code=_response_error_code(response),
         )
+
+
+def _response_error_code(response: httpx.Response) -> str | None:
+    try:
+        code = response.json().get("error", {}).get("code")
+        return code if isinstance(code, str) else None
+    except (AttributeError, ValueError):
+        return None
 
 
 def _response_request_id(response: httpx.Response) -> UUID | None:

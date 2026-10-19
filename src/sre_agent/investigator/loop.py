@@ -334,6 +334,18 @@ async def investigate(
                 provider.collect(action.tool, action.arguments), limits.tool_timeout_seconds
             )
         except (EvidenceUnavailable, TimeoutError) as error:
+            if isinstance(error, EvidenceUnavailable) and error.code == "upstream_invalid":
+                # The tool answered, with an error for these arguments: an observation the model
+                # can act on within the step budget (retry, change them or use another tool).
+                if error.request_id is not None:
+                    request_ids.append(error.request_id)
+                    mcp_request_ids.append(error.request_id)
+                invocation = ToolInvocation(
+                    tool=action.tool, arguments=action.arguments, result_summary="tool error"
+                )
+                turns.append(turn.model_copy(update={"tool_invocation": invocation}))
+                feedback = f"{action.tool} answered with an error for those arguments"
+                continue
             turns.append(turn)
             if isinstance(error, EvidenceUnavailable) and error.request_id is not None:
                 request_ids.append(error.request_id)

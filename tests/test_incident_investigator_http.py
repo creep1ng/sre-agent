@@ -200,8 +200,19 @@ def _create_started_run_with_pending_receipt(incident_id: str, command_id: str) 
 
 
 def _scripted_decision(state: dict[str, Any], statement: str) -> dict[str, Any]:
-    """A cited hypothesis first; once it is recorded, a mitigation based on it."""
+    """Evidence, then a cited hypothesis; once it is recorded, a mitigation based on it."""
     hypotheses = state["incident"]["hypotheses"]
+    if not hypotheses and not state["collected_evidence"]:
+        return {
+            "action": "use_tool",
+            "tool": "query_prometheus",
+            "arguments": {
+                "datasource_uid": "webstore-metrics",
+                "expr": "rate(http_requests_total[5m])",
+                "query_type": "instant",
+                "end_time": "now",
+            },
+        }
     if hypotheses:
         return {
             "action": "propose_mitigation",
@@ -243,7 +254,7 @@ class ScriptedLLM:
             if self.final_outcome is not None:
                 text = json.dumps(self.final_outcome)
             else:
-                state = json.loads(request.input.split("State: ", 1)[1])
+                state = json.loads(request.input.split("State: ", 1)[1].splitlines()[0])
                 text = json.dumps(
                     _scripted_decision(state, "A synthetic payment error-rate increase is visible.")
                 )
@@ -833,6 +844,38 @@ def test_http_investigate_uses_governed_llm_and_mcp_and_persists_the_result() ->
     assert timeline.json()["events"]
     assert "assembled_input" not in json.dumps(event_payloads)
     assert "model_output" not in json.dumps(event_payloads)
+
+
+class ToolErrorOnceMCP(ScriptedMCP):
+    """The first call answers with a tool error, as Grafana MCP intermittently did live."""
+
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+        if not self.calls:
+            self.calls.append((tool_name, arguments))
+            return {"isError": True, "content": [{"type": "text", "text": "query failed"}]}
+        return await super().call_tool(tool_name, arguments)
+
+
+def test_a_tool_error_is_shown_to_the_model_and_the_run_goes_on() -> None:
+    incident_id = "inc-investigator-tool-error"
+    _add_incident(incident_id)
+    _grant_run_access()
+    llm, mcp = ScriptedLLM(), ToolErrorOnceMCP()
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=llm, mcp=mcp)
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        response = _start(client, incident_id, "investigation-tool-error-0001")
+        assert response.status_code == 201
+        run_id = response.json()["run_id"]
+
+    incident_state, event_payloads, _ = _database_rows(incident_id, run_id)
+    receipt = _receipts(event_payloads)[-1]
+    assert len(mcp.calls) == 2 and len(llm.requests) == 4 and _context_turns(run_id) == 4
+    assert "query_prometheus answered with an error" in llm.requests[1].input
+    assert incident_state["state"] == "mitigating" and len(incident_state["evidence"]) == 1
+    assert receipt["status"] == "success" and len(receipt["mcp_request_ids"]) == 2
+    assert incident_state["evidence"][0]["request_id"] == receipt["mcp_request_ids"][1]
 
 
 def test_investigator_receives_only_runtime_schemas_for_authorized_tools() -> None:
