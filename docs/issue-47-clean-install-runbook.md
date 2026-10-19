@@ -310,6 +310,7 @@ delete it (`rm compose.provision.yaml`) when you no longer need the optional pat
 |---|---|
 | `ss` shows a busy port / `port is already allocated` | Pick another free `API_PORT`, `WEB_PORT` or `POSTGRES_PORT` in `.env` and rerun `docker compose up --wait`; never stop foreign containers |
 | `error while interpolating ... required variable ... is missing a value` | `.env` is incomplete or not in the checkout root; copy the block above verbatim and rerun |
+| Right after a fresh volume (first start or reset), `up --wait` stops with `service "migrate" didn't complete successfully: exit 1` and `docker compose logs db` shows `the database system is shutting down` | PostgreSQL restarts once while it initializes a new volume and `migrate` can hit that restart. Rerun `docker compose up --wait`: the volume is kept and migrate/seed converge |
 | `migrate` exits non-zero | Inspect `docker compose logs migrate`; fix configuration; rerun `docker compose run --rm migrate`. The volume is preserved; do not delete it |
 | Data from an older experiment appears | Two checkouts share one `COMPOSE_PROJECT_NAME`; the pre-check before the first start catches it. Compare `docker volume ls` with your project name, then finish the owner or use a unique name |
 | `seed_state_conflict` | Seed rows do not match the configured inputs; see the routing reconciliation notes in the [README](../README.md#when-a-changed-env-route-does-not-take-effect). Do not delete the volume to force it |
