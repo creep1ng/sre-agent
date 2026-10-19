@@ -62,7 +62,9 @@
       </div>
       <section id="resources-context" class="model-aliases__resources" aria-labelledby="resources-context-title">
         <h2 id="resources-context-title" class="ma-panel__title">Resources</h2>
-        <p class="principals__subtitle">Aliases below are managed on this surface. The resource catalog exposes no management actions in this build.</p>
+        <p class="principals__subtitle">Read-only catalog of the governed resources that grants can target: LLM aliases, MCP servers and tools, Skills, BoK collections and workflows. Aliases below are managed on this surface.</p>
+        <p id="resources-status" class="ma-panel__description" aria-live="polite">Connect to load the resource catalog.</p>
+        <div id="resources-wrap" class="ma-table-wrap" hidden></div>
       </section>
       <div class="model-aliases__layout">
         <section id="alias-list" class="ma-panel model-aliases__list" aria-labelledby="alias-list-title">

@@ -7,6 +7,8 @@
 
 .model-aliases__content {
   display: grid;
+  /* A wide table scrolls inside its .ma-table-wrap instead of widening the page. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--ma-space-6);
   min-width: 0;
 }
