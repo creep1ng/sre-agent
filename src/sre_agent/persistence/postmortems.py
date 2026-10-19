@@ -1,11 +1,12 @@
 """PostgreSQL adapter for the versioned postmortem artifact (issue #335)."""
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import String, bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.incident.persistence import IncidentStaleWriteError
@@ -60,6 +61,16 @@ class PostgresPostmortemRepository:
         found = await self._session.execute(text(_CURRENT), {"incident_id": incident_id})
         row = found.mappings().one_or_none()
         return _record(row) if row else None
+
+    async def known_event_ids(self, incident_id: str, event_ids: Iterable[str]) -> frozenset[str]:
+        statement = text(
+            "SELECT event_id FROM incident.run_events "
+            "WHERE incident_id=:incident_id AND event_id = ANY(:event_ids)"
+        ).bindparams(bindparam("event_ids", type_=ARRAY(String())))
+        rows = await self._session.execute(
+            statement, {"incident_id": incident_id, "event_ids": list(event_ids)}
+        )
+        return frozenset(row[0] for row in rows)
 
     async def save(
         self,

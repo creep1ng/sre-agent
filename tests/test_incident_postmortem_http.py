@@ -54,6 +54,7 @@ NEIGHBOUR_ID = "inc-335-neighbour"
 NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)
 BEARERS: dict[str, str] = {}
 FACTS: dict[str, Any] = {}
+SUMMARY = "Checkout payments failed for 14 minutes after a bad config push."
 
 
 def _state(state: str) -> dict[str, Any]:
@@ -165,6 +166,29 @@ def _incident() -> tuple[dict[str, Any], int]:
     return _sql(query, INCIDENT_ID)[0]
 
 
+def _content(timeline_event: str, action_event: str, **changes: Any) -> dict[str, Any]:
+    return {
+        "summary": SUMMARY,
+        "impact": "About 3% of checkouts failed; revenue impact unknown.",
+        "timeline": [{"event_id": timeline_event, "description": "Stability check passed."}],
+        "cause": {"statement": "Config push removed the payment timeout.", "certainty": "probable"},
+        "strategy": "Roll back the config and add a timeout guard.",
+        "actions_taken": [{"event_id": action_event, "description": "Postmortem opened."}],
+        "verification": "Error rate stayed at baseline for 30 minutes.",
+        "pending": ["Add a config lint for timeouts."],
+        "unknowns": ["Exact revenue impact."],
+        **changes,
+    }
+
+
+def _put(content: Any, expected_version: int, who: str = "demo") -> Any:
+    return _client().put(
+        f"/v1/incidents/{INCIDENT_ID}/postmortem",
+        json={"expected_version": expected_version, "content": content},
+        headers=_headers(who),
+    )
+
+
 def test_resolved_to_postmortem_reserves_the_artifact_id() -> None:
     asyncio.run(_transition("verification_passed", FACTS["verify_run"], outcome="stable"))
     assert _incident()[0]["state"] == "resolved"
@@ -196,3 +220,42 @@ def test_close_without_an_artifact_is_rejected_and_changes_nothing() -> None:
             )  # noqa: E501  # fmt: skip
         )
     assert _incident() == (state, version)
+
+
+def test_citations_must_name_real_events_of_this_incident() -> None:
+    neighbour = _client().post(
+        f"/v1/incidents/{NEIGHBOUR_ID}/runs",
+        json={"workflow_version": "1.0.0", "objective": "triage"},
+        headers=_headers(key="key-335-neighbour-triage"),
+    )
+    assert neighbour.status_code == 201
+    foreign = _sql("SELECT event_id FROM incident.run_events WHERE incident_id=%s", NEIGHBOUR_ID)
+    for missing in ("evt_doesnotexist", foreign[0][0]):
+        refused = _put(_content(FACTS["verified_event"], missing), 0)
+        assert refused.status_code == 422
+        assert refused.json()["error"]["code"] == "unknown_event_reference"
+    uncertain = _content(FACTS["verified_event"], FACTS["started_event"], cause={"statement": "x"})
+    assert _put(uncertain, 0).status_code == 422
+    assert _sql("SELECT count(*) FROM incident.postmortems") == [(0,)]
+
+
+def test_create_stores_the_reserved_id_and_a_retry_does_not_duplicate() -> None:
+    content = _content(FACTS["verified_event"], FACTS["started_event"])
+    created = _put(content, 0)
+    assert created.status_code == 201, created.text
+    body = created.json()
+    assert (body["postmortem_id"], body["version"]) == (FACTS["pm_id"], 1)
+    assert sorted(body["run_ids"]) == sorted([FACTS["verify_run"], FACTS["pm_run"]])
+    assert body["updated_by"] == "demo-human" and "content" not in body
+
+    assert _put(content, 0).status_code == 409  # retried create: no second artifact
+    assert _sql("SELECT count(*) FROM incident.postmortems") == [(1,)]
+
+
+def test_a_stale_edit_conflicts_and_a_current_one_advances() -> None:
+    edited = _content(FACTS["verified_event"], FACTS["started_event"], summary=SUMMARY + " v2")
+    assert _put(edited, 1).status_code == 200
+    stale = _put(_content(FACTS["verified_event"], FACTS["started_event"]), 1)
+    assert stale.status_code == 409
+    assert stale.json()["error"]["code"] == "postmortem_version_conflict"
+    assert _sql("SELECT max(version) FROM incident.postmortem_revisions") == [(2,)]
