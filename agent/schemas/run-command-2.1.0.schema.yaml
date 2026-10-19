@@ -1,0 +1,123 @@
+# Human command sent to a run — run-command:2.1.0 (issues #41, #43).
+#
+# Additive release over run-command:2.0.0, which stays published unchanged in
+# run-command.schema.yaml. Adds the human stability check and the closure:
+#   verification_passed  verifying -> resolved       outcome stable      run.command
+#   verification_failed  verifying -> investigating  outcome not_stable  run.command
+#   close_incident       postmortem -> closed        explicit approval   run.approve
+# The three require expected_incident_version. close_incident must carry the
+# `authorization` assertion with run.approve: that assertion is the explicit
+# human approval the workflow requires; omitting it is a 422. Workflow guards
+# (verification evidence and check, an identified postmortem) are enforced by
+# the runtime and answer 409 `precondition_failed` without changing the state.
+# Field semantics are unchanged from 2.0.0 and documented there.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:run-command:2.1.0
+title: RunCommand
+type: object
+additionalProperties: false
+required: [command, actor, actor_reference]
+properties:
+  command:
+    enum: [approve_mitigation, reject_mitigation, request_changes,
+           propose_disposition, escalate, cancel_run,
+           verification_passed, verification_failed, close_incident]
+  actor:
+    const: human
+  actor_reference:
+    type: object
+    additionalProperties: false
+    required: [reference_version, principal_id]
+    properties:
+      reference_version:
+        const: 1.0.0
+      principal_id:
+        type: string
+        pattern: '^[a-z][a-z0-9_-]{2,63}$'
+      display_name:
+        type: [string, "null"]
+        maxLength: 200
+        default: null
+  expected_incident_version:
+    type: integer
+    minimum: 0
+  turn_id:
+    type: [string, "null"]
+    pattern: '^turn_[a-z0-9]{8,32}$'
+    default: null
+  disposition:
+    type: [string, "null"]
+    enum: [dismiss, link, declare, null]
+    default: null
+  comment:
+    type: [string, "null"]
+    maxLength: 2000
+    default: null
+  authorization:
+    type: object
+    additionalProperties: false
+    required: [action, resource]
+    properties:
+      action:
+        enum: [run.approve, run.command]
+      resource:
+        type: object
+        additionalProperties: false
+        required: [type, id]
+        properties:
+          type: { const: incident_workflow }
+          id: { const: incident-response }
+
+allOf:
+  - if:
+      properties:
+        command: { const: propose_disposition }
+      required: [command]
+    then:
+      required: [disposition]
+      properties:
+        disposition:
+          type: string
+          enum: [dismiss, link, declare]
+    else:
+      properties:
+        disposition: { type: "null" }
+  - if:
+      properties:
+        command:
+          enum: [approve_mitigation, reject_mitigation, close_incident]
+      required: [command]
+    then:
+      properties:
+        authorization:
+          properties:
+            action: { const: run.approve }
+  - if:
+      properties:
+        command:
+          enum: [approve_mitigation, reject_mitigation, request_changes,
+                 verification_passed, verification_failed, close_incident]
+      required: [command]
+    then:
+      required: [expected_incident_version]
+    else:
+      not:
+        required: [expected_incident_version]
+  - if:
+      properties:
+        command:
+          enum: [request_changes, propose_disposition, escalate, cancel_run,
+                 verification_passed, verification_failed]
+      required: [command]
+    then:
+      properties:
+        authorization:
+          properties:
+            action: { const: run.command }
+  - if:
+      properties:
+        command: { const: close_incident }
+      required: [command]
+    then:
+      required: [authorization]

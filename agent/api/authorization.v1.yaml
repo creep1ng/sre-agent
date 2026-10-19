@@ -72,6 +72,9 @@ command_action_map:
   propose_disposition: "run.command"
   escalate: "run.command"
   cancel_run: "run.command"
+  verification_passed: "run.command"
+  verification_failed: "run.command"
+  close_incident: "run.approve"
 
 principals:
   - id: "admin-human"
