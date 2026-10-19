@@ -48,21 +48,17 @@ EVIDENCE = {
     "collected_at": NOW.isoformat(),
     "request_id": str(uuid.UUID(int=41)),
 }
-POSTMORTEM = {
-    "postmortem_id": "pm_payment_flag",
-    "summary": "paymentFailure flag disabled; error rate recovered.",
-    "status": "declared",
-    "created_by": "agent",
-    "created_at": NOW.isoformat(),
-}
 APPROVE = {
     "action": "run.approve",
     "resource": {"type": "incident_workflow", "id": "incident-response"},
 }
 
 
-def _seed(incident_id: str, state: str, **fields: object) -> None:
+def _seed(incident_id: str, state: str, reviewed: bool = False, **fields: object) -> None:
+    """Seed an incident; `reviewed` also stores its #335 postmortem with an approved v1."""
     document = yaml.safe_load(INITIAL_STATE_PATH.read_text())
+    postmortem = f"pm_{incident_id.replace('-', '_')}"
+    fields |= {"postmortem": {"postmortem_id": postmortem}} if reviewed else {}
     document.update(state=state, incident_id=incident_id, severity="sev2", **fields)
     RUNS[incident_id] = f"run_{incident_id.replace('-', '')}"
     run = {"workflow_version": "1.0.0", "current_state": state, "status": "awaiting_human"}
@@ -73,6 +69,15 @@ def _seed(incident_id: str, state: str, **fields: object) -> None:
             async with PostgresIncidentUnitOfWork(database) as work:
                 await work.incidents.add(incident_id, document, now=NOW)
                 await work.runs.add(RUNS[incident_id], incident_id, run, now=NOW)
+                if reviewed:
+                    await work.postmortems.save(
+                        postmortem, incident_id, expected_version=0, content={},
+                        run_ids=[RUNS[incident_id]], actor_id="demo-human", now=NOW,
+                    )  # fmt: skip
+                    await work.postmortems.review(
+                        postmortem, version=1, outcome="approved",
+                        reviewer_id="demo-human", comment=None, now=NOW,
+                    )  # fmt: skip
         finally:
             await database.dispose()
 
@@ -86,12 +91,10 @@ def _verifying(incident_id: str) -> None:
 
 def _row(incident_id: str) -> tuple[str, int, int]:
     """State, incident version and event count, read straight from the store."""
-
     with psycopg.connect(DATABASE_URL) as connection:
         row = connection.execute(
-            "SELECT i.state->>'state', i.version, "
-            "(SELECT count(*) FROM incident.run_events e WHERE e.run_id = %s) "
-            "FROM incident.incidents i WHERE i.incident_id = %s",
+            "SELECT i.state->>'state', i.version, (SELECT count(*) FROM incident.run_events e "
+            "WHERE e.run_id = %s) FROM incident.incidents i WHERE i.incident_id = %s",
             (RUNS[incident_id], incident_id),
         ).fetchone()
     assert row is not None
@@ -104,7 +107,6 @@ def _command(name: str, principal: str = "demo-human", **extra: object) -> dict:
 
 def _close(incident_id: str, key: str, principal: str = "demo-human", bearer=None, **extra):
     """Close with the explicit approval assertion unless a case drops it (None)."""
-
     fields = {name: value for name, value in ({"authorization": APPROVE} | extra).items() if value}
     body = _command("close_incident", principal, **fields)
     return _send(incident_id, key, body, bearer=bearer or principal)
@@ -131,7 +133,7 @@ def test_closure_without_a_postmortem_fails_its_precondition_and_changes_nothing
 
 
 def test_closure_without_the_explicit_approval_is_refused() -> None:
-    _seed("inc-v21-noappr", "postmortem", postmortem=POSTMORTEM)
+    _seed("inc-v21-noappr", "postmortem", reviewed=True)
     implicit = _close("inc-v21-noappr", "key-v21-noappr-01", authorization=None)
     downgraded = _close(
         "inc-v21-noappr", "key-v21-noappr-02", authorization=APPROVE | {"action": "run.command"}
@@ -141,7 +143,7 @@ def test_closure_without_the_explicit_approval_is_refused() -> None:
 
 
 def test_approved_closure_with_a_postmortem_closes_once_even_when_replayed() -> None:
-    _seed("inc-v21-close", "postmortem", postmortem=POSTMORTEM)
+    _seed("inc-v21-close", "postmortem", reviewed=True)
     closed = _close("inc-v21-close", "key-v21-close-001", comment="Postmortem reviewed.")
     assert (closed.status_code, closed.json()["current_state"]) == (202, "closed")
     replayed = _close("inc-v21-close", "key-v21-close-001", comment="Postmortem reviewed.")
@@ -153,13 +155,18 @@ def test_approved_closure_with_a_postmortem_closes_once_even_when_replayed() -> 
             (RUNS["inc-v21-close"],),
         ).fetchall()
     assert [
-        (row[0]["postmortem_id"], row[0]["actor_reference"]["principal_id"]) for row in approvals
-    ] == [("pm_payment_flag", "demo-human")]
+        (
+            row[0]["postmortem_id"],
+            row[0]["postmortem_version"],
+            row[0]["actor_reference"]["principal_id"],
+        )
+        for row in approvals
+    ] == [("pm_inc_v21_close", 1, "demo-human")]
 
 
 def test_a_stale_version_conflicts_without_overwriting() -> None:
     _verifying("inc-v21-stale")
-    _seed("inc-v21-stalepm", "postmortem", postmortem=POSTMORTEM)
+    _seed("inc-v21-stalepm", "postmortem", reviewed=True)
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "UPDATE incident.incidents SET version = 3, updated_at = now() "
@@ -174,7 +181,7 @@ def test_a_stale_version_conflicts_without_overwriting() -> None:
 
 
 def test_closing_needs_run_approve_and_a_human() -> None:
-    _seed("inc-v21-perm", "postmortem", postmortem=POSTMORTEM)
+    _seed("inc-v21-perm", "postmortem", reviewed=True)
     _verifying("inc-v21-agent")
     sender = _close("inc-v21-perm", "key-v21-sender-01", "sender-human")
     assert (sender.status_code, sender.json()["error"]["code"]) == (403, "not_authorized")
@@ -184,9 +191,8 @@ def test_closing_needs_run_approve_and_a_human() -> None:
     assert (agent.status_code, spoofed.status_code) == (403, 403)
     assert _row("inc-v21-perm") == ("postmortem", 0, 0)
     for index, name in enumerate(("verification_passed", "verification_failed")):
-        body = _command(name, "approving-harness")
-        refused = _send(
-            "inc-v21-agent", f"key-v21-agentv-{index}", body, bearer="approving-harness"
+        key, agent_body = f"key-v21-agentv-{index}", _command(name, "approving-harness")
+        assert (
+            _send("inc-v21-agent", key, agent_body, bearer="approving-harness").status_code == 403
         )
-        assert refused.status_code == 403
     assert _row("inc-v21-agent") == ("verifying", 0, 0)

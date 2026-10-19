@@ -1,16 +1,12 @@
 # Human command sent to a run — run-command:2.1.0 (issues #41, #43).
 #
-# Additive release over run-command:2.0.0, which stays published unchanged in
-# run-command.schema.yaml. Adds the human stability check and the closure:
+# Additive over run-command:2.0.0 (run-command.schema.yaml, unchanged). Adds:
 #   verification_passed  verifying -> resolved       outcome stable      run.command
 #   verification_failed  verifying -> investigating  outcome not_stable  run.command
 #   close_incident       postmortem -> closed        explicit approval   run.approve
-# The three require expected_incident_version. close_incident must carry the
-# `authorization` assertion with run.approve: that assertion is the explicit
-# human approval the workflow requires; omitting it is a 422. Workflow guards
-# (verification evidence and check, an identified postmortem) are enforced by
-# the runtime and answer 409 `precondition_failed` without changing the state.
-# Field semantics are unchanged from 2.0.0 and documented there.
+# All three require expected_incident_version. close_incident carries the run.approve
+# `authorization` assertion as its explicit human approval (422 without it). Runtime
+# guards answer 409 `precondition_failed` with the state intact. Fields as in 2.0.0.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: urn:sre-agent:schema:run-command:2.1.0
