@@ -73,6 +73,10 @@ async function mockIncident(page, { detail = detailPayload(), deny = () => false
       await route.fulfill({ status: 404, json: { error: { code: "snapshot_absent", message: "none" } } });
       return;
     }
+    if (url.pathname.endsWith("/postmortem")) {
+      await route.fulfill({ status: 404, json: { error: { code: "postmortem_not_found", message: "none" } } });
+      return;
+    }
     await route.fulfill({ json: detail });
   });
   return reads;
