@@ -4,7 +4,9 @@
 caller's credential, so ``mcp.invoke`` authorization and audit are unchanged. Callers never
 supply PromQL. A firing rule becomes one canonical alert (incident-state ``$defs/alert``) whose
 id derives from the instant this process first saw the episode firing: stable across polls,
-new after recovery. Episodes are in memory; an API restart starts a new one.
+new after recovery. A window without samples keeps an open episode listed with its last
+value (no flapping); only an ``ok`` evaluation ends it. Episodes are in memory; an API restart
+starts a new one.
 """
 
 import hashlib
@@ -86,7 +88,7 @@ class LiveAlertsService:
     def __init__(self, sessions: Any, mcp: MCPGatewayService | None) -> None:
         self._sessions = sessions
         self._mcp = mcp
-        self._episodes: dict[str, datetime] = {}
+        self._episodes: dict[str, tuple[datetime, float]] = {}
 
     def _error(self, request_id: str, status: int, code: str, retryable: bool) -> JSONResponse:
         headers = {"Retry-After": "15"} if retryable else {}
@@ -142,10 +144,13 @@ class LiveAlertsService:
             state = "no_data" if value is None else "ok"
             if value is not None and value > rule.threshold:
                 state = "firing"
-                started = self._episodes.setdefault(rule.rule_id, evaluated_at)
-                alerts.append(self._alert(rule, value, started, evaluated_at))
+                started = self._episodes.get(rule.rule_id, (evaluated_at, value))[0]
+                self._episodes[rule.rule_id] = (started, value)
             elif state == "ok":
                 self._episodes.pop(rule.rule_id, None)
+            if rule.rule_id in self._episodes:
+                started, last = self._episodes[rule.rule_id]
+                alerts.append(self._alert(rule, last, started, evaluated_at, stale=value is None))
             rules.append({"rule_id": rule.rule_id, "state": state, "value": value})
         return JSONResponse(
             {"evaluated_at": _iso(evaluated_at), "rules": rules, "alerts": alerts},
@@ -154,7 +159,7 @@ class LiveAlertsService:
 
     @staticmethod
     def _alert(
-        rule: AlertRule, value: float, started: datetime, evaluated_at: datetime
+        rule: AlertRule, value: float, started: datetime, evaluated_at: datetime, stale: bool
     ) -> dict[str, Any]:
         episode = f"{rule.rule_id}:{started.isoformat()}".encode()
         fingerprint = hashlib.sha256(episode).hexdigest()[:12]
@@ -169,7 +174,8 @@ class LiveAlertsService:
             "source": SOURCE,
             "origin": {
                 "signal": rule.signal,
-                "condition": f"{rule.rule_id}: error ratio {value:.2f} > {rule.threshold}",
+                "condition": f"{rule.rule_id}: error ratio {value:.2f} > {rule.threshold}"
+                + (" (last value; no samples in the latest window)" if stale else ""),
                 "detector": DETECTOR,
                 "observed_at": _iso(evaluated_at),
             },
