@@ -42,11 +42,12 @@ const WAIT_MS = Number(process.env.WAIT_MS ?? 240000);
       await page.locator("#command-reason").fill("Live checkout payment alert; customers cannot pay.");
       await page.locator("#command-severity").selectOption(latest.severity);
       await page.locator("#command-impact").fill("Checkout cannot charge payments in the store.");
-      await page.locator("#alert-context-service").fill(latest.service);
-      await page.locator("#alert-context-summary").fill(latest.summary);
-      await page.locator("#alert-context-observed-at").fill(latest.observed_at);
-      await page.locator("#alert-context-source").fill(latest.source);
-      await page.locator("#alert-context-severity").selectOption(latest.severity);
+      // The inbox hands the canonical facts over; Triage prefills them and waits for confirmation.
+      for (const field of ["service", "summary", "observed_at", "source", "severity"]) {
+        const value = await page.locator(`#alert-context-${field.replace("_", "-")}`).inputValue();
+        if (value !== latest[field]) throw new Error(`alert_context.${field} was not prefilled`);
+      }
+      out.prefilled = true;
       await page.locator("#alert-context-confirmed").check();
       await page.locator("#submit-button").click();
       await page.locator("#result-status").filter({ hasText: "declared" }).waitFor({ timeout: 30000 });

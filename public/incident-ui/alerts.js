@@ -11,6 +11,7 @@ import { mountedView } from "../console/view.js";
   });
   // Live alerts come from GET /v1/alerts (gateway rules over governed MCP); fixtures only on request.
   const LIVE_POLL_MS = 15000;
+  const CONTEXT_FIELDS = Object.freeze(["service", "summary", "observed_at", "source", "severity"]);
   const LIVE_SEVERITY = Object.freeze({ sev1: "critical", sev2: "warning", sev3: "info", sev4: "info" });
 
   const severityMeta = Object.freeze({
@@ -278,6 +279,7 @@ import { mountedView } from "../console/view.js";
         alert_id: alert.alert_id,
         service: alert.service,
         source: "hu-ops-01-alert-inbox",
+        handoff: alert.handoff ?? {},
       }),
     });
 
@@ -290,7 +292,7 @@ import { mountedView } from "../console/view.js";
   function openTriageForRequestedAlert(event) {
     const alertId = event.detail?.alert_id;
     if (typeof alertId !== "string" || !/^[a-z][a-z0-9_-]{2,63}$/.test(alertId)) return;
-    view.navigate("triage", { alert_id: alertId });
+    view.navigate("triage", { ...event.detail.handoff, alert_id: alertId });
   }
 
   function showLoadError(error, title, detail, countLabel = "Fixture no disponible") {
@@ -348,6 +350,8 @@ import { mountedView } from "../console/view.js";
       timestamp: alert.observed_at,
       status: alert.status,
       source: alert.source,
+      // Canonical facts handed to Triage as a prefill; the operator still confirms them there.
+      handoff: Object.fromEntries(CONTEXT_FIELDS.map((field) => [`ctx_${field}`, alert[field]])),
       context:
         "Regla evaluada por el gateway con query_prometheus a través del MCP gobernado (auditado). " +
         `Última evaluación: ${formatTimestamp(evaluatedAt)}. Severidad sugerida: ${alert.severity}.`,
