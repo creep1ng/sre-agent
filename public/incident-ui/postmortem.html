@@ -17,7 +17,7 @@
         <div>
           <p class="ma-eyebrow">Atención a incidentes</p>
           <h1 class="war-room__title">Postmortem mínimo</h1>
-          <p class="war-room__subtitle">Presentación del mínimo contractual. No genera artefactos ni cierra incidentes.</p>
+          <p class="war-room__subtitle">Artefacto persistido del incidente, su versión y su revisión humana. Esta vista no cierra incidentes.</p>
         </div>
         <div class="war-room__actions">
           <button id="refresh-button" class="ma-button ma-button--secondary" type="button" hidden>Actualizar</button>
@@ -55,12 +55,24 @@
           <div><dt>Incidente</dt><dd id="fact-incident"></dd></div>
           <div><dt>Estado</dt><dd id="fact-state"></dd></div>
           <div><dt>Artefacto</dt><dd id="fact-artifact"></dd></div>
+          <div><dt>Versión</dt><dd id="fact-version"></dd></div>
+          <div><dt>Revisión</dt><dd id="fact-review"></dd></div>
+          <div><dt>Runs</dt><dd id="fact-runs"></dd></div>
+          <div><dt>Última edición</dt><dd id="fact-updated"></dd></div>
         </dl>
-        <div class="ma-panel__body"><p class="ma-muted" id="fixture-banner" hidden></p></div>
+      </section>
+      <section id="empty-section" class="ma-panel" hidden>
+        <div class="ma-panel__body">
+          <p class="ma-alert__title">Sin postmortem persistido</p>
+          <p id="empty-detail" class="ma-muted"></p>
+        </div>
       </section>
       <section id="artifact-section" class="ma-panel" hidden>
-        <div class="ma-panel__header"><h2 class="ma-panel__title">Borrador mínimo</h2></div>
-        <div class="ma-panel__body"><dl class="war-room__facts" id="artifact-sections"></dl></div>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Contenido de la versión</h2></div>
+        <div class="ma-panel__body">
+          <p id="content-restricted" class="ma-muted" hidden>Esta identidad ve el progreso del postmortem, no su texto: el contenido requiere run.read_context.</p>
+          <dl class="war-room__facts" id="artifact-sections"></dl>
+        </div>
       </section>
     </main>
   </body>

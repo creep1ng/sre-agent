@@ -287,6 +287,9 @@ export function createAdministrativeApiClient({
     getIncident(incidentId) {
       return request(`/v1/incidents/${encodeURIComponent(incidentId)}`);
     },
+    getPostmortem(incidentId) {
+      return request(`/v1/incidents/${encodeURIComponent(incidentId)}/postmortem`);
+    },
     getWhoAmI() {
       return request("/v1/whoami");
     },
