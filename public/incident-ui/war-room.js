@@ -6,6 +6,7 @@ import {
   STATE_DESCRIPTIONS,
   stateLabel,
 } from "/public/console/incident-vocabulary.js";
+import { hrefFor } from "/public/console/routes.js";
 import { mountedView } from "/public/console/view.js";
 
 const view = mountedView();
@@ -123,6 +124,7 @@ function cacheNodes() {
     "run-status-line",
     "run-pending",
     "run-terminated",
+    "run-decide",
     "run-start",
     "run-resume",
     "timeline-list",
@@ -496,8 +498,14 @@ function renderRunState(runState) {
     runState.pending_command !== ""
       ? runState.pending_command
       : null;
-  nodes["run-pending"].textContent = pending === null ? "" : `El run espera un comando: ${pending}.`;
-  nodes["run-pending"].hidden = pending === null;
+  // Una mitigación propuesta se decide en Decisiones; reanudar el run no la mueve.
+  const deciding = status === "awaiting_human" && runState.current_state === "mitigating";
+  nodes["run-pending"].textContent = deciding
+    ? "La investigación propuso una mitigación que espera tu decisión."
+    : pending === null ? "" : `El run espera un comando: ${pending}.`;
+  nodes["run-pending"].hidden = !deciding && pending === null;
+  nodes["run-decide"].href = hrefFor("decisions", { incident_id: state.incidentId, run_id: state.runId });
+  nodes["run-decide"].hidden = !deciding;
   const reason = runState.terminated_reason;
   if (typeof reason === "string" && reason !== "" && reason !== "denied") {
     nodes["run-terminated"].textContent = TERMINATION_REASONS[reason] ?? `Run terminado (${reason}).`;
@@ -506,7 +514,7 @@ function renderRunState(runState) {
   } else {
     nodes["run-terminated"].hidden = true;
   }
-  nodes["run-resume"].hidden = status !== "awaiting_human";
+  nodes["run-resume"].hidden = status !== "awaiting_human" || deciding;
   nodes["run-state"].hidden = false;
 }
 
