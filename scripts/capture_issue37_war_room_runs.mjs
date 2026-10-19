@@ -3,11 +3,11 @@
 // stamped incident with the demo-human operator, waits for the projected run
 // strip and captures docs/evidence/37-war-room-run-start.png.
 //
-// Host prerequisites: the compose stack is up and healthy, and the environment
-// carries DEMO_HUMAN_API_KEY plus SEED_STAMP seeded by
-// scripts/seed_war_room_runs.py. Example (PR reproduction commands):
-//   WEB_PORT=8091 ... docker compose -p sre-agent-37 up -d --build db api web
-//   PLAYWRIGHT_BASE_URL=http://127.0.0.1:8091 node scripts/capture_issue37_war_room_runs.mjs
+// Runs in the e2e container on the stack network, after scripts/seed_war_room_runs.py
+// seeded SEED_STAMP; DEMO_HUMAN_API_KEY comes from the e2e service environment:
+//   docker compose --profile e2e run --rm --no-deps -v ./scripts:/e2e/scripts:ro \
+//     -v ./docs/evidence:/e2e/docs/evidence -e PLAYWRIGHT_BASE_URL=http://web \
+//     -e SEED_STAMP=<stamp> e2e node scripts/capture_issue37_war_room_runs.mjs
 import { chromium } from "@playwright/test";
 import { connectConsole } from "../tests/browser/support/console-session.mjs";
 

@@ -70,6 +70,18 @@ test("restricted-harness stays at 403 without any success state", async ({ page 
   await expect(page.locator("#run-select option")).toHaveCount(0);
 });
 
+test("a proposed mitigation sends the operator to Decisiones", async ({ page }) => {
+  await page.goto(`/public/incident-ui/war-room.html?incident_id=inc-37-decide-${STAMP}`);
+  await connectConsole(page, DEMO_KEY);
+
+  await expect(page.locator("#run-state")).toContainText("Mitigando");
+  await expect(page.locator("#run-resume")).toBeHidden();
+  await page.locator("#run-decide").click();
+  await expect(page).toHaveURL(/[?&]view=decisions&incident_id=inc-37-decide-/);
+  await expect(page.locator("#session-chip")).toHaveAttribute("data-phase", "active");
+  await expect(page.getByRole("button", { name: "Aprobar mitigación" })).toBeVisible();
+});
+
 test("unknown incident and rejected credential surface 404 and 401", async ({ page }) => {
   await page.goto("/public/incident-ui/war-room.html?incident_id=inc-37-not-there");
   await connectConsole(page, DEMO_KEY);
