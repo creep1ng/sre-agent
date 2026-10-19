@@ -10,6 +10,8 @@ mitigation with its verification_check). The agent steps use the same command
 shape as the investigator; the evidence is a labelled fixture (source: fixture),
 never an observed query. Every later step is human and goes through the HTTP
 API or the console. Requires DATABASE_URL and SEED_STAMP ([a-z0-9-]{4,32}).
+SEED_UNTIL=<transition> stops after that step (e.g. start_investigation leaves the
+run investigating); a later run without it replays those steps and finishes.
 """
 
 from __future__ import annotations
@@ -139,12 +141,15 @@ async def main() -> None:
         runtime = IncidentRuntime(
             workflow, lambda: PostgresIncidentUnitOfWork(database), clock=lambda: NOW
         )
+        until = os.environ.get("SEED_UNTIL")
         for command in commands(incident_id, run_id):
             result = await runtime.execute(command)
             print(
                 f"{command.transition_id}: incident v{result.incident.version} "
                 f"{result.incident.state['state']} (replayed={result.replayed})"
             )
+            if command.transition_id == until:
+                break
         print(f"seeded {incident_id} / {run_id}")
     finally:
         await database.dispose()

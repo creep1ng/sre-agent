@@ -135,6 +135,7 @@
             <p class="ma-panel__description">
               Lo que el agente registró en el incidente: la hipótesis actual y la evidencia que reunió.
             </p>
+            <p id="reasoning-live" class="ma-panel__description" aria-live="polite"></p>
           </div>
         </div>
         <div id="reasoning-forbidden" class="ma-alert reasoning__notice" data-tone="warning" hidden>
@@ -209,8 +210,8 @@
       </section>
 
       <p class="war-room__developer-note">
-        Fuente: API de consultas del dominio de incidentes. Actualización manual con el botón
-        Actualizar.
+        Fuente: API de consultas del dominio de incidentes. Mientras el agente investiga, la vista
+        se actualiza sola; en otro caso, con el botón Actualizar.
       </p>
     </main>
   </body>

@@ -20,6 +20,10 @@ const TIMELINE_LIMIT = 50;
 const OBJECTIVE = "investigate";
 const WORKFLOW_VERSION = "1.0.0";
 const START_KEY_STORAGE = "midnight-agent-run-start";
+// While the agent investigates (the start request in flight, or the run running in
+// `investigating`), the view polls the run every few seconds and reloads when it changes.
+const LIVE_EVERY_MS = 4000;
+const LIVE_FOR_MS = 6 * 60 * 1000;
 
 const TERMINATION_REASONS = Object.freeze({
   completed: "Investigación completada.",
@@ -95,6 +99,8 @@ const state = {
   lastDay: null,
   version: null,
   generation: 0,
+  // Bumped on every session change: an answer from an earlier session never lands in this one.
+  session: 0,
 };
 
 const nodes = {};
@@ -137,6 +143,7 @@ function cacheNodes() {
     "load-more",
     "refresh-button",
     "reasoning-section",
+    "reasoning-live",
     "reasoning-forbidden",
     "reasoning-unavailable",
     "reasoning-empty",
@@ -185,6 +192,7 @@ function hideAll() {
 }
 
 function showError(kind, status) {
+  stopLive();
   hideAll();
   nodes[`error-${kind}`].hidden = false;
   nodes["war-room"].dataset.state = "error";
@@ -201,7 +209,9 @@ function newGeneration() {
 }
 
 function clearSessionData() {
+  stopLive();
   renderReasoning(null);
+  nodes["reasoning-live"].textContent = "";
   nodes["timeline-list"].replaceChildren();
   nodes["timeline-context"].textContent = "";
   nodes["load-more"].disabled = false;
@@ -492,6 +502,26 @@ function renderRunPicker(detail, activeRunId) {
 
 // Franja del run en foco: estado proyectado, comando pendiente y motivo de
 // terminación. `denied` nunca es terminado, completado ni exitoso.
+// After the mitigation decision the run waits for no command: the war room points to the
+// journey's next step (workflow 1.0.0), keyed by the incident's state.
+const NEXT_STEPS = Object.freeze({
+  verifying: Object.freeze({
+    view: "decisions",
+    label: "Ir a Decisiones",
+    text: "La mitigación quedó aprobada: confirma en Decisiones si el servicio quedó estable.",
+  }),
+  resolved: Object.freeze({
+    view: "postmortem",
+    label: "Ir al postmortem",
+    text: "El servicio quedó verificado: abre el postmortem y redáctalo.",
+  }),
+  postmortem: Object.freeze({
+    view: "postmortem",
+    label: "Ir al postmortem",
+    text: "El postmortem está abierto: complétalo y revísalo; el cierre se confirma en Decisiones.",
+  }),
+});
+
 function renderRunState(runState) {
   state.runState = runState;
   if (!runState || runState.run_id !== state.runId) {
@@ -516,12 +546,15 @@ function renderRunState(runState) {
       : null;
   // Una mitigación propuesta se decide en Decisiones; reanudar el run no la mueve.
   const deciding = status === "awaiting_human" && runState.current_state === "mitigating";
+  const next = deciding ? null : (NEXT_STEPS[state.incidentState] ?? null);
   nodes["run-pending"].textContent = deciding
     ? "La investigación propuso una mitigación que espera tu decisión."
-    : pending === null ? "" : `El run espera un comando: ${pending}.`;
-  nodes["run-pending"].hidden = !deciding && pending === null;
-  nodes["run-decide"].href = hrefFor("decisions", { incident_id: state.incidentId, run_id: state.runId });
-  nodes["run-decide"].hidden = !deciding;
+    : next !== null ? next.text : pending === null ? "" : `El run espera un comando: ${pending}.`;
+  nodes["run-pending"].hidden = !deciding && next === null && pending === null;
+  const target = next?.view ?? "decisions";
+  nodes["run-decide"].href = hrefFor(target, { incident_id: state.incidentId, run_id: state.runId });
+  nodes["run-decide"].textContent = next?.label ?? "Ir a Decisiones";
+  nodes["run-decide"].hidden = !deciding && next === null;
   const reason = runState.terminated_reason;
   if (typeof reason === "string" && reason !== "" && reason !== "denied") {
     nodes["run-terminated"].textContent = TERMINATION_REASONS[reason] ?? `Run terminado (${reason}).`;
@@ -530,7 +563,8 @@ function renderRunState(runState) {
   } else {
     nodes["run-terminated"].hidden = true;
   }
-  nodes["run-resume"].hidden = status !== "awaiting_human" || deciding;
+  // Resuming only reads the run again: a run blocked by a denial needs a grant and a human, not a reread.
+  nodes["run-resume"].hidden = status !== "awaiting_human" || deciding || runState.terminated_reason === "denied";
   nodes["run-state"].hidden = false;
 }
 
@@ -570,6 +604,67 @@ function renderReasoning(result) {
 }
 
 let runActionInFlight = false;
+const live = { timer: null, since: 0 };
+
+function investigating(runState) {
+  return runState?.status === "running" && runState?.current_state === "investigating";
+}
+
+function stopLive() {
+  if (live.timer !== null) clearTimeout(live.timer);
+  live.timer = null;
+}
+
+// The run line heads the panel; while the agent works it says so and when it last checked.
+function showLive(runId, runState) {
+  const active = runActionInFlight || investigating(runState);
+  if (!active && runId === null) return;
+  const status = RUN_LABELS[runState?.status] ?? runState?.status ?? "—";
+  const line =
+    runId === null ? "Iniciando la investigación…" : `${runId} · ${status} · ${stateLabel(runState?.current_state)}`;
+  nodes["reasoning-live"].textContent = active
+    ? `${line} · el agente está investigando; la vista se actualiza sola (${clockFormat.format(new Date())}).`
+    : line;
+  if (active) nodes["reasoning-section"].hidden = false;
+}
+
+function scheduleLive(fresh) {
+  stopLive();
+  if (!runActionInFlight && !investigating(state.runState)) return;
+  if (fresh) live.since = Date.now();
+  if (Date.now() - live.since > LIVE_FOR_MS) {
+    nodes["reasoning-live"].textContent += " Actualización automática detenida: usa Actualizar.";
+    return;
+  }
+  const generation = state.generation;
+  live.timer = setTimeout(() => liveTick(generation), LIVE_EVERY_MS);
+}
+
+// A start request in flight owns the reload when it answers; meanwhile only the line moves.
+async function liveTick(generation) {
+  live.timer = null;
+  if (generation !== state.generation) return;
+  try {
+    let runId = state.runId;
+    if (runActionInFlight || runId === null) runId = latestRunId(await client.getIncident(state.incidentId));
+    const runState = runId === null ? null : await client.getRun(state.incidentId, runId);
+    if (generation !== state.generation) return;
+    const known = state.runState;
+    const changed =
+      runId !== state.runId ||
+      runState?.cursor !== known?.cursor ||
+      runState?.status !== known?.status ||
+      runState?.current_state !== known?.current_state;
+    if (changed && !runActionInFlight) {
+      loadAll();
+      return;
+    }
+    showLive(runId, runState);
+  } catch {
+    if (generation !== state.generation) return;
+  }
+  scheduleLive(false);
+}
 
 function showRunActionError(error) {
   if (!(error instanceof ApiClientError)) {
@@ -595,6 +690,9 @@ async function beginRun(resumeRunId = null) {
   nodes["run-start"].disabled = true;
   nodes["run-resume"].disabled = true;
   const generation = state.generation;
+  const session = state.session;
+  showLive(state.runId, resume ? state.runState : null);
+  scheduleLive(true);
   const body = resume
     ? { workflow_version: WORKFLOW_VERSION, objective: OBJECTIVE, resume_from_run_id: resumeRunId }
     : { workflow_version: WORKFLOW_VERSION, objective: OBJECTIVE };
@@ -604,7 +702,8 @@ async function beginRun(resumeRunId = null) {
       body,
       storedRunKey(state.incidentId, { resume: resume ? resumeRunId : undefined }),
     );
-    if (generation !== state.generation) return;
+    // Another session discards the answer; a reload of this one (Actualizar) does not.
+    if (session !== state.session) return;
     if (!resume) storedRunKey(state.incidentId, { clear: true });
     state.selectedRunId = created.run_id;
   } catch (error) {
@@ -613,8 +712,11 @@ async function beginRun(resumeRunId = null) {
     return;
   } finally {
     runActionInFlight = false;
+    nodes["run-start"].disabled = false;
+    nodes["run-resume"].disabled = false;
   }
-  if (generation === state.generation) loadAll();
+  // A reload during the request read the run before it answered: read it again.
+  loadAll();
 }
 
 async function fetchTimeline({ runId, after } = {}) {
@@ -682,6 +784,8 @@ async function loadAll() {
     view.focusIncident(detail, runId);
     renderRunState(runState);
     renderReasoning(reasoning);
+    showLive(runId, runState);
+    scheduleLive(true);
     nodes["run-start"].hidden = state.incidentState !== "active";
     nodes["run-start"].disabled = runActionInFlight;
     nodes["run-resume"].disabled = runActionInFlight;
@@ -739,6 +843,7 @@ function selectRun(event) {
 // La credencial vive en la sesión de la consola: una sesión activa carga el incidente y
 // cualquier cambio descarta lo leído con la credencial anterior.
 function applySession(session) {
+  state.session += 1;
   if (session.phase === "active") {
     loadAll();
     return;
