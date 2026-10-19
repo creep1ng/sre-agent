@@ -632,12 +632,26 @@ class IncidentRuntime:
             incident["alert"] = alert
         if transition.transition_id in {"apply_mitigation", "reject_mitigation"}:
             strategy = dict(incident["mitigation_strategy"])
+            outcome = command.outcome or transition.outcomes[0]
             strategy["approval_status"] = {
                 "approve": "approved",
                 "reject": "rejected",
                 "request_changes": "changes_requested",
-            }[command.outcome or transition.outcomes[0]]
+            }[outcome]
             incident["mitigation_strategy"] = strategy
+            if outcome in {"approve", "reject"}:
+                # The human gate's answer, listed where the incident shows its approvals.
+                incident["approvals"] = [
+                    *(incident.get("approvals") or []),
+                    {
+                        "approval_id": self._id_factory("apr"),
+                        "subject_id": strategy["mitigation_id"],
+                        "granted": outcome == "approve",
+                        "comment": (command.inputs or {}).get("comment"),
+                        "actor": "human",
+                        "decided_at": now.isoformat(),
+                    },
+                ]
         self._validate_result(transition, incident)
 
         run = dict(old_run)

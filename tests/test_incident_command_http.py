@@ -663,3 +663,35 @@ def test_a_retried_command_returns_the_same_state_and_decides_once() -> None:
             "SELECT count(*) FROM incident.run_events WHERE run_id = %s", (RUNS["inc-b3-retry"],)
         ).fetchone()
     assert count == (1,)
+
+
+def test_mitigation_decisions_reach_the_incident_approvals_once() -> None:
+    """Failure modes: the war room lists no approval after a human decided the mitigation;
+    a rejection reads as granted; a replay lists the decision twice; asking for changes
+    reads as a rejection."""
+    _mitigating("inc-apr-approve", "inc-apr-reject", "inc-apr-changes")
+    decided = [
+        _send("inc-apr-approve", "key-apr-approve-001", _body()),
+        _send("inc-apr-approve", "key-apr-approve-001", _body()),
+        _send("inc-apr-reject", "key-apr-reject-0001", _body(command="reject_mitigation")),
+        _send("inc-apr-changes", "key-apr-changes-001", _body(command="request_changes")),
+    ]
+    assert [response.status_code for response in decided] == [202, 202, 202, 202]
+    with TestClient(create_application(Settings(DATABASE_URL))) as client:
+        approvals = {
+            incident_id: client.get(
+                f"/v1/incidents/{incident_id}", headers={"Authorization": BEARERS["demo-human"]}
+            ).json()["approvals"]
+            for incident_id in ("inc-apr-approve", "inc-apr-reject", "inc-apr-changes")
+        }
+    listed = {
+        incident_id: [(item["subject_id"], item["granted"]) for item in items]
+        for incident_id, items in approvals.items()
+    }
+    assert listed == {
+        "inc-apr-approve": [(MITIGATION["mitigation_id"], True)],
+        "inc-apr-reject": [(MITIGATION["mitigation_id"], False)],
+        "inc-apr-changes": [],
+    }
+    for item in approvals["inc-apr-approve"] + approvals["inc-apr-reject"]:
+        assert item["approval_id"].startswith("apr_") and item["decided_at"]
