@@ -154,7 +154,8 @@
   font-size: var(--ma-font-size-sm);
 }
 
-.reasoning__evidence-list {
+.reasoning__evidence-list,
+.reasoning__steps {
   display: grid;
   gap: var(--ma-space-3);
   margin: var(--ma-space-3) 0 0;
@@ -198,6 +199,30 @@
 
 .reasoning__request {
   font-size: var(--ma-font-size-xs);
+}
+
+.reasoning__label {
+  margin: var(--ma-space-4) 0 0;
+  font-size: var(--ma-font-size-sm);
+}
+
+.reasoning__facts {
+  display: grid;
+  gap: var(--ma-space-2);
+  margin: var(--ma-space-4) 0 0;
+}
+
+.reasoning__facts dt {
+  color: var(--ma-color-text-tertiary);
+  font-size: var(--ma-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reasoning__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 /* The timeline is the design system's ma-timeline with numbered markers: each event shows its
