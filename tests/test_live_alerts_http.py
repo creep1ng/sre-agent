@@ -155,6 +155,14 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
             k: alert[k] for k in ("alert_id", "observed_at")
         }
 
+        # A window without samples keeps the open episode listed (no flapping).
+        mcp.next = {"data": []}
+        gap = alerts().json()
+        assert gap["rules"][0]["state"] == "no_data"
+        assert [item["alert_id"] for item in gap["alerts"]] == [alert["alert_id"]]
+        assert "no samples" in gap["alerts"][0]["origin"]["condition"]
+        mcp.next = ratio("1")
+
         # Triage accepts the live id and the operator-confirmed alert facts.
         context = {key: alert[key] for key in ("service", "summary", "observed_at", "source")}
         declared = client.post(
