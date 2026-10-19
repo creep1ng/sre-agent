@@ -199,6 +199,26 @@ def _create_started_run_with_pending_receipt(incident_id: str, command_id: str) 
     return asyncio.run(create())
 
 
+def _scripted_decision(state: dict[str, Any], statement: str) -> dict[str, Any]:
+    """A cited hypothesis first; once it is recorded, a mitigation based on it."""
+    hypotheses = state["incident"]["hypotheses"]
+    if hypotheses:
+        return {
+            "action": "propose_mitigation",
+            "description": "Keep the synthetic payment path simulated.",
+            "steps": ["Keep the change simulated."],
+            "risk": "low",
+            "verification_check": "The synthetic payment error rate returns to zero.",
+            "based_on_hypothesis": hypotheses[0]["hypothesis_id"],
+        }
+    return {
+        "action": "propose_hypothesis",
+        "statement": statement,
+        "confidence": "medium",
+        "supporting_evidence": [state["collected_evidence"][0]["evidence_id"]],
+    }
+
+
 class ScriptedLLM:
     def __init__(self, final_outcome: dict[str, Any] | None = None) -> None:
         self.requests: list[ProviderRequest] = []
@@ -224,14 +244,8 @@ class ScriptedLLM:
                 text = json.dumps(self.final_outcome)
             else:
                 state = json.loads(request.input.split("State: ", 1)[1])
-                evidence_id = state["collected_evidence"][0]["evidence_id"]
                 text = json.dumps(
-                    {
-                        "action": "propose_hypothesis",
-                        "statement": "A synthetic payment error-rate increase is visible.",
-                        "confidence": "medium",
-                        "supporting_evidence": [evidence_id],
-                    }
+                    _scripted_decision(state, "A synthetic payment error-rate increase is visible.")
                 )
         return ProviderResult(
             response_id=f"resp_test_{len(self.requests):04d}",
@@ -289,14 +303,10 @@ class SchemaDrivenLLM(ScriptedLLM):
                 }
             )
         else:
-            evidence_id = state["collected_evidence"][0]["evidence_id"]
             text = json.dumps(
-                {
-                    "action": "propose_hypothesis",
-                    "statement": "The authorized synthetic Prometheus query returned evidence.",
-                    "confidence": "medium",
-                    "supporting_evidence": [evidence_id],
-                }
+                _scripted_decision(
+                    state, "The authorized synthetic Prometheus query returned evidence."
+                )
             )
         return ProviderResult(
             response_id=f"resp_schema_{len(self.requests):04d}",
@@ -500,14 +510,8 @@ class _WitnessRequestHandler(BaseHTTPRequestHandler):
                     self.send_error(504)
                     return
             state = json.loads(body["input"].split("State: ", 1)[1])
-            evidence_id = state["collected_evidence"][0]["evidence_id"]
             text = json.dumps(
-                {
-                    "action": "propose_hypothesis",
-                    "statement": "A synthetic payment error-rate increase is visible.",
-                    "confidence": "medium",
-                    "supporting_evidence": [evidence_id],
-                }
+                _scripted_decision(state, "A synthetic payment error-rate increase is visible.")
             )
         self._respond(
             {
@@ -771,29 +775,42 @@ def test_http_investigate_uses_governed_llm_and_mcp_and_persists_the_result() ->
     incident_state, event_payloads, decisions = _database_rows(incident_id, run_id)
     run_state, run_version = _active_state(run_id)
     receipts = _receipts(event_payloads)
-    assert len(llm.requests) == 2 and len(mcp.calls) == 1
+    assert len(llm.requests) == 3 and len(mcp.calls) == 1
     assert llm.requests[0].input != "" and "inc-investigator-positive" in llm.requests[0].input
-    assert incident_state["state"] == "investigating"
+    # The recorded hypothesis keeps the run going: the agent then proposes a mitigation for it.
+    assert incident_state["state"] == "mitigating"
     assert len(incident_state["hypotheses"]) == 1
     assert len(incident_state["evidence"]) == 1
-    assert run_state["current_state"] == "investigating" and run_version == 2
+    hypothesis_id = incident_state["hypotheses"][0]["hypothesis_id"]
+    mitigation = incident_state["mitigation_strategy"]
+    assert mitigation["based_on_hypothesis"] == hypothesis_id
+    assert mitigation["approval_status"] == "pending" and mitigation["verification_check"]
+    assert run_state["current_state"] == "mitigating" and run_version == 3
+    assert run_state["pending_command"] == "approve_mitigation"
     assert [(receipt["phase"], receipt["status"]) for receipt in receipts] == [
         ("intent", "pending"),
         ("outcome", "success"),
     ]
     mcp_request_id = incident_state["evidence"][0]["request_id"]
     assert mcp_request_id == receipts[-1]["mcp_request_ids"][0]
-    transition_decision_id = next(
+    for transition_id, action in (
+        ("continue_investigation", "propose_hypothesis"),
+        ("propose_mitigation", "propose_mitigation"),
+    ):
+        transition_decision_id = next(
+            event["decision_id"]
+            for event in event_payloads
+            if event.get("transition_id") == transition_id
+        )
+        assert [
+            event["decision_id"]
+            for event in event_payloads
+            if event.get("outcome", {}).get("action") == action
+        ] == [transition_decision_id]
+    assert transition_decision_id == next(
         event["decision_id"]
         for event in event_payloads
-        if event.get("transition_id") == "continue_investigation"
-    )
-    assert all(
-        event["decision_id"] == transition_decision_id
-        for event in event_payloads
-        if event.get("transition_id") == "continue_investigation"
-        or event.get("outcome", {}).get("action") == "propose_hypothesis"
-        or event.get("dispatch_receipt", {}).get("phase") == "outcome"
+        if event.get("dispatch_receipt", {}).get("phase") == "outcome"
     )
     with psycopg.connect(DATABASE_URL) as connection:
         audit_count = connection.execute(
@@ -801,7 +818,11 @@ def test_http_investigate_uses_governed_llm_and_mcp_and_persists_the_result() ->
             (mcp_request_id,),
         ).fetchone()[0]
     assert audit_count == 1
-    assert any(decision.get("transition_id") == "continue_investigation" for decision in decisions)
+    assert [
+        decision.get("transition_id")
+        for decision in decisions
+        if decision.get("transition_id") in {"continue_investigation", "propose_mitigation"}
+    ] == ["continue_investigation", "propose_mitigation"]
     assert timeline.json()["events"]
     assert "assembled_input" not in json.dumps(event_payloads)
     assert "model_output" not in json.dumps(event_payloads)
@@ -822,14 +843,14 @@ def test_investigator_receives_only_runtime_schemas_for_authorized_tools() -> No
 
     incident_state, event_payloads, _ = _database_rows(incident_id, run_id)
     receipts = _receipts(event_payloads)
-    assert len(llm.requests) == 2 and len(mcp.calls) == 1
+    assert len(llm.requests) == 3 and len(mcp.calls) == 1
     assert [tool for tool, _ in mcp.calls] == ["query_prometheus"]
-    assert len(llm.tool_schemas) == 2
+    assert len(llm.tool_schemas) == 3
     assert set(llm.tool_schemas[0]) == {"query_prometheus"}
     assert "query_elasticsearch" not in json.dumps(llm.tool_schemas)
     assert llm.tool_schemas[0]["query_prometheus"] == PrometheusQuery.model_json_schema()
-    assert llm.tool_schemas[1] == llm.tool_schemas[0]
-    assert incident_state["state"] == "investigating"
+    assert llm.tool_schemas[1] == llm.tool_schemas[2] == llm.tool_schemas[0]
+    assert incident_state["state"] == "mitigating"
     assert len(incident_state["hypotheses"]) == 1 and len(incident_state["evidence"]) == 1
     assert [(receipt["phase"], receipt["status"]) for receipt in receipts] == [
         ("intent", "pending"),
@@ -866,7 +887,7 @@ def test_indeterminate_prometheus_sample_survives_governed_http_and_prompt() -> 
         run_id = response.json()["run_id"]
 
     incident_state, event_payloads, _ = _database_rows(incident_id, run_id)
-    assert len(llm.requests) == 2 and len(mcp.calls) == 1
+    assert len(llm.requests) == 3 and len(mcp.calls) == 1
     prompt_state = json.loads(llm.requests[1].input.split("State: ", 1)[1])
     prompt_evidence = prompt_state["collected_evidence"][0]
     evidence_summary = json.loads(prompt_evidence["summary"])
@@ -1220,7 +1241,7 @@ def test_concurrent_idempotent_start_does_not_terminalize_active_dispatch_or_red
         ("intent", "pending"),
         ("outcome", "success"),
     ]
-    assert llm.calls_started == 2 and len(llm.requests) == 2 and len(mcp.calls) == 1
+    assert llm.calls_started == 3 and len(llm.requests) == 3 and len(mcp.calls) == 1
 
 
 def test_restart_with_orphaned_intent_marks_unknown_without_redispatch() -> None:
@@ -1406,7 +1427,12 @@ def test_real_app_process_crash_and_success_replay_do_not_redispatch() -> None:
             assert started.status_code == 201, started.text
             success_run_id = started.json()["run_id"]
             witness_before_restart = _read_witness(upstream.witness_path)
-            assert [item["kind"] for item in witness_before_restart] == ["llm", "mcp", "llm"]
+            assert [item["kind"] for item in witness_before_restart] == [
+                "llm",
+                "mcp",
+                "llm",
+                "llm",
+            ]
         finally:
             first_exit = _stop_app_process(first_process)
 
@@ -1429,7 +1455,7 @@ def test_real_app_process_crash_and_success_replay_do_not_redispatch() -> None:
         ]
         assert len(incident_state["hypotheses"]) == 1 and len(incident_state["evidence"]) == 1
         assert witness_after_replay == witness_before_restart
-        assert upstream.counts == {"llm": 2, "mcp": 1}
+        assert upstream.counts == {"llm": 3, "mcp": 1}
         print(
             "SUCCESS_REPLAY_PROOF "
             f"first_pid={first_pid} first_exit={first_exit} retry_pid={retry_pid} "

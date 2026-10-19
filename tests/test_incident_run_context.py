@@ -111,7 +111,8 @@ def test_the_run_writes_its_context_and_only_run_read_context_reads_it_after_res
     assert reread.json()["turns"] == turns
     assert [turn["assembled_input"] for turn in turns] == [item.input for item in llm.requests]
     actions = [json.loads(turn["model_output"])["action"] for turn in turns]
-    assert actions == ["use_tool", "propose_hypothesis"]
+    assert actions == ["use_tool", "propose_hypothesis", "propose_mitigation"]
+    assert [turn["sequence"] for turn in turns] == [0, 1, 2]
     assert turns[0]["tool_invocation"]["arguments"]["expr"] == SENSITIVE[1]
     assert turns[1]["tool_invocation"] is None
     assert [turn["task_id"] for turn in turns] == [
