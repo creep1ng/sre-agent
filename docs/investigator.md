@@ -68,9 +68,14 @@ answered and the gateway request id. `GET .../runs/{run_id}/context` reads them 
 enough, a run of another incident is 404, and state, events and timeline stay safe. A dispatch
 interrupted before its outcome leaves no context: its turns never came back.
 
-A cited hypothesis maps to the existing `continue_investigation` transition. A proposed
-mitigation uses the existing `propose_mitigation` preconditions and creates a pending,
-identified artifact. `request_human` and `conclude` have no transition in this workflow;
+A cited hypothesis maps to the existing `continue_investigation` transition. While steps
+are left, the same dispatch then continues with the remaining budget and the recorded
+hypothesis in its context, so the agent can reach the `evidence_sufficiency` decision again
+and propose a mitigation based on it; the outcome receipt closes the dispatch only once. A
+proposed mitigation uses the existing `propose_mitigation` preconditions and creates a
+pending, identified artifact. Those preconditions need a recorded hypothesis with cited
+evidence, so a mitigation proposed before one exists is rejected as invalid output and the
+model is asked again. `request_human` and `conclude` have no transition in this workflow;
 their validated result is recorded without inventing a domain-state transition.
 
 Governed MCP discovery includes the JSON Schema generated from each tool's strict runtime

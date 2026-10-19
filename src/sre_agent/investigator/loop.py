@@ -24,6 +24,7 @@ from sre_agent.investigator.contract import (
     Limits,
     Outcome,
     PinnedSkill,
+    ProposeMitigation,
     RequestHuman,
     SearchBoK,
     SkillPin,
@@ -276,6 +277,9 @@ async def investigate(
             unknown = unknown_references(action, request, {item.evidence_id for item in evidence})
             if unknown:
                 raise InvalidOutput("unknown references: " + ", ".join(unknown))
+            if isinstance(action, ProposeMitigation) and not request.context.hypotheses:
+                # The runtime proposes a mitigation only for a recorded, cited hypothesis.
+                raise InvalidOutput("propose a cited hypothesis before a mitigation")
         except InvalidOutput as error:
             turns.append(turn)
             if feedback is not None:

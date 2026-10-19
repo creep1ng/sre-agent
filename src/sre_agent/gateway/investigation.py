@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from secrets import token_hex
 from typing import Any
@@ -30,6 +31,7 @@ from sre_agent.investigator.contract import (
     IncidentContext,
     InvestigationRequest,
     InvestigationResult,
+    Limits,
     ProposeHypothesis,
     ProposeMitigation,
     RequestHuman,
@@ -178,34 +180,72 @@ class InvestigationRunDispatcher:
             )
             return
 
-        try:
-            result = await investigate(
-                InvestigationRequest(
-                    incident_id=incident_id,
-                    run_id=run_id,
-                    objective="investigate",
-                    context=context,
-                    authorized_capabilities=capabilities,
-                ),
-                self.gateway,
-                self.evidence,
-            )
-        except Exception:
-            await self._finish(
-                work,
-                incident_id,
-                run_id,
-                actor_reference,
-                status="unknown",
-                reason_code="investigator_failed",
-                request_ids=request_ids,
-            )
-            return
+        # A cited hypothesis with steps left is recorded through continue_investigation and
+        # the run goes on with the remaining budget, so the agent can still reach the
+        # evidence_sufficiency decision and propose a mitigation for that hypothesis.
+        limits, offset = Limits(), 0
+        run_mcp_ids: list[UUID] = []
+        while True:
+            try:
+                result = await investigate(
+                    InvestigationRequest(
+                        incident_id=incident_id,
+                        run_id=run_id,
+                        objective="investigate",
+                        context=context,
+                        authorized_capabilities=capabilities,
+                    ),
+                    self.gateway,
+                    self.evidence,
+                    limits,
+                )
+            except Exception:
+                await self._finish(
+                    work,
+                    incident_id,
+                    run_id,
+                    actor_reference,
+                    status="unknown",
+                    reason_code="investigator_failed",
+                    request_ids=request_ids,
+                    mcp_request_ids=run_mcp_ids,
+                )
+                return
+            request_ids.extend(result.request_ids)
+            run_mcp_ids.extend(result.mcp_request_ids)
+            contexts = self._contexts(incident_id, run_id, result, offset)
+            if not (
+                result.status == "completed"
+                and isinstance(result.outcome, ProposeHypothesis)
+                and result.remaining_step_budget >= 1
+            ):
+                break
+            try:
+                view = await self._continue(
+                    incident_id, run_id, view, principal, actor_reference, result, contexts
+                )
+                context = IncidentContext.model_validate(view.incident_state)
+            except Exception as error:
+                await self._finish(
+                    work,
+                    incident_id,
+                    run_id,
+                    actor_reference,
+                    status="unknown",
+                    reason_code="stale_incident_snapshot"
+                    if isinstance(error, IncidentStaleWriteError)
+                    else "result_persistence_uncertain",
+                    request_ids=request_ids,
+                    mcp_request_ids=run_mcp_ids,
+                    result_status=result.status,
+                    contexts=contexts,
+                )
+                return
+            offset += len(result.turns)
+            limits = Limits(max_steps=result.remaining_step_budget)
 
-        request_ids.extend(result.request_ids)
         all_request_ids = _unique_ids(request_ids)
-        mcp_request_ids = _unique_ids(result.mcp_request_ids)
-        contexts = self._contexts(incident_id, run_id, result)
+        mcp_request_ids = _unique_ids(run_mcp_ids)
         if result.status == "denied":
             await self._finish(
                 work,
@@ -294,6 +334,37 @@ class InvestigationRunDispatcher:
                 contexts=contexts,
             )
 
+    async def _continue(
+        self,
+        incident_id: str,
+        run_id: str,
+        view: IncidentView,
+        principal: PrincipalContext,
+        actor_reference: ActorReference,
+        result: InvestigationResult,
+        contexts: tuple[TextContextRecord, ...],
+    ) -> IncidentView:
+        """Record a hypothesis that leaves budget; the dispatch stays open for the next step."""
+        turn_id = result.turns[-1].turn_id if result.turns else None
+        outcome_event = self._result_event(
+            incident_id, run_id, actor_reference, result, datetime.now(UTC), (), turn_id
+        )
+        command = self._runtime_command(
+            incident_id,
+            run_id,
+            view,
+            view.incident_version,
+            principal,
+            result,
+            (outcome_event,),
+            contexts,
+        )
+        assert command is not None
+        await self.runtime.execute(
+            replace(command, command_id=f"investigation-{run_id}-{turn_id}", dispatch_id=None)
+        )
+        return await self.runtime.current(incident_id, run_id)
+
     async def _persist_result(
         self,
         work: IncidentUnitOfWork,
@@ -311,6 +382,8 @@ class InvestigationRunDispatcher:
         assert result.outcome is not None
         now = datetime.now(UTC)
         turn_id = result.turns[-1].turn_id if result.turns else None
+        # Events written with a transition carry the state it reaches, as the timeline reads them.
+        reached = "mitigating" if isinstance(result.outcome, ProposeMitigation) else "investigating"
         incident_patch = (
             self._hypothesis_patch(
                 result.outcome,
@@ -329,6 +402,7 @@ class InvestigationRunDispatcher:
             request_ids,
             turn_id,
             incident_patch=incident_patch,
+            state=reached,
         )
         receipt_event = self._receipt_event(
             incident_id,
@@ -341,6 +415,7 @@ class InvestigationRunDispatcher:
             mcp_request_ids=mcp_request_ids,
             turn_id=turn_id,
             result_status=result.status,
+            state=reached,
         )
         command = self._runtime_command(
             incident_id,
@@ -571,6 +646,7 @@ class InvestigationRunDispatcher:
         turn_id: str | None = None,
         result_status: str | None = None,
         diagnostic: Mapping[str, Any] | None = None,
+        state: str = "investigating",
     ) -> EventDraft:
         receipt: dict[str, Any] = {
             "dispatch_id": run_id,
@@ -589,7 +665,7 @@ class InvestigationRunDispatcher:
             event_id=f"evt_{token_hex(8)}",
             kind="dispatch_receipt",
             payload={
-                "state": "investigating",
+                "state": state,
                 "dispatch_receipt": receipt,
                 "request_id": str(request_ids[-1]) if request_ids else None,
             },
@@ -599,7 +675,7 @@ class InvestigationRunDispatcher:
 
     @staticmethod
     def _contexts(
-        incident_id: str, run_id: str, result: InvestigationResult
+        incident_id: str, run_id: str, result: InvestigationResult, offset: int = 0
     ) -> tuple[TextContextRecord, ...]:
         """Each turn as the run-context contract reads it, written with the run's outcome."""
         return tuple(
@@ -607,7 +683,7 @@ class InvestigationRunDispatcher:
                 turn_id=turn.turn_id,
                 incident_id=incident_id,
                 run_id=run_id,
-                sequence=turn.sequence,
+                sequence=offset + turn.sequence,
                 content=turn.model_dump(
                     mode="json",
                     include={"assembled_input", "model_output", "tool_invocation", "request_id"},
@@ -643,6 +719,7 @@ class InvestigationRunDispatcher:
         request_ids: Sequence[UUID],
         turn_id: str | None,
         incident_patch: Mapping[str, Any] | None = None,
+        state: str = "investigating",
     ) -> EventDraft:
         assert result.outcome is not None
         action = result.outcome.action
@@ -665,7 +742,7 @@ class InvestigationRunDispatcher:
             event_id=f"evt_{token_hex(8)}",
             kind="investigation_result",
             payload={
-                "state": "investigating",
+                "state": state,
                 "outcome": outcome,
                 **({"incident_patch": incident_patch} if incident_patch is not None else {}),
                 "evidence_references": [
