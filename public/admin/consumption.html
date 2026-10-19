@@ -58,6 +58,34 @@
         <p id="page-error-title" class="ma-alert__title">Request failed</p>
         <p id="page-error-detail" class="ma-alert__detail"></p>
       </div></div>
+      <section id="limits-panel" class="ma-panel" aria-labelledby="limits-title">
+        <div class="ma-panel__header"><div>
+          <h2 id="limits-title" class="ma-panel__title">Consumption limits</h2>
+          <p class="ma-panel__description">Workspace policy the gateway applies before each new LLM call: tokens per incident and USD per UTC calendar month. Empty means not configured; 0 blocks every new call.</p>
+        </div></div>
+        <div class="ma-panel__body">
+          <p id="limits-status" class="ma-panel__description" aria-live="polite">Connect to load the policy.</p>
+          <dl id="limits-current" class="ma-detail-list" hidden>
+            <dt>Policy version</dt><dd id="limits-version" class="ma-mono">—</dd>
+            <dt>Tokens per incident</dt><dd id="limits-incident" class="ma-mono">—</dd>
+            <dt>Monthly budget (USD)</dt><dd id="limits-monthly" class="ma-mono">—</dd>
+            <dt>Updated</dt><dd id="limits-updated" class="ma-mono">—</dd>
+          </dl>
+          <form id="limits-form" autocomplete="off" novalidate hidden>
+            <div class="ma-field">
+              <label class="ma-field__label" for="limits-incident-input">Tokens per incident</label>
+              <input class="ma-input ma-mono" id="limits-incident-input" type="text" inputmode="numeric" spellcheck="false" placeholder="Not configured" />
+            </div>
+            <div class="ma-field">
+              <label class="ma-field__label" for="limits-monthly-input">Monthly budget (USD)</label>
+              <input class="ma-input ma-mono" id="limits-monthly-input" type="text" inputmode="decimal" spellcheck="false" placeholder="Not configured" />
+            </div>
+            <div class="ma-button-row">
+              <button id="limits-submit" class="ma-button ma-button--primary ma-button--small" type="submit">Save limits</button>
+            </div>
+          </form>
+        </div>
+      </section>
       <section class="ma-panel" aria-labelledby="query-title">
         <div class="ma-panel__header"><div>
           <h2 id="query-title" class="ma-panel__title">Consumption query</h2>
