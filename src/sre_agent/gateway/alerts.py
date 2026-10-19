@@ -6,7 +6,9 @@ supply PromQL. A firing rule becomes one canonical alert (incident-state ``$defs
 id derives from the instant this process first saw the episode firing: stable across polls,
 new after recovery. A window without samples keeps an open episode listed with its last
 value (no flapping); only an ``ok`` evaluation ends it. Episodes are in memory; an API restart
-starts a new one.
+starts a new one. The summary also says where the rule's evidence lives (metric, labels, log
+index and field): it is the only alert text an investigation receives, and without it the
+model guessed field names, found nothing and the run ended without a mitigation.
 """
 
 import hashlib
@@ -38,6 +40,15 @@ class AlertRule:
     window: str
     threshold: float
     expr: str
+
+
+def _evidence_hint(service: str, span: str) -> str:
+    return (
+        "Evidence: Prometheus datasource webstore-metrics, metric traces_span_metrics_calls_total"
+        f' with service_name="{service}", span_name="{span}" and status_code="STATUS_CODE_ERROR"'
+        " for the errors; logs in datasource webstore-logs, index otel-logs-*, field"
+        f' resource.service.name:"{service}".'
+    )
 
 
 def _error_ratio(service: str, span: str, window: str) -> str:
@@ -170,7 +181,7 @@ class LiveAlertsService:
             "status": "new",
             "observed_at": _iso(started),
             "summary": f"{rule.description}: {value:.0%} errors over the last {rule.window}"
-            f" (threshold {rule.threshold:.0%})",
+            f" (threshold {rule.threshold:.0%}). {_evidence_hint(rule.service, rule.signal)}",
             "source": SOURCE,
             "origin": {
                 "signal": rule.signal,
