@@ -52,7 +52,8 @@ def test_war_room_applies_no_transitions_or_lifecycle_controls() -> None:
         "lifecycle",
         "midnight:triage-requested",
         'localStorage.setItem("incident',
-        "postmortem",
+        # Pointing to the postmortem view is navigation; opening the postmortem is not offered here.
+        "start_postmortem",
         "sendRunCommand",
         "EventSource",
         "WebSocket",
