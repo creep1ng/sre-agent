@@ -71,6 +71,24 @@
           <div><dt>Workflow</dt><dd id="fact-workflow"></dd></div>
         </dl>
       </section>
+      <section id="mitigation-section" class="ma-panel reasoning" aria-labelledby="mitigation-title" hidden>
+        <div class="ma-panel__header">
+          <div>
+            <h2 id="mitigation-title" class="ma-panel__title">Mitigación propuesta</h2>
+            <p class="ma-panel__description">
+              La propuesta que el agente registró en el incidente, tal como la decides.
+            </p>
+          </div>
+        </div>
+        <div id="mitigation-forbidden" class="ma-alert reasoning__notice" data-tone="warning" hidden>
+          <svg class="ma-icon" aria-hidden="true"><use href="/public/icons.svg#icon-alert"></use></svg>
+          <div><p class="ma-alert__title">Sin permiso para ver la mitigación</p>
+          <p class="ma-alert__detail">Esta identidad no tiene <code>run.read_context</code>: no puede leer la propuesta ni la hipótesis en que se basa. Pide ese permiso antes de decidir.</p></div>
+        </div>
+        <p id="mitigation-unavailable" class="ma-muted reasoning__notice" hidden>No se pudo leer la mitigación. Actualiza antes de decidir.</p>
+        <p id="mitigation-empty" class="ma-muted reasoning__notice" hidden>El incidente no registra una mitigación.</p>
+        <div id="mitigation-content" class="war-room__section" hidden></div>
+      </section>
       <section id="actions-section" class="ma-panel" hidden>
         <div class="ma-panel__header"><h2 class="ma-panel__title">Acciones disponibles</h2></div>
         <div class="ma-panel__body">

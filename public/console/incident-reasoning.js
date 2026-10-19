@@ -18,6 +18,24 @@ export const HYPOTHESIS_STATUS = Object.freeze({
   superseded: "reemplazada",
 });
 
+export const RISK = Object.freeze({
+  low: Object.freeze({ label: "Riesgo bajo", tone: "success" }),
+  medium: Object.freeze({ label: "Riesgo medio", tone: "warning" }),
+  high: Object.freeze({ label: "Riesgo alto", tone: "critical" }),
+});
+
+export const DECISION = Object.freeze({
+  pending: Object.freeze({ label: "Pendiente de decisión humana", tone: "warning" }),
+  approved: Object.freeze({ label: "Aprobada", tone: "success" }),
+  rejected: Object.freeze({ label: "Rechazada", tone: "critical" }),
+  changes_requested: Object.freeze({ label: "Cambios solicitados", tone: "warning" }),
+});
+
+export const EXECUTION = Object.freeze({
+  simulated: "Simulada: el agente no cambia infraestructura.",
+  human: "Humana: la aplica una persona fuera de la consola.",
+});
+
 const MAX_SERIES = 6;
 
 // { kind: "ok", reasoning } | { kind: "forbidden" } | { kind: "unavailable" }.
@@ -151,4 +169,39 @@ export function evidenceItem(item, citedIds) {
   );
   entry.append(request);
   return entry;
+}
+
+// The mitigation as recorded: everything the human needs before deciding on it.
+export function mitigationBlock(strategy, hypotheses = []) {
+  const block = element("div", "reasoning__mitigation");
+  block.append(english("p", "reasoning__statement", strategy.description ?? "—"));
+  const meta = element("p", "reasoning__meta");
+  meta.append(
+    badge(RISK[strategy.risk], strategy.risk),
+    " ",
+    badge(DECISION[strategy.approval_status], strategy.approval_status),
+  );
+  block.append(meta);
+  const steps = Array.isArray(strategy.steps) ? strategy.steps : [];
+  if (steps.length > 0) {
+    block.append(element("h4", "reasoning__label", "Pasos"));
+    const list = element("ol", "reasoning__steps");
+    steps.forEach((step) => list.append(english("li", "", step)));
+    block.append(list);
+  }
+  const facts = element("dl", "reasoning__facts");
+  const fact = (label, value, lang) => {
+    const row = element("div");
+    const description = lang ? english("dd", "", value) : element("dd", "", value);
+    row.append(element("dt", "", label), description);
+    facts.append(row);
+  };
+  fact("Verificación", strategy.verification_check ?? "—", true);
+  if (strategy.expected_effect) fact("Efecto esperado", strategy.expected_effect, true);
+  fact("Ejecución", EXECUTION[strategy.execution_mode] ?? strategy.execution_mode ?? "—");
+  const based = hypotheses.find((item) => item.hypothesis_id === strategy.based_on_hypothesis);
+  const basis = typeof based?.statement === "string" ? clip(based.statement, 240) : null;
+  fact("Basada en la hipótesis", basis ?? strategy.based_on_hypothesis ?? "—", basis !== null);
+  block.append(facts);
+  return block;
 }

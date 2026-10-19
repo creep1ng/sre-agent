@@ -1,4 +1,5 @@
 import { ApiClientError } from "/public/api/client.js";
+import { mitigationBlock, readReasoning } from "/public/console/incident-reasoning.js";
 import { mountedView } from "/public/console/view.js";
 
 // Acciones humanas del workflow 1.0.0, derivadas de los decision points publicados
@@ -54,7 +55,8 @@ function cacheNodes() {
     "decision-key", "decision-submit", "decision-approval", "decision-approval-row",
     "decision-hint",
     "receipt-section", "receipt-line",
-    "refresh-button",
+    "refresh-button", "mitigation-section", "mitigation-title", "mitigation-forbidden",
+    "mitigation-unavailable", "mitigation-empty", "mitigation-content",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -64,7 +66,7 @@ function hideAll() {
   [
     "loading-state", "command-status", "error-missing-id", "error-401",
     "error-403", "error-404", "error-409", "error-503", "context-section",
-    "actions-section", "decision-section", "receipt-section",
+    "actions-section", "decision-section", "receipt-section", "mitigation-section",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
@@ -101,6 +103,34 @@ function renderContext(run, workflowVersion) {
   nodes["fact-state"].textContent = `${run.current_state ?? "—"} · ${run.status ?? "—"}`;
   nodes["fact-workflow"].textContent = workflowVersion;
   nodes["context-section"].hidden = false;
+}
+
+// States where the mitigation is what the human decides on (mitigating) or verifies (verifying).
+const MITIGATION_TITLES = Object.freeze({
+  mitigating: "Mitigación propuesta",
+  verifying: "Mitigación aprobada y su verificación",
+});
+
+// The recorded mitigation before any decision, only for run.read_context readers; a refusal or
+// a failed read is said in place and the decision flow stays as it is.
+function renderMitigation(result, currentState) {
+  ["mitigation-forbidden", "mitigation-unavailable", "mitigation-empty", "mitigation-content"].forEach((id) => {
+    nodes[id].hidden = true;
+  });
+  nodes["mitigation-content"].replaceChildren();
+  nodes["mitigation-section"].hidden = result === null;
+  if (result === null) return;
+  nodes["mitigation-title"].textContent = MITIGATION_TITLES[currentState];
+  const strategy = result.kind === "ok" ? result.reasoning.mitigation_strategy : null;
+  if (result.kind !== "ok") {
+    nodes[result.kind === "forbidden" ? "mitigation-forbidden" : "mitigation-unavailable"].hidden = false;
+  } else if (!strategy || typeof strategy !== "object") {
+    nodes["mitigation-empty"].hidden = false;
+  } else {
+    const hypotheses = result.reasoning.hypotheses.filter((item) => item && typeof item === "object");
+    nodes["mitigation-content"].append(mitigationBlock(strategy, hypotheses));
+    nodes["mitigation-content"].hidden = false;
+  }
 }
 
 function renderActions(actions) {
@@ -205,8 +235,13 @@ async function loadAll() {
       showError("404");
       return;
     }
+    const reasoning = MITIGATION_TITLES[run.current_state]
+      ? await readReasoning(client, state.incidentId, state.runId)
+      : null;
+    if (generation !== state.generation) return;
     state.pending = null;
     renderContext(run, detail.workflow_version);
+    renderMitigation(reasoning, run.current_state);
     renderActions(availableActions(detail.workflow_version, run.current_state));
     view.focusIncident(detail, run.run_id);
     nodes["loading-state"].hidden = true;
