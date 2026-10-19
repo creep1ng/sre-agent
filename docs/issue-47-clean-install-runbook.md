@@ -42,8 +42,15 @@ step below was verified against that commit.
 ## Configure secrets and ports
 
 The stack reads one untracked `.env` from the checkout root; it is gitignored and must
-never be committed, printed, attached or sourced by other scripts. The values below
-are non-production demo values; generate unique keys before any shared use.
+never be committed, printed, attached or sourced by other scripts.
+
+The five secret values below (the four `sre_` keys and `AUDIT_HMAC_KEY`) are published
+on purpose so this documented install is reproducible. That is acceptable only while
+the three ports are loopback-bound (`127.0.0.1`) and nothing off-host can reach them.
+Before any shared host, shared network or otherwise reachable environment, replace all
+five: `AUDIT_HMAC_KEY` with 64 random hex characters (`openssl rand -hex 32`), and each
+`sre_` key with a unique value matching `sre_[A-Za-z0-9_-]{24,128}` (for example
+`sre_admn_$(openssl rand -hex 20)`).
 
 ```sh
 cat > .env <<'EOF'
@@ -70,10 +77,29 @@ chmod 600 .env
 
 - `POSTGRES_*` / `DATABASE_URL`: local database identity; host `db`; keep both sides consistent.
 - `API_PORT` / `WEB_PORT` / `POSTGRES_PORT`: loopback port overrides; change a busy one, nothing else moves.
-- `COMPOSE_PROJECT_NAME`: isolates containers, network and volume under `sre-agent-release_*`; keep it unique per checkout.
+- `COMPOSE_PROJECT_NAME`: isolates containers, network and volume under `sre-agent-release_*`; keep it unique per checkout and confirm it is free with the pre-check below.
 - The four `sre_` keys: credentials for `admin-human`, `demo-human`, `incident-harness`, `restricted-harness`; unique, with unique first eight characters.
 - `TRIAGE_AGENT_*` / `REMEDIATION_AGENT_*`: initial demo routing for `triage-agent` and `remediation-agent`; seed inputs, not live providers.
 - `AUDIT_HMAC_KEY`: protects audit references. No provider key is required; no paid model call happens.
+
+## Confirm the project name is free
+
+`COMPOSE_PROJECT_NAME` owns this install's containers, network and `postgres_data`
+volume. Two checkouts that share one project name also share that volume, and the
+scoped reset below would delete the other checkout's data. Before the first start,
+confirm nothing owns the name yet:
+
+```sh
+PROJECT=$(grep '^COMPOSE_PROJECT_NAME=' .env | cut -d= -f2)
+docker volume ls -q --filter "label=com.docker.compose.project=$PROJECT"
+docker ps -a -q --filter "label=com.docker.compose.project=$PROJECT"
+```
+
+Expected: both commands print nothing. If either prints an identifier, stop and decide
+before starting anything: it is either your own interrupted run (finish it, or remove
+it with the scoped cleanup that names exactly this project) or another checkout's
+project (change `COMPOSE_PROJECT_NAME` in `.env`). Never run `down --volumes` while
+that question is open.
 
 ## Start the stack
 
@@ -136,17 +162,20 @@ checks the migration head above), then plain `ok` from the web container.
 
 ## UI and API smoke
 
-Open <http://127.0.0.1:8888> (title `midnight.agent`, linking the control plane), then
+Open <http://127.0.0.1:8888>: the server returns the console shell, whose raw HTML title
+is `midnight.agent`; the console boots into the Alerts inbox (4 fixture alerts) and the
+browser tab title then reads `Alertas · midnight.agent`. Then open
 <http://127.0.0.1:8888/public/admin/principals.html>: paste `ADMIN_HUMAN_API_KEY` and
 press "Connect and load". Expect 4 principals with their kinds. The key stays in the
 masked field and in memory only, so it cannot leak into screenshots or shell history.
-Headless equivalent:
+Headless equivalent (raw shell; `curl` does not run the console script):
 
 ```sh
 curl -fsS http://127.0.0.1:8888/ | grep -o '<title>[^<]*</title>'
 ```
 
-Expected: `<title>midnight.agent</title>`.
+Expected: `<title>midnight.agent</title>` from the raw shell; in a browser the tab
+title is `Alertas · midnight.agent` once the console has booted.
 
 ## Persistence check
 
@@ -163,21 +192,24 @@ Expected: `seed converged` (existing rows are validated, not recreated) and the 
 
 ## Backup and restore notes
 
-Back up from inside the container, then copy the dump to the host:
+Back up from inside the container, then copy the dump to the host, outside the checkout.
+The dump contains the seeded credentials, principals and grants, so treat it as
+sensitive: keep it in `$HOME` and mode `600`, never inside the Git tree.
 
 ```sh
 docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists -f /tmp/sre-agent-backup.sql'
-docker compose cp db:/tmp/sre-agent-backup.sql ./sre-agent-backup.sql
-ls -l sre-agent-backup.sql
+docker compose cp db:/tmp/sre-agent-backup.sql "$HOME/sre-agent-backup.sql"
+chmod 600 "$HOME/sre-agent-backup.sql"
+ls -l "$HOME/sre-agent-backup.sql"
 ```
 
 Expected: a non-empty plain-SQL dump whose first lines contain
-`-- PostgreSQL database dump`. Keep the file outside Git. Prove it is restorable
+`-- PostgreSQL database dump`, with `-rw-------` permissions. Prove it is restorable
 without touching the live database:
 
 ```sh
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "CREATE DATABASE restore_check"'
-docker compose cp ./sre-agent-backup.sql db:/tmp/restore.sql
+docker compose cp "$HOME/sre-agent-backup.sql" db:/tmp/restore.sql
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d restore_check -v ON_ERROR_STOP=1 -f /tmp/restore.sql'
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d restore_check -tAc "SELECT count(*) FROM principals"'
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -c "DROP DATABASE restore_check"'
@@ -185,7 +217,8 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v O
 
 Expected: the scratch database prints `4` and is dropped afterwards. A real recovery
 restores the dump into a fresh project/volume (new `COMPOSE_PROJECT_NAME`); never
-restore over a live database in place.
+restore over a live database in place. Delete the dump (`rm "$HOME/sre-agent-backup.sql"`)
+once you no longer need it.
 
 ## Scoped reset
 
@@ -200,9 +233,76 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
 ```
 
 Expected: `seed created` again and the same baseline row `4 | 4 | 2 | 16`.
-`down --volumes` deletes only `sre-agent-release_*` resources. Never use `docker
-system prune` or `docker volume prune` as recovery: they can destroy other projects'
-data, including a shared stack's.
+`down --volumes` deletes only the containers, network and volume labeled with this
+checkout's `COMPOSE_PROJECT_NAME`. Before running it, confirm that project is yours:
+the pre-check above printed nothing on a fresh host, and any resumable data in it came
+from this checkout. Never use `docker system prune` or `docker volume prune` as
+recovery: they can destroy other projects' data, including a shared stack's.
+
+## Optional: provision a triage-capable operator
+
+The clean seed is deliberately minimal: `demo-human` authenticates but holds zero
+incident-workflow grants, so triage reads answer HTTP 403
+(`not_authorized`, "Sin acceso") until the operator is provisioned. The full operator
+setup ([setup-sre.md](setup-sre.md)) obtains those grants through the same governed
+provisioning path; this optional section applies that path to the packaged stack. It
+does not modify the seed and is not required by the base verification above. Run it
+when you need to exercise triage or declare incidents with the demo key (J2 in the
+[evaluator plan](issue-52-evaluator-plan.md)).
+
+Both provisioners run in the `seed` image against the repo's own governed API; a small
+local override mounts `scripts/` and passes the audit key:
+
+```sh
+cat > compose.provision.yaml <<'EOF'
+services:
+  seed:
+    volumes:
+      - ./scripts:/setup:ro
+    environment:
+      AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?required}"
+EOF
+
+docker compose -f compose.yaml -f compose.provision.yaml run --rm seed \
+  python -m sre_agent.persistence.seeds --seed-mcp
+docker compose -f compose.yaml -f compose.provision.yaml run --rm seed \
+  python /setup/provision_demo.py
+```
+
+Expected: the first command prints `mcp seed created` (`mcp seed converged` on a rerun)
+and registers the demo MCP server, its two tools and the `demo-human` MCP grants,
+which is the governed registry the MCP read path needs (the complete J7 run
+additionally requires the MCP/OTel overlay from the setup guide). The second prints
+`demo permissions converged; restricted identity unchanged` and adds the
+`incident-response` workflow catalog plus 12 grants through the governed API: 4
+`run.*` and the 5 triage actions (`alert.read`, `alert.triage`, `alert.dismiss`,
+`alert.associate`, `incident.declare`) for `demo-human`, and 3 MCP grants for
+`incident-harness`. Check the count evolution (16 core, 19 after the MCP seed, 31
+after provisioning) and the active `demo-human` grants:
+
+```sh
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM grants"'
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM grants WHERE principal_id = '\''demo-human'\'' AND status = '\''active'\''"'
+```
+
+Expected: `31` and `12`. Both commands are safe to rerun; the provisioners converge
+instead of duplicating. Now prove triage no longer answers 403 for the demo key
+(the base install answers `403` here):
+
+```sh
+DEMO_KEY=$(grep '^DEMO_HUMAN_API_KEY=' .env | cut -d= -f2)
+curl -fsS -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $DEMO_KEY" http://127.0.0.1:8688/v1/alerts/alert-checkout-001/triage/context
+```
+
+Expected: `200` (the fixture alert has no persisted triage state yet, so the context
+projection returns `triage_state: null`). In the browser, the console Triage view with
+the demo key replaces the "Sin acceso" panel with the command form, and declaring an
+incident from the Alerts inbox returns a new incident id.
+
+The provisioned rows survive `down` and `up`; the scoped reset above removes them
+because they live in the same volume, and running the two commands again recreates
+them. `compose.provision.yaml` is a local helper like `.env`: keep it out of Git and
+delete it (`rm compose.provision.yaml`) when you no longer need the optional path.
 
 ## Troubleshooting
 
@@ -211,7 +311,7 @@ data, including a shared stack's.
 | `ss` shows a busy port / `port is already allocated` | Pick another free `API_PORT`, `WEB_PORT` or `POSTGRES_PORT` in `.env` and rerun `docker compose up --wait`; never stop foreign containers |
 | `error while interpolating ... required variable ... is missing a value` | `.env` is incomplete or not in the checkout root; copy the block above verbatim and rerun |
 | `migrate` exits non-zero | Inspect `docker compose logs migrate`; fix configuration; rerun `docker compose run --rm migrate`. The volume is preserved; do not delete it |
-| Data from an older experiment appears | Two checkouts share one `COMPOSE_PROJECT_NAME`; compare `docker volume ls` with your project name and use a unique one |
+| Data from an older experiment appears | Two checkouts share one `COMPOSE_PROJECT_NAME`; the pre-check before the first start catches it. Compare `docker volume ls` with your project name, then finish the owner or use a unique name |
 | `seed_state_conflict` | Seed rows do not match the configured inputs; see the routing reconciliation notes in the [README](../README.md#when-a-changed-env-route-does-not-take-effect). Do not delete the volume to force it |
 | Web pages fail to load data | Check `docker compose ps` and the API readiness URL first; web only proxies `/api/` to `api:8000` |
 
@@ -221,8 +321,10 @@ data, including a shared stack's.
 docker compose down --volumes --remove-orphans
 ```
 
-This removes only this project's containers, network and volume; the backup file and
-`.env` stay on the host (keep `.env` out of Git). Confirm other stacks run with `docker ps`.
+This removes only the containers, network and volume labeled with this checkout's
+`COMPOSE_PROJECT_NAME`; `$HOME/sre-agent-backup.sql`, `.env` and (if created)
+`compose.provision.yaml` stay on the host (keep `.env` out of Git). Confirm other
+stacks run with `docker ps`.
 
 ## Runner log
 
@@ -232,7 +334,7 @@ Copy this block into the issue or PR when your run finishes:
 Runner log - issue 47 clean install
 - Release SHA executed: ______________ (git rev-parse HEAD) | date/runner: ______________
 - Environment: VM/OS __________ | CPU/RAM/disk free __________ | docker ______ | compose ______ | project/ports __________ / __________
-- Steps (command -> observed result): 1 build+up -> ; 2 migrations -> ; 3 seed counts -> ; 4 health -> ; 5 UI -> ; 6 persistence -> ; 7 backup -> ; 8 reset ->
+- Steps (command -> observed result): 1 build+up -> ; 2 migrations -> ; 3 seed counts -> ; 4 health -> ; 5 UI -> ; 6 persistence -> ; 7 backup -> ; 8 reset -> ; 9 provisioning (optional) ->
 - Deviations and reproducible failures (step, exact message, action):
 - Author help required: yes/no (details):
 - Total wall-clock time to first healthy stack: __________
