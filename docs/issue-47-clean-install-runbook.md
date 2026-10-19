@@ -271,7 +271,8 @@ docker compose -f compose.yaml -f compose.provision.yaml run --rm seed \
 
 Expected: the first command prints `mcp seed created` (`mcp seed converged` on a rerun)
 and registers the demo MCP server, its two tools and the `demo-human` MCP grants,
-which is also the registry the governed MCP read path needs. The second prints
+which is the governed registry the MCP read path needs (the complete J7 run
+additionally requires the MCP/OTel overlay from the setup guide). The second prints
 `demo permissions converged; restricted identity unchanged` and adds the
 `incident-response` workflow catalog plus 12 grants through the governed API: 4
 `run.*` and the 5 triage actions (`alert.read`, `alert.triage`, `alert.dismiss`,
