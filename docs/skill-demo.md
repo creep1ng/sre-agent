@@ -22,6 +22,21 @@ as complete manifests once authority exists. It inspects persisted Skill, grant,
 it does not call a model or external service. This is local controlled PostgreSQL evidence, not
 live-service evidence.
 
+## Provision on a running stack
+
+A clean install seeds no Skill. To make both examples grantable in the console, publish and
+activate them through the governed control service from the `seed` one-shot (admin key and
+audit key come from the same untracked `.env`):
+
+```sh
+docker compose run --rm -v ./scripts:/setup:ro -v ./demo/skills:/skills:ro -e AUDIT_HMAC_KEY seed python /setup/provision_skills_demo.py
+```
+
+Expected: `demo skills active: incident-triage@1.0.0, postmortem-writer@1.0.0; no grant created`.
+Rerunning converges. A different manifest already stored under the same version, or a version an
+admin deactivated, fails closed with exit `1` and changes nothing. Access stays an admin decision:
+grant `invoke` on `skill/<id>@<version>` in the Grants view.
+
 ## Acceptance evidence
 
 | Criterion | Where to verify |

@@ -2855,7 +2855,11 @@ class ControlService:  # noqa: E305
                     ),
                 )
                 if binding.replayed:
-                    record = SkillVersionRecord.model_validate(binding.outcome.response_payload)
+                    # The stored payload is JSON (ISO timestamps); strict python-mode validation
+                    # rejected it, so a same-key retry failed instead of replaying.
+                    record = SkillVersionRecord.model_validate_json(
+                        _canonical_payload(binding.outcome.response_payload)
+                    )
                 else:
                     record = await SkillVersionRepository(session).publish(
                         skill_id=body.skill_id,
