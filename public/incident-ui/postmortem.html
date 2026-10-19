@@ -94,6 +94,19 @@
           <p id="save-status" role="status" aria-live="polite" hidden></p>
         </form>
       </section>
+      <section id="review-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title" id="review-title">Revisión humana</h2></div>
+        <form id="review-form" class="ma-panel__body war-room__form">
+          <p class="ma-muted">Revisor: la identidad autenticada. Revisar no cierra el incidente; editar después anula la revisión.</p>
+          <label class="ma-field" for="review-comment"><span class="ma-field__label">Comentario (opcional, máx. 2000)</span><textarea id="review-comment" class="ma-textarea" maxlength="2000" rows="2"></textarea></label>
+          <div class="ma-button-row">
+            <button id="approve-postmortem" class="ma-button ma-button--primary" type="button">Aprobar versión</button>
+            <button id="request-changes" class="ma-button ma-button--secondary" type="button">Solicitar cambios</button>
+          </div>
+          <p id="review-status" role="status" aria-live="polite" hidden></p>
+          <p id="close-hint" hidden>Versión aprobada. El cierre (close_incident) se solicita en <a id="decisions-link" href="/?view=decisions">Decisiones</a> sobre el run del postmortem.</p>
+        </form>
+      </section>
     </main>
   </body>
 </html>
