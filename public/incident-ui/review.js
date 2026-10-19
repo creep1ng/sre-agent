@@ -3,9 +3,8 @@ import { mountedView } from "/public/console/view.js";
 
 // Acciones humanas del workflow 1.0.0, derivadas de los decision points publicados
 // (mitigation_approval, stability_check) y de las transiciones de incident-response.yaml.
-// La verificación y el cierre reutilizan la senda de comandos existente; su forma exacta
-// queda sujeta al contrato run-command:2.1.0, que aún no está publicado (adaptación
-// real pendiente, se documenta en el PR). Versión o estado desconocidos no ofrecen nada.
+// La verificación y el cierre reutilizan la senda de comandos existente con el contrato
+// publicado run-command:2.1.0 (#658). Versión o estado desconocidos no ofrecen nada.
 const REVIEW_ACTIONS = Object.freeze({
   "1.0.0": Object.freeze({
     mitigating: Object.freeze([
@@ -243,7 +242,7 @@ async function submitDecision(event) {
     state.submissionComplete = true;
     nodes["receipt-line"].textContent =
       `Decisión ${action.command} registrada por el backend (transición ${action.transition}, ` +
-      `resultado ${action.outcome}). Estado del run: ${response.current_state ?? "—"}.`;
+      `resultado ${action.outcome ?? "—"}). Estado del run: ${response.current_state ?? "—"}.`;
     nodes["decision-section"].hidden = true;
     nodes["receipt-section"].hidden = false;
   } catch (error) {
