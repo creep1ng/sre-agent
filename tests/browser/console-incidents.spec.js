@@ -217,7 +217,7 @@ test("sin incidente en foco, la vista explica cómo llegar sin dictar direccione
   await expect(page.locator("#error-missing-id")).not.toContainText("?incident_id");
   await expect(band(page)).toBeHidden();
   await page.locator("#error-missing-id").getByRole("link", { name: "Ir a Alertas" }).click();
-  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "locked");
   expect(fetched).toBe(false);
 });
 

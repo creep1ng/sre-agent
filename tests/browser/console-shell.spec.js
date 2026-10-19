@@ -20,6 +20,10 @@ test.beforeEach(async ({ page }) => {
   });
   page.on("pageerror", (error) => errors.push(String(error?.message ?? error)));
   page.context()["__errors"] = errors;
+  // With a session the inbox polls live alerts; the shell specs answer it like whoami.
+  await page.route("**/api/v1/alerts", (route) =>
+    route.fulfill({ json: { evaluated_at: "2026-10-19T04:00:00Z", rules: [], alerts: [] } }),
+  );
 });
 
 test.afterEach(async ({ page }) => {
@@ -71,7 +75,7 @@ test("la raíz abre la consola con las dos secciones y Alertas como vista inicia
   await expect(page.locator("[data-console-nav][aria-current='page']")).toHaveText("Alertas");
   await expect(page.locator(".console-breadcrumb")).toContainText("Atención a incidentes");
   await expect(page.locator("#console-surface")).toHaveText("Alertas");
-  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "locked");
   await expect(page).toHaveTitle("Alertas · midnight.agent");
   await expect(page.getByRole("link", { name: "Sistema de diseño" })).toHaveAttribute(
     "href",
@@ -97,13 +101,13 @@ test("navegar dentro de la consola conserva el documento y Atrás/Adelante resta
 
   await page.getByRole("link", { name: "Ir a Alertas" }).click();
   await expect(page).toHaveURL(/\/\?view=alerts$/);
-  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "locked");
   await expect(page.locator("#alert-inbox h1")).toBeFocused();
 
   await page.goBack();
   await expect(page.locator("#console-view h1")).toHaveText("Vista no encontrada");
   await page.goForward();
-  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "locked");
   expect(await page.evaluate(() => window.__sameDocument)).toBe(true);
 });
 
@@ -123,7 +127,7 @@ test("la credencial se escribe una vez, vale para toda la consola y se cierra pa
   await connect(page);
   await expect(page.locator("#session-principal")).toHaveText("admin-human");
   await page.getByRole("link", { name: "Ir a Alertas" }).click();
-  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "empty");
   await expect(page.locator("#session-principal")).toHaveText("admin-human");
   expect(calls).toHaveLength(2);
 
@@ -226,7 +230,7 @@ test("el tema elegido aplica a toda la consola y persiste al recargar", async ({
 });
 
 test("Alertas entrega la alerta seleccionada a Triage sin copiar su ID", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?fixture=default");
   await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
   await page.evaluate(() => {
     window.__sameDocument = true;
@@ -239,7 +243,7 @@ test("Alertas entrega la alerta seleccionada a Triage sin copiar su ID", async (
 });
 
 test("la consola no tiene violaciones WCAG A/AA detectables", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?fixture=default");
   await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])

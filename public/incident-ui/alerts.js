@@ -9,6 +9,9 @@ import { mountedView } from "../console/view.js";
     default: "/public/fixtures/alerts.json",
     empty: "/public/fixtures/alerts-empty.json",
   });
+  // Live alerts come from GET /v1/alerts (gateway rules over governed MCP); fixtures only on request.
+  const LIVE_POLL_MS = 15000;
+  const LIVE_SEVERITY = Object.freeze({ sev1: "critical", sev2: "warning", sev3: "info", sev4: "info" });
 
   const severityMeta = Object.freeze({
     critical: { label: "SEV1 · Crítica", tone: "critical", rank: 3 },
@@ -25,7 +28,9 @@ import { mountedView } from "../console/view.js";
   const state = {
     alerts: [],
     selectedAlertId: null,
+    countNoun: "simuladas",
   };
+  let pollTimer = null;
 
   const nodes = {};
 
@@ -36,8 +41,12 @@ import { mountedView } from "../console/view.js";
   function cacheNodes() {
     [
       "alert-inbox",
+      "source-mode",
       "fixture-label",
       "load-error",
+      "load-error-title",
+      "load-error-detail",
+      "live-locked",
       "loading-state",
       "alert-list",
       "alert-count",
@@ -66,11 +75,7 @@ import { mountedView } from "../console/view.js";
 
   function getFixtureKey() {
     const requested = view.params.get("fixture");
-    return requested === "empty" ? "empty" : "default";
-  }
-
-  function getFixturePath() {
-    return FIXTURE_PATHS[getFixtureKey()];
+    return Object.hasOwn(FIXTURE_PATHS, requested) ? requested : null;
   }
 
   function formatTimestamp(timestamp) {
@@ -142,7 +147,7 @@ import { mountedView } from "../console/view.js";
 
     nodes["empty-state"].hidden = true;
     nodes["alert-list"].hidden = false;
-    nodes["alert-count"].textContent = `${state.alerts.length} alertas simuladas`;
+    nodes["alert-count"].textContent = `${state.alerts.length} alertas ${state.countNoun}`;
 
     state.alerts.forEach((alert) => {
       const severity = severityFor(alert);
@@ -288,19 +293,35 @@ import { mountedView } from "../console/view.js";
     view.navigate("triage", { alert_id: alertId });
   }
 
-  function showLoadError(error) {
-    console.error(error);
+  function showLoadError(error, title, detail, countLabel = "Fixture no disponible") {
+    // Live failures are shown in the inbox and retried; only a broken fixture is a console error.
+    if (!title) console.error(error);
     nodes["loading-state"].hidden = true;
+    nodes["live-locked"].hidden = true;
     nodes["alert-list"].hidden = true;
     nodes["empty-state"].hidden = true;
+    if (title) nodes["load-error-title"].textContent = title;
+    if (detail) nodes["load-error-detail"].textContent = detail;
     nodes["load-error"].hidden = false;
-    nodes["alert-count"].textContent = "Fixture no disponible";
+    nodes["alert-count"].textContent = countLabel;
     nodes["alert-inbox"].dataset.state = "error";
     clearDetail();
   }
 
-  async function loadAlerts() {
-    const fixturePath = getFixturePath();
+  function showAlerts(alerts) {
+    state.alerts = sortAlerts(alerts);
+    nodes["loading-state"].hidden = true;
+    nodes["live-locked"].hidden = true;
+    nodes["load-error"].hidden = true;
+    nodes["alert-inbox"].dataset.state = state.alerts.length === 0 ? "empty" : "ready";
+    const kept = state.alerts.find((alert) => alert.alert_id === state.selectedAlertId);
+    const selected = kept ?? state.alerts[0];
+    state.selectedAlertId = selected?.alert_id ?? null;
+    renderAlertList();
+    if (selected) renderDetail(selected);
+  }
+
+  async function loadFixture(fixturePath) {
     nodes["fixture-label"].textContent = fixturePath.split("/").at(-1);
 
     try {
@@ -309,23 +330,87 @@ import { mountedView } from "../console/view.js";
         throw new Error(`No se pudo cargar ${fixturePath}: HTTP ${response.status}.`);
       }
 
-      const payload = await response.json();
-      state.alerts = sortAlerts(validateFixture(payload));
-      nodes["loading-state"].hidden = true;
-      nodes["load-error"].hidden = true;
-      nodes["alert-inbox"].dataset.state = state.alerts.length === 0 ? "empty" : "ready";
-
-      if (state.alerts.length > 0) {
-        state.selectedAlertId = state.alerts[0].alert_id;
-      }
-
-      renderAlertList();
-      if (state.selectedAlertId) {
-        renderDetail(state.alerts[0]);
-      }
+      showAlerts(validateFixture(await response.json()));
     } catch (error) {
       showLoadError(error);
     }
+  }
+
+  // Canonical alert (incident-state $defs/alert) to the inbox card; the API stays authoritative.
+  function fromLive(alert, evaluatedAt) {
+    const origin = alert.origin && typeof alert.origin === "object" ? alert.origin : {};
+    return {
+      alert_id: alert.alert_id,
+      title: alert.summary,
+      summary: origin.condition ?? alert.summary,
+      service: alert.service,
+      severity: LIVE_SEVERITY[alert.severity] ?? "info",
+      timestamp: alert.observed_at,
+      status: alert.status,
+      source: alert.source,
+      context:
+        "Regla evaluada por el gateway con query_prometheus a través del MCP gobernado (auditado). " +
+        `Última evaluación: ${formatTimestamp(evaluatedAt)}. Severidad sugerida: ${alert.severity}.`,
+      origin: {
+        summary: "Señal y condición que reportó la regla en vivo.",
+        metadata: {
+          signal: origin.signal,
+          condition: origin.condition,
+          detector: origin.detector,
+          evaluated_at: origin.observed_at,
+        },
+      },
+    };
+  }
+
+  function describeLiveError(error) {
+    if (error?.kind === "authorization")
+      return ["Sin acceso a alertas en vivo", "Esta identidad necesita alert.read sobre incident-response y mcp.invoke sobre query_prometheus."];
+    if (error?.status === 503 || error?.kind === "network")
+      return ["Fuente de alertas no disponible", "El MCP gobernado no respondió. Se reintenta automáticamente."];
+    return ["Respuesta de alertas inválida", "La fuente de métricas devolvió un resultado que no se puede evaluar. Se reintenta automáticamente."];
+  }
+
+  async function pollLive() {
+    clearTimeout(pollTimer);
+    try {
+      const payload = await view.client.listAlerts();
+      if (view.signal.aborted || view.session.phase !== "active") return;
+      if (!payload || !Array.isArray(payload.alerts)) throw new Error("GET /v1/alerts devolvió un cuerpo inválido.");
+      nodes["fixture-label"].textContent = `GET /v1/alerts · ${formatTimestamp(payload.evaluated_at)}`;
+      showAlerts(payload.alerts.map((alert) => fromLive(alert, payload.evaluated_at)));
+    } catch (error) {
+      // A 401 already ended the session (locked state); do not paint an error over it.
+      if (view.signal.aborted || view.session.phase !== "active") return;
+      const [title, detail] = describeLiveError(error);
+      showLoadError(error, title, detail, "Alertas en vivo no disponibles");
+    }
+    if (!view.signal.aborted && view.session.phase === "active") {
+      pollTimer = setTimeout(pollLive, LIVE_POLL_MS);
+    }
+  }
+
+  function startLive() {
+    state.countNoun = "en vivo";
+    nodes["source-mode"].textContent = "En vivo";
+    nodes["fixture-label"].textContent = "GET /v1/alerts";
+    view.signal.addEventListener("abort", () => clearTimeout(pollTimer), { once: true });
+    view.onSession((session) => {
+      clearTimeout(pollTimer);
+      if (session.phase === "active") {
+        pollLive();
+        return;
+      }
+      state.alerts = [];
+      clearDetail();
+      nodes["loading-state"].hidden = true;
+      nodes["load-error"].hidden = true;
+      nodes["alert-list"].hidden = true;
+      nodes["empty-state"].hidden = true;
+      nodes["live-locked"].hidden = false;
+      nodes["alert-count"].textContent = "Conecta la consola para leer alertas en vivo";
+      nodes["alert-inbox"].dataset.state = "locked";
+    });
   }
 
   cacheNodes();
@@ -333,5 +418,7 @@ import { mountedView } from "../console/view.js";
   document.addEventListener("midnight:triage-requested", openTriageForRequestedAlert, {
     signal: view.signal,
   });
-  loadAlerts();
+  const fixtureKey = getFixtureKey();
+  if (fixtureKey) loadFixture(FIXTURE_PATHS[fixtureKey]);
+  else startLive();
 })();
