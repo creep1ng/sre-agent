@@ -382,6 +382,8 @@ class InvestigationRunDispatcher:
         assert result.outcome is not None
         now = datetime.now(UTC)
         turn_id = result.turns[-1].turn_id if result.turns else None
+        # Events written with a transition carry the state it reaches, as the timeline reads them.
+        reached = "mitigating" if isinstance(result.outcome, ProposeMitigation) else "investigating"
         incident_patch = (
             self._hypothesis_patch(
                 result.outcome,
@@ -400,6 +402,7 @@ class InvestigationRunDispatcher:
             request_ids,
             turn_id,
             incident_patch=incident_patch,
+            state=reached,
         )
         receipt_event = self._receipt_event(
             incident_id,
@@ -412,6 +415,7 @@ class InvestigationRunDispatcher:
             mcp_request_ids=mcp_request_ids,
             turn_id=turn_id,
             result_status=result.status,
+            state=reached,
         )
         command = self._runtime_command(
             incident_id,
@@ -642,6 +646,7 @@ class InvestigationRunDispatcher:
         turn_id: str | None = None,
         result_status: str | None = None,
         diagnostic: Mapping[str, Any] | None = None,
+        state: str = "investigating",
     ) -> EventDraft:
         receipt: dict[str, Any] = {
             "dispatch_id": run_id,
@@ -660,7 +665,7 @@ class InvestigationRunDispatcher:
             event_id=f"evt_{token_hex(8)}",
             kind="dispatch_receipt",
             payload={
-                "state": "investigating",
+                "state": state,
                 "dispatch_receipt": receipt,
                 "request_id": str(request_ids[-1]) if request_ids else None,
             },
@@ -714,6 +719,7 @@ class InvestigationRunDispatcher:
         request_ids: Sequence[UUID],
         turn_id: str | None,
         incident_patch: Mapping[str, Any] | None = None,
+        state: str = "investigating",
     ) -> EventDraft:
         assert result.outcome is not None
         action = result.outcome.action
@@ -736,7 +742,7 @@ class InvestigationRunDispatcher:
             event_id=f"evt_{token_hex(8)}",
             kind="investigation_result",
             payload={
-                "state": "investigating",
+                "state": state,
                 "outcome": outcome,
                 **({"incident_patch": incident_patch} if incident_patch is not None else {}),
                 "evidence_references": [

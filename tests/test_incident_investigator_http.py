@@ -787,6 +787,13 @@ def test_http_investigate_uses_governed_llm_and_mcp_and_persists_the_result() ->
     assert mitigation["approval_status"] == "pending" and mitigation["verification_check"]
     assert run_state["current_state"] == "mitigating" and run_version == 3
     assert run_state["pending_command"] == "approve_mitigation"
+    # The mitigation's result and the closing receipt record the state the timeline reached.
+    assert {
+        event["state"]
+        for event in event_payloads
+        if event.get("outcome", {}).get("action") == "propose_mitigation"
+        or event.get("dispatch_receipt", {}).get("phase") == "outcome"
+    } == {"mitigating"}
     assert [(receipt["phase"], receipt["status"]) for receipt in receipts] == [
         ("intent", "pending"),
         ("outcome", "success"),
