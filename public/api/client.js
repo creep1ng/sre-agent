@@ -296,6 +296,12 @@ export function createAdministrativeApiClient({
     reviewPostmortem(incidentId, body) {
       return request(`/v1/incidents/${encodeURIComponent(incidentId)}/postmortem/reviews`, { method: "POST", body });
     },
+    getRunContext(incidentId, runId) {
+      return request(`/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/context`);
+    },
+    createResponse(body) {
+      return request("/v1/responses", { method: "POST", body });
+    },
     getWhoAmI() {
       return request("/v1/whoami");
     },

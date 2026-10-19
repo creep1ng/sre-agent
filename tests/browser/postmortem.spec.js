@@ -18,6 +18,10 @@ import { answerWhoAmI, connectConsole, logoutConsole } from "./support/console-s
 // 12. A review names the version on screen; a stale one (409), a reviewer without run.approve (403)
 //     or a closed postmortem (409 postmortem_not_open) is refused and nothing is approved.
 // 13. Approving is not closing: no close action here, only a link to Decisiones on the postmortem run.
+// 14. The agent draft goes through the governed /v1/responses (alias, incident, postmortem run) and
+//     only fills the form: nothing is written until a human saves; invented citations are dropped.
+// 15. A refused or failed model call (403, 503) or an output that is not a draft leaves the form as
+//     it was and writes nothing.
 const INCIDENT = "inc-demo";
 const RUN = "run_demo0001";
 const PM_RUN = "run_demopm0001";
@@ -89,6 +93,10 @@ async function mockApi(page, { detail = () => detailPayload(), postmortem = () =
     if (path.endsWith("/timeline")) {
       const events = EVENTS[url.searchParams.get("run_id")] ?? [];
       return route.fulfill({ json: { events, next_cursor: "seq:9", has_more: false } });
+    }
+    if (path.endsWith("/context")) {
+      const turns = path.includes(RUN) ? [{ turn_id: "turn_demo0001", model_output: "Hypothesis: payment timeout removed." }] : [];
+      return route.fulfill({ json: { run_id: RUN, incident_id: INCIDENT, turns, retrieved_at: "2026-08-24T15:00:00Z" } });
     }
     if (path.endsWith("/postmortem")) return route.fulfill(postmortem());
     const answer = detail();
@@ -384,5 +392,74 @@ for (const [status, code, text] of [
     await expect(page.locator("#fact-review")).toContainText("Pendiente de revisión");
     await expect(page.locator("#close-hint")).toBeHidden();
     expect(requests.filter((entry) => entry.path.endsWith("/reviews"))).toHaveLength(1);
+  });
+}
+
+const AGENT_DRAFT = {
+  summary: "Checkout payments failed after a config push.",
+  impact: "About 3% of checkouts failed at payment.",
+  timeline: [
+    { event_id: "evt_verified01", description: "Service verified stable." },
+    { event_id: "evt_invented999", description: "An event the incident never stored." },
+  ],
+  cause: { statement: "The payment client timeout was removed.", certainty: "probable" },
+  strategy: "Roll back the payment client config.",
+  actions_taken: [{ event_id: "evt_applied001", description: "A human approved the rollback." }],
+  verification: "Error rate stayed below 1%.",
+  pending: ["Add a config lint."],
+  unknowns: ["Exact revenue impact."],
+};
+
+async function mockModel(page, answer) {
+  const calls = [];
+  await page.route("**/api/v1/responses", async (route) => {
+    calls.push(route.request().postDataJSON());
+    await route.fulfill(answer());
+  });
+  return calls;
+}
+
+const modelText = (text) => ({
+  json: {
+    id: "resp_demo00001", object: "response", status: "completed", model: "z-ai/glm-5.3-flash", request_id: "00000000-0000-4000-8000-000000000001",
+    output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }],
+    metadata: { requested_model_alias: "triage-agent", router: "openrouter", inference_provider: "relace", consumption: { availability: "absent" } },
+  },
+});
+
+test("el borrador del agente pasa por /v1/responses y solo llena el formulario", async ({ page }) => {
+  const requests = await mockApi(page, { postmortem: () => NOT_FOUND });
+  const calls = await mockModel(page, () => modelText("```json\n" + JSON.stringify(AGENT_DRAFT) + "\n```"));
+  await openPostmortem(page);
+  await page.locator("#agent-draft").click();
+
+  await expect(page.locator("#pm-summary")).toHaveValue(AGENT_DRAFT.summary);
+  await expect(page.locator("#pm-certainty")).toHaveValue("probable");
+  await expect(page.locator("#pm-timeline")).toHaveValue("evt_verified01 | Service verified stable.");
+  await expect(page.locator("#agent-status")).toContainText("triage-agent");
+  await expect(page.locator("#agent-status")).toContainText("1 cita descartada");
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ model: "triage-agent", incident_id: INCIDENT, run_id: PM_RUN });
+  expect(calls[0].input).toContain("evt_applied001");
+  expect(calls[0].input).toContain("Hypothesis: payment timeout removed.");
+  expect(requests.filter((entry) => entry.method !== "GET")).toHaveLength(0);
+});
+
+for (const [name, answer, text] of [
+  ["403", () => ({ status: 403, json: { error: { code: "model_unavailable", message: "x" } } }), "HTTP 403"],
+  ["503", () => ({ status: 503, json: { error: { code: "provider_unavailable", message: "x" } } }), "HTTP 503"],
+  ["una salida que no es un borrador", () => modelText("I cannot help with that."), "no es un borrador"],
+]) {
+  test(`el agente con ${name} deja el formulario como estaba`, async ({ page }) => {
+    const requests = await mockApi(page, { postmortem: () => NOT_FOUND });
+    await mockModel(page, answer);
+    await openPostmortem(page);
+    await expect(page.locator("#pm-summary")).not.toHaveValue("");
+    const before = await page.locator("#pm-summary").inputValue();
+    await page.locator("#agent-draft").click();
+
+    await expect(page.locator("#agent-status")).toContainText(text);
+    await expect(page.locator("#pm-summary")).toHaveValue(before);
+    expect(requests.filter((entry) => entry.method !== "GET")).toHaveLength(0);
   });
 }
