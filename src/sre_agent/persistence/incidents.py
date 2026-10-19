@@ -27,6 +27,7 @@ from sre_agent.incident.persistence import (
     TransitionResult,
 )
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.postmortems import PostgresPostmortemRepository
 
 
 def _document(value: JsonDocument) -> str:
@@ -355,6 +356,7 @@ class PostgresIncidentUnitOfWork:
         self.snapshots = PostgresSnapshotRepository(self._session)
         self.decisions = PostgresDecisionRepository(self._session)
         self.text_context = PostgresTextContextRepository(self._session)
+        self.postmortems = PostgresPostmortemRepository(self._session)
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, traceback: object) -> None:
