@@ -32,6 +32,7 @@ import { mountedView } from "../console/view.js";
     countNoun: "simuladas",
   };
   let pollTimer = null;
+  let lastLiveAt = null;
 
   const nodes = {};
 
@@ -381,13 +382,19 @@ import { mountedView } from "../console/view.js";
       const payload = await view.client.listAlerts();
       if (view.signal.aborted || view.session.phase !== "active") return;
       if (!payload || !Array.isArray(payload.alerts)) throw new Error("GET /v1/alerts devolvió un cuerpo inválido.");
+      lastLiveAt = payload.evaluated_at;
       nodes["fixture-label"].textContent = `GET /v1/alerts · ${formatTimestamp(payload.evaluated_at)}`;
       showAlerts(payload.alerts.map((alert) => fromLive(alert, payload.evaluated_at)));
     } catch (error) {
       // A 401 already ended the session (locked state); do not paint an error over it.
       if (view.signal.aborted || view.session.phase !== "active") return;
       const [title, detail] = describeLiveError(error);
-      showLoadError(error, title, detail, "Alertas en vivo no disponibles");
+      // A transient failure keeps the last list on screen; a denial or a never-loaded inbox does not.
+      if (lastLiveAt && error?.kind !== "authorization") {
+        nodes["fixture-label"].textContent = `${title}: reintentando · última lectura ${formatTimestamp(lastLiveAt)}`;
+      } else {
+        showLoadError(error, title, detail, "Alertas en vivo no disponibles");
+      }
     }
     if (!view.signal.aborted && view.session.phase === "active") {
       pollTimer = setTimeout(pollLive, LIVE_POLL_MS);
@@ -406,6 +413,7 @@ import { mountedView } from "../console/view.js";
         return;
       }
       state.alerts = [];
+      lastLiveAt = null;
       clearDetail();
       nodes["loading-state"].hidden = true;
       nodes["load-error"].hidden = true;
