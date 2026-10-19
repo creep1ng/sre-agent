@@ -189,6 +189,16 @@ export function createAdministrativeApiClient({
         headers: mutationHeaders(idempotencyKey),
       });
     },
+    getConsumptionLimits() {
+      return request("/v1/consumption-limits");
+    },
+    replaceConsumptionLimits(body, idempotencyKey) {
+      return request("/v1/consumption-limits", {
+        method: "PUT",
+        body,
+        headers: mutationHeaders(idempotencyKey),
+      });
+    },
     readUsageConsumption({ requestId, incidentId, month } = {}) {
       const hasRequest = requestId !== undefined && requestId !== null && requestId !== "";
       const hasIncident =
