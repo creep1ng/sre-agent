@@ -24,6 +24,7 @@ from sre_agent.investigator.contract import (
     Limits,
     Outcome,
     PinnedSkill,
+    ProposeMitigation,
     RequestHuman,
     SearchBoK,
     SkillPin,
@@ -276,6 +277,9 @@ async def investigate(
             unknown = unknown_references(action, request, {item.evidence_id for item in evidence})
             if unknown:
                 raise InvalidOutput("unknown references: " + ", ".join(unknown))
+            if isinstance(action, ProposeMitigation) and not request.context.hypotheses:
+                # The runtime proposes a mitigation only for a recorded, cited hypothesis.
+                raise InvalidOutput("propose a cited hypothesis before a mitigation")
         except InvalidOutput as error:
             turns.append(turn)
             if feedback is not None:
@@ -330,6 +334,18 @@ async def investigate(
                 provider.collect(action.tool, action.arguments), limits.tool_timeout_seconds
             )
         except (EvidenceUnavailable, TimeoutError) as error:
+            if isinstance(error, EvidenceUnavailable) and error.code == "upstream_invalid":
+                # The tool answered, with an error for these arguments: an observation the model
+                # can act on within the step budget (retry, change them or use another tool).
+                if error.request_id is not None:
+                    request_ids.append(error.request_id)
+                    mcp_request_ids.append(error.request_id)
+                invocation = ToolInvocation(
+                    tool=action.tool, arguments=action.arguments, result_summary="tool error"
+                )
+                turns.append(turn.model_copy(update={"tool_invocation": invocation}))
+                feedback = f"{action.tool} answered with an error for those arguments"
+                continue
             turns.append(turn)
             if isinstance(error, EvidenceUnavailable) and error.request_id is not None:
                 request_ids.append(error.request_id)

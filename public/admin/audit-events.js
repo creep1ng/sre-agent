@@ -64,6 +64,13 @@ function collectFilters() {
   return filters;
 }
 
+// "deny · no_matching_grant": the policy decision and its contractual reason code, never a
+// resource name. Absent or non-string values stay absent instead of being guessed.
+function decisionLabel(item) {
+  const decision = item.policy_decision && typeof item.policy_decision === "object" ? item.policy_decision : {};
+  return [text(decision.decision), text(decision.reason_code)].filter(Boolean).join(" · ");
+}
+
 function detailRow(item) {
   const eventId = text(item.event_id);
   const identity = item.identity && typeof item.identity === "object" ? item.identity : {};
@@ -72,7 +79,8 @@ function detailRow(item) {
   const routing = item.routing && typeof item.routing === "object" ? item.routing : null;
   const correlation = item.correlation && typeof item.correlation === "object" ? item.correlation : {};
   const rows = [["Event", eventId], ["Occurred", text(item.occurred_at)], ["Operation", text(item.operation)],
-    ["Outcome", text(item.outcome)],
+    ["Action", text(item.action)], ["Stage", text(item.stage)], ["Outcome", text(item.outcome)],
+    ["Outcome reason", text(item.reason_code)],
     ["Response status", item.response_status === undefined ? "" : String(item.response_status)],
     ["Latency (ms)", item.latency_ms === undefined ? "" : String(item.latency_ms)],
     ["Actor kind", text(identity.principal_kind)],
@@ -80,14 +88,15 @@ function detailRow(item) {
     ["Resource type", text(resource.resource_type)], ["Resource reference", text(resource.resource_ref?.digest)],
     ["Model alias reference", text(item.model_alias_ref?.digest)], ["Router", routing === null ? "" : text(routing.router)],
     ["Model reference", text(routing?.model_ref?.digest)], ["Provider reference", text(routing?.provider_ref?.digest)],
-    ["Policy decision", text(decision.decision)], ["Content state", text(item.content_state)],
+    ["Policy decision", text(decision.decision)], ["Decision reason", text(decision.reason_code)],
+    ["Denial cause", text(item.authorization_denial_cause)], ["Content state", text(item.content_state)],
     ["Request ID", text(correlation.request_id)], ["Incident reference", refDigest(correlation.incident_ref)],
     ["Run reference", refDigest(correlation.run_ref)], ["Task reference", refDigest(correlation.task_ref)],
     ["Trace reference", refDigest(correlation.trace_ref)]];
   const detail = el("tr", "principals__detail-row");
   detail.dataset.eventDetail = eventId;
   const cell = el("td");
-  cell.colSpan = 5;
+  cell.colSpan = 7;
   const panel = el("div", "principals__detail");
   const list = el("dl", "principals__facts");
   for (const [term, value] of rows) {
@@ -128,7 +137,16 @@ function renderRows() {
     toggle.setAttribute("aria-expanded", String(expanded.has(eventId)));
     const actionCell = el("td");
     actionCell.append(toggle);
-    row.append(idCell, el("td", "ma-mono", text(item.occurred_at) || "—"), outcomeCell,
+    // Operation and resource type share one cell so the list stays readable without scrolling.
+    const operationCell = el("td", "ma-mono");
+    const operation = el("div", null, text(item.operation) || "—");
+    operation.dataset.auditOperation = "";
+    const resourceType = el("div", "ma-panel__description", text(item.resource?.resource_type) || "—");
+    resourceType.dataset.auditResourceType = "";
+    operationCell.append(operation, resourceType);
+    const decisionCell = el("td", "ma-mono", decisionLabel(item) || "—");
+    decisionCell.dataset.auditDecision = "";
+    row.append(idCell, el("td", "ma-mono", text(item.occurred_at) || "—"), operationCell, decisionCell, outcomeCell,
       el("td", null, text(item.identity?.principal_kind) || "—"), actionCell);
     rowsBody.append(row);
     if (expanded.has(eventId)) rowsBody.append(detailRow(item));

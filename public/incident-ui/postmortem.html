@@ -17,7 +17,7 @@
         <div>
           <p class="ma-eyebrow">Atención a incidentes</p>
           <h1 class="war-room__title">Postmortem mínimo</h1>
-          <p class="war-room__subtitle">Presentación del mínimo contractual. No genera artefactos ni cierra incidentes.</p>
+          <p class="war-room__subtitle">Artefacto persistido del incidente, su versión y su revisión humana. Esta vista no cierra incidentes.</p>
         </div>
         <div class="war-room__actions">
           <button id="refresh-button" class="ma-button ma-button--secondary" type="button" hidden>Actualizar</button>
@@ -55,12 +55,61 @@
           <div><dt>Incidente</dt><dd id="fact-incident"></dd></div>
           <div><dt>Estado</dt><dd id="fact-state"></dd></div>
           <div><dt>Artefacto</dt><dd id="fact-artifact"></dd></div>
+          <div><dt>Versión</dt><dd id="fact-version"></dd></div>
+          <div><dt>Revisión</dt><dd id="fact-review"></dd></div>
+          <div><dt>Runs</dt><dd id="fact-runs"></dd></div>
+          <div><dt>Última edición</dt><dd id="fact-updated"></dd></div>
         </dl>
-        <div class="ma-panel__body"><p class="ma-muted" id="fixture-banner" hidden></p></div>
+      </section>
+      <section id="empty-section" class="ma-panel" hidden>
+        <div class="ma-panel__body">
+          <p class="ma-alert__title">Sin postmortem persistido</p>
+          <p id="empty-detail" class="ma-muted"></p>
+          <button id="start-postmortem" class="ma-button ma-button--primary" type="button" hidden>Abrir postmortem</button>
+          <p id="start-status" role="status" aria-live="polite" hidden></p>
+        </div>
       </section>
       <section id="artifact-section" class="ma-panel" hidden>
-        <div class="ma-panel__header"><h2 class="ma-panel__title">Borrador mínimo</h2></div>
-        <div class="ma-panel__body"><dl class="war-room__facts" id="artifact-sections"></dl></div>
+        <div class="ma-panel__header"><h2 class="ma-panel__title">Contenido de la versión</h2></div>
+        <div class="ma-panel__body">
+          <p id="content-restricted" class="ma-muted" hidden>Esta identidad ve el progreso del postmortem, no su texto: el contenido requiere run.read_context.</p>
+          <dl class="war-room__facts" id="artifact-sections"></dl>
+        </div>
+      </section>
+      <section id="editor-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><div><h2 class="ma-panel__title">Redactar y guardar</h2><p id="editor-basis" class="ma-panel__description"></p></div></div>
+        <div class="ma-panel__body">
+          <button id="agent-draft" class="ma-button ma-button--secondary" type="button">Generar borrador con el agente</button>
+          <p id="agent-status" role="status" aria-live="polite" hidden></p>
+        </div>
+        <form id="editor-form" class="ma-panel__body war-room__form">
+          <label class="ma-field" for="pm-summary"><span class="ma-field__label">Resumen</span><textarea id="pm-summary" class="ma-textarea" rows="2"></textarea></label>
+          <label class="ma-field" for="pm-impact"><span class="ma-field__label">Impacto conocido</span><textarea id="pm-impact" class="ma-textarea" rows="2"></textarea></label>
+          <label class="ma-field" for="pm-cause"><span class="ma-field__label">Causa o hipótesis</span><textarea id="pm-cause" class="ma-textarea" rows="2"></textarea></label>
+          <label class="ma-field" for="pm-certainty"><span class="ma-field__label">Certeza</span>
+            <select id="pm-certainty" class="ma-select"><option value="confirmed">Confirmada</option><option value="probable">Probable</option><option value="hypothesis">Hipótesis</option><option value="unknown">Desconocida</option></select></label>
+          <label class="ma-field" for="pm-strategy"><span class="ma-field__label">Estrategia</span><textarea id="pm-strategy" class="ma-textarea" rows="2"></textarea></label>
+          <label class="ma-field" for="pm-timeline"><span class="ma-field__label">Cronología</span><span class="ma-field__hint">Una línea por evento: evt_… | descripción. Solo eventos guardados de este incidente.</span><textarea id="pm-timeline" class="ma-textarea" rows="5"></textarea></label>
+          <label class="ma-field" for="pm-actions_taken"><span class="ma-field__label">Acciones realizadas</span><span class="ma-field__hint">Una línea por evento: evt_… | descripción. Solo eventos guardados de este incidente.</span><textarea id="pm-actions_taken" class="ma-textarea" rows="3"></textarea></label>
+          <label class="ma-field" for="pm-verification"><span class="ma-field__label">Verificación</span><textarea id="pm-verification" class="ma-textarea" rows="2"></textarea></label>
+          <label class="ma-field" for="pm-pending"><span class="ma-field__label">Pendientes</span><span class="ma-field__hint">Una línea por elemento.</span><textarea id="pm-pending" class="ma-textarea" rows="2"></textarea></label>
+          <label class="ma-field" for="pm-unknowns"><span class="ma-field__label">Lo que no se sabe</span><span class="ma-field__hint">Una línea por elemento.</span><textarea id="pm-unknowns" class="ma-textarea" rows="2"></textarea></label>
+          <button id="save-postmortem" class="ma-button ma-button--primary" type="submit">Guardar versión</button>
+          <p id="save-status" role="status" aria-live="polite" hidden></p>
+        </form>
+      </section>
+      <section id="review-section" class="ma-panel" hidden>
+        <div class="ma-panel__header"><h2 class="ma-panel__title" id="review-title">Revisión humana</h2></div>
+        <form id="review-form" class="ma-panel__body war-room__form">
+          <p class="ma-muted">Revisor: la identidad autenticada. Revisar no cierra el incidente; editar después anula la revisión.</p>
+          <label class="ma-field" for="review-comment"><span class="ma-field__label">Comentario (opcional, máx. 2000)</span><textarea id="review-comment" class="ma-textarea" maxlength="2000" rows="2"></textarea></label>
+          <div class="ma-button-row">
+            <button id="approve-postmortem" class="ma-button ma-button--primary" type="button">Aprobar versión</button>
+            <button id="request-changes" class="ma-button ma-button--secondary" type="button">Solicitar cambios</button>
+          </div>
+          <p id="review-status" role="status" aria-live="polite" hidden></p>
+          <p id="close-hint" hidden>Versión aprobada. El cierre (close_incident) se solicita en <a id="decisions-link" href="/?view=decisions">Decisiones</a> sobre el run del postmortem.</p>
+        </form>
       </section>
     </main>
   </body>

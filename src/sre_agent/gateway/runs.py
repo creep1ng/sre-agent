@@ -298,6 +298,9 @@ COMMAND_ACTIONS = {
     "propose_disposition": "run.command",
     "escalate": "run.command",
     "cancel_run": "run.command",
+    "verification_passed": "run.command",
+    "verification_failed": "run.command",
+    "close_incident": "run.approve",
 }
 COMMAND_FIELDS = frozenset(
     {
@@ -314,6 +317,13 @@ COMMAND_FIELDS = frozenset(
 VERSIONED_REVIEW_COMMANDS = frozenset(
     {"approve_mitigation", "reject_mitigation", "request_changes"}
 )
+# run-command:2.1.0 commands have no pre-version clients to replay, so the
+# reviewed version is always required, and closing must assert run.approve in
+# the body: the explicit human approval the workflow requires to close.
+VERSION_REQUIRED_COMMANDS = frozenset(
+    {"verification_passed", "verification_failed", "close_incident"}
+)
+EXPLICIT_APPROVAL_COMMANDS = frozenset({"close_incident"})
 DISPOSITIONS = frozenset({"dismiss", "link", "declare"})
 TURN_ID_PATTERN = r"^turn_[a-z0-9]{8,32}$"
 MAX_COMMENT = 2000
@@ -321,6 +331,10 @@ COMMAND_DENIED = ("not_authorized", "The principal is not authorized to send thi
 ATTRIBUTION_MISMATCH = (
     "actor_attribution_mismatch",
     "Actor attribution must match the authenticated principal.",
+)
+PRECONDITION_FAILED = (
+    "precondition_failed",
+    "The incident does not meet the command's workflow precondition.",
 )
 COMMAND_CONFLICT = (
     "run_conflict",
@@ -420,6 +434,10 @@ class RunCommandService:
             # versionless review still fails the runtime's version precondition.
             if "expected_incident_version" in body and (type(version) is not int or version < 0):
                 return True
+        elif command in VERSION_REQUIRED_COMMANDS:
+            version = body.get("expected_incident_version")
+            if type(version) is not int or version < 0:
+                return True
         elif "expected_incident_version" in body:
             return True
         if body.get("actor") != "human":
@@ -446,7 +464,7 @@ class RunCommandService:
         """The body may assert its authorization; it may never disagree with it."""
 
         if claim is None:
-            return False
+            return command in EXPLICIT_APPROVAL_COMMANDS
         if not isinstance(claim, dict) or set(claim) - {"action", "resource"}:
             return True
         resource = claim.get("resource")
@@ -476,7 +494,7 @@ class RunCommandService:
         if error is not None:
             return error
         assert principal is not None and idempotency_key is not None
-        # Commands are human-only (run-command:2.0.0). The actor type and the
+        # Commands are human-only (run-command:2.0.0 and 2.1.0). The actor type and the
         # reference the body asserts must both describe the authenticated
         # principal: an agent credential holding the action, by grant or by
         # mistake, still cannot sign a human command.
@@ -507,12 +525,14 @@ class RunCommandService:
             return error_envelope(request_id, 404, RUN_NOT_FOUND)
         except MissingIncidentVersionError:
             return error_envelope(request_id, 422)
+        except PreconditionFailedError:
+            # A guard of the runtime refused it, before anything was written.
+            return error_envelope(request_id, 409, PRECONDITION_FAILED)
         except (
             ApprovalRequiredError,
             IncidentIdempotencyConflictError,
             IncidentStaleWriteError,
             InvalidTransitionError,
-            PreconditionFailedError,
         ):
             return error_envelope(request_id, 409, COMMAND_CONFLICT)
         except Exception:

@@ -147,3 +147,147 @@ test("drilldown reports auth and storage failures distinctly without inventing r
   await expect(page.locator("#request-detail-status")).toContainText("Consumption unavailable");
   await expect(page.locator("[data-request-row]")).toHaveCount(0);
 });
+
+// Consumption limits (issue #142). Failure modes covered: null shown as 0 or 0 sent as
+// null; the typed value shown as accepted instead of the server's answer; a stale version
+// overwriting the policy or hiding the conflict; invalid values sent or a 422 shown as
+// saved; a 403 revealing a partial policy; a retry minting a new key or a changed payload
+// reusing the old one; the previous session's policy left on screen.
+const LIMITS_PATH = "/api/v1/consumption-limits";
+const policy = (version, incident, monthly) => ({
+  version, incident_token_limit: incident, monthly_usd_limit: monthly, updated_at: `2026-10-0${version}T00:00:00Z`,
+});
+
+async function connectLimits(page) {
+  await page.goto("/public/admin/consumption.html");
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+}
+
+test("limits panel shows the server policy and saves exactly what the contract defines", async ({ page }) => {
+  const puts = [];
+  let failNext = true;
+  await page.route((url) => url.pathname === LIMITS_PATH, (route) => {
+    const request = route.request();
+    if (request.method() === "GET") return route.fulfill(json(200, JSON.stringify(policy(3, 0, null))));
+    puts.push({ body: request.postDataJSON(), key: request.headers()["idempotency-key"] });
+    if (failNext) {
+      failNext = false;
+      return route.abort("failed");
+    }
+    return route.fulfill(json(200, JSON.stringify(policy(4, null, "0.5"))));
+  });
+  await connectLimits(page);
+  await expect(page.locator("#limits-incident")).toHaveText("0");
+  await expect(page.locator("#limits-monthly")).toHaveText("Not configured");
+  await expect(page.locator("#limits-version")).toHaveText("3");
+  await expect(page.locator("#limits-incident-input")).toHaveValue("0");
+  await expect(page.locator("#limits-monthly-input")).toHaveValue("");
+
+  for (const [tokens, usd] of [["-1", ""], ["1.5", ""], ["", "1.1234567890123"], ["", "abc"]]) {
+    await page.fill("#limits-incident-input", tokens);
+    await page.fill("#limits-monthly-input", usd);
+    await page.click("#limits-submit");
+    await expect(page.locator("#limits-status")).toContainText("Nothing was sent");
+  }
+  expect(puts).toHaveLength(0);
+
+  await page.fill("#limits-incident-input", "");
+  await page.fill("#limits-monthly-input", "0.50");
+  await page.click("#limits-submit");
+  await expect(page.locator("#limits-status")).toContainText("Not saved: API unavailable");
+  await expect(page.locator("#limits-monthly")).toHaveText("Not configured");
+  await page.click("#limits-submit");
+  await expect(page.locator("#limits-status")).toHaveText("Saved: policy version 4 applies to new gateway admissions.");
+  await expect(page.locator("#limits-monthly")).toHaveText("0.5");
+  await expect(page.locator("#limits-incident")).toHaveText("Not configured");
+  expect(puts.map((put) => put.body)).toEqual([
+    { expected_version: 3, incident_token_limit: null, monthly_usd_limit: "0.50" },
+    { expected_version: 3, incident_token_limit: null, monthly_usd_limit: "0.50" },
+  ]);
+  expect(puts[0].key).toMatch(/^limits-[0-9a-f]{32}$/);
+  expect(puts[1].key).toBe(puts[0].key);
+
+  await page.fill("#limits-incident-input", "0");
+  await page.click("#limits-submit");
+  await expect(page.locator("#limits-status")).toContainText("Saved: policy version 4");
+  expect(puts[2].body).toEqual({ expected_version: 4, incident_token_limit: 0, monthly_usd_limit: "0.5" });
+  expect(puts[2].key).not.toBe(puts[0].key);
+
+  await page.click("#disconnect-button");
+  await expect(page.locator("#limits-current")).toBeHidden();
+  await expect(page.locator("#limits-form")).toBeHidden();
+  await expect(page.locator("#limits-status")).toHaveText("Connect to load the policy.");
+});
+
+test("limits panel reloads on a version conflict and keeps the policy on rejection", async ({ page }) => {
+  let current = policy(5, 1000, "10");
+  let putStatus = 409;
+  await page.route((url) => url.pathname === LIMITS_PATH, (route) => {
+    if (route.request().method() === "GET") return route.fulfill(json(200, JSON.stringify(current)));
+    return route.fulfill(json(putStatus, JSON.stringify({ error: { code: putStatus === 409 ? "status_conflict" : "validation_error" } })));
+  });
+  await connectLimits(page);
+  await expect(page.locator("#limits-version")).toHaveText("5");
+  current = policy(6, 2000, "20");
+  await page.fill("#limits-monthly-input", "15");
+  await page.click("#limits-submit");
+  await expect(page.locator("#limits-status")).toHaveText("The policy changed elsewhere (409). The current version is shown; nothing was overwritten.");
+  await expect(page.locator("#limits-version")).toHaveText("6");
+  await expect(page.locator("#limits-monthly")).toHaveText("20");
+  putStatus = 422;
+  await page.fill("#limits-monthly-input", "15");
+  await page.click("#limits-submit");
+  await expect(page.locator("#limits-status")).toHaveText("Invalid limits (rejected by the API). The active policy is unchanged.");
+  await expect(page.locator("#limits-monthly")).toHaveText("20");
+  await expect(page.locator("#page-error")).toBeHidden();
+});
+
+test("limits panel reveals nothing to an identity without access", async ({ page }) => {
+  await page.route((url) => url.pathname === LIMITS_PATH, (route) =>
+    route.fulfill(json(403, JSON.stringify({ error: { code: "resource_unavailable" } }))));
+  await connectLimits(page);
+  await expect(page.locator("#limits-status")).toHaveText("Consumption limits unavailable: Access unavailable.");
+  await expect(page.locator("#limits-current")).toBeHidden();
+  await expect(page.locator("#limits-form")).toBeHidden();
+});
+
+test("limits panel persists a real policy change and restores it", async ({ page, request }) => {
+  test.skip(process.env.PLAYWRIGHT_PRODUCTION_TOPOLOGY !== "1", "requires the connected control-plane API");
+  const admin = process.env.ADMIN_HUMAN_API_KEY;
+  test.skip(!admin, "requires ADMIN_HUMAN_API_KEY");
+  await page.goto("/public/admin/consumption.html");
+  await page.fill("#api-key", admin);
+  await page.click("#connect-button");
+  await expect(page.locator("#limits-form")).toBeVisible({ timeout: 20_000 });
+  const before = { tokens: await page.inputValue("#limits-incident-input"), usd: await page.inputValue("#limits-monthly-input") };
+  const version = Number(await page.locator("#limits-version").innerText());
+  await page.fill("#limits-incident-input", "123456");
+  await page.fill("#limits-monthly-input", "7.25");
+  await page.click("#limits-submit");
+  await expect(page.locator("#limits-status")).toHaveText(`Saved: policy version ${version + 1} applies to new gateway admissions.`);
+  if (process.env.CONSUMPTION_LIMITS_SCREENSHOT)
+    await page.locator("#limits-panel").screenshot({ path: process.env.CONSUMPTION_LIMITS_SCREENSHOT });
+  await page.reload();
+  await page.fill("#api-key", admin);
+  await page.click("#connect-button");
+  await expect(page.locator("#limits-incident")).toHaveText("123456", { timeout: 20_000 });
+  await expect(page.locator("#limits-monthly")).toHaveText("7.25");
+  const stale = await request.put("/api/v1/consumption-limits", {
+    headers: { Authorization: `Bearer ${admin}`, "Idempotency-Key": `limits-stale-${Date.now()}-check` },
+    data: { expected_version: version, incident_token_limit: null, monthly_usd_limit: null },
+  });
+  expect(stale.status()).toBe(409);
+  await page.fill("#limits-incident-input", before.tokens);
+  await page.fill("#limits-monthly-input", before.usd);
+  await page.click("#limits-submit");
+  await expect(page.locator("#limits-status")).toHaveText(`Saved: policy version ${version + 2} applies to new gateway admissions.`);
+  const restricted = process.env.RESTRICTED_HARNESS_API_KEY;
+  if (restricted) {
+    await page.click("#disconnect-button");
+    await page.fill("#api-key", restricted);
+    await page.click("#connect-button");
+    await expect(page.locator("#limits-status")).toHaveText("Consumption limits unavailable: Access unavailable.", { timeout: 20_000 });
+    await expect(page.locator("#limits-current")).toBeHidden();
+  }
+});

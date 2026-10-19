@@ -109,11 +109,14 @@ class EvidenceUnavailable(Exception):
         kind: Literal["denied", "transient", "rejected"] = "transient",
         status: int | None = None,
         request_id: UUID | None = None,
+        code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.kind = kind
         self.status = status
         self.request_id = request_id
+        # The gateway's error code, e.g. `upstream_invalid` when the tool answered with an error.
+        self.code = code
 
 
 class EvidenceProvider(Protocol):

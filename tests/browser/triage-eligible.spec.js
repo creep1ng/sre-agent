@@ -71,7 +71,7 @@ async function beginInboxJourney(page, alertId, key) {
     if (request.method() === "POST" && request.url().includes("/triage/commands"))
       commandPosts.push(request.postDataJSON());
   });
-  await page.goto(`${WEB}/public/incident-ui/alerts.html`);
+  await page.goto(`${WEB}/public/incident-ui/alerts.html?fixture=default`);
   await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
   await page.locator(`#alert-list [data-alert-id="${alertId}"]`).click();
   await page.locator("#start-triage").click();
@@ -167,7 +167,7 @@ test("inbox event deep-links the same alert id and sends no triage command", asy
       commandPosts.push(request.url());
   });
 
-  await page.goto(`${WEB}/public/incident-ui/alerts.html`);
+  await page.goto(`${WEB}/public/incident-ui/alerts.html?fixture=default`);
   await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
   await page.locator('#alert-list [data-alert-id="alert-checkout-001"]').click();
   await page.locator("#start-triage").click();

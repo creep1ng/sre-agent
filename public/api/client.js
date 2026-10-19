@@ -189,6 +189,16 @@ export function createAdministrativeApiClient({
         headers: mutationHeaders(idempotencyKey),
       });
     },
+    getConsumptionLimits() {
+      return request("/v1/consumption-limits");
+    },
+    replaceConsumptionLimits(body, idempotencyKey) {
+      return request("/v1/consumption-limits", {
+        method: "PUT",
+        body,
+        headers: mutationHeaders(idempotencyKey),
+      });
+    },
     readUsageConsumption({ requestId, incidentId, month } = {}) {
       const hasRequest = requestId !== undefined && requestId !== null && requestId !== "";
       const hasIncident =
@@ -287,8 +297,26 @@ export function createAdministrativeApiClient({
     getIncident(incidentId) {
       return request(`/v1/incidents/${encodeURIComponent(incidentId)}`);
     },
+    getPostmortem(incidentId) {
+      return request(`/v1/incidents/${encodeURIComponent(incidentId)}/postmortem`);
+    },
+    putPostmortem(incidentId, body) {
+      return request(`/v1/incidents/${encodeURIComponent(incidentId)}/postmortem`, { method: "PUT", body });
+    },
+    reviewPostmortem(incidentId, body) {
+      return request(`/v1/incidents/${encodeURIComponent(incidentId)}/postmortem/reviews`, { method: "POST", body });
+    },
+    getRunContext(incidentId, runId) {
+      return request(`/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/context`);
+    },
+    createResponse(body) {
+      return request("/v1/responses", { method: "POST", body });
+    },
     getWhoAmI() {
       return request("/v1/whoami");
+    },
+    listAlerts() {
+      return request("/v1/alerts");
     },
     postTriageCommand(alertId, body, idempotencyKey) {
       return request(`/v1/alerts/${encodeURIComponent(alertId)}/triage/commands`, {
@@ -332,6 +360,36 @@ export function createAdministrativeApiClient({
           body,
           headers: mutationHeaders(idempotencyKey),
         },
+      );
+    },
+    startRun(incidentId, body, idempotencyKey) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs`,
+        {
+          method: "POST",
+          body,
+          headers: mutationHeaders(idempotencyKey),
+        },
+      );
+    },
+    getRun(incidentId, runId) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}`,
+      );
+    },
+    // Sensitive context (run.read_context): turns and the incident's recorded reasoning.
+    getRunContext(incidentId, runId) {
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/context`,
+      );
+    },
+    listRunEvents(incidentId, runId, { after, limit } = {}) {
+      const params = new URLSearchParams();
+      if (after) params.set("after", after);
+      if (limit !== undefined) params.set("limit", String(limit));
+      const query = params.toString();
+      return request(
+        `/v1/incidents/${encodeURIComponent(incidentId)}/runs/${encodeURIComponent(runId)}/events${query ? `?${query}` : ""}`,
       );
     },
   });

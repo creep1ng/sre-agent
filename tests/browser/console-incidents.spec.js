@@ -73,6 +73,10 @@ async function mockIncident(page, { detail = detailPayload(), deny = () => false
       await route.fulfill({ status: 404, json: { error: { code: "snapshot_absent", message: "none" } } });
       return;
     }
+    if (url.pathname.endsWith("/postmortem")) {
+      await route.fulfill({ status: 404, json: { error: { code: "postmortem_not_found", message: "none" } } });
+      return;
+    }
     await route.fulfill({ json: detail });
   });
   return reads;
@@ -213,7 +217,7 @@ test("sin incidente en foco, la vista explica cómo llegar sin dictar direccione
   await expect(page.locator("#error-missing-id")).not.toContainText("?incident_id");
   await expect(band(page)).toBeHidden();
   await page.locator("#error-missing-id").getByRole("link", { name: "Ir a Alertas" }).click();
-  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "locked");
   expect(fetched).toBe(false);
 });
 
@@ -228,6 +232,29 @@ test("un incidente sin run no ofrece Decisión ni inventa un run", async ({ page
   await expect(step(page, "War room")).toHaveAttribute("data-progress", "current");
   await expect(step(page, "Triage")).toContainText("Declarado");
   await expect(page).toHaveURL(`/?view=war-room&incident_id=${INCIDENT}`);
+});
+
+test("cambiar a Decisiones sin run retira la franja y no conserva el run anterior", async ({ page }) => {
+  await mockIncident(page);
+  await answerWhoAmI(page);
+  // Decisiones reads an incident and one of its runs: without the run there is no read, so
+  // nothing stays in focus while that route is mounted.
+  await page.goto(`/?view=decisions&incident_id=${INCIDENT}`);
+  await connectConsole(page);
+  await expect(page.locator("#error-missing-id")).toBeVisible();
+  await expect(band(page)).toBeHidden();
+
+  // The war room reads the same incident, picks its latest run and shows it in the band.
+  await page.locator('[data-console-nav="war-room"]').click();
+  await expect(page.locator("#war-room")).toHaveAttribute("data-state", "ready");
+  await expect(band(page)).toBeVisible();
+  await expect(page.locator("#incident-focus-run")).toHaveText(RUN);
+
+  // Back to the run-less route: the band must not keep the run of the view that read it.
+  await page.goBack();
+  await expect(page.locator("#error-missing-id")).toBeVisible();
+  await expect(band(page)).toBeHidden();
+  await expect(page.locator("#incident-focus-run")).toBeEmpty();
 });
 
 test("la consola con un incidente en foco no tiene violaciones WCAG A/AA detectables", async ({ page }) => {

@@ -1,76 +1,465 @@
 import { expect, test } from "@playwright/test";
-import { answerWhoAmI, connectConsole } from "./support/console-session.mjs";
+import { answerWhoAmI, connectConsole, logoutConsole } from "./support/console-session.mjs";
 
+// The postmortem view reads the persisted artifact of the incident in focus (#43 over #335).
+// Failure modes covered here, each with its own test below:
+//  1. No incident in focus: nothing is read.
+//  2. Incident read fails (401, 404 incident_not_found, 503): no artifact data is shown.
+//  3. The postmortem read is denied (403): nothing of the incident is left on screen.
+//  4. No artifact is persisted (404 postmortem_not_found): an honest empty state, never a fixture.
+//  5. A reader without run.read_context gets the projection only: no text reaches the page.
+//  6. Logging out removes the artifact content from the page.
+//  7. Only a resolved incident offers to open the postmortem; other states explain why not.
+//  8. Opening it is refused (409 run_conflict, 403): the reason shows and nothing changes.
+//  9. A draft cites only events the incident really stored; saving creates version 1 from 0.
+// 10. A stale save (409 postmortem_version_conflict), invalid content (422) or a writer without
+//     run.command (403) shows the backend reason and keeps the draft in the form.
+// 11. Without the text (no run.read_context) or outside the postmortem state there is no editor.
+// 12. A review names the version on screen; a stale one (409), a reviewer without run.approve (403)
+//     or a closed postmortem (409 postmortem_not_open) is refused and nothing is approved.
+// 13. Approving is not closing: no close action here, only a link to Decisiones on the postmortem run.
+// 14. The agent draft goes through the governed /v1/responses (alias, incident, postmortem run) and
+//     only fills the form: nothing is written until a human saves; invented citations are dropped.
+// 15. A refused or failed model call (403, 503) or an output that is not a draft leaves the form as
+//     it was and writes nothing.
 const INCIDENT = "inc-demo";
+const RUN = "run_demo0001";
+const PM_RUN = "run_demopm0001";
 
-function detailPayload() {
+function detailPayload(state = "postmortem") {
+  const runs = [{ run_id: RUN, version: 6, status: "running", current_state: "resolved", updated_at: "2026-08-24T14:40:00Z" }];
+  if (state === "postmortem") {
+    runs.push({ run_id: PM_RUN, version: 1, status: "running", current_state: "postmortem", updated_at: "2026-08-24T14:45:00Z" });
+  }
   return {
-    incident_id: INCIDENT,
-    workflow_version: "1.0.0",
-    state: "investigating",
-    severity: "sev2",
-    impact: "Checkout failing at payment.",
-    alert: {
-      alert_id: "alt-payment-error-rate",
-      service: "paymentservice",
-      severity: "sev2",
-      status: "triaged",
-      observed_at: "2026-08-24T14:05:00Z",
-      summary: "Elevated error rate on paymentservice.",
-      source: "grafana-alerting",
-    },
-    approvals: [],
-    version: 4,
-    updated_at: "2026-08-24T14:20:00Z",
-    runs: [
-      { run_id: "run_demo0001", version: 4, status: "running", current_state: "investigating", updated_at: "2026-08-24T14:20:00Z" },
-    ],
+    incident_id: INCIDENT, workflow_version: "1.0.0", state, severity: "sev2", impact: "Checkout failing at payment.",
+    alert: null, approvals: [], version: 9, updated_at: "2026-08-24T14:45:00Z", runs,
   };
 }
 
-async function openPostmortem(page, status = 200) {
-  await page.route("**/api/v1/incidents/**", async (route) => {
-    if (status === 200) return route.fulfill({ json: detailPayload() });
-    return route.fulfill({ status, json: { error: { code: "not_authorized" } } });
-  });
-  await answerWhoAmI(page);
-  await page.goto(`/public/incident-ui/postmortem.html?incident_id=${INCIDENT}`);
-  await connectConsole(page);
+const CONTENT = {
+  summary: "Checkout payments failed for 14 minutes.",
+  impact: "About 3% of checkouts failed.",
+  timeline: [{ event_id: "evt_verified01", description: "Stability check passed." }],
+  cause: { statement: "A config push removed the payment client timeout.", certainty: "probable" },
+  strategy: "Roll back the config.",
+  actions_taken: [{ event_id: "evt_applied001", description: "Mitigation approved by a human." }],
+  verification: "Error rate below 1% for 15 minutes.",
+  pending: ["Add a config lint for client timeouts."],
+  unknowns: ["Exact revenue impact."],
+};
+
+function projection({ withContent = true, review = null } = {}) {
+  const payload = {
+    postmortem_id: "pm_demopayment", incident_id: INCIDENT, version: 2, run_ids: [RUN, PM_RUN],
+    updated_by: "demo-human", created_at: "2026-08-24T14:46:00Z", updated_at: "2026-08-24T14:50:00Z",
+    review: review ?? { status: "pending", reviewed_version: null, reviewer_id: null, reviewed_at: null },
+    content_included: withContent,
+  };
+  if (withContent) {
+    payload.content = CONTENT;
+    payload.review = { ...payload.review, comment: null };
+  }
+  return payload;
 }
 
-test("renders the minimum sections with explicit unknowns", async ({ page }) => {
-  await openPostmortem(page);
+const NOT_FOUND = { status: 404, json: { error: { code: "postmortem_not_found", message: "none" } } };
 
-  await expect(page.locator("#fact-incident")).toHaveText(INCIDENT);
-  await expect(page.locator("#fact-state")).toHaveText("investigating");
-  await expect(page.locator("#fact-artifact")).toContainText("pm_demo0001");
-  await expect(page.locator("#fact-artifact")).toContainText("draft");
-  await expect(page.locator("#fixture-banner")).toContainText("#335");
-  for (const section of ["Resumen", "Impacto conocido", "Hipotesis o causa", "Certeza", "Estrategia", "Verificacion", "Pendientes"]) {
-    await expect(page.locator("#artifact-sections")).toContainText(section);
-  }
-  await expect(page.locator("#artifact-sections")).toContainText("Desconocido");
-  await expect(page.locator("#artifact-sections")).toContainText("Pendiente");
+// Events the incident stored, per run; the draft may cite only these.
+const EVENTS = {
+  [RUN]: [
+    // Triage writes its declaration as evt-…, which the postmortem citation contract (evt_…) refuses.
+    { event_id: "evt-declared00000001", kind: "state_change", state: "active", summary: "Incident declared." },
+    { event_id: "evt_started0001", kind: "state_change", state: "investigating", summary: "Investigation started." },
+    { event_id: "evt_dispatch001", kind: "dispatch_receipt", state: "investigating", summary: "Investigation dispatch started." },
+    { event_id: "evt_proposed001", kind: "state_change", state: "mitigating", summary: "Mitigation proposed." },
+    { event_id: "evt_applied001", kind: "state_change", state: "verifying", summary: "Mitigation approved." },
+    { event_id: "evt_verified01", kind: "state_change", state: "resolved", summary: "Service verified stable." },
+  ],
+  [PM_RUN]: [{ event_id: "evt_pmstart001", kind: "state_change", state: "postmortem", summary: "Postmortem started." }],
+};
+
+// Answers the incident, its postmortem, its timeline, run starts and writes; records every request.
+async function mockApi(page, { detail = () => detailPayload(), postmortem = () => ({ json: projection() }), start, put, review } = {}) {
+  const requests = [];
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    requests.push({ method: request.method(), path, headers: request.headers(), body: request.postDataJSON() });
+    if (path.endsWith("/runs") && request.method() === "POST") return route.fulfill(start());
+    if (path.endsWith("/postmortem") && request.method() === "PUT") return route.fulfill(put());
+    if (path.endsWith("/postmortem/reviews")) return route.fulfill(review());
+    if (path.endsWith("/timeline")) {
+      const events = EVENTS[url.searchParams.get("run_id")] ?? [];
+      return route.fulfill({ json: { events, next_cursor: "seq:9", has_more: false } });
+    }
+    if (path.endsWith("/context")) {
+      const turns = path.includes(RUN) ? [{ turn_id: "turn_demo0001", model_output: "Hypothesis: payment timeout removed." }] : [];
+      return route.fulfill({ json: { run_id: RUN, incident_id: INCIDENT, turns, retrieved_at: "2026-08-24T15:00:00Z" } });
+    }
+    if (path.endsWith("/postmortem")) return route.fulfill(postmortem());
+    const answer = detail();
+    return route.fulfill(answer.status ? answer : { json: answer });
+  });
+  return requests;
+}
+
+async function openPostmortem(page, query = `incident_id=${INCIDENT}`, { active = true } = {}) {
+  await answerWhoAmI(page);
+  await page.goto(`/?view=postmortem&${query}`);
+  if (active) return connectConsole(page);
+  // A 401 ends the console session right after connecting, so "active" may never be observable.
+  await page.locator("#api-key").fill("sre_demo_token_demo_0001");
+  await page.locator("#connect-button").click();
+}
+
+test("sin incidente en foco no consulta nada", async ({ page }) => {
+  const requests = await mockApi(page);
+  await openPostmortem(page, "");
+
+  await expect(page.locator("#error-missing-id")).toBeVisible();
+  await expect(page.locator("#context-section")).toBeHidden();
+  expect(requests).toHaveLength(0);
 });
 
-test("reloads the same fixture and never closes", async ({ page }) => {
+for (const [status, code, alert] of [
+  [401, "authentication_failed", "#error-401"],
+  [404, "incident_not_found", "#error-404"],
+  [503, "storage_unavailable", "#error-503"],
+]) {
+  test(`un ${status} al leer el incidente no muestra artefacto`, async ({ page }) => {
+    await mockApi(page, { detail: () => ({ status, json: { error: { code, message: "x" } } }) });
+    await openPostmortem(page, `incident_id=${INCIDENT}`, { active: status !== 401 });
+
+    await expect(page.locator(alert)).toBeVisible();
+    for (const section of ["#context-section", "#empty-section", "#artifact-section"]) {
+      await expect(page.locator(section)).toBeHidden();
+    }
+    // A 401 ends the console session instead: recovery is reconnecting, not refreshing.
+    if (status !== 401) await expect(page.locator("#refresh-button")).toBeVisible();
+  });
+}
+
+test("un 403 al leer el postmortem no deja nada del incidente", async ({ page }) => {
+  await mockApi(page, { postmortem: () => ({ status: 403, json: { error: { code: "not_authorized", message: "x" } } }) });
   await openPostmortem(page);
-  await expect(page.locator("#artifact-sections")).toContainText("Resumen");
-
-  // The key lives only in this tab's memory: a reload asks for it again (ADR-009).
-  await page.reload();
-  await expect(page.locator("#console-session")).toBeVisible();
-  await expect(page.locator("#close-incident")).toHaveCount(0);
-  const labels = await page.locator("button").allTextContents();
-  for (const label of labels) {
-    expect(label).not.toMatch(/close|cierre/i);
-  }
-});
-
-test("shows the forbidden state without content", async ({ page }) => {
-  await openPostmortem(page, 403);
 
   await expect(page.locator("#error-403")).toBeVisible();
   await expect(page.locator("#context-section")).toBeHidden();
-  await expect(page.locator("#artifact-section")).toBeHidden();
+  await expect(page.locator("#artifact-sections")).toBeEmpty();
 });
+
+test("sin artefacto persistido muestra un estado vacío honesto y ningún fixture", async ({ page }) => {
+  await mockApi(page, { postmortem: () => NOT_FOUND });
+  await openPostmortem(page);
+
+  await expect(page.locator("#postmortem")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("#empty-section")).toBeVisible();
+  await expect(page.locator("#empty-detail")).toContainText("sin contenido persistido");
+  await expect(page.locator("#fact-artifact")).toHaveText("Sin artefacto persistido");
+  await expect(page.locator("#artifact-section")).toBeHidden();
+  await expect(page.locator("#postmortem")).not.toContainText("pm_demo0001");
+});
+
+test("con run.read_context muestra versión, revisión, runs y el mínimo con sus citas", async ({ page }) => {
+  await mockApi(page);
+  await openPostmortem(page);
+
+  await expect(page.locator("#fact-artifact")).toHaveText("pm_demopayment");
+  await expect(page.locator("#fact-version")).toHaveText("2");
+  await expect(page.locator("#fact-review")).toContainText("Pendiente de revisión");
+  await expect(page.locator("#fact-runs")).toHaveText(`${RUN}, ${PM_RUN}`);
+  const sections = page.locator("#artifact-sections");
+  await expect(sections).toContainText(CONTENT.summary);
+  await expect(sections).toContainText("certeza: Probable");
+  await expect(sections).toContainText("evt_verified01");
+  await expect(sections).toContainText("evt_applied001");
+  await expect(sections).toContainText("Exact revenue impact.");
+  await expect(page.locator("#content-restricted")).toBeHidden();
+});
+
+test("sin run.read_context muestra la proyección y ningún texto del postmortem", async ({ page }) => {
+  await mockApi(page, { postmortem: () => ({ json: projection({ withContent: false }) }) });
+  await openPostmortem(page);
+
+  await expect(page.locator("#fact-version")).toHaveText("2");
+  await expect(page.locator("#content-restricted")).toBeVisible();
+  await expect(page.locator("#artifact-sections")).toBeEmpty();
+  await expect(page.locator("#postmortem")).not.toContainText(CONTENT.summary);
+});
+
+test("cerrar sesión retira el contenido del postmortem", async ({ page }) => {
+  await mockApi(page);
+  await openPostmortem(page);
+  await expect(page.locator("#artifact-sections")).toContainText(CONTENT.summary);
+
+  await logoutConsole(page);
+  await expect(page.locator("#error-401")).toBeVisible();
+  await expect(page.locator("#artifact-sections")).toBeEmpty();
+  await expect(page.locator("#postmortem")).not.toContainText(CONTENT.summary);
+});
+
+test("solo un incidente resuelto ofrece abrir el postmortem", async ({ page }) => {
+  let state = "investigating";
+  await mockApi(page, { detail: () => detailPayload(state), postmortem: () => NOT_FOUND });
+  await openPostmortem(page);
+  await expect(page.locator("#empty-detail")).toContainText("Investigando");
+  await expect(page.locator("#start-postmortem")).toBeHidden();
+
+  state = "resolved";
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#start-postmortem")).toBeVisible();
+  await expect(page.locator("#empty-detail")).toContainText("start_postmortem");
+});
+
+test("abrir el postmortem pide objective postmortem con clave de idempotencia y relee", async ({ page }) => {
+  let state = "resolved";
+  const requests = await mockApi(page, {
+    detail: () => detailPayload(state),
+    postmortem: () => NOT_FOUND,
+    start: () => {
+      state = "postmortem";
+      return { status: 201, json: { run_id: PM_RUN, incident_id: INCIDENT, current_state: "postmortem" } };
+    },
+  });
+  await openPostmortem(page);
+  await page.locator("#start-postmortem").click();
+
+  await expect(page.locator("#fact-state")).toHaveText("En postmortem");
+  await expect(page.locator("#start-postmortem")).toBeHidden();
+  const starts = requests.filter((entry) => entry.method === "POST");
+  expect(starts).toHaveLength(1);
+  expect(starts[0].path).toBe(`/api/v1/incidents/${INCIDENT}/runs`);
+  expect(starts[0].body).toEqual({ workflow_version: "1.0.0", objective: "postmortem" });
+  expect(starts[0].headers["idempotency-key"]).toMatch(/^\S{8,200}$/);
+});
+
+for (const [status, code, text] of [
+  [409, "run_conflict", "cambió de estado"],
+  [403, "not_authorized", "no está autorizada"],
+]) {
+  test(`abrir el postmortem rechazado con ${status} muestra el motivo y no cambia nada`, async ({ page }) => {
+    await mockApi(page, {
+      detail: () => detailPayload("resolved"),
+      postmortem: () => NOT_FOUND,
+      start: () => ({ status, json: { error: { code, message: "x" } } }),
+    });
+    await openPostmortem(page);
+    await page.locator("#start-postmortem").click();
+
+    await expect(page.locator("#start-status")).toContainText(`HTTP ${status}`);
+    await expect(page.locator("#start-status")).toContainText(text);
+    await expect(page.locator("#fact-state")).toHaveText("Resuelto");
+    await expect(page.locator("#start-postmortem")).toBeEnabled();
+  });
+}
+
+test("el borrador cita solo eventos guardados y guardar crea la versión 1", async ({ page }) => {
+  let stored = null;
+  const requests = await mockApi(page, {
+    postmortem: () => (stored ? { json: stored } : NOT_FOUND),
+    put: () => {
+      stored = { ...projection(), version: 1 };
+      return { status: 201, json: { ...projection({ withContent: false }), version: 1 } };
+    },
+  });
+  await openPostmortem(page);
+  await expect(page.locator("#editor-basis")).toContainText("versión 1");
+  await expect(page.locator("#pm-timeline")).toHaveValue(/evt_verified01 \| /);
+  await expect(page.locator("#pm-timeline")).not.toHaveValue(/evt_dispatch001/);
+  await page.locator("#pm-pending").fill("Add a config lint for client timeouts.");
+  await page.locator("#save-postmortem").click();
+
+  await expect(page.locator("#save-status")).toContainText("Versión 1 guardada");
+  await expect(page.locator("#fact-version")).toHaveText("1");
+  const [write] = requests.filter((entry) => entry.method === "PUT");
+  expect(write.path).toBe(`/api/v1/incidents/${INCIDENT}/postmortem`);
+  expect(write.body.expected_version).toBe(0);
+  const cited = [...write.body.content.timeline, ...write.body.content.actions_taken].map((entry) => entry.event_id);
+  const known = Object.values(EVENTS).flat().map((event) => event.event_id);
+  expect(cited.every((id) => known.includes(id) && /^evt_[a-z0-9_-]{1,60}$/.test(id))).toBe(true);
+  expect(write.body.content.actions_taken).toEqual([expect.objectContaining({ event_id: "evt_applied001" })]);
+  expect(write.body.content.cause.certainty).toBe("hypothesis");
+  expect(write.body.content.pending).toEqual(["Add a config lint for client timeouts."]);
+});
+
+test("editar la versión mostrada envía expected_version con esa versión", async ({ page }) => {
+  const requests = await mockApi(page, { put: () => ({ status: 200, json: { ...projection({ withContent: false }), version: 3 } }) });
+  await openPostmortem(page);
+  await expect(page.locator("#pm-summary")).toHaveValue(CONTENT.summary);
+  await page.locator("#pm-summary").fill("Checkout payments failed for 14 minutes after a config push.");
+  await page.locator("#save-postmortem").click();
+
+  await expect.poll(() => requests.filter((entry) => entry.method === "PUT").length).toBe(1);
+  const [write] = requests.filter((entry) => entry.method === "PUT");
+  expect(write.body.expected_version).toBe(2);
+  expect(write.body.content.timeline).toEqual(CONTENT.timeline);
+});
+
+for (const [status, code, message, text] of [
+  [409, "postmortem_version_conflict", "The postmortem changed; reload the current version.", "cambió"],
+  [422, "invalid_postmortem", "timeline requires at least one cited event", "timeline requires at least one cited event"],
+  [422, "unknown_event_reference", "A cited event does not exist in this incident.", "no corresponde"],
+  [403, "not_authorized", "denied", "no está autorizada"],
+]) {
+  test(`guardar con ${status} ${code} muestra el motivo y conserva el borrador`, async ({ page }) => {
+    const requests = await mockApi(page, { put: () => ({ status, json: { error: { code, message } } }) });
+    await openPostmortem(page);
+    await page.locator("#pm-summary").fill("Texto local del borrador.");
+    await page.locator("#save-postmortem").click();
+
+    await expect(page.locator("#save-status")).toContainText(`HTTP ${status}`);
+    await expect(page.locator("#save-status")).toContainText(text);
+    await expect(page.locator("#pm-summary")).toHaveValue("Texto local del borrador.");
+    await expect(page.locator("#fact-version")).toHaveText("2");
+    expect(requests.filter((entry) => entry.method === "PUT")).toHaveLength(1);
+  });
+}
+
+test("sin el texto o fuera de postmortem no hay editor", async ({ page }) => {
+  let restricted = true;
+  let state = "postmortem";
+  await mockApi(page, { detail: () => detailPayload(state), postmortem: () => ({ json: projection({ withContent: !restricted }) }) });
+  await openPostmortem(page);
+  await expect(page.locator("#fact-version")).toHaveText("2");
+  await expect(page.locator("#editor-section")).toBeHidden();
+  await expect(page.locator("#review-section")).toBeHidden();
+
+  restricted = false;
+  state = "closed";
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#artifact-sections")).toContainText(CONTENT.summary);
+  await expect(page.locator("#editor-section")).toBeHidden();
+});
+
+const reviewed = (status) => ({
+  ...projection(),
+  review: { status, reviewed_version: 2, reviewer_id: "demo-human", reviewed_at: "2026-08-24T15:00:00Z", comment: null },
+});
+
+test("aprobar revisa la versión en pantalla y deja el cierre a Decisiones", async ({ page }) => {
+  let stored = projection();
+  const requests = await mockApi(page, {
+    postmortem: () => ({ json: stored }),
+    review: () => {
+      stored = reviewed("approved");
+      return { status: 201, json: { ...stored, content_included: false } };
+    },
+  });
+  await openPostmortem(page);
+  await expect(page.locator("#close-hint")).toBeHidden();
+  await page.locator("#review-comment").fill("Matches the timeline.");
+  await page.locator("#approve-postmortem").click();
+
+  await expect(page.locator("#fact-review")).toContainText("Aprobada");
+  await expect(page.locator("#review-status")).toContainText("versión 2");
+  await expect(page.locator("#decisions-link")).toHaveAttribute("href", `/?view=decisions&incident_id=${INCIDENT}&run_id=${PM_RUN}`);
+  const [sent] = requests.filter((entry) => entry.path.endsWith("/reviews"));
+  expect(sent.body).toEqual({ version: 2, outcome: "approved", comment: "Matches the timeline." });
+  for (const label of await page.locator("#postmortem button").allTextContents()) expect(label).not.toMatch(/cerrar|close/i);
+});
+
+test("solicitar cambios no aprueba ni ofrece el cierre", async ({ page }) => {
+  let stored = projection();
+  const requests = await mockApi(page, {
+    postmortem: () => ({ json: stored }),
+    review: () => {
+      stored = reviewed("changes_requested");
+      return { status: 201, json: { ...stored, content_included: false } };
+    },
+  });
+  await openPostmortem(page);
+  await page.locator("#request-changes").click();
+
+  await expect(page.locator("#fact-review")).toContainText("Cambios solicitados");
+  await expect(page.locator("#close-hint")).toBeHidden();
+  expect(requests.filter((entry) => entry.path.endsWith("/reviews"))[0].body).toEqual({ version: 2, outcome: "changes_requested" });
+});
+
+for (const [status, code, text] of [
+  [409, "postmortem_version_conflict", "cambió"],
+  [403, "not_authorized", "no está autorizada"],
+  [409, "postmortem_not_open", "solo lectura"],
+]) {
+  test(`revisar con ${status} ${code} no aprueba nada`, async ({ page }) => {
+    const requests = await mockApi(page, { review: () => ({ status, json: { error: { code, message: "x" } } }) });
+    await openPostmortem(page);
+    await page.locator("#approve-postmortem").click();
+
+    await expect(page.locator("#review-status")).toContainText(`HTTP ${status}`);
+    await expect(page.locator("#review-status")).toContainText(text);
+    await expect(page.locator("#fact-review")).toContainText("Pendiente de revisión");
+    await expect(page.locator("#close-hint")).toBeHidden();
+    expect(requests.filter((entry) => entry.path.endsWith("/reviews"))).toHaveLength(1);
+  });
+}
+
+const AGENT_DRAFT = {
+  summary: "Checkout payments failed after a config push.",
+  impact: "About 3% of checkouts failed at payment.",
+  timeline: [
+    { event_id: "evt_verified01", description: "Service verified stable." },
+    { event_id: "evt_invented999", description: "An event the incident never stored." },
+  ],
+  cause: { statement: "The payment client timeout was removed.", certainty: "probable" },
+  strategy: "Roll back the payment client config.",
+  actions_taken: [{ event_id: "evt_applied001", description: "A human approved the rollback." }],
+  verification: "Error rate stayed below 1%.",
+  pending: ["Add a config lint."],
+  unknowns: ["Exact revenue impact."],
+};
+
+async function mockModel(page, answer) {
+  const calls = [];
+  await page.route("**/api/v1/responses", async (route) => {
+    calls.push(route.request().postDataJSON());
+    await route.fulfill(answer());
+  });
+  return calls;
+}
+
+const modelText = (text) => ({
+  json: {
+    id: "resp_demo00001", object: "response", status: "completed", model: "z-ai/glm-5.3-flash", request_id: "00000000-0000-4000-8000-000000000001",
+    output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text }] }],
+    metadata: { requested_model_alias: "triage-agent", router: "openrouter", inference_provider: "relace", consumption: { availability: "absent" } },
+  },
+});
+
+test("el borrador del agente pasa por /v1/responses y solo llena el formulario", async ({ page }) => {
+  const requests = await mockApi(page, { postmortem: () => NOT_FOUND });
+  const calls = await mockModel(page, () => modelText("```json\n" + JSON.stringify(AGENT_DRAFT) + "\n```"));
+  await openPostmortem(page);
+  await page.locator("#agent-draft").click();
+
+  await expect(page.locator("#pm-summary")).toHaveValue(AGENT_DRAFT.summary);
+  await expect(page.locator("#pm-certainty")).toHaveValue("probable");
+  await expect(page.locator("#pm-timeline")).toHaveValue("evt_verified01 | Service verified stable.");
+  await expect(page.locator("#agent-status")).toContainText("triage-agent");
+  await expect(page.locator("#agent-status")).toContainText("1 cita descartada");
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toMatchObject({ model: "triage-agent", incident_id: INCIDENT, run_id: PM_RUN });
+  expect(calls[0].input).toContain("evt_applied001");
+  expect(calls[0].input).toContain("Hypothesis: payment timeout removed.");
+  expect(requests.filter((entry) => entry.method !== "GET")).toHaveLength(0);
+});
+
+for (const [name, answer, text] of [
+  ["403", () => ({ status: 403, json: { error: { code: "model_unavailable", message: "x" } } }), "HTTP 403"],
+  ["503", () => ({ status: 503, json: { error: { code: "provider_unavailable", message: "x" } } }), "HTTP 503"],
+  ["una salida que no es un borrador", () => modelText("I cannot help with that."), "no es un borrador"],
+]) {
+  test(`el agente con ${name} deja el formulario como estaba`, async ({ page }) => {
+    const requests = await mockApi(page, { postmortem: () => NOT_FOUND });
+    await mockModel(page, answer);
+    await openPostmortem(page);
+    await expect(page.locator("#pm-summary")).not.toHaveValue("");
+    const before = await page.locator("#pm-summary").inputValue();
+    await page.locator("#agent-draft").click();
+
+    await expect(page.locator("#agent-status")).toContainText(text);
+    await expect(page.locator("#pm-summary")).toHaveValue(before);
+    expect(requests.filter((entry) => entry.method !== "GET")).toHaveLength(0);
+  });
+}

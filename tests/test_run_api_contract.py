@@ -148,7 +148,7 @@ def test_events_never_stream_secrets(schemas: dict) -> None:
 def test_human_authorization_matches_every_catalog_command(schemas: dict) -> None:
     """Each command accepts only the action resolved by the canonical catalog."""
     authorization = load_yaml(REPOSITORY_ROOT / "agent/api/authorization.v1.yaml")
-    command_schema = schemas["run-command"]
+    command_schema = schemas["run-command-2.1.0"]
     auth = command_schema["properties"]["authorization"]
     assert set(auth["required"]) == {"action", "resource"}
     assert set(auth["properties"]["action"]["enum"]) == set(
@@ -165,7 +165,7 @@ def test_human_authorization_matches_every_catalog_command(schemas: dict) -> Non
             "actor_reference": identity,
             "authorization": {"action": action, "resource": resource},
         }
-        if command in {"approve_mitigation", "reject_mitigation", "request_changes"}:
+        if command not in {"propose_disposition", "escalate", "cancel_run"}:
             payload["expected_incident_version"] = 0
         if command == "propose_disposition":
             payload["disposition"] = "link"

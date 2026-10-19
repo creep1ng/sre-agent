@@ -51,9 +51,34 @@ An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs bef
 upstream tool call, so no external effect was dispatched. Transient or ambiguous failures
 remain `unknown`.
 
-A cited hypothesis maps to the existing `continue_investigation` transition. A proposed
-mitigation uses the existing `propose_mitigation` preconditions and creates a pending,
-identified artifact. `request_human` and `conclude` have no transition in this workflow;
+A denial blocks the run for a human (issue #39). A `denied` result, or an MCP discovery
+answered with 401 or 403, keeps its `confirmed_failure` receipt (`governed_call_denied` or
+`mcp_discovery_denied`) and, in the same transaction, the run becomes `awaiting_human` with
+`pending_command` `escalate` and `terminated_reason` `denied`, through an `escalation` event
+that replay applies. This is the workflow's escalation: the incident keeps its state and
+version, and nothing is retried with another identity, endpoint or resource. Resuming takes
+people, never a retry: an administrator must grant the denied capability again, and a human
+must answer the escalation. The `escalate` command is still refused
+(`src/sre_agent/incident/commands.py`), so a blocked run cannot be resumed yet.
+
+Every outcome with a harness result also writes, in the same transaction, the run's turns as
+its sensitive context: the input sent, the model output, the tool invocation when the tool
+answered and the gateway request id. `GET .../runs/{run_id}/context` reads them back only with
+`run.read_context`, which an administrator grants through the control plane (the demo
+provisioning grants it to `demo-human`); `run.read` is not enough, a run of another incident is
+404, and state, events and timeline stay safe. The same response carries `reasoning`: the
+hypotheses, evidence and mitigation the incident recorded, which the war room and Decisiones
+show to that reader. A dispatch
+interrupted before its outcome leaves no context: its turns never came back.
+
+A cited hypothesis maps to the existing `continue_investigation` transition. While steps
+are left, the same dispatch then continues with the remaining budget and the recorded
+hypothesis in its context, so the agent can reach the `evidence_sufficiency` decision again
+and propose a mitigation based on it; the outcome receipt closes the dispatch only once. A
+proposed mitigation uses the existing `propose_mitigation` preconditions and creates a
+pending, identified artifact. Those preconditions need a recorded hypothesis with cited
+evidence, so a mitigation proposed before one exists is rejected as invalid output and the
+model is asked again. `request_human` and `conclude` have no transition in this workflow;
 their validated result is recorded without inventing a domain-state transition.
 
 Governed MCP discovery includes the JSON Schema generated from each tool's strict runtime

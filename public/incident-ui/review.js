@@ -1,15 +1,24 @@
 import { ApiClientError } from "/public/api/client.js";
+import { mitigationBlock, readReasoning } from "/public/console/incident-reasoning.js";
 import { mountedView } from "/public/console/view.js";
 
-// Acciones de revisión/mitigación del workflow 1.0.0, derivadas de
-// mitigation_approval y run-command.schema.yaml. Versión o estado
-// desconocidos no ofrecen nada. El envío llega en el slice 41a-2.
+// Acciones humanas del workflow 1.0.0, derivadas de los decision points publicados
+// (mitigation_approval, stability_check) y de las transiciones de incident-response.yaml.
+// La verificación y el cierre reutilizan la senda de comandos existente con el contrato
+// publicado run-command:2.1.0 (#658). Versión o estado desconocidos no ofrecen nada.
 const REVIEW_ACTIONS = Object.freeze({
   "1.0.0": Object.freeze({
     mitigating: Object.freeze([
-      { command: "approve_mitigation", transition: "apply_mitigation", outcome: "approve", label: "Aprobar mitigación" },
-      { command: "reject_mitigation", transition: "reject_mitigation", outcome: "reject", label: "Rechazar mitigación" },
-      { command: "request_changes", transition: "reject_mitigation", outcome: "request_changes", label: "Solicitar corrección" },
+      { command: "approve_mitigation", transition: "apply_mitigation", outcome: "approve", label: "Aprobar mitigación", authorization: "run.approve" },
+      { command: "reject_mitigation", transition: "reject_mitigation", outcome: "reject", label: "Rechazar mitigación", authorization: "run.approve" },
+      { command: "request_changes", transition: "reject_mitigation", outcome: "request_changes", label: "Solicitar corrección", authorization: "run.command" },
+    ]),
+    verifying: Object.freeze([
+      { command: "verification_passed", transition: "verification_passed", outcome: "stable", label: "Verificación estable", authorization: "run.command" },
+      { command: "verification_failed", transition: "verification_failed", outcome: "not_stable", label: "Verificación no estable", authorization: "run.command" },
+    ]),
+    postmortem: Object.freeze([
+      { command: "close_incident", transition: "close_incident", outcome: null, label: "Cerrar incidente", authorization: "run.approve", approval: true },
     ]),
   }),
 });
@@ -43,8 +52,11 @@ function cacheNodes() {
     "fact-incident", "fact-run", "fact-incident-version", "fact-state", "fact-workflow",
     "actions-section", "actions-list", "actions-empty",
     "decision-section", "decision-title", "decision-form", "decision-comment",
-    "decision-key", "decision-submit", "receipt-section", "receipt-line",
-    "refresh-button",
+    "decision-key", "decision-submit", "decision-approval", "decision-approval-row",
+    "decision-hint",
+    "receipt-section", "receipt-line",
+    "refresh-button", "mitigation-section", "mitigation-title", "mitigation-forbidden",
+    "mitigation-unavailable", "mitigation-empty", "mitigation-content",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -54,7 +66,7 @@ function hideAll() {
   [
     "loading-state", "command-status", "error-missing-id", "error-401",
     "error-403", "error-404", "error-409", "error-503", "context-section",
-    "actions-section", "decision-section", "receipt-section",
+    "actions-section", "decision-section", "receipt-section", "mitigation-section",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
@@ -93,6 +105,34 @@ function renderContext(run, workflowVersion) {
   nodes["context-section"].hidden = false;
 }
 
+// States where the mitigation is what the human decides on (mitigating) or verifies (verifying).
+const MITIGATION_TITLES = Object.freeze({
+  mitigating: "Mitigación propuesta",
+  verifying: "Mitigación aprobada y su verificación",
+});
+
+// The recorded mitigation before any decision, only for run.read_context readers; a refusal or
+// a failed read is said in place and the decision flow stays as it is.
+function renderMitigation(result, currentState) {
+  ["mitigation-forbidden", "mitigation-unavailable", "mitigation-empty", "mitigation-content"].forEach((id) => {
+    nodes[id].hidden = true;
+  });
+  nodes["mitigation-content"].replaceChildren();
+  nodes["mitigation-section"].hidden = result === null;
+  if (result === null) return;
+  nodes["mitigation-title"].textContent = MITIGATION_TITLES[currentState];
+  const strategy = result.kind === "ok" ? result.reasoning.mitigation_strategy : null;
+  if (result.kind !== "ok") {
+    nodes[result.kind === "forbidden" ? "mitigation-forbidden" : "mitigation-unavailable"].hidden = false;
+  } else if (!strategy || typeof strategy !== "object") {
+    nodes["mitigation-empty"].hidden = false;
+  } else {
+    const hypotheses = result.reasoning.hypotheses.filter((item) => item && typeof item === "object");
+    nodes["mitigation-content"].append(mitigationBlock(strategy, hypotheses));
+    nodes["mitigation-content"].hidden = false;
+  }
+}
+
 function renderActions(actions) {
   nodes["actions-list"].replaceChildren();
   actions.forEach((action) => {
@@ -115,6 +155,7 @@ function setSubmitting(submitting) {
   nodes["refresh-button"].disabled = submitting;
   nodes["decision-submit"].disabled = submitting;
   nodes["decision-comment"].disabled = submitting;
+  nodes["decision-approval"].disabled = submitting;
   nodes["actions-list"].querySelectorAll("button").forEach((button) => {
     button.disabled = submitting || state.submissionComplete;
   });
@@ -128,9 +169,21 @@ function openDecision(action) {
   nodes["decision-title"].textContent = action.label;
   nodes["decision-comment"].value = state.draftComments[action.command] ?? "";
   nodes["decision-key"].textContent = state.idempotencyKey;
-  nodes["decision-submit"].disabled = false;
+  // El cierre exige una aprobación marcada en cada apertura: reabrir y confirmar
+  // por accidente no puede cerrar el incidente ni heredar una revisión previa.
+  nodes["decision-approval"].checked = false;
+  nodes["decision-approval-row"].hidden = !action.approval;
+  nodes["decision-hint"].hidden = !action.approval;
+  syncApprovalGate(action);
   nodes["receipt-section"].hidden = true;
   nodes["decision-section"].hidden = false;
+}
+
+// La casilla es la aprobación explícita y visible del cierre; el botón no se
+// habilita hasta que el usuario la marca en esta apertura del panel.
+function syncApprovalGate(action) {
+  nodes["decision-approval-row"].hidden = !action?.approval;
+  nodes["decision-submit"].disabled = state.submitting || Boolean(action?.approval && !nodes["decision-approval"].checked);
 }
 
 // The identity is freshly resolved from this credential for each command; it
@@ -146,7 +199,7 @@ function commandPayload(action, principalId) {
     disposition: null,
     comment: comment ? comment.slice(0, 2000) : null,
     authorization: {
-      action: action.command === "request_changes" ? "run.command" : "run.approve",
+      action: action.authorization,
       resource: { type: "incident_workflow", id: "incident-response" },
     },
   };
@@ -182,8 +235,13 @@ async function loadAll() {
       showError("404");
       return;
     }
+    const reasoning = MITIGATION_TITLES[run.current_state]
+      ? await readReasoning(client, state.incidentId, state.runId)
+      : null;
+    if (generation !== state.generation) return;
     state.pending = null;
     renderContext(run, detail.workflow_version);
+    renderMitigation(reasoning, run.current_state);
     renderActions(availableActions(detail.workflow_version, run.current_state));
     view.focusIncident(detail, run.run_id);
     nodes["loading-state"].hidden = true;
@@ -219,7 +277,7 @@ async function submitDecision(event) {
     state.submissionComplete = true;
     nodes["receipt-line"].textContent =
       `Decisión ${action.command} registrada por el backend (transición ${action.transition}, ` +
-      `resultado ${action.outcome}). Estado del run: ${response.current_state ?? "—"}.`;
+      `resultado ${action.outcome ?? "—"}). Estado del run: ${response.current_state ?? "—"}.`;
     nodes["decision-section"].hidden = true;
     nodes["receipt-section"].hidden = false;
   } catch (error) {
@@ -243,6 +301,7 @@ async function submitDecision(event) {
       }
     } else if (generation === state.generation) {
       setSubmitting(false);
+      syncApprovalGate(state.pending);
     }
   }
 }
@@ -271,12 +330,15 @@ function dropSession() {
 cacheNodes();
 nodes["refresh-button"].addEventListener("click", loadAll);
 nodes["decision-form"].addEventListener("submit", submitDecision);
+nodes["decision-approval"].addEventListener("change", () => syncApprovalGate(state.pending));
 state.incidentId = view.params.get("incident_id");
 state.runId = view.params.get("run_id");
 if (!state.incidentId || !state.runId) {
   hideAll();
   nodes["error-missing-id"].hidden = false;
   nodes["review"].dataset.state = "error";
+  // Sin run no hay lectura posible: la franja no conserva el incidente de una vista anterior.
+  view.focusIncident(null);
 } else {
   view.onSession((session) => (session.phase === "active" ? loadAll() : dropSession()));
 }

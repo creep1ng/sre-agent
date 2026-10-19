@@ -645,9 +645,16 @@ function startSession() {
   alertInput.disabled = false;
   clearActionProjection();
   const deepLinkAlertId = deepLinkPending ? alertInput.value.trim() : "";
+  const deepLinkCanceled = deepLinkPending && deepLinkAlertId === "";
   deepLinkPending = false;
+  // Un deep link cancelado antes de conectar también sale de la dirección: Atrás no puede
+  // volver a precargar la alerta que la persona descartó.
+  if (deepLinkCanceled) view.replaceParams({ alert_id: null });
   clearResult();
-  if (/^[a-z][a-z0-9_-]{2,63}$/.test(deepLinkAlertId)) alertInput.value = deepLinkAlertId;
+  if (/^[a-z][a-z0-9_-]{2,63}$/.test(deepLinkAlertId)) {
+    alertInput.value = deepLinkAlertId;
+    if (deepLinkAlertId === initialAlertId) prefillDeclarationContext();
+  }
   lastObservedAlertId = alertInput.value.trim();
   hideError();
   page.dataset.state = "idle";
@@ -669,6 +676,20 @@ function endSession() {
   clearResult();
   deepLinkPending = false;
   view.replaceParams({ alert_id: null });
+}
+
+// A live alert opened from the inbox carries its canonical facts; they prefill the declaration
+// context only for that deep link and still require the operator's explicit confirmation.
+const deepLinkContext = Object.freeze(
+  Object.fromEntries(["service", "summary", "observed_at", "source", "severity"].map((field) => [field, view.params.get(`ctx_${field}`) ?? ""])),
+);
+
+function prefillDeclarationContext() {
+  alertContextServiceInput.value = deepLinkContext.service;
+  alertContextSummaryInput.value = deepLinkContext.summary;
+  alertContextObservedAtInput.value = deepLinkContext.observed_at;
+  alertContextSourceInput.value = deepLinkContext.source;
+  if (["sev1", "sev2", "sev3", "sev4"].includes(deepLinkContext.severity)) alertContextSeverityInput.value = deepLinkContext.severity;
 }
 
 const initialAlertId = view.params.get("alert_id") ?? "";

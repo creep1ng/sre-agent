@@ -19,6 +19,7 @@ from sre_agent.incident.persistence import (
     SnapshotRecord,
     TransitionResult,
 )
+from sre_agent.incident.postmortem import PostmortemRecord, PostmortemReview
 from sre_agent.incident.runtime import (
     ActorReference,
     ApprovalRequiredError,
@@ -74,6 +75,20 @@ class MemoryStore:
         self.commands: dict[tuple[str, str], tuple[str, TransitionResult]] = {}
         self.decisions = []
         self.command_locks: dict[tuple[str, str], asyncio.Lock] = {}
+        self.postmortem: PostmortemRecord | None = None
+
+
+def reviewed_postmortem(postmortem_id: str, *, outcome: str = "approved") -> PostmortemRecord:
+    review = PostmortemReview(1, outcome, "admin-human", None, NOW)
+    return PostmortemRecord(postmortem_id, "inc_test", 1, {}, ("run_test",), "admin-human", NOW, NOW, review)  # noqa: E501  # fmt: skip
+
+
+class MemoryPostmortems:
+    def __init__(self, store: MemoryStore) -> None:
+        self.store = store
+
+    async def get(self, incident_id: str, *, lock: bool = False):
+        return self.store.postmortem
 
 
 class MemoryRepository:
@@ -104,6 +119,7 @@ class MemoryUnitOfWork:
         self.events = MemoryRepository(store, "events")
         self.snapshots = MemoryRepository(store, "snapshots")
         self.text_context = MemoryRepository(store, "context")
+        self.postmortems = MemoryPostmortems(store)
         self.concurrent = concurrent
         self.acquired_lock: asyncio.Lock | None = None
 
@@ -445,6 +461,14 @@ async def test_close_incident_requires_postmortem_even_with_human_approval(workf
         store.incident,
         state=store.incident.state | {"postmortem": {"postmortem_id": "pm_1"}},
     )
+    # The reserved id alone is not an artifact, and an unapproved one is not reviewed.
+    for stored in (None, reviewed_postmortem("pm_1", outcome="changes_requested")):
+        store.postmortem = stored
+        with pytest.raises(PreconditionFailedError):
+            await engine.execute(
+                command("close_incident", approval=True, expected_incident_version=0)
+            )
+    store.postmortem = reviewed_postmortem("pm_1")
     result = await engine.execute(
         command(
             "close_incident",
@@ -457,6 +481,7 @@ async def test_close_incident_requires_postmortem_even_with_human_approval(workf
     assert result.run.state["status"] == "completed"
     approval = store.decisions[-1].document["approval"]
     assert approval["postmortem_id"] == "pm_1"
+    assert approval["postmortem_version"] == 1
     assert approval["reviewed_incident_version"] == 0
 
 
@@ -499,6 +524,7 @@ async def test_close_candidate_cannot_erase_postmortem_after_guard_check(workflo
         },
     )
     store = MemoryStore("postmortem", state_document=state)
+    store.postmortem = reviewed_postmortem("pm_runtime_review")
 
     with pytest.raises(PreconditionFailedError):
         await runtime(workflow, store).execute(

@@ -50,10 +50,29 @@ const filters = {
   },
 };
 
+const limits = {
+  status: document.getElementById("limits-status"),
+  current: document.getElementById("limits-current"),
+  version: document.getElementById("limits-version"),
+  incident: document.getElementById("limits-incident"),
+  monthly: document.getElementById("limits-monthly"),
+  updated: document.getElementById("limits-updated"),
+  form: document.getElementById("limits-form"),
+  incidentInput: document.getElementById("limits-incident-input"),
+  monthlyInput: document.getElementById("limits-monthly-input"),
+  submit: document.getElementById("limits-submit"),
+};
+// Contract bounds of PUT /v1/consumption-limits; tokens stay below 2^53 so they are sent exactly.
+const TOKENS_PATTERN = /^(?:0|[1-9][0-9]{0,14})$/;
+const USD_PATTERN = /^(?:0|[1-9][0-9]{0,19})(?:\.[0-9]{1,12})?$/;
+
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
 let activeFilter = "request";
 let sessionGeneration = 0;
+let limitsGeneration = 0;
+let limitsPolicy = null;
+let limitsPending = null;
 
 const announce = (message) => {
   liveRegion.textContent = message;
@@ -252,6 +271,88 @@ function renderSummary(payload, requestFilter, selectorValue) {
   announce(scopeNote.hidden ? "Consumption loaded." : "No consumption evidence in this scope.");
 }
 
+// The policy shown is always the server's answer: null is "Not configured", 0 is a real limit.
+function renderLimits(policy, message) {
+  limitsPolicy = policy;
+  const shown = (value) => (value === null || value === undefined ? "Not configured" : String(value));
+  limits.version.textContent = shown(policy.version);
+  limits.incident.textContent = shown(policy.incident_token_limit);
+  limits.monthly.textContent = shown(policy.monthly_usd_limit);
+  limits.updated.textContent = shown(policy.updated_at);
+  limits.incidentInput.value = policy.incident_token_limit === null ? "" : String(policy.incident_token_limit);
+  limits.monthlyInput.value = policy.monthly_usd_limit === null ? "" : String(policy.monthly_usd_limit);
+  limits.current.hidden = false;
+  limits.form.hidden = false;
+  limits.submit.disabled = false;
+  limits.status.textContent = message;
+}
+
+function clearLimits(message) {
+  limitsGeneration += 1;
+  limitsPolicy = null;
+  limitsPending = null;
+  limits.current.hidden = true;
+  limits.form.hidden = true;
+  limits.status.textContent = message;
+}
+
+async function loadLimits(message) {
+  clearLimits("Loading the consumption policy…");
+  const generation = limitsGeneration;
+  try {
+    const policy = await controlApi.getConsumptionLimits();
+    if (generation !== limitsGeneration) return;
+    renderLimits(policy, message ?? `Policy version ${policy.version} applies to new gateway admissions.`);
+  } catch (error) {
+    if (generation !== limitsGeneration) return;
+    limits.status.textContent = `Consumption limits unavailable: ${describeError(error)[0]}.`;
+  }
+}
+
+limits.form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!limitsPolicy || limits.submit.disabled) return;
+  const tokens = limits.incidentInput.value.trim();
+  const usd = limits.monthlyInput.value.trim();
+  if ((tokens && !TOKENS_PATTERN.test(tokens)) || (usd && !USD_PATTERN.test(usd))) {
+    limits.status.textContent = "Invalid limits: use a whole number of tokens and a USD amount with up to 12 decimals, or leave empty. Nothing was sent.";
+    return;
+  }
+  const body = {
+    expected_version: limitsPolicy.version,
+    incident_token_limit: tokens ? Number(tokens) : null,
+    monthly_usd_limit: usd || null,
+  };
+  const bodyKey = JSON.stringify(body);
+  if (limitsPending?.bodyKey !== bodyKey) {
+    // getRandomValues works on plain-HTTP origins too (randomUUID needs a secure context).
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    limitsPending = { bodyKey, key: `limits-${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}` };
+  }
+  const generation = limitsGeneration;
+  limits.submit.disabled = true;
+  limits.status.textContent = "Saving the consumption policy…";
+  try {
+    const policy = await controlApi.replaceConsumptionLimits(body, limitsPending.key);
+    if (generation !== limitsGeneration) return;
+    limitsPending = null;
+    renderLimits(policy, `Saved: policy version ${policy.version} applies to new gateway admissions.`);
+    announce(limits.status.textContent);
+  } catch (error) {
+    if (generation !== limitsGeneration) return;
+    limits.submit.disabled = false;
+    if (error?.status === 409) {
+      limitsPending = null;
+      await loadLimits("The policy changed elsewhere (409). The current version is shown; nothing was overwritten.");
+    } else if (error?.status === 422 || error?.status === 400) {
+      limits.status.textContent = "Invalid limits (rejected by the API). The active policy is unchanged.";
+    } else {
+      limits.status.textContent = `Not saved: ${describeError(error)[0]}. The active policy is unchanged.`;
+    }
+    announce(limits.status.textContent);
+  }
+});
+
 for (const [name, filter] of Object.entries(filters)) {
   filter.button.addEventListener("click", () => setActiveFilter(name));
 }
@@ -274,6 +375,7 @@ sessionForm.addEventListener("submit", (event) => {
   clearRequestDetail("Load consumption to see request detail.");
   page.dataset.state = "idle";
   announce("Session set. Choose a filter and load consumption.");
+  loadLimits();
 });
 
 disconnectButton.addEventListener("click", () => {
@@ -282,6 +384,7 @@ disconnectButton.addEventListener("click", () => {
   hideError();
   clearResult();
   clearRequestDetail("Load consumption to see request detail.");
+  clearLimits("Connect to load the policy.");
   page.dataset.state = "idle";
   announce("Session cleared.");
 });

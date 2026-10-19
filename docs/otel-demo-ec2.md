@@ -173,6 +173,25 @@ sessions](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-m
 SSM API/session metadata may still be audited. Never print token payloads, request
 headers, owner credentials or private connection metadata into evidence.
 
+## Open the store and see its live alert (#672)
+
+`connect` forwards one declared port to this host's loopback over SSM; nothing
+opens to the internet. The store is the frontend proxy on port 8090, which also
+serves `/grafana`, `/jaeger/ui` and `/feature`:
+
+```sh
+python3 scripts/otel_ec2.py connect --local-port 18690 --remote-port 8090
+```
+
+Open `http://127.0.0.1:18690/`, add a product to the cart and place the order.
+With `fail` applied, Place Order leaves you on the cart (`POST /api/checkout`
+answers 500; the store shows no error banner). After `reset` it reaches
+"Your order is complete!". With a console session, the Alertas view polls
+`GET /v1/alerts` every 15 s; the rule reads a 2-minute window of span metrics
+that reach Prometheus about once a minute. Measured on 2026-10-19:
+`checkout payment calls failing` fired about 70 s after the first failed payment
+and cleared about 95 s after `reset`.
+
 ## AWS references
 
 - [Scheduler confused-deputy protection](https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html)

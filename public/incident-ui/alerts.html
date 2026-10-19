@@ -22,7 +22,7 @@
           </p>
         </div>
         <div class="alert-inbox__fixture-note">
-          <span class="ma-live-state">Datos reproducibles</span>
+          <span id="source-mode" class="ma-live-state">Datos reproducibles</span>
           <span id="fixture-label" class="ma-muted ma-mono">alerts.json</span>
         </div>
       </header>
@@ -30,8 +30,8 @@
       <div id="load-error" class="ma-alert alert-inbox__error" data-tone="critical" hidden>
         <span aria-hidden="true">!</span>
         <div>
-          <p class="ma-alert__title">No se pudo cargar el fixture de alertas</p>
-          <p class="ma-alert__detail">
+          <p id="load-error-title" class="ma-alert__title">No se pudo cargar el fixture de alertas</p>
+          <p id="load-error-detail" class="ma-alert__detail">
             Verifica que el archivo exista y que la vista se esté sirviendo desde el stack web.
           </p>
         </div>
@@ -54,12 +54,20 @@
 
             <ul id="alert-list" class="alert-list" aria-label="Alertas disponibles" hidden></ul>
 
+            <div id="live-locked" class="alert-empty" hidden>
+              <h3>Alertas en vivo</h3>
+              <p>
+                Conecta la consola con tu API key (botón de sesión) para leer las alertas que evalúa el
+                gateway. Para datos de ejemplo abre <code>?fixture=default</code>.
+              </p>
+            </div>
+
             <div id="empty-state" class="alert-empty" hidden>
               <div class="alert-empty__icon" aria-hidden="true">✓</div>
               <h3>No hay alertas pendientes</h3>
               <p>
-                El fixture seleccionado no contiene alertas. Cuando existan señales, aparecerán aquí
-                con servicio, severidad, estado y fecha.
+                No hay alertas disparadas en la fuente seleccionada. Cuando existan señales, aparecerán
+                aquí con servicio, severidad, estado y fecha.
               </p>
             </div>
           </div>
@@ -155,8 +163,8 @@
       </section>
 
       <p class="alert-inbox__developer-note">
-        Estado vacío reproducible: <code>?fixture=empty</code>. Esta superficie no realiza ingesta en vivo
-        ni crea incidentes.
+        Por defecto la bandeja lee <code>GET /v1/alerts</code> cada 15 s. Fixtures reproducibles:
+        <code>?fixture=default</code> y <code>?fixture=empty</code>. Esta superficie no crea incidentes.
       </p>
     </main>
   </body>

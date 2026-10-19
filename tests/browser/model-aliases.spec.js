@@ -955,3 +955,79 @@ test("side panel exposes no secrets or stored credentials", async ({ page }) => 
   expect(panelText).not.toContain("Authorization");
   expect(await storageContents(page)).toEqual({ local: {}, session: {} });
 });
+
+// Governed resource catalog. Failure modes covered: rows appear without a real catalog
+// response; a catalog 401/403/network failure hides the alias list or leaves stale rows;
+// disconnecting keeps rows of the previous session; unknown types are renamed or
+// non-string values leak as "[object Object]"; a truncated catalog reads as complete.
+const CATALOG_PATH = "/api/v1/catalog/resources";
+const catalogItem = (resource_type, resource_id, display_name, extra = {}) => ({
+  resource_type, resource_id, owner_id: "demo-owner", status: "active", source: "registry", source_ref: resource_id,
+  discoverability: { display_name, visibility: "private", description: "synthetic", tags: [] }, ...extra,
+});
+
+test("lists the governed resource catalog read-only after connecting", async ({ page }) => {
+  let catalogQuery = null;
+  await page.route((url) => url.pathname === CATALOG_PATH, (route) => {
+    catalogQuery = new URL(route.request().url()).searchParams;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ truncated: true, limit: 100, items: [
+      catalogItem("llm_model", "triage-agent", "triage-agent", { source: "model_alias" }),
+      catalogItem("mcp_server", "grafana-mcp", "Grafana MCP", { source: "mcp" }),
+      catalogItem("mcp_tool", "query_prometheus", "Query Prometheus", { source: "mcp" }),
+      catalogItem("skill", "incident-triage@1.0.0", "Incident triage", { source: "skill", status: "inactive" }),
+      catalogItem("bok_collection", "runbooks@1.0.0", "Runbooks", { source: "bok" }),
+      catalogItem("future_kind", "x-1", { injected: true }, { source: 3 }),
+    ] }) });
+  });
+  const section = page.locator("#resources-context");
+  await expect(section.locator("table")).toHaveCount(0);
+  await connectMocked(page);
+  const rows = section.locator("[data-resource-row]");
+  await expect(rows).toHaveCount(6);
+  expect(catalogQuery.get("limit")).toBe("100");
+  await expect(section.locator("thead th")).toHaveText(["Type", "Resource ID", "Name", "Status", "Source"]);
+  await expect(section.locator("[data-resource-row='mcp_tool/query_prometheus'] td")).toHaveText(
+    ["MCP tool", "query_prometheus", "Query Prometheus", "active", "mcp"]);
+  await expect(section.locator("[data-resource-row='skill/incident-triage@1.0.0'] td").nth(3)).toHaveText("inactive");
+  await expect(section.locator("[data-resource-row='bok_collection/runbooks@1.0.0'] td").first()).toHaveText("BoK collection");
+  await expect(section.locator("[data-resource-row='future_kind/x-1'] td")).toHaveText(["future_kind", "x-1", "—", "active", "—"]);
+  expect(await section.innerText()).not.toContain("[object Object]");
+  await expect(page.locator("#resources-status")).toContainText("6 governed resources; the catalog is truncated");
+  await expect(section.locator("button")).toHaveCount(0);
+
+  await page.click("#disconnect-button");
+  await expect(section.locator("table")).toHaveCount(0);
+  await expect(page.locator("#resources-status")).toHaveText("Connect to load the resource catalog.");
+});
+
+test("keeps the alias list when the resource catalog is refused or unreachable", async ({ page }) => {
+  let mode = "forbidden";
+  await page.route((url) => url.pathname === CATALOG_PATH, (route) =>
+    mode === "forbidden"
+      ? route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: { code: "resource_unavailable" } }) })
+      : route.abort("failed"));
+  await connectMocked(page);
+  await expect(page.locator("#resources-status")).toHaveText("Resource catalog unavailable: Access unavailable.");
+  await expect(page.locator("#resources-context table")).toHaveCount(0);
+  await expect(page.locator("#page-error")).toBeHidden();
+  mode = "network";
+  await page.click("#refresh-button");
+  await expect(page.locator("#resources-status")).toHaveText("Resource catalog unavailable: API unavailable.");
+  await expect(page.locator("#model-aliases-page")).toHaveAttribute("data-state", "ready");
+  await expect(page.locator("[data-alias-row='triage-agent']")).toHaveCount(1);
+});
+
+test("shows the real seeded catalog to the admin and nothing to a restricted identity", async ({ page }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  await connect(page, apiKey("ADMIN_HUMAN_API_KEY"));
+  const section = page.locator("#resources-context");
+  await expect(section.locator("[data-resource-row='llm_model/triage-agent'] td").first()).toHaveText("LLM model", { timeout: 20_000 });
+  await expect(section.locator("[data-resource-row='llm_model/remediation-agent']")).toHaveCount(1);
+  await expect(page.locator("#resources-status")).toContainText("governed resource");
+  if (process.env.RESOURCES_CATALOG_SCREENSHOT)
+    await page.screenshot({ path: process.env.RESOURCES_CATALOG_SCREENSHOT, fullPage: true });
+  await page.click("#disconnect-button");
+  await connect(page, apiKey("RESTRICTED_HARNESS_API_KEY"));
+  await expect(page.locator("#resources-status")).toHaveText("Resource catalog unavailable: Access unavailable.", { timeout: 20_000 });
+  await expect(section.locator("[data-resource-row]")).toHaveCount(0);
+});

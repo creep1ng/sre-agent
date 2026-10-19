@@ -9,6 +9,7 @@ from typing import Any
 from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
+from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.identity import router as identity_router
@@ -32,7 +33,9 @@ from sre_agent.control.consumption_limits import (
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
 from sre_agent.gateway.investigation import InvestigationRunDispatcher
+from sre_agent.gateway.run_context import RunContextService, run_context_router
 from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
+from sre_agent.gateway.postmortems import PostmortemService, postmortems_router
 from sre_agent.gateway.runs import RunCommandService, RunStartService, commands_router, runs_router  # noqa: E501  # fmt: skip
 from sre_agent.incident.runtime import IncidentRuntime
 from sre_agent.gateway.triage import TriageHttpService, triage_router
@@ -114,6 +117,10 @@ def create_application(
             )
         )
     )
+    context = RunContextService(
+        database.sessions, workflow, lambda: PostgresIncidentUnitOfWork(database)
+    )
+    application.include_router(run_context_router(context))
     incident_runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
     if runtime_settings.investigator_gateway is not None:
         shared_investigator_client = httpx.AsyncClient(
@@ -141,6 +148,13 @@ def create_application(
         commands_router(RunCommandService(database.sessions, workflow, incident_runtime))
     )
     application.include_router(triage_router(TriageHttpService(database, workflow)))
+    application.include_router(
+        postmortems_router(
+            PostmortemService(
+                database.sessions, workflow, lambda: PostgresIncidentUnitOfWork(database)
+            )
+        )
+    )
     if runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
         projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
@@ -186,19 +200,18 @@ def create_application(
             runtime_settings.grafana_mcp_endpoint,
             runtime_settings.grafana_mcp_token,
         )
+    mcp_service = None
     if configured_mcp_client is not None and runtime_settings.audit_hmac_key:
         mcp_store = audit_store or PostgresAuditStore(database.sessions)
         mcp_projector = AuditProjector(runtime_settings.audit_hmac_key.encode())
-        application.include_router(
-            mcp_router(
-                MCPGatewayService(
-                    database.sessions,
-                    configured_mcp_client,
-                    audit=mcp_store,
-                    projector=mcp_projector,
-                )
-            )
+        mcp_service = MCPGatewayService(
+            database.sessions,
+            configured_mcp_client,
+            audit=mcp_store,
+            projector=mcp_projector,
         )
+        application.include_router(mcp_router(mcp_service))
+    application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:

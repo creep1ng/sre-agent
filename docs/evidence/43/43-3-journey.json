@@ -1,0 +1,14 @@
+{
+  "incident": "inc-6966fbccff52e1863cb4a2f0da3a8857",
+  "run": "run_9992bf7a76304a30",
+  "postmortem_id": "pm_23b37b133e664a8d",
+  "version": 2,
+  "review": {
+    "status": "approved",
+    "reviewed_version": 2,
+    "reviewer_id": "demo-human",
+    "reviewed_at": "2026-10-19T04:39:55.543047+00:00",
+    "comment": null
+  },
+  "state": "closed"
+}

@@ -41,6 +41,8 @@ const editInferenceProvider = document.getElementById("edit-inference-provider")
 const assignmentSaveButton = document.getElementById("assignment-save-button");
 const assignmentCancelButton = document.getElementById("assignment-cancel-button");
 const assignmentRefreshButton = document.getElementById("assignment-refresh-button");
+const resourcesStatus = document.getElementById("resources-status");
+const resourcesWrap = document.getElementById("resources-wrap");
 
 const credentialStore = createMemoryCredentialStore();
 const controlApi = createAdministrativeApiClient({ credentialStore });
@@ -55,6 +57,16 @@ let saveInFlight = false;
 let statusInFlight = false;
 let pendingDeactivate = null;
 const CONCRETE_MODEL_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/;
+// Wireframe 03 labels; an unlisted type is shown verbatim rather than renamed.
+const RESOURCE_TYPE_LABELS = {
+  llm_model: "LLM model",
+  mcp_server: "MCP server",
+  mcp_tool: "MCP tool",
+  skill: "Skill",
+  bok_collection: "BoK collection",
+  incident_workflow: "Workflow",
+};
+let catalogGeneration = 0;
 
 const text = (value) => (typeof value === "string" ? value : "");
 const announce = (message) => {
@@ -369,6 +381,61 @@ async function openDetail(aliasId) {
   }
 }
 
+function clearCatalog(message) {
+  catalogGeneration += 1;
+  resourcesWrap.replaceChildren();
+  resourcesWrap.hidden = true;
+  resourcesStatus.textContent = message;
+}
+
+// Read-only GET /v1/catalog/resources. Its failure never touches the alias list or the
+// page error; only rows returned by this session's request are rendered.
+async function loadCatalog() {
+  const generation = catalogGeneration + 1;
+  catalogGeneration = generation;
+  resourcesWrap.replaceChildren();
+  resourcesWrap.hidden = true;
+  resourcesStatus.textContent = "Loading the resource catalog…";
+  let payload;
+  try {
+    payload = await controlApi.listCatalogResources({ limit: 100 });
+  } catch (error) {
+    if (generation !== catalogGeneration) return;
+    resourcesStatus.textContent = `Resource catalog unavailable: ${describeError(error)}.`;
+    return;
+  }
+  if (generation !== catalogGeneration) return;
+  const items = Array.isArray(payload?.items) ? payload.items : [];
+  if (items.length === 0) {
+    resourcesStatus.textContent = "No governed resources are registered.";
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "ma-table principals__table";
+  const head = table.createTHead().insertRow();
+  for (const label of ["Type", "Resource ID", "Name", "Status", "Source"]) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = label;
+    head.append(th);
+  }
+  const body = table.createTBody();
+  for (const item of items) {
+    const type = text(item?.resource_type);
+    const row = body.insertRow();
+    row.dataset.resourceRow = `${type}/${text(item?.resource_id)}`;
+    const typeCell = document.createElement("td");
+    typeCell.textContent = RESOURCE_TYPE_LABELS[type] ?? (type || "—");
+    const nameCell = document.createElement("td");
+    nameCell.textContent = text(item?.discoverability?.display_name) || "—";
+    row.append(typeCell, monoCell(text(item?.resource_id)), nameCell, statusCell(item?.status), monoCell(text(item?.source)));
+  }
+  resourcesWrap.append(table);
+  resourcesWrap.hidden = false;
+  const truncated = payload?.truncated === true;
+  resourcesStatus.textContent = `${items.length} governed resource${items.length === 1 ? "" : "s"}${truncated ? "; the catalog is truncated, more resources exist." : "."}`;
+}
+
 async function loadAliases() {
   const generation = sessionGeneration + 1;
   sessionGeneration = generation;
@@ -432,6 +499,7 @@ sessionForm.addEventListener("submit", (event) => {
   apiKeyInput.value = "";
   announce("Session set. Loading aliases.");
   loadAliases();
+  loadCatalog();
 });
 
 disconnectButton.addEventListener("click", () => {
@@ -455,12 +523,14 @@ disconnectButton.addEventListener("click", () => {
   listEmpty.hidden = false;
   emptyDetail.textContent = "Connect with an administrative API key to load the list.";
   countLine.textContent = "Not loaded.";
+  clearCatalog("Connect to load the resource catalog.");
   page.dataset.state = "idle";
   announce("Session cleared.");
 });
 
 refreshButton.addEventListener("click", () => {
   loadAliases();
+  loadCatalog();
 });
 
 rowsBody.addEventListener("click", (event) => {

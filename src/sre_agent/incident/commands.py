@@ -1,6 +1,6 @@
 """Resolve the contract's human commands to named transitions (HT-INC-COMMANDS, issue #330).
 
-The operations UI sends a command by name (`run-command:2.0.0`); the runtime of
+The operations UI sends a command by name (`run-command:2.1.0`); the runtime of
 #26 executes named transitions of the pinned workflow. This module is the only
 place that knows which command means which transition, and it decides nothing
 else: the state rule, the approval guard, the attribution rule and the unit of
@@ -9,9 +9,9 @@ work all stay in the runtime.
 Two rules are load-bearing here. A command always carries the human who issued
 it, because the question an audit of the incident asks is which person approved
 the mitigation, and "a human" does not answer it. And only `approve_mitigation`
-carries approval: the workflow marks `apply_mitigation` as `requires_approval`,
-so nothing else can move a proposal into production, and no other command may
-leave an approval record behind that never happened.
+and `close_incident` carry approval: the workflow marks exactly their
+transitions as `requires_approval`, and no other command may leave an approval
+record behind that never happened.
 
 `escalate` and `cancel_run` are refused by name, not silently ignored. Neither
 is a transition: the workflow states that escalation "never produces a state
@@ -30,17 +30,22 @@ from sre_agent.incident.runtime import ActorReference, IncidentCommand, InvalidT
 # workflow declares a single edge back to investigating carrying two outcomes,
 # and the outcome is what tells a reviewer "rejected" from "sent back for
 # changes". Collapsing them would erase that distinction from the audit trail.
-COMMAND_TRANSITIONS: Mapping[str, tuple[str, str]] = {
+COMMAND_TRANSITIONS: Mapping[str, tuple[str, str | None]] = {
     "approve_mitigation": ("apply_mitigation", "approve"),
     "reject_mitigation": ("reject_mitigation", "reject"),
     "request_changes": ("reject_mitigation", "request_changes"),
+    # run-command:2.1.0. The guards (evidence, verification check, postmortem)
+    # stay in the runtime; closing declares no decision point, hence no outcome.
+    "verification_passed": ("verification_passed", "stable"),
+    "verification_failed": ("verification_failed", "not_stable"),
+    "close_incident": ("close_incident", None),
 }
 DISPOSITION_TRANSITIONS: Mapping[str, str] = {
     "dismiss": "triage_dismiss",
     "link": "triage_link",
     "declare": "triage_declare",
 }
-APPROVING_COMMANDS = frozenset({"approve_mitigation"})
+APPROVING_COMMANDS = frozenset({"approve_mitigation", "close_incident"})
 DEFERRED_COMMANDS = frozenset({"escalate", "cancel_run"})
 
 
@@ -76,7 +81,7 @@ def resolve(request: HumanCommand) -> IncidentCommand:
         transition_id = DISPOSITION_TRANSITIONS.get(request.disposition or "")
         if transition_id is None:
             raise InvalidTransitionError("propose_disposition requires a declared disposition")
-        outcome: str = str(request.disposition)
+        outcome: str | None = str(request.disposition)
     else:
         mapped = COMMAND_TRANSITIONS.get(request.command)
         if mapped is None:

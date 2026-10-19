@@ -84,6 +84,11 @@ paths:
         review without `expected_incident_version` returns 422. For compatibility, an exact
         retry of a committed pre-version review may omit that field; it returns only the stored
         historical result and does not reapply the approval to current state.
+        run-command:2.1.0 adds verification_passed, verification_failed and close_incident,
+        all requiring `expected_incident_version`; close_incident also requires the
+        `authorization` assertion with run.approve as the explicit human approval (422 when
+        absent). A workflow guard that refuses the command answers 409 `precondition_failed`
+        and changes neither state nor version.
       parameters:
         - { $ref: '#/components/parameters/IncidentId' }
         - { $ref: '#/components/parameters/RunId' }
@@ -92,7 +97,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: 'urn:sre-agent:schema:run-command:2.0.0' }
+            schema: { $ref: 'urn:sre-agent:schema:run-command:2.1.0' }
       responses:
         '202':
           description: Command accepted; run state advances
@@ -165,6 +170,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
 components:
   securitySchemes:
@@ -197,7 +203,7 @@ components:
       description: Incident or run does not exist for this principal
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { missing_run: { $ref: './examples/http/error-404.json' } } } }
     Conflict:
-      description: Command not permitted from the current state, or idempotency conflict
+      description: Command not permitted from the current state, a workflow guard refused it (precondition_failed), or idempotency conflict
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { disallowed_command: { $ref: './examples/http/error-409.json' } } } }
     ValidationError:
       description: Request failed contract validation

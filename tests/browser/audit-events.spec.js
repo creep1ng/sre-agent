@@ -430,3 +430,67 @@ test("never links to untrusted correlation values or adopts unrelated URL parame
   await expect(page.locator("#page-error-title")).toHaveText("Access unavailable");
   await expect(page.locator("[data-event-row]")).toHaveCount(0);
 });
+
+// Failure modes covered below: a denied row hides which operation and resource type were
+// refused; missing or non-string fields are invented or leak as "[object Object]"; the
+// decision cell exposes a protected digest; the detail row stops spanning the whole table.
+test("lists operation, resource type and decision reason without guessing absent values", async ({ page }) => {
+  const ref = (digest) => ({ algorithm: "hmac-sha-256", key_version: 1, digest });
+  const denied = {
+    ...eventItem("evt-denied-01"), operation: "mcp.invoke", action: "invoke", stage: "authorization",
+    outcome: "denied", reason_code: "no_matching_grant", authorization_denial_cause: "grant_not_applicable",
+    response_status: 403, resource: { resource_type: "mcp_tool", resource_ref: ref("9".repeat(64)) },
+    policy_decision: { decision: "deny", reason_code: "no_matching_grant" },
+    identity: { principal_kind: "agent", principal_ref: ref("8".repeat(64)) },
+  };
+  const sparse = { event_id: "evt-sparse-01", occurred_at: "2026-09-20T10:00:00Z", outcome: "error",
+    operation: { injected: true }, resource: { resource_type: 7 }, policy_decision: "deny" };
+  await page.route((url) => url.pathname.startsWith(LIST_PATH), (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === LIST_PATH) return route.fulfill(json(200, JSON.stringify({ items: [denied, sparse] })));
+    if (path === `${LIST_PATH}/evt-denied-01`) return route.fulfill(json(200, JSON.stringify(denied)));
+    return route.fulfill(json(404, "{}"));
+  });
+  await page.fill("#filter-principal-id", "shop-agent");
+  await page.fill("#api-key", "sre_admn_0123456789abcdefghijklmnop");
+  await page.click("#connect-button");
+  const headers = page.locator("#list-wrap thead th");
+  await expect(headers).toHaveText(["Event", "Occurred", "Operation · resource type", "Decision", "Outcome", "Actor", "Detail"]);
+  const deniedRow = page.locator("[data-event-row='evt-denied-01']");
+  await expect(deniedRow.locator("[data-audit-operation]")).toHaveText("mcp.invoke");
+  await expect(deniedRow.locator("[data-audit-resource-type]")).toHaveText("mcp_tool");
+  await expect(deniedRow.locator("[data-audit-decision]")).toHaveText("deny · no_matching_grant");
+  await expect(deniedRow.locator(".ma-badge")).toHaveText("denied");
+  const sparseRow = page.locator("[data-event-row='evt-sparse-01']");
+  for (const field of ["operation", "resource-type", "decision"])
+    await expect(sparseRow.locator(`[data-audit-${field}]`)).toHaveText("—");
+  const rowsText = await page.locator("#event-rows").innerText();
+  expect(rowsText).not.toContain("[object Object]");
+  expect(rowsText).not.toContain("9".repeat(64));
+  expect(rowsText).not.toContain("8".repeat(64));
+
+  await page.click("[data-expand-event='evt-denied-01']");
+  const detail = page.locator("[data-event-detail='evt-denied-01']");
+  await expect(detail.locator("td")).toHaveAttribute("colspan", "7");
+  for (const fact of ["authorization", "no_matching_grant", "grant_not_applicable", "403"])
+    await expect(detail).toContainText(fact);
+});
+
+test("shows the operation, resource type and reason of a real gateway denial", async ({ page, request }) => {
+  test.skip(!connected, "requires the connected control-plane API");
+  const denied = await request.get("/api/v1/principals", {
+    headers: { Authorization: `Bearer ${apiKey("RESTRICTED_HARNESS_API_KEY")}` },
+  });
+  expect(denied.status()).toBe(403);
+  await page.fill("#filter-principal-id", "restricted-harness");
+  await page.fill("#filter-decision", "deny");
+  await page.fill("#api-key", apiKey("ADMIN_HUMAN_API_KEY"));
+  await page.click("#connect-button");
+  await expect(page.locator("#audit-events-page")).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+  const row = page.locator("[data-event-row]").filter({ hasText: "principals.list" }).first();
+  await expect(row.locator("[data-audit-resource-type]")).toHaveText("administrative_control");
+  await expect(row.locator("[data-audit-decision]")).toHaveText("deny · no_matching_grant");
+  await expect(row.locator(".ma-badge")).toHaveText("denied");
+  if (process.env.AUDIT_DENIAL_SCREENSHOT)
+    await page.screenshot({ path: process.env.AUDIT_DENIAL_SCREENSHOT, fullPage: true });
+});

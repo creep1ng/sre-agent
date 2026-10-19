@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal, Protocol, Self
 
+from sre_agent.incident.postmortem import PostmortemRecord
+
 JsonDocument = Mapping[str, Any]
+# What a dispatch outcome may change in its run without a transition: never its workflow state.
+RUN_PATCH_FIELDS = frozenset({"status", "pending_command", "terminated_reason", "updated_at"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +168,10 @@ class DecisionRepository(Protocol):
     async def get(self, decision_id: str) -> DecisionRecord | None: ...
 
 
+class PostmortemRepository(Protocol):
+    async def get(self, incident_id: str, *, lock: bool = False) -> PostmortemRecord | None: ...
+
+
 class IncidentUnitOfWork(Protocol):
     @property
     def incidents(self) -> IncidentRepository: ...
@@ -182,6 +190,9 @@ class IncidentUnitOfWork(Protocol):
 
     @property
     def decisions(self) -> DecisionRepository: ...
+
+    @property
+    def postmortems(self) -> PostmortemRepository: ...
 
     async def __aenter__(self) -> Self: ...
 
@@ -213,6 +224,8 @@ class IncidentUnitOfWork(Protocol):
         events: Sequence[EventDraft],
         expected_incident_version: int | None = None,
         incident_patch: JsonDocument | None = None,
+        run_patch: JsonDocument | None = None,
+        contexts: Sequence[TextContextRecord] = (),
     ) -> bool: ...
 
     async def release_run_dispatch(self, incident_id: str, run_id: str) -> None: ...
@@ -234,6 +247,7 @@ class IncidentUnitOfWork(Protocol):
         events: Sequence[EventDraft],
         snapshot: SnapshotDraft | None = None,
         dispatch_id: str | None = None,
+        contexts: Sequence[TextContextRecord] = (),
     ) -> TransitionResult: ...
 
     async def load_replay(self, run_id: str, *, incident_id: str) -> ReplayRecord: ...

@@ -602,6 +602,254 @@ test("exposes no slice-40b controls on the read-only timeline", async ({ page })
   }
 });
 
+// Slice #37 T1: start or resume the investigation over the runs contract. The mock
+// decides only what the store already knows: a created run enters detail exactly
+// once, and a replayed Idempotency-Key returns the stored run instead of another.
+const RUN_START_BODY = { workflow_version: "1.0.0", objective: "investigate" };
+
+function activeDetail() {
+  const detail = detailPayload();
+  detail.state = "active";
+  detail.runs = [];
+  return detail;
+}
+
+function runStatePayload(over = {}) {
+  return {
+    run_id: "run_new0001",
+    incident_id: INCIDENT,
+    workflow_version: "1.0.0",
+    status: "running",
+    current_state: "investigating",
+    pending_command: null,
+    cursor: "seq:1",
+    terminated_reason: null,
+    updated_at: "2026-08-24T14:12:00Z",
+    ...over,
+  };
+}
+
+async function mockRunSlice(page, model) {
+  const seen = { posts: [], states: 0 };
+  await page.route("**/api/v1/incidents/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith("/snapshot")) {
+      const snapshot = model.snapshot();
+      return snapshot
+        ? route.fulfill({ json: snapshot })
+        : route.fulfill({
+            status: 404,
+            json: errorPayload("snapshot_absent", "No snapshot exists for this run yet."),
+          });
+    }
+    if (url.pathname.endsWith("/timeline")) {
+      if (url.searchParams.get("run_id") === null) {
+        return route.fulfill({
+          status: 404,
+          json: errorPayload("run_absent", "This incident has no runs yet."),
+        });
+      }
+      return route.fulfill({ json: runPage("Investigación", [0, 1], "seq:1", false) });
+    }
+    if (url.pathname.endsWith("/runs")) {
+      seen.posts.push({
+        key: route.request().headers()["idempotency-key"] ?? "",
+        body: route.request().postDataJSON() ?? null,
+      });
+      return route.fulfill(await model.start());
+    }
+    if (url.pathname.includes("/runs/")) {
+      seen.states += 1;
+      return route.fulfill({ json: model.runState() });
+    }
+    return route.fulfill({ json: model.detail() });
+  });
+  return seen;
+}
+
+function storedRunModel(over = {}) {
+  const detail = over.detail ?? activeDetail();
+  let created = null;
+  return {
+    detail: () => detail,
+    snapshot: () => null,
+    runState: () => runStatePayload({ run_id: created ? created.run_id : "" }),
+    start: async () => {
+      if (over.hold) await over.hold;
+      if (created) return { status: 200, json: created };
+      created = runStatePayload();
+      detail.runs = [
+        {
+          run_id: created.run_id,
+          version: 5,
+          status: "running",
+          current_state: "investigating",
+          updated_at: created.updated_at,
+        },
+      ];
+      detail.state = "investigating";
+      detail.version = 5;
+      return { status: 201, json: created };
+    },
+  };
+}
+
+test("offers the investigation start only while the incident is active", async ({ page }) => {
+  const seen = await mockRunSlice(page, {
+    detail: () => activeDetail(),
+    snapshot: () => null,
+    runState: () => runStatePayload(),
+  });
+  await openWarRoom(page);
+  await expect(page.locator("#run-start")).toBeVisible();
+  await expect(page.locator("#timeline-empty")).toBeVisible();
+  await expect(page.locator("#run-state")).toBeHidden();
+
+  await page.unroute("**/api/v1/incidents/**");
+  await mockApi(page, { pages: [pageOne, pageTwo], snapshot: snapshotPayload() });
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#run-start")).toBeHidden();
+  expect(seen.posts).toHaveLength(0);
+});
+
+test("starts one investigation run with the pinned body and key", async ({ page }) => {
+  const seen = await mockRunSlice(page, storedRunModel());
+  await openWarRoom(page);
+  await page.locator("#run-start").click();
+
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  await expect(page.locator(".war-room__event").first()).toContainText("Investigación event 0.");
+  await expect(page.locator("#run-state")).toContainText("run_new0001 · Run en curso · Investigando");
+  expect(seen.posts).toHaveLength(1);
+  expect(seen.posts[0].body).toEqual(RUN_START_BODY);
+  expect(seen.posts[0].key).toMatch(/^run-start-inc-demo-[0-9a-f]{32}$/);
+  await expect(page.locator("#run-start")).toBeHidden();
+  await expect(page.locator("#run-select option")).toHaveCount(1);
+  // Neither the key nor the credential ever reaches the URL.
+  expect(page.url()).not.toContain(seen.posts[0].key);
+});
+
+test("a start in flight stays disabled and keyed for a second click", async ({ page }) => {
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const seen = await mockRunSlice(page, storedRunModel({ hold: gate }));
+  await openWarRoom(page);
+  await page.locator("#run-start").click();
+  await expect(page.locator("#run-start")).toBeDisabled();
+  // A second physical click cannot land while the action is in flight.
+  await page.locator("#run-start").click({ timeout: 400 }).catch(() => {});
+  release();
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  expect(seen.posts).toHaveLength(1);
+  expect(seen.posts[0].body).toEqual(RUN_START_BODY);
+});
+
+test("reload keeps the started run without creating another", async ({ page }) => {
+  const seen = await mockRunSlice(page, storedRunModel());
+  await openWarRoom(page);
+  await page.locator("#run-start").click();
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  expect(seen.posts).toHaveLength(1);
+
+  // A reload re-derives the run from the stored detail; it never POSTs again.
+  await page.reload();
+  await authenticate(page);
+  await expect(page.locator("#run-select")).toHaveValue("run_new0001");
+  await expect(page.locator("#run-select option")).toHaveCount(1);
+  await expect(page.locator("#run-state")).toContainText("run_new0001 · Run en curso");
+  expect(seen.posts).toHaveLength(1);
+});
+
+test("an awaiting decision offers resume and reuses the same run", async ({ page }) => {
+  const detail = detailPayload();
+  detail.runs[0].status = "awaiting_human";
+  const waiting = runStatePayload({
+    run_id: "run_demo0001",
+    status: "awaiting_human",
+    pending_command: "approve_mitigation",
+    cursor: "seq:4",
+  });
+  const seen = await mockRunSlice(page, {
+    detail: () => detail,
+    snapshot: () => snapshotPayload(),
+    runState: () => waiting,
+    start: () => Promise.resolve({ status: 200, json: waiting }),
+  });
+  await openWarRoom(page);
+
+  await expect(page.locator("#run-state")).toContainText(
+    "run_demo0001 · Decisión pendiente · Investigando",
+  );
+  await expect(page.locator("#run-pending")).toContainText("approve_mitigation");
+  await expect(page.locator("#run-start")).toBeHidden();
+  await page.locator("#run-resume").click();
+
+  await expect(page.locator("#run-select option")).toHaveCount(1);
+  await expect(page.locator("#run-state")).toContainText("Decisión pendiente");
+  expect(seen.posts).toHaveLength(1);
+  expect(seen.posts[0].body).toEqual({ ...RUN_START_BODY, resume_from_run_id: "run_demo0001" });
+});
+
+test("denied authorization never reads as completed or a plain ending", async ({ page }) => {
+  const detail = detailPayload();
+  detail.runs[0].status = "terminated";
+  await mockRunSlice(page, {
+    detail: () => detail,
+    snapshot: () => null,
+    runState: () =>
+      runStatePayload({ run_id: "run_demo0001", status: "terminated", terminated_reason: "denied" }),
+  });
+  await openWarRoom(page);
+
+  await expect(page.locator("#run-state")).toContainText(
+    "Autorización denegada, requiere intervención",
+  );
+  expect((await page.locator("#run-state").textContent()) ?? "").not.toMatch(/terminad|complet|exitos/i);
+  await expect(page.locator("#run-terminated")).toBeHidden();
+  await expect(page.locator("#run-resume")).toBeHidden();
+
+  // Any other ending keeps its explicit reason; only the denial is masked.
+  await page.unroute("**/api/v1/incidents/**");
+  await mockRunSlice(page, {
+    detail: () => detail,
+    snapshot: () => null,
+    runState: () =>
+      runStatePayload({
+        run_id: "run_demo0001",
+        status: "terminated",
+        terminated_reason: "max_steps",
+      }),
+  });
+  await page.locator("#refresh-button").click();
+  await expect(page.locator("#run-terminated")).toContainText("se agotó el presupuesto");
+});
+
+test("start failures surface their HTTP kind without success states", async ({ page }) => {
+  for (const [http, code, selector] of [
+    [401, "authentication_failed", "#error-401"],
+    [403, "not_authorized", "#error-403"],
+    [409, "run_conflict", "#error-409"],
+    [503, "storage_unavailable", "#error-503"],
+  ]) {
+    const seen = await mockRunSlice(page, {
+      detail: () => activeDetail(),
+      snapshot: () => null,
+      runState: () => runStatePayload(),
+      start: () => Promise.resolve({ status: http, json: errorPayload(code, `${code} moment.`) }),
+    });
+    await openWarRoom(page);
+    await page.locator("#run-start").click();
+
+    await expect(page.locator(selector)).toBeVisible();
+    await expect(page.locator("#summary-section")).toBeHidden();
+    expect(seen.posts).toHaveLength(1);
+    await page.unroute("**/api/v1/incidents/**");
+  }
+});
+
+
 // Reading the timeline: each event says where it sits in the run, its local time and the offset
 // since the run's first event, its type and the state it reached in Spanish, and who acted.
 test.describe("reading the timeline", () => {
@@ -739,4 +987,30 @@ test.describe("reading the timeline", () => {
     await expect(items.nth(1)).toContainText("00:00:30");
     await expect(items.nth(1)).toContainText("+1 min desde el inicio");
   });
+});
+
+test("the war room timeline stays readable at 375px", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await mockApi(page, { pages: [pageOne] });
+  await openWarRoom(page);
+
+  const item = page.locator(".war-room__events .ma-timeline__item").first();
+  await expect(item).toBeVisible();
+
+  // The design system's mobile reset rules the marker track and one content track; the war
+  // room's three-column desktop geometry must not win at this width.
+  const columns = await item.evaluate((node) =>
+    getComputedStyle(node).gridTemplateColumns.split(" ").map((track) => Number.parseFloat(track)),
+  );
+  expect(columns).toHaveLength(2);
+  expect(columns[0]).toBeLessThanOrEqual(44);
+
+  const time = item.locator(".ma-timeline__time");
+  const content = item.locator(".ma-timeline__content");
+  for (const node of [time, content]) {
+    expect(await node.evaluate((el) => getComputedStyle(el).gridColumnStart)).toBe("2");
+  }
+  // Time and content are wide enough to read, not squeezed into the marker column.
+  expect((await time.boundingBox()).width).toBeGreaterThan(44);
+  expect((await content.boundingBox()).width).toBeGreaterThan(44);
 });
