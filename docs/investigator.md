@@ -64,8 +64,11 @@ must answer the escalation. The `escalate` command is still refused
 Every outcome with a harness result also writes, in the same transaction, the run's turns as
 its sensitive context: the input sent, the model output, the tool invocation when the tool
 answered and the gateway request id. `GET .../runs/{run_id}/context` reads them back only with
-`run.read_context`, which an administrator grants through the control plane; `run.read` is not
-enough, a run of another incident is 404, and state, events and timeline stay safe. A dispatch
+`run.read_context`, which an administrator grants through the control plane (the demo
+provisioning grants it to `demo-human`); `run.read` is not enough, a run of another incident is
+404, and state, events and timeline stay safe. The same response carries `reasoning`: the
+hypotheses, evidence and mitigation the incident recorded, which the war room and Decisiones
+show to that reader. A dispatch
 interrupted before its outcome leaves no context: its turns never came back.
 
 A cited hypothesis maps to the existing `continue_investigation` transition. While steps

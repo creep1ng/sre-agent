@@ -28,6 +28,15 @@ def demo_grants():
             "resource": workflow,
             "effect": "allow",
         }
+    # The operator approves a mitigation it can read: the reasoning (hypothesis, evidence,
+    # mitigation) is behind run.read_context, apart from run.read.
+    yield {
+        "grant_id": "grant-demo-human-run-read-context-incident-response",
+        "principal_id": "demo-human",
+        "action": "run.read_context",
+        "resource": workflow,
+        "effect": "allow",
+    }
     for action, kind, resource in (
         ("mcp.discovery", "mcp_server", "grafana-mcp"),
         ("mcp.invoke", "mcp_tool", "query_prometheus"),
@@ -69,7 +78,8 @@ async def provision_demo(service, bearer):
         raise RuntimeError("workflow provisioning conflict; inspect existing workflow/grants")
     for body in demo_grants():
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
-        if response.status_code != 201 or not await _granted(service, body):
+        # 409 with the same active grant already persisted is convergence, not a conflict.
+        if response.status_code not in (201, 409) or not await _granted(service, body):
             raise RuntimeError("demo grant conflict: " + body["grant_id"])
 
 
