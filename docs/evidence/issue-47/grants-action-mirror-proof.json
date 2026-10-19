@@ -1,0 +1,54 @@
+{
+  "page": "http://web/public/admin/grants.html",
+  "capturedAt": "2026-10-19T02:05:27.539Z",
+  "consoleErrors": [],
+  "createResourceOptions": [
+    "incident_workflow/incident-response",
+    "llm_model/remediation-agent",
+    "llm_model/triage-agent",
+    "mcp_server/grafana-mcp",
+    "mcp_tool/query_elasticsearch",
+    "mcp_tool/query_prometheus",
+    "administrative_control/principals",
+    "administrative_control/credentials",
+    "administrative_control/model_aliases",
+    "administrative_control/usage",
+    "administrative_control/consumption_limits",
+    "administrative_control/catalog",
+    "administrative_control/grants"
+  ],
+  "incidentWorkflowResource": "incident_workflow/incident-response",
+  "actions": [
+    "run.start",
+    "run.read",
+    "run.command",
+    "run.approve",
+    "run.read_context",
+    "alert.read",
+    "alert.triage",
+    "alert.dismiss",
+    "alert.associate",
+    "incident.declare"
+  ],
+  "expectedActions": [
+    "run.start",
+    "run.read",
+    "run.command",
+    "run.approve",
+    "run.read_context",
+    "alert.read",
+    "alert.triage",
+    "alert.dismiss",
+    "alert.associate",
+    "incident.declare"
+  ],
+  "actionsMatch": true,
+  "create": {
+    "grantId": "grant-incident-harness-incident-declare-incident-response",
+    "principal": "incident-harness",
+    "action": "incident.declare",
+    "resource": "incident_workflow/incident-response",
+    "announce": "Grant grant-incident-harness-incident-declare-incident-response ready (201 created or stable replay). 6 grants.",
+    "rowText": "grant-incident-harness-incident-declare-incident-responseincident-harnessincident.declareincident_workflow/incident-responseactiveRevoke"
+  }
+}

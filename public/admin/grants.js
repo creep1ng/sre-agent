@@ -42,7 +42,7 @@ const revokeErrorDetail = document.getElementById("revoke-error-detail");
 const revokeSubmit = document.getElementById("revoke-submit");
 const revokeCancel = document.getElementById("revoke-cancel");
 
-// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:342-352 (#480).
+// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:343-364 (#480).
 // Frontend-only guide: the backend admits only these exact per-type actions
 // and rejects anything else with 422 without mutation. Keep in sync manually;
 // drift mitigation: tests/browser/grants.spec.js asserts the exact per-type
@@ -54,7 +54,18 @@ const GRANT_ADMITTED_ACTIONS = {
   mcp_tool: ["admin.write", "mcp.discovery", "mcp.invoke"],
   skill: ["admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"],
   bok_collection: ["admin.write", "bok.discovery", "bok.search", "bok.read"],
-  incident_workflow: ["run.start", "run.read", "run.command", "run.approve", "run.read_context"],
+  incident_workflow: [
+    "run.start",
+    "run.read",
+    "run.command",
+    "run.approve",
+    "run.read_context",
+    "alert.read",
+    "alert.triage",
+    "alert.dismiss",
+    "alert.associate",
+    "incident.declare",
+  ],
   administrative_control: ["admin.read", "admin.write"],
 };
 // Seeded administrative-control resources (mirrors seeds.ADMIN_RESOURCES).

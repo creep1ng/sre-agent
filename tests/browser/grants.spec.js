@@ -130,7 +130,7 @@ function catalogPayload() {
   };
 }
 
-// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:342-352.
+// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:343-364.
 // The browser spec asserts the page offers exactly these per-type sets.
 const EXPECTED_ADMITTED_ACTIONS = {
   "llm_model": ["admin.read", "admin.write", "invoke"],
@@ -138,7 +138,18 @@ const EXPECTED_ADMITTED_ACTIONS = {
   "mcp_tool": ["admin.write", "mcp.discovery", "mcp.invoke"],
   "skill": ["admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"],
   "bok_collection": ["admin.write", "bok.discovery", "bok.search", "bok.read"],
-  "incident_workflow": ["run.start", "run.read", "run.command", "run.approve", "run.read_context"],
+  "incident_workflow": [
+    "run.start",
+    "run.read",
+    "run.command",
+    "run.approve",
+    "run.read_context",
+    "alert.read",
+    "alert.triage",
+    "alert.dismiss",
+    "alert.associate",
+    "incident.declare",
+  ],
   "administrative_control": ["admin.read", "admin.write"],
 };
 
@@ -655,8 +666,9 @@ test("action selector rebuilds per resource type and creates run.* on incident_w
       await expect(page.locator(`#create-action option[value='${rejected}']`)).toHaveCount(0);
     }
   }
-  // incident_workflow offers zero legacy actions and only the five run.* actions;
-  // bare invoke and admin.read are absent so a non-admitted combo cannot be picked.
+  // incident_workflow offers zero legacy actions and only its admitted run.*,
+  // alert.* and incident.declare actions; bare invoke and admin.read are absent
+  // so a non-admitted combo cannot be picked.
   await page.selectOption("#create-resource", "incident_workflow/incident-response");
   await expect(page.locator("#create-action option[value='invoke']")).toHaveCount(0);
   await expect(page.locator("#create-action option[value='admin.read']")).toHaveCount(0);

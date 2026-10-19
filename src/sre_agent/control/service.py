@@ -333,12 +333,13 @@ class GrantCreate(BaseModel):
 # (schemas/releases/*/conformance/resource-catalog-matrix.yaml) plus the
 # vocabularies the runtime actually evaluates: bare "invoke" on skill
 # (gateway/skills.py) alongside skill.invoke, admin.read/admin.write over
-# administrative_control (CONTROL_SCOPES), and the five run.* actions over
-# incident_workflow (agent/api/authorization.v1.yaml). Dotted refinements such
-# as "invoke.delete" or "run.start.unpublished" are absent from those closed
-# contracts and the engine matches grant.action exactly, so they are rejected
-# without mutation. This is a pure lookup: it never touches a repository, so a
-# denied caller still receives 403 before any target access.
+# administrative_control (CONTROL_SCOPES), and the run.*, alert.* and
+# incident.declare actions over incident_workflow (agent/api/authorization.v1.yaml
+# and agent/api/triage.openapi.yaml). Dotted refinements such as "invoke.delete"
+# or "run.start.unpublished" are absent from those closed contracts and the
+# engine matches grant.action exactly, so they are rejected without mutation.
+# This is a pure lookup: it never touches a repository, so a denied caller
+# still receives 403 before any target access.
 GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
     "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
     "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
