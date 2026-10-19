@@ -59,6 +59,7 @@ SCHEMAS = {
     "run-start-request": AGENT / "schemas" / "run-start-request.schema.yaml",
     "run-state": AGENT / "schemas" / "run-state.schema.yaml",
     "run-command": AGENT / "schemas" / "run-command.schema.yaml",
+    "run-command-2.1.0": AGENT / "schemas" / "run-command-2.1.0.schema.yaml",
     "run-event": AGENT / "schemas" / "run-event.schema.yaml",
 }
 
@@ -344,14 +345,23 @@ def check_correlation_mapping(schemas: dict[str, Any]) -> list[str]:
 
 
 def check_authorization_contract(schemas: dict[str, Any]) -> list[str]:
-    """Every command assertion must be closed over the catalog action map."""
+    """Every command assertion must be closed over the catalog action map.
+
+    The catalog follows the current release, 2.1.0, which must stay additive:
+    every command of the frozen 2.0.0 release is still accepted.
+    """
     errors: list[str] = []
     vocabulary = load_yaml(AUTHORIZATION_PATH)
-    command = schemas["run-command"]
+    command = schemas["run-command-2.1.0"]
+    if not set(schemas["run-command"]["properties"]["command"]["enum"]) <= set(
+        command["properties"]["command"]["enum"]
+    ):
+        errors.append("run-command:2.1.0 drops a command of run-command:2.0.0")
     props = command["properties"]["authorization"]["properties"]
     resource_props = props["resource"]["properties"]
     command_action_map = vocabulary["command_action_map"]
-    versioned_review_commands = {"approve_mitigation", "reject_mitigation", "request_changes"}
+    unversioned = {"propose_disposition", "escalate", "cancel_run"}
+    versioned_review_commands = set(command_action_map) - unversioned
     declared_actions = set(props["action"].get("enum", []))
     expected_actions = set(command_action_map.values())
     if declared_actions != expected_actions:

@@ -47,6 +47,9 @@ COMMANDS = frozenset(
         "propose_disposition",
         "escalate",
         "cancel_run",
+        "verification_passed",
+        "verification_failed",
+        "close_incident",
     }
 )
 
@@ -111,7 +114,7 @@ def check_command_mapping(catalogue: dict[str, Any]) -> list[str]:
 
     # Approving and rejecting a mitigation are the human gate; both must sit behind the
     # same dedicated action, otherwise participation would imply approval.
-    for command in ("approve_mitigation", "reject_mitigation"):
+    for command in ("approve_mitigation", "reject_mitigation", "close_incident"):
         if mapping.get(command) != "run.approve":
             errors.append(f"command '{command}' must be authorized by run.approve")
 
