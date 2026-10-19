@@ -622,8 +622,9 @@ function showLive(runId, runState) {
   const status = RUN_LABELS[runState?.status] ?? runState?.status ?? "—";
   const line =
     runId === null ? "Iniciando la investigación…" : `${runId} · ${status} · ${stateLabel(runState?.current_state)}`;
+  const activity = runActionInFlight ? "el agente está investigando" : "investigación en curso";
   nodes["reasoning-live"].textContent = active
-    ? `${line} · el agente está investigando; la vista se actualiza sola (${clockFormat.format(new Date())}).`
+    ? `${line} · ${activity}; la vista se actualiza sola (${clockFormat.format(new Date())}).`
     : line;
   if (active) nodes["reasoning-section"].hidden = false;
 }
