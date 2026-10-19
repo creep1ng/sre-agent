@@ -128,6 +128,20 @@ OBJECTIVE_TRANSITIONS = {
     "postmortem": "start_postmortem",
 }
 
+# Harness statuses that block a run for a human, with the workflow escalation trigger each is.
+ESCALATION_TRIGGERS = {"denied": "authorization denied for a capability required by the objective"}
+
+
+def escalation(reason: str, now: datetime) -> tuple[str, dict[str, Any]]:
+    """The trigger and the run fields of an escalation: the transition is blocked and a human
+    notified, never a state change. The run waits for the human's `escalate` command."""
+    return ESCALATION_TRIGGERS[reason], {
+        "status": "awaiting_human",
+        "pending_command": "escalate",
+        "terminated_reason": reason,
+        "updated_at": now.isoformat(),
+    }
+
 
 @dataclass(frozen=True, slots=True)
 class IncidentView:
@@ -368,6 +382,10 @@ class IncidentRuntime:
                                 f"event '{event.event_id}' has an invalid incident patch"
                             )
                         incident_state.update(patch)
+                    continue
+                if event.kind == "escalation":
+                    # A run blocked for a human made no transition, so its version stays.
+                    run_state.update(event.payload["run_patch"])
                     continue
                 if event.kind != "state_change":
                     continue

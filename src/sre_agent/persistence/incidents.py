@@ -11,6 +11,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from sre_agent.incident.persistence import (
+    RUN_PATCH_FIELDS,
     DecisionDraft,
     DecisionRecord,
     EventDraft,
@@ -481,9 +482,12 @@ class PostgresIncidentUnitOfWork:
         session = self._require_session()
         if decision.run_id not in (None, run_id) or not events:
             raise ValueError("dispatch records require one run decision and at least one event")
-        if any(event.kind not in {"dispatch_receipt", "investigation_result"} for event in events):
+        if any(
+            event.kind not in {"dispatch_receipt", "investigation_result", "escalation"}
+            for event in events
+        ):
             raise ValueError(
-                "investigation dispatch may append only safe result and receipt events"
+                "investigation dispatch may append only safe result, receipt and escalation events"
             )
         await session.execute(
             text("SELECT pg_advisory_xact_lock(hashtextextended(:run_id, 146))"),
@@ -625,6 +629,7 @@ class PostgresIncidentUnitOfWork:
         events: Sequence[EventDraft],
         expected_incident_version: int | None = None,
         incident_patch: JsonDocument | None = None,
+        run_patch: JsonDocument | None = None,
     ) -> bool:
         await self._lock_run_event_sequence(run_id)
         incident, _run = await self._lock_incident_run(incident_id, run_id)
@@ -665,6 +670,13 @@ class PostgresIncidentUnitOfWork:
         ]
         if len(terminal_events) != 1:
             raise ValueError("a completed dispatch must append one terminal receipt")
+        escalations = [
+            event.payload.get("run_patch") for event in events if event.kind == "escalation"
+        ]
+        if escalations != ([run_patch] if run_patch is not None else []):
+            raise ValueError("a dispatch blocks its run only through one escalation event")
+        if run_patch is not None and not set(run_patch) <= RUN_PATCH_FIELDS:
+            raise ValueError("a dispatch outcome never moves the workflow state of its run")
         if incident_patch is not None:
             if (
                 expected_incident_version is None
@@ -701,6 +713,13 @@ class PostgresIncidentUnitOfWork:
             )
             if updated.scalar_one_or_none() is None:
                 raise IncidentStaleWriteError(f"stale investigation result: {incident_id}/{run_id}")
+        if run_patch is not None:
+            # No version bump: blocking a run is no transition, so replay applies the event.
+            await self._require_session().execute(
+                text("""UPDATE incident.runs SET state=state || CAST(:run_patch AS jsonb)
+                    WHERE run_id=:run_id AND incident_id=:incident_id"""),
+                {"run_patch": _document(run_patch), "run_id": run_id, "incident_id": incident_id},
+            )
         await self._append_run_events(incident_id, run_id, decision=decision, events=events)
         return True
 

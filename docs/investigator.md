@@ -51,6 +51,16 @@ An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs bef
 upstream tool call, so no external effect was dispatched. Transient or ambiguous failures
 remain `unknown`.
 
+A denial blocks the run for a human (issue #39). A `denied` result, or an MCP discovery
+answered with 401 or 403, keeps its `confirmed_failure` receipt (`governed_call_denied` or
+`mcp_discovery_denied`) and, in the same transaction, the run becomes `awaiting_human` with
+`pending_command` `escalate` and `terminated_reason` `denied`, through an `escalation` event
+that replay applies. This is the workflow's escalation: the incident keeps its state and
+version, and nothing is retried with another identity, endpoint or resource. Resuming takes
+people, never a retry: an administrator must grant the denied capability again, and a human
+must answer the escalation. The `escalate` command is still refused
+(`src/sre_agent/incident/commands.py`), so a blocked run cannot be resumed yet.
+
 A cited hypothesis maps to the existing `continue_investigation` transition. A proposed
 mitigation uses the existing `propose_mitigation` preconditions and creates a pending,
 identified artifact. `request_human` and `conclude` have no transition in this workflow;
