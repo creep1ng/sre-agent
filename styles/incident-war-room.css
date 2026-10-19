@@ -127,6 +127,79 @@
   font-size: var(--ma-font-size-sm);
 }
 
+/* The agent's recorded reasoning (run.read_context): current hypothesis, the evidence it
+   gathered and the proposed mitigation. Shared by the war room and Decisiones. */
+.reasoning {
+  overflow: hidden;
+}
+
+.reasoning__notice {
+  margin: var(--ma-space-5) var(--ma-space-6);
+}
+
+.reasoning__statement {
+  margin: 0 0 var(--ma-space-3);
+  max-width: 72ch;
+  font-size: var(--ma-font-size-md);
+  line-height: 1.5;
+}
+
+.reasoning__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ma-space-2);
+  margin: 0;
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-sm);
+}
+
+.reasoning__evidence-list {
+  display: grid;
+  gap: var(--ma-space-3);
+  margin: var(--ma-space-3) 0 0;
+  padding-left: var(--ma-space-5);
+}
+
+.reasoning__evidence {
+  display: grid;
+  gap: var(--ma-space-1);
+  min-width: 0;
+}
+
+.reasoning__evidence p {
+  margin: 0;
+}
+
+.reasoning__evidence-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ma-space-1);
+  color: var(--ma-color-text-secondary);
+  font-size: var(--ma-font-size-sm);
+}
+
+.reasoning__query {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  padding: var(--ma-space-2) var(--ma-space-3);
+  border-radius: var(--ma-radius-md);
+  background: var(--ma-color-bg-subtle);
+  font-family: var(--ma-font-mono);
+  font-size: var(--ma-font-size-xs);
+}
+
+.reasoning__result {
+  overflow-wrap: anywhere;
+  font-size: var(--ma-font-size-sm);
+}
+
+.reasoning__request {
+  font-size: var(--ma-font-size-xs);
+}
+
 /* The timeline is the design system's ma-timeline with numbered markers: each event shows its
    position, local time and offset since the run started, its type, the state it reached and who
    acted. */
