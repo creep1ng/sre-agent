@@ -1,5 +1,6 @@
 import { ApiClientError } from "/public/api/client.js";
 import { stateLabel } from "/public/console/incident-vocabulary.js";
+import { hrefFor } from "/public/console/routes.js";
 import { mountedView } from "/public/console/view.js";
 
 // The persisted postmortem of the incident in focus (#43 over the #335 routes). The text arrives
@@ -22,14 +23,14 @@ const CODE_MESSAGES = Object.freeze({
   run_conflict: "El incidente cambió de estado; actualiza antes de reintentar.",
   not_authorized: "Tu identidad no está autorizada para esta operación.",
   postmortem_version_conflict:
-    "El postmortem cambió desde que lo cargaste. Tu borrador sigue en el formulario: cópialo, actualiza y vuelve a aplicarlo.",
+    "El postmortem cambió desde que lo cargaste: actualiza antes de reintentar. Si editabas, tu borrador sigue en el formulario.",
   postmortem_not_open: "El incidente ya no está en postmortem: el artefacto es de solo lectura.",
   invalid_postmortem: "El contenido no cumple el mínimo del postmortem:",
   unknown_event_reference: "Una cita no corresponde a un evento guardado de este incidente.",
 });
 const FIELDS = ["summary", "impact", "cause", "certainty", "strategy", "timeline", "actions_taken", "verification", "pending", "unknowns"];
 
-const state = { incidentId: null, runId: null, generation: 0, busy: false, startKey: null, baseVersion: 0, notice: null };
+const state = { incidentId: null, runId: null, generation: 0, busy: false, startKey: null, baseVersion: 0, notice: null, reviewNotice: null };
 
 const nodes = {};
 const view = mountedView();
@@ -46,7 +47,8 @@ function cacheNodes() {
     "fact-state", "fact-artifact", "fact-version", "fact-review", "fact-runs", "fact-updated",
     "artifact-section", "artifact-sections", "empty-section", "empty-detail", "content-restricted",
     "refresh-button", "start-postmortem", "start-status", "editor-section", "editor-form", "editor-basis",
-    "save-postmortem", "save-status", ...FIELDS.map((key) => `pm-${key}`),
+    "save-postmortem", "save-status", ...FIELDS.map((key) => `pm-${key}`), "review-section", "review-title",
+    "review-form", "review-comment", "approve-postmortem", "request-changes", "review-status", "close-hint", "decisions-link",
   ].forEach((id) => {
     nodes[id] = byId(id);
   });
@@ -56,12 +58,13 @@ function hideAll() {
   [
     "loading-state", "error-missing-id", "error-401",
     "error-403", "error-404", "error-503", "context-section", "artifact-section", "empty-section",
-    "editor-section", "start-status", "save-status",
+    "editor-section", "start-status", "save-status", "review-section", "review-status", "close-hint",
   ].forEach((id) => {
     nodes[id].hidden = true;
   });
   nodes["artifact-sections"].replaceChildren();
   nodes["editor-form"].reset();
+  nodes["review-form"].reset();
   nodes["refresh-button"].hidden = true;
 }
 
@@ -95,7 +98,7 @@ function showStatus(id, text) {
 
 function setBusy(busy) {
   state.busy = busy;
-  ["start-postmortem", "save-postmortem", "refresh-button"].forEach((id) => {
+  ["start-postmortem", "save-postmortem", "approve-postmortem", "request-changes", "refresh-button"].forEach((id) => {
     nodes[id].disabled = busy;
   });
 }
@@ -268,6 +271,22 @@ function validRecord(record) {
   return Number.isSafeInteger(record?.version) && typeof record.postmortem_id === "string" && Array.isArray(record.run_ids);
 }
 
+// The human review of the version on screen. Approving never closes: close_incident is asked in
+// Decisiones on the run that holds the postmortem state, and the backend checks this approval.
+function renderReview(detail, record) {
+  const postmortemRun = (Array.isArray(detail.runs) ? detail.runs : []).find((run) => run?.current_state === "postmortem");
+  if (detail.state !== "postmortem" || record === null || record.content_included !== true) return;
+  state.reviewVersion = record.version;
+  nodes["review-title"].textContent = `Revisión humana de la versión ${record.version}`;
+  nodes["approve-postmortem"].textContent = `Aprobar versión ${record.version}`;
+  showStatus("review-status", state.reviewNotice);
+  state.reviewNotice = null;
+  const approved = record.review?.status === "approved" && typeof postmortemRun?.run_id === "string";
+  if (approved) nodes["decisions-link"].href = hrefFor("decisions", { incident_id: state.incidentId, run_id: postmortemRun.run_id });
+  nodes["close-hint"].hidden = !approved;
+  nodes["review-section"].hidden = false;
+}
+
 async function loadAll() {
   const generation = (state.generation += 1);
   hideAll();
@@ -293,6 +312,7 @@ async function loadAll() {
     state.startKey = `postmortem-start-${globalThis.crypto?.randomUUID?.() ?? Date.now()}`;
     render(detail, record);
     renderEditor(detail, record, events);
+    renderReview(detail, record);
     view.focusIncident(detail, focusRun(detail));
     nodes["loading-state"].hidden = true;
     nodes["refresh-button"].hidden = false;
@@ -342,6 +362,26 @@ async function savePostmortem(event) {
   }
 }
 
+async function reviewPostmortem(outcome) {
+  if (state.busy) return;
+  const generation = state.generation;
+  setBusy(true);
+  showStatus("review-status", "Registrando la revisión…");
+  try {
+    const comment = nodes["review-comment"].value.trim();
+    const body = { version: state.reviewVersion, outcome, ...(comment ? { comment } : {}) };
+    const { review } = await client.reviewPostmortem(state.incidentId, body);
+    if (generation !== state.generation) return;
+    state.reviewNotice = `${REVIEW_LABELS[review.status] ?? review.status}: revisión de la versión ${review.reviewed_version} registrada por ${review.reviewer_id}.`;
+    setBusy(false);
+    await loadAll();
+  } catch (error) {
+    if (generation === state.generation) showStatus("review-status", outcomeMessage(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
 // La credencial vive en la sesión de la consola: sin sesión activa no queda nada leído.
 function dropSession() {
   state.generation += 1;
@@ -354,6 +394,8 @@ cacheNodes();
 nodes["refresh-button"].addEventListener("click", loadAll);
 nodes["start-postmortem"].addEventListener("click", startPostmortem);
 nodes["editor-form"].addEventListener("submit", savePostmortem);
+nodes["approve-postmortem"].addEventListener("click", () => reviewPostmortem("approved"));
+nodes["request-changes"].addEventListener("click", () => reviewPostmortem("changes_requested"));
 state.incidentId = view.params.get("incident_id");
 state.runId = view.params.get("run_id");
 if (!state.incidentId) {

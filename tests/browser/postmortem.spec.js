@@ -15,6 +15,9 @@ import { answerWhoAmI, connectConsole, logoutConsole } from "./support/console-s
 // 10. A stale save (409 postmortem_version_conflict), invalid content (422) or a writer without
 //     run.command (403) shows the backend reason and keeps the draft in the form.
 // 11. Without the text (no run.read_context) or outside the postmortem state there is no editor.
+// 12. A review names the version on screen; a stale one (409), a reviewer without run.approve (403)
+//     or a closed postmortem (409 postmortem_not_open) is refused and nothing is approved.
+// 13. Approving is not closing: no close action here, only a link to Decisiones on the postmortem run.
 const INCIDENT = "inc-demo";
 const RUN = "run_demo0001";
 const PM_RUN = "run_demopm0001";
@@ -73,7 +76,7 @@ const EVENTS = {
 };
 
 // Answers the incident, its postmortem, its timeline, run starts and writes; records every request.
-async function mockApi(page, { detail = () => detailPayload(), postmortem = () => ({ json: projection() }), start, put } = {}) {
+async function mockApi(page, { detail = () => detailPayload(), postmortem = () => ({ json: projection() }), start, put, review } = {}) {
   const requests = [];
   await page.route("**/api/v1/incidents/**", async (route) => {
     const request = route.request();
@@ -82,6 +85,7 @@ async function mockApi(page, { detail = () => detailPayload(), postmortem = () =
     requests.push({ method: request.method(), path, headers: request.headers(), body: request.postDataJSON() });
     if (path.endsWith("/runs") && request.method() === "POST") return route.fulfill(start());
     if (path.endsWith("/postmortem") && request.method() === "PUT") return route.fulfill(put());
+    if (path.endsWith("/postmortem/reviews")) return route.fulfill(review());
     if (path.endsWith("/timeline")) {
       const events = EVENTS[url.searchParams.get("run_id")] ?? [];
       return route.fulfill({ json: { events, next_cursor: "seq:9", has_more: false } });
@@ -312,6 +316,7 @@ test("sin el texto o fuera de postmortem no hay editor", async ({ page }) => {
   await openPostmortem(page);
   await expect(page.locator("#fact-version")).toHaveText("2");
   await expect(page.locator("#editor-section")).toBeHidden();
+  await expect(page.locator("#review-section")).toBeHidden();
 
   restricted = false;
   state = "closed";
@@ -319,3 +324,65 @@ test("sin el texto o fuera de postmortem no hay editor", async ({ page }) => {
   await expect(page.locator("#artifact-sections")).toContainText(CONTENT.summary);
   await expect(page.locator("#editor-section")).toBeHidden();
 });
+
+const reviewed = (status) => ({
+  ...projection(),
+  review: { status, reviewed_version: 2, reviewer_id: "demo-human", reviewed_at: "2026-08-24T15:00:00Z", comment: null },
+});
+
+test("aprobar revisa la versión en pantalla y deja el cierre a Decisiones", async ({ page }) => {
+  let stored = projection();
+  const requests = await mockApi(page, {
+    postmortem: () => ({ json: stored }),
+    review: () => {
+      stored = reviewed("approved");
+      return { status: 201, json: { ...stored, content_included: false } };
+    },
+  });
+  await openPostmortem(page);
+  await expect(page.locator("#close-hint")).toBeHidden();
+  await page.locator("#review-comment").fill("Matches the timeline.");
+  await page.locator("#approve-postmortem").click();
+
+  await expect(page.locator("#fact-review")).toContainText("Aprobada");
+  await expect(page.locator("#review-status")).toContainText("versión 2");
+  await expect(page.locator("#decisions-link")).toHaveAttribute("href", `/?view=decisions&incident_id=${INCIDENT}&run_id=${PM_RUN}`);
+  const [sent] = requests.filter((entry) => entry.path.endsWith("/reviews"));
+  expect(sent.body).toEqual({ version: 2, outcome: "approved", comment: "Matches the timeline." });
+  for (const label of await page.locator("#postmortem button").allTextContents()) expect(label).not.toMatch(/cerrar|close/i);
+});
+
+test("solicitar cambios no aprueba ni ofrece el cierre", async ({ page }) => {
+  let stored = projection();
+  const requests = await mockApi(page, {
+    postmortem: () => ({ json: stored }),
+    review: () => {
+      stored = reviewed("changes_requested");
+      return { status: 201, json: { ...stored, content_included: false } };
+    },
+  });
+  await openPostmortem(page);
+  await page.locator("#request-changes").click();
+
+  await expect(page.locator("#fact-review")).toContainText("Cambios solicitados");
+  await expect(page.locator("#close-hint")).toBeHidden();
+  expect(requests.filter((entry) => entry.path.endsWith("/reviews"))[0].body).toEqual({ version: 2, outcome: "changes_requested" });
+});
+
+for (const [status, code, text] of [
+  [409, "postmortem_version_conflict", "cambió"],
+  [403, "not_authorized", "no está autorizada"],
+  [409, "postmortem_not_open", "solo lectura"],
+]) {
+  test(`revisar con ${status} ${code} no aprueba nada`, async ({ page }) => {
+    const requests = await mockApi(page, { review: () => ({ status, json: { error: { code, message: "x" } } }) });
+    await openPostmortem(page);
+    await page.locator("#approve-postmortem").click();
+
+    await expect(page.locator("#review-status")).toContainText(`HTTP ${status}`);
+    await expect(page.locator("#review-status")).toContainText(text);
+    await expect(page.locator("#fact-review")).toContainText("Pendiente de revisión");
+    await expect(page.locator("#close-hint")).toBeHidden();
+    expect(requests.filter((entry) => entry.path.endsWith("/reviews"))).toHaveLength(1);
+  });
+}
