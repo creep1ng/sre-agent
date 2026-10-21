@@ -269,3 +269,7 @@ The hierarchy is `primitive -> semantic -> component`. Theme switching changes s
 ### Scope
 
 This release intentionally does not select a frontend framework. The solution design leaves that decision open, so future React, Vue, or mobile adapters should wrap these token and behavior contracts rather than fork them.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
