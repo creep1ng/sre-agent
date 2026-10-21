@@ -1,0 +1,251 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * midnight.agent brand tokens (palette.css + styles/tokens.css of the console),
+ * exposed with the shadcn/ui variable names so every primitive inherits the brand.
+ */
+:root {
+  --radius: 0.75rem;
+
+  --background: #fafaff; /* ghost white */
+  --foreground: #1e2749; /* space indigo */
+  --card: #ffffff;
+  --card-foreground: #1e2749;
+  --popover: #ffffff;
+  --popover-foreground: #1e2749;
+  --primary: #273469; /* twilight indigo */
+  --primary-foreground: #fafaff;
+  --secondary: #f6f3ff; /* indigo 50 */
+  --secondary-foreground: #1e2749;
+  --muted: #efeff4; /* slate 100 */
+  --muted-foreground: #565a68; /* slate 600 */
+  --accent: #f6f3ff;
+  --accent-foreground: #1e2749;
+  --destructive: #a82f4a; /* red 700 */
+  --border: #dedee7; /* slate 200 */
+  --input: #c6c6d2; /* slate 300 */
+  --ring: #6655c7; /* brand focus */
+  --brand-soft: #e4d9ff; /* periwinkle */
+  --brand-line: #a797d7; /* indigo 300 */
+  /* The agent's identity color: the brand focus violet, so "who did what" reads at a glance. */
+  --agent: #6655c7;
+  --agent-solid: #6655c7;
+  --agent-solid-foreground: #ffffff;
+  --agent-soft: #f1f0fa;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1e2749;
+  --sidebar-accent: #f6f3ff;
+  --sidebar-border: #dedee7;
+
+  --info: #24588e;
+  --info-soft: #edf6ff;
+  --info-line: #d9ebff;
+  --success: #176247;
+  --success-soft: #ecf8f2;
+  --success-line: #d4efe3;
+  --warning: #805000;
+  --warning-soft: #fff7e8;
+  --warning-line: #ffe8bd;
+  --critical: #a82f4a;
+  --critical-soft: #fff0f3;
+  --critical-line: #ffdce4;
+
+  --chart-line: #273469;
+  --chart-fill: #616398;
+  --chart-grid: #dedee7;
+  --chart-threshold: #c94c65;
+  /* Ordinal ramp for phases in order (validated: monotone, ΔL >= 0.06, light end 2.6:1). */
+  --chart-step-1: #a797d7;
+  --chart-step-2: #616398;
+  --chart-step-3: #273469;
+  /* Context marks behind the one that matters (4.5:1 on the card). */
+  --chart-context: #747785;
+}
+
+.dark {
+  --background: #0a0e1d; /* indigo 950 */
+  --foreground: #fafaff;
+  --card: #171d36;
+  --card-foreground: #fafaff;
+  --popover: #171d36;
+  --popover-foreground: #fafaff;
+  --primary: #e4d9ff; /* periwinkle */
+  --primary-foreground: #1e2749;
+  --secondary: #283354;
+  --secondary-foreground: #fafaff;
+  --muted: #11162c;
+  --muted-foreground: #c6c6d2;
+  --accent: #202a49;
+  --accent-foreground: #fafaff;
+  --destructive: #ff9eb2;
+  --border: #2b3455;
+  --input: #3b466a;
+  --ring: #b4a2f2;
+  --brand-soft: #283354;
+  --brand-line: #817bb9;
+  --agent: #b4a2f2;
+  --agent-solid: #6655c7;
+  --agent-solid-foreground: #ffffff;
+  --agent-soft: #282956;
+
+  --sidebar: #11162c;
+  --sidebar-foreground: #fafaff;
+  --sidebar-accent: #202a49;
+  --sidebar-border: #2b3455;
+
+  --info: #91c9ff;
+  --info-soft: #122b46;
+  --info-line: #23547f;
+  --success: #88dcb9;
+  --success-soft: #102d25;
+  --success-line: #236149;
+  --warning: #ffd083;
+  --warning-soft: #32250f;
+  --warning-line: #71511b;
+  --critical: #ff9eb2;
+  --critical-soft: #361621;
+  --critical-line: #782c42;
+
+  --chart-line: #e4d9ff;
+  --chart-fill: #a797d7;
+  --chart-grid: #2b3455;
+  --chart-threshold: #ff9eb2;
+  --chart-step-1: #46507e;
+  --chart-step-2: #817bb9;
+  --chart-step-3: #c8b8f0;
+  --chart-context: #999ba9;
+}
+
+@theme inline {
+  --font-sans: "Spline Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Offside", "Trebuchet MS", sans-serif;
+  --font-mono: "Monaspace Neon", "SFMono-Regular", Consolas, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-line: var(--brand-line);
+  --color-agent: var(--agent);
+  --color-agent-solid: var(--agent-solid);
+  --color-agent-solid-foreground: var(--agent-solid-foreground);
+  --color-agent-soft: var(--agent-soft);
+  --color-chart-step-1: var(--chart-step-1);
+  --color-chart-step-2: var(--chart-step-2);
+  --color-chart-step-3: var(--chart-step-3);
+  --color-chart-context: var(--chart-context);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-line: var(--info-line);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-line: var(--success-line);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-line: var(--warning-line);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+  --color-critical-line: var(--critical-line);
+
+  --animate-pulse-ring: pulse-ring 1.8s cubic-bezier(0.2, 0, 0, 1) infinite;
+  --animate-shimmer: shimmer 2.2s linear infinite;
+
+  @keyframes pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 45%, transparent);
+    }
+    80%,
+    100% {
+      box-shadow: 0 0 0 7px transparent;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    /* Spline Sans sets tight spaces at semibold; a touch more keeps labels readable. */
+    word-spacing: 0.04em;
+  }
+  ::selection {
+    background: var(--brand-soft);
+    color: var(--foreground);
+  }
+}
+
+@layer utilities {
+  .text-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--muted-foreground) 0%,
+      var(--muted-foreground) 40%,
+      var(--foreground) 50%,
+      var(--muted-foreground) 60%,
+      var(--muted-foreground) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: var(--animate-shimmer);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
