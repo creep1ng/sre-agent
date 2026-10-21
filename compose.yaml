@@ -99,6 +99,21 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      incident-console:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [runtime]
+
+  # The new incident console (web/incident-console), served by the web proxy at /app.
+  incident-console:
+    build:
+      context: web/incident-console
+      target: serve
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 2s
@@ -219,6 +234,28 @@ services:
       ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime]
+
+  # Browser journeys of the new console through the web proxy (/app). Screenshots, videos and
+  # the HTML report land in web/incident-console/e2e/artifacts, owned by HOST_UID:HOST_GID.
+  incident-console-e2e:
+    profiles: ["e2e"]
+    build:
+      context: web/incident-console
+      target: e2e
+    environment:
+      BASE_URL: http://web
+    command:
+      - sh
+      - -c
+      - npx playwright test; status=$$?; chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} e2e/artifacts; exit $$status
+    volumes:
+      - ./web/incident-console/e2e/artifacts:/e2e/e2e/artifacts
+    ipc: host
     depends_on:
       web:
         condition: service_healthy

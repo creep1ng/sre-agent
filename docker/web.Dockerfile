@@ -2,6 +2,7 @@
 FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
 
 ENV API_UPSTREAM=api:8000
+ENV INCIDENT_CONSOLE_UPSTREAM=incident-console:80
 
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY index.html design-system.html palette.css /usr/share/nginx/html/
