@@ -8,6 +8,7 @@ its own models, so the investigator never imports gateway code.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -39,6 +40,9 @@ from sre_agent.investigator.ports import (
 URL = "INVESTIGATOR_GATEWAY_URL"
 KEY = "INVESTIGATOR_GATEWAY_API_KEY"
 ALIAS = "INVESTIGATOR_MODEL_ALIAS"
+# The OTel logs index keeps the service under resource.service.name (#716); a bare
+# service.name matches no document. An unquoted hyphenated value is split by the parser.
+_SERVICE_FIELD = re.compile(r'(?<![\w.])(?:resource\.)?service\.name:("[^"]*"|[^\s()"]+)')
 
 
 class GatewaySettings(BaseModel):
@@ -335,6 +339,9 @@ class MCPGatewayClient:
         )
 
     async def collect(self, tool: str, arguments: Mapping[str, JsonValue]) -> ToolResult:
+        query = arguments.get("query")
+        if tool == "query_elasticsearch" and isinstance(query, str):
+            arguments = {**arguments, "query": _SERVICE_FIELD.sub(_service_term, query)}
         response = await self._send("POST", f"/v1/mcp/tools/{tool}", json=dict(arguments))
         if response.status_code != 200:
             self._raise_error(response)
@@ -398,6 +405,13 @@ class MCPGatewayClient:
             request_id=_response_request_id(response),
             code=_response_error_code(response),
         )
+
+
+def _service_term(match: re.Match[str]) -> str:
+    value = match.group(1)
+    if "-" in value and not value.startswith('"'):
+        value = f'"{value}"'
+    return f"resource.service.name:{value}"
 
 
 def _response_error_code(response: httpx.Response) -> str | None:

@@ -130,8 +130,6 @@ Backend gaps:
 - Expose `objective`/ordinal in the run summary (the UI numbers investigations and proposals).
 - Ask the investigator for Spanish output (`src/sre_agent/investigator/prompt.py`) and for a
   per-evidence verdict.
-- Fix the logs evidence field (`service.name` vs `resource.service.name`) so findings are not
-  empty.
 - Return a triage status per alert in `GET /v1/alerts` (#693), a short title (#694) and the
   dispatch failure reason (#692).
 - "Ya la apliqué" is new: today the workflow goes from approval straight to `verifying`. It can

@@ -9,10 +9,14 @@ const existingTests = ["api-seam.spec.js", "production-proxy.spec.js", "principa
 const postmortemJourney = process.env.POSTMORTEM_INCIDENT ? ["postmortem-journey.spec.js"] : [];
 // The output-language journey runs a paid investigation, so it runs only when asked (#717).
 const languageJourney = process.env.EXPECTED_OUTPUT_LANGUAGE ? ["investigator-language-real.spec.js"] : [];
+// A live investigation needs the OTel Demo failure and the paid model (issue #716).
+const liveInvestigation = process.env.LIVE_INVESTIGATION === "1" ? ["war-room-logs-evidence-real.spec.js"] : [];
 
 export default defineConfig({
   testDir: "tests/browser",
-  testMatch: triageReview ? triageTests : [...existingTests, ...postmortemJourney, ...languageJourney],
+  testMatch: triageReview
+    ? triageTests
+    : [...existingTests, ...postmortemJourney, ...languageJourney, ...liveInvestigation],
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results/production-browser",
   reporter: [["line"]],
   use: {

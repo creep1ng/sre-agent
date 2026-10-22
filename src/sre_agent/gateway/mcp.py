@@ -190,7 +190,17 @@ class ElasticsearchQuery(BaseModel):
 
     datasource_uid: str = Field(pattern=r"^webstore-logs$")
     index: str = Field(pattern=r"^otel-logs-\*$")
-    query: str = Field(min_length=1, max_length=4096)
+    query: str = Field(
+        min_length=1,
+        max_length=4096,
+        description=(
+            "Lucene query over OpenTelemetry log records. The service is in"
+            ' resource.service.name; quote it: resource.service.name:"checkout",'
+            ' resource.service.name:"frontend-proxy". The message is in body and the level in'
+            " severity.text, which can stay INFO while requests fail: query the service alone"
+            " first and narrow it only after seeing documents."
+        ),
+    )
     start_time: str = Field(pattern=r"^now-[1-9][0-9]*[smhd]$")
     end_time: str = Field(pattern=r"^now$")
     limit: int = Field(ge=1, le=100)
