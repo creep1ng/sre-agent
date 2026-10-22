@@ -2,11 +2,14 @@
 
 Failure modes: anonymous caller; no alert.read; no mcp.invoke on query_prometheus; MCP
 unavailable; empty result; malformed sample; id changing within an episode or reused by the
-next; unaudited evaluation; an alert triage cannot declare. Real PostgreSQL, seeds, grants and
-audit; only the Grafana MCP upstream is scripted.
+next; unaudited evaluation; an alert triage cannot declare; a triage decision missing from the
+list, reported without its incident, or carried over to the next episode. Real PostgreSQL,
+seeds, grants and audit; only the Grafana MCP upstream is scripted. With LIVE_ALERTS_TRANSCRIPT
+set, the GET /v1/alerts bodies of the triage journey are written there as the review artifact.
 """
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -147,8 +150,9 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
         first = alerts()
         assert first.status_code == 200, first.text
         [alert] = first.json()["alerts"]
-        assert set(alert) == ALERT_KEYS | {"origin"}
+        assert set(alert) == ALERT_KEYS | {"origin", "triage_status", "incident_id"}
         assert (alert["service"], alert["severity"], alert["status"]) == ("checkout", "sev1", "new")
+        assert (alert["triage_status"], alert["incident_id"]) == ("new", None)
         assert first.json()["rules"][0]["state"] == "firing"
         [again] = alerts().json()["alerts"]
         assert {k: again[k] for k in ("alert_id", "observed_at")} == {
@@ -164,23 +168,38 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
         mcp.next = ratio("1")
 
         # Triage accepts the live id and the operator-confirmed alert facts.
+        def command(alert_id: str, operation: str, **body: Any) -> Any:
+            return client.post(
+                f"/v1/alerts/{alert_id}/triage/commands",
+                headers={
+                    "Authorization": "Bearer " + KEYS["DEMO_HUMAN_API_KEY"],
+                    "Idempotency-Key": f"live-alert-{operation}-" + os.urandom(8).hex(),
+                },
+                json={"operation": operation, "expected_version": 1, **body},
+            )
+
+        transcript: list[dict[str, Any]] = []
+
+        def listed(alert_id: str, step: str) -> tuple[str, str | None]:
+            body = alerts().json()
+            transcript.append({"step": step, "response": body})
+            [item] = body["alerts"]
+            assert item["alert_id"] == alert_id
+            return item["triage_status"], item["incident_id"]
+
+        assert listed(alert["alert_id"], "firing, untriaged") == ("new", None)
         context = {key: alert[key] for key in ("service", "summary", "observed_at", "source")}
-        declared = client.post(
-            f"/v1/alerts/{alert['alert_id']}/triage/commands",
-            headers={
-                "Authorization": "Bearer " + KEYS["DEMO_HUMAN_API_KEY"],
-                "Idempotency-Key": "live-alert-declare-" + os.urandom(8).hex(),
-            },
-            json={
-                "operation": "triage_declare",
-                "expected_version": 1,
-                "reason": "Checkout cannot charge payments.",
-                "severity": "sev1",
-                "impact": "Customers cannot pay.",
-                "alert_context": {**context, "severity": alert["severity"]},
-            },
+        declared = command(
+            alert["alert_id"],
+            "triage_declare",
+            reason="Checkout cannot charge payments.",
+            severity="sev1",
+            impact="Customers cannot pay.",
+            alert_context={**context, "severity": alert["severity"]},
         )
         assert declared.status_code == 201, declared.text
+        incident_id = declared.json()["incident_id"]
+        assert listed(alert["alert_id"], "after triage_declare") == ("declared", incident_id)
 
         # Resolution ends the episode; the next one gets a new id.
         mcp.next = ratio("0")
@@ -188,6 +207,17 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
         mcp.next = ratio("1")
         [next_episode] = alerts().json()["alerts"]
         assert next_episode["alert_id"] != alert["alert_id"]
+
+        # The next episode starts untriaged; opening and dismissing it show in the list.
+        assert listed(next_episode["alert_id"], "next episode") == ("new", None)
+        opened = command(next_episode["alert_id"], "open_triage")
+        assert opened.status_code == 200, opened.text
+        assert listed(next_episode["alert_id"], "after open_triage") == ("triaging", None)
+        dismissed = command(next_episode["alert_id"], "triage_dismiss", reason="Load test noise.")
+        assert dismissed.status_code == 200, dismissed.text
+        assert listed(next_episode["alert_id"], "after triage_dismiss") == ("dismissed", None)
+        if path := os.environ.get("LIVE_ALERTS_TRANSCRIPT"):
+            Path(path).write_text(json.dumps(transcript, indent=2) + "\n")
 
         # Without mcp.invoke on query_prometheus the governed path denies.
         with psycopg.connect(URL, autocommit=True) as conn:

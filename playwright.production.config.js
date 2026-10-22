@@ -11,12 +11,14 @@ const postmortemJourney = process.env.POSTMORTEM_INCIDENT ? ["postmortem-journey
 const languageJourney = process.env.EXPECTED_OUTPUT_LANGUAGE ? ["investigator-language-real.spec.js"] : [];
 // A live investigation needs the OTel Demo failure and the paid model (issue #716).
 const liveInvestigation = process.env.LIVE_INVESTIGATION === "1" ? ["war-room-logs-evidence-real.spec.js"] : [];
+// A live alert's triage status needs the OTel Demo failure firing the alert rule (issue #701).
+const liveAlertsTriage = process.env.LIVE_ALERTS_TRIAGE ? ["alerts-triage-status-real.spec.js"] : [];
 
 export default defineConfig({
   testDir: "tests/browser",
   testMatch: triageReview
     ? triageTests
-    : [...existingTests, ...postmortemJourney, ...languageJourney, ...liveInvestigation],
+    : [...existingTests, ...postmortemJourney, ...languageJourney, ...liveInvestigation, ...liveAlertsTriage],
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results/production-browser",
   reporter: [["line"]],
   use: {

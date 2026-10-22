@@ -170,7 +170,7 @@ def test_workflow_and_schema_carry_explicit_versions(workflow: dict, state_schem
     """Criterion: files carry explicit id/version so a run is reproducible."""
     assert workflow["workflow_id"] == "incident-response"
     assert workflow["workflow_version"] == "1.0.0"
-    assert state_schema["$id"].endswith(":1.0.0")
+    assert state_schema["$id"].endswith(":1.1.0")
     assert state_schema["properties"]["workflow_version"]["const"] == "1.0.0"
 
 

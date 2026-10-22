@@ -1,0 +1,48 @@
+[
+  {
+    "step": "waiting for an untriaged firing alert",
+    "at": "2026-10-22T17:41:28.139Z",
+    "alerts": [
+      {
+        "alert_id": "alt-checkout-66ae2f13ad43",
+        "service": "checkout",
+        "severity": "sev1",
+        "status": "new",
+        "observed_at": "2026-10-22T17:41:27Z",
+        "summary": "checkout payment calls failing: 50% errors over the last 2m (threshold 5%). Evidence: Prometheus datasource webstore-metrics, metric traces_span_metrics_calls_total with service_name=\"checkout\", span_name=\"oteldemo.PaymentService/Charge\" and status_code=\"STATUS_CODE_ERROR\" for the errors; logs in datasource webstore-logs, index otel-logs-*, field resource.service.name:\"checkout\".",
+        "source": "opentelemetry-demo",
+        "origin": {
+          "signal": "oteldemo.PaymentService/Charge",
+          "condition": "checkout-payment-error-rate: error ratio 0.50 > 0.05",
+          "detector": "sre-agent-alert-rules",
+          "observed_at": "2026-10-22T17:41:27Z"
+        },
+        "triage_status": "new",
+        "incident_id": null
+      }
+    ]
+  },
+  {
+    "step": "after triage_dismiss",
+    "at": "2026-10-22T17:41:30.278Z",
+    "alerts": [
+      {
+        "alert_id": "alt-checkout-66ae2f13ad43",
+        "service": "checkout",
+        "severity": "sev1",
+        "status": "new",
+        "observed_at": "2026-10-22T17:41:27Z",
+        "summary": "checkout payment calls failing: 50% errors over the last 2m (threshold 5%). Evidence: Prometheus datasource webstore-metrics, metric traces_span_metrics_calls_total with service_name=\"checkout\", span_name=\"oteldemo.PaymentService/Charge\" and status_code=\"STATUS_CODE_ERROR\" for the errors; logs in datasource webstore-logs, index otel-logs-*, field resource.service.name:\"checkout\".",
+        "source": "opentelemetry-demo",
+        "origin": {
+          "signal": "oteldemo.PaymentService/Charge",
+          "condition": "checkout-payment-error-rate: error ratio 0.50 > 0.05",
+          "detector": "sre-agent-alert-rules",
+          "observed_at": "2026-10-22T17:41:30Z"
+        },
+        "triage_status": "dismissed",
+        "incident_id": null
+      }
+    ]
+  }
+]
