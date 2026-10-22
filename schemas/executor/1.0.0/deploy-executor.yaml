@@ -1,8 +1,7 @@
-# Contract of the deploy-executor (HT-EXEC-SERVICE, issue #720): the only
-# process that touches the Docker Engine, through docker-socket-proxy with the
-# `containers` and `images` families enabled and nothing else. It executes
-# named operations with a strict input schema; no endpoint takes a command, a
-# script or an image name. The failure modes were written before the runtime.
+# Contract of the deploy-executor (HT-EXEC-SERVICE, issue #720): the only process
+# that touches the Docker Engine, through docker-socket-proxy with the `containers`
+# and `images` families enabled and nothing else. It executes named operations with
+# a strict input schema; no endpoint takes a command, a script or an image name.
 contract_version: "1.0.0"
 protocol: "http"
 

@@ -1,9 +1,0 @@
-{
-  "contract_version": "1.0.0",
-  "services": [
-    { "service": "probe", "image_repository": "demo/probe", "operations": [
-      { "operation": "deployment.rollback", "parameters": ["to_tag"], "risk": { "reversible": true, "touches_data": false, "blast_radius": "service", "downtime": "seconds" } },
-      { "operation": "deployment.restart", "parameters": [], "risk": { "reversible": false, "touches_data": false, "blast_radius": "service", "downtime": "seconds" } } ] },
-    { "service": "web", "image_repository": null, "operations": [
-      { "operation": "deployment.restart", "parameters": [], "risk": { "reversible": false, "touches_data": false, "blast_radius": "service", "downtime": "seconds" } } ] } ]
-}

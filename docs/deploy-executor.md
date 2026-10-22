@@ -116,7 +116,6 @@ Takeaways this design applies: typed named actions, not scripts (Rootly's Privat
 PagerDuty's script actions); two enforcement layers, control plane and local allow-list (Datadog's
 policies plus the Agent's `actions_allowlist`; here the gateway's grant plus the proxy); write
 actions are an explicit grant, read is the default (Datadog); autonomy decided by static,
-reviewable policy, never by the model's confidence (no vendor scores risk at execution time; AWS
-SSM `aws:approve` and Ansible approval nodes are typed steps with approvers and timeouts); a budget
-degrades to approval and never queues (incident.io, Rootly cooldowns); and attribution follows the
-human who approved, not the agent (incident.io).
+reviewable policy, never by the model's confidence (no vendor scores risk at execution time); a
+budget degrades to approval and never queues (incident.io, Rootly cooldowns); and attribution
+follows the human who approved, not the agent (incident.io).
