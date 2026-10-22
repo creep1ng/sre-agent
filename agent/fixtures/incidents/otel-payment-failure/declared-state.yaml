@@ -24,6 +24,8 @@ alert:
   summary: >-
     Elevated error rate on paymentservice calls originating from checkoutservice.
   source: grafana-alerting
+  triage_status: declared
+  incident_id: inc-otel-payment-failure
   origin:
     signal: traces_span_metrics_calls_total
     condition: error rate above threshold over a five minute window

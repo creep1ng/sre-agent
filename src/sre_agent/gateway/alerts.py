@@ -8,7 +8,8 @@ new after recovery. A window without samples keeps an open episode listed with i
 value (no flapping); only an ``ok`` evaluation ends it. Episodes are in memory; an API restart
 starts a new one. The summary also says where the rule's evidence lives (metric, labels, log
 index and field): it is the only alert text an investigation receives, and without it the
-model guessed field names, found nothing and the run ended without a mitigation.
+model guessed field names, found nothing and the run ended without a mitigation. Each listed
+alert carries its triage decision (incident-state 1.1.0) read from the triage store.
 """
 
 import hashlib
@@ -25,9 +26,17 @@ from fastapi.responses import JSONResponse
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.mcp import MCPGatewayService
 from sre_agent.incident.signals import SOURCE
+from sre_agent.triage.store import TriageRepository
 
 DETECTOR = "sre-agent-alert-rules"
 WORKFLOW = ("incident_workflow", "incident-response")
+# Triage store status -> alert triage_status; an alert without a stored decision is `new`.
+TRIAGE_STATUS = {
+    "open": "triaging",
+    "declared": "declared",
+    "linked": "linked",
+    "dismissed": "dismissed",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,10 +172,24 @@ class LiveAlertsService:
                 started, last = self._episodes[rule.rule_id]
                 alerts.append(self._alert(rule, last, started, evaluated_at, stale=value is None))
             rules.append({"rule_id": rule.rule_id, "state": state, "value": value})
+        try:
+            await self._attach_triage(alerts)
+        except Exception:
+            return self._error(request_id, 503, "storage_unavailable", True)
         return JSONResponse(
             {"evaluated_at": _iso(evaluated_at), "rules": rules, "alerts": alerts},
             headers={"Cache-Control": "no-store"},
         )
+
+    async def _attach_triage(self, alerts: list[dict[str, Any]]) -> None:
+        if not alerts:
+            return
+        async with self._sessions() as session:
+            repository = TriageRepository(session)
+            for alert in alerts:
+                decision = await repository.get(alert["alert_id"]) or {}
+                alert["triage_status"] = TRIAGE_STATUS.get(decision.get("status"), "new")
+                alert["incident_id"] = decision.get("incident_id")
 
     @staticmethod
     def _alert(

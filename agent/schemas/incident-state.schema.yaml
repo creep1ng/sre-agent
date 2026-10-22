@@ -5,9 +5,13 @@
 #
 # First-class artifacts are exactly four: alert, hypothesis, mitigation_strategy,
 # postmortem. Anomaly data may only appear nested inside alert.origin.
+#
+# 1.1.0 (issue #701): additive minor. `$defs/alert` gains optional `triage_status`
+# and `incident_id` so GET /v1/alerts can report each alert's triage decision.
+# Every 1.0.0 document stays valid; the workflow is still incident-response 1.0.0.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:incident-state:1.0.0
+$id: urn:sre-agent:schema:incident-state:1.1.0
 title: IncidentState
 type: object
 additionalProperties: false
@@ -24,8 +28,8 @@ properties:
   workflow_version:
     const: 1.0.0
     description: >-
-      Exact workflow version executed. Pinned with `const` because this schema is
-      itself incident-state 1.0.0, and a permissive pattern would accept a snapshot
+      Exact workflow version executed. Pinned with `const` because this schema
+      describes workflow 1.0.0 only, and a permissive pattern would accept a snapshot
       produced by a different workflow version, breaking the reproducibility
       guarantee. A new workflow version requires a new schema version.
   incident_id:
@@ -201,6 +205,16 @@ $defs:
       observed_at: { type: string, format: date-time }
       summary: { type: string, minLength: 1, maxLength: 2000 }
       source: { type: string, minLength: 1, maxLength: 200 }
+      triage_status:
+        description: Triage decision recorded for this alert (1.1.0). `new` means no
+          triage yet and `triaging` an opened, undecided triage.
+        enum: [new, triaging, declared, linked, dismissed]
+      incident_id:
+        description: Incident the alert declared (`declared`) or joined (`linked`);
+          null otherwise (1.1.0).
+        type: [string, "null"]
+        pattern: '^[a-z][a-z0-9_-]{2,63}$'
+        default: null
       origin:
         description: Anomaly information, when it exists, lives here as metadata.
           There is no standalone Anomaly entity in the MVP.
