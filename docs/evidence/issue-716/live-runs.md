@@ -22,7 +22,7 @@ Every `checkout` and `payment` log of the failure is `INFO`, so a level filter f
 
 Columns: evidence, tool, query, documents, services in the documents, cited by the hypothesis.
 
-`run_db138d9d35867705` (screenshot `war-room-logs-evidence.png`):
+`run_db138d9d35867705` (screenshot `war-room-logs-evidence-local.png`):
 
 | Evidence | Tool | Query | Docs | Services | Cited |
 | --- | --- | --- | --- | --- | --- |
@@ -56,6 +56,23 @@ the governed MCP answering log queries in 0.2-2 s. The logs queries every run ma
 | run_ad87ccfaaab5714b | `resource.service.name:"payment"` | 50 | payment |
 | run_7f6d7dde06f3e522 | `resource.service.name:"checkout"` | 100 | checkout |
 
-None reached a hypothesis: the model call that follows the evidence produced 10-17 K output tokens
-and took 47-253 s, past the investigator's 45 s gateway timeout, so each run ended
-`investigation_upstream_unavailable` (stage `gateway_transport`).
+None reached a hypothesis with `z-ai/glm-5.3-flash`: the model call that follows the evidence
+produced 10-17 K output tokens and took 47-253 s, past the investigator's 45 s gateway timeout, so
+each run ended `investigation_upstream_unavailable` (stage `gateway_transport`).
+
+### Passing browser E2E
+
+With the `triage-agent` route reconciled to `openai/gpt-4.1-mini` (private configuration, no code
+change), `war-room-logs-evidence-real.spec.js` passed in 13.6 s: `playwright-report-aws.json`,
+screenshot `war-room-logs-evidence-aws.png`, incident `inc-7266e8cca063f29f7cdbe7cc406e2197`,
+run `run_bb6e4eb5ec0a6cbf`.
+
+| Evidence | Tool | Query | Docs | Services |
+| --- | --- | --- | --- | --- |
+| ev_96d3a7e9226305d6 | query_elasticsearch | `resource.service.name:"checkout"` | 50 | checkout |
+| ev_e265c88892397662 | query_prometheus | `sum(rate(checkout_payment_failures_total[5m]))` | - | - |
+| ev_674b663a93ee31ca | query_elasticsearch | `resource.service.name:"checkout" AND severity.text:"error"` | 0 | - |
+
+The first hypothesis (`hyp_7b73f5826319a1ae`) cites the 50 checkout documents. The current one
+(`hyp_dbe1ea24c95c3ee1`) received them in its input, as the spec asserts, but cites the metric and
+the empty error query instead.

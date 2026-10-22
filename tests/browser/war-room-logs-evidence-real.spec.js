@@ -46,30 +46,32 @@ test("the logs evidence brings checkout or payment documents into the hypothesis
   await connectConsole(page, DEMO_KEY);
   await page.locator("#run-start").click();
 
-  // The war room refreshes itself while the agent investigates.
-  await expect(page.locator("#hypothesis-block")).toBeVisible({ timeout: 540_000 });
+  // The war room refreshes itself while the agent investigates. Whether the run then proposes a
+  // mitigation or asks for a human is the model's call; the dispatch ending is not.
+  await expect(page.locator("#timeline-list")).toContainText("Investigation dispatch ended", {
+    timeout: 540_000,
+  });
+  await expect(page.locator("#hypothesis-block")).toBeVisible();
   const runId = await page.locator("#run-select").inputValue();
-  const logs = page.locator("#evidence-list li", { hasText: "query_elasticsearch" }).first();
-  await expect(logs.locator(".reasoning__query")).toContainText("resource.service.name");
-  await expect(logs.locator(".reasoning__result")).toHaveText(/^[1-9]\d* documentos?/);
+  const logs = page.locator("#evidence-list li", { hasText: /[1-9]\d* documentos?/ });
+  await expect(logs.filter({ hasText: "query_elasticsearch" }).first()).toContainText("resource.service.name");
   await page.screenshot({ path: `${ARTIFACTS}/war-room-logs-evidence.png`, fullPage: true });
 
-  // The turns are stored when the dispatch ends, after the hypothesis is shown.
+  // The turns are stored when the dispatch ends, after the war room shows its result.
   let context;
-  let proposal;
   await expect
     .poll(async () => {
       const url = `${BASE}/api/v1/incidents/${incident}/runs/${runId}/context`;
       context = await (await api.get(url)).json();
-      proposal = context.turns.find((turn) => turn.model_output.includes('"propose_hypothesis"'));
-      return Boolean(proposal);
+      return context.turns.some((turn) => turn.model_output.includes('"propose_hypothesis"'));
     }, { timeout: 120_000 })
     .toBe(true);
   const evidence = context.reasoning.evidence.filter((item) => item.tool === "query_elasticsearch");
   const found = evidence.find((item) => /"service\.name":"(checkout|payment)"/.test(item.summary));
   expect(found, "a log document of checkout or payment").toBeTruthy();
   expect(found.query).not.toMatch(/(^|[^.\w])service\.name:/);
-  expect(proposal.assembled_input).toContain(found.evidence_id);
+  const proposals = context.turns.filter((turn) => turn.model_output.includes('"propose_hypothesis"'));
+  expect(proposals.at(-1).assembled_input).toContain(found.evidence_id);
   const cited = context.reasoning.hypotheses.some((h) => h.supporting_evidence.includes(found.evidence_id));
   test.info().annotations.push(
     { type: "incident", description: incident },
