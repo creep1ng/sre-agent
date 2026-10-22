@@ -63,16 +63,21 @@ each run ended `investigation_upstream_unavailable` (stage `gateway_transport`).
 ### Passing browser E2E
 
 With the `triage-agent` route reconciled to `openai/gpt-4.1-mini` (private configuration, no code
-change), `war-room-logs-evidence-real.spec.js` passed in 13.6 s: `playwright-report-aws.json`,
-screenshot `war-room-logs-evidence-aws.png`, incident `inc-7266e8cca063f29f7cdbe7cc406e2197`,
-run `run_bb6e4eb5ec0a6cbf`.
+change), `war-room-logs-evidence-real.spec.js` passed at tested SHA
+`1855430870da5620dda785eee08debda88d19c33`: `playwright-report-aws.json`, screenshot
+`war-room-logs-evidence-aws.png`, incident `inc-d88d8c0bae90fff12661007d503f7b96`, run
+`run_ebdd1578727fa0d1`.
 
 | Evidence | Tool | Query | Docs | Services |
 | --- | --- | --- | --- | --- |
-| ev_96d3a7e9226305d6 | query_elasticsearch | `resource.service.name:"checkout"` | 50 | checkout |
-| ev_e265c88892397662 | query_prometheus | `sum(rate(checkout_payment_failures_total[5m]))` | - | - |
-| ev_674b663a93ee31ca | query_elasticsearch | `resource.service.name:"checkout" AND severity.text:"error"` | 0 | - |
+| ev_2a6a46565ae6600e | query_elasticsearch | `resource.service.name:"checkout"` | 50 | checkout |
+| ev_2cd80e8346dfcfa9 | query_prometheus | `rate(http_request_duration_seconds_sum{...status_code=~"5.."}[5m]) / ...` | - | - |
+| ev_c9b0eb7726ac233b | query_elasticsearch | `resource.service.name:"checkout" AND severity.text:"ERROR"` | 0 | - |
 
-The first hypothesis (`hyp_7b73f5826319a1ae`) cites the 50 checkout documents. The current one
-(`hyp_dbe1ea24c95c3ee1`) received them in its input, as the spec asserts, but cites the metric and
-the empty error query instead.
+The first hypothesis (`hyp_b49b24386bf63b5c`) cites the 50 checkout documents. The current one
+(`hyp_96c9fe074f1d2de0`) received them in its input, as the spec asserts, but cites the metric.
+
+Other runs at the same SHA: two failed because the model narrowed every log query with
+`severity.text`/`body` filters (0 documents each), despite the schema's advice to query the service
+alone first; one ended `needs_human` after citing 20 checkout documents, which the spec's earlier
+"Mitigando" wait rejected before it was changed to wait for the dispatch end.
