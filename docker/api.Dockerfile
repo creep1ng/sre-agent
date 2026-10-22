@@ -58,6 +58,10 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY src ./src
 COPY agent/workflows ./agent/workflows
+# The deploy-executor runs from this image too (compose.yaml overrides the command) and owns
+# its idempotency journal volume as the unprivileged runtime user.
+COPY agent/executor ./agent/executor
+RUN mkdir -p /var/lib/deploy-executor && chown 65532:65532 /var/lib/deploy-executor
 
 USER 65532:65532
 EXPOSE 8000

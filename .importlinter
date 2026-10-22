@@ -59,3 +59,19 @@ forbidden_modules =
     fastapi
     sqlalchemy
     psycopg
+
+[importlinter:contract:executor-is-isolated]
+name = The deploy-executor reaches only the Docker Engine API and imports no other plane
+type = forbidden
+source_modules =
+    sre_agent.executor
+forbidden_modules =
+    sre_agent.persistence
+    sre_agent.gateway
+    sre_agent.control
+    sre_agent.application
+    sre_agent.incident
+    sre_agent.governance
+    sre_agent.investigator
+    sqlalchemy
+    psycopg

@@ -10,6 +10,8 @@ RUN npm ci --ignore-scripts
 # source or starts an API process; it consumes the candidate's Compose images.
 COPY playwright.production.config.js ./
 COPY tests/browser ./tests/browser
+# The executor journey fires the contract's negative fixtures at the real executor (#720).
+COPY schemas/executor ./schemas/executor
 RUN chown -R pwuser:pwuser /e2e
 
 USER pwuser
