@@ -115,6 +115,15 @@ exactly that chunk. An empty search is an answer; 401 and 403 end the run as `de
 network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
 body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
 
+## Output language
+
+`INVESTIGATOR_OUTPUT_LANGUAGE` (`es` by default, or `en`) sets the language of the model's prose:
+hypothesis statements, mitigation descriptions, steps and verification checks, and the
+request-human and conclude texts (issue #717). JSON keys, action names, tool names, ids and
+`low|medium|high` stay in English. The web proxy serves the same value at `/workspace.json`, and
+the console's agent postmortem draft uses it. Change the variable and recreate `api` and `web`;
+nothing else changes.
+
 ## Deterministic demonstration
 
 `scripts/investigator_demo.py` runs six scenarios against a local demo gateway. The stub

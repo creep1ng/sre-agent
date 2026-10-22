@@ -32,6 +32,7 @@ from sre_agent.investigator.contract import (
     InvestigationRequest,
     InvestigationResult,
     Limits,
+    OutputLanguage,
     ProposeHypothesis,
     ProposeMitigation,
     RequestHuman,
@@ -54,8 +55,10 @@ class InvestigationRunDispatcher:
         gateway_settings: GatewaySettings | None,
         *,
         http: Any = None,
+        language: OutputLanguage = "es",
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
+        self.language = language
         self.gateway_settings = gateway_settings
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
@@ -198,6 +201,7 @@ class InvestigationRunDispatcher:
                     self.gateway,
                     self.evidence,
                     limits,
+                    language=self.language,
                 )
             except Exception:
                 await self._finish(

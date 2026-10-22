@@ -23,6 +23,7 @@ from sre_agent.investigator.contract import (
     InvestigationResult,
     Limits,
     Outcome,
+    OutputLanguage,
     PinnedSkill,
     ProposeMitigation,
     RequestHuman,
@@ -150,6 +151,7 @@ async def investigate(
     clock: Callable[[], datetime] = _now,
     skills: SkillSource | None = None,
     bok: BoKSource | None = None,
+    language: OutputLanguage = "es",
 ) -> InvestigationResult:
     limits = limits or Limits()
     turns: list[Turn] = []
@@ -223,7 +225,9 @@ async def investigate(
 
     while len(turns) < limits.max_steps:
         turn_id = new_id("turn")
-        prompt = assemble(request, evidence, turns, limits.max_steps - len(turns), feedback, loaded)
+        prompt = assemble(
+            request, evidence, turns, limits.max_steps - len(turns), feedback, loaded, language
+        )
         if len(prompt) > MAX_INPUT:
             return finish("needs_human", detail="assembled input exceeds the gateway limit")
         try:
