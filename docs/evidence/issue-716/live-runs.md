@@ -42,3 +42,20 @@ Columns: evidence, tool, query, documents, services in the documents, cited by t
 
 Four other runs on the same host ended `investigation_upstream_unavailable`: a governed MCP call
 took longer than the investigator's 10 s tool timeout (2-20 s measured under memory pressure).
+
+## AWS OTel Demo (2026-10-22)
+
+Same incident and spec against the AWS producer (`t3a.xlarge`, `paymentUnreachable` on), with
+the governed MCP answering log queries in 0.2-2 s. The logs queries every run made:
+
+| Run | Query | Docs | Services |
+| --- | --- | --- | --- |
+| run_6a07d594b4ab0b5e | `resource.service.name:"checkout"` | 86 | checkout |
+| run_6a07d594b4ab0b5e | `resource.service.name:"payment"` | 74 | payment |
+| run_ad87ccfaaab5714b | `resource.service.name:"checkout"` | 50 | checkout |
+| run_ad87ccfaaab5714b | `resource.service.name:"payment"` | 50 | payment |
+| run_7f6d7dde06f3e522 | `resource.service.name:"checkout"` | 100 | checkout |
+
+None reached a hypothesis: the model call that follows the evidence produced 10-17 K output tokens
+and took 47-253 s, past the investigator's 45 s gateway timeout, so each run ended
+`investigation_upstream_unavailable` (stage `gateway_transport`).
