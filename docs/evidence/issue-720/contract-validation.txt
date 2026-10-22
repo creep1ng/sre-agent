@@ -1,0 +1,13 @@
+contract 1.0.0 protocol=http server=deploy-executor
+  deployment.rollback: input example valid against json-schema/deployment-rollback-input.schema.json; result example valid against json-schema/execution-result.schema.json; risk={'reversible': True, 'touches_data': False, 'blast_radius': 'service', 'downtime': 'seconds'}
+  deployment.restart: input example valid against json-schema/deployment-restart-input.schema.json; result example valid against json-schema/execution-result.schema.json; risk={'reversible': False, 'touches_data': False, 'blast_radius': 'service', 'downtime': 'seconds'}
+  fixture extra-field                      -> 422 contract_validation_failed   body valid against the input schema: False
+  fixture key-reused-with-other-payload    -> 409 idempotency_conflict         body valid against the input schema: True
+  fixture missing-idempotency-key          -> 400 invalid_idempotency_key      body valid against the input schema: True
+  fixture missing-to-tag                   -> 422 contract_validation_failed   body valid against the input schema: False
+  fixture operation-not-enrolled           -> 404 operation_not_enrolled       body valid against the input schema: True
+  fixture tag-with-repository              -> 422 contract_validation_failed   body valid against the input schema: False
+  fixture unknown-service                  -> 404 service_not_enrolled         body valid against the input schema: True
+  fixture unknown-tag                      -> 422 image_tag_unknown            body valid against the input schema: True
+8 negative fixtures, 12 failure scenarios, 13 public errors
+catalog: [('probe', ['deployment.rollback', 'deployment.restart']), ('web', ['deployment.restart'])]
