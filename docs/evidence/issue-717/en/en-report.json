@@ -1,0 +1,47 @@
+{
+  "expected": "en",
+  "incident": "inc-57cdeb147bd06eaf0c24d8f55848418e",
+  "run": "run_35b49c4a7f2beaae",
+  "confidence": "low",
+  "risk": "low",
+  "texts": {
+    "hypothesis": "Checkout payment charge failures are likely caused by the payment service erroring or timing out at the charge step, but the queried Elasticsearch logs show no matching checkout or payment error records, suggesting either the failure is not logged in the searched index or the telemetry pipeline is incomplete for this incident.",
+    "mitigation_description": "Restore and verify telemetry for checkout payment charge failures so the payment service error or timeout can be diagnosed and addressed.",
+    "mitigation_steps": "Check the OpenTelemetry collector configuration and health for the checkout and payment services to confirm logs are being exported to otel-logs-*. Inspect the payment service directly for errors or timeouts at the charge step, including application logs and process health. If telemetry is misconfigured or stopped, repair or restart the relevant collector agents and ensure checkout/payment error logs are indexed.",
+    "verification_check": "Re-run the Elasticsearch queries for service.name:checkout and service.name:payment with error/charge terms; confirm matching log documents appear, and verify that payment charge failures are either explained or resolved.",
+    "postmortem_summary": "Sev1 checkout incident: payment calls failed at the charge step, preventing customers from completing purchases. Investigation proposed a low-confidence hypothesis and a mitigation; mitigation was approved, and the service was verified stable.",
+    "postmortem_cause": "Checkout payment charge failures are likely caused by the payment service erroring or timing out at the charge step, but the queried Elasticsearch logs show no matching checkout or payment error records, suggesting either the failure is not logged in the searched index or the telemetry pipeline is incomplete for this incident."
+  },
+  "detected": {
+    "hypothesis": {
+      "detected": "en",
+      "es": 0,
+      "en": 12
+    },
+    "mitigation_description": {
+      "detected": "en",
+      "es": 0,
+      "en": 4
+    },
+    "mitigation_steps": {
+      "detected": "en",
+      "es": 0,
+      "en": 16
+    },
+    "verification_check": {
+      "detected": "en",
+      "es": 0,
+      "en": 7
+    },
+    "postmortem_summary": {
+      "detected": "en",
+      "es": 0,
+      "en": 7
+    },
+    "postmortem_cause": {
+      "detected": "en",
+      "es": 0,
+      "en": 12
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "expected": "es",
+  "incident": "inc-a4d9afb4f421274abfce5bd4f2fedd6f",
+  "run": "run_d4e485c29a556c94",
+  "confidence": "low",
+  "risk": "medium",
+  "texts": {
+    "hypothesis": "El fallo reportado en checkout durante el paso de cobro con payment no se refleja en los errores de logs ni en la tasa de respuestas 5xx de checkout/payment en la ventana consultada; esto sugiere que la alerta puede depender de una fuente no cubierta, de datos ausentes o de un fallo intermitente aún no visible en las consultas realizadas.",
+    "mitigation_description": "Mitigar la falta de visibilidad del fallo de cobro en checkout/payment validando la fuente de la alerta y añadiendo telemetría específica del paso de cargo, ya que las consultas actuales no muestran errores ni 5xx en la ventana revisada.",
+    "mitigation_steps": "Confirmar con los equipos de checkout y payment la ruta exacta, dependencias y eventos del paso de cobro. Revisar la configuración de la alerta y las consultas asociadas para verificar fuente, etiquetas y ventana temporal. Añadir temporalmente logs y métricas detalladas en checkout/payment alrededor del cargo, incluyendo errores de integración con el proveedor de pago. Repetir las consultas con una ventana ampliada y comparar si aparece el fallo o si se confirma su carácter intermitente.",
+    "verification_check": "Reproducir o esperar un fallo de cargo y confirmar que la telemetría corregida lo registra; verificar que las consultas equivalentes ya devuelven eventos o métricas del paso de cobro.",
+    "postmortem_summary": "Alerta sev1 para checkout por fallos en llamadas de pago durante el paso de cobro; clientes no pueden completar compras en la tienda. Se inició investigación, se propuso y aprobó mitigación, y el servicio fue verificado estable. La causa raíz no está confirmada.",
+    "postmortem_cause": "No hay causa raíz confirmada. La hipótesis de la investigación indica que el fallo reportado en checkout durante el paso de cobro con payment no se refleja en los errores de logs ni en la tasa de respuestas 5xx de checkout/payment en la ventana consultada; esto sugiere que la alerta puede depender de una fuente no cubierta, de datos ausentes o de un fallo intermitente aún no visible en las consultas realizadas."
+  },
+  "detected": {
+    "hypothesis": {
+      "detected": "es",
+      "es": 24,
+      "en": 0
+    },
+    "mitigation_description": {
+      "detected": "es",
+      "es": 15,
+      "en": 0
+    },
+    "mitigation_steps": {
+      "detected": "es",
+      "es": 28,
+      "en": 0
+    },
+    "verification_check": {
+      "detected": "es",
+      "es": 9,
+      "en": 0
+    },
+    "postmortem_summary": {
+      "detected": "es",
+      "es": 14,
+      "en": 0
+    },
+    "postmortem_cause": {
+      "detected": "es",
+      "es": 28,
+      "en": 0
+    }
+  }
+}
