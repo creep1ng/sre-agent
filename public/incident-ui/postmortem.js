@@ -31,6 +31,7 @@ const CODE_MESSAGES = Object.freeze({
 // The agent drafts through the governed gateway with an existing alias: the caller's grants,
 // consumption and audit apply, and a human still edits, saves and approves (#43 CA1, CA4).
 const AGENT_ALIAS = "triage-agent";
+const LANGUAGE_NAMES = Object.freeze({ es: "Spanish", en: "English" });
 const FIELDS = ["summary", "impact", "cause", "certainty", "strategy", "timeline", "actions_taken", "verification", "pending", "unknowns"];
 
 const state = { incidentId: null, runId: null, generation: 0, busy: false, startKey: null, baseVersion: 0, notice: null, reviewNotice: null };
@@ -390,6 +391,17 @@ async function reviewPostmortem(outcome) {
   }
 }
 
+// The workspace's output language, served by the web proxy (#717); Spanish when it is absent.
+async function outputLanguage() {
+  try {
+    const response = await fetch("/workspace.json", { cache: "no-store" });
+    const { output_language: language } = response.ok ? await response.json() : {};
+    return LANGUAGE_NAMES[language] ?? LANGUAGE_NAMES.es;
+  } catch {
+    return LANGUAGE_NAMES.es;
+  }
+}
+
 // What the agent may use: the incident read, every stored event and, when this identity can read
 // them, the agent turns of each run. Only stored, contract-valid event ids may be cited.
 async function agentPrompt(detail) {
@@ -401,8 +413,9 @@ async function agentPrompt(detail) {
   const citable = events.filter((event) => CITABLE.test(event.event_id ?? ""));
   const row = (event) => [event.event_id, event.kind, event.state, event.actor?.type, event.occurred_at, event.summary].join(" | ");
   const facts = { incident_id: detail.incident_id, state: detail.state, severity: detail.severity, impact: detail.impact, alert: detail.alert };
+  const language = await outputLanguage();
   const input = [
-    "Draft the minimum postmortem of this incident for a human reviewer, in Spanish. Use only the facts below; never invent events, actions or causes.",
+    `Draft the minimum postmortem of this incident for a human reviewer, in ${language}. Use only the facts below; never invent events, actions or causes.`,
     "Answer with only a JSON object with exactly the keys summary, impact, timeline, cause, strategy, actions_taken, verification, pending, unknowns.",
     'summary, impact, strategy, verification: short nonblank text. cause: {"statement": text, "certainty": "confirmed"|"probable"|"hypothesis"|"unknown"}.',
     'timeline (at least one): list of {"event_id": a citable id, "description": text}, the key moments in order.',

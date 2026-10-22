@@ -132,6 +132,7 @@ def create_application(
         lambda: PostgresIncidentUnitOfWork(database),
         runtime_settings.investigator_gateway,
         http=shared_investigator_client,
+        language=runtime_settings.investigator_output_language,
     )
     application.include_router(
         runs_router(

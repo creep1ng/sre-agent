@@ -10,6 +10,13 @@ server {
         return 200 "ok\n";
     }
 
+    # The workspace's output language (#717): the console writes its agent prompts with it.
+    location = /workspace.json {
+        default_type application/json;
+        add_header Cache-Control "no-store" always;
+        return 200 '{"output_language":"${INVESTIGATOR_OUTPUT_LANGUAGE}"}';
+    }
+
     location /api/ {
         if ($http_sec_fetch_site = "cross-site") {
             return 403;

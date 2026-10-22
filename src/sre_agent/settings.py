@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from os import environ
 
 from sre_agent.investigator.client import GatewaySettings
+from sre_agent.investigator.contract import OutputLanguage
 from sre_agent.release import ReleaseMetadata
 
 
@@ -19,6 +20,7 @@ class Settings:
     grafana_mcp_token: str | None = field(default=None, repr=False)
     openrouter_management_key: str | None = field(default=None, repr=False)
     investigator_gateway: GatewaySettings | None = field(default=None, repr=False)
+    investigator_output_language: OutputLanguage = "es"
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -48,6 +50,12 @@ class Settings:
         investigator_gateway = (
             GatewaySettings.from_environment(environment) if investigator_configured else None
         )
+        language: OutputLanguage
+        match environment.get("INVESTIGATOR_OUTPUT_LANGUAGE") or "es":
+            case "es" | "en" as language:
+                pass
+            case _:
+                raise ValueError("INVESTIGATOR_OUTPUT_LANGUAGE must be es or en")
         return cls(
             database_url,
             api_key,
@@ -58,4 +66,5 @@ class Settings:
             mcp_token,
             openrouter_management_key=environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None,
             investigator_gateway=investigator_gateway,
+            investigator_output_language=language,
         )

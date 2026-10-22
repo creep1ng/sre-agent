@@ -30,6 +30,7 @@ Text = Annotated[str, Field(min_length=1, max_length=4000)]
 Step = Annotated[str, Field(min_length=1, max_length=1000)]
 Level = Literal["low", "medium", "high"]
 Objective = Literal["triage", "investigate", "mitigate", "postmortem"]
+OutputLanguage = Literal["es", "en"]
 Status = Literal[
     "completed",
     "needs_human",

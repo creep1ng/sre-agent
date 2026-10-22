@@ -7,10 +7,12 @@ const existingTests = ["api-seam.spec.js", "production-proxy.spec.js", "principa
 
 // The postmortem journey needs a resolved incident of the stack under test (docs/evidence/43).
 const postmortemJourney = process.env.POSTMORTEM_INCIDENT ? ["postmortem-journey.spec.js"] : [];
+// The output-language journey runs a paid investigation, so it runs only when asked (#717).
+const languageJourney = process.env.EXPECTED_OUTPUT_LANGUAGE ? ["investigator-language-real.spec.js"] : [];
 
 export default defineConfig({
   testDir: "tests/browser",
-  testMatch: triageReview ? triageTests : [...existingTests, ...postmortemJourney],
+  testMatch: triageReview ? triageTests : [...existingTests, ...postmortemJourney, ...languageJourney],
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results/production-browser",
   reporter: [["line"]],
   use: {
