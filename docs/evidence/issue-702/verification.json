@@ -1,9 +1,9 @@
 {
   "sanitized": true,
-  "startedAt": "2026-10-23T05:37:16.756Z",
-  "elapsedMs": 969,
-  "polls": 2,
+  "startedAt": "2026-10-23T05:51:28.751Z",
+  "elapsedMs": 77488,
+  "polls": 6,
   "alertIds": [
-    "alt-checkout-64e53f9a655a"
+    "alt-checkout-f350c6d98254"
   ]
 }

@@ -1,9 +1,9 @@
 # Issue #702 — live inbox evidence
 
-- **Code under test**: `feat/702-live-shell-evidence` @ `077c5087222da5c13604f6c799409606d6d896c5`
+- **Code under test**: `feat/702-live-shell-evidence` @ `60c6c0d01b8afcdae24200c862ddf51040d54284`
 - **Date**: 2026-10-23
 - **Environment**: Windows 11 + Docker Desktop 29.2.1, Docker Compose v5.0.2, Python 3.13.14.
-  Compose project `sre-702x` (`28180` web, `28100` API, `25532` Postgres), OpenTelemetry Demo
+  Setup projects `sre-702x` (API proof) and `sre-702z` (browser run), OpenTelemetry Demo
   `3.0.0` (`1755859a9de82c2e5e225be68abc401a5ebf2b4f`), `SRE_OTEL_MODE=local`.
 - **Browser**: Playwright Chromium 1.63.0 in the `incident-console-e2e` container, 1440x920.
 
@@ -11,24 +11,24 @@
 
 | Check | Expected | Actual |
 | --- | --- | --- |
-| Real alert reaches the inbox | `checkout` / `SEV1` card appears from `GET /v1/alerts` | Card visible; `alt-checkout-64e53f9a655a` |
-| Local time | `observed_at` rendered in local time | `hoy 00:37` (UTC-5); API `05:37:17Z` |
+| Real alert reaches the inbox | `checkout` / `SEV1` card appears from `GET /v1/alerts` | Card visible; `alt-checkout-f350c6d98254` |
+| Local time | `observed_at` rendered in local time | `hoy 00:52` (UTC-5); API `05:52Z` |
 | Triage state | `new` rendered as `Nueva` | `Nueva` badge present |
-| Polling | 15 s cadence, stable `alert_id` | 2 polls, 15.09 s apart, same ID |
+| Polling | 15 s cadence, stable `alert_id` | 6 polls; first empty 05:51:30Z, first alert 05:52:45Z |
 | Service filter | Single service still shows the filter | `Todos los servicios 1`; checkout filter works |
 | Credential | Session shown only while connected | `Sesión de API / Conectada`; no credential in URL/storage |
 
-Real browser run: **1 passed (18.8 s)**. The failure flag was already active before the browser
-session, so the first poll returned the firing episode; the screenshot/log record
-**969 ms from connect to visible card**. Injection-to-detection is bounded by the server-owned
-2-minute rule window (the first setup run observed the API transition to firing ~110 s after
-`demo_env.py fail`); the UI made an available alert visible on the first poll.
+Real browser run: **1 passed (1.3 min)**, browser open before injection. The failure was injected
+**5.2 s after the session started**; the first alert became visible **72.2 s after injection**.
+That misses the issue's <60 s criterion: detection is server-side (the fixed 2-minute rule and
+OTel span-metric export), not the inbox. The UI polled every ~15 s and rendered the alert on the
+first poll that contained it.
 
 ## Artifacts
 
 `inbox-live.png` shows the real UI (header, live count, filter, `SEV1 · Crítica`, `checkout`,
-`Nueva`, local time, title and summary); `poll-log.json` holds sanitized requests;
-`verification.json` holds the run summary.
+`Nueva`, local time, title and summary); `poll-log.json` is an excerpt with the first empty poll
+and the first alert; `verification.json` holds the run summary.
 
 ## Reproduction
 
@@ -47,7 +47,7 @@ On this Windows host setup ran in a disposable container with the Docker socket 
 mounted at its VM path. The passing e2e run used the full setup compose set (`compose.yaml`,
 `compose.mcp.yaml`, generated overlay); omitting the MCP overlay recreated the API without wiring.
 
-## Direct API proof (same stack, same candidate)
+## Direct API proof (same candidate, separate setup stack)
 
 ```text
 GET /v1/alerts (no Authorization)
@@ -66,7 +66,7 @@ GET /v1/alerts (DEMO_HUMAN_API_KEY)
             "incident_id":null}]}
 ```
 
-The alert stayed stable across both browser polls.
+The excerpt shows the transition from an empty poll to one stable alert ID.
 
 ## Deterministic suite
 
