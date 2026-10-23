@@ -1,0 +1,10 @@
+$ curl -sS -i -X POST http://deploy-executor:8000/v1/operations/deployment.restart -H "Idempotency-Key: 0123456789abcdef" -H "Content-Type: application/json" -d '{"service":"probe"}' (from executor-e2e, no signature)
+HTTP/1.1 401 Unauthorized
+date: Fri, 23 Oct 2026 00:18:26 GMT
+server: uvicorn
+content-length: 179
+content-type: application/json
+
+{"error":{"code":"signature_missing","message":"X-Executor-Timestamp and X-Executor-Signature are required"},"request_id":"ed9f252c-f376-4352-8638-4d0d64d7e05f","retryable":false}
+$ GET /v1/services/probe afterwards (container untouched)
+{"container_id": "a301cf3cbc9665352d545c7527dd3c1b7dcceac0677eb48e1e5193190ecb3265", "image": "demo/probe:1.1.0", "state": "running", "health": "healthy", "started_at": "2026-10-23T00:16:54.532643421Z"}

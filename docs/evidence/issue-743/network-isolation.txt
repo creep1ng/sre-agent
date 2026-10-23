@@ -1,0 +1,8 @@
+$ docker compose -p sre-743 --profile executor-e2e run --rm --no-deps probe python -c "import socket; print(socket.gethostbyname('deploy-executor'))"
+Traceback (most recent call last):
+socket.gaierror: [Errno -2] Name or service not known
+exit=1
+
+$ docker compose -p sre-743 --profile executor-e2e run --rm --no-deps --entrypoint "" executor-e2e getent hosts deploy-executor
+172.31.x.x      deploy-executor
+exit=0

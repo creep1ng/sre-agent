@@ -1,0 +1,1 @@
+[{"step":"ready","response":{"status":503,"body":{"status":"unavailable","dependency":"docker"}}},{"step":"rollback","response":{"status":503,"body":{"error":{"code":"docker_unavailable","message":"the socket proxy or the daemon is unavailable"},"request_id":"022a52c6-75ea-42c2-a066-5190592dab76","retryable":true}}}]
