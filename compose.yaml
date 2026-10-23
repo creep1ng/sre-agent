@@ -300,8 +300,105 @@ services:
     restart: "no"
     networks: [runtime]
 
+  # Docker Engine API confined to the containers and images families, on an internal network
+  # that only the deploy-executor joins. Every other family answers 403 here (#720).
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      POST: "1"
+      PING: "1"
+      EVENTS: "0"
+      VERSION: "0"
+      LOG_LEVEL: warning
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    networks: [executor-boundary]
+
+  # Named operations over the proxy (docs/deploy-executor.md): the API image with another
+  # entrypoint, no database, no provider secret, and a journal volume for idempotency.
+  deploy-executor:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["uvicorn", "sre_agent.executor.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DOCKER_API_URL: http://docker-socket-proxy:2375
+    volumes:
+      - executor_journal:/var/lib/deploy-executor
+    depends_on:
+      docker-socket-proxy:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [runtime, executor-boundary]
+
+  # E2E target of the executor (#720): demo/probe:1.1.0 runs; probe-previous only puts the
+  # rollback target demo/probe:1.0.0 into the daemon's image store (build it, never run it).
+  probe:
+    profiles: ["executor-e2e"]
+    image: demo/probe:1.1.0
+    build:
+      context: docker
+      dockerfile: probe.Dockerfile
+      args:
+        PROBE_VERSION: "1.1.0"
+    restart: unless-stopped
+    networks: [runtime]
+
+  probe-previous:
+    profiles: ["executor-e2e"]
+    image: demo/probe:1.0.0
+    build:
+      context: docker
+      dockerfile: probe.Dockerfile
+      args:
+        PROBE_VERSION: "1.0.0"
+    command: ["true"]
+    restart: "no"
+    networks: [runtime]
+
+  # Runs the executor journey (tests/browser/deploy-executor-real.spec.js). It joins the proxy's
+  # network only to prove its deny list; the product's e2e runner never does. Mount a host
+  # directory on /artifacts to keep the transcript, screenshots and report.
+  executor-e2e:
+    profiles: ["executor-e2e"]
+    build:
+      context: .
+      dockerfile: docker/e2e.Dockerfile
+    command: ["npx", "playwright", "test", "--config=playwright.production.config.js", "deploy-executor-real", "--reporter=line,json"]
+    environment:
+      DEPLOY_EXECUTOR_E2E: "1"
+      DEPLOY_EXECUTOR_URL: http://deploy-executor:8000
+      DOCKER_SOCKET_PROXY_URL: http://docker-socket-proxy:2375
+      PROBE_URL: http://probe:8080
+      DEPLOY_EXECUTOR_ARTIFACT_DIR: /artifacts
+      PLAYWRIGHT_JSON_OUTPUT_NAME: /artifacts/report.json
+    depends_on:
+      deploy-executor:
+        condition: service_healthy
+      probe:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime, executor-boundary]
+
 volumes:
   postgres_data:
+  executor_journal:
 
 networks:
   runtime:
+  executor-boundary:
+    internal: true

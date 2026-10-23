@@ -160,6 +160,7 @@ database until an operator-approved migration or restore plan exists.
 | `src/sre_agent/incident/` | Incident-resolution-plane boundary |
 | `src/sre_agent/harness/` | Contract and fixture harness boundary |
 | `src/sre_agent/gateway/` | HTTP gateway and health probes |
+| `src/sre_agent/executor/` | The deploy-executor: named remediation operations over docker-socket-proxy ([design](docs/deploy-executor.md)) |
 | `schemas/` | Versioned contract authority and conformance tooling |
 | `index.html`, `public/console/` | Integrated console: incident response and AI governance in one document ([design](docs/design/ht-web-shell/ht-web-shell.md)) |
 | `design-system.html`, `styles/`, `scripts/`, `public/` | Design-system catalog and the surfaces mounted by the console |

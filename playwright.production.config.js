@@ -13,12 +13,14 @@ const languageJourney = process.env.EXPECTED_OUTPUT_LANGUAGE ? ["investigator-la
 const liveInvestigation = process.env.LIVE_INVESTIGATION === "1" ? ["war-room-logs-evidence-real.spec.js"] : [];
 // A live alert's triage status needs the OTel Demo failure firing the alert rule (issue #701).
 const liveAlertsTriage = process.env.LIVE_ALERTS_TRIAGE ? ["alerts-triage-status-real.spec.js"] : [];
+// The deploy-executor journey needs the executor, the socket proxy and the probe (issue #720).
+const executorJourney = process.env.DEPLOY_EXECUTOR_E2E === "1" ? ["deploy-executor-real.spec.js"] : [];
 
 export default defineConfig({
   testDir: "tests/browser",
   testMatch: triageReview
     ? triageTests
-    : [...existingTests, ...postmortemJourney, ...languageJourney, ...liveInvestigation, ...liveAlertsTriage],
+    : [...existingTests, ...postmortemJourney, ...languageJourney, ...liveInvestigation, ...liveAlertsTriage, ...executorJourney],
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results/production-browser",
   reporter: [["line"]],
   use: {

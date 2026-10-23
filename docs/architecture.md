@@ -12,6 +12,7 @@ capabilities without making ORM, DTO, or provider models authoritative.
 | Incident-resolution plane | `sre_agent.incident` | Workflow transitions, decisions, replay ports, and authoritative incident/run persistence |
 | Harness | `sre_agent.harness` | Incident conversation and capability-orchestration boundary; it is not part of the gateway |
 | Gateway | `sre_agent.gateway` | Health, authentication, capability authorization, governed responses, provider, and audit adapters |
+| Deploy executor | `sre_agent.executor` | A separate process of the same image: named `deployment.rollback`/`deployment.restart` operations over docker-socket-proxy, idempotent by key and by state; it imports no other plane ([design](deploy-executor.md)) |
 
 `sre_agent.application.create_application` is the only composition root:
 

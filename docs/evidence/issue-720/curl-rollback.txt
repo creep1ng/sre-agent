@@ -1,0 +1,23 @@
+$ curl -X POST http://deploy-executor:8000/v1/operations/deployment.rollback -H 'Idempotency-Key: <uuid>' -d '{"service":"probe","to_tag":"1.0.0"}'
+{"execution_id":"exe_572f04418fcf3159","operation":"deployment.rollback","service":"probe","parameters":{"to_tag":"1.0.0"},"outcome":"rolled_back","replayed":false,"before":{"container_id":"ba749423c366744e42ce026f5a7b044cb5d9e331482899693875a8e8a1deb096","name":"sre-720-probe-1","image":"demo/probe:1.1.0","state":"running","health":"healthy","started_at":"2026-10-22T18:33:21.804628896Z"},"after":{"container_id":"6c18b60dca1ac7096c5b9c66a3729a482d178c3dd950697815e9df61bd6079d7","name":"sre-720-probe-1","image":"demo/probe:1.0.0","state":"running","health":"healthy","started_at":"2026-10-22T18:34:56.563578303Z"},"executed_at":"2026-10-22T18:34:45.882Z","duration_ms":13559}
+HTTP 200
+
+$ curl http://probe:8080/
+{"service": "probe", "version": "1.0.0"}
+HTTP 200
+
+$ (same Idempotency-Key, same body)
+{"execution_id":"exe_572f04418fcf3159","operation":"deployment.rollback","service":"probe","parameters":{"to_tag":"1.0.0"},"outcome":"rolled_back","replayed":true,"before":{"container_id":"ba749423c366744e42ce026f5a7b044cb5d9e331482899693875a8e8a1deb096","name":"sre-720-probe-1","image":"demo/probe:1.1.0","state":"running","health":"healthy","started_at":"2026-10-22T18:33:21.804628896Z"},"after":{"container_id":"6c18b60dca1ac7096c5b9c66a3729a482d178c3dd950697815e9df61bd6079d7","name":"sre-720-probe-1","image":"demo/probe:1.0.0","state":"running","health":"healthy","started_at":"2026-10-22T18:34:56.563578303Z"},"executed_at":"2026-10-22T18:34:45.882Z","duration_ms":13559}
+HTTP 200
+
+$ curl -X POST .../deployment.rollback -H 'Idempotency-Key: <new uuid>' -d '{"service":"probe","to_tag":"9.9.9"}'
+{"error":{"code":"image_tag_unknown","message":"demo/probe:9.9.9 is not present in the local image store"},"request_id":"5ebd4b40-20a0-411b-a75b-2db0ffce720a","retryable":false}
+HTTP 422
+
+$ curl -X POST .../deployment.rollback -H 'Idempotency-Key: <new uuid>' -d '{"service":"probe","to_tag":"1.1.0"}'  (roll forward)
+{"execution_id":"exe_6e0a3c1d3b3fb45a","operation":"deployment.rollback","service":"probe","parameters":{"to_tag":"1.1.0"},"outcome":"rolled_back","replayed":false,"before":{"container_id":"6c18b60dca1ac7096c5b9c66a3729a482d178c3dd950697815e9df61bd6079d7","name":"sre-720-probe-1","image":"demo/probe:1.0.0","state":"running","health":"healthy","started_at":"2026-10-22T18:34:56.563578303Z"},"after":{"container_id":"f38e3b5ab1853788dbce07b96426636fd603144237bac69a71371edf2c43177a","name":"sre-720-probe-1","image":"demo/probe:1.1.0","state":"running","health":"healthy","started_at":"2026-10-22T18:35:15.533673571Z"},"executed_at":"2026-10-22T18:35:04.874Z","duration_ms":13520}
+HTTP 200
+
+$ curl http://probe:8080/
+{"service": "probe", "version": "1.1.0"}
+HTTP 200
