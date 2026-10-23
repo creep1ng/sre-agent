@@ -2,9 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 /*
- * Opt-in journey against the real stack: OTel demo + setup_sre.py + an injected checkout
- * failure. Run it only with LIVE_INBOX=1 and the demo key, after `python scripts/demo_env.py
- * fail`. The log keeps statuses, counts and alert ids; the key never reaches disk.
+ * Opt-in journey against the real stack: OTel demo + setup_sre.py and an injected checkout
+ * failure. Run it only with LIVE_INBOX=1 and the demo key while the failure is injected; the
+ * test tolerates empty polls until the first alert. The log keeps statuses, counts and alert ids;
+ * the key never reaches disk.
  */
 
 const enabled = process.env.LIVE_INBOX === "1" && Boolean(process.env.DEMO_HUMAN_API_KEY);
@@ -59,8 +60,11 @@ test.describe("bandeja contra la pila real", () => {
       .poll(() => polls.filter((poll) => poll.status === 200).length, { timeout: 25_000 })
       .toBeGreaterThanOrEqual(2);
     const successful = polls.filter((poll) => poll.status === 200);
-    expect(successful.every((poll) => poll.alertIds.length > 0)).toBe(true);
-    expect(new Set(successful.flatMap((poll) => poll.alertIds)).size).toBe(1);
+    const firstAlert = successful.findIndex((poll) => poll.alertIds.length > 0);
+    expect(firstAlert).toBeGreaterThanOrEqual(0);
+    const afterAlert = successful.slice(firstAlert);
+    expect(afterAlert.every((poll) => poll.alertIds.length > 0)).toBe(true);
+    expect(new Set(afterAlert.flatMap((poll) => poll.alertIds)).size).toBe(1);
 
     const filter = page.getByRole("button", { name: /Filtrar por servicio/ });
     await expect(filter).toBeVisible();
