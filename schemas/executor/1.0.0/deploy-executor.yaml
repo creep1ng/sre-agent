@@ -1,0 +1,103 @@
+# Contract of the deploy-executor (HT-EXEC-SERVICE, issue #720): the only process
+# that touches the Docker Engine, through docker-socket-proxy with the `containers`
+# and `images` families enabled and nothing else. It executes named operations with
+# a strict input schema; no endpoint takes a command, a script or an image name.
+contract_version: "1.0.0"
+protocol: "http"
+
+server:
+  resource_type: "deploy_executor"
+  resource_id: "deploy-executor"
+  # Reachable only on the Compose `runtime` network; no published host port.
+  base_url: "http://deploy-executor:8000"
+
+# Which service a request may name comes from the catalog mounted into the
+# executor (agent/executor/catalog.v1.yaml), never from the request. The image
+# repository of a service is fixed there too: `to_tag` is appended to it.
+catalog:
+  schema_version: "v1"
+  path: "agent/executor/catalog.v1.yaml"
+  reads: { catalog: "GET /v1/catalog", service: "GET /v1/services/{service}", executions: "GET /v1/executions" }
+
+operations:
+  - operation: "deployment.rollback"
+    endpoint: { method: "POST", path: "/v1/operations/deployment.rollback" }
+    input_schema: "json-schema/deployment-rollback-input.schema.json"
+    result_schema: "json-schema/execution-result.schema.json"
+    input_example: "examples/deployment-rollback-input.json"
+    result_example: "examples/deployment-rollback-result.json"
+    outcomes: ["rolled_back", "already_at_target"]
+    # Static attributes the risk scorer of #726 reads; the executor only reports them.
+    risk: { reversible: true, touches_data: false, blast_radius: "service", downtime: "seconds" }
+  - operation: "deployment.restart"
+    endpoint: { method: "POST", path: "/v1/operations/deployment.restart" }
+    input_schema: "json-schema/deployment-restart-input.schema.json"
+    result_schema: "json-schema/execution-result.schema.json"
+    input_example: "examples/deployment-restart-input.json"
+    result_example: "examples/deployment-restart-result.json"
+    outcomes: ["restarted"]
+    risk: { reversible: false, touches_data: false, blast_radius: "service", downtime: "seconds" }
+
+# Each POST carries an Idempotency-Key (16-128 printable ASCII), as the
+# gateway's own mutations do. The key binds to the operation and the payload
+# digest when execution starts; a validation rejection binds nothing.
+idempotency:
+  header: "Idempotency-Key"
+  scope: ["operation", "key"]
+  same_payload: { status: 200, replayed: true }
+  different_payload: { status: 409, error_code: "idempotency_conflict" }
+  in_flight: "the second request waits for the first result and replays it"
+  intent_without_result: { status: 409, error_code: "execution_unknown" }
+  journal: "/var/lib/deploy-executor/executions.jsonl (append-only, reloaded at start)"
+
+# The proxy confines the API families; the executor's fixed call list is the
+# fine-grained allow-list. Everything else answers 403 at the proxy.
+docker_socket_proxy:
+  image: "tecnativa/docker-socket-proxy"
+  enabled: { CONTAINERS: 1, IMAGES: 1, POST: 1, PING: 1 }
+  disabled: [AUTH, BUILD, COMMIT, CONFIGS, DISTRIBUTION, EVENTS, EXEC, GRPC, INFO, NETWORKS, NODES, PLUGINS, SECRETS, SERVICES, SESSION, SWARM, SYSTEM, TASKS, VERSION, VOLUMES]
+  executor_calls:
+    - "GET /containers/json (compose labels), /containers/{id}/json, /images/{repository}:{tag}/json, /images/json (repository filter)"
+    - "POST /containers/create, /containers/{id}/start|stop|restart|rename; DELETE /containers/{id} (the replaced one, once the new one runs)"
+
+# Governance mapping the gateway implements in #722; nothing here is seeded.
+governance:
+  maturity: "contracted"
+  action: "mitigation.execute"
+  resource_type: "service_operation"
+  resource_id: "{service}:{operation}"
+  caller: "the gateway only; the executor is not reachable from the harness"
+
+# Errors use the shared envelope of the current release.
+error_envelope: "schemas/releases/2.8.0/json-schema/http/error-envelope.schema.json"
+
+public_errors:
+  - { code: "invalid_idempotency_key", status: 400, retryable: false }
+  - { code: "service_not_enrolled", status: 404, retryable: false }
+  - { code: "operation_not_enrolled", status: 404, retryable: false }
+  - { code: "contract_validation_failed", status: 422, retryable: false }
+  - { code: "image_tag_unknown", status: 422, retryable: false }
+  - { code: "idempotency_conflict", status: 409, retryable: false }
+  - { code: "execution_unknown", status: 409, retryable: false }
+  - { code: "container_not_found", status: 409, retryable: false }
+  - { code: "service_ambiguous", status: 409, retryable: false }
+  - { code: "docker_unavailable", status: 503, retryable: true }
+  - { code: "docker_timeout", status: 504, retryable: true }
+  - { code: "docker_invalid", status: 502, retryable: false }
+  - { code: "execution_failed", status: 502, retryable: false }
+
+# Written before the code. `touches_container: false` means the E2E proves the
+# container id, image and start time are unchanged after the request.
+failure_scenarios:
+  - { id: "unknown-tag", operation: "deployment.rollback", expected: { status: 422, error_code: "image_tag_unknown", touches_container: false } }
+  - { id: "unknown-service", operation: "deployment.rollback", expected: { status: 404, error_code: "service_not_enrolled", touches_container: false } }
+  - { id: "operation-not-enrolled", operation: "deployment.rollback", expected: { status: 404, error_code: "operation_not_enrolled", touches_container: false } }
+  - { id: "missing-to-tag", operation: "deployment.rollback", expected: { status: 422, error_code: "contract_validation_failed", touches_container: false } }
+  - { id: "extra-field", operation: "deployment.restart", expected: { status: 422, error_code: "contract_validation_failed", touches_container: false } }
+  - { id: "tag-with-repository", operation: "deployment.rollback", expected: { status: 422, error_code: "contract_validation_failed", touches_container: false } }
+  - { id: "missing-idempotency-key", operation: "deployment.restart", expected: { status: 400, error_code: "invalid_idempotency_key", touches_container: false } }
+  - { id: "double-submission", operation: "deployment.rollback", expected: { status: 200, replayed: true, executions: 1 } }
+  - { id: "key-reused-with-other-payload", operation: "deployment.rollback", expected: { status: 409, error_code: "idempotency_conflict", touches_container: false } }
+  - { id: "already-at-target", operation: "deployment.rollback", expected: { status: 200, outcome: "already_at_target", touches_container: false } }
+  - { id: "socket-down", operation: "deployment.rollback", expected: { status: 503, error_code: "docker_unavailable", readiness: 503 } }
+  - { id: "proxy-denies-other-families", operation: "docker-socket-proxy", expected: { status: 403, paths: ["/info", "/networks", "/volumes", "/version", "/events", "/exec/any/start"] } }

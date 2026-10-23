@@ -1,0 +1,7 @@
+{
+  "target": "urn:sre-agent:contract:deploy-executor:1.0.0", "rule": "scenario", "status": "negative", "version": "1.0.0", "scenario_id": "missing-idempotency-key",
+  "data": {
+    "request": { "method": "POST", "path": "/v1/operations/deployment.restart", "idempotency_key": "absent", "body": { "service": "probe" } },
+    "expected": { "status": 400, "error_code": "invalid_idempotency_key", "touches_container": false }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "execution_id": "exe_0a1b2c3d4e5f6071", "operation": "deployment.restart", "service": "probe", "parameters": {},
+  "outcome": "restarted", "replayed": false,
+  "before": { "container_id": "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d", "name": "sre-probe-1", "image": "demo/probe:1.0.0", "state": "running", "health": "healthy", "started_at": "2026-10-22T18:05:40.103Z" },
+  "after": { "container_id": "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d", "name": "sre-probe-1", "image": "demo/probe:1.0.0", "state": "running", "health": "healthy", "started_at": "2026-10-22T18:09:02.577Z" },
+  "executed_at": "2026-10-22T18:09:00.212Z",
+  "duration_ms": 3410
+}

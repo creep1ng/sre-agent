@@ -1,0 +1,7 @@
+{
+  "target": "urn:sre-agent:contract:deploy-executor:1.0.0", "rule": "scenario", "status": "negative", "version": "1.0.0", "scenario_id": "unknown-tag",
+  "data": {
+    "request": { "method": "POST", "path": "/v1/operations/deployment.rollback", "idempotency_key": "fresh", "body": { "service": "probe", "to_tag": "9.9.9" } },
+    "expected": { "status": 422, "error_code": "image_tag_unknown", "touches_container": false }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:executor-deployment-restart-input:1.0.0",
+  "title": "deploy-executor deployment.restart input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["service"],
+  "properties": {
+    "service": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$" }
+  }
+}

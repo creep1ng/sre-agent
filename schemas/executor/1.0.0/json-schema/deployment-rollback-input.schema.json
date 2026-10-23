@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:executor-deployment-rollback-input:1.0.0",
+  "title": "deploy-executor deployment.rollback input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["service", "to_tag"],
+  "properties": {
+    "service": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,62}$" },
+    "to_tag": {
+      "description": "A tag of the service's catalog repository; never a repository or digest.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$"
+    }
+  }
+}

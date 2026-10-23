@@ -1,0 +1,8 @@
+{
+  "execution_id": "exe_5f1c2a9d7b3e4c10", "operation": "deployment.rollback", "service": "probe", "parameters": { "to_tag": "1.0.0" },
+  "outcome": "rolled_back", "replayed": false,
+  "before": { "container_id": "3c9b1f0e8a2d4b6c7e5f1a3b9d8c7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0d", "name": "sre-probe-1", "image": "demo/probe:1.1.0", "state": "running", "health": "healthy", "started_at": "2026-10-22T18:02:11.412Z" },
+  "after": { "container_id": "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d9c8b7a6f5e4d3c2b1a0f9e8d", "name": "sre-probe-1", "image": "demo/probe:1.0.0", "state": "running", "health": "healthy", "started_at": "2026-10-22T18:05:40.103Z" },
+  "executed_at": "2026-10-22T18:05:38.950Z",
+  "duration_ms": 4120
+}

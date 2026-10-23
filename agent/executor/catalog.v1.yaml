@@ -1,0 +1,25 @@
+# Services the deploy-executor may act on (HT-EXEC-SERVICE, issue #720).
+#
+# A request names a service and, for a rollback, a tag. Everything else about
+# the target comes from here: which container, which image repository, which
+# operations. A service absent from this file does not exist for the executor,
+# whatever grant the caller holds. The contract that reads this file is
+# schemas/executor/1.0.0/deploy-executor.yaml.
+schema_version: "v1"
+
+# `compose_project: self` selects containers of the executor's own Compose
+# project, read from its container labels. Cross-project targets (the OTel
+# store of #724) declare the project explicitly.
+defaults:
+  compose_project: self
+
+services:
+  # E2E target of #720: demo/probe:1.1.0 runs, demo/probe:1.0.0 is the rollback target.
+  - service: probe
+    compose_service: probe
+    image_repository: demo/probe
+    operations: [deployment.rollback, deployment.restart]
+  # The product's own web proxy: locally built, no release tags, so restart only.
+  - service: web
+    compose_service: web
+    operations: [deployment.restart]

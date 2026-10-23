@@ -1,0 +1,11 @@
+deployment.rollback examples valid
+deployment.restart examples valid
+fixture extra-field                      expects 422 contract_validation_failed   body valid against the input schema: False
+fixture key-reused-with-other-payload    expects 409 idempotency_conflict         body valid against the input schema: True
+fixture missing-idempotency-key          expects 400 invalid_idempotency_key      body valid against the input schema: True
+fixture missing-to-tag                   expects 422 contract_validation_failed   body valid against the input schema: False
+fixture operation-not-enrolled           expects 404 operation_not_enrolled       body valid against the input schema: True
+fixture tag-with-repository              expects 422 contract_validation_failed   body valid against the input schema: False
+fixture unknown-service                  expects 404 service_not_enrolled         body valid against the input schema: True
+fixture unknown-tag                      expects 422 image_tag_unknown            body valid against the input schema: True
+12 failure scenarios, 13 public errors

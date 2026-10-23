@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:sre-agent:schema:executor-execution-result:1.0.0",
+  "title": "deploy-executor execution result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["execution_id", "operation", "service", "parameters", "outcome", "replayed", "before", "after", "executed_at", "duration_ms"],
+  "properties": {
+    "execution_id": { "type": "string", "pattern": "^exe_[a-f0-9]{16}$" },
+    "operation": { "enum": ["deployment.rollback", "deployment.restart"] },
+    "service": { "type": "string" },
+    "parameters": { "type": "object", "additionalProperties": { "type": "string" } },
+    "outcome": { "enum": ["rolled_back", "already_at_target", "restarted"] },
+    "replayed": { "type": "boolean", "description": "true when an Idempotency-Key replayed a stored result" },
+    "before": { "$ref": "#/$defs/container" },
+    "after": { "$ref": "#/$defs/container" },
+    "executed_at": { "type": "string", "format": "date-time" },
+    "duration_ms": { "type": "integer", "minimum": 0 }
+  },
+  "$defs": {
+    "container": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["container_id", "name", "image", "state", "health", "started_at"],
+      "properties": {
+        "container_id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "name": { "type": "string" },
+        "image": { "type": "string" },
+        "state": { "type": "string" },
+        "health": { "type": ["string", "null"] },
+        "started_at": { "type": "string" }
+      }
+    }
+  }
+}

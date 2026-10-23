@@ -1,0 +1,7 @@
+{
+  "target": "urn:sre-agent:contract:deploy-executor:1.0.0", "rule": "scenario", "status": "negative", "version": "1.0.0", "scenario_id": "operation-not-enrolled",
+  "data": {
+    "request": { "method": "POST", "path": "/v1/operations/deployment.rollback", "idempotency_key": "fresh", "body": { "service": "web", "to_tag": "1.0.0" } },
+    "expected": { "status": 404, "error_code": "operation_not_enrolled", "touches_container": false }
+  }
+}
