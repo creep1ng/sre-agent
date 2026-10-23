@@ -37,7 +37,7 @@ async function expectNoLeaks(page: Page) {
 const settle = (page: Page) => page.waitForTimeout(600);
 
 async function freshStart(page: Page) {
-  await page.goto("./");
+  await page.goto("./?mock");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 cosas necesitan tu atención");

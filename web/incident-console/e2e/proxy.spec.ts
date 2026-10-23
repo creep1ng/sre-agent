@@ -6,7 +6,8 @@ import { expect, test } from "@playwright/test";
  */
 
 test("el proxy sirve la consola nueva en /app y la actual sigue en su ruta", async ({ page }) => {
-  const app = await page.goto("/app");
+  // The demo journey below is the simulated one; live is the production default.
+  const app = await page.goto("/app/?mock");
   expect(app?.status()).toBe(200);
   await expect(page).toHaveURL(/\/app\/$/);
   await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();

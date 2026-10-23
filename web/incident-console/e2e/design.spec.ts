@@ -19,7 +19,7 @@ async function quiet(page: Page) {
 }
 
 async function freshStart(page: Page) {
-  await page.goto("./");
+  await page.goto("./?mock");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 cosas necesitan tu atención");

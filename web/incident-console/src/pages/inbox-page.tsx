@@ -6,12 +6,15 @@ import { BrandMark } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { AlertCard } from "@/features/inbox/alert-card";
+import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { DeclareDialog } from "@/features/inbox/declare-dialog";
 import { IncidentCard } from "@/features/inbox/incident-card";
 import { MenuServiceFilter, type ServiceStatus } from "@/features/inbox/service-filter";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime, formatDuration, formatTime, plural } from "@/lib/format";
-import { useInbox, type RecentItem } from "@/lib/selectors";
+import { useLive, type LivePhase } from "@/lib/live";
+import { appMode } from "@/lib/mode";
+import { useInbox, useLiveInbox, type RecentItem } from "@/lib/selectors";
 import { useStore } from "@/lib/store";
 import type { Alert } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -100,14 +103,46 @@ function EmptyState() {
   );
 }
 
+const LIVE_STATE: Partial<Record<LivePhase, { title: string; body: string; action?: string }>> = {
+  connecting: { title: "Conectando con la API", body: "Estamos pidiendo las alertas de tus servicios." },
+  unauthenticated: {
+    title: "Conecta una credencial",
+    body: "La bandeja muestra las alertas reales de tu API. Conecta una clave con permiso para verlas.",
+    action: "Conectar API",
+  },
+  auth: {
+    title: "La API rechazó la credencial",
+    body: "La clave no es válida o venció. Conecta otra para seguir viendo las alertas.",
+    action: "Conectar API",
+  },
+  forbidden: {
+    title: "Sin acceso a las alertas",
+    body: "Tu credencial no tiene permiso para ver alertas. Pide acceso a quien administra la API.",
+    action: "Conectar otra",
+  },
+  error: {
+    title: "No pudimos cargar las alertas",
+    body: "Revisa que la API esté disponible. Se reintenta automáticamente.",
+    action: "Reintentar ahora",
+  },
+};
+
 export function InboxPage() {
   const now = useNow();
-  const inbox = useInbox(now);
+  const live = appMode === "live";
+  const mockInbox = useInbox(now);
+  const liveInbox = useLiveInbox(now);
+  const inbox = live ? liveInbox : mockInbox;
+  const phase = useLive((s) => s.phase);
+  const stale = useLive((s) => s.stale);
+  const lastSuccessAt = useLive((s) => s.lastSuccessAt);
+  const retry = useLive((s) => s.retry);
   const alerts = useStore((s) => s.alerts);
   const [params, setParams] = useSearchParams();
   const [service, setService] = useState<string>("all");
   const [recentOpen, setRecentOpen] = useState(false);
   const [declaring, setDeclaring] = useState<Alert | null>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
 
   const declareParam = params.get("declarar");
   const linkedAlert = declareParam ? alerts.find((a) => a.id === declareParam && a.status === "new") ?? null : null;
@@ -132,33 +167,50 @@ export function InboxPage() {
   const newAlerts = visible(inbox.newAlerts);
   const needsYou = visible(inbox.needsYou);
   const working = visible(inbox.working);
-  const attention = newAlerts.length + needsYou.length;
+  const attentionAlerts = live
+    ? newAlerts.filter((alert) => alert.triageStatus === "new" || alert.triageStatus === "triaging")
+    : newAlerts;
+  const attention = attentionAlerts.length + needsYou.length;
+  const state = live ? LIVE_STATE[phase] : undefined;
 
   const headline =
-    attention > 0
+    state?.title ??
+    (attention > 0
       ? `${plural(attention, "cosa necesita", "cosas necesitan")} tu atención`
       : working.length > 0
         ? "El agente se está encargando"
-        : "Todo en orden";
-  const subline = [
-    newAlerts.length > 0 && plural(newAlerts.length, "alerta nueva", "alertas nuevas"),
-    needsYou.length > 0 && `${plural(needsYou.length, "incidente espera", "incidentes esperan")} una decisión tuya`,
-    working.length > 0 && `el agente trabaja en ${plural(working.length, "incidente", "incidentes")}`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+        : "Todo en orden");
+  const subline = live
+    ? newAlerts.length > 0
+      ? plural(newAlerts.length, "alerta en vivo", "alertas en vivo")
+      : "No hay alertas activas"
+    : [
+        newAlerts.length > 0 && plural(newAlerts.length, "alerta nueva", "alertas nuevas"),
+        needsYou.length > 0 && `${plural(needsYou.length, "incidente espera", "incidentes esperan")} una decisión tuya`,
+        working.length > 0 && `el agente trabaja en ${plural(working.length, "incidente", "incidentes")}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-8 sm:px-8 lg:py-10">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-display text-3xl tracking-tight sm:text-4xl">{headline}</h1>
-          <p className="mt-2 text-muted-foreground">
-            {subline ? `${subline.charAt(0).toUpperCase()}${subline.slice(1)}.` : "No hay nada pendiente."}{" "}
-            <span className="whitespace-nowrap">Actualizado {formatTime(now)}</span>
-          </p>
+          {!state && (
+            <p className="mt-2 text-muted-foreground">
+              {subline ? `${subline.charAt(0).toUpperCase()}${subline.slice(1)}.` : "No hay nada pendiente."}{" "}
+              {live ? (
+                lastSuccessAt !== null && (
+                  <span className="whitespace-nowrap">Actualizado {formatTime(lastSuccessAt)}</span>
+                )
+              ) : (
+                <span className="whitespace-nowrap">Actualizado {formatTime(now)}</span>
+              )}
+            </p>
+          )}
         </div>
-        {services.length > 1 && (
+        {services.length > 0 && (
           <MenuServiceFilter
             services={services}
             value={selected}
@@ -168,10 +220,33 @@ export function InboxPage() {
         )}
       </header>
 
-      {attention === 0 && working.length === 0 && <EmptyState />}
+      {state && (
+        <div
+          role="status"
+          className="flex flex-col gap-3 rounded-2xl border bg-card p-5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="max-w-xl text-sm text-muted-foreground">{state.body}</p>
+          {state.action && (
+            <Button variant="outline" onClick={() => (phase === "error" ? retry() : setConnectOpen(true))}>
+              {state.action}
+            </Button>
+          )}
+        </div>
+      )}
 
-      {attention > 0 && (
-        <Section title="Necesita tu atención" count={attention}>
+      {live && stale && (
+        <div
+          role="status"
+          className="rounded-lg border border-warning-line bg-warning-soft px-4 py-3 text-sm text-warning"
+        >
+          No pudimos actualizar las alertas. Se reintenta automáticamente.
+        </div>
+      )}
+
+      {attention === 0 && working.length === 0 && newAlerts.length === 0 && !state && <EmptyState />}
+
+      {(newAlerts.length > 0 || attention > 0) && (
+        <Section title={live ? "Alertas en vivo" : "Necesita tu atención"} count={live ? newAlerts.length : attention}>
           {needsYou.map((incident) => (
             <Appear key={incident.id} id={incident.id}>
               <IncidentCard incident={incident} />
@@ -222,6 +297,7 @@ export function InboxPage() {
           }
         }}
       />
+      <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setClock } from "@/hooks/use-now";
 import { useApplyTheme } from "@/hooks/use-theme";
+import { resumePolling, stopPolling } from "@/lib/live";
+import { appMode } from "@/lib/mode";
 import { subscribeNotices, useStore } from "@/lib/store";
 import { InboxPage } from "@/pages/inbox-page";
 import { IncidentPage } from "@/pages/incident-page";
@@ -27,6 +29,24 @@ function Simulator() {
     return () => window.clearInterval(id);
   }, []);
   return null;
+}
+
+/** Keeps relative times fresh without the mock simulator. */
+function Clock() {
+  useEffect(() => {
+    const id = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  return null;
+}
+
+/** Live mode: the inbox polls the real API while the page is open. */
+function LivePoller() {
+  useEffect(() => {
+    resumePolling();
+    return () => stopPolling();
+  }, []);
+  return <Clock />;
 }
 
 function Notifier() {
@@ -65,7 +85,7 @@ export function App() {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <TooltipProvider delayDuration={250}>
-        <Simulator />
+        {appMode === "mock" ? <Simulator /> : <LivePoller />}
         <Notifier />
         <Routes>
           <Route element={<AppShell />}>
