@@ -55,7 +55,7 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
-    networks: [runtime]
+    networks: [runtime, executor-call]
 
   migrate:
     build:
@@ -318,7 +318,9 @@ services:
     networks: [executor-boundary]
 
   # Named operations over the proxy (docs/deploy-executor.md): the API image with another
-  # entrypoint, no database, no provider secret, and a journal volume for idempotency.
+  # entrypoint, no database, no provider secret, and a journal volume for idempotency. Every
+  # operation carries the gateway's signature (#743); compromising this container is
+  # compromising the host, hence no writable root, no capabilities, no route from `runtime`.
   deploy-executor:
     build:
       context: .
@@ -326,6 +328,11 @@ services:
     command: ["uvicorn", "sre_agent.executor.app:app", "--host", "0.0.0.0", "--port", "8000"]
     environment:
       DOCKER_API_URL: http://docker-socket-proxy:2375
+      DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     volumes:
       - executor_journal:/var/lib/deploy-executor
     depends_on:
@@ -343,7 +350,7 @@ services:
       timeout: 3s
       retries: 20
     restart: unless-stopped
-    networks: [runtime, executor-boundary]
+    networks: [executor-call, executor-boundary]
 
   # E2E target of the executor (#720): demo/probe:1.1.0 runs; probe-previous only puts the
   # rollback target demo/probe:1.0.0 into the daemon's image store (build it, never run it).
@@ -371,7 +378,8 @@ services:
     networks: [runtime]
 
   # Runs the executor journey (tests/browser/deploy-executor-real.spec.js). It joins the proxy's
-  # network only to prove its deny list; the product's e2e runner never does. Mount a host
+  # network only to prove its deny list, and the executor's to sign as the gateway will;
+  # the product's e2e runner never does either. Mount a host
   # directory on /artifacts to keep the transcript, screenshots and report.
   executor-e2e:
     profiles: ["executor-e2e"]
@@ -386,13 +394,14 @@ services:
       PROBE_URL: http://probe:8080
       DEPLOY_EXECUTOR_ARTIFACT_DIR: /artifacts
       PLAYWRIGHT_JSON_OUTPUT_NAME: /artifacts/report.json
+      DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
     depends_on:
       deploy-executor:
         condition: service_healthy
       probe:
         condition: service_healthy
     restart: "no"
-    networks: [runtime, executor-boundary]
+    networks: [runtime, executor-call, executor-boundary]
 
 volumes:
   postgres_data:
@@ -400,5 +409,8 @@ volumes:
 
 networks:
   runtime:
+  # The api and the executor only (#743): a container on `runtime` cannot resolve the executor.
+  executor-call:
+    internal: true
   executor-boundary:
     internal: true

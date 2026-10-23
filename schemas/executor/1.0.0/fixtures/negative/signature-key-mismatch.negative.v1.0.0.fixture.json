@@ -1,0 +1,7 @@
+{
+  "target": "urn:sre-agent:contract:deploy-executor:1.0.0", "rule": "scenario", "status": "negative", "version": "1.0.0", "scenario_id": "signature-key-mismatch",
+  "data": {
+    "request": {"method": "POST", "path": "/v1/operations/deployment.restart", "idempotency_key": "fresh", "signature": "other_idempotency_key", "body": {"service": "probe"}},
+    "expected": {"status": 401, "error_code": "signature_invalid", "touches_container": false}
+  }
+}

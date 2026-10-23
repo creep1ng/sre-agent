@@ -1,0 +1,4 @@
+$ docker compose -p sre-743 run --rm --no-deps -e DEPLOY_EXECUTOR_SIGNING_KEY= deploy-executor python -c "...fastapi.testclient against sre_agent.executor.app..."
+GET /health/ready 503 {"status":"unavailable","dependency":"signing_key"}
+POST deployment.restart 503 {"error":{"code":"signing_key_unconfigured","message":"DEPLOY_EXECUTOR_SIGNING_KEY is unset or a placeholder"},"request_id":"3e2c3dcd-9346-4675-a3de-241d5331e7da","retryable":false}
+exit=0

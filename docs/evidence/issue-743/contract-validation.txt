@@ -1,0 +1,16 @@
+deployment.rollback examples valid
+deployment.restart examples valid
+fixture extra-field                      signature valid                  expects 422 contract_validation_failed   body valid against the input schema: False
+fixture key-reused-with-other-payload    signature valid                  expects 409 idempotency_conflict         body valid against the input schema: True
+fixture missing-idempotency-key          signature valid                  expects 400 invalid_idempotency_key      body valid against the input schema: True
+fixture missing-to-tag                   signature valid                  expects 422 contract_validation_failed   body valid against the input schema: False
+fixture operation-not-enrolled           signature valid                  expects 404 operation_not_enrolled       body valid against the input schema: True
+fixture signature-body-tampered          signature signed_for_other_body  expects 401 signature_invalid            body valid against the input schema: True
+fixture signature-expired                signature stale                  expects 401 signature_expired            body valid against the input schema: True
+fixture signature-key-mismatch           signature other_idempotency_key  expects 401 signature_invalid            body valid against the input schema: True
+fixture signature-missing                signature absent                 expects 401 signature_missing            body valid against the input schema: True
+fixture signature-wrong-key              signature wrong_key              expects 401 signature_invalid            body valid against the input schema: True
+fixture tag-with-repository              signature valid                  expects 422 contract_validation_failed   body valid against the input schema: False
+fixture unknown-service                  signature valid                  expects 404 service_not_enrolled         body valid against the input schema: True
+fixture unknown-tag                      signature valid                  expects 422 image_tag_unknown            body valid against the input schema: True
+19 failure scenarios, 17 public errors, {'timestamp': 'X-Executor-Timestamp', 'signature': 'X-Executor-Signature'}

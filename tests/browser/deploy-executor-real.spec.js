@@ -1,5 +1,5 @@
 import { expect, request, test } from "@playwright/test";
-import { randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 
 // Issue #720 against the REAL deploy-executor, docker-socket-proxy and Docker Engine inside
@@ -10,26 +10,43 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 // 3. the rollback leaves the probe on the old image, or the probe does not answer its new version;
 // 4. the same key sent twice executes twice, or a key reused with another payload is accepted;
 // 5. a rollback to the running tag moves the container; a restart changes the container id;
-// 6. the journal does not list the executions.
+// 6. the journal does not list the executions;
+// 7. (#743) a request without a valid gateway signature (absent, wrong key, body tampered after
+//    signing, another Idempotency-Key, stale timestamp) is not 401, or touches the probe or the
+//    journal; 8. a signed negative fixture answers 401 instead of its own code (signature first).
 const ENABLED = process.env.DEPLOY_EXECUTOR_E2E === "1";
 const EXECUTOR = process.env.DEPLOY_EXECUTOR_URL ?? "http://deploy-executor:8000";
 const PROXY = process.env.DOCKER_SOCKET_PROXY_URL ?? "http://docker-socket-proxy:2375";
 const PROBE = process.env.PROBE_URL ?? "http://probe:8080";
 const ARTIFACTS = process.env.DEPLOY_EXECUTOR_ARTIFACT_DIR ?? "test-results/issue-720";
 const FIXTURES = "schemas/executor/1.0.0/fixtures/negative";
+const SIGNING_KEY = process.env.DEPLOY_EXECUTOR_SIGNING_KEY ?? "";
 const DENIED_FAMILIES = ["/info", "/networks", "/volumes", "/version", "/events", "/exec/any/start"];
 
 test.skip(!ENABLED, "requires DEPLOY_EXECUTOR_E2E=1 inside the Compose stack");
 
 const transcript = [];
-async function call(api, method, url, { key, body } = {}) {
-  const headers = { "content-type": "application/json", ...(key ? { "idempotency-key": key } : {}) };
+async function call(api, method, url, { key, body, headers: extra = {} } = {}) {
+  const headers = { "content-type": "application/json", ...(key ? { "idempotency-key": key } : {}), ...extra };
   const response = await api.fetch(url, { method, headers, data: body === undefined ? undefined : JSON.stringify(body) });
   const text = await response.text();
   let parsed;
   try { parsed = JSON.parse(text); } catch { parsed = text; }
   return { status: response.status(), body: parsed };
 }
+// What the gateway will send (#722): v1 = HMAC-SHA256 over method, path, key, sha256(body), timestamp.
+function signature(method, path, key, data, { secret = SIGNING_KEY, signedKey = key, signedBody = data, timestamp = Math.floor(Date.now() / 1000) } = {}) {
+  const digest = createHash("sha256").update(signedBody ?? "").digest("hex");
+  const mac = createHmac("sha256", secret).update([method, path, signedKey ?? "", digest, String(timestamp)].join("\n")).digest("hex");
+  return { "x-executor-timestamp": String(timestamp), "x-executor-signature": `v1=${mac}` };
+}
+const VARIANTS = {
+  absent: () => null,
+  wrong_key: () => ({ secret: "not-the-key-".padEnd(48, "x") }),
+  signed_for_other_body: (request_) => ({ signedBody: JSON.stringify(request_.signed_body) }),
+  other_idempotency_key: () => ({ signedKey: randomUUID() }),
+  stale: () => ({ timestamp: Math.floor(Date.now() / 1000) - 3600 }),
+};
 function note(step, request_, response) {
   transcript.push({ step, at: new Date().toISOString(), request: request_, response });
   return response;
@@ -40,7 +57,11 @@ test("rollback and restart run once per key, rejections touch nothing, the proxy
   test.setTimeout(300_000);
   mkdirSync(ARTIFACTS, { recursive: true });
   const api = await request.newContext();
-  const executor = (method, path, options) => call(api, method, `${EXECUTOR}${path}`, options);
+  const executor = (method, path, { key, body, sign = {} } = {}) => {
+    const data = body === undefined ? undefined : JSON.stringify(body);
+    const headers = method === "POST" && sign !== null ? signature(method, path, key, data, sign) : {};
+    return call(api, method, `${EXECUTOR}${path}`, { key, body, headers });
+  };
   const probeVersion = async () => (await call(api, "GET", `${PROBE}/`)).body.version;
 
   expect(note("ready", "GET /health/ready", await executor("GET", "/health/ready")).status).toBe(200);
@@ -70,14 +91,17 @@ test("rollback and restart run once per key, rejections touch nothing, the proxy
   // 1. Every negative fixture of the contract, then the probe is exactly as it was.
   const fixtures = readdirSync(FIXTURES).sort().map((name) => JSON.parse(readFileSync(`${FIXTURES}/${name}`, "utf8")));
   const rollbackKey = randomUUID();
+  const executionsBefore = (await executor("GET", "/v1/executions")).body.executions.length;
   for (const { scenario_id, data } of fixtures) {
     if (data.request.idempotency_key === "previous") continue; // needs the rollback below first
     const key = data.request.idempotency_key === "fresh" ? randomUUID() : undefined;
-    const response = note(`fixture ${scenario_id}`, data.request, await executor(data.request.method, data.request.path, { key, body: data.request.body }));
+    const sign = data.request.signature ? VARIANTS[data.request.signature](data.request) : {};
+    const response = note(`fixture ${scenario_id}`, data.request, await executor(data.request.method, data.request.path, { key, body: data.request.body, sign }));
     expect(response.status, scenario_id).toBe(data.expected.status);
     expect(response.body.error.code, scenario_id).toBe(data.expected.error_code);
   }
   expect(untouched(before, (await executor("GET", "/v1/services/probe")).body), "rejections touched the probe").toBe(true);
+  expect((await executor("GET", "/v1/executions")).body.executions.length, "rejections reached the journal").toBe(executionsBefore);
 
   // 3. The rollback replaces the container and the probe answers its old version.
   const rollback = note("rollback 1.0.0", "POST deployment.rollback", await executor("POST", "/v1/operations/deployment.rollback", { key: rollbackKey, body: { service: "probe", to_tag: "1.0.0" } }));
@@ -134,7 +158,10 @@ test("with the socket proxy stopped, readiness and operations answer 503 and not
   const ready = await call(api, "GET", `${EXECUTOR}/health/ready`);
   steps.push({ step: "ready", response: ready });
   expect(ready.status).toBe(503);
-  const rollback = await call(api, "POST", `${EXECUTOR}/v1/operations/deployment.rollback`, { key: randomUUID(), body: { service: "probe", to_tag: "1.0.0" } });
+  const key = randomUUID();
+  const body = { service: "probe", to_tag: "1.0.0" };
+  const headers = signature("POST", "/v1/operations/deployment.rollback", key, JSON.stringify(body));
+  const rollback = await call(api, "POST", `${EXECUTOR}/v1/operations/deployment.rollback`, { key, body, headers });
   steps.push({ step: "rollback", response: rollback });
   expect(rollback.status).toBe(503);
   expect(rollback.body.error.code).toBe("docker_unavailable");
