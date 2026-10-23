@@ -72,7 +72,15 @@ function AgentPresence({ inbox }: { inbox: InboxModel }) {
   );
 }
 
-export function Sidebar({ inbox, onSearch }: { inbox: InboxModel; onSearch: () => void }) {
+export function Sidebar({
+  inbox,
+  onSearch,
+  onConnect,
+}: {
+  inbox: InboxModel;
+  onSearch: () => void;
+  onConnect: () => void;
+}) {
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <div className="px-2 pt-1">
@@ -96,7 +104,7 @@ export function Sidebar({ inbox, onSearch }: { inbox: InboxModel; onSearch: () =
 
       <div className="mt-auto flex flex-col gap-3">
         <AgentPresence inbox={inbox} />
-        <AccountMenu />
+        <AccountMenu onConnect={onConnect} />
       </div>
     </div>
   );
