@@ -5,15 +5,20 @@ import { Logo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useNow } from "@/hooks/use-now";
-import { useInbox } from "@/lib/selectors";
+import { ConnectDialog } from "@/features/inbox/connect-dialog";
+import { appMode } from "@/lib/mode";
+import { useInbox, useLiveInbox } from "@/lib/selectors";
 import { CommandMenu } from "./command-menu";
 import { Sidebar } from "./sidebar";
 
 export function AppShell() {
   const now = useNow();
-  const inbox = useInbox(now);
+  const mockInbox = useInbox(now);
+  const liveInbox = useLiveInbox(now);
+  const inbox = appMode === "live" ? liveInbox : mockInbox;
   const [menuOpen, setMenuOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
   const location = useLocation();
 
   useEffect(() => setMenuOpen(false), [location.pathname]);
@@ -36,14 +41,14 @@ export function AppShell() {
   return (
     <div className="min-h-dvh bg-background">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-sidebar-border bg-sidebar lg:block">
-        <Sidebar inbox={inbox} onSearch={() => setCommandOpen(true)} />
+        <Sidebar inbox={inbox} onSearch={() => setCommandOpen(true)} onConnect={() => setConnectOpen(true)} />
       </aside>
 
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navegación</SheetTitle>
           <SheetDescription className="sr-only">Secciones de la consola</SheetDescription>
-          <Sidebar inbox={inbox} onSearch={() => setCommandOpen(true)} />
+          <Sidebar inbox={inbox} onSearch={() => setCommandOpen(true)} onConnect={() => setConnectOpen(true)} />
         </SheetContent>
       </Sheet>
 
@@ -68,6 +73,7 @@ export function AppShell() {
       </main>
 
       <CommandMenu open={commandOpen} onOpenChange={setCommandOpen} />
+      <ConnectDialog open={connectOpen} onOpenChange={setConnectOpen} />
     </div>
   );
 }

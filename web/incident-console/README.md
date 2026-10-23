@@ -6,12 +6,29 @@ console's incident pages step by step; the current console keeps its routes (`/`
 It answers the UX review of the current console (thread "Simplificar UX de alertas y triage",
 2026-10-19) and the known gaps of the 2026-10-19 demo runbook (#700, EP-8 #732).
 
-It starts in **mock mode**. A small in-browser simulator follows the states of
-`agent/workflows/incident-response.yaml` and plays the agent with timed steps. The content
-(evidence, hypothesis, mitigation, postmortem) mirrors the OpenTelemetry demo store and its
-`paymentUnreachable` flag, written at the quality the agent should reach. It is not what the
-current agent produces. Each screen is connected to the API in its own follow-up PR, using the
-map below.
+The inbox runs against the real API. `GET /v1/alerts` through the same-origin `/api` proxy feeds
+the list, every 15 s, with service, severity, local time and triage state. The remaining screens
+still use the **mock mode** simulator, which follows `agent/workflows/incident-response.yaml` and
+plays the agent with timed steps. The content (evidence, hypothesis, mitigation, postmortem)
+mirrors the OpenTelemetry demo store and its `paymentUnreachable` flag, written at the quality the
+agent should reach. It is not what the current agent produces. Each remaining screen is connected
+to the API in its own follow-up PR, using the map below.
+
+## Live inbox
+
+- **Credential.** The key lives only in memory for the tab. Paste it in **Conectar API** (account
+  menu, bottom of the sidebar, or the inbox state card). It is never written to the URL, cookies,
+  Web Storage, logs or telemetry, and a reload clears it. The dialog is the only way in: there is
+  no fixture or test hook that injects a token.
+- **Polling.** The first request runs when the key is connected; the next one starts 15 s after
+  each answer finishes. A 503 `Retry-After` is honored.
+- **Failures.** A transient failure keeps the last list and shows a retry banner. An invalid key
+  (401) clears the list and stops polling until another key is connected; a missing `alert.read`
+  grant (403) clears the list but keeps polling, because grants can change while the tab is open.
+- **Triage.** Cards show `Nueva`, `En triage`, `Declarada`, `Vinculada` or `Descartada`. Only
+  `new` and `triaging` count toward the headline; the card actions belong to the triage story.
+- **Mock mode.** Append `?mock` once per tab to run the simulator instead (`/app/?mock`). The flag
+  is stored in `sessionStorage` and the query is removed. The two modes share the same UI shell.
 
 ## Run it
 
@@ -29,12 +46,16 @@ request, so `/` and `/api/` keep working when the console container is absent.
 
 - Browser journeys (Playwright 1.63, pinned image), through the proxy:
   `HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose --profile e2e run --build --rm incident-console-e2e`.
-  Screenshots (`screens/`, `design/`, `proxy/`), videos and the HTML report land in
+  Screenshots (`screens/`, `design/`, `proxy/`, `live/`), videos and the HTML report land in
   `web/incident-console/e2e/artifacts/`. The journeys also check that no screen shows protocol
   details (`open_triage`, `run_`, `evt_`, «Versión esperada», …).
-- Demo controls live in the account menu (bottom of the sidebar) → **Escenario de demostración**:
-  simulate a new alert, make the agent fail, or reset the scenario. State persists in
-  `localStorage`, so reloads keep the incident where it was.
+- The suite has two modes. The design and journey specs opt into the simulator with `?mock`; the
+  live specs answer `GET /api/v1/alerts` with Playwright routes or, when `LIVE_INBOX=1` and
+  `DEMO_HUMAN_API_KEY` are set, connect the real key to the stack started by `setup_sre.py` and
+  wait for the injected OTel failure. Authentication specs disable video and traces.
+- Demo controls live in the account menu (bottom of the sidebar) → **Escenario de demostración**,
+  only in mock mode: simulate a new alert, make the agent fail, or reset the scenario. State
+  persists in `localStorage`, so reloads keep the incident where it was.
 
 ## Design decisions
 
