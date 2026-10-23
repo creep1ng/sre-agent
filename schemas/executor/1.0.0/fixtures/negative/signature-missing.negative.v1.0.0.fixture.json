@@ -1,0 +1,7 @@
+{
+  "target": "urn:sre-agent:contract:deploy-executor:1.0.0", "rule": "scenario", "status": "negative", "version": "1.0.0", "scenario_id": "signature-missing",
+  "data": {
+    "request": {"method": "POST", "path": "/v1/operations/deployment.restart", "idempotency_key": "fresh", "signature": "absent", "body": {"service": "probe"}},
+    "expected": {"status": 401, "error_code": "signature_missing", "touches_container": false}
+  }
+}

@@ -1,9 +1,10 @@
 """HTTP surface of the deploy-executor: catalog reads and the named operations (#720).
 
 Served by ``uvicorn sre_agent.executor.app:app`` from the API image. Every
-POST carries an ``Idempotency-Key``; the key binds to the operation and the
-payload digest when execution starts, so a validation rejection leaves it
-free and a replay after an execution returns the stored result.
+POST carries the gateway's signature (#743), checked before anything else,
+and an ``Idempotency-Key``; the key binds to the operation and the payload
+digest when execution starts, so a validation rejection leaves it free and a
+replay after an execution returns the stored result.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from pydantic import ValidationError
 from sre_agent.executor.catalog import OPERATIONS, EnrolledService, load_catalog
 from sre_agent.executor.docker import DockerClient, DockerInvalid, DockerTimeout, DockerUnavailable
 from sre_agent.executor.operations import ExecutionError, Operations, container_view
+from sre_agent.executor.signature import SIGNATURE_HEADER, TIMESTAMP_HEADER, usable_key, verify
 
 CONTRACT_VERSION = "1.0.0"
 logger = logging.getLogger(__name__)
@@ -39,6 +41,13 @@ def _error(status: int, code: str, message: str, retryable: bool = False) -> JSO
     body = {"error": {"code": code, "message": message}, "request_id": str(uuid4())}
     headers = {"Retry-After": "15"} if retryable else {}
     return JSONResponse({**body, "retryable": retryable}, status_code=status, headers=headers)
+
+
+_SIGNATURE_MESSAGES = {
+    "signature_missing": "X-Executor-Timestamp and X-Executor-Signature are required",
+    "signature_expired": "the signature timestamp is outside the accepted window",
+    "signature_invalid": "the signature does not cover this method, path, key and body",
+}
 
 
 def _docker_error(error: Exception) -> JSONResponse:
@@ -82,15 +91,41 @@ class Journal:
 
 class Executor:
     def __init__(
-        self, catalog: Mapping[str, EnrolledService], operations: Operations, journal: Journal
+        self,
+        catalog: Mapping[str, EnrolledService],
+        operations: Operations,
+        journal: Journal,
+        signing_key: bytes | None,
+        signature_window: float,
     ) -> None:
         self._catalog = catalog
         self._operations = operations
         self._journal = journal
+        self._signing_key = signing_key
+        self._signature_window = signature_window
         self._key_locks: dict[str, asyncio.Lock] = {}
         self._service_locks: dict[str, asyncio.Lock] = {}
 
     async def execute(self, operation_name: str, request: Request) -> JSONResponse:
+        if self._signing_key is None:
+            return _error(
+                503,
+                "signing_key_unconfigured",
+                "DEPLOY_EXECUTOR_SIGNING_KEY is unset or a placeholder",
+            )
+        # The signature comes first: an unsigned caller learns nothing, not even the operation.
+        rejection = verify(
+            self._signing_key,
+            self._signature_window,
+            request.method,
+            request.url.path,
+            request.headers.get("idempotency-key") or "",
+            await request.body(),
+            request.headers.get(TIMESTAMP_HEADER) or "",
+            request.headers.get(SIGNATURE_HEADER) or "",
+        )
+        if rejection is not None:
+            return _error(401, rejection, _SIGNATURE_MESSAGES[rejection])
         operation = OPERATIONS.get(operation_name)
         if operation is None:
             return _error(404, "operation_not_enrolled", f"'{operation_name}' is not an operation")
@@ -209,7 +244,14 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
         settings.get("HOSTNAME"),
         float(settings.get("DEPLOY_EXECUTOR_SETTLE_SECONDS", "30")),
     )
-    executor = Executor(catalog, operations, journal)
+    signing_key = usable_key(settings.get("DEPLOY_EXECUTOR_SIGNING_KEY"))
+    executor = Executor(
+        catalog,
+        operations,
+        journal,
+        signing_key,
+        float(settings.get("DEPLOY_EXECUTOR_SIGNATURE_WINDOW_SECONDS", "300")),
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -224,6 +266,10 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
 
     @app.get("/health/ready")
     async def ready() -> JSONResponse:
+        if signing_key is None:  # fail closed: unready until the key is configured
+            return JSONResponse(
+                {"status": "unavailable", "dependency": "signing_key"}, status_code=503
+            )
         try:
             await docker.ping()
         except Exception:  # the answer names the dependency, never the transport error

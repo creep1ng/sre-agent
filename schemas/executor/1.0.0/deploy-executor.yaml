@@ -8,7 +8,8 @@ protocol: "http"
 server:
   resource_type: "deploy_executor"
   resource_id: "deploy-executor"
-  # Reachable only on the Compose `runtime` network; no published host port.
+  # Reachable only on the internal Compose network `executor-call`, shared with the
+  # api; no published host port, and no name resolution from `runtime` (#743).
   base_url: "http://deploy-executor:8000"
 
 # Which service a request may name comes from the catalog mounted into the
@@ -50,6 +51,16 @@ idempotency:
   intent_without_result: { status: 409, error_code: "execution_unknown" }
   journal: "/var/lib/deploy-executor/executions.jsonl (append-only, reloaded at start)"
 
+# Every POST is signed by its only caller, the gateway (#722 signs, #743 verifies);
+# reads are not. The signature is checked before anything else, so an unsigned
+# request learns nothing, not even whether the operation exists.
+request_signature:
+  headers: { timestamp: "X-Executor-Timestamp", signature: "X-Executor-Signature" }
+  v1: "hex(HMAC-SHA256(key, join(LF, [METHOD, path, Idempotency-Key, sha256hex(body), timestamp])))"
+  key: "DEPLOY_EXECUTOR_SIGNING_KEY, 32+ characters; absent or placeholder: readiness 503, every operation 503 signing_key_unconfigured"
+  window_seconds: 300
+  replay: "a captured request re-sent inside the window meets its Idempotency-Key binding and replays the stored result; it never re-executes"
+
 # The proxy confines the API families; the executor's fixed call list is the
 # fine-grained allow-list. Everything else answers 403 at the proxy.
 docker_socket_proxy:
@@ -66,12 +77,16 @@ governance:
   action: "mitigation.execute"
   resource_type: "service_operation"
   resource_id: "{service}:{operation}"
-  caller: "the gateway only; the executor is not reachable from the harness"
+  caller: "the gateway only: it shares the executor-call network and signs every operation; the harness has no route and no key"
 
 # Errors use the shared envelope of the current release.
 error_envelope: "schemas/releases/2.8.0/json-schema/http/error-envelope.schema.json"
 
 public_errors:
+  - { code: "signature_missing", status: 401, retryable: false }
+  - { code: "signature_invalid", status: 401, retryable: false }
+  - { code: "signature_expired", status: 401, retryable: false }
+  - { code: "signing_key_unconfigured", status: 503, retryable: false }
   - { code: "invalid_idempotency_key", status: 400, retryable: false }
   - { code: "service_not_enrolled", status: 404, retryable: false }
   - { code: "operation_not_enrolled", status: 404, retryable: false }
@@ -101,3 +116,11 @@ failure_scenarios:
   - { id: "already-at-target", operation: "deployment.rollback", expected: { status: 200, outcome: "already_at_target", touches_container: false } }
   - { id: "socket-down", operation: "deployment.rollback", expected: { status: 503, error_code: "docker_unavailable", readiness: 503 } }
   - { id: "proxy-denies-other-families", operation: "docker-socket-proxy", expected: { status: 403, paths: ["/info", "/networks", "/volumes", "/version", "/events", "/exec/any/start"] } }
+  # #743: the signature precedes validation, so the fixtures above answer their own code only when signed.
+  - { id: "signature-missing", operation: "deployment.restart", expected: { status: 401, error_code: "signature_missing", touches_container: false } }
+  - { id: "signature-wrong-key", operation: "deployment.rollback", expected: { status: 401, error_code: "signature_invalid", touches_container: false } }
+  - { id: "signature-body-tampered", operation: "deployment.rollback", expected: { status: 401, error_code: "signature_invalid", touches_container: false } }
+  - { id: "signature-key-mismatch", operation: "deployment.restart", expected: { status: 401, error_code: "signature_invalid", touches_container: false } }
+  - { id: "signature-expired", operation: "deployment.rollback", expected: { status: 401, error_code: "signature_expired", touches_container: false } }
+  - { id: "signing-key-unconfigured", operation: "deployment.restart", expected: { status: 503, error_code: "signing_key_unconfigured", readiness: 503 } }
+  - { id: "unreachable-from-runtime", operation: "deploy-executor", expected: { dns: "unresolved from a container that is only on runtime" } }

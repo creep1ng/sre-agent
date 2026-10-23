@@ -1,0 +1,7 @@
+{
+  "target": "urn:sre-agent:contract:deploy-executor:1.0.0", "rule": "scenario", "status": "negative", "version": "1.0.0", "scenario_id": "signature-expired",
+  "data": {
+    "request": {"method": "POST", "path": "/v1/operations/deployment.rollback", "idempotency_key": "fresh", "signature": "stale", "body": {"service": "probe", "to_tag": "1.0.0"}},
+    "expected": {"status": 401, "error_code": "signature_expired", "touches_container": false}
+  }
+}

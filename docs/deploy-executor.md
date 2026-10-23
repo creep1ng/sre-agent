@@ -8,15 +8,17 @@ enabled. No endpoint takes a command, a script, an image name or a path. The con
 `schemas/executor/1.0.0/deploy-executor.yaml`.
 
 ```
-console ──approve──▶ gateway (#722: exact grant, audit, idempotency by run) ──▶ deploy-executor
-                                                                                   │ fixed call list
-                                                                        docker-socket-proxy (containers, images)
-                                                                                   │ unix socket
-                                                                                dockerd
+console ──approve──▶ gateway (#722: exact grant, audit, idempotency by run) ──signed──▶ deploy-executor
+                                                                                           │ fixed call list
+                                                                                docker-socket-proxy (containers, images)
+                                                                                           │ unix socket
+                                                                                        dockerd
 ```
 
 The harness never reaches the executor: it talks to the gateway only. The executor has no
-published port, and the proxy sits on an internal network that only the executor joins.
+published port, sits on the internal `executor-call` network with the api alone, and verifies the
+gateway's signature on every operation (#743); the proxy sits on a second internal network that
+only the executor joins.
 
 ## Failure modes, written before the code
 
@@ -33,6 +35,10 @@ published port, and the proxy sits on an internal network that only the executor
 | Socket proxy down | readiness 503; operations 503 `docker_unavailable` | E2E with the proxy stopped |
 | Executor died between intent and result | 409 `execution_unknown` on replay; never re-executed | journal rule |
 | Any API family other than containers/images | 403 at the proxy | E2E against `/info`, `/networks`, `/volumes`, `/version`, `/events`, `/exec/*/start` |
+| No signature, wrong key, body tampered after signing, signature for another key, stale timestamp (#743) | 401 `signature_missing`, `signature_invalid` or `signature_expired`; container and journal untouched | fixtures `signature-*` |
+| A negative fixture sent signed | its own code, never 401: the signature is checked first | the eight fixtures above, now signed |
+| `DEPLOY_EXECUTOR_SIGNING_KEY` unset or a placeholder | readiness 503; operations 503 `signing_key_unconfigured`; nothing runs | one-off executor without the key |
+| A container that is only on `runtime` | `deploy-executor` does not resolve | `gethostbyname` from `probe` |
 
 The E2E fires each fixture of `schemas/executor/1.0.0/fixtures/negative/` at the real executor
 and then checks that the probe container keeps its id, image and start time.
@@ -79,6 +85,40 @@ The proxy gates API families, not fields: with `containers` and `POST` enabled i
 a `create` with a host bind or a privileged flag. The executor is the second layer: a fixed list
 of calls, and `create` only ever sends the configuration of the container it replaces. Both
 layers are needed; neither replaces the gateway's grant.
+
+## Caller authentication
+
+The executor is the hands, not the policy: it knows no principal and no grant. What it checks is
+that the exact request in front of it came from its one caller. Every `POST /v1/operations/*`
+carries `X-Executor-Timestamp` and `X-Executor-Signature: v1=<hex>`: HMAC-SHA256 with the key in
+`DEPLOY_EXECUTOR_SIGNING_KEY` over the method, the path, the `Idempotency-Key`, the SHA-256 of the
+body and the timestamp. The signature is checked before anything else, so an unsigned request
+learns nothing, not even whether the operation exists; a tampered body, a signature made for
+another key, a wrong secret or a timestamp outside 300 s answer 401 and write nothing. A captured
+request re-sent inside the window meets its own `Idempotency-Key` binding and replays the stored
+result. Without a usable key the executor fails closed: readiness 503 and every operation 503
+`signing_key_unconfigured`. The gateway signs from #722; until then the only signer is the E2E.
+
+Four layers, each answering one question: the network (only the api shares `executor-call`, so a
+container on `runtime` cannot even resolve the name) says who can reach it; the signature says the
+gateway produced this exact request; the grant (#722) says the agent may run that operation on
+that service; the human approval says this instance may run now.
+
+## Known limitations of the academic demo
+
+Stated so that the exposition does not overclaim; a green E2E hides none of them.
+
+- The key is symmetric: whoever reads the api container's environment can sign. An asymmetric
+  `v2` (the executor holding only a public key) is the upgrade, not needed for the demo.
+- The proxy gates API families, not fields. From inside the executor container, `POST
+  /containers/create` with a host bind is an allowed call, so compromising that container is
+  compromising the host. That is why it runs read-only, without capabilities, without privilege
+  escalation and with no secret beyond the verification key, and why the catalog, not the proxy,
+  is the action space.
+- The host, its Docker socket and the administrator who grants are the root of trust by design.
+- No mTLS, no key rotation, no nonce beyond the `Idempotency-Key`; the window bounds a replay.
+- Single host, Compose only: no Kubernetes, no remote executor, no registry authentication.
+- Until #722 nothing in the product calls the executor; until #726 nothing scores risk.
 
 ## Catalog
 

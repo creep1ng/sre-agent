@@ -126,6 +126,7 @@ jobs:
               ),
               "<lab/model>": ("openai/gpt-4o-mini", "anthropic/claude-sonnet-4"),
               "<provider>": ("openai", "anthropic"),
+              "<set-long-random-executor-signing-key>": (token_hex(32),),
           }
           for placeholder, values in replacements.items():
               for value in values:
