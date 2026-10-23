@@ -2,6 +2,21 @@ export type Severity = "sev1" | "sev2" | "sev3" | "sev4";
 export type ScenarioKey = "payments" | "recommendations" | "ads" | "cart" | "images";
 
 export type AlertStatus = "new" | "declared" | "linked" | "dismissed";
+export type TriageStatus = "new" | "triaging" | "declared" | "linked" | "dismissed";
+
+/** One alert as `GET /v1/alerts` returns it. */
+export interface LiveAlert {
+  alert_id: string;
+  service: string;
+  severity: Severity;
+  status: string;
+  /** Episode start, UTC. */
+  observed_at: string;
+  summary: string;
+  source: string;
+  triage_status: TriageStatus;
+  incident_id?: string | null;
+}
 
 export interface SignalSpec {
   /** Human name of the measured signal, e.g. "Pagos con error". */
@@ -35,6 +50,9 @@ export interface Alert {
   dismissedAt?: number;
   /** Set when the signal recovers (mitigation applied). */
   recoveryStartAt?: number;
+  /** True when the alert comes from the real API; mock-only details stay hidden. */
+  live?: boolean;
+  triageStatus?: TriageStatus;
 }
 
 /** States of agent/workflows/incident-response.yaml that an incident goes through. */
