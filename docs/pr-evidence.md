@@ -60,6 +60,21 @@ may create only the profile's ephemeral/one-shot resources; do not add `docker c
 or another global teardown to PR reproduction instructions. If a demonstration needs a running
 service, use its existing scoped Compose service and document the safe, project-specific cleanup.
 
+Container pitfalls that silently invalidate evidence:
+
+- Piping a script into `docker run` without `-i` exits 0 without executing it, because stdin is
+  not attached. Prefer mounting the script read-only and require the artifact it writes; when
+  comparing hashes between host and container, compare the digest only, not whole `sha256sum`
+  lines, whose paths differ.
+- Playwright deletes its `outputDir` at startup, so pointing it at a bind-mount root fails with
+  `EACCES`. Use a child of the mount (as `compose.triage23.yaml` does with
+  `PLAYWRIGHT_OUTPUT_DIR: /artifacts/test-results`) or a path under `/tmp`.
+- The static browser suites (`playwright.config.js`, `playwright.api.config.js`) expect the
+  loopback origin `http://127.0.0.1:4173`: run Playwright in the server container's network
+  namespace. A non-loopback HTTP origin such as `http://web` is not a secure context and lacks
+  `crypto.randomUUID`; never stub it or weaken assertions to pass. See
+  [issue 25 closure verification](evidence/issue-25-closure-verification.md).
+
 This policy governs contributor-facing PR reproduction and demo commands. It does not prescribe
 or validate internal GitHub Actions runner steps. The current metadata validator checks only a
 nonempty fenced command block; a human reviewer must verify that the PR follows this container
