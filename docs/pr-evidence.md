@@ -114,6 +114,10 @@ reviews evidence freshness, scope, size, governance changes, and risk once when 
 whether to merge. Keep independent work in focused PRs when that improves reviewability,
 but no fixed line-count exception is enforced.
 
+Reviewers may use Codex or other bots to assist a review. The human reviewer validates every
+finding, restates it plainly and actionably, and remains the accountable acceptance step; a bot
+finding is never an acceptance by itself.
+
 If multiple open PRs share the exact same head SHA, `pr-governance` fails closed because
 commit statuses cannot distinguish them. Use distinct candidates or close the redundant
 proposal before asking for acceptance.
