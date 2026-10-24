@@ -124,6 +124,8 @@ the author explains why it remains valid and the reviewer confirms that explanat
 
 Keep PRs focused enough to review safely. CI reports size metadata but does not enforce a
 fixed line limit or require a size-exception label; the maintainer evaluates scope when merging.
+When a change grows beyond one reviewable PR (see the 400-line guidance in `AGENTS.md`), prefer a
+feature branch delivered as a stack of PRs managed with `gh stack` over a size exception.
 
 Automated validation can check field presence and references. It requires a real screenshot, and accepts only a real video link or the exact documented storage deferral; it cannot establish that media proves behavior. The human reviewer owns that judgement.
 
