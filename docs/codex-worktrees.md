@@ -90,3 +90,32 @@ scripts/bootstrap-worktree.py
 ```
 
 The branch is a delivery convenience, not the environment identity.
+
+## Troubleshooting local stacks
+
+**Docker address pools exhausted.** When Compose fails with `all predefined address pools have
+been fully subnetted`, first tear down your own stale worktree stacks with the teardown command
+above. Never prune, reuse, or reconfigure another project's networks or the Docker daemon. If that
+is not enough, write a temporary Compose override outside the repository (for example under
+`/tmp`) that gives only your project's networks (`runtime`, plus `executor-call` and
+`executor-boundary` when you start the executor) an explicit private `/28` subnet. Check that each
+subnet is unused against `docker network inspect` of the existing networks and `ip route` before
+you use it. `compose.triage23.network.yaml` is an example of such an override.
+
+**The checks database outlives `run --rm`.** `--profile checks run --rm python-checks` removes only
+the one-shot container. Its dependency `python-checks-db` keeps running and holds the project
+network until `scripts/worktree-compose down`; confirm with `scripts/worktree-compose ps --all`.
+
+**Migration tests need their own PostgreSQL cluster.** Migrations create cluster-global roles
+(for example `sre_incident_owner` in `20260907_06`), so a role created for one database is visible
+to every other database in the same server. Run full migration and downgrade suites against the
+fresh `python-checks-db` container, never against another database inside a shared or evidence
+cluster.
+
+**Offline runs still build.** `--pull never` does not stop Compose from building a missing image
+for a service with a `build` section, and `docker compose run` has no `--no-build` option. Build
+the image while online first.
+
+**Do not mount the checkout over `/app`.** The API and checks images keep their virtual
+environment in `/app/.venv` and bake source and docs into `/app`. A bind mount over `/app` hides
+the environment. Mount only the paths you need, or rebuild the image.

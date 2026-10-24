@@ -21,6 +21,8 @@ Read [the team workflow](docs/team-workflow.md) before contributing and
   - Tautological tests considered harmful.
   - Change-detector tests considered harmful.
   - Do not create regression tests for bug fixes without a genuine gap in behavior testing.
+- Before adding a migration, table, governed route, resource type or audit operation, follow
+  the [change checklist](docs/architecture.md#change-checklist).
 - Preserve existing tests and runtime boundaries unless the requested change
   authorizes editing them. Validate the actual current candidate, not another
   task's reported result. Clearly separate local tests from hosted CI evidence.

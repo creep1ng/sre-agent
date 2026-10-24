@@ -28,6 +28,10 @@ optimize for clear, repeatable behavior over operational coverage.
 The issue remains the planning record. A partial PR must state what it covers and must not claim
 to close the full issue.
 
+Issue status lives in GitHub Project #8, which holds several hundred items.
+`gh project item-list` returns only 30 items unless you pass a large `--limit`; to read one
+issue's status, prefer `gh issue view N --json projectItems`.
+
 ## Team baseline
 
 The evaluated baseline is **Gentle AI 2.5.0**, on the stable release channel. Its documentation
@@ -153,6 +157,10 @@ This rule applies to PR reproduction and demonstration, not GitHub Actions' inte
 commands. The current metadata validator only confirms a nonempty fenced block, so the reviewer
 must enforce the container boundary during evidence review.
 
+For Compose failures on a shared host (exhausted Docker address pools, a lingering checks
+database, migration suites that need their own PostgreSQL cluster), see
+[troubleshooting local stacks](codex-worktrees.md#troubleshooting-local-stacks).
+
 ## Peer reproduction exercise
 
 During onboarding, every contributor completes this exercise:
@@ -173,6 +181,10 @@ checks scope, reproducibility, evidence sufficiency, and sanitization. Maintaine
 size exception and administer branch/ruleset protection after a pilot proves the controls block
 invalid PRs. GitHub Actions validates only untrusted PR metadata; it must not execute commands or
 download arbitrary URLs supplied by a PR description.
+
+The repository accepts only merge commits; squash and rebase merges are disabled, so integrate
+with `gh pr merge --merge`. Head branches are deleted automatically on merge; check that any
+stacked PR now targets the intended base before integrating it.
 
 For staged rollout, see [governance rollout](governance-rollout.md). For CI control ownership and
 non-blocking diagnostic proposals, see [CI control inventory](ci-controls.md).

@@ -15,6 +15,10 @@ it. Issue: #186.
   loopback interface only, so the environment answers on this host and on no
   other machine. The Envoy admin interface is not published.
 - Python with `pyyaml`. On Windows the interpreter is `python` or `py`.
+- A rootful Docker daemon, or a rootless one whose memlock limit is unlimited. Upstream
+  OpenSearch (`compose.observability.yaml` at the pinned tag) sets
+  `bootstrap.memory_lock=true` with an unlimited `memlock` ulimit, so on a default rootless
+  daemon the container fails to start with a runc `RLIMIT_MEMLOCK` error.
 
 Nothing is prepared by hand: `up` clones the pinned tag into `otel-demo/`,
 which git ignores.
