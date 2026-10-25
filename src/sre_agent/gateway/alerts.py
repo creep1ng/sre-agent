@@ -49,6 +49,7 @@ class AlertRule:
     window: str
     threshold: float
     expr: str
+    evidence: str
 
 
 def _evidence_hint(service: str, span: str) -> str:
@@ -66,6 +67,7 @@ def _error_ratio(service: str, span: str, window: str) -> str:
     return f"sum(increase({errors}[{window}])) / sum(increase({calls}}}[{window}]))"
 
 
+_ORDERS = 'checkout_requests_total{service_namespace="sre-agent",service_name="checkout"'
 RULES = (
     AlertRule(
         rule_id="checkout-payment-error-rate",
@@ -76,6 +78,26 @@ RULES = (
         window="2m",
         threshold=0.05,
         expr=_error_ratio("checkout", "oteldemo.PaymentService/Charge", "2m"),
+        evidence=_evidence_hint("checkout", "oteldemo.PaymentService/Charge"),
+    ),
+    # The demo's second service (#721) pushes its own counter every 5 s, so 30 s is a full
+    # window; span metrics flush every 60 s, too late for an alert within a minute of a deploy.
+    # A healthy release has no 5xx series at all, hence `or vector(0)`: only an `ok` evaluation
+    # closes an episode, and a missing numerator would read as no data.
+    AlertRule(
+        rule_id="checkout-orders-error-rate",
+        description="checkout orders failing",
+        service="checkout",
+        severity="sev2",
+        signal="checkout.requests",
+        window="30s",
+        threshold=0.1,
+        expr=f'(sum(increase({_ORDERS},http_response_status_code=~"5.."}}[30s])) or vector(0))'
+        f" / sum(increase({_ORDERS}}}[30s]))",
+        evidence="Evidence: Prometheus datasource webstore-metrics, metric checkout_requests_total"
+        ' with service_namespace="sre-agent" and service_name="checkout" (not the store\'s'
+        " checkout): http_response_status_code counts the answers and service_version names"
+        " the release that served them. The service sends no logs and no traces.",
     ),
 )
 
@@ -204,7 +226,7 @@ class LiveAlertsService:
             "status": "new",
             "observed_at": _iso(started),
             "summary": f"{rule.description}: {value:.0%} errors over the last {rule.window}"
-            f" (threshold {rule.threshold:.0%}). {_evidence_hint(rule.service, rule.signal)}",
+            f" (threshold {rule.threshold:.0%}). {rule.evidence}",
             "source": SOURCE,
             "origin": {
                 "signal": rule.signal,

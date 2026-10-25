@@ -49,7 +49,9 @@ class ScriptedMCP:
         self.calls.append((tool_name, arguments))
         if isinstance(self.next, Exception):
             raise self.next
-        return self.next
+        # This journey is the store's payment rule; the second service's rule (#721) sees no
+        # samples here, so it never fires.
+        return self.next if "PaymentService" in arguments["expr"] else {"data": []}
 
 
 def ratio(value: str) -> dict[str, Any]:
@@ -120,8 +122,8 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
         empty = alerts()
         assert empty.status_code == 200, empty.text
         assert empty.json()["alerts"] == []
-        assert [rule["state"] for rule in empty.json()["rules"]] == ["no_data"]
-        assert mcp_invocations() == audited + 1
+        assert [rule["state"] for rule in empty.json()["rules"]] == ["no_data", "no_data"]
+        assert mcp_invocations() == audited + 2
         assert mcp.calls[-1][0] == "query_prometheus"
 
         # Healthy traffic below the threshold.

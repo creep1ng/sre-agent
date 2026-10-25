@@ -124,8 +124,10 @@ Stated so that the exposition does not overclaim; a green E2E hides none of them
 
 `agent/executor/catalog.v1.yaml` enrols services: a `service` name, its `compose_service`, the
 `image_repository` the tag is appended to, and the `operations` offered. `probe` (the E2E target)
-offers both; `web` offers restart only, its image being built locally without release tags. #721
-enrols `checkout`; #724 adds a `flag.set` adapter for the OTel store; a generic manifest is later.
+offers both; `web` offers restart only, its image being built locally without release tags.
+`checkout` (#721) offers both: the demo's second service, `sre-checkout` in the `otel-demo`
+project, between `demo/checkout:1.4.0` and `1.5.0` ([demo-env](demo-env.md)). #724 adds a
+`flag.set` adapter for the OTel store; a generic manifest is later.
 
 ## Levels of autonomy
 

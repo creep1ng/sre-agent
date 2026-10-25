@@ -53,6 +53,25 @@ services:
     restart: unless-stopped
     networks: [default, mcp-boundary]
 
+  # The demo's second enrolled service (#721): a checkout of our own, beside the store. It
+  # cannot be named `checkout` here: it would merge with the store's service and answer for
+  # its DNS name. The release lives in the image, never on the container, so a rollback by
+  # the deploy-executor keeps the version it rolled back to. `demo_env.py fail|reset
+  # --service checkout` picks the release through DEMO_CHECKOUT_VERSION.
+  sre-checkout:
+    image: demo/checkout:${DEMO_CHECKOUT_VERSION:-1.4.0}
+    build:
+      context: ../docker
+      dockerfile: checkout.Dockerfile
+      args:
+        CHECKOUT_VERSION: ${DEMO_CHECKOUT_VERSION:-1.4.0}
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    depends_on:
+      otel-collector:
+        condition: service_started
+    restart: unless-stopped
+
   # The two declared ports, bound to the loopback interface. Upstream publishes
   # them on every interface, which put Grafana's anonymous Admin session and the
   # Envoy admin interface on whatever network the host is attached to. The admin

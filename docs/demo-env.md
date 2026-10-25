@@ -35,6 +35,18 @@ All five are idempotent and bounded to the Compose project `otel-demo`. None
 removes resources of another project, and none runs a host-wide cleanup such as
 `docker system prune`.
 
+### The second service (#721)
+
+    python scripts/demo_env.py fail|reset --service checkout
+
+Beside the store runs a checkout of our own, `sre-checkout`, built from
+`docker/checkout.Dockerfile` with the release baked into the image. It generates
+its own orders and pushes `checkout_requests_total` to the demo's collector every
+5 s. `fail --service checkout` builds and deploys `demo/checkout:1.5.0`, which
+answers 500 to 3 of every 10 orders; `reset --service checkout` deploys `1.4.0`
+again. The deploy-executor rolls it back between the same two tags, kept in the
+local image store; the gateway rule `checkout-orders-error-rate` alerts on it.
+
 ## Typical run
 
     python scripts/demo_env.py up
@@ -61,7 +73,7 @@ and traces, and how to read it, is in [demo-signals.md](demo-signals.md).
 | `.demo-state/grafana-mcp.env` | Grafana MCP caller token, created by `up` | No |
 | `demo/manifest.yaml` | What the environment is made of | Yes |
 | `demo/digests.lock` | Digests validated for the pinned version | Yes |
-| `compose.demo.yaml` | Overlay: owned flag directory, no flag cache in `checkout`, Grafana MCP, reset of undeclared host ports | Yes |
+| `compose.demo.yaml` | Overlay: owned flag directory, no flag cache in `checkout`, Grafana MCP, the second service `sre-checkout`, reset of undeclared host ports | Yes |
 
 The upstream checkout stays pristine: `up` refuses to run if it reports local
 modifications, and the flag working copy is never written back to it.
