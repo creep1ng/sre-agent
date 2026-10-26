@@ -340,6 +340,8 @@ class GrantCreate(BaseModel):
 # engine matches grant.action exactly, so they are rejected without mutation.
 # This is a pure lookup: it never touches a repository, so a denied caller
 # still receives 403 before any target access.
+# mitigation.execute over service_operation comes from the `governance` block of
+# schemas/executor/1.0.0/deploy-executor.yaml (#722).
 GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
     "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
     "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
@@ -361,6 +363,7 @@ GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
         }
     ),
     "administrative_control": frozenset({"admin.read", "admin.write"}),
+    "service_operation": frozenset({"mitigation.execute"}),
 }
 
 
@@ -430,12 +433,19 @@ class CatalogCreate(BaseModel):
     """
 
     model_config = ConfigDict(strict=True, extra="forbid")
-    resource_type: Literal["mcp_server", "mcp_tool", "skill", "bok_collection", "incident_workflow"]
+    resource_type: Literal[
+        "mcp_server",
+        "mcp_tool",
+        "skill",
+        "bok_collection",
+        "incident_workflow",
+        "service_operation",
+    ]
     resource_id: Annotated[
         str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
     ]
     owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
-    source: Literal["mcp", "skill", "bok", "incident_workflow"]
+    source: Literal["mcp", "skill", "bok", "incident_workflow", "deploy_executor"]
     source_ref: Annotated[
         str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
     ]
@@ -2439,6 +2449,7 @@ class ControlService:  # noqa: E305
             "skill": "skill",
             "bok_collection": "bok",
             "incident_workflow": "incident_workflow",
+            "service_operation": "deploy_executor",
         }[body.resource_type]
         if body.source != expected_source:
             return await self._finish(
@@ -2456,6 +2467,7 @@ class ControlService:  # noqa: E305
             "skill": {"draft", "published", "active", "inactive", "revoked"},
             "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
             "incident_workflow": {"active", "inactive"},
+            "service_operation": {"active", "inactive"},
         }
         if body.status not in allowed_status[body.resource_type]:
             return await self._finish(
@@ -2599,6 +2611,7 @@ class ControlService:  # noqa: E305
             "skill",
             "bok_collection",
             "incident_workflow",
+            "service_operation",
         }
         valid_status = {
             "registered",
@@ -2714,6 +2727,7 @@ class ControlService:  # noqa: E305
             "skill",
             "bok_collection",
             "incident_workflow",
+            "service_operation",
         } or (re.match(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$", resource_id) is None):
             return await self._finish(
                 request_id,

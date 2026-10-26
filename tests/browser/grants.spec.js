@@ -124,13 +124,22 @@ function catalogPayload() {
         source_ref: "incident-response@1.0.0",
         discoverability: { display_name: "Incident response workflow", visibility: "private", description: "", tags: [] },
       },
+      {
+        resource_type: "service_operation",
+        resource_id: "checkout:deployment.rollback",
+        owner_id: "executor-platform",
+        status: "active",
+        source: "deploy_executor",
+        source_ref: "deploy-executor@1.0.0",
+        discoverability: { display_name: "Roll checkout back", visibility: "private", description: "", tags: [] },
+      },
     ],
     limit: 100,
     truncated: false,
   };
 }
 
-// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:343-364.
+// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:345-367.
 // The browser spec asserts the page offers exactly these per-type sets.
 const EXPECTED_ADMITTED_ACTIONS = {
   "llm_model": ["admin.read", "admin.write", "invoke"],
@@ -151,6 +160,7 @@ const EXPECTED_ADMITTED_ACTIONS = {
     "incident.declare",
   ],
   "administrative_control": ["admin.read", "admin.write"],
+  "service_operation": ["mitigation.execute"],
 };
 
 const REJECTED_LEGACY_ACTIONS = ["authenticate", "export", "persist", "read_metadata", "redact"];
@@ -656,6 +666,7 @@ test("action selector rebuilds per resource type and creates run.* on incident_w
     ["bok_collection/demo-incident-response@1.0.0", EXPECTED_ADMITTED_ACTIONS["bok_collection"]],
     ["incident_workflow/incident-response", EXPECTED_ADMITTED_ACTIONS["incident_workflow"]],
     ["administrative_control/grants", EXPECTED_ADMITTED_ACTIONS["administrative_control"]],
+    ["service_operation/checkout:deployment.rollback", EXPECTED_ADMITTED_ACTIONS["service_operation"]],
   ];
   await page.click("#create-grant-button");
   await expect(page.locator("#create-dialog")).toBeVisible();

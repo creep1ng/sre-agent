@@ -1,6 +1,7 @@
 """CA2/4/6 controlled HTTP/PostgreSQL journey, authored before provisioner.
 
-Failure modes: missing direct agent MCP grants; inherited human authority;
+Failure modes: missing direct agent MCP grants, or an operation grant beyond checkout's
+rollback (#722); inherited human authority;
 operator lacks triage/run grants; restricted identity gains authority; repeat
 rotates credentials/duplicates grants/loses incidents; revoked grants silently
 reactivated; provisioning errors leak credentials. No external or paid calls.
@@ -147,6 +148,15 @@ def test_demo_permissions_converge_and_http_journey_remains_governed():
                 ("mcp.invoke", "query_prometheus"),
                 ("mcp.invoke", "query_elasticsearch"),
             }
+            assert conn.execute(
+                "SELECT g.action, g.resource_id, r.status FROM grants g JOIN resources r "
+                "USING (resource_type, resource_id) WHERE g.principal_id='incident-harness' "
+                "AND g.resource_type='service_operation'"
+            ).fetchall() == [("mitigation.execute", "checkout:deployment.rollback", "active")]
+            assert conn.execute(
+                "SELECT resource_id FROM resources "
+                "WHERE resource_type='service_operation' ORDER BY 1"
+            ).fetchall() == [("checkout:deployment.restart",), ("checkout:deployment.rollback",)]
             conn.execute(
                 "UPDATE grants SET status='revoked' WHERE grant_id='grant-setup-human-alert-read'"
             )
