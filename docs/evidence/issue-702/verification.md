@@ -20,9 +20,10 @@
 
 Real browser run: **1 passed (1.3 min)**, browser open before injection. The failure was injected
 **5.2 s after the session started**; the first alert became visible **72.2 s after injection**.
-That misses the issue's <60 s criterion: detection is server-side (the fixed 2-minute rule and
-OTel span-metric export), not the inbox. The UI polled every ~15 s and rendered the alert on the
-first poll that contained it.
+That meets the issue's current **≤ 180 s** criterion, which on 2026-10-24 replaced the earlier
+<60 s target that this OTel Demo configuration cannot reach. The remaining latency is server-side
+detection (the fixed 2-minute rule and OTel span-metric export), not the inbox. The UI polled
+every ~15 s and rendered the alert on the first poll that contained it.
 
 ## Artifacts
 
