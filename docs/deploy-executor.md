@@ -141,6 +141,38 @@ The executor is the same at every level; what changes is who may call it and whe
 The decisions of #733 hold at every level: no shell even when a human approves, the risk scorer
 never authorizes without a human, and the catalog is the whole action space.
 
+## Approve-to-execute (#722)
+
+Maintainer decisions of 2026-10-26 closing the definition of ready of #722. The goal is
+demonstrable agentic remediation for the demo, not a simulated one.
+
+- **Grant.** Resource type `service_operation`, `resource_id` `{service}:{operation}` (for example
+  `checkout:deployment.rollback`), action `mitigation.execute`, as the contract's `governance`
+  block already says. The holder is the agent principal `incident-harness`: the grant says the
+  agent may run that operation on that service. A separate executor identity (#697) would add a
+  credential and no control, since the executor checks only the gateway's signature; it remains a
+  possible upgrade.
+- **Proposal.** For a service enrolled in the catalog the investigator must propose an enrolled
+  operation with its parameters. A proposal without one is invalid investigator output, not a
+  `simulated` mitigation: the investigator retries with the validation error and otherwise
+  escalates through `RequestHuman`, visible in the timeline. `simulated` is kept only for services
+  with no catalog (the OTel store until #724). The demo scenario must therefore be one an enrolled
+  operation can fix.
+- **Order on approval.** Check the incident is still `mitigating` at `expected_incident_version`,
+  validate the operation against the catalog the executor serves (`GET /v1/services/{service}`),
+  evaluate the grant, and only then call the executor, signed, with an `Idempotency-Key` derived
+  from the run and the mitigation. A stale approval never reaches the executor.
+- **Executor failure.** 4xx, 5xx, timeout or `execution_unknown` apply no transition: the incident
+  stays `mitigating` and the failure is audited and shown in the timeline. An `execution_unknown`
+  intent keeps answering 409 for its key; the operator applies the change by hand or asks for a
+  new proposal. This is a known limitation of the demo.
+- **Audit.** `mitigation.execute` enters the `audit_events` CHECK through a migration, without
+  publishing a new audit schema release.
+- **Delivery.** The cuts (grant, proposal, execution on approval) merge through PRs into an
+  integration branch `feature/722-mitigation-execute`; one final PR from that branch to `main`
+  closes #722. #723 owns the agent's verification, the return to `investigating` and the full
+  scenario up to `resolved`.
+
 ## What the vendors do
 
 Official documentation, read on 2026-10-22; marketing claims are left out.
