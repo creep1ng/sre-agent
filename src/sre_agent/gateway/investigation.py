@@ -7,7 +7,10 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from secrets import token_hex
 from typing import Any
+from urllib.parse import quote
 from uuid import UUID
+
+import httpx
 
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.incident.persistence import (
@@ -36,6 +39,7 @@ from sre_agent.investigator.contract import (
     ProposeHypothesis,
     ProposeMitigation,
     RequestHuman,
+    ServiceOperations,
 )
 from sre_agent.investigator.loop import investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
@@ -56,9 +60,10 @@ class InvestigationRunDispatcher:
         *,
         http: Any = None,
         language: OutputLanguage = "es",
+        executor_url: str | None = None,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
-        self.language = language
+        self.language, self.executor_url = language, executor_url
         self.gateway_settings = gateway_settings
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
@@ -167,6 +172,7 @@ class InvestigationRunDispatcher:
             assert self.evidence is not None and self.gateway is not None
             capabilities, discovery_id = await self.evidence.discover()
             request_ids.append(discovery_id)
+            operations, unavailable = await self._service_operations(context.alert.service)
         except EvidenceUnavailable as error:
             if error.request_id is not None:
                 request_ids.append(error.request_id)
@@ -197,6 +203,8 @@ class InvestigationRunDispatcher:
                         objective="investigate",
                         context=context,
                         authorized_capabilities=capabilities,
+                        service_operations=operations,
+                        operations_unavailable=unavailable,
                     ),
                     self.gateway,
                     self.evidence,
@@ -479,6 +487,7 @@ class InvestigationRunDispatcher:
                 "approval_status": "pending",
                 "execution_mode": "simulated",
                 "based_on_hypothesis": outcome.based_on_hypothesis,
+                **({"operation": outcome.operation.model_dump()} if outcome.operation else {}),
                 "created_by": "agent",
                 "created_at": datetime.now(UTC).isoformat(),
             }
@@ -697,6 +706,29 @@ class InvestigationRunDispatcher:
             )
             for turn in result.turns
         )
+
+    async def _service_operations(self, service: str) -> tuple[ServiceOperations | None, bool]:
+        """The deploy-executor's catalog for the alert's service, its one source (#722): what it
+        offers, nothing when the service is not enrolled, or unreadable (fail closed)."""
+        if self.executor_url is None:
+            return None, False
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                url = f"{self.executor_url}/v1/services/{quote(service, safe='')}"
+                response = await client.get(url)
+            body = response.json()
+            if response.status_code == 404 and body["error"]["code"] == "service_not_enrolled":
+                return None, False
+            response.raise_for_status()
+            view = ServiceOperations(
+                service=service,
+                running_image=body["container"]["image"],
+                available_tags=body["available_tags"],
+                operations=body["operations"],
+            )
+        except Exception:
+            return None, True
+        return view, False
 
     @staticmethod
     def _result_diagnostic(result: InvestigationResult) -> dict[str, Any] | None:

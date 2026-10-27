@@ -35,7 +35,8 @@ EVIDENCE_FIELDS = (
 )  # fmt: skip
 MITIGATION_FIELDS = (
     "mitigation_id", "description", "steps", "risk", "expected_effect", "verification_check",
-    "approval_status", "execution_mode", "based_on_hypothesis", "created_by", "created_at",
+    "approval_status", "execution_mode", "based_on_hypothesis", "operation", "created_by",
+    "created_at",
 )  # fmt: skip
 
 

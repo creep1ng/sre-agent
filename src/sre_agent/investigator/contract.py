@@ -122,6 +122,55 @@ class PinnedSkill(_Strict):
     request_id: UUID
 
 
+OperationName = Annotated[str, Field(min_length=1, max_length=100)]
+ParameterName = Annotated[str, Field(min_length=1, max_length=64)]
+
+
+class ProposedOperation(_Strict):
+    """The deploy-executor operation a mitigation runs once a human approves it (#722)."""
+
+    service: Name
+    operation: OperationName
+    parameters: dict[ParameterName, Annotated[str, Field(min_length=1, max_length=128)]] = Field(
+        default_factory=dict
+    )
+
+
+class OperationOffer(_Projection):
+    operation: OperationName
+    parameters: list[ParameterName] = Field(default_factory=list)
+    risk: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class ServiceOperations(_Strict):
+    """What the deploy-executor serves for the incident's service, GET /v1/services/{service}:
+    its one catalog (#722), with the release running and the tags it can roll back to."""
+
+    service: Name
+    running_image: Annotated[str, Field(max_length=300)] | None = None
+    available_tags: list[Annotated[str, Field(max_length=128)]] = Field(default_factory=list)
+    operations: Annotated[list[OperationOffer], Field(min_length=1)]
+
+    def problem(self, proposed: ProposedOperation | None) -> str | None:
+        """Why a proposal does not name an operation this service can run, if it does not."""
+        offers = {item.operation: item for item in self.operations}
+        names = ", ".join(sorted(offers))
+        if proposed is None:
+            return f"{self.service} is enrolled: name one of its operations ({names}) in operation"
+        if proposed.service != self.service:
+            return f"operation.service must be {self.service}, the incident's service"
+        if (offer := offers.get(proposed.operation)) is None:
+            return f"{self.service} offers only {names}"
+        if set(proposed.parameters) != set(offer.parameters):
+            return f"{offer.operation} takes exactly: {', '.join(offer.parameters) or 'nothing'}"
+        tag = proposed.parameters.get("to_tag")
+        if tag is not None and tag not in self.available_tags:
+            return f"to_tag must be one of the available tags: {', '.join(self.available_tags)}"
+        if tag is not None and tag == (self.running_image or "").rpartition(":")[2]:
+            return f"{self.service} already runs {tag}: roll back to another available tag"
+        return None
+
+
 class InvestigationRequest(_Strict):
     incident_id: IncidentId
     run_id: Annotated[str, Field(pattern=r"^run_[a-z0-9]{8,32}$")]
@@ -129,6 +178,9 @@ class InvestigationRequest(_Strict):
     context: IncidentContext
     authorized_capabilities: list[Capability] = Field(default_factory=list)
     skills: Annotated[list[SkillPin], Field(max_length=8)] = Field(default_factory=list)
+    service_operations: ServiceOperations | None = None
+    # The executor could not be read: a mitigation then goes to a human (fail closed).
+    operations_unavailable: bool = False
 
     @model_validator(mode="after")
     def _context_incident_matches_request(self) -> InvestigationRequest:
@@ -191,6 +243,7 @@ class ProposeMitigation(_Strict):
     risk: Level
     verification_check: Annotated[str, Field(min_length=1, max_length=2000)]
     based_on_hypothesis: HypothesisId | None = None
+    operation: ProposedOperation | None = None
 
 
 class RequestHuman(_Strict):
@@ -250,6 +303,15 @@ def unknown_references(
         if action.based_on_hypothesis not in hypotheses:
             unknown.append(action.based_on_hypothesis)
     return unknown
+
+
+def operation_problem(action: ProposeMitigation, request: InvestigationRequest) -> str | None:
+    """An enrolled service needs one of its operations; any other service names none."""
+    if request.service_operations is not None:
+        return request.service_operations.problem(action.operation)
+    if action.operation is not None:
+        return "no deploy-executor operation is enrolled for this service: leave operation out"
+    return None
 
 
 def task_id_for(turn_id: str) -> str:

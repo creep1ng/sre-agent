@@ -29,7 +29,7 @@ The investigator's internal result status describes the bounded loop:
 | Status | When |
 |---|---|
 | `completed` | The model proposed a cited hypothesis, a mitigation or a conclusion |
-| `needs_human` | The model explicitly requested human review, or the gateway rejected the response contract |
+| `needs_human` | The model explicitly requested human review, the gateway rejected the response contract, or the mitigation named no valid executor operation twice |
 | `invalid_output` | Two consecutive answers were not one valid action or cited unknown evidence |
 | `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool or BoK collection |
 | `pre_dispatch_rejected` | The MCP gateway rejected the tool request with HTTP 422 before upstream dispatch |
@@ -80,6 +80,15 @@ pending, identified artifact. Those preconditions need a recorded hypothesis wit
 evidence, so a mitigation proposed before one exists is rejected as invalid output and the
 model is asked again. `request_human` and `conclude` have no transition in this workflow;
 their validated result is recorded without inventing a domain-state transition.
+
+The dispatch also reads the deploy-executor's `GET /v1/services/{service}` for the alert's
+service (`DEPLOY_EXECUTOR_URL`), the one source of its catalog (#722). For an enrolled service
+the agent gets the operations, the release running and the tags available, and its mitigation
+must name one operation with exactly its parameters, a rollback to a tag other than the running
+one. Otherwise the model is asked again with the error, and a second miss becomes
+`request_human`, visible in the timeline. A service the executor does not enrol keeps a
+simulated mitigation without an operation; an executor that cannot be read sends any
+mitigation to a person.
 
 Governed MCP discovery includes the JSON Schema generated from each tool's strict runtime
 input model, but only for tools with a direct invocation grant. The investigator passes

@@ -93,7 +93,7 @@ def migrated_database() -> Iterator[None]:
     yield
 
 
-def _incident(incident_id: str) -> dict[str, Any]:
+def _incident(incident_id: str, service: str = "payments") -> dict[str, Any]:
     return {
         "workflow_id": "incident-response",
         "workflow_version": "1.0.0",
@@ -103,7 +103,7 @@ def _incident(incident_id: str) -> dict[str, Any]:
         "impact": None,
         "alert": {
             "alert_id": "alt-investigation-http",
-            "service": "payments",
+            "service": service,
             "severity": "sev2",
             "status": "triaged",
             "observed_at": NOW.isoformat(),
@@ -119,11 +119,11 @@ def _incident(incident_id: str) -> dict[str, Any]:
     }
 
 
-def _add_incident(incident_id: str) -> None:
+def _add_incident(incident_id: str, service: str = "payments") -> None:
     async def add() -> None:
         database = Database(DATABASE_URL)
         async with PostgresIncidentUnitOfWork(database) as work:
-            await work.incidents.add(incident_id, _incident(incident_id), now=NOW)
+            await work.incidents.add(incident_id, _incident(incident_id, service), now=NOW)
         await database.dispose()
 
     asyncio.run(add())
@@ -644,6 +644,7 @@ def _application(
     harness_key: str = HARNESS_KEY,
     llm: ScriptedLLM | None = None,
     mcp: ScriptedMCP | None = None,
+    executor_url: str | None = None,
 ) -> Any:
     settings = Settings.from_environment(
         SEED_ENV
@@ -654,6 +655,7 @@ def _application(
             "INVESTIGATOR_GATEWAY_API_KEY": harness_key,
             "INVESTIGATOR_MODEL_ALIAS": "triage-agent",
         }
+        | ({"DEPLOY_EXECUTOR_URL": executor_url} if executor_url else {})
     )
     return create_application(
         settings,
@@ -1883,3 +1885,140 @@ def test_invalid_model_output_retains_all_governed_http_audits(recover: bool) ->
             {"recover": recover, "correlated_response_audits": correlated, "replay_unchanged": True}
         )
     )
+
+
+# The proposed operation (#722, second cut). Ways this can fail:
+# 1. the agent is not told what it may run: its first request lacks the operations the
+#    deploy-executor enrols for the incident's service, the release running and the tags;
+# 2. a proposal for an enrolled service without an operation is stored as a simulated
+#    mitigation, instead of going back to the agent with the validation error;
+# 3. a second invalid proposal ends the run silently, or a rollback to the running release
+#    is accepted: it must reach a human, visible in the timeline, and store no mitigation;
+# 4. a service with no catalog stops being simulated, or a down executor lets the agent
+#    propose without a human.
+ROLLBACK = dict(service="checkout", operation="deployment.rollback", parameters={"to_tag": "1.4.0"})
+CHECKOUT = {
+    "service": "checkout",
+    "operations": [
+        {"operation": "deployment.restart", "parameters": [], "risk": {"reversible": False}},
+        {
+            "operation": "deployment.rollback",
+            "parameters": ["to_tag"],
+            "risk": {"reversible": True},
+        },
+    ],
+    "container": {"image": "demo/checkout:1.5.0", "state": "running"},
+    "available_tags": ["1.4.0", "1.5.0"],
+}
+
+
+class _ExecutorHandler(BaseHTTPRequestHandler):
+    """GET /v1/services/{service} of the deploy-executor: checkout is enrolled, or it is down."""
+
+    def log_message(self, _format: str, *args: Any) -> None:
+        return
+
+    def do_GET(self) -> None:
+        status, body = (404, {"error": {"code": "service_not_enrolled", "message": "no"}})
+        if self.server.down:  # type: ignore[attr-defined]
+            status, body = 503, {"error": {"code": "docker_unavailable", "message": "down"}}
+        elif self.path == "/v1/services/checkout":
+            status, body = 200, CHECKOUT
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(body).encode())
+
+
+@contextmanager
+def _executor(*, down: bool = False) -> Iterator[str]:
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _ExecutorHandler)
+    server.down = down  # type: ignore[attr-defined]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+class OperationLLM(ScriptedLLM):
+    """Evidence, a hypothesis, then each scripted mitigation in turn, with its operation."""
+
+    def __init__(self, *operations: dict[str, Any] | None) -> None:
+        super().__init__()
+        self.operations = list(operations)
+
+    async def create(self, request: ProviderRequest) -> ProviderResult:
+        self.requests.append(request)
+        reply = _scripted_decision(_state(request), "Orders fail since release 1.5.0 started.")
+        if reply["action"] == "propose_mitigation" and (operation := self.operations.pop(0)):
+            reply["operation"] = operation
+        return ProviderResult(
+            response_id=f"resp_operation_{len(self.requests):04d}",
+            model=request.model,
+            text=json.dumps(reply),
+            provider=request.provider,
+        )
+
+
+def _state(request: ProviderRequest) -> dict[str, Any]:
+    return json.loads(request.input.split("State: ", 1)[1].splitlines()[0])
+
+
+def _investigate(incident_id: str, service: str, llm: OperationLLM, *, down: bool = False) -> Any:
+    _add_incident(incident_id, service)
+    _grant_run_access()
+    port = _free_port()
+    with _executor(down=down) as executor_url:
+        app = _application(f"http://127.0.0.1:{port}", llm=llm, executor_url=executor_url)
+        with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+            _add_agent_mcp_grants(client, "positive")
+            started = _start(client, incident_id, f"{incident_id}-0001")
+            assert started.status_code == 201, started.text
+            events = f"/v1/incidents/{incident_id}/runs/{started.json()['run_id']}/events"
+            timeline = client.get(events, headers={"Authorization": f"Bearer {HUMAN_KEY}"})
+    state, events, _decisions = _database_rows(incident_id, started.json()["run_id"])
+    return state, events, [event["summary"] for event in timeline.json()["events"]]
+
+
+def test_the_agent_names_an_enrolled_operation_after_the_validation_error() -> None:
+    llm = OperationLLM(None, ROLLBACK)
+    state, _events, _timeline = _investigate("inc-operation-retry", "checkout", llm)
+    told = _state(llm.requests[0])["service_operations"]
+    assert (told["running_image"], told["available_tags"]) == (
+        "demo/checkout:1.5.0",
+        ["1.4.0", "1.5.0"],
+    )
+    assert [item["operation"] for item in told["operations"]] == [
+        "deployment.restart",
+        "deployment.rollback",
+    ]
+    assert "Your previous reply was rejected" in llm.requests[-1].input
+    assert state["state"] == "mitigating" and state["mitigation_strategy"]["operation"] == ROLLBACK
+
+
+def test_a_second_invalid_proposal_asks_a_human_in_the_timeline() -> None:
+    llm = OperationLLM(None, {**ROLLBACK, "parameters": {"to_tag": "1.5.0"}})
+    state, events, timeline = _investigate("inc-operation-human", "checkout", llm)
+    assert state["state"] == "investigating" and state["mitigation_strategy"] is None
+    asked = [event["outcome"] for event in events if "outcome" in event][-1]
+    assert asked["action"] == "request_human" and "1.5.0" in asked["reason"]
+    assert "Investigation requested human review." in timeline
+
+
+@pytest.mark.parametrize("down", [False, True])
+def test_with_no_catalog_the_mitigation_stays_simulated_and_a_down_executor_asks_a_human(
+    down: bool,
+) -> None:
+    llm = OperationLLM(None)
+    state, _events, timeline = _investigate(
+        f"inc-operation-down-{str(down).lower()}", "payments", llm, down=down
+    )
+    assert "service_operations" not in _state(llm.requests[0])
+    if down:
+        assert state["mitigation_strategy"] is None
+        assert "Investigation requested human review." in timeline
+    else:
+        assert state["mitigation_strategy"]["execution_mode"] == "simulated"
+        assert "operation" not in state["mitigation_strategy"]
