@@ -35,9 +35,10 @@ services:
       INVESTIGATOR_GATEWAY_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
       INVESTIGATOR_MODEL_ALIAS: triage-agent
       INVESTIGATOR_OUTPUT_LANGUAGE: ${INVESTIGATOR_OUTPUT_LANGUAGE:-es}
-      # The executor's catalog tells the agent what it may propose (#722); with the executor
-      # down, a mitigation goes to a person.
-      DEPLOY_EXECUTOR_URL: http://deploy-executor:8000
+      # http://deploy-executor:8000 where the stack runs the executor (#722): its catalog tells
+      # the agent what it may propose, and if it cannot be read a mitigation goes to a person.
+      # Empty, as in the stack scripts/setup_sre.py starts, every mitigation stays simulated.
+      DEPLOY_EXECUTOR_URL: ${DEPLOY_EXECUTOR_URL:-}
       SRE_AGENT_APPLICATION_VERSION: ${SRE_AGENT_APPLICATION_VERSION:-}
       SRE_AGENT_CONTRACT_VERSION: ${SRE_AGENT_CONTRACT_VERSION:-}
       SRE_AGENT_BUILD_REVISION: ${SRE_AGENT_BUILD_REVISION:-}

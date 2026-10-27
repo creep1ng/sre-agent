@@ -1895,7 +1895,9 @@ def test_invalid_model_output_retains_all_governed_http_audits(recover: bool) ->
 # 3. a second invalid proposal ends the run silently, or a rollback to the running release
 #    is accepted: it must reach a human, visible in the timeline, and store no mitigation;
 # 4. a service with no catalog stops being simulated, or a down executor lets the agent
-#    propose without a human.
+#    propose without a human;
+# 5. a stack that runs no executor, like the one scripts/setup_sre.py starts, stops proposing
+#    mitigations, because compose points the api at an executor that is not there.
 ROLLBACK = dict(service="checkout", operation="deployment.rollback", parameters={"to_tag": "1.4.0"})
 CHECKOUT = {
     "service": "checkout",
@@ -1966,12 +1968,13 @@ def _state(request: ProviderRequest) -> dict[str, Any]:
     return json.loads(request.input.split("State: ", 1)[1].splitlines()[0])
 
 
-def _investigate(incident_id: str, service: str, llm: OperationLLM, *, down: bool = False) -> Any:
+def _investigate(incident_id: str, service: str, llm: OperationLLM, *, executor: str = "up") -> Any:
     _add_incident(incident_id, service)
     _grant_run_access()
     port = _free_port()
-    with _executor(down=down) as executor_url:
-        app = _application(f"http://127.0.0.1:{port}", llm=llm, executor_url=executor_url)
+    with _executor(down=executor == "down") as executor_url:
+        url = None if executor == "unset" else executor_url
+        app = _application(f"http://127.0.0.1:{port}", llm=llm, executor_url=url)
         with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
             _add_agent_mcp_grants(client, "positive")
             started = _start(client, incident_id, f"{incident_id}-0001")
@@ -2007,16 +2010,23 @@ def test_a_second_invalid_proposal_asks_a_human_in_the_timeline() -> None:
     assert "Investigation requested human review." in timeline
 
 
-@pytest.mark.parametrize("down", [False, True])
+@pytest.mark.parametrize("executor", ["unset", "up", "down"])
 def test_with_no_catalog_the_mitigation_stays_simulated_and_a_down_executor_asks_a_human(
-    down: bool,
+    executor: str,
 ) -> None:
+    # unset: the stack scripts/setup_sre.py starts runs no executor, and compose leaves the URL
+    # empty unless the stack declares one, so even checkout stays simulated there.
+    if executor == "unset":
+        compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
+        environment = compose["services"]["api"]["environment"]
+        assert environment["DEPLOY_EXECUTOR_URL"] == "${DEPLOY_EXECUTOR_URL:-}"
     llm = OperationLLM(None)
+    service = "checkout" if executor == "unset" else "payments"
     state, _events, timeline = _investigate(
-        f"inc-operation-down-{str(down).lower()}", "payments", llm, down=down
+        f"inc-operation-{executor}", service, llm, executor=executor
     )
     assert "service_operations" not in _state(llm.requests[0])
-    if down:
+    if executor == "down":
         assert state["mitigation_strategy"] is None
         assert "Investigation requested human review." in timeline
     else:

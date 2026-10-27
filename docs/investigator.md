@@ -81,14 +81,16 @@ evidence, so a mitigation proposed before one exists is rejected as invalid outp
 model is asked again. `request_human` and `conclude` have no transition in this workflow;
 their validated result is recorded without inventing a domain-state transition.
 
-The dispatch also reads the deploy-executor's `GET /v1/services/{service}` for the alert's
-service (`DEPLOY_EXECUTOR_URL`), the one source of its catalog (#722). For an enrolled service
-the agent gets the operations, the release running and the tags available, and its mitigation
-must name one operation with exactly its parameters, a rollback to a tag other than the running
-one. Otherwise the model is asked again with the error, and a second miss becomes
-`request_human`, visible in the timeline. A service the executor does not enrol keeps a
-simulated mitigation without an operation; an executor that cannot be read sends any
-mitigation to a person.
+Where the stack runs the deploy-executor and sets `DEPLOY_EXECUTOR_URL`
+(`http://deploy-executor:8000` in Compose), the dispatch also reads its
+`GET /v1/services/{service}` for the alert's service, the one source of its catalog (#722). For
+an enrolled service the agent gets the operations, the release running and the tags available,
+and its mitigation must name one operation with exactly its parameters, a rollback to a tag
+other than the running one. Otherwise the model is asked again with the error, and a second
+miss becomes `request_human`, visible in the timeline. A service the executor does not enrol
+keeps a simulated mitigation without an operation; a configured executor that cannot be read
+sends any mitigation to a person. Without `DEPLOY_EXECUTOR_URL`, as in the stack
+`scripts/setup_sre.py` starts, every mitigation stays simulated.
 
 Governed MCP discovery includes the JSON Schema generated from each tool's strict runtime
 input model, but only for tools with a direct invocation grant. The investigator passes
