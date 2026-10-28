@@ -147,7 +147,7 @@ Maintainer decisions of 2026-10-26 closing the definition of ready of #722. The 
 demonstrable agentic remediation for the demo, not a simulated one.
 
 - **Grant.** Resource type `service_operation`, `resource_id` `{service}:{operation}` (for example
-  `checkout:deployment.rollback`), action `mitigation.execute`, as the contract's `governance`
+  `sre-checkout:deployment.rollback`), action `mitigation.execute`, as the contract's `governance`
   block already says. The holder is the agent principal `incident-harness`: the grant says the
   agent may run that operation on that service. A separate executor identity (#697) would add a
   credential and no control, since the executor checks only the gateway's signature; it remains a
@@ -158,6 +158,13 @@ demonstrable agentic remediation for the demo, not a simulated one.
   escalates through `RequestHuman`, visible in the timeline. `simulated` is kept only for services
   with no catalog (the OTel store until #724). The demo scenario must therefore be one an enrolled
   operation can fix.
+- **Service names.** The proposal looks up operations by the alert's `service`, so an enrolled
+  service needs a name no other source emits. Our second service (#721) is `sre-checkout`
+  everywhere: catalog, the `checkout-orders-error-rate` rule, its `service.name`,
+  `demo_env.py --service` and the grants. The store's `checkout`, alerted by
+  `checkout-payment-error-rate`, keeps its name and stays without a catalog; sharing `checkout`
+  would hand a store payment incident the rollback of an unrelated service (decided on 2026-10-28
+  in #751).
 - **Order on approval.** Check the incident is still `mitigating` at `expected_incident_version`,
   validate the operation against the catalog the executor serves (`GET /v1/services/{service}`),
   evaluate the grant, and only then call the executor, signed, with an `Idempotency-Key` derived
