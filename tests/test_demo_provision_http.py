@@ -121,13 +121,14 @@ def test_demo_permissions_converge_and_http_journey_remains_governed():
         )
         assert declared.status_code == 201, declared.text
         incident = declared.json()["incident_id"]
-        started = request(
-            "POST",
-            f"/v1/incidents/{incident}/runs",
-            body={"workflow_version": "1.0.0", "objective": "investigate"},
+        # The declaration already opened the investigation run as the operator (#704).
+        detail = request("GET", f"/v1/incidents/{incident}")
+        assert detail.status_code == 200, detail.text
+        run = next(
+            item["run_id"]
+            for item in detail.json()["runs"]
+            if item["current_state"] == "investigating"
         )
-        assert started.status_code == 201, started.text
-        run = started.json()["run_id"]
         for suffix in ("", "/events"):
             path = f"/v1/incidents/{incident}/runs/{run}" + suffix
             assert request("GET", path).status_code == 200
