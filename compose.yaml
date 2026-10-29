@@ -255,6 +255,7 @@ services:
       # Opt-in real-API journey: the key is injected only into this runner and never logged.
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       LIVE_INBOX: ${LIVE_INBOX:-0}
+      LIVE_DECLARE: ${LIVE_DECLARE:-0}
     command:
       - sh
       - -c
