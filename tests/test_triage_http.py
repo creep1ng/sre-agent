@@ -3,6 +3,7 @@
 import asyncio
 import os
 from pathlib import Path
+from time import perf_counter
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
@@ -70,7 +71,8 @@ def triage_http_database() -> None:
             "('producer-limited','agent','Limited producer','active',now(),now()),"
             "('context-human','human','Context operator','active',now(),now()),"
             "('context-revocable','human','Revocable operator','active',now(),now()),"
-            "('eligible-linker','human','Eligible incident reader','active',now(),now())"
+            "('eligible-linker','human','Eligible incident reader','active',now(),now()),"
+            "('starter-human','human','Declarer who can start runs','active',now(),now())"
         )
         connection.execute(
             "INSERT INTO resources (resource_type, resource_id, status, updated_at,"
@@ -97,6 +99,7 @@ def triage_http_database() -> None:
             issued_context_human = await creds.issue("context-human")
             issued_context_revocable = await creds.issue("context-revocable")
             issued_eligible_linker = await creds.issue("eligible-linker")
+            issued_starter = await creds.issue("starter-human")
             grants = GrantRepository(session)
             for index, action in enumerate(
                 ("alert.triage", "alert.dismiss", "alert.associate", "run.read", "incident.declare")
@@ -192,6 +195,16 @@ def triage_http_database() -> None:
                 "incident_workflow",
                 "incident-response",
             )
+            for index, action in enumerate(
+                ("alert.read", "run.read", "incident.declare", "run.start")
+            ):
+                await grants.create(
+                    f"grant-starter-human-{index}",
+                    "starter-human",
+                    action,
+                    "incident_workflow",
+                    "incident-response",
+                )
         BEARERS["op"] = f"Bearer {issued_op.key}"
         BEARERS["reader"] = f"Bearer {issued_reader.key}"
         BEARERS["bystander"] = f"Bearer {issued_by.key}"
@@ -200,6 +213,7 @@ def triage_http_database() -> None:
         BEARERS["context_human"] = f"Bearer {issued_context_human.key}"
         BEARERS["context_revocable"] = f"Bearer {issued_context_revocable.key}"
         BEARERS["eligible_linker"] = f"Bearer {issued_eligible_linker.key}"
+        BEARERS["starter"] = f"Bearer {issued_starter.key}"
 
     asyncio.run(_setup())
     asyncio.run(database.dispose())
@@ -346,6 +360,10 @@ def test_declare_persists_operator_impact_through_http_state_event_and_replay() 
             "SELECT count(*) FROM incident.run_events WHERE incident_id=%s",
             (result["incident_id"],),
         ).fetchone()[0]
+        run_count = connection.execute(
+            "SELECT count(*) FROM incident.runs WHERE incident_id=%s",
+            (result["incident_id"],),
+        ).fetchone()[0]
     assert incident[0]["impact"] == impact
     assert event[0]["impact"] == impact
     assert snapshot is not None
@@ -370,7 +388,8 @@ def test_declare_persists_operator_impact_through_http_state_event_and_replay() 
                 },
             }
         )
-    assert event_count == 1
+    assert run_count == 1
+    assert event_count == 2
 
     replay = _post(client, alert_id, body, "k-impact-http-123456", BEARERS["op"])
     assert replay.status_code == 201
@@ -380,7 +399,22 @@ def test_declare_persists_operator_impact_through_http_state_event_and_replay() 
         assert connection.execute(
             "SELECT count(*) FROM incident.run_events WHERE incident_id=%s",
             (result["incident_id"],),
-        ).fetchone() == (1,)
+        ).fetchone() == (event_count,)
+        assert connection.execute(
+            "SELECT count(*) FROM incident.runs WHERE incident_id=%s",
+            (result["incident_id"],),
+        ).fetchone() == (run_count,)
+    timeline = client.get(
+        f"/v1/incidents/{result['incident_id']}/timeline",
+        headers={"Authorization": BEARERS["op"]},
+    )
+    assert timeline.status_code == 200
+    receipt = next(
+        event
+        for event in timeline.json()["events"]
+        if event["reason_code"] == "run_start_not_authorized"
+    )
+    assert "declarant lacks the run.start grant" in receipt["summary"]
 
 
 @pytest.mark.parametrize(
@@ -1438,3 +1472,60 @@ def test_eligible_list_then_closed_destination_is_rejected_without_association()
             == "resolved"
         )
     assert (_count_rows("alert_triage"), _count_rows("idempotency_records")) == before
+
+
+def test_declare_starts_investigation_as_declarant_and_replays_idempotently() -> None:
+    client, alert_id = _client(), "al-auto-investigate-704"
+    body = _cmd("triage_declare", reason=REASON, severity="sev2")
+    started = perf_counter()
+    first = _post(client, alert_id, body, "k-auto-investigate-704", BEARERS["starter"])
+    elapsed = perf_counter() - started
+    assert first.status_code == 201, first.text
+    assert elapsed < 5
+    incident_id = first.json()["incident_id"]
+
+    detail = client.get(
+        f"/v1/incidents/{incident_id}", headers={"Authorization": BEARERS["starter"]}
+    )
+    assert detail.status_code == 200, detail.text
+    runs = detail.json()["runs"]
+    assert len(runs) == 2
+    investigation = next(run for run in runs if run["current_state"] == "investigating")
+    assert investigation["status"] == "running"
+
+    events = client.get(
+        f"/v1/incidents/{incident_id}/runs/{investigation['run_id']}/events",
+        headers={"Authorization": BEARERS["starter"]},
+    )
+    assert events.status_code == 200, events.text
+    start = next(
+        event for event in events.json()["events"] if event["summary"] == "Investigation started."
+    )
+    assert start["actor"]["reference"]["principal_id"] == "starter-human"
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        before = (
+            connection.execute(
+                "SELECT count(*) FROM incident.runs WHERE incident_id=%s",
+                (incident_id,),
+            ).fetchone()[0],
+            connection.execute(
+                "SELECT count(*) FROM incident.run_events WHERE incident_id=%s",
+                (incident_id,),
+            ).fetchone()[0],
+        )
+    replay = _post(client, alert_id, body, "k-auto-investigate-704", BEARERS["starter"])
+    assert replay.status_code == 201, replay.text
+    assert replay.json() == first.json()
+    with psycopg.connect(DATABASE_URL) as connection:
+        after = (
+            connection.execute(
+                "SELECT count(*) FROM incident.runs WHERE incident_id=%s",
+                (incident_id,),
+            ).fetchone()[0],
+            connection.execute(
+                "SELECT count(*) FROM incident.run_events WHERE incident_id=%s",
+                (incident_id,),
+            ).fetchone()[0],
+        )
+    assert after == before

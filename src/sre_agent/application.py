@@ -150,7 +150,9 @@ def create_application(
     application.include_router(
         commands_router(RunCommandService(database.sessions, workflow, incident_runtime))
     )
-    application.include_router(triage_router(TriageHttpService(database, workflow)))
+    application.include_router(
+        triage_router(TriageHttpService(database, workflow, investigator=investigation_dispatcher))
+    )
     application.include_router(
         postmortems_router(
             PostmortemService(
