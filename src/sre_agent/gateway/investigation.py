@@ -70,6 +70,15 @@ class InvestigationRunDispatcher:
             for event in started.events
         ):
             return
+        await self.dispatch(started.incident.incident_id, started.run.run_id)
+
+    async def dispatch(self, incident_id: str, run_id: str) -> None:
+        """Claim and run one already-committed investigation run.
+
+        Callers may hand off after the declaration/start response is committed.
+        The claim and receipts make a duplicate hand-off converge instead of
+        starting a second investigation.
+        """
 
         principal = await self._configured_agent()
         actor_reference = (
@@ -77,7 +86,6 @@ class InvestigationRunDispatcher:
             if principal is not None
             else None
         )
-        incident_id, run_id = started.incident.incident_id, started.run.run_id
         now = datetime.now(UTC)
         async with self.units() as work:
             claim = await work.claim_run_dispatch(

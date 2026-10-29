@@ -13,7 +13,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -21,15 +21,18 @@ from sqlalchemy.exc import IntegrityError
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import Principal
 from sre_agent.incident.persistence import (
+    EventDraft,
     IncidentIdempotencyConflictError,
     IncidentStaleWriteError,
 )
+from sre_agent.incident.reasons import RUN_START_NOT_AUTHORIZED
 from sre_agent.incident.runtime import (
     ActorReference,
     IncidentCommand,
     IncidentRuntime,
     InvalidTransitionError,
     PreconditionFailedError,
+    RunStart,
 )
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.database import Database
@@ -87,6 +90,18 @@ class TriageError(Exception):
         self.code = code
 
 
+class InvestigationDispatcher(Protocol):
+    """Post-commit hand-off to the investigation worker."""
+
+    async def dispatch(self, incident_id: str, run_id: str) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _TransitionOutcome:
+    incident_id: str | None
+    investigation_run_id: str | None = None
+
+
 class _SessionUnits(PostgresIncidentUnitOfWork):
     """Run incident transitions inside the triage transaction.
 
@@ -124,6 +139,7 @@ class TriageResult:
     responsible_system: str | None
     replayed: bool
     http_status: int
+    investigation_run_id: str | None = None
 
 
 def _canonical(value: Any) -> str:
@@ -316,7 +332,17 @@ class TriageService:
                 # Never infer it from the stored actor identity.
                 stored.setdefault("decision_origin", "unknown")
                 stored.setdefault("responsible_system", None)
-                return TriageResult(replayed=True, http_status=created, **stored)
+                investigation_run_id = (
+                    await self._investigation_run_id(session, stored.get("incident_id"))
+                    if operation == "triage_declare"
+                    else None
+                )
+                return TriageResult(
+                    replayed=True,
+                    http_status=created,
+                    investigation_run_id=investigation_run_id,
+                    **stored,
+                )
             repository = TriageRepository(session)
             current = await repository.get(alert_id)
             if (current is None and expected_version != 1) or (
@@ -342,7 +368,7 @@ class TriageService:
                         target_incident_id,
                     )
                 raise TriageError(409, "terminal_decision")
-            incident_id = await self._transition(
+            outcome = await self._transition(
                 session,
                 operation,
                 alert_id,
@@ -357,7 +383,7 @@ class TriageService:
                 alert_id=alert_id,
                 expected_version=None if current is None else expected_version,
                 status=STATES[operation],
-                incident_id=incident_id,
+                incident_id=outcome.incident_id,
                 reason=reason,
                 severity=severity,
                 actor=principal.principal_id,
@@ -379,7 +405,12 @@ class TriageService:
                 "responsible_system": persisted["responsible_system"],
             }
             await idem.set_response_payload(scope=scope, key_digest=digest, response_payload=result)
-            return TriageResult(replayed=False, http_status=created, **result)
+            return TriageResult(
+                replayed=False,
+                http_status=created,
+                investigation_run_id=outcome.investigation_run_id,
+                **result,
+            )
 
     async def read_state(self, principal: Principal, *, alert_id: str) -> dict[str, Any]:
         """Authoritative triage-state read (contract getAlertTriage).
@@ -445,6 +476,33 @@ class TriageService:
                 raise TriageError(503, "storage_unavailable") from error
         return {"items": list(items)}
 
+    async def _investigation_run_id(self, session: Any, incident_id: Any) -> str | None:
+        """Resolve the run started with a declaration, including on idempotent replay."""
+        if not isinstance(incident_id, str):
+            return None
+        row = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT result->'run'->>'run_id' AS run_id"
+                        " FROM incident.transition_commits"
+                        " WHERE incident_id=:incident_id AND command_id=:command_id"
+                    ),
+                    {
+                        "incident_id": incident_id,
+                        "command_id": self._investigation_command_id(incident_id),
+                    },
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return row["run_id"] if row is not None else None
+
+    @staticmethod
+    def _investigation_command_id(incident_id: str) -> str:
+        return f"auto-investigate:{incident_id}"
+
     async def _transition(
         self,
         session: Any,
@@ -456,7 +514,7 @@ class TriageService:
         impact: str | None,
         alert_context: dict[str, Any] | None,
         target_incident_id: str | None,
-    ) -> str | None:
+    ) -> _TransitionOutcome:
         if operation == "triage_link":
             if target_incident_id is None:
                 raise TriageError(422, "invalid_target")
@@ -477,9 +535,9 @@ class TriageService:
                 raise TriageError(404, "incident_not_found")
             if row["state"] not in ELIGIBLE:
                 raise TriageError(409, "destination_ineligible")
-            return target_incident_id
+            return _TransitionOutcome(target_incident_id)
         if operation != "triage_declare":
-            return None
+            return _TransitionOutcome(None)
         now = datetime.now(UTC)
         incident_id = f"inc-{digest[:32]}"
         run_id = f"run_{digest[:32]}"
@@ -515,6 +573,28 @@ class TriageService:
             clock=lambda: now,
             id_factory=lambda prefix: f"{prefix}-{digest[:24]}",
         )
+        may_start = await self._has_action(session, principal, "run.start")
+        extra_events: tuple[EventDraft, ...] = ()
+        if not may_start:
+            extra_events = (
+                EventDraft(
+                    event_id=f"evt_{_digest(f'run-start-blocked:{digest}')[:24]}",
+                    kind="dispatch_receipt",
+                    payload={
+                        "state": "active",
+                        "dispatch_receipt": {
+                            "dispatch_id": run_id,
+                            "phase": "outcome",
+                            "status": "confirmed_failure",
+                            "reason_code": RUN_START_NOT_AUTHORIZED,
+                            "request_ids": [],
+                            "mcp_request_ids": [],
+                        },
+                        "request_id": None,
+                    },
+                    occurred_at=now,
+                ),
+            )
         command = IncidentCommand(
             command_id=f"cmd-{digest[:32]}",
             incident_id=incident_id,
@@ -526,6 +606,7 @@ class TriageService:
                 display_name=principal.display_name,
             ),
             inputs={"severity": severity, "impact": impact},
+            extra_events=extra_events,
         )
         try:
             await runtime.execute(command)
@@ -535,4 +616,33 @@ class TriageService:
             raise TriageError(409, "stale_version") from error
         except IncidentIdempotencyConflictError as error:
             raise TriageError(409, "idempotency_conflict") from error
-        return incident_id
+
+        if not may_start:
+            return _TransitionOutcome(incident_id)
+
+        investigation = IncidentRuntime(
+            self._workflow,
+            lambda: units,
+            clock=lambda: now,
+        )
+        try:
+            started = await investigation.start_run_in(
+                units,
+                RunStart(
+                    command_id=self._investigation_command_id(incident_id),
+                    incident_id=incident_id,
+                    objective="investigate",
+                    actor="human",
+                    actor_reference=ActorReference(
+                        principal_id=principal.principal_id,
+                        display_name=principal.display_name,
+                    ),
+                ),
+            )
+        except (InvalidTransitionError, PreconditionFailedError) as error:
+            raise TriageError(422, "invalid_transition") from error
+        except IncidentStaleWriteError as error:
+            raise TriageError(409, "stale_version") from error
+        except IncidentIdempotencyConflictError as error:
+            raise TriageError(409, "idempotency_conflict") from error
+        return _TransitionOutcome(incident_id, started.run.run_id)
