@@ -1894,13 +1894,16 @@ def test_invalid_model_output_retains_all_governed_http_audits(recover: bool) ->
 #    mitigation, instead of going back to the agent with the validation error;
 # 3. a second invalid proposal ends the run silently, or a rollback to the running release
 #    is accepted: it must reach a human, visible in the timeline, and store no mitigation;
-# 4. a service with no catalog stops being simulated, or a down executor lets the agent
-#    propose without a human;
+# 4. a service with no catalog stops being simulated, like the store's checkout, which a store
+#    rule alerts on and whose name the demo's own service does not share (sre-checkout), or a
+#    down executor lets the agent propose without a human;
 # 5. a stack that runs no executor, like the one scripts/setup_sre.py starts, stops proposing
 #    mitigations, because compose points the api at an executor that is not there.
-ROLLBACK = dict(service="checkout", operation="deployment.rollback", parameters={"to_tag": "1.4.0"})
+ROLLBACK = dict(
+    service="sre-checkout", operation="deployment.rollback", parameters={"to_tag": "1.4.0"}
+)
 CHECKOUT = {
-    "service": "checkout",
+    "service": "sre-checkout",
     "operations": [
         {"operation": "deployment.restart", "parameters": [], "risk": {"reversible": False}},
         {
@@ -1915,7 +1918,7 @@ CHECKOUT = {
 
 
 class _ExecutorHandler(BaseHTTPRequestHandler):
-    """GET /v1/services/{service} of the deploy-executor: checkout is enrolled, or it is down."""
+    """GET /v1/services/{service} of the executor: sre-checkout is enrolled, or it is down."""
 
     def log_message(self, _format: str, *args: Any) -> None:
         return
@@ -1924,7 +1927,7 @@ class _ExecutorHandler(BaseHTTPRequestHandler):
         status, body = (404, {"error": {"code": "service_not_enrolled", "message": "no"}})
         if self.server.down:  # type: ignore[attr-defined]
             status, body = 503, {"error": {"code": "docker_unavailable", "message": "down"}}
-        elif self.path == "/v1/services/checkout":
+        elif self.path == "/v1/services/sre-checkout":
             status, body = 200, CHECKOUT
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -1987,7 +1990,7 @@ def _investigate(incident_id: str, service: str, llm: OperationLLM, *, executor:
 
 def test_the_agent_names_an_enrolled_operation_after_the_validation_error() -> None:
     llm = OperationLLM(None, ROLLBACK)
-    state, _events, _timeline = _investigate("inc-operation-retry", "checkout", llm)
+    state, _events, _timeline = _investigate("inc-operation-retry", "sre-checkout", llm)
     told = _state(llm.requests[0])["service_operations"]
     assert (told["running_image"], told["available_tags"]) == (
         "demo/checkout:1.5.0",
@@ -2003,7 +2006,7 @@ def test_the_agent_names_an_enrolled_operation_after_the_validation_error() -> N
 
 def test_a_second_invalid_proposal_asks_a_human_in_the_timeline() -> None:
     llm = OperationLLM(None, {**ROLLBACK, "parameters": {"to_tag": "1.5.0"}})
-    state, events, timeline = _investigate("inc-operation-human", "checkout", llm)
+    state, events, timeline = _investigate("inc-operation-human", "sre-checkout", llm)
     assert state["state"] == "investigating" and state["mitigation_strategy"] is None
     asked = [event["outcome"] for event in events if "outcome" in event][-1]
     assert asked["action"] == "request_human" and "1.5.0" in asked["reason"]
@@ -2015,13 +2018,14 @@ def test_with_no_catalog_the_mitigation_stays_simulated_and_a_down_executor_asks
     executor: str,
 ) -> None:
     # unset: the stack scripts/setup_sre.py starts runs no executor, and compose leaves the URL
-    # empty unless the stack declares one, so even checkout stays simulated there.
+    # empty unless the stack declares one, so even sre-checkout stays simulated there. up: the
+    # store's checkout is not enrolled. down: the executor cannot be read.
     if executor == "unset":
         compose = yaml.safe_load((ROOT / "compose.yaml").read_text(encoding="utf-8"))
         environment = compose["services"]["api"]["environment"]
         assert environment["DEPLOY_EXECUTOR_URL"] == "${DEPLOY_EXECUTOR_URL:-}"
     llm = OperationLLM(None)
-    service = "checkout" if executor == "unset" else "payments"
+    service = "checkout" if executor == "up" else "sre-checkout"
     state, _events, timeline = _investigate(
         f"inc-operation-{executor}", service, llm, executor=executor
     )
