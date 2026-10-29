@@ -4,10 +4,11 @@ import { expect, request, test } from "@playwright/test";
 
 // Who may run an enrolled service operation (#722, first cut), against the REAL stack (web proxy,
 // FastAPI, PostgreSQL) after scripts/provision_demo.py; nothing is mocked. Ways this can fail:
-// 1. setup leaves incident-harness without mitigation.execute on checkout:deployment.rollback, so
-//    approving the demo's rollback would be denied;
-// 2. setup gives the agent more than that: checkout:deployment.restart stays an enrolled resource
-//    the agent may not run, the denial case of the approval cut;
+// 1. setup leaves incident-harness without mitigation.execute on sre-checkout:deployment.rollback,
+//    so approving the demo's rollback would be denied;
+// 2. setup gives the agent more than that: sre-checkout:deployment.restart stays an enrolled
+//    resource the agent may not run, the denial case of the approval cut; or it catalogs an
+//    operation of the store's `checkout`, which has no catalog (#722);
 // 3. the console offers another action on a service operation;
 // 4. a grant naming an operation outside the catalog, or an action the type does not admit, is
 //    stored instead of refused;
@@ -16,8 +17,8 @@ const ADMIN_KEY = process.env.ADMIN_HUMAN_API_KEY ?? "";
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://web";
 const ARTIFACTS = process.env.SERVICE_OPERATION_ARTIFACT_DIR ?? "";
 const REAL = process.env.SERVICE_OPERATION_E2E === "1" && Boolean(ADMIN_KEY);
-const ROLLBACK = "checkout:deployment.rollback";
-const RESTART = "checkout:deployment.restart";
+const ROLLBACK = "sre-checkout:deployment.rollback";
+const RESTART = "sre-checkout:deployment.restart";
 // A principal of its own per run: the spec never revokes the demo's authority, and an authority
 // once revoked can never be granted again.
 const STAMP = Date.now().toString(36);
@@ -82,7 +83,7 @@ async function capture(page, name) {
   await page.screenshot({ path: join(ARTIFACTS, name), fullPage: true });
 }
 
-test("setup lets the agent roll checkout back, and nothing else", async ({ page }) => {
+test("setup lets the agent roll sre-checkout back, and nothing else", async ({ page }) => {
   const agent = await call("GET", "/v1/grants?principal_id=incident-harness");
   expect(agent.status).toBe(200);
   const operations = agent.body.items.filter((item) => item.resource.resource_type === "service_operation");
@@ -131,7 +132,7 @@ test("an operation outside the catalog, or another action on one, is refused", a
   const outside = await call(
     "POST",
     "/v1/grants",
-    grant(`grant-${PROBE}-scale`, "mitigation.execute", "checkout:deployment.scale"),
+    grant(`grant-${PROBE}-scale`, "mitigation.execute", "sre-checkout:deployment.scale"),
   );
   expect(outside.status).toBe(404);
   const foreign = await call("POST", "/v1/grants", grant(`grant-${PROBE}-approve`, "run.approve", ROLLBACK));

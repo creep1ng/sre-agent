@@ -126,12 +126,12 @@ function catalogPayload() {
       },
       {
         resource_type: "service_operation",
-        resource_id: "checkout:deployment.rollback",
+        resource_id: "sre-checkout:deployment.rollback",
         owner_id: "executor-platform",
         status: "active",
         source: "deploy_executor",
         source_ref: "deploy-executor@1.0.0",
-        discoverability: { display_name: "Roll checkout back", visibility: "private", description: "", tags: [] },
+        discoverability: { display_name: "Roll sre-checkout back", visibility: "private", description: "", tags: [] },
       },
     ],
     limit: 100,
@@ -666,7 +666,7 @@ test("action selector rebuilds per resource type and creates run.* on incident_w
     ["bok_collection/demo-incident-response@1.0.0", EXPECTED_ADMITTED_ACTIONS["bok_collection"]],
     ["incident_workflow/incident-response", EXPECTED_ADMITTED_ACTIONS["incident_workflow"]],
     ["administrative_control/grants", EXPECTED_ADMITTED_ACTIONS["administrative_control"]],
-    ["service_operation/checkout:deployment.rollback", EXPECTED_ADMITTED_ACTIONS["service_operation"]],
+    ["service_operation/sre-checkout:deployment.rollback", EXPECTED_ADMITTED_ACTIONS["service_operation"]],
   ];
   await page.click("#create-grant-button");
   await expect(page.locator("#create-dialog")).toBeVisible();

@@ -11,11 +11,12 @@ import sys
 
 from provision_incident_workflow import CATALOG_BODY, _granted, build_service, provision
 
-# The enrolled operations mitigation.execute grants are over (#722). The agent may roll checkout
-# back, what the demo's failure needs; the restart stays an operation it may not run.
+# The enrolled operations mitigation.execute grants are over (#722). The agent may roll
+# sre-checkout back, what the demo's failure needs; the restart stays an operation it may not
+# run. Not `checkout`: that is the store's service, which has no catalog.
 SERVICE_OPERATIONS = {
-    "checkout:deployment.rollback": "Roll checkout back to an earlier release.",
-    "checkout:deployment.restart": "Restart checkout on its current release.",
+    "sre-checkout:deployment.rollback": "Roll sre-checkout back to an earlier release.",
+    "sre-checkout:deployment.restart": "Restart sre-checkout on its current release.",
 }
 
 
@@ -83,12 +84,12 @@ def demo_grants():
             "effect": "allow",
         }
     yield {
-        "grant_id": "grant-setup-agent-checkout-deployment-rollback",
+        "grant_id": "grant-setup-agent-sre-checkout-deployment-rollback",
         "principal_id": "incident-harness",
         "action": "mitigation.execute",
         "resource": {
             "resource_type": "service_operation",
-            "resource_id": "checkout:deployment.rollback",
+            "resource_id": "sre-checkout:deployment.rollback",
         },
         "effect": "allow",
     }
