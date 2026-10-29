@@ -7,6 +7,8 @@ never projected.
 
 from __future__ import annotations
 
+RUN_START_NOT_AUTHORIZED = "run_start_not_authorized"
+
 # The cause of each dispatch ending the dispatcher records, as the operator reads it (#705).
 DISPATCH_CAUSES = {
     "harness_not_configured": "the investigator gateway is not configured.",
@@ -25,6 +27,9 @@ DISPATCH_CAUSES = {
     "result_persistence_uncertain": "the result could not be confirmed as saved.",
     "stale_incident_snapshot": "the incident changed while the agent investigated.",
     "producer_interrupted": "the previous dispatch was interrupted.",
+    # Recorded by triage when the declarant may declare but not start runs (#704).
+    RUN_START_NOT_AUTHORIZED: "the declarant lacks the run.start grant; "
+    "an administrator must grant it, then a new run may retry.",
 }
 
 PROJECTED_REASON_CODES = frozenset(DISPATCH_CAUSES)
