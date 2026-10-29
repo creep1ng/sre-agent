@@ -1,5 +1,6 @@
 import { ChevronDownIcon, SirenIcon } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { ServiceChip, SeverityBadge } from "@/components/badges";
 import { RelativeTime } from "@/components/relative-time";
 import { SignalChart, Sparkline } from "@/components/signal-chart";
@@ -27,8 +28,9 @@ export function AlertCard({
   const [open, setOpen] = useState(false);
 
   if (alert.live) {
+    const undecided = alert.triageStatus === "new" || alert.triageStatus === "triaging";
     return (
-      <article className="group relative overflow-hidden rounded-xl border bg-card shadow-xs">
+      <article data-alert-id={alert.id} className="group relative overflow-hidden rounded-xl border bg-card shadow-xs">
         <span className={cn("absolute inset-y-0 left-0 w-1", TONE_DOT[SEVERITY[alert.severity].tone])} aria-hidden="true" />
         <div className="p-4 pl-5">
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -40,6 +42,19 @@ export function AlertCard({
           <h3 className="mt-2 text-base font-semibold text-balance">{alert.title}</h3>
           {alert.summary && <p className="mt-0.5 text-sm text-muted-foreground">{alert.summary}</p>}
         </div>
+        {(undecided || alert.incidentId) && (
+          <div className="flex flex-wrap items-center gap-1.5 border-t bg-muted/40 px-3 py-2.5 pl-4">
+            {undecided ? (
+              <Button onClick={() => onDeclare(alert)}>
+                <SirenIcon /> Declarar incidente
+              </Button>
+            ) : (
+              <Button variant="ghost" asChild>
+                <Link to={`/incidentes/${alert.incidentId}`}>Ver incidente</Link>
+              </Button>
+            )}
+          </div>
+        )}
       </article>
     );
   }

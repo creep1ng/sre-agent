@@ -29,6 +29,125 @@ function isLiveAlert(raw: unknown): raw is LiveAlert {
   );
 }
 
+export type TriageResult =
+  | { kind: "ok"; incidentId?: string }
+  | { kind: "auth" }
+  | { kind: "forbidden" }
+  | { kind: "conflict" }
+  | { kind: "rejected" }
+  | { kind: "transient" };
+
+export type TriageFailure = Exclude<TriageResult["kind"], "ok">;
+
+export interface DeclareInput {
+  severity: Severity;
+  impact: string;
+}
+
+function headers(token: string): Record<string, string> {
+  return { Accept: "application/json", Authorization: `Bearer ${token}` };
+}
+
+function triagePath(alertId: string, suffix: string): string {
+  return `/api/v1/alerts/${encodeURIComponent(alertId)}/triage${suffix}`;
+}
+
+/** The triage version a command must name: 1 while the alert has no decision yet. */
+export async function readTriageVersion(token: string, alertId: string): Promise<number | null> {
+  try {
+    const response = await fetch(triagePath(alertId, "/context"), {
+      headers: headers(token),
+      credentials: "omit",
+      cache: "no-store",
+    });
+    if (response.status !== 200) return null;
+    const body = (await response.json()) as { triage_state?: { expected_version?: unknown } | null };
+    if (body.triage_state == null) return 1;
+    const version = body.triage_state.expected_version;
+    return typeof version === "number" ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+type Command = { operation: "triage_declare"; reason: string } & Record<string, unknown>;
+
+function idempotencyKey(command: Command): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${command.operation.replace("triage_", "")}-${hex}`;
+}
+
+async function postCommand(token: string, alertId: string, command: Command, version: number) {
+  const response = await fetch(triagePath(alertId, "/commands"), {
+    method: "POST",
+    headers: { ...headers(token), "Content-Type": "application/json", "Idempotency-Key": idempotencyKey(command) },
+    credentials: "omit",
+    cache: "no-store",
+    body: JSON.stringify({ ...command, expected_version: version }),
+  });
+  try {
+    const body = (await response.json()) as { incident_id?: unknown; error?: { code?: unknown } };
+    return {
+      status: response.status,
+      code: typeof body.error?.code === "string" ? body.error.code : undefined,
+      incidentId: typeof body.incident_id === "string" ? body.incident_id : undefined,
+    };
+  } catch {
+    return { status: response.status };
+  }
+}
+
+/**
+ * Sends one decision through POST /v1/alerts/{id}/triage/commands; the server decides. A version
+ * that went stale while the operator was choosing is read again and retried once, with a new key.
+ */
+async function sendCommand(token: string, alertId: string, command: Command, version: number): Promise<TriageResult> {
+  try {
+    let sent = await postCommand(token, alertId, command, version);
+    if (sent.status === 409 && sent.code === "stale_version") {
+      const fresh = await readTriageVersion(token, alertId);
+      if (fresh === null) return { kind: "transient" };
+      sent = await postCommand(token, alertId, command, fresh);
+    }
+    if (sent.status === 200 || sent.status === 201) return { kind: "ok", incidentId: sent.incidentId };
+    if (sent.status === 401) return { kind: "auth" };
+    if (sent.status === 403) return { kind: "forbidden" };
+    if (sent.status === 409) return { kind: "conflict" };
+    if (sent.status === 400 || sent.status === 404 || sent.status === 422) return { kind: "rejected" };
+    return { kind: "transient" };
+  } catch {
+    return { kind: "transient" };
+  }
+}
+
+export async function declareAlert(
+  token: string,
+  alert: LiveAlert,
+  input: DeclareInput,
+  version: number,
+): Promise<TriageResult> {
+  const result = await sendCommand(
+    token,
+    alert.alert_id,
+    {
+      operation: "triage_declare",
+      reason: "Declarado desde la bandeja de la consola de incidentes.",
+      severity: input.severity,
+      impact: input.impact,
+      alert_context: {
+        service: alert.service,
+        summary: alert.summary,
+        observed_at: alert.observed_at,
+        source: alert.source,
+        severity: alert.severity,
+      },
+    },
+    version,
+  );
+  return result.kind === "ok" && !result.incidentId ? { kind: "transient" } : result;
+}
+
 /** Same-origin read of the real alert list. It never surfaces server codes or details. */
 export async function fetchAlerts(token: string, signal: AbortSignal): Promise<AlertsResult> {
   let response: Response;
