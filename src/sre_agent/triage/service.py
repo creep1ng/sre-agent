@@ -626,8 +626,7 @@ class TriageService:
             clock=lambda: now,
         )
         try:
-            started = await investigation.start_run_in(
-                units,
+            started = await investigation.start_run(
                 RunStart(
                     command_id=self._investigation_command_id(incident_id),
                     incident_id=incident_id,
@@ -638,6 +637,7 @@ class TriageService:
                         display_name=principal.display_name,
                     ),
                 ),
+                work=units,
             )
         except (InvalidTransitionError, PreconditionFailedError) as error:
             raise TriageError(422, "invalid_transition") from error

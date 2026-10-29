@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -237,56 +238,52 @@ class IncidentRuntime:
                 raise RunNotFoundError(command.run_id)
             return await self._apply(work, command, payload_hash, incident, run)
 
-    async def start_run(self, request: RunStart) -> TransitionResult:
+    async def start_run(
+        self, request: RunStart, work: IncidentUnitOfWork | None = None
+    ) -> TransitionResult:
         """Open a run for the requested objective and execute its first transition.
 
         The run aggregate and that transition commit together, so a run never
-        exists without the snapshot its replay needs.
-        """
-
-        async with self._unit_of_work() as work:
-            return await self.start_run_in(work, request)
-
-    async def start_run_in(self, work: IncidentUnitOfWork, request: RunStart) -> TransitionResult:
-        """Open a run inside a caller-owned unit of work.
-
-        Triage declaration and the investigation it starts must commit or roll
-        back together. This entry point keeps the runtime's idempotency, replay
-        and snapshot rules while letting the caller own the transaction.
+        exists without the snapshot its replay needs. A caller that passes its own
+        unit of work owns the transaction: triage declaration and the investigation
+        it starts commit or roll back together.
         """
 
         transition_id = OBJECTIVE_TRANSITIONS.get(request.objective)
         if transition_id is None:
             raise InvalidTransitionError(f"objective '{request.objective}' has no transition")
         payload_hash = request.payload_sha256()
-        await work.lock_command(request.incident_id, request.command_id)
-        replayed = await work.get_transition(request.incident_id, request.command_id, payload_hash)
-        if replayed is not None:
-            return replayed
+        async with nullcontext(work) if work is not None else self._unit_of_work() as work:
+            await work.lock_command(request.incident_id, request.command_id)
+            replayed = await work.get_transition(
+                request.incident_id, request.command_id, payload_hash
+            )
+            if replayed is not None:
+                return replayed
 
-        incident = await work.incidents.get(request.incident_id)
-        if incident is None:
-            raise IncidentNotFoundError(request.incident_id)
-        now = self._clock()
-        run = await work.runs.add(
-            self._id_factory("run"),
-            request.incident_id,
-            {
-                "workflow_version": self._workflow.version,
-                "current_state": incident.state.get("state"),
-                "status": "running",
-            },
-            now=now,
-        )
-        command = IncidentCommand(
-            command_id=request.command_id,
-            incident_id=request.incident_id,
-            run_id=run.run_id,
-            transition_id=transition_id,
-            actor=request.actor,
-            actor_reference=request.actor_reference,
-        )
-        return await self._apply(work, command, payload_hash, incident, run)
+            incident = await work.incidents.get(request.incident_id)
+            if incident is None:
+                raise IncidentNotFoundError(request.incident_id)
+            now = self._clock()
+            run = await work.runs.add(
+                self._id_factory("run"),
+                request.incident_id,
+                {
+                    "workflow_version": self._workflow.version,
+                    "current_state": incident.state.get("state"),
+                    "status": "running",
+                },
+                now=now,
+            )
+            command = IncidentCommand(
+                command_id=request.command_id,
+                incident_id=request.incident_id,
+                run_id=run.run_id,
+                transition_id=transition_id,
+                actor=request.actor,
+                actor_reference=request.actor_reference,
+            )
+            return await self._apply(work, command, payload_hash, incident, run)
 
     async def _apply(
         self,
