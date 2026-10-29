@@ -1,5 +1,5 @@
 import { CheckIcon, LinkIcon, XIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/badges";
@@ -7,8 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { dismissAlert, fetchEligibleIncidents, linkAlert, readTriageVersion, type EligibleIncident, type TriageResult } from "@/lib/api";
+import { useLive } from "@/lib/live";
 import { incidentStatus } from "@/lib/status";
 import { useStore } from "@/lib/store";
+import { markTriaged, TRIAGE_FAILURE } from "@/lib/triage";
 import type { Alert, Incident } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DISMISS_REASONS } from "@/lib/vocabulary";
@@ -19,11 +22,21 @@ export function DismissPopover({ alert }: { alert: Alert }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string>(DISMISS_REASONS[0]);
   const [other, setOther] = useState("");
+  const live = useLiveDecision(alert, open);
   const isOther = reason === "otro";
   const finalReason = isOther ? other.trim() : reason;
 
+  async function confirmLive() {
+    const result = await live.send((token, version) => dismissAlert(token, alert.id, finalReason, version));
+    if (result.kind !== "ok") return live.fail(TRIAGE_FAILURE.dismiss[result.kind]);
+    markTriaged(alert.id, "dismissed");
+    setOpen(false);
+    toast("Alerta descartada", { description: `${alert.title} · ${finalReason}` });
+  }
+
   function confirm() {
-    if (!finalReason) return;
+    if (!finalReason || live.pending) return;
+    if (alert.live) return void confirmLive();
     dismiss(alert.id, finalReason);
     setOpen(false);
     toast("Alerta descartada", {
@@ -76,8 +89,9 @@ export function DismissPopover({ alert }: { alert: Alert }) {
             className="mt-2"
           />
         )}
-        <Button className="mt-3 w-full" onClick={confirm} disabled={!finalReason}>
-          Descartar alerta
+        <LiveFailure message={live.failure} />
+        <Button className="mt-3 w-full" onClick={confirm} disabled={!finalReason || live.pending}>
+          {live.pending ? "Descartando…" : "Descartar alerta"}
         </Button>
       </PopoverContent>
     </Popover>
@@ -88,6 +102,31 @@ export function LinkPopover({ alert, incidents }: { alert: Alert; incidents: Inc
   const link = useStore((s) => s.link);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const live = useLiveDecision(alert, open);
+  const [eligible, setEligible] = useState<EligibleIncident[] | null>(null);
+  const token = useLive((s) => s.token);
+
+  useEffect(() => {
+    if (!open || !alert.live || !token) return;
+    setEligible(null);
+    void fetchEligibleIncidents(token, alert.id).then((result) => {
+      if (result.kind === "ok") return setEligible(result.items);
+      setEligible([]);
+      live.fail(TRIAGE_FAILURE.link[result.kind]);
+    });
+    // The list is read again each time the popover opens; `live.fail` only sets state.
+  }, [open, alert.live, alert.id, token]);
+
+  async function chooseLive(incidentId: string) {
+    if (live.pending) return;
+    const result = await live.send((key, version) => linkAlert(key, alert.id, incidentId, version));
+    if (result.kind !== "ok") return live.fail(TRIAGE_FAILURE.link[result.kind]);
+    markTriaged(alert.id, "linked", incidentId);
+    setOpen(false);
+    toast.success(`Alerta vinculada a ${incidentId}`, {
+      action: { label: "Ver", onClick: () => navigate(`/incidentes/${incidentId}`) },
+    });
+  }
 
   function choose(incident: Incident) {
     link(alert.id, incident.id);
@@ -112,26 +151,89 @@ export function LinkPopover({ alert, incidents }: { alert: Alert; incidents: Inc
             <p className="text-xs text-muted-foreground">La alerta se suma a su historia y deja la bandeja.</p>
           </div>
           <CommandList>
-            <CommandEmpty>No hay incidentes abiertos.</CommandEmpty>
-            <CommandGroup>
-              {incidents.map((incident) => (
-                <CommandItem
-                  key={incident.id}
-                  value={`${incident.id} ${incident.title}`}
-                  onSelect={() => choose(incident)}
-                  className="flex-col items-start gap-1"
-                >
-                  <span className="flex w-full items-center gap-2">
-                    <span className="font-mono text-xs text-muted-foreground">{incident.id}</span>
-                    <span className="flex-1 truncate font-medium">{incident.title}</span>
-                  </span>
-                  <StatusPill status={incidentStatus(incident)} className="py-0.5" />
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            <CommandEmpty>{alert.live && eligible === null ? "Buscando incidentes abiertos…" : "No hay incidentes abiertos."}</CommandEmpty>
+            {alert.live && (
+              <CommandGroup>
+                {(eligible ?? []).map((incident) => (
+                  <CommandItem
+                    key={incident.incident_id}
+                    value={incident.incident_id}
+                    disabled={live.pending}
+                    onSelect={() => void chooseLive(incident.incident_id)}
+                    className="flex items-center gap-2"
+                  >
+                    <span className="flex-1 truncate font-mono text-xs">{incident.incident_id}</span>
+                    <span className="text-xs text-muted-foreground">{INCIDENT_STATE[incident.state] ?? "Abierto"}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {!alert.live && (
+              <CommandGroup>
+                {incidents.map((incident) => (
+                  <CommandItem
+                    key={incident.id}
+                    value={`${incident.id} ${incident.title}`}
+                    onSelect={() => choose(incident)}
+                    className="flex-col items-start gap-1"
+                  >
+                    <span className="flex w-full items-center gap-2">
+                      <span className="font-mono text-xs text-muted-foreground">{incident.id}</span>
+                      <span className="flex-1 truncate font-medium">{incident.title}</span>
+                    </span>
+                    <StatusPill status={incidentStatus(incident)} className="py-0.5" />
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
+        <div className="px-3 empty:hidden">
+          <LiveFailure message={live.failure} />
+        </div>
       </PopoverContent>
     </Popover>
+  );
+}
+
+const INCIDENT_STATE: Record<string, string> = {
+  active: "Activo",
+  investigating: "Investigando",
+  mitigating: "Mitigando",
+  verifying: "Verificando",
+};
+
+/** A live decision reads the alert's version when its popover opens and sends one command at a time. */
+function useLiveDecision(alert: Alert, open: boolean) {
+  const token = useLive((s) => s.token);
+  const [version, setVersion] = useState<number | null>(null);
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !alert.live || !token) return;
+    setFailure(null);
+    setVersion(null);
+    void readTriageVersion(token, alert.id).then(setVersion);
+  }, [open, alert.live, alert.id, token]);
+
+  async function send(command: (token: string, version: number) => Promise<TriageResult>): Promise<TriageResult> {
+    if (!token) return { kind: "auth" };
+    setPending(true);
+    setFailure(null);
+    const result = await command(token, version ?? 1);
+    setPending(false);
+    return result;
+  }
+
+  return { pending, failure, fail: setFailure, send };
+}
+
+function LiveFailure({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="mt-2 mb-2 rounded-lg border border-critical-line bg-critical-soft px-3 py-2 text-sm text-critical">
+      {message}
+    </p>
   );
 }

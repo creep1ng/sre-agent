@@ -45,9 +45,13 @@ export function AlertCard({
         {(undecided || alert.incidentId) && (
           <div className="flex flex-wrap items-center gap-1.5 border-t bg-muted/40 px-3 py-2.5 pl-4">
             {undecided ? (
-              <Button onClick={() => onDeclare(alert)}>
-                <SirenIcon /> Declarar incidente
-              </Button>
+              <>
+                <Button onClick={() => onDeclare(alert)}>
+                  <SirenIcon /> Declarar incidente
+                </Button>
+                <DismissPopover alert={alert} />
+                <LinkPopover alert={alert} incidents={[]} />
+              </>
             ) : (
               <Button variant="ghost" asChild>
                 <Link to={`/incidentes/${alert.incidentId}`}>Ver incidente</Link>
