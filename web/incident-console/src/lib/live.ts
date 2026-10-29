@@ -23,6 +23,8 @@ interface LiveState {
   connect: (token: string) => void;
   disconnect: () => void;
   retry: () => void;
+  /** Shows a decision the API just accepted until the next poll confirms it. */
+  markDeclared: (alertId: string, incidentId: string) => void;
 }
 
 export const useLive = create<LiveState>((set) => ({
@@ -44,6 +46,14 @@ export const useLive = create<LiveState>((set) => ({
     if (!useLive.getState().token) return;
     stop();
     start();
+  },
+  markDeclared: (alertId, incidentId) => {
+    set((state) => ({
+      alerts: state.alerts.map((alert) =>
+        alert.alert_id === alertId ? { ...alert, triage_status: "declared", incident_id: incidentId } : alert,
+      ),
+    }));
+    useLive.getState().retry();
   },
 }));
 
