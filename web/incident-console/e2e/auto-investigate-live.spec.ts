@@ -6,7 +6,8 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
  * checkout failure injected, setup_sre.py, the web proxy, FastAPI and PostgreSQL. No route is
  * answered by the test. Ways this can fail:
  * 1. the declaration does not open an `investigate` run, or opens it as someone else;
- * 2. the run is still `pending` (or missing) 5 s after the declaration was accepted;
+ * 2. the run is still `pending` (or missing) 5 s after the operator sent the declaration, or
+ *    the first declaration opens more than one investigating run;
  * 3. replaying the exact request the console sent opens a second run or a second start;
  * 4. a declarant without run.start loses the declaration, or the timeline says nothing about
  *    why no investigation started, or a run appears anyway.
@@ -68,14 +69,15 @@ async function declareFromCard(page: Page, key: string) {
   const posted = page.waitForResponse(
     (response) => response.url().endsWith("/triage/commands") && response.request().method() === "POST",
   );
+  // The 5 s bound counts from the operator's click, not from the 201.
+  const sentAt = Date.now();
   await dialog.getByRole("button", { name: /Declarar e investigar/ }).click();
   const response = await posted;
-  const acceptedAt = Date.now();
   expect(response.status()).toBe(201);
   const request = response.request();
   return {
     alertId,
-    acceptedAt,
+    sentAt,
     incidentId: ((await response.json()) as { incident_id: string }).incident_id,
     body: request.postDataJSON() as unknown,
     idempotencyKey: (await request.allHeaders())["idempotency-key"],
@@ -107,12 +109,10 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
       expect(response.status()).toBe(200);
       return (await response.json()) as { runs: Run[] };
     };
-    // Since #703 the console lands on the declared incident's route.
-    await expect(page).toHaveURL(new RegExp(`/incidentes/${declared.incidentId}$`));
-    await page.screenshot({ path: `${dir}/incident-route.png`, fullPage: true });
-
+    // Poll before waiting for the route or taking a screenshot, so neither counts against 5 s.
+    let investigation: Run | undefined;
+    let observedMs: number | undefined;
     if (SCENARIO === "granted") {
-      let investigation: Run | undefined;
       await expect
         .poll(
           async () => {
@@ -122,7 +122,18 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
           { timeout: 5_000, intervals: [100, 250, 500] },
         )
         .not.toMatch(/^(missing|pending)$/);
-      const observedMs = Date.now() - declared.acceptedAt;
+      observedMs = Date.now() - declared.sentAt;
+      expect(observedMs).toBeLessThan(5_000);
+      expect(investigation!.status).not.toBe("pending");
+      const investigating = (await detailOf()).runs.filter((run) => run.current_state === "investigating");
+      expect(investigating).toHaveLength(1);
+    }
+
+    // Since #703 the console lands on the declared incident's route.
+    await expect(page).toHaveURL(new RegExp(`/incidentes/${declared.incidentId}$`));
+    await page.screenshot({ path: `${dir}/incident-route.png`, fullPage: true });
+
+    if (SCENARIO === "granted") {
       const events = await reader.get(
         `${BASE}/api/v1/incidents/${declared.incidentId}/runs/${investigation!.run_id}/events`,
       );
