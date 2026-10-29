@@ -21,5 +21,22 @@ export const TRIAGE_FAILURE = {
     forbidden: "Tu credencial no tiene permiso para declarar incidentes.",
     rejected: "La API no aceptó la declaración. Revisa la gravedad y el impacto.",
     transient: "No pudimos declarar el incidente. Vuelve a intentarlo.",
+    ineligible: "No pudimos declarar el incidente. Vuelve a intentarlo.",
+  },
+  dismiss: {
+    auth: "La API rechazó la credencial. Conecta otra y vuelve a intentarlo.",
+    conflict: "Alguien más decidió sobre esta alerta. Revisa la bandeja antes de volver a intentarlo.",
+    forbidden: "Tu credencial no tiene permiso para descartar alertas.",
+    rejected: "La API no aceptó el descarte. Revisa el motivo.",
+    transient: "No pudimos descartar la alerta. Vuelve a intentarlo.",
+    ineligible: "No pudimos descartar la alerta. Vuelve a intentarlo.",
+  },
+  link: {
+    auth: "La API rechazó la credencial. Conecta otra y vuelve a intentarlo.",
+    conflict: "Alguien más decidió sobre esta alerta. Revisa la bandeja antes de volver a intentarlo.",
+    forbidden: "Tu credencial no tiene permiso para vincular alertas.",
+    rejected: "La API no aceptó el vínculo. Elige otro incidente.",
+    transient: "No pudimos vincular la alerta. Vuelve a intentarlo.",
+    ineligible: "Ese incidente ya no admite alertas. Elige otro.",
   },
 } satisfies Record<string, Record<TriageFailure, string>>;
