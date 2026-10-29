@@ -1,5 +1,5 @@
 # The demo's second enrolled service (#721), built by compose.demo.yaml for one release:
-# demo/checkout:1.4.0 runs, `demo_env.py fail --service checkout` builds and deploys 1.5.0,
+# demo/checkout:1.4.0 runs, `demo_env.py fail --service sre-checkout` builds and deploys 1.5.0,
 # and the deploy-executor rolls back to a tag the local image store holds.
 FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
 

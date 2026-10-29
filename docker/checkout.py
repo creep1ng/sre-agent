@@ -1,4 +1,4 @@
-"""The demo's second enrolled service (#721): a checkout of our own, beside the OTel store.
+"""The demo's second enrolled service (#721): sre-checkout, a checkout of our own beside the store.
 
 It serves POST /checkout, generates its own traffic and pushes one cumulative OTLP counter,
 checkout.requests by HTTP status code, to the demo's collector every five seconds. The release
@@ -30,7 +30,7 @@ def attribute(key: str, value: str | int) -> dict[str, object]:
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
-        about = {"service": "checkout", "version": VERSION}
+        about = {"service": "sre-checkout", "version": VERSION}
         self.reply(200, {"status": "ok"} if self.path == "/health" else about)
 
     def do_POST(self) -> None:
@@ -66,7 +66,7 @@ def traffic() -> None:
 def export() -> None:
     resource = {
         "attributes": [
-            attribute("service.name", "checkout"),
+            attribute("service.name", "sre-checkout"),  # the store emits checkout (#722)
             attribute("service.namespace", "sre-agent"),
             attribute("service.version", VERSION),
             attribute("service.instance.id", socket.gethostname()),
@@ -92,7 +92,7 @@ def export() -> None:
             "description": "Checkout orders served, by HTTP status code.",
             "sum": {"aggregationTemporality": 2, "isMonotonic": True, "dataPoints": points},
         }
-        scope = {"scope": {"name": "checkout"}, "metrics": [counter]}
+        scope = {"scope": {"name": "sre-checkout"}, "metrics": [counter]}
         body = json.dumps({"resourceMetrics": [{"resource": resource, "scopeMetrics": [scope]}]})
         push = urllib.request.Request(
             ENDPOINT + "/v1/metrics", body.encode(), {"Content-Type": "application/json"}
@@ -100,14 +100,14 @@ def export() -> None:
         try:
             urllib.request.urlopen(push, timeout=3).close()
         except OSError as error:
-            print(f"checkout: metrics push failed: {error}", flush=True)
+            print(f"sre-checkout: metrics push failed: {error}", flush=True)
 
 
 if not VERSION:
-    raise SystemExit("checkout: CHECKOUT_VERSION is baked in at build time")
+    raise SystemExit("sre-checkout: CHECKOUT_VERSION is baked in at build time")
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
 for worker in (traffic, export):
     threading.Thread(target=worker, daemon=True).start()
-print(f"checkout {VERSION} on :8080, pushing metrics to {ENDPOINT}", flush=True)
+print(f"sre-checkout {VERSION} on :8080, pushing metrics to {ENDPOINT}", flush=True)
 server.serve_forever()

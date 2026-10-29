@@ -67,7 +67,7 @@ def _error_ratio(service: str, span: str, window: str) -> str:
     return f"sum(increase({errors}[{window}])) / sum(increase({calls}}}[{window}]))"
 
 
-_ORDERS = 'checkout_requests_total{service_namespace="sre-agent",service_name="checkout"'
+_ORDERS = 'checkout_requests_total{service_namespace="sre-agent",service_name="sre-checkout"'
 RULES = (
     AlertRule(
         rule_id="checkout-payment-error-rate",
@@ -86,8 +86,8 @@ RULES = (
     # closes an episode, and a missing numerator would read as no data.
     AlertRule(
         rule_id="checkout-orders-error-rate",
-        description="checkout orders failing",
-        service="checkout",
+        description="sre-checkout orders failing",
+        service="sre-checkout",
         severity="sev2",
         signal="checkout.requests",
         window="30s",
@@ -95,9 +95,9 @@ RULES = (
         expr=f'(sum(increase({_ORDERS},http_response_status_code=~"5.."}}[30s])) or vector(0))'
         f" / sum(increase({_ORDERS}}}[30s]))",
         evidence="Evidence: Prometheus datasource webstore-metrics, metric checkout_requests_total"
-        ' with service_namespace="sre-agent" and service_name="checkout" (not the store\'s'
-        " checkout): http_response_status_code counts the answers and service_version names"
-        " the release that served them. The service sends no logs and no traces.",
+        ' with service_namespace="sre-agent" and service_name="sre-checkout":'
+        " http_response_status_code counts the answers and service_version names the release"
+        " that served them. The service sends no logs and no traces.",
     ),
 )
 

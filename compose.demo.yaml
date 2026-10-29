@@ -57,7 +57,7 @@ services:
   # cannot be named `checkout` here: it would merge with the store's service and answer for
   # its DNS name. The release lives in the image, never on the container, so a rollback by
   # the deploy-executor keeps the version it rolled back to. `demo_env.py fail|reset
-  # --service checkout` picks the release through DEMO_CHECKOUT_VERSION.
+  # --service sre-checkout` picks the release through DEMO_CHECKOUT_VERSION.
   sre-checkout:
     image: demo/checkout:${DEMO_CHECKOUT_VERSION:-1.4.0}
     build:

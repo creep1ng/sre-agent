@@ -3,7 +3,7 @@
 
 Usage:
     python scripts/demo_env.py up|fail|verify|reset|down
-    python scripts/demo_env.py fail|reset --service checkout   # the second service (#721)
+    python scripts/demo_env.py fail|reset --service sre-checkout   # the second service (#721)
 
 Every operation is idempotent and bounded to the Compose project declared in
 demo/manifest.yaml, removes nothing outside it, and never writes to upstream.
@@ -340,7 +340,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Operate the demo environment.")
     parser.add_argument("operation", choices=sorted(OPERATIONS))
     parser.add_argument(
-        "--service", choices=["checkout"], help="fail or reset the second service, not the store"
+        "--service", choices=["sre-checkout"], help="fail or reset the demo's own service"
     )
     arguments = parser.parse_args()
     if arguments.service and arguments.operation not in {"fail", "reset"}:

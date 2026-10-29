@@ -37,15 +37,16 @@ removes resources of another project, and none runs a host-wide cleanup such as
 
 ### The second service (#721)
 
-    python scripts/demo_env.py fail|reset --service checkout
+    python scripts/demo_env.py fail|reset --service sre-checkout
 
 Beside the store runs a checkout of our own, `sre-checkout`, built from
 `docker/checkout.Dockerfile` with the release baked into the image. It generates
 its own orders and pushes `checkout_requests_total` to the demo's collector every
-5 s. `fail --service checkout` builds and deploys `demo/checkout:1.5.0`, which
-answers 500 to 3 of every 10 orders; `reset --service checkout` deploys `1.4.0`
+5 s. `fail --service sre-checkout` builds and deploys `demo/checkout:1.5.0`, which
+answers 500 to 3 of every 10 orders; `reset --service sre-checkout` deploys `1.4.0`
 again. The deploy-executor rolls it back between the same two tags, kept in the
 local image store; the gateway rule `checkout-orders-error-rate` alerts on it.
+The store's `checkout` keeps its name and has no catalog (#722).
 
 ## Typical run
 
