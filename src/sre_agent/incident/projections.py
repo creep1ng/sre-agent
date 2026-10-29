@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from sre_agent.incident.persistence import IncidentRecord, RunEvent, RunRecord, SnapshotRecord
+from sre_agent.incident.reasons import PROJECTED_REASON_CODES, RUN_START_NOT_AUTHORIZED
 from sre_agent.incident.workflow import IncidentWorkflow
 
 IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
@@ -99,6 +100,19 @@ def actor_reference(document: Any) -> dict[str, Any] | None:
     }
 
 
+def safe_reason_code(payload: Any) -> str | None:
+    """Only allow-listed causes leave the persisted receipt metadata."""
+    if not isinstance(payload, dict):
+        return None
+    receipt = payload.get("dispatch_receipt")
+    if isinstance(receipt, dict):
+        code = receipt.get("reason_code")
+        if code in PROJECTED_REASON_CODES:
+            return code
+    code = payload.get("reason_code")
+    return code if code in PROJECTED_REASON_CODES else None
+
+
 def event_summary(payload: Any) -> str:
     transition_id = payload.get("transition_id") if isinstance(payload, dict) else None
     if isinstance(transition_id, str) and transition_id in TRANSITION_SUMMARIES:
@@ -111,6 +125,8 @@ def event_summary(payload: Any) -> str:
             status = receipt.get("status")
             if status == "pending":
                 return "Investigation dispatch started."
+            if safe_reason_code(payload) == RUN_START_NOT_AUTHORIZED:
+                return "Investigation did not start: the declarant lacks the run.start grant."
             if status in {"success", "confirmed_failure", "unknown"}:
                 return f"Investigation dispatch ended: {status}."
         patch = payload.get("run_patch")
@@ -150,6 +166,7 @@ def project_event(event: RunEvent, decision_document: Any) -> dict[str, Any]:
         "turn_id": event.turn_id,
         "task_id": gateway_task_id(event.turn_id),
         "request_id": request_id,
+        "reason_code": safe_reason_code(payload),
         "occurred_at": utc_iso(event.occurred_at),
     }
 
