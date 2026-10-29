@@ -17,8 +17,11 @@ import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNow } from "@/hooks/use-now";
+import { declareAlert, readTriageVersion } from "@/lib/api";
 import { formatDayTime } from "@/lib/format";
+import { useLive } from "@/lib/live";
 import { useStore } from "@/lib/store";
+import { markTriaged, TRIAGE_FAILURE } from "@/lib/triage";
 import type { Alert, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SEVERITIES, SEVERITY, TONE_CLASSES } from "@/lib/vocabulary";
@@ -54,20 +57,50 @@ export function SeverityPicker({ value, onChange }: { value: Severity; onChange:
 
 export function DeclareDialog({ alert, onOpenChange }: { alert: Alert | null; onOpenChange: (open: boolean) => void }) {
   const declare = useStore((s) => s.declare);
+  const token = useLive((s) => s.token);
+  const liveAlerts = useLive((s) => s.alerts);
   const navigate = useNavigate();
   const now = useNow();
   const [severity, setSeverity] = useState<Severity>("sev1");
   const [impact, setImpact] = useState("");
+  const [version, setVersion] = useState<number | null>(null);
+  const [pending, setPending] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
 
   useEffect(() => {
     if (!alert) return;
     setSeverity(alert.severity);
     setImpact(alert.suggestedImpact);
-  }, [alert]);
+    setFailure(null);
+    setVersion(null);
+    // The version is read when the dialog opens: a decision taken meanwhile makes it stale.
+    if (alert.live && token) void readTriageVersion(token, alert.id).then(setVersion);
+  }, [alert, token]);
+
+  async function submitLive(source: Alert) {
+    const live = liveAlerts.find((item) => item.alert_id === source.id);
+    if (!token || !live || !impact.trim()) return;
+    setPending(true);
+    setFailure(null);
+    const result = await declareAlert(token, live, { severity, impact: impact.trim() }, version ?? 1);
+    setPending(false);
+    if (result.kind !== "ok") {
+      setFailure(TRIAGE_FAILURE.declare[result.kind]);
+      return;
+    }
+    markTriaged(source.id, "declared", result.incidentId);
+    onOpenChange(false);
+    toast.success("Incidente declarado", { description: source.title });
+    navigate(`/incidentes/${result.incidentId}`);
+  }
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (!alert) return;
+    if (!alert || pending) return;
+    if (alert.live) {
+      void submitLive(alert);
+      return;
+    }
     const id = declare(alert.id, { severity, impact });
     onOpenChange(false);
     if (id) {
@@ -120,14 +153,20 @@ export function DeclareDialog({ alert, onOpenChange }: { alert: Alert | null; on
                 <AgentAvatar />
                 <span>Al declararlo, el agente empieza a investigar de inmediato.</span>
               </div>
+
+              {failure && (
+                <p role="alert" className="rounded-lg border border-critical-line bg-critical-soft px-3 py-2.5 text-sm text-critical">
+                  {failure}
+                </p>
+              )}
             </div>
 
             <DialogFooter className="border-t p-4">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" autoFocus>
-                <SirenIcon /> Declarar e investigar
+              <Button type="submit" autoFocus disabled={pending}>
+                <SirenIcon /> {pending ? "Declarando…" : "Declarar e investigar"}
                 <Kbd className="ml-1 hidden bg-white/15 text-current sm:inline-flex">Ctrl ⏎</Kbd>
               </Button>
             </DialogFooter>
