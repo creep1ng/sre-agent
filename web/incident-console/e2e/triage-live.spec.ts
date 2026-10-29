@@ -4,8 +4,9 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 /*
  * Issue #703, dismiss and link from the live card against the real stack (OTel demo with the
  * checkout failure injected, setup_sre.py, the web proxy, FastAPI, PostgreSQL). No route is
- * answered by the test. LIVE_TRIAGE picks one scenario per episode; each consumes the alert, so
- * run `demo_env.py reset` and `fail` between scenarios. Ways this can fail:
+ * answered by the test. LIVE_TRIAGE picks one scenario; each consumes its alert, so use a fresh
+ * SRE stack per scenario. `link` needs two real episodes of the same stack, see below. Ways this
+ * can fail:
  * 1. the card dismisses or links in the browser only: the API holds no decision;
  * 2. a version that went stale while the popover was open ends in an error instead of one retry;
  * 3. linking offers no real eligible incident, or links to another one;
@@ -43,7 +44,7 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
   test.skip(!enabled, "Requiere LIVE_TRIAGE=dismiss|link|conflict y DEMO_HUMAN_API_KEY con la falla inyectada");
 
   test(`escenario ${scenario}`, async ({ page, playwright }) => {
-    test.setTimeout(420_000);
+    test.setTimeout(scenario === "link" ? 900_000 : 420_000);
     const key = process.env.DEMO_HUMAN_API_KEY!;
     mkdirSync(DIR, { recursive: true });
     const api = await playwright.request.newContext({ extraHTTPHeaders: { authorization: `Bearer ${key}` } });
@@ -63,34 +64,40 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
     await connect(page, key);
     const card = page.locator("article").filter({ hasText: "Nueva" }).first();
     await expect(card).toBeVisible({ timeout: 300_000 });
-    const alertId = (await card.getAttribute("data-alert-id"))!;
+    let alertId = (await card.getAttribute("data-alert-id"))!;
     expect(alertId).toMatch(/^alt-/);
-    const pinned = page.locator(`article[data-alert-id="${alertId}"]`);
+    let pinned = page.locator(`article[data-alert-id="${alertId}"]`);
     let destination: string | undefined;
 
     if (scenario === "link") {
-      // A real eligible destination: a synthetic declaration whose investigation run is open.
-      const declared = await command(api, `al-e2e-703-${Date.now().toString(36)}`, {
-        operation: "triage_declare",
-        expected_version: 1,
-        reason: "Destino para la prueba de vincular.",
-        severity: "sev2",
-        impact: "Sintético: destino de la prueba E2E.",
-        alert_context: {
-          service: "checkout",
-          summary: "Destino sintético para vincular.",
-          observed_at: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
-          source: "issue-703 e2e",
-          severity: "sev2",
-        },
-      });
-      expect(declared.status()).toBe(201);
-      destination = ((await declared.json()) as { incident_id: string }).incident_id;
+      // Episode 1: its real alert is declared from the card and the declarant opens the investigation.
+      const first = alertId;
+      await pinned.getByRole("button", { name: "Declarar incidente" }).click();
+      await page.getByRole("dialog").getByRole("button", { name: /Declarar e investigar/ }).click();
+      await expect(page).toHaveURL(/\/incidentes\/inc-[^/]+$/, { timeout: 30_000 });
+      destination = page.url().split("/").pop()!;
+      await page.goBack();
       const run = await api.post(`${BASE}/api/v1/incidents/${destination}/runs`, {
         headers: { "Idempotency-Key": `e2e-703-run-${Date.now().toString(36)}` },
         data: { workflow_version: "1.0.0", objective: "investigate" },
       });
-      expect([201, 409]).toContain(run.status());
+      expect(run.status()).toBe(201);
+      // Episode 2: the host ends the failure (`demo_env.py reset`) on need-reset and injects it
+      // again (`demo_env.py fail`) on need-fail; the API then reports a new real alert.
+      const live = async () =>
+        (await (await api.get(`${BASE}/api/v1/alerts`)).json()) as {
+          rules: { state: string }[];
+          alerts: { alert_id: string }[];
+        };
+      const next = async () => (await live()).alerts.find((alert) => alert.alert_id !== first)?.alert_id ?? "";
+      const deadline = Date.now() + 360_000;
+      writeFileSync(`${DIR}/need-reset`, new Date().toISOString());
+      await expect.poll(async () => (await live()).rules[0].state, { timeout: 360_000, intervals: [5_000] }).toBe("ok");
+      writeFileSync(`${DIR}/need-fail`, new Date().toISOString());
+      await expect.poll(next, { timeout: deadline - Date.now(), intervals: [5_000] }).toMatch(/^alt-/);
+      alertId = await next();
+      pinned = page.locator(`article[data-alert-id="${alertId}"]`);
+      await expect(pinned).toBeVisible({ timeout: 60_000 });
       await expect
         .poll(async () => {
           const eligible = await api.get(`${BASE}/api/v1/alerts/${alertId}/triage/eligible-incidents`);
