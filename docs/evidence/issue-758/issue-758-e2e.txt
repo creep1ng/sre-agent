@@ -1,0 +1,25 @@
+Issue #758 consumption-limit E2E, incident inc-e2e758-d6b4d99a, model z-ai/glm-5.3-flash
+provider relace: 2 endpoints, window [1048576, 262144], caps [131072, 262144]
+PASS limits set to tokens=200000 usd=100: {'version': 1, 'incident_token_limit': 200000, 'monthly_usd_limit': '100', 'updated_at': '2026-10-30T07:29:33.815182+00:00'}
+PASS investigation run accepted: 201
+PASS incident reached mitigating under both limits: mitigating
+PASS every model call was reserved, settled at its audited cost: [{'model': 'z-ai/glm-5.3-flash', 'state': 'settled', 'token_exposure': 134950, 'settled_usd': '0.000050778600000000000000000000000000', 'response_status': 200, 'audited_usd': '0.0000507786'}, {'model': 'z-ai/glm-5.3-flash', 'state': 'settled', 'token_exposure': 135165, 'settled_usd': '0.000055495300000000000000000000000000', 'resp...
+PASS each call sent max_output_tokens equal to its admitted cap: {'sent': [131072, 131072], 'admitted': [131072, 131072]}
+PASS calls on the incident were admitted until then: 9
+PASS each cap was the tightest of endpoint, window and incident balance: [(131072, [131072]), (115922, [115922]), (99531, [99531]), (83140, [83140]), (66749, [66749]), (50358, [50358]), (33967, [33967]), (17576, [17576]), (1185, [1185])]
+PASS the call over the incident limit answers 429 consumption_limit_exceeded: {'error': {'code': 'consumption_limit_exceeded', 'message': 'Consumption limit exceeded.'}, 'request_id': 'a50f6d4d-279c-445d-84da-cb95d0acc7f6', 'retryable': True}
+PASS the refusal is audited as incident_limit_exceeded: incident_limit_exceeded
+PASS the incident balance could not cover the refused call's input bound: {'remaining': 50394, 'input_bound': 65600}
+PASS the refused call never reached the provider: []
+PASS limits set to tokens=200000 usd=0: {'version': 2, 'incident_token_limit': 200000, 'monthly_usd_limit': '0', 'updated_at': '2026-10-30T07:29:35.814499+00:00'}
+PASS at 0 USD a call answers 429 consumption_limit_exceeded: {'error': {'code': 'consumption_limit_exceeded', 'message': 'Consumption limit exceeded.'}, 'request_id': '0b517005-4bb6-4bed-b77d-cd6152484378', 'retryable': True}
+PASS the refusal is audited as monthly_limit_exceeded: monthly_limit_exceeded
+PASS the refused call never reached the provider: []
+PASS limits set to tokens=200000 usd=100: {'version': 3, 'incident_token_limit': 200000, 'monthly_usd_limit': '100', 'updated_at': '2026-10-30T07:29:36.162787+00:00'}
+PASS an unknown incident_id answers 422 incident_not_found, not a 500 or 429: {'error': {'code': 'incident_not_found', 'message': 'Incident not found.'}, 'request_id': '605fc5d8-e2e7-418f-a83a-bd37ee16c858', 'retryable': False}
+PASS its audit names resource_not_found: resource_not_found
+PASS limits set to tokens=None usd=100: {'version': 4, 'incident_token_limit': None, 'monthly_usd_limit': '100', 'updated_at': '2026-10-30T07:29:36.532339+00:00'}
+PASS a large multi-byte input gets an output cap that fits the context window: {'status': 200, 'sent': [65472], 'window_minus_input': 65472}
+PASS the catalog was queried with the routed model, every call authenticated: ['/api/v1/models/z-ai/glm-5.3-flash/endpoints']
+PASS limits set to tokens=None usd=None: {'version': 5, 'incident_token_limit': None, 'monthly_usd_limit': None, 'updated_at': '2026-10-30T07:29:36.921802+00:00'}
+PASS: 22 checks, 0 failed

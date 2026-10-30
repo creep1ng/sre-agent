@@ -1,8 +1,13 @@
-# Issue #758: the real API, database and investigator with OpenRouter replaced by
-# scripts/fake_openrouter.py. Start it, with scripts/ mounted on the seed:
+# Issue #758 E2E: consumption limits against the real API, database and investigator, with
+# OpenRouter replaced by scripts/fake_openrouter.py. Run, with scripts/ mounted on the seed:
 #   docker compose -f compose.yaml -f compose.consumption-e2e.yaml up --build --wait db api
 #   ... run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
 #   ... run --rm -T seed python /e2e/provision_demo.py
+#   ... --profile consumption-e2e run --rm consumption-e2e
+# The summary goes to stdout and to a temporary file inside the container. To keep it, mount a
+# directory and point ARTIFACT_DIR at it:
+#   ... run --rm -v "$PWD/docs/evidence/issue-758:/artifacts" -e ARTIFACT_DIR=/artifacts consumption-e2e
+# CI runs it from scripts/run_real_journeys.sh incidents.
 services:
   api:
     environment:
@@ -34,4 +39,25 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
       interval: 2s
       retries: 20
+    networks: [runtime]
+
+  consumption-e2e:
+    profiles: ["consumption-e2e"]
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/consumption_limits_e2e.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      API_URL: http://api:8000
+      FAKE_OPENROUTER_URL: http://fake-openrouter:8080
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      INCIDENT_HARNESS_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
+      TRIAGE_AGENT_MODEL: ${TRIAGE_AGENT_MODEL:?TRIAGE_AGENT_MODEL is required}
+      TRIAGE_AGENT_PROVIDER: ${TRIAGE_AGENT_PROVIDER:?TRIAGE_AGENT_PROVIDER is required}
+      FAKE_MANAGEMENT_KEY: fake-management-key
+    volumes:
+      - ./scripts/consumption_limits_e2e.py:/e2e/consumption_limits_e2e.py:ro
+    depends_on:
+      api: {condition: service_healthy}
     networks: [runtime]
