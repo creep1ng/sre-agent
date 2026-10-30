@@ -176,7 +176,7 @@ def delivered(section: str) -> None:
         section,
         {"outbox": rows, "messages": messages, "sent_rows": every, "fake_messages": len(sent())},
         {
-            "each pending message is delivered exactly once": len(messages) == 2,
+            "each pending message arrives once across the restarts": len(messages) == 2,
             "the failed first send was retried": rows[0][3] == 2 and rows[0][4],
             "every sent outbox row reached Telegram once": every == len(sent()),
         },

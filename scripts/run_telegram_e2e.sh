@@ -8,7 +8,7 @@
 # restarts the gateway twice: each pending message must arrive once. Finally it unlinks the chat
 # and dispatches a third time: nothing may reach it. Writes telegram-e2e.json, transcript.png
 # and summary.txt, and always removes the project (`down -v --remove-orphans`) on exit. Uses the
-# repository's .env, or .env.example when there is none.
+# repository's .env or, when there is none, .env.example with synthetic keys for this run only.
 set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,10 +22,22 @@ mkdir -p "$ARTIFACTS"
 ARTIFACTS="$(cd "$ARTIFACTS" && pwd)"
 export TELEGRAM_E2E_ARTIFACTS="$ARTIFACTS"  # mounted by compose.telegram-e2e.yaml
 ENV_FILE="$ROOT/.env"
-[[ -f "$ENV_FILE" ]] || ENV_FILE="$ROOT/.env.example"
+if [[ ! -f "$ENV_FILE" ]]; then
+  hex() { od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; }
+  env="$(<"$ROOT/.env.example")"
+  for role in admn demo inci rest; do
+    env="${env/<set-unique-sre_-prefixed-key-with-32-plus-characters>/sre_${role}_$(hex)}"
+  done
+  env="${env//<set-long-random-audit-hmac-key>/$(hex)}"
+  env="${env//<set-long-random-executor-signing-key>/$(hex)}"
+  env="${env//<lab\/model>/openai/gpt-4o-mini}"
+  env="${env//<provider>/openai}"
+  ENV_FILE="$(mktemp)"
+  printf '%s\n' "$env" > "$ENV_FILE"
+fi
 COMPOSE=(docker compose --project-directory "$ROOT" --env-file "$ENV_FILE" -f "$ROOT/compose.yaml"
   -f "$ROOT/compose.e2e.yaml" --profile telegram --profile telegram-e2e)
-trap '"${COMPOSE[@]}" --profile e2e down -v --remove-orphans' EXIT
+trap '"${COMPOSE[@]}" --profile e2e down -v --remove-orphans; [[ $ENV_FILE == "$ROOT/.env" ]] || rm -f "$ENV_FILE"' EXIT
 STAMP="$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
 SEED=("${COMPOSE[@]}" -f "$ROOT/compose.telegram-e2e.yaml" run --rm --no-deps -T
   --user "$(id -u):$(id -g)")
