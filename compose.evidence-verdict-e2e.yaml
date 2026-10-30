@@ -21,7 +21,7 @@ services:
       ARTIFACT_DIR: /artifacts
     volumes:
       - ./scripts/evidence_verdict_e2e.py:/e2e/evidence_verdict_e2e.py:ro
-      - ${EVIDENCE_VERDICT_ARTIFACTS:-./docs/evidence/issue-707}:/artifacts
+      - ${EVIDENCE_VERDICT_ARTIFACTS:-/tmp/evidence-verdict-e2e}:/artifacts
     depends_on:
       api: {condition: service_healthy}
     networks: [runtime]

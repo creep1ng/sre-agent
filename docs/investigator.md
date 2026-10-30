@@ -102,17 +102,19 @@ The model gives them in `verdicts` of `propose_hypothesis`, keyed by evidence id
 invalid verdict is recorded as `inconclusive`, not rejected. The harness, not the model, measures
 whether a tool answered with data: a Prometheus query without series or a log query without
 documents is recorded with `empty: true` and as `inconclusive`, whatever the model says. The fields
-are optional in incident-state 1.2.0 and the run context, so earlier documents stay valid. The war
-room shows «Respalda la hipótesis», «Contradice», «No concluyente» or, if empty, «No encontró
-nada». Reproduce it against the real API, with a scripted model and Grafana MCP:
+are optional in incident-state 1.2.0 and the run context, so earlier documents stay valid. On the
+evidence the current hypothesis cites, the war room shows «Respalda la hipótesis», «Contradice» or
+«No concluyente»; on any empty evidence, «No encontró nada». Reproduce it against the real API,
+with a scripted model and Grafana MCP:
 
     C="scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml"
     $C up --build --wait db api web
     $C run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
     $C run --rm -T seed python /e2e/provision_demo.py
-    $C --profile verdict-e2e run --rm verdict-e2e
+    mkdir -p /tmp/evidence-verdict-e2e  # default artifact dir (EVIDENCE_VERDICT_ARTIFACTS)
+    HOST_UID=$(id -u) HOST_GID=$(id -g) $C --profile verdict-e2e run --rm verdict-e2e
     $C --profile e2e run --rm --no-deps -u "$(id -u)" -e HOME=/tmp -e EVIDENCE_DIR=/artifacts \
-      -v "$PWD/scripts:/e2e/scripts:ro" -v "$PWD/docs/evidence/issue-707:/artifacts" \
+      -v "$PWD/scripts:/e2e/scripts:ro" -v /tmp/evidence-verdict-e2e:/artifacts \
       e2e node scripts/capture_evidence_verdict.mjs
 
 ## Skills

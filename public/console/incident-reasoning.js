@@ -32,11 +32,11 @@ export const DECISION = Object.freeze({
 });
 
 // What each evidence says about the hypothesis (#707). Empty evidence found nothing; other
-// inconclusive evidence has data that neither supports nor contradicts it.
+// inconclusive evidence has data that neither supports nor contradicts it (neutral tone).
 export const VERDICT = Object.freeze({
   supports: Object.freeze({ label: "Respalda la hipótesis", tone: "success" }),
   contradicts: Object.freeze({ label: "Contradice", tone: "critical" }),
-  inconclusive: Object.freeze({ label: "No concluyente", tone: "info" }),
+  inconclusive: Object.freeze({ label: "No concluyente" }),
   empty: Object.freeze({ label: "No encontró nada", tone: "warning" }),
 });
 
@@ -167,9 +167,13 @@ export function evidenceItem(item, citedIds) {
     cited.dataset.tone = "info";
     head.append(" ", cited);
   }
-  if (item.verdict) head.append(" ", badge(VERDICT[item.empty ? "empty" : item.verdict], item.verdict));
+  // The model judged evidence against the hypothesis of its run, so its verdict shows only where
+  // the current hypothesis cites it; that a query returned nothing was measured and always shows.
+  const judged = item.verdict && citedIds.has(item.evidence_id);
+  const shown = item.empty || judged;
+  if (shown) head.append(" ", badge(VERDICT[item.empty ? "empty" : item.verdict]));
   entry.append(head);
-  if (item.finding) entry.append(element("p", "reasoning__finding", item.finding));
+  if (shown && item.finding) entry.append(element("p", "reasoning__finding", item.finding));
   if (item.query) entry.append(element("code", "reasoning__query", item.query));
   entry.append(element("p", "reasoning__result", resultSummary(item.summary)));
   const request = element("p", "reasoning__request ma-muted");
