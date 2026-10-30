@@ -124,13 +124,29 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      # A pinned digest never changes, so rewriting a release together with its lock entry still fails.
+      - name: Keep every published release digest pinned
+        if: ${{ github.event_name != 'schedule' }}
+        run: |
+          git show HEAD^1:schemas/releases.lock.json > "${RUNNER_TEMP}/base-releases.lock.json" 2>/dev/null ||
+            echo '{}' > "${RUNNER_TEMP}/base-releases.lock.json"
+          jq -en --slurpfile base "${RUNNER_TEMP}/base-releases.lock.json" --slurpfile head schemas/releases.lock.json \
+            '$base[0] | to_entries | all(.value == $head[0][.key])' ||
+            { echo "::error::schemas/releases.lock.json changed or removed a published release digest"; exit 1; }
       - name: Create local-only Compose inputs
         run: cp .env.example .env
+      # Pull requests and pushes validate the newest release in full and pin the older ones by
+      # digest; the schedule revalidates every published release.
       - name: Run locked contract tooling in its container
+        env:
+          RELEASES: ${{ github.event_name == 'schedule' && 'validate:releases' || 'validate:releases:locked' }}
         run: >-
           docker compose --project-name ci-contracts-${{ github.run_id }} --profile harness run --build --rm harness
-          sh -c 'npm --prefix schemas/tooling test && npm --prefix schemas/tooling run validate &&
-          npm --prefix schemas/tooling run validate:releases && npm --prefix schemas/tooling run lint:openapi'
+          sh -c "npm --prefix schemas/tooling test && npm --prefix schemas/tooling run validate &&
+          npm --prefix schemas/tooling run ${RELEASES} && npm --prefix schemas/tooling run lint:openapi"
       - name: Remove disposable contract services
         if: always()
         run: docker compose --project-name ci-contracts-${{ github.run_id }} --profile harness down -v --remove-orphans

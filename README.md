@@ -203,6 +203,14 @@ docker compose --profile checks run --rm harness node --check scripts/showcase.j
 
 `validate:releases` discovers every published SemVer directory in `schemas/releases`, validates
 them in deterministic order, and fails if any directory is omitted or its manifest is invalid.
+`validate:releases:locked` is the faster check CI runs on pull requests: it validates the newest
+release in full and checks the older ones against the digests pinned in
+`schemas/releases.lock.json`. After publishing a release, pin it with `lock:releases`; the
+container mounts `schemas/` read-only, so write the lock from its output:
+
+```bash
+docker compose --profile checks run --rm harness sh -c 'npm --prefix schemas/tooling run --silent lock:releases >&2 && cat schemas/releases.lock.json' > schemas/releases.lock.json.new && mv schemas/releases.lock.json.new schemas/releases.lock.json
+```
 
 To verify issue #13 only, run its HTTP behavior tests and pinned contract obligation:
 

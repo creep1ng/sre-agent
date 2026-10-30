@@ -105,7 +105,9 @@ test("release tooling admits and discovers additive 2.4.0 over 2.3.0", async () 
   );
   assert.doesNotMatch(command.stderr, /Usage:/);
 
-  const releases = await validatePublishedReleases();
+  // Discovery only: validate:releases revalidates every published release in its own CI step.
+  const root = fileURLToPath(new URL("../../releases/", import.meta.url));
+  const releases = await validatePublishedReleases(root, async () => ({ artifacts: 1, results: 1 }));
   assert.equal(releases.releases.at(-1), "2.8.0");
 
   const manifest = parse(await readFile(new URL("../../releases/2.4.0/manifest.yaml", import.meta.url), "utf8"));

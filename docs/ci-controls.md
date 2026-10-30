@@ -26,9 +26,20 @@ documentation-only merge.
 
 `contracts` also runs only when a pull request changes a contract input: `schemas/`, the
 harness image (`docker/harness*`), `compose.yaml` or this workflow. The harness container
-mounts only `schemas/` and `scripts/`, and none of its CI commands reads `scripts/`. Its tests
-revalidate every published release, which takes about 15 minutes. Otherwise the gate requires
-`contracts` to be `skipped`, and `compose-smoke` accepts that skip.
+mounts only `schemas/` and `scripts/`, and none of its CI commands reads `scripts/`. Otherwise
+the gate requires `contracts` to be `skipped`, and `compose-smoke` accepts that skip.
+
+When `contracts` runs on a pull request or a push to `main`, it validates only the newest
+published release in full and checks every older one against `schemas/releases.lock.json`
+(`validate:releases:locked`). The lock pins the digest of each release's `manifest.yaml`, and
+the manifest pins the digest of every other file of that release and of the ADRs, so changing
+any published file fails: either the recomputed manifest differs from the committed one or the
+manifest no longer matches its pinned digest. A step before the harness also fails when the
+change edits or removes a digest the base commit already pinned, so a release cannot be
+rewritten together with its lock entry. The nightly schedule still revalidates every release in
+full (`validate:releases`). Publishing a release adds its digest with
+`npm --prefix schemas/tooling run lock:releases`, which validates the unpinned releases in full
+first.
 
 | Stage | Control | Boundary protected |
 | --- | --- | --- |

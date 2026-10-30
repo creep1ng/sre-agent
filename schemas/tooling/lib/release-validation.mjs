@@ -346,10 +346,7 @@ export function assertEveryPublishedRelease(published, validated) {
   }
 }
 
-export async function validatePublishedReleases(
-  root = join(schemas, "releases"),
-  validator = validateRelease,
-) {
+async function publishedVersions(root) {
   const entries = await readdir(root, { withFileTypes: true });
   const versions = entries
     .filter((entry) => entry.isDirectory())
@@ -358,18 +355,76 @@ export async function validatePublishedReleases(
   if (!versions.length || versions.some((version) => !SEMVER.test(version))) {
     throw new Error("Published release directories must use semantic versions");
   }
-  const validated = [];
-  const results = [];
   for (const version of versions) {
     const manifest = await parsed(join(root, version, "manifest.yaml"));
     if (manifest?.contract_version !== version) {
       throw new Error(`Release directory ${version} does not match its manifest`);
     }
+  }
+  return versions;
+}
+
+export async function validatePublishedReleases(
+  root = join(schemas, "releases"),
+  validator = validateRelease,
+) {
+  const versions = await publishedVersions(root);
+  const validated = [];
+  const results = [];
+  for (const version of versions) {
     results.push({ version, ...await validator(version) });
     validated.push(version);
   }
   assertEveryPublishedRelease(versions, validated);
   return { releases: validated, results };
+}
+
+// The lock pins each published manifest by digest. The manifest already pins every other file
+// of its release and the ADRs, so a matching manifest digest plus a manifest that still matches
+// the files proves the release is unchanged without rerunning its conformance and evidence.
+const releasesLock = join(schemas, "releases.lock.json");
+const newestVersion = (versions) => [...versions].sort((a, b) => {
+  const [left, right] = [a, b].map((version) => version.split(/[.+-]/, 3).map(Number));
+  return left[0] - right[0] || left[1] - right[1] || left[2] - right[2];
+}).at(-1);
+const manifestDigest = async (root, version) => fileHash(join(root, version, "manifest.yaml"));
+
+export async function assertLockedRelease(version, lock, root = join(schemas, "releases")) {
+  if (!lock[version]) throw new Error(`Release ${version} is missing from releases.lock.json; record it with: node release.mjs lock`);
+  if (await manifestDigest(root, version) !== lock[version]) throw new Error(`Release ${version} is immutable; its manifest no longer matches releases.lock.json`);
+  const manifest = await parsed(join(root, version, "manifest.yaml"));
+  assertReleaseMetadata(manifest);
+  assertImmutableManifest(manifest, await manifestObject(join(root, version), version));
+  return { artifacts: Object.values(manifest.inventory).flat().length, locked: true };
+}
+
+// Pull requests and pushes fully validate only the newest release, the one a contract change can
+// add; every older release is checked against its pinned digest. The schedule runs validate-all.
+export async function validateLockedReleases(root = join(schemas, "releases"), lockPath = releasesLock, validator = validateRelease) {
+  const versions = await publishedVersions(root), lock = JSON.parse(await readFile(lockPath, "utf8")), newest = newestVersion(versions);
+  const unknown = Object.keys(lock).filter((version) => !versions.includes(version));
+  if (unknown.length) throw new Error(`releases.lock.json pins unpublished releases [${unknown.join(", ")}]`);
+  const results = [];
+  for (const version of versions) {
+    const locked = await assertLockedRelease(version, lock, root);
+    results.push({ version, ...(version === newest ? await validator(version) : locked) });
+  }
+  assertEveryPublishedRelease(versions, results.map(({ version }) => version));
+  return { releases: versions, fully_validated: [newest], results };
+}
+
+// Records releases that the lock does not pin yet, after validating each of them in full. A pinned
+// digest never changes: a published release is immutable.
+export async function lockPublishedReleases(root = join(schemas, "releases"), lockPath = releasesLock, validator = validateRelease) {
+  const versions = await publishedVersions(root), lock = await optional(lockPath, JSON.parse) ?? {}, added = [];
+  const unpublished = Object.keys(lock).filter((version) => !versions.includes(version));
+  if (unpublished.length) throw new Error(`releases.lock.json pins unpublished releases [${unpublished.join(", ")}]; a published release cannot be removed`);
+  for (const version of versions) {
+    if (lock[version]) { if (await manifestDigest(root, version) !== lock[version]) throw new Error(`Release ${version} is immutable; its manifest no longer matches releases.lock.json`); continue; }
+    await validator(version); lock[version] = await manifestDigest(root, version); added.push(version);
+  }
+  await writeFile(lockPath, `${JSON.stringify(Object.fromEntries(versions.map((version) => [version, lock[version]])), null, 2)}\n`);
+  return { releases: versions, added };
 }
 
 export async function writeProjectionFixtures(version = DEFAULT_VERSION) {
