@@ -1,4 +1,4 @@
-import type { Certainty, Confidence, EvidenceSource, Severity, Verdict } from "./types";
+import type { Certainty, Confidence, EvidenceSource, Severity, TriageStatus, Verdict } from "./types";
 
 export type Tone = "info" | "warning" | "success" | "critical" | "neutral" | "brand";
 
@@ -64,6 +64,14 @@ export const SEVERITY: Record<
 };
 
 export const SEVERITIES: Severity[] = ["sev1", "sev2", "sev3", "sev4"];
+
+export const TRIAGE: Record<TriageStatus, { label: string; tone: Tone }> = {
+  new: { label: "Nueva", tone: "brand" },
+  triaging: { label: "En triage", tone: "warning" },
+  declared: { label: "Declarada", tone: "info" },
+  linked: { label: "Vinculada", tone: "info" },
+  dismissed: { label: "Descartada", tone: "neutral" },
+};
 
 export const SOURCE_LABEL: Record<EvidenceSource, string> = {
   metrics: "Métricas",

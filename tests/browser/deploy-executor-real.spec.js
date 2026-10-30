@@ -69,6 +69,7 @@ test("rollback and restart run once per key, rejections touch nothing, the proxy
   expect(catalog.services.map((s) => [s.service, s.operations.map((o) => o.operation)])).toEqual([
     ["probe", ["deployment.restart", "deployment.rollback"]],
     ["web", ["deployment.restart"]],
+    ["sre-checkout", ["deployment.restart", "deployment.rollback"]], // the demo's second service (#721)
   ]);
   const before = note("probe before", "GET /v1/services/probe", await executor("GET", "/v1/services/probe")).body;
   expect(before.container.image).toBe("demo/probe:1.1.0");

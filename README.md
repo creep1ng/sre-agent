@@ -1,5 +1,10 @@
 # SRE agent local foundation
 
+Midnight is a background SRE agent for freelancers who keep several clients' services running. It
+watches the signals they already have, remembers every incident and deploy, acts only through
+operations they approved in advance, and wakes them only when a human decision changes the outcome.
+[The vision and values](docs/vision.md) decide its scope.
+
 The repository runs a governed, non-streaming `POST /v1/responses`, PostgreSQL, and the existing
 framework-agnostic web catalog as one reproducible local stack. Authorization precedes provider
 routing, and every released response or denial is gated by metadata-only audit persistence.
@@ -66,6 +71,10 @@ Run the contract harness as a one-shot profile:
 ```bash
 docker compose --profile harness run --rm harness
 ```
+
+The harness mounts `schemas/` and `scripts/` read-only and works on a copy in a `tmpfs` at
+`/workspace`. Anything it generates there, such as release projections or manifests, disappears
+with the container unless you copy it out through an explicit writable mount.
 
 Prove issue #14 deterministically against an isolated PostgreSQL container and recording provider:
 

@@ -1,0 +1,19 @@
+{
+  "sanitized": true,
+  "polls": [
+    {
+      "at": "2026-10-23T05:51:30.149Z",
+      "status": 200,
+      "count": 0,
+      "alertIds": []
+    },
+    {
+      "at": "2026-10-23T05:52:45.966Z",
+      "status": 200,
+      "count": 1,
+      "alertIds": [
+        "alt-checkout-f350c6d98254"
+      ]
+    }
+  ]
+}
