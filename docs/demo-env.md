@@ -15,6 +15,10 @@ it. Issue: #186.
   loopback interface only, so the environment answers on this host and on no
   other machine. The Envoy admin interface is not published.
 - Python with `pyyaml`. On Windows the interpreter is `python` or `py`.
+- A rootful Docker daemon, or a rootless one whose memlock limit is unlimited. Upstream
+  OpenSearch (`compose.observability.yaml` at the pinned tag) sets
+  `bootstrap.memory_lock=true` with an unlimited `memlock` ulimit, so on a default rootless
+  daemon the container fails to start with a runc `RLIMIT_MEMLOCK` error.
 
 Nothing is prepared by hand: `up` clones the pinned tag into `otel-demo/`,
 which git ignores.
@@ -34,6 +38,19 @@ which git ignores.
 All five are idempotent and bounded to the Compose project `otel-demo`. None
 removes resources of another project, and none runs a host-wide cleanup such as
 `docker system prune`.
+
+### The second service (#721)
+
+    python scripts/demo_env.py fail|reset --service sre-checkout
+
+Beside the store runs a checkout of our own, `sre-checkout`, built from
+`docker/checkout.Dockerfile` with the release baked into the image. It generates
+its own orders and pushes `checkout_requests_total` to the demo's collector every
+5 s. `fail --service sre-checkout` builds and deploys `demo/checkout:1.5.0`, which
+answers 500 to 3 of every 10 orders; `reset --service sre-checkout` deploys `1.4.0`
+again. The deploy-executor rolls it back between the same two tags, kept in the
+local image store; the gateway rule `checkout-orders-error-rate` alerts on it.
+The store's `checkout` keeps its name and has no catalog (#722).
 
 ## Typical run
 
@@ -61,7 +78,7 @@ and traces, and how to read it, is in [demo-signals.md](demo-signals.md).
 | `.demo-state/grafana-mcp.env` | Grafana MCP caller token, created by `up` | No |
 | `demo/manifest.yaml` | What the environment is made of | Yes |
 | `demo/digests.lock` | Digests validated for the pinned version | Yes |
-| `compose.demo.yaml` | Overlay: owned flag directory, no flag cache in `checkout`, Grafana MCP, reset of undeclared host ports | Yes |
+| `compose.demo.yaml` | Overlay: owned flag directory, no flag cache in `checkout`, Grafana MCP, the second service `sre-checkout`, reset of undeclared host ports | Yes |
 
 The upstream checkout stays pristine: `up` refuses to run if it reports local
 modifications, and the flag working copy is never written back to it.

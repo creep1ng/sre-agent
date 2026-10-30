@@ -17,10 +17,11 @@ capabilities without making ORM, DTO, or provider models authoritative.
 `sre_agent.application.create_application` is the only composition root:
 
 - `GET /health/live` is dependency-free and proves the Python process can serve requests.
-- `GET /health/ready` verifies the exact Alembic revision required by the running build. The
-  current integrated baseline is `20260910_07`; every later schema migration must advance that
-  code-owned prerequisite in the same work unit. Failures return a fixed `503` response that
-  excludes driver messages, DSNs, and credentials.
+- `GET /health/ready` verifies the exact Alembic revision required by the running build, the
+  code-owned `REQUIRED_SCHEMA_VERSION` in `src/sre_agent/gateway/health.py`; every later schema
+  migration must advance that prerequisite in the same work unit (see the
+  [change checklist](#change-checklist)). Failures return a fixed `503` response that excludes
+  driver messages, DSNs, and credentials.
 - The `/v1/principals` and `/v1/credentials` routes expose the real governed administrative API.
 - `POST /v1/responses` validates and authenticates before logical-resource authorization, resolves
   routing only after allow, makes at most one OpenRouter request, commits a protected terminal
@@ -52,6 +53,27 @@ dependency or any nested dependency produces the same non-disclosing 404. Status
 rechecked on every request, and the exact URL keeps resume pinned to its original versions. The
 request-correlated audit records metadata only; no implicit latest-version selection or content cache
 is used.
+
+Catalog `owner_id` is a functional subsystem label (for example `bok-platform`), not a reference
+to a Principal: it is a plain identifier column with no foreign key to `principals`, and it grants
+nothing. The administrator supplies `owner_id` and the discoverability metadata (display name,
+tags) in the control-plane request that registers a catalog resource; the catalog does not read
+them from the registered server.
+
+## LLM consumption admission
+
+`ConsumptionAdmissionService` (`src/sre_agent/gateway/consumption_admission.py`) reserves capacity
+before any provider contact:
+
+- When neither an incident token limit nor a monthly USD limit is active, admission allows without
+  a reservation.
+- An active limit needs conservative bounds from the endpoint catalog: the endpoint's maximum
+  prompt tokens and its prices, plus a dynamically capped `max_output_tokens`. A missing,
+  expired, or unusable catalog fails closed with `consumption_bounds_unavailable`.
+- Each admitted request keeps the policy version it was admitted under, and its reservation stays
+  booked until exact usage settles; an uncertain settlement keeps the reservation.
+- Monthly limits use half-open UTC calendar months (`[first day 00:00, next first day 00:00)`),
+  serialized per month with a PostgreSQL advisory lock.
 
 ## Release metadata
 
@@ -98,6 +120,31 @@ makes one provider attempt with fallback disabled. Seed validation happens befor
 is a no-op, while partial or differing seed-owned state rolls back and reports only entity/field
 names. Routing drift is read safely with `--check-routing` and changed only through the explicit
 `--reconcile-routing` seed action under the seed transaction lock.
+
+## Change checklist
+
+Several invariants are repeated across code, schema, and tests. Extend them together in the same
+work unit:
+
+- **New Alembic revision.** Set `REQUIRED_SCHEMA_VERSION` in `src/sre_agent/gateway/health.py`
+  to the new head, otherwise `/health/ready` returns `503`. Update the tests that pin the exact
+  head (for example `tests/test_health.py`, `tests/test_migrations.py`,
+  `tests/test_skill_migration_compatibility.py`).
+- **New table.** Add it to the manual `DROP TABLE` reset lists of the PostgreSQL-backed tests
+  (for example `tests/issue454_support.py`), children before parents, or later tests fail with
+  `DuplicateTable`.
+- **New governed control route.** Register it in both `CONTROL_SCOPES`
+  (`src/sre_agent/control/scopes.py`) and `CONTROL_OPERATIONS`
+  (`src/sre_agent/control/service.py`), and update the tests that compare the two registries and
+  enumerate every `/v1/` route.
+- **New resource type or audit operation.** These are closed vocabularies repeated in the
+  `governance/dto.py` Literals, the `ck_resources_type` and `ck_audit_events_operation` database
+  checks, and the release schema enums. Extend every copy, or `AuditEvent` validation rejects the
+  value and the request fails.
+- **Backfilling `audit_events`.** The `audit_events_append_only` trigger rejects every `UPDATE`
+  and `DELETE`, including a migration's own backfill. A backfilling migration drops the trigger,
+  updates the rows, and recreates it in the same transaction, as
+  `20260825_02_add_audit_latency.py` does.
 
 ## Rollback boundaries
 
