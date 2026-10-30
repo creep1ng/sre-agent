@@ -125,7 +125,7 @@ def dispatch(incident_id: str) -> None:
         },
         {
             "the acknowledgment arrives first": messages[0]["text"].startswith("Investigando"),
-            "the acknowledgment arrives in under 5 s": 0 <= latency < 5,
+            f"the acknowledgment arrives in under 5 s ({latency:.3f} s)": 0 <= latency < 5,
             "the conclusion follows": messages[1]["text"].startswith("Investigación terminada"),
             "unlinked chats receive no incident information": not any(
                 incident_texts(chat) for chat in (STRANGER, LATECOMER, EXPIRED)
