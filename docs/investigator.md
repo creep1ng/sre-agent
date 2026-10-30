@@ -88,7 +88,12 @@ as `unknown`, an exception after the claim (`investigator_failed`, only its type
 and a mitigation a human sends back. The incident stays in `investigating`. Only a human
 retries: `POST .../runs` with `objective: investigate` opens a new run through
 `continue_investigation`, refused with 409 for an agent, beside a live run, or for the loser
-of two concurrent retries. The ended run is never redispatched.
+of two concurrent retries. The ended run is never redispatched. The receipt and the
+`run_terminated` event carry the ending's `reason_code`; the timeline projects only the codes
+in `src/sre_agent/incident/reasons.py`, each with a readable cause (issue #705), and the war
+room shows that cause in Spanish with the code in parentheses. An MCP tool that fails or does
+not answer is `investigation_tool_unavailable`, distinct from the model provider's
+`investigation_upstream_unavailable`; both store `terminated_reason` `upstream_unavailable`.
 
 Every outcome with a harness result also writes, in the same transaction, the run's turns as
 its sensitive context: the input sent, the model output, the tool invocation when the tool

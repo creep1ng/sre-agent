@@ -35,9 +35,12 @@ test("starting one investigation shows the created run and keeps it across reloa
   const runId = await page.locator("#run-select").inputValue();
   expect(runId).toMatch(/^run_[0-9a-z]{8,32}$/);
   await expect(page.locator("#run-state")).toContainText(`${runId} ·`);
-  // This stack has no Grafana MCP: the run ends with its reason instead of staying "en curso",
-  // and the incident offers a retry (#761).
-  await expect(page.locator("#run-terminated")).toHaveText("Run terminado: hace falta intervención humana.");
+  // This stack has no Grafana MCP: the run ends with its cause instead of staying "en curso"
+  // (#761, #705), and the incident offers a retry.
+  await expect(page.locator("#run-terminated")).toHaveText(
+    "Run terminado: Las herramientas de observabilidad no están configuradas o rechazaron la conexión (mcp_discovery_rejected).",
+  );
+  await expect(page.locator(".ma-timeline__detail", { hasText: "Causa:" }).first()).toBeVisible();
   await expect(page.locator("#run-start")).toHaveText("Reintentar investigación");
 
   // A reload re-derives the same run from the stored detail; nothing starts another one.

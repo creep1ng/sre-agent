@@ -142,6 +142,7 @@ class InvestigationRunDispatcher:
                         actor_reference,
                         status="confirmed_failure",
                         reason_code="harness_identity_unavailable",
+                        agent_principal_id=await self._configured_agent_id(),
                     )
                     return
                 assert actor_reference is not None
@@ -180,6 +181,15 @@ class InvestigationRunDispatcher:
         ):
             return None
         return context
+
+    async def _configured_agent_id(self) -> str | None:
+        """The configured agent identity even when it cannot run, so the cause can name it."""
+        assert self.gateway_settings is not None
+        async with self.sessions() as session:
+            context = await CredentialRepository(session).resolve_authorization_context(
+                self.gateway_settings.api_key.get_secret_value()
+            )
+        return context.principal.principal_id if context is not None else None
 
     async def _investigate(
         self,
@@ -320,9 +330,14 @@ class InvestigationRunDispatcher:
                 run_id,
                 actor_reference,
                 status="unknown",
+                # A tool held past INVESTIGATOR_TOOL_TIMEOUT_SECONDS names the timeout (#719); any
+                # other tool that did not answer is a cause distinct from the model provider (#705).
                 reason_code="tool_timeout"
                 if result.failure_diagnostic is not None
                 and result.failure_diagnostic.stage == "tool_timeout"
+                else "investigation_tool_unavailable"
+                if result.status == "upstream_unavailable"
+                and (result.detail or "").startswith("tool failed:")
                 else f"investigation_{result.status}",
                 request_ids=all_request_ids,
                 mcp_request_ids=mcp_request_ids,
@@ -614,6 +629,7 @@ class InvestigationRunDispatcher:
         diagnostic: Mapping[str, Any] | None = None,
         escalate: str | None = None,
         contexts: Sequence[TextContextRecord] = (),
+        agent_principal_id: str | None = None,
     ) -> None:
         now = datetime.now(UTC)
         events = [
@@ -629,6 +645,7 @@ class InvestigationRunDispatcher:
                 mcp_request_ids=mcp_request_ids,
                 result_status=result_status,
                 diagnostic=diagnostic,
+                agent_principal_id=agent_principal_id,
             )
         ]
         reason = "investigation dispatch outcome"
@@ -637,7 +654,9 @@ class InvestigationRunDispatcher:
             # Nothing else will act on this run: it ends with the reason, and a human retries
             # with a new run. An `unknown` outcome is never redispatched inside this run.
             run_patch = termination(_terminated_reason(reason_code, result_status), now)
-            events.append(self._termination_event(run_patch, request_ids, now))
+            events.append(
+                self._termination_event(run_patch, request_ids, now, reason_code=reason_code)
+            )
         else:
             # The incident keeps its state; the run waits for a human and is never retried.
             reason, run_patch = escalation(escalate, now)
@@ -669,6 +688,7 @@ class InvestigationRunDispatcher:
         request_ids: Sequence[UUID],
         now: datetime,
         state: str = "investigating",
+        reason_code: str | None = None,
     ) -> EventDraft:
         return EventDraft(
             event_id=f"evt_{token_hex(8)}",
@@ -676,6 +696,7 @@ class InvestigationRunDispatcher:
             payload={
                 "state": state,
                 "run_patch": dict(run_patch),
+                **({"reason_code": reason_code} if reason_code else {}),
                 "request_id": str(request_ids[-1]) if request_ids else None,
             },
             occurred_at=now,
@@ -721,6 +742,7 @@ class InvestigationRunDispatcher:
         result_status: str | None = None,
         diagnostic: Mapping[str, Any] | None = None,
         state: str = "investigating",
+        agent_principal_id: str | None = None,
     ) -> EventDraft:
         receipt: dict[str, Any] = {
             "dispatch_id": run_id,
@@ -735,6 +757,8 @@ class InvestigationRunDispatcher:
             receipt["result_status"] = result_status
         if diagnostic is not None:
             receipt["diagnostic"] = dict(diagnostic)
+        if agent_principal_id is not None:
+            receipt["agent_principal_id"] = agent_principal_id
         return EventDraft(
             event_id=f"evt_{token_hex(8)}",
             kind="dispatch_receipt",

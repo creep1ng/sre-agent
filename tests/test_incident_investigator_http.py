@@ -1082,7 +1082,7 @@ def test_http_200_mcp_body_rejection_has_bounded_diagnostic_and_no_redispatch(
     assert observed_mcp_responses and observed_mcp_responses[0][0] == 200
     assert len(llm.requests) == 1 and len(mcp.calls) == 1
     assert receipt["status"] == "unknown"
-    assert receipt["reason_code"] == "investigation_upstream_unavailable"
+    assert receipt["reason_code"] == "investigation_tool_unavailable"
     assert receipt["diagnostic"] == {
         "stage": "mcp_response_validation",
         "kind": "rejected",
@@ -1147,7 +1147,7 @@ def test_transient_mcp_http_failure_has_bounded_diagnostic_and_no_redispatch(
     assert observed_mcp_responses and observed_mcp_responses[0][0] == 502
     assert len(llm.requests) == 1 and len(mcp.calls) == 1
     assert receipt["status"] == "unknown"
-    assert receipt["reason_code"] == "investigation_upstream_unavailable"
+    assert receipt["reason_code"] == "investigation_tool_unavailable"
     assert receipt["diagnostic"] == {
         "stage": "gateway_transport",
         "kind": "transient",
@@ -2087,3 +2087,93 @@ def test_a_retry_is_refused_beside_a_live_run_for_an_agent_and_for_a_concurrent_
             await database.dispose()
 
     asyncio.run(agent_retry())
+
+
+def _set_harness_status(client: httpx.Client, status: str) -> None:
+    headers = {"Authorization": f"Bearer {ADMIN_KEY}"}
+    current = client.get("/v1/principals/incident-harness", headers=headers).json()
+    response = client.put(
+        "/v1/principals/incident-harness/status",
+        headers=headers | {"Idempotency-Key": f"harness-{status}-{current['updated_at']}"},
+        json={"status": status, "expected_updated_at": current["updated_at"]},
+    )
+    assert response.status_code == 200, response.text
+
+
+def _ending(client: httpx.Client, incident_id: str, run_id: str) -> dict[str, Any]:
+    events = client.get(
+        f"/v1/incidents/{incident_id}/runs/{run_id}/events",
+        headers={"Authorization": f"Bearer {HUMAN_KEY}"},
+    )
+    assert events.status_code == 200
+    return next(
+        event
+        for event in events.json()["events"]
+        if event["kind"] == "dispatch_receipt"
+        and event["summary"] != "Investigation dispatch started."
+    )
+
+
+def test_an_inactive_agent_identity_is_named_and_a_retry_after_reactivation_advances() -> None:
+    """Issue #705: deactivate, start, read the cause; reactivate, retry, the run advances."""
+    incident_id = "inc-investigator-reason-identity"
+    _add_incident(incident_id)
+    _grant_run_access()
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}")
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        _set_harness_status(client, "inactive")
+        try:
+            first = _start(client, incident_id, "investigation-reason-identity-first")
+            ending = _ending(client, incident_id, first.json()["run_id"])
+        finally:
+            _set_harness_status(client, "active")
+        retry = _start(client, incident_id, "investigation-reason-identity-retry")
+    assert first.status_code == 201 and first.json()["terminated_reason"] == "needs_human"
+    assert ending["reason_code"] == "harness_identity_unavailable"
+    assert (
+        "'incident-harness' is inactive or not an agent; reactivate it in Principals"
+        in ending["summary"]
+    )
+    assert retry.status_code == 201 and retry.json()["current_state"] == "mitigating"
+
+
+@pytest.mark.parametrize(
+    ("ending_kind", "reason_code", "cause"),
+    [
+        (
+            "provider_503",
+            "investigation_upstream_unavailable",
+            "the model provider was unavailable",
+        ),
+        (
+            "mcp_tool_timeout",
+            "investigation_tool_unavailable",
+            "an MCP tool failed or did not answer in time",
+        ),
+    ],
+)
+def test_a_provider_outage_and_an_mcp_tool_timeout_show_distinct_safe_causes(
+    ending_kind: str, reason_code: str, cause: str
+) -> None:
+    incident_id = f"inc-investigator-reason-{ending_kind.replace('_', '-')}"
+    _add_incident(incident_id)
+    _grant_run_access()
+    llm = UnavailableOnceLLM() if ending_kind == "provider_503" else ScriptedLLM()
+    mcp = ScriptedMCP(lose_response=ending_kind == "mcp_tool_timeout")
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=llm, mcp=mcp)
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        started = _start(client, incident_id, f"investigation-reason-{ending_kind}")
+        run_id = started.json()["run_id"]
+        ending = _ending(client, incident_id, run_id)
+        timeline = client.get(
+            f"/v1/incidents/{incident_id}/runs/{run_id}/events",
+            headers={"Authorization": f"Bearer {HUMAN_KEY}"},
+        ).text
+    assert ending["reason_code"] == reason_code and cause in ending["summary"]
+    # The cause is metadata only: no prompt, provider error body or key reaches the timeline.
+    for leaked in ("State: ", "provider_unavailable", "Elevated payment errors", HARNESS_KEY):
+        assert leaked not in timeline
