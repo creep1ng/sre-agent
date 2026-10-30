@@ -53,8 +53,8 @@ ERRORS: dict[int, tuple[str, str]] = {
 ERROR_MESSAGES = {
     "policy_unavailable": "The consumption policy is unavailable.",
     "status_conflict": "The status was changed by another request.",
-    "grant_conflict": "An active grant with this principal, action and resource, "
-    "or a grant with this grant_id, already exists.",
+    "grant_conflict": "An active grant with this principal, action and resource already exists.",
+    "grant_id_conflict": "A grant with this grant_id already exists, active or revoked.",
     "credential_inactive": "The credential is not active.",
     "credential_issuance_failed": "Credential issuance could not be completed.",
 }
@@ -370,6 +370,15 @@ def _grant_action_admitted(resource_type: str, action: str) -> bool:
     return action in GRANT_ADMITTED_ACTIONS.get(resource_type, frozenset())
 
 
+def _grant_conflict_code(error: Exception) -> str:
+    """Name the constraint a new grant violated, not a generic idempotency conflict (#759)."""
+    diag = getattr(getattr(error, "orig", None), "diag", None)
+    constraint = getattr(diag, "constraint_name", None)
+    return {"grants_pkey": "grant_id_conflict", "uq_grants_active_direct": "grant_conflict"}.get(
+        constraint, "idempotency_conflict"
+    )
+
+
 class GrantListResponse(BaseModel):
     items: list[Grant]
     limit: int
@@ -575,6 +584,7 @@ class ControlService:  # noqa: E305
             "invalid_idempotency_key": "contract_validation_failed",
             "idempotency_conflict": "status_conflict",
             "grant_conflict": "status_conflict",
+            "grant_id_conflict": "status_conflict",
             "credential_inactive": "contract_validation_failed",
             "rotation_failed": "upstream_failed",
             "credential_issuance_failed": "upstream_failed",
@@ -1692,8 +1702,6 @@ class ControlService:  # noqa: E305
                     media_type="application/json",
                 )
         except (IdempotencyConflictError, IntegrityError) as conflict:
-            # A new key whose grant collides with an active one (or reuses a grant_id) is
-            # not an idempotency problem; say what actually conflicts.
             return await self._finish(
                 request_id,
                 started,
@@ -1701,11 +1709,7 @@ class ControlService:  # noqa: E305
                 "authorization",
                 operation,
                 action,
-                error_code=(
-                    "grant_conflict"
-                    if isinstance(conflict, IntegrityError)
-                    else "idempotency_conflict"
-                ),
+                error_code=_grant_conflict_code(conflict),
                 context=context,
                 resource_ref=("administrative_control", "grants"),
                 decision=evaluation.decision,

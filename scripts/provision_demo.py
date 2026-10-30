@@ -121,6 +121,8 @@ async def _drifted(service, body):
         persisted = await GrantRepository(session).get(body["grant_id"])
     if persisted is None or persisted.status != "revoked":
         return False
+    if await _already_active(service, body):
+        return True
     print(f"seed drift: grant {body['grant_id']} is revoked; left revoked")
     return True
 
