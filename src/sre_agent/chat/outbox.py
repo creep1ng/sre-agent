@@ -264,6 +264,10 @@ REASONS = {
     "investigation_invalid_output": "el modelo respondió en un formato no válido",
     "investigation_pre_dispatch_rejected": "la solicitud al modelo se rechazó antes de enviarla",
     "investigation_upstream_unavailable": "el proveedor del modelo no respondió",
+    "investigation_tool_unavailable": (
+        "una herramienta de observabilidad falló o no respondió a tiempo"
+    ),
+    "tool_timeout": "una herramienta de observabilidad superó el tiempo límite de la consulta",
     "result_persistence_uncertain": "no se pudo confirmar que el resultado se guardó",
 }
 
