@@ -1,0 +1,31 @@
+{
+  "issue": 765,
+  "environment": "LOCAL OpenTelemetry Demo 3.0.0 (scripts/demo_env.py + compose.demo.yaml) on an 8-CPU/16 GB host, not EC2 (EC2 blocked by the account's monthly budget guard)",
+  "tree": "stack tip 1045c831 (#820) for the runs; product-catalog and checkout memory raised to 64M on the running containers (docker update), as #818 now commits",
+  "healthy_baseline": {
+    "intake_mode": "record only (ALERT_INTAKE_PRINCIPAL_ID empty)",
+    "window": ["2026-10-30T16:13:40+00:00", "2026-10-30T16:33:37+00:00"],
+    "samples": 40,
+    "interval_s": 30,
+    "host_load1": {"min": 3.19, "max": 7.99, "avg": 5.0},
+    "rules_firing": 0,
+    "episodes_recorded": 0,
+    "pending_never_fired": ["2026-10-30T16:15:44+00:00 service-error-rate payment", "2026-10-30T16:16:15+00:00 service-error-rate payment", "2026-10-30T16:25:58+00:00 service-error-rate payment", "2026-10-30T16:26:29+00:00 service-error-rate payment"],
+    "max_error_ratio": {"payment": 0.111, "ad": 0.043, "recommendation": 0.017, "flagd": 0.002, "frontend-proxy": 0, "frontend": 0},
+    "max_p95_ms": {"checkout": 190.0, "frontend": 71.071, "frontend-proxy": 67.917, "product-catalog": 55.0, "email": 48.0, "recommendation": 46.833}
+  },
+  "before_memory_fix": {
+    "observed_at": "2026-10-30T16:08:12Z",
+    "host_load1": 32.9,
+    "product_catalog_checkout_memory": "20M upstream limit, pinned (page cache)",
+    "rules": {"service-latency-p95 Alerting": ["checkout", "frontend", "frontend-proxy", "recommendation"], "service-latency-p95 Pending": ["product-catalog"], "service-error-rate Pending": ["frontend", "frontend-proxy", "recommendation"]},
+    "p95_ms": {"product-catalog": 15000, "checkout": 15000, "recommendation": 15000, "frontend": 15000, "frontend-proxy": 15000},
+    "error_ratio": {"recommendation": 0.232, "frontend": 0.091, "frontend-proxy": 0.069}
+  },
+  "paymentFailure": {
+    "injection": "paymentFailure.defaultVariant=100% in the flag working copy .demo-state/flagd + flagd restart (the path of demo_env.py fail); the clock starts at the write, before the restart",
+    "flagd_ui_route": "POST /feature/api/write changed upstream otel-demo/src/flagd, which the local flagd does not read: 7 min at 100% with no failed charge and no episode (run 1, discarded)",
+    "run_paid_llm_off": {"flag_written_at": "2026-10-30T16:44:15.079157+00:00", "timings": [{"episode": "alt-checkout-27c463824d38cb82", "service": "checkout", "rule": "service-error-rate", "status": "firing", "injection_to_recorded_s": 210.1, "injection_to_dispatch_s": 210.4}, {"episode": "alt-payment-e39d19f14e91b990", "service": "payment", "rule": "service-error-rate", "status": "firing", "injection_to_recorded_s": 210.1, "injection_to_dispatch_s": 210.3}], "investigation_outcome": "unknown (no provider key)", "reset_at": "2026-10-30T16:52:36.226084+00:00", "resolved": "both at 2026-10-30T16:54:40Z"},
+    "run_real_model": {"model": "z-ai/glm-5.3-flash via relace (OpenRouter)", "fresh_database": true, "flag_written_at": "2026-10-30T17:01:37.972599+00:00", "timings": [{"episode": "alt-payment-746c7032ae33c8ce", "service": "payment", "rule": "service-error-rate", "status": "firing", "injection_to_recorded_s": 127.3, "injection_to_dispatch_s": 127.7}, {"episode": "alt-checkout-0c54fe961c245b25", "service": "checkout", "rule": "service-error-rate", "status": "firing", "injection_to_recorded_s": 127.3, "injection_to_dispatch_s": 127.7}], "console_actions": 0, "model_calls_responses_create": 10, "investigation_runs": 2, "hypotheses": [{"run_id": "run_6187117b40428f09", "at": "2026-10-30 17:04:38.569217+00", "statement": "El servicio payment está rechazando el 100% de las solicitudes de cobro (span oteldemo.PaymentService/Charge) porque el token de pago se considera inválido: los logs muestran 'Payment request failed. Invalid token. demo.user_context.loyalty_level=gold' con stacktrace en charge.js:46, y en paralelo hay errores en el stream de evaluación de flags (flagd.evaluation.v2.Service/EventStream), lo que apunta a una validación de token ligada al contexto de usuario de feature flags (nivel gold) que falla de forma consistente en cada charge.", "confidence": "medium", "cited_evidence": [{"evidence_id": "ev_506679f1b1b44d57", "tool": "query_prometheus", "datasource_uid": "webstore-metrics", "query": "sum by (span_name) (rate(traces_span_metrics_calls_total{service_name=\"payment\", status_code=\"STATUS_CODE_ERROR\"}[5m]))", "time_window": "now", "cited": true}, {"evidence_id": "ev_47115d19f0f1ca9d", "tool": "query_elasticsearch", "datasource_uid": "webstore-logs", "query": "resource.service.name:\"payment\"", "time_window": "now-15m/now", "cited": true}]}, {"run_id": "run_a8f27e573be0e4d1", "at": "2026-10-30 17:04:55.198248+00", "statement": "El servicio payment rechaza las peticiones Charge con el error 'Payment request failed. Invalid token' cuando el contexto indica demo.user_context.loyalty_level=gold, y ese fallo se propaga a la operación PlaceOrder de checkout, explicando el 18,75% de spans con STATUS_CODE_ERROR detectados tanto en oteldemo.CheckoutService/PlaceOrder como en oteldemo.PaymentService/Charge.", "confidence": "high", "cited_evidence": [{"evidence_id": "ev_e986aa8760335bb4", "tool": "query_prometheus", "datasource_uid": "webstore-metrics", "query": "topk(5, sum by (span_name) (rate(traces_span_metrics_calls_total{service_name=\"checkout\",status_code=\"STATUS_CODE_ERROR\"}[5m])))", "time_window": "now", "cited": true}, {"evidence_id": "ev_0bd2f2cee498d304", "tool": "query_elasticsearch", "datasource_uid": "webstore-logs", "query": "resource.service.name:\"checkout\"", "time_window": "now-30m/now", "cited": false}, {"evidence_id": "ev_c30da3ea08e1428a", "tool": "query_elasticsearch", "datasource_uid": "webstore-logs", "query": "resource.service.name:\"payment\"", "time_window": "now-30m/now", "cited": true}]}], "mitigations": {"payment": "revert the recently changed flag (paymentFailure), restart flagd, watch errors 5-10 min", "checkout": "restart or roll back payment (wrong target: the cause is the flag)"}, "reset_at": "2026-10-30T17:09:54.448641+00:00", "resolved": {"checkout": "2026-10-30T17:10:40Z", "payment": "2026-10-30T17:11:40Z"}}
+  }
+}

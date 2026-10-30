@@ -68,8 +68,11 @@ generic rules. Each holds for 1 min before it fires; notifications group by
 | `sre-checkout-orders-error-rate` | 5xx share of `sre-checkout` orders over 30 s > 10% | warning | the broken `sre-checkout` 1.5.0 release (#721) |
 
 The flag list is the scenario bank of `docs/product-direction-2026-10-28.md`; which flags each
-rule actually catches is verified only for the runs recorded in the PR evidence. How the
-generic span-error rule behaves on the store's normal traffic has not been measured yet.
+rule actually catches is verified only for the runs recorded in the PR evidence. On the local
+store's normal traffic a 20 min watch fired no rule (load ~5 on 8 CPUs); `payment`'s error
+ratio went `Pending` twice on a single failed span and the 1 min hold kept it silent. On a
+starved store (20M `product-catalog`, see [demo-env](demo-env.md#design-notes)) the latency and
+error rules fire on the cascade: that is a real degradation, not rule noise.
 
 ## Where the rules run
 
@@ -109,6 +112,12 @@ DEMO_CHECKOUT_VERSION=1.4.0 $C up -d --build --no-deps sre-checkout
 $C logs -f alert-intake-e2e   # ends in PASS or FAIL; /tmp/765/alert-intake-e2e.json
 $C down -v --remove-orphans
 ```
+
+Local `paymentFailure`: set `paymentFailure.defaultVariant` in `.demo-state/flagd/demo.flagd.json`
+and restart `flagd` (what `demo_env.py fail` does for its flag). flagd-ui's write API changes
+upstream's file, which the local flagd does not read. One injection opens two incidents,
+`payment` and `checkout`, each with its own investigation; record in
+`docs/evidence/issue-765/local-paymentfailure.json`.
 
 ## Known limits
 
