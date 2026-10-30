@@ -5,6 +5,10 @@ incident that `seed_war_room_runs.py` created (INCIDENT). The default compose ha
 MCP, so every investigation ends at MCP discovery. The script starts one, reads the run, starts
 a retry on the same incident and reads it, then writes every status and body it saw to
 ARTIFACT as JSON. It exits non-zero when a run stays `running` or the retry is refused.
+
+With DEACTIVATE_HARNESS=1 (issue #705) the administrator sets the agent identity
+`incident-harness` inactive for the first attempt and reactivates it before the retry, so the
+first ending names the identity and the retry gets past it.
 """
 
 from __future__ import annotations
@@ -25,8 +29,13 @@ HEADERS = {
 }
 
 
-def call(method: str, path: str, body: Any = None, key: str | None = None) -> dict[str, Any]:
-    headers = HEADERS | ({"Idempotency-Key": key} if key else {})
+ADMIN = HEADERS | {"Authorization": "Bearer " + os.environ["ADMIN_HUMAN_API_KEY"]}
+
+
+def call(
+    method: str, path: str, body: Any = None, key: str | None = None, admin: bool = False
+) -> dict[str, Any]:
+    headers = (ADMIN if admin else HEADERS) | ({"Idempotency-Key": key} if key else {})
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(BASE + path, data, headers, method=method)
     try:
@@ -51,8 +60,27 @@ def investigate(attempt: str) -> tuple[dict[str, Any], ...]:
     return start, run, events
 
 
+def set_harness(status: str) -> None:
+    current = call("GET", "/v1/principals/incident-harness", admin=True)["body"]
+    changed = call(
+        "PUT",
+        "/v1/principals/incident-harness/status",
+        {"status": status, "expected_updated_at": current["updated_at"]},
+        key=f"e2e-harness-{status}-{INCIDENT}",
+        admin=True,
+    )
+    print(f"incident-harness -> {status}: HTTP {changed['status']}")
+
+
 def main() -> int:
-    first = investigate("first")
+    deactivate = os.environ.get("DEACTIVATE_HARNESS") == "1"
+    if deactivate:
+        set_harness("inactive")
+    try:
+        first = investigate("first")
+    finally:
+        if deactivate:
+            set_harness("active")
     retry = investigate("retry")
     detail = call("GET", f"/v1/incidents/{INCIDENT}")
     transcript = {"incident_id": INCIDENT, "first": first, "retry": retry, "incident": detail}
@@ -70,7 +98,8 @@ def main() -> int:
             f"pending_command={run['pending_command']} terminated_reason={run['terminated_reason']}"
         )
         for event in steps[2]["body"]["events"]:
-            print(f"    #{event['sequence']} {event['kind']}: {event['summary']}")
+            reason = f" [reason_code={event['reason_code']}]" if event.get("reason_code") else ""
+            print(f"    #{event['sequence']} {event['kind']}: {event['summary']}{reason}")
         if run["status"] == "running":
             failures.append(f"{name} run {run['run_id']} is still running")
     print(
