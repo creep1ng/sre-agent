@@ -22,9 +22,15 @@ job, and the gate then requires each of them to be `skipped` and `changes` to be
 Pushes to `main` and scheduled runs never skip, so they still run the full path after a
 documentation-only merge.
 
+`contracts` also runs only when a pull request changes a contract input: `schemas/`, the
+harness image (`docker/harness*`), `compose.yaml` or this workflow. The harness container
+mounts only `schemas/` and `scripts/`, and none of its CI commands reads `scripts/`. Its tests
+revalidate every published release, which takes about 15 minutes. Otherwise the gate requires
+`contracts` to be `skipped`, and `compose-smoke` accepts that skip.
+
 | Stage | Control | Boundary protected |
 | --- | --- | --- |
-| Changes | Classify the pull request's changed paths | Only documentation no code reads skips the path |
+| Changes | Classify the pull request's changed paths | Only documentation no code reads skips the path; only a contract input runs contracts |
 | Configuration lock | Build the runtime image with `uv sync --locked --no-dev` | Manifest/lock drift and runtime dependency resolution |
 | Checks image | Ruff, `lint-imports`, scoped strict mypy, shell and declarative validators | Style, architecture imports, typed interfaces and contract metadata |
 | Unit and contracts | Locked Compose Python checks and Node harness | Application behavior and published schemas |

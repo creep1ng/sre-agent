@@ -16,12 +16,14 @@ concurrency:
 
 jobs:
   # A pull request that only changes documentation no code reads skips every build and test
-  # job; pushes to main and scheduled runs always run them all.
+  # job, and one that changes no contract input skips contracts. Pushes to main and scheduled
+  # runs always run them all.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
+      contracts: ${{ steps.classify.outputs.contracts }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -31,6 +33,7 @@ jobs:
         id: classify
         run: |
           docs_only=false
+          contracts=true
           if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
             # The pull_request checkout is the merge commit; its first parent is the base.
             changed="$(git diff --name-only HEAD^1 HEAD)"
@@ -50,10 +53,15 @@ jobs:
                 docs_only=false
               fi
             done <<< "${changed}"
+            # The contract harness reads only schemas/, through its image and Compose service.
+            if ! grep -qE '^(schemas/|docker/harness|compose\.yaml$|\.github/workflows/ci\.yml$)' <<< "${changed}"; then
+              contracts=false
+            fi
             printf '%s\n' "${changed}"
           fi
-          echo "docs_only=${docs_only}"
+          echo "docs_only=${docs_only} contracts=${contracts}"
           echo "docs_only=${docs_only}" >> "${GITHUB_OUTPUT}"
+          echo "contracts=${contracts}" >> "${GITHUB_OUTPUT}"
 
   configuration-lock:
     needs: changes
@@ -110,8 +118,8 @@ jobs:
         run: docker compose --project-name ci-unit-${{ github.run_id }} --profile checks down -v --remove-orphans
 
   contracts:
-    needs: checks-image
-    if: ${{ always() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
+    needs: [changes, checks-image]
+    if: ${{ always() && needs.changes.outputs.contracts != 'false' && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -146,8 +154,8 @@ jobs:
         run: npm run test:browser
 
   compose-smoke:
-    needs: [unit, contracts, static-web]
-    if: ${{ always() && (github.event_name == 'schedule' || (needs.unit.result == 'success' && needs.contracts.result == 'success' && needs.static-web.result == 'success')) }}
+    needs: [changes, unit, contracts, static-web]
+    if: ${{ always() && (github.event_name == 'schedule' || (needs.unit.result == 'success' && (needs.contracts.result == 'success' || (needs.contracts.result == 'skipped' && needs.changes.outputs.contracts == 'false')) && needs.static-web.result == 'success')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -298,6 +306,7 @@ jobs:
     env:
       CHANGES_RESULT: ${{ needs.changes.result }}
       DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+      CONTRACTS_NEEDED: ${{ needs.changes.outputs.contracts }}
       CONFIGURATION_LOCK_RESULT: ${{ needs.configuration-lock.result }}
       CHECKS_IMAGE_RESULT: ${{ needs.checks-image.result }}
       UNIT_RESULT: ${{ needs.unit.result }}
@@ -320,6 +329,7 @@ jobs:
           event=${GITHUB_EVENT_NAME}
           changes=${CHANGES_RESULT}
           docs-only=${DOCS_ONLY}
+          contracts-needed=${CONTRACTS_NEEDED}
           configuration-lock=${CONFIGURATION_LOCK_RESULT}
           checks-image=${CHECKS_IMAGE_RESULT}
           unit=${UNIT_RESULT}
@@ -360,8 +370,11 @@ jobs:
             "deploy-executor:${DEPLOY_EXECUTOR_RESULT}"; do
             job="${result%%:*}"
             status="${result#*:}"
-            if [ "${status}" != "${expected}" ]; then
-              echo "${job} ended as ${status}; quality gate requires ${expected}."
+            required="${expected}"
+            # A pull request that changes no contract input skips only contracts.
+            if [ "${job}" = contracts ] && [ "${CONTRACTS_NEEDED}" = "false" ]; then required=skipped; fi
+            if [ "${status}" != "${required}" ]; then
+              echo "${job} ended as ${status}; quality gate requires ${required}."
               failures=1
             fi
           done
