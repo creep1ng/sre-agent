@@ -7,7 +7,7 @@
   "data": {
     "event_id": "10000000-0000-4000-8000-000000000101",
     "occurred_at": "2026-08-17T12:00:00Z",
-    "operation": "mcp.discoverx",
+    "operation": "mcp.discovery",
     "action": "read_metadata",
     "stage": "response",
     "outcome": "success",
