@@ -13,6 +13,8 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
+import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -66,18 +68,83 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 
 
+_SALVAGED = re.compile(r'"(binding|payload_digest|execution_id|operation|service)":"([^"\\]*)"')
+
+
 class Journal:
-    """Append-only intent and result lines, re-read at start so keys outlive a restart."""
+    """Append-only intent and result lines, re-read at start so keys outlive a restart.
+
+    A last line cut off mid-write (#762) is replaced, atomically, by a complete ``truncated``
+    record keeping the fragment and whatever key it still names, which then answers
+    ``execution_unknown``. A damaged line before the last one sets ``corruption`` instead: the
+    executor starts but refuses every operation until an operator repairs the file.
+    """
 
     def __init__(self, path: Path) -> None:
         self._path = path
         self.records: dict[str, dict[str, Any]] = {}
         self.results: list[dict[str, Any]] = []
-        if path.exists():
-            for line in path.read_text(encoding="utf-8").splitlines():
+        self.corruption: str | None = None
+        if not path.exists():
+            return
+        raw = path.read_bytes()
+        lines = [(number, line) for number, line in enumerate(raw.split(b"\n"), 1) if line.strip()]
+        for position, (number, line) in enumerate(lines):
+            try:
                 self._index(json.loads(line))
+            except ValueError:
+                if position == len(lines) - 1:
+                    self._recover_tail(raw, line)
+                elif self.corruption is None:
+                    self.corruption = f"line {number} of the journal is not a complete record"
+            except (KeyError, TypeError):
+                if self.corruption is None:
+                    self.corruption = f"line {number} of the journal is not a journal record"
+        if lines and self.corruption is None and not raw.endswith(b"\n"):
+            with path.open("ab") as stream:  # a complete last record that lost its newline
+                stream.write(b"\n")
+        if self.corruption is not None:
+            logger.error("deploy-executor journal %s: %s", path, self.corruption)
+
+    def _recover_tail(self, raw: bytes, line: bytes) -> None:
+        fragment = line.decode("utf-8", errors="replace")
+        record = {
+            "kind": "truncated",
+            **dict(_SALVAGED.findall(fragment)),
+            "fragment": fragment,
+            "recovered_at": datetime.now(UTC).isoformat(timespec="milliseconds"),
+        }
+        kept = raw[: raw.rstrip().rfind(b"\n") + 1]
+        temporary = self._path.with_name(self._path.name + ".recovering")
+        with temporary.open("wb") as stream:
+            stream.write(kept + json.dumps(record, separators=(",", ":")).encode() + b"\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, self._path)
+        logger.warning(
+            "deploy-executor journal: the last line was cut off mid-write; kept as a truncated "
+            "record for binding %s, which answers execution_unknown",
+            record.get("binding", "(not recoverable)"),
+        )
+        self._index(record)
 
     def _index(self, record: dict[str, Any]) -> None:
+        if record["kind"] == "truncated":
+            # The operation may have run: list it as unknown, and bind its key if it is known.
+            if "binding" in record:
+                self.records[record["binding"]] = record
+            names = ("execution_id", "operation", "service", "recovered_at")
+            self.results.append(
+                {
+                    "status": 409,
+                    "error": {
+                        "code": "execution_unknown",
+                        "message": "the journal's last line was cut off; this may have run",
+                    },
+                    **{name: record[name] for name in names if name in record},
+                }
+            )
+            return
         self.records[record["binding"]] = record
         if record["kind"] == "result":
             self.results.append({"status": record["status"], **record["response"]})
@@ -126,6 +193,8 @@ class Executor:
         )
         if rejection is not None:
             return _error(401, rejection, _SIGNATURE_MESSAGES[rejection])
+        if self._journal.corruption is not None:
+            return _error(503, "journal_corrupt", self._journal.corruption)
         operation = OPERATIONS.get(operation_name)
         if operation is None:
             return _error(404, "operation_not_enrolled", f"'{operation_name}' is not an operation")
@@ -156,11 +225,11 @@ class Executor:
         async with self._key_locks.setdefault(binding, asyncio.Lock()):
             record = self._journal.records.get(binding)
             if record is not None:
-                if record["payload_digest"] != payload_digest:
+                if record.get("payload_digest", payload_digest) != payload_digest:
                     return _error(
                         409, "idempotency_conflict", "the key was used with another payload"
                     )
-                if record["kind"] == "intent":
+                if record["kind"] in ("intent", "truncated"):
                     return _error(409, "execution_unknown", "that attempt recorded no result")
                 replay = (
                     {**record["response"], "replayed": True}
@@ -270,6 +339,9 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
             return JSONResponse(
                 {"status": "unavailable", "dependency": "signing_key"}, status_code=503
             )
+        if journal.corruption is not None:  # fail closed without a restart loop (#762)
+            body = {"status": "unavailable", "dependency": "journal", "reason": journal.corruption}
+            return JSONResponse(body, status_code=503)
         try:
             await docker.ping()
         except Exception:  # the answer names the dependency, never the transport error

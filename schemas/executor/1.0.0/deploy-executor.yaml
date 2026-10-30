@@ -50,6 +50,10 @@ idempotency:
   in_flight: "the second request waits for the first result and replays it"
   intent_without_result: { status: 409, error_code: "execution_unknown" }
   journal: "/var/lib/deploy-executor/executions.jsonl (append-only, reloaded at start)"
+  # #762: a last line cut off mid-write becomes a `truncated` record; its key, if the fragment
+  # still names one, answers execution_unknown for any payload, and GET /v1/executions lists it.
+  truncated_last_line: { status: 409, error_code: "execution_unknown", readiness: 200 }
+  damaged_earlier_line: { status: 503, error_code: "journal_corrupt", readiness: 503 }
 
 # Every POST is signed by its only caller, the gateway (#722 signs, #743 verifies);
 # reads are not. The signature is checked before anything else, so an unsigned
@@ -94,6 +98,7 @@ public_errors:
   - { code: "image_tag_unknown", status: 422, retryable: false }
   - { code: "idempotency_conflict", status: 409, retryable: false }
   - { code: "execution_unknown", status: 409, retryable: false }
+  - { code: "journal_corrupt", status: 503, retryable: false }
   - { code: "container_not_found", status: 409, retryable: false }
   - { code: "service_ambiguous", status: 409, retryable: false }
   - { code: "docker_unavailable", status: 503, retryable: true }
@@ -123,4 +128,6 @@ failure_scenarios:
   - { id: "signature-key-mismatch", operation: "deployment.restart", expected: { status: 401, error_code: "signature_invalid", touches_container: false } }
   - { id: "signature-expired", operation: "deployment.rollback", expected: { status: 401, error_code: "signature_expired", touches_container: false } }
   - { id: "signing-key-unconfigured", operation: "deployment.restart", expected: { status: 503, error_code: "signing_key_unconfigured", readiness: 503 } }
+  - { id: "journal-truncated-tail", operation: "deployment.restart", expected: { status: 409, error_code: "execution_unknown", readiness: 200, touches_container: false } }
+  - { id: "journal-damaged-line", operation: "deployment.restart", expected: { status: 503, error_code: "journal_corrupt", readiness: 503, touches_container: false } }
   - { id: "unreachable-from-runtime", operation: "deploy-executor", expected: { dns: "unresolved from a container that is only on runtime" } }

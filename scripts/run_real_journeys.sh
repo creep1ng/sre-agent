@@ -6,7 +6,8 @@
 # incidents: builds (or reuses) the production-browser stack (compose.yaml + compose.e2e.yaml),
 #   seeds the demo grants and one stamped incident per journey, then runs war-room-runs-real,
 #   war-room-reasoning-real, review-mitigation-real, war-room-follow-real and postmortem-journey.
-# executor: the deploy-executor journey (#720/#743) and its socket-down case.
+# executor: the deploy-executor journey (#720/#743), its socket-down case, and its journal cut
+#   mid-write then damaged in the middle (#762).
 # Compose reads the untracked .env (from .env.example). The OpenRouter keys are forced empty, so
 # no investigation reaches a model provider. Remove the project afterwards with
 #   docker compose -f compose.yaml -f compose.e2e.yaml --project-name <unique> --profile e2e \
@@ -130,11 +131,53 @@ executor() {
   "${compose[@]}" build deploy-executor probe probe-previous executor-e2e
   "${compose[@]}" up -d --wait docker-socket-proxy deploy-executor probe
   run_journey executor executor-e2e -- deploy-executor-real --reporter=line,json \
-    --grep-invert "socket proxy stopped"
+    --grep-invert "socket proxy stopped|journal:"
   "${compose[@]}" stop docker-socket-proxy
   run_journey executor-socket-down executor-e2e -e DEPLOY_EXECUTOR_SOCKET_DOWN=1 -- \
     deploy-executor-real --reporter=line,json --grep "socket proxy stopped"
   "${compose[@]}" start docker-socket-proxy
+  executor_journal "${compose[@]}"
+}
+
+# #762: cut a restart intent mid-write, as a crash or a full disk would, then damage a middle line.
+executor_journal() {
+  local compose=("$@") cut key
+  cut="$("${compose[@]}" exec -T deploy-executor python - << 'EOF'
+import hashlib, json, uuid
+key, execution_id = str(uuid.uuid4()), "exe_" + uuid.uuid4().hex[:16]
+line = json.dumps({
+    "kind": "intent",
+    "binding": "deployment.restart:" + hashlib.sha256(key.encode()).hexdigest(),
+    "payload_digest": hashlib.sha256(json.dumps({"service": "probe"}).encode()).hexdigest(),
+    "execution_id": execution_id, "operation": "deployment.restart", "service": "probe",
+    "parameters": {}, "requested_at": "2026-10-30T00:00:00.000Z"}, separators=(",", ":"))
+with open("/var/lib/deploy-executor/executions.jsonl", "a") as journal:
+    journal.write(line[: line.index(',"service"') + 8])
+print(key, execution_id)
+EOF
+)"
+  read -r key cut <<< "$cut"
+  "${compose[@]}" restart deploy-executor
+  "${compose[@]}" up -d --wait deploy-executor
+  run_journey executor-journal-tail executor-e2e -e DEPLOY_EXECUTOR_JOURNAL=tail \
+    -e JOURNAL_KEY="$key" -e JOURNAL_EXECUTION_ID="$cut" -- \
+    deploy-executor-real --reporter=line,json --grep "journal: a last line"
+  "${compose[@]}" exec -T deploy-executor python -c '
+path = "/var/lib/deploy-executor/executions.jsonl"
+lines = open(path).read().splitlines(keepends=True)
+open(path, "w").writelines(lines[:-1] + ["{\"kind\n"] + lines[-1:])'
+  "${compose[@]}" restart deploy-executor
+  run_journey executor-journal-damaged executor-e2e -e DEPLOY_EXECUTOR_JOURNAL=damaged -- \
+    deploy-executor-real --reporter=line,json --grep "journal: a damaged"
+  docker inspect -f 'restarts={{.RestartCount}} state={{.State.Status}}' \
+    "$("${compose[@]}" ps -q deploy-executor)" | tee "$ARTIFACTS/executor-journal-damaged.state"
+  # Repair as an operator would (drop the damaged line), so the stack is left as found.
+  "${compose[@]}" exec -T deploy-executor python -c '
+path = "/var/lib/deploy-executor/executions.jsonl"
+lines = open(path).read().splitlines(keepends=True)
+open(path, "w").writelines(lines[:-2] + lines[-1:])'
+  "${compose[@]}" restart deploy-executor
+  "${compose[@]}" up -d --wait deploy-executor
 }
 
 case "${1:-}" in

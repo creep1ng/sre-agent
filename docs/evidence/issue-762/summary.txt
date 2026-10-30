@@ -1,0 +1,5 @@
+executor             PASS rc=0 [1 passed] 73s
+executor-socket-down PASS rc=0 [1 passed] 36s
+executor-journal-tail PASS rc=0 [1 passed] 41s
+executor-journal-damaged PASS rc=0 [1 passed] 20s
+restarts=0 state=running

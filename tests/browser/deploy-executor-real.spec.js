@@ -168,3 +168,60 @@ test("with the socket proxy stopped, readiness and operations answer 503 and not
   expect(rollback.body.error.code).toBe("docker_unavailable");
   writeFileSync(`${ARTIFACTS}/socket-down.json`, JSON.stringify(steps, null, 2));
 });
+
+// #762, run by scripts/run_real_journeys.sh after it cuts the journal. Ways this can fail:
+// 9. a last line cut off mid-write keeps the executor down or restarting, or makes it forget the
+//    key that line named, so that key runs again (it must answer 409 execution_unknown and leave
+//    the probe untouched), or the operator cannot see the unknown operation in /v1/executions, or
+//    a new key no longer runs; 10. a damaged earlier line is skipped silently and operations run
+//    on a journal that lost records, instead of readiness 503 naming the line and 503 journal_corrupt.
+test("journal: a last line cut off mid-write starts the executor and keeps that key unknown", async ({ page }) => {
+  test.skip(process.env.DEPLOY_EXECUTOR_JOURNAL !== "tail", "requires DEPLOY_EXECUTOR_JOURNAL=tail");
+  mkdirSync(ARTIFACTS, { recursive: true });
+  const api = await request.newContext();
+  const steps = [];
+  const signed = async (key, body) => {
+    const headers = signature("POST", "/v1/operations/deployment.restart", key, JSON.stringify(body));
+    return call(api, "POST", `${EXECUTOR}/v1/operations/deployment.restart`, { key, body, headers });
+  };
+  const step = (name, response) => { steps.push({ step: name, response }); return response; };
+  expect(step("ready", await call(api, "GET", `${EXECUTOR}/health/ready`)).status).toBe(200);
+  const executions = step("executions", await call(api, "GET", `${EXECUTOR}/v1/executions`)).body.executions;
+  expect(executions).toContainEqual(expect.objectContaining({ status: 409, error: expect.objectContaining({ code: "execution_unknown" }), execution_id: process.env.JOURNAL_EXECUTION_ID, operation: "deployment.restart" }));
+  const before = (await call(api, "GET", `${EXECUTOR}/v1/services/probe`)).body;
+  const unknown = step("cut key again", await signed(process.env.JOURNAL_KEY, { service: "probe" }));
+  expect(unknown.status).toBe(409);
+  expect(unknown.body.error.code).toBe("execution_unknown");
+  expect(untouched(before, (await call(api, "GET", `${EXECUTOR}/v1/services/probe`)).body), "the cut key ran again").toBe(true);
+  const fresh = step("new key", await signed(randomUUID(), { service: "probe" }));
+  expect(fresh.status).toBe(200);
+  expect(fresh.body.outcome).toBe("restarted");
+  await page.goto(`${EXECUTOR}/v1/executions`);
+  await page.screenshot({ path: `${ARTIFACTS}/journal-tail-executions.png`, fullPage: true });
+  writeFileSync(`${ARTIFACTS}/journal-tail.json`, JSON.stringify(steps, null, 2));
+});
+
+test("journal: a damaged earlier line leaves readiness 503 with a reason and runs nothing", async ({ page }) => {
+  test.skip(process.env.DEPLOY_EXECUTOR_JOURNAL !== "damaged", "requires DEPLOY_EXECUTOR_JOURNAL=damaged");
+  mkdirSync(ARTIFACTS, { recursive: true });
+  const api = await request.newContext();
+  const steps = [];
+  // Just restarted: a process that came up answers; a restart loop never would.
+  const answer = () => call(api, "GET", `${EXECUTOR}/health/ready`).catch(() => ({ status: 0 }));
+  await expect.poll(async () => (await answer()).status, { timeout: 30_000 }).toBe(503);
+  const ready = await call(api, "GET", `${EXECUTOR}/health/ready`);
+  steps.push({ step: "ready", response: ready });
+  expect(ready.body).toMatchObject({ dependency: "journal", reason: expect.stringMatching(/^line \d+ /) });
+  const before = (await call(api, "GET", `${EXECUTOR}/v1/services/probe`)).body;
+  const key = randomUUID();
+  const body = { service: "probe" };
+  const headers = signature("POST", "/v1/operations/deployment.restart", key, JSON.stringify(body));
+  const refused = await call(api, "POST", `${EXECUTOR}/v1/operations/deployment.restart`, { key, body, headers });
+  steps.push({ step: "restart", response: refused });
+  expect(refused.status).toBe(503);
+  expect(refused.body.error.code).toBe("journal_corrupt");
+  expect(untouched(before, (await call(api, "GET", `${EXECUTOR}/v1/services/probe`)).body)).toBe(true);
+  await page.goto(`${EXECUTOR}/health/ready`);
+  await page.screenshot({ path: `${ARTIFACTS}/journal-damaged-ready.png` });
+  writeFileSync(`${ARTIFACTS}/journal-damaged.json`, JSON.stringify(steps, null, 2));
+});

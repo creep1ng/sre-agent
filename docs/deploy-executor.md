@@ -34,6 +34,8 @@ only the executor joins.
 | Rollback to the tag already running | 200 `already_at_target`; container untouched | E2E `already-at-target` |
 | Socket proxy down | readiness 503; operations 503 `docker_unavailable` | E2E with the proxy stopped |
 | Executor died between intent and result | 409 `execution_unknown` on replay; never re-executed | journal rule |
+| Journal's last line cut off mid-write (#762) | the executor starts, readiness 200; the fragment is kept in a `truncated` record; a key it names answers 409 `execution_unknown` and is listed in `GET /v1/executions`; new keys run | E2E `journal-tail` |
+| A damaged journal line before the last one (#762) | no restart loop: readiness 503 `dependency: journal` naming the line; operations 503 `journal_corrupt`; nothing runs until an operator repairs the file | E2E `journal-tail` |
 | Any API family other than containers/images | 403 at the proxy | E2E against `/info`, `/networks`, `/volumes`, `/version`, `/events`, `/exec/*/start` |
 | No signature, wrong key, body tampered after signing, signature for another key, stale timestamp (#743) | 401 `signature_missing`, `signature_invalid` or `signature_expired`; container and journal untouched | fixtures `signature-*` |
 | A negative fixture sent signed | its own code, never 401: the signature is checked first | the eight fixtures above, now signed |
@@ -69,6 +71,17 @@ tag is a no-op, so even a replay after a lost journal cannot roll twice. The jou
 `/var/lib/deploy-executor/executions.jsonl` records an intent line before the first write and a
 result line after; an intent without a result answers 409 `execution_unknown` and is never
 re-executed, the rule the runtime applies to lost investigator dispatches (#567).
+
+A crash or a full disk can cut the journal's last line short (#762). At start the executor treats
+an unparseable last line as an interrupted write: it rewrites the file atomically, replacing that
+line with a complete `truncated` record that keeps the fragment and whatever binding, payload
+digest, execution id, operation and service the fragment still names. Since the intent is written
+before the first Docker call, a cut intent that lost its binding never reached Docker; a cut result
+follows a complete intent. Either way the key answers 409 `execution_unknown`, whatever its payload,
+and `GET /v1/executions` lists the record as a 409 `execution_unknown` entry so the operator learns
+an operation may have run. A damaged line anywhere else is not an interrupted write, so the executor
+does not guess: it starts, readiness answers 503 with `dependency: journal` and the line number,
+and every operation answers 503 `journal_corrupt` until an operator repairs the file and restarts it.
 `GET /v1/executions` lists the results; `GET /v1/services/{service}` shows the live container and
 the locally present tags of its repository, which is what a proposal needs to pick `to_tag`.
 
