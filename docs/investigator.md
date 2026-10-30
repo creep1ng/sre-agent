@@ -101,7 +101,9 @@ Each piece of evidence recorded with a hypothesis carries a verdict on it (issue
 The model gives them in `verdicts` of `propose_hypothesis`, keyed by evidence id; a missing or
 invalid verdict is recorded as `inconclusive`, not rejected. The harness, not the model, measures
 whether a tool answered with data: a Prometheus query without series or a log query without
-documents is recorded with `empty: true` and as `inconclusive`, whatever the model says. The fields
+documents is recorded with `empty: true` and as `inconclusive`, whatever the model says. A
+hypothesis whose citations are all empty evidence is invalid output (issue #760): the model is told
+why and asked again, and a second such answer ends the run without a hypothesis. The fields
 are optional in incident-state 1.2.0 and the run context, so earlier documents stay valid. On the
 evidence the current hypothesis cites, the war room shows «Respalda la hipótesis», «Contradice» or
 «No concluyente»; on any empty evidence, «No encontró nada». Reproduce it against the real API,

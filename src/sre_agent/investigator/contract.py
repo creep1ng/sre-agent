@@ -88,6 +88,7 @@ class EvidenceContext(_Projection):
     query: Annotated[str, Field(max_length=4000)] | None = None
     time_window: Annotated[str, Field(max_length=200)] | None = None
     summary: Annotated[str, Field(min_length=1, max_length=8000)]
+    empty: bool = False
 
 
 class IncidentContext(_Projection):
@@ -262,6 +263,17 @@ def parse_action(text: str) -> Action:
             for item in error.errors(include_url=False)[:3]
         ]
         raise InvalidOutput("; ".join(problems)) from None
+
+
+def unfounded_citations(
+    action: Action, request: InvestigationRequest, collected: Collection[CollectedEvidence] = ()
+) -> list[str]:
+    """A hypothesis's citations when every one names evidence that returned no data (#760)."""
+    if not isinstance(action, ProposeHypothesis):
+        return []
+    empty = {item.evidence_id for item in [*request.context.evidence, *collected] if item.empty}
+    cited = action.supporting_evidence
+    return list(cited) if all(ref in empty for ref in cited) else []
 
 
 def unknown_references(

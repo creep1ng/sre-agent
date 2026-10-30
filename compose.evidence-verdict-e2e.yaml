@@ -4,6 +4,7 @@ services:
   api:
     command: ["python", "/e2e/evidence_verdict_upstreams.py"]
     volumes: ["./scripts/evidence_verdict_upstreams.py:/e2e/evidence_verdict_upstreams.py:ro"]
+    environment: {E2E_REAL_MODEL: "${E2E_REAL_MODEL:-0}"}
 
   seed:
     volumes: ["./scripts:/e2e:ro"]
@@ -19,6 +20,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       ARTIFACT_DIR: /artifacts
+      E2E_REAL_MODEL: ${E2E_REAL_MODEL:-0}
     volumes:
       - ./scripts/evidence_verdict_e2e.py:/e2e/evidence_verdict_e2e.py:ro
       - ${EVIDENCE_VERDICT_ARTIFACTS:-/tmp/evidence-verdict-e2e}:/artifacts

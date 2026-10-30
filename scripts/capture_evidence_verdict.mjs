@@ -11,12 +11,15 @@ const runs = JSON.parse(readFileSync(`${out}/evidence-verdict-e2e.json`, "utf8")
 const browser = await chromium.launch();
 const page = await browser.newPage({ baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://web" });
 page.setViewportSize({ width: 1280, height: 1100 });
-for (const [scenario, { incident }] of Object.entries(runs)) {
+for (const [scenario, { incident, evidence: found = [] }] of Object.entries(runs)) {
+  if (!incident) continue;
   await page.goto(`/public/incident-ui/war-room.html?incident_id=${incident}`);
   await connectConsole(page, process.env.DEMO_HUMAN_API_KEY);
-  const evidence = page.locator("#evidence-block");
-  await expect(evidence).toBeVisible({ timeout: 30_000 });
-  await expect(evidence).toContainText("No encontró nada");
-  await page.locator("#reasoning-section").screenshot({ path: `${out}/war-room-${scenario}.png` });
+  await expect(page.locator("#reasoning-section")).toBeVisible({ timeout: 30_000 });
+  // A run whose only hypothesis was rejected (#760) records no evidence: its timeline says why.
+  if (found.some((item) => item.empty)) {
+    await expect(page.locator("#evidence-block")).toContainText("No encontró nada");
+  }
+  await page.screenshot({ path: `${out}/war-room-${scenario}.png`, fullPage: true });
 }
 await browser.close();
