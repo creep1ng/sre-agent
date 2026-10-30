@@ -36,8 +36,12 @@ The investigator's internal result status describes the bounded loop:
 | `upstream_unavailable` | A gateway or tool call was unavailable, timed out, or returned a retryable error |
 | `max_steps` | Six turns passed without a final answer |
 
-The limits (6 steps, 45 s per gateway call, 10 s per tool) are fixed in the change's
-`design.md`. A timeout, network error, or 5xx is not automatically retried: the remote
+The limits (6 steps, 10 s per tool) are fixed in the change's `design.md`. A gateway call
+follows the provider timeout: `OPENROUTER_TIMEOUT_SECONDS` + 15 s, or 2 ×
+`OPENROUTER_TIMEOUT_SECONDS` + 15 s when `OPENROUTER_MANAGEMENT_API_KEY` configures the endpoint
+catalog (admission may fetch it before the provider call), at most 180 s. With the demo's 60 s
+that is 75 s, or 135 s with the catalog, so the run waits for a slow answer the gateway records
+and charges. A timeout, network error, or 5xx is not automatically retried: the remote
 call may have completed even when its response was lost.
 
 The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
@@ -152,3 +156,18 @@ What is simulated: the gateway answers and the evidence. What is real: the harne
 its HTTP client and the contract validation of every request. A run against the real
 gateway with a live model is a separate step and needs the provider key in the gateway's
 `.env`.
+
+## Slow provider demonstration
+
+`compose.investigator-timeout-e2e.yaml` runs the real API, database and investigator with
+`OPENROUTER_TIMEOUT_SECONDS=60` and a model that answers after 50 s
+(`scripts/investigator_timeout_upstreams.py`). The run must complete and its receipt must name
+the request id the gateway audited. From a worktree with `.env` and `.env.worktree`:
+
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml up --build --wait db api
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml run --rm --no-deps -T seed python /e2e/provision_demo.py
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml --profile timeout-e2e run --rm --build timeout-e2e
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml down -v --remove-orphans
+
+The report goes to `$INVESTIGATOR_TIMEOUT_ARTIFACTS` (default `/tmp/investigator-timeout-e2e`).
