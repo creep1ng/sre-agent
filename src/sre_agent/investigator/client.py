@@ -353,9 +353,11 @@ class MCPGatewayClient:
             if tool == "query_prometheus":
                 prometheus_result = _PrometheusResult.model_validate_json(response.content)
                 summary = prometheus_result.model_dump_json()
+                empty = prometheus_result.result == []
             elif tool == "query_elasticsearch":
                 elasticsearch_result = _ElasticsearchResult.model_validate(payload)
                 summary = elasticsearch_result.model_dump_json()
+                empty = elasticsearch_result.total == 0 and not elasticsearch_result.documents
             else:
                 raise ValueError("unsupported tool")
         except (ValueError, ValidationError):
@@ -376,6 +378,7 @@ class MCPGatewayClient:
             query=query if isinstance(query, str) else None,
             time_window=time_window if isinstance(time_window, str) else None,
             request_id=request_id,
+            empty=empty,
         )
 
     async def _send(self, method: str, path: str, **kwargs: Any) -> httpx.Response:

@@ -545,6 +545,9 @@ class InvestigationRunDispatcher:
                     "summary",
                     "collected_at",
                     "request_id",
+                    "empty",
+                    "verdict",
+                    "finding",
                 },
             )
             if document["evidence_id"] not in known:
@@ -759,6 +762,9 @@ class InvestigationRunDispatcher:
                         "time_window": item.time_window,
                         "summary": item.summary,
                         "request_id": str(item.request_id) if item.request_id else None,
+                        "empty": item.empty,
+                        "verdict": item.verdict,
+                        "finding": item.finding,
                     }
                     for item in result.evidence
                 ],

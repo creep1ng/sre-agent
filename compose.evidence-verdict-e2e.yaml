@@ -1,0 +1,28 @@
+# Evidence-verdict E2E (#707): real API, database, investigator and web proxy; the model and
+# Grafana MCP are scripts/evidence_verdict_upstreams.py. Commands: docs/investigator.md.
+services:
+  api:
+    command: ["python", "/e2e/evidence_verdict_upstreams.py"]
+    volumes: ["./scripts/evidence_verdict_upstreams.py:/e2e/evidence_verdict_upstreams.py:ro"]
+
+  seed:
+    volumes: ["./scripts:/e2e:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  verdict-e2e:
+    profiles: ["verdict-e2e"]
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/evidence_verdict_e2e.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      API_URL: http://api:8000
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      ARTIFACT_DIR: /artifacts
+    volumes:
+      - ./scripts/evidence_verdict_e2e.py:/e2e/evidence_verdict_e2e.py:ro
+      - ${EVIDENCE_VERDICT_ARTIFACTS:-./docs/evidence/issue-707}:/artifacts
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [runtime]
+

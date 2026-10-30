@@ -31,6 +31,15 @@ export const DECISION = Object.freeze({
   changes_requested: Object.freeze({ label: "Cambios solicitados", tone: "warning" }),
 });
 
+// What each evidence says about the hypothesis (#707). Empty evidence found nothing; other
+// inconclusive evidence has data that neither supports nor contradicts it.
+export const VERDICT = Object.freeze({
+  supports: Object.freeze({ label: "Respalda la hipótesis", tone: "success" }),
+  contradicts: Object.freeze({ label: "Contradice", tone: "critical" }),
+  inconclusive: Object.freeze({ label: "No concluyente", tone: "info" }),
+  empty: Object.freeze({ label: "No encontró nada", tone: "warning" }),
+});
+
 export const EXECUTION = Object.freeze({
   simulated: "Simulada: el agente no cambia infraestructura.",
   human: "Humana: la aplica una persona fuera de la consola.",
@@ -158,7 +167,9 @@ export function evidenceItem(item, citedIds) {
     cited.dataset.tone = "info";
     head.append(" ", cited);
   }
+  if (item.verdict) head.append(" ", badge(VERDICT[item.empty ? "empty" : item.verdict], item.verdict));
   entry.append(head);
+  if (item.finding) entry.append(element("p", "reasoning__finding", item.finding));
   if (item.query) entry.append(element("code", "reasoning__query", item.query));
   entry.append(element("p", "reasoning__result", resultSummary(item.summary)));
   const request = element("p", "reasoning__request ma-muted");

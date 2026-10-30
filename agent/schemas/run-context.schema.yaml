@@ -94,6 +94,19 @@ $defs:
         description: The governed gateway request that returned this evidence.
         type: [string, "null"]
         format: uuid
+      # Additive for 1.0.0 readers: the verdict of incident-state 1.2.0 (issue #707).
+      empty:
+        description: The tool answered with no data (no series, no log documents), as the
+          harness measured it (#707). Empty evidence is always inconclusive.
+        type: boolean
+      verdict:
+        description: What this evidence says about the hypothesis it was recorded with
+          (#707). The model judges it; a missing or invalid verdict is inconclusive.
+        enum: [supports, contradicts, inconclusive, null]
+      finding:
+        description: One line in the run's language on what the evidence shows.
+        type: [string, "null"]
+        maxLength: 300
 
   mitigationStrategy:
     type: object

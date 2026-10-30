@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from pydantic import (
@@ -19,6 +19,7 @@ from pydantic import (
     JsonValue,
     TypeAdapter,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -29,6 +30,9 @@ Name = Annotated[str, Field(min_length=1, max_length=200)]
 Text = Annotated[str, Field(min_length=1, max_length=4000)]
 Step = Annotated[str, Field(min_length=1, max_length=1000)]
 Level = Literal["low", "medium", "high"]
+# What one piece of evidence says about the hypothesis it is recorded with (#707).
+Verdict = Literal["supports", "contradicts", "inconclusive"]
+Finding = Annotated[str, Field(min_length=1, max_length=300)]
 Objective = Literal["triage", "investigate", "mitigate", "postmortem"]
 OutputLanguage = Literal["es", "en"]
 Status = Literal[
@@ -42,6 +46,7 @@ Status = Literal[
 ]
 _TURN = re.compile(r"^turn_[a-z0-9]{8,32}$")
 _FENCE = re.compile(r"^```(?:json)?[ \t]*\n(?P<body>.*)\n```$", re.DOTALL)
+_EVIDENCE = re.compile(r"^ev_[a-z0-9_-]{1,60}$")
 _COLLECTION = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}@[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$")
 
 
@@ -177,11 +182,33 @@ class SearchBoK(_Strict):
     query: Annotated[str, Field(min_length=1, max_length=300)]
 
 
+class EvidenceVerdict(_Strict):
+    verdict: Verdict
+    finding: Finding
+
+
 class ProposeHypothesis(_Strict):
     action: Literal["propose_hypothesis"]
     statement: Text
     confidence: Level
     supporting_evidence: Annotated[list[EvidenceId], Field(min_length=1)]
+    # Recorded on each evidence item (CollectedEvidence.verdict), not in the outcome.
+    verdicts: dict[EvidenceId, EvidenceVerdict] = Field(default_factory=dict, exclude=True)
+
+    @field_validator("verdicts", mode="before")
+    @classmethod
+    def _drop_invalid_verdicts(cls, value: Any) -> Any:
+        """A verdict that is not valid is left out, so its evidence reads `inconclusive`."""
+        if not isinstance(value, dict):
+            return {}
+        kept: dict[str, EvidenceVerdict] = {}
+        for key, item in value.items():
+            if isinstance(key, str) and _EVIDENCE.fullmatch(key):
+                try:
+                    kept[key] = EvidenceVerdict.model_validate(item)
+                except ValidationError:
+                    continue
+        return kept
 
 
 class ProposeMitigation(_Strict):
@@ -297,6 +324,11 @@ class CollectedEvidence(_Strict):
     collected_at: AwareDatetime
     request_id: UUID | None = None
     trusted: Literal[False] = False
+    # The tool answered with no data, as the harness measured it; such evidence is always
+    # `inconclusive`, whatever the model says (#707).
+    empty: bool = False
+    verdict: Verdict | None = None
+    finding: Finding | None = None
 
 
 class InvestigationResult(_Strict):
