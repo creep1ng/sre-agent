@@ -49,6 +49,7 @@ class ConsumptionAdmissionService:
         catalog: object,
         now: datetime,
         request_id: UUID | None = None,
+        input_tokens: int | None = None,
     ) -> AdmissionResult:
         if now.tzinfo is None or now.utcoffset() is None:
             return AdmissionResult(False, None, 0, None, "consumption_bounds_unavailable", False)
@@ -127,6 +128,7 @@ class ConsumptionAdmissionService:
                     incident_tokens_remaining=incident_remaining,
                     monthly_usd_remaining=monthly_remaining,
                     now=check_at,
+                    input_tokens=input_tokens,
                 )
             except AffordabilityDenied:
                 return AdmissionResult(
@@ -161,7 +163,8 @@ class ConsumptionAdmissionService:
                 await session.commit()
             except IntegrityError as error:
                 # The caller names the incident; an unknown one cannot hold a reservation.
-                if "fk_consumption_reservation_incident" not in str(error.orig):
+                constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+                if constraint != "fk_consumption_reservation_incident":
                     raise
                 return AdmissionResult(False, None, int(version), None, "resource_not_found", False)
             return AdmissionResult(

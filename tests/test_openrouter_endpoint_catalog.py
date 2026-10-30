@@ -170,28 +170,48 @@ async def test_catalog_rejects_transport_failure_without_leaking_transport_detai
 
 
 @pytest.mark.asyncio
-async def test_catalog_selection_fails_closed_on_missing_or_ambiguous_provider() -> None:
+async def test_catalog_selection_rejects_missing_provider_and_prices_worst_duplicate() -> None:
     duplicate = _body(
         [
             {
                 "provider_name": "OpenAI",
+                "tag": "openai",
+                "context_length": 40,
                 "max_prompt_tokens": 10,
                 "max_completion_tokens": 5,
+                "pricing": {"prompt": "0.2", "completion": "0.1"},
             },
             {
                 "provider_name": "openai",
+                "tag": "openai/us",
+                "context_length": 30,
                 "max_prompt_tokens": 20,
                 "max_completion_tokens": 10,
+                "pricing": {"prompt": "0.1", "completion": "0.3", "request": "0.01"},
             },
         ]
     )
     catalog, client = _catalog(lambda _request: httpx.Response(200, json=duplicate))
     try:
         snapshot = await catalog.fetch(MODEL)
-        with pytest.raises(EndpointCatalogUnavailable):
-            snapshot.select("openai", now=NOW)
+        # A provider slug may route to either endpoint: take the worst of each value.
+        worst = snapshot.select("openai", now=NOW)
+        assert (worst.max_prompt_tokens, worst.max_completion_tokens, worst.context_length) == (
+            20,
+            5,
+            30,
+        )
+        assert (worst.prompt_price, worst.completion_price, worst.request_price) == (
+            Decimal("0.2"),
+            Decimal("0.3"),
+            Decimal("0.01"),
+        )
+        # An endpoint tag names exactly one endpoint.
+        assert snapshot.select("openai/us", now=NOW).max_completion_tokens == 10
         with pytest.raises(EndpointCatalogUnavailable):
             snapshot.select("anthropic", now=NOW)
+        with pytest.raises(EndpointCatalogUnavailable):
+            snapshot.select("openai/eu", now=NOW)
     finally:
         await client.aclose()
 
