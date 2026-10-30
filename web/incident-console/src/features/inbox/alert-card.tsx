@@ -6,12 +6,13 @@ import { SignalChart, Sparkline } from "@/components/signal-chart";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNow } from "@/hooks/use-now";
-import { formatSignal, formatTime } from "@/lib/format";
+import { formatDayTime, formatSignal, formatTime } from "@/lib/format";
 import { currentValue } from "@/lib/signal";
 import type { Alert, Incident } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SEVERITY, TONE_DOT } from "@/lib/vocabulary";
 import { DismissPopover, LinkPopover } from "./alert-actions";
+import { TriageBadge } from "./triage-badge";
 
 export function AlertCard({
   alert,
@@ -24,6 +25,25 @@ export function AlertCard({
 }) {
   const now = useNow();
   const [open, setOpen] = useState(false);
+
+  if (alert.live) {
+    return (
+      <article className="group relative overflow-hidden rounded-xl border bg-card shadow-xs">
+        <span className={cn("absolute inset-y-0 left-0 w-1", TONE_DOT[SEVERITY[alert.severity].tone])} aria-hidden="true" />
+        <div className="p-4 pl-5">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <SeverityBadge severity={alert.severity} />
+            <ServiceChip service={alert.service} />
+            {alert.triageStatus && <TriageBadge status={alert.triageStatus} />}
+            <span>{formatDayTime(alert.detectedAt, now)}</span>
+          </div>
+          <h3 className="mt-2 text-base font-semibold text-balance">{alert.title}</h3>
+          {alert.summary && <p className="mt-0.5 text-sm text-muted-foreground">{alert.summary}</p>}
+        </div>
+      </article>
+    );
+  }
+
   const value = currentValue(alert, now);
   const above = value > alert.signal.threshold;
 

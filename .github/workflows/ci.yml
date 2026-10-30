@@ -39,7 +39,7 @@ jobs:
           -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo
           sre-agent-checks:${{ github.sha }} sh -c
           'python scripts/assert_test_database_isolated.py &&
-          shellcheck docker/harness-entrypoint.sh scripts/worktree-compose &&
+          shellcheck docker/harness-entrypoint.sh scripts/worktree-compose scripts/run_real_journeys.sh &&
           ruff check --no-cache . && ruff format --check --no-cache . &&
           uv lock --check --no-cache && lint-imports --no-cache &&
           mypy --cache-dir=/tmp/mypy src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py
@@ -169,12 +169,17 @@ jobs:
               content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
           content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
           content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
+          content = content.replace("<set-long-random-audit-hmac-key>", token_hex(32), 1)
           path.write_text(content)
           PY
       - name: Build and wait for production images only
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} up --build --wait db api web
       - name: Run browser journeys against candidate images
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} --profile e2e run --build --rm e2e
+      - name: Run the seeded real-stack incident journeys without a model provider
+        env:
+          COMPOSE_PROJECT_NAME: ci-browser-${{ github.run_id }}
+        run: scripts/run_real_journeys.sh incidents
       - name: Verify a bad proxy fails the browser journey
         run: |
           docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} --profile e2e-negative up --build --wait web-bad-proxy
@@ -203,6 +208,35 @@ jobs:
         if: always()
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} down -v --remove-orphans
 
+  triage-review:
+    needs: compose-smoke
+    if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Run the 55 seeded T23 triage journeys on their isolated stack
+        run: scripts/run_triage23_review.sh
+
+  deploy-executor:
+    needs: compose-smoke
+    if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Create ephemeral executor inputs
+        run: |
+          cp .env.example .env
+          sed -i "s/^DEPLOY_EXECUTOR_SIGNING_KEY=.*/DEPLOY_EXECUTOR_SIGNING_KEY=$(openssl rand -hex 32)/" .env
+      - name: Run the deploy-executor journey and its socket-down case
+        env:
+          COMPOSE_PROJECT_NAME: ci-executor-${{ github.run_id }}
+        run: scripts/run_real_journeys.sh executor
+      - name: Remove the scoped executor stack
+        if: always()
+        run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-executor-${{ github.run_id }} --profile executor-e2e down -v --remove-orphans
+
   quality-gate:
     name: Quality gate
     needs:
@@ -213,6 +247,8 @@ jobs:
       - static-web
       - compose-smoke
       - production-browser
+      - triage-review
+      - deploy-executor
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -224,6 +260,8 @@ jobs:
       STATIC_WEB_RESULT: ${{ needs.static-web.result }}
       COMPOSE_SMOKE_RESULT: ${{ needs.compose-smoke.result }}
       PRODUCTION_BROWSER_RESULT: ${{ needs.production-browser.result }}
+      TRIAGE_REVIEW_RESULT: ${{ needs.triage-review.result }}
+      DEPLOY_EXECUTOR_RESULT: ${{ needs.deploy-executor.result }}
       PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
     steps:
@@ -242,6 +280,8 @@ jobs:
           static-web=${STATIC_WEB_RESULT}
           compose-smoke=${COMPOSE_SMOKE_RESULT}
           production-browser=${PRODUCTION_BROWSER_RESULT}
+          triage-review=${TRIAGE_REVIEW_RESULT}
+          deploy-executor=${DEPLOY_EXECUTOR_RESULT}
           EOF
       - name: Retain sanitised CI summary
         if: always()
@@ -261,7 +301,9 @@ jobs:
             "contracts:${CONTRACTS_RESULT}" \
             "static-web:${STATIC_WEB_RESULT}" \
             "compose-smoke:${COMPOSE_SMOKE_RESULT}" \
-            "production-browser:${PRODUCTION_BROWSER_RESULT}"; do
+            "production-browser:${PRODUCTION_BROWSER_RESULT}" \
+            "triage-review:${TRIAGE_REVIEW_RESULT}" \
+            "deploy-executor:${DEPLOY_EXECUTOR_RESULT}"; do
             job="${result%%:*}"
             status="${result#*:}"
             if [ "${status}" != "success" ]; then

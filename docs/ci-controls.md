@@ -19,7 +19,9 @@ required job; failed, cancelled, skipped, neutral, or missing work fails closed.
 | Checks image | Ruff, `lint-imports`, scoped strict mypy, shell and declarative validators | Style, architecture imports, typed interfaces and contract metadata |
 | Unit and contracts | Locked Compose Python checks and Node harness | Application behavior and published schemas |
 | Compose smoke | Candidate API, web, database, migration, seed and harness | Startup and composed-service behavior |
-| Production browser | Containerized Playwright against the candidate API/web images and isolated PostgreSQL | Delivered image, proxy, network and browser behavior |
+| Production browser | Containerized Playwright against the candidate API/web images and isolated PostgreSQL, then the seeded real-stack incident journeys | Delivered image, proxy, network and browser behavior; war room, mitigation review and postmortem against the real API |
+| Triage review | The 55 T23 triage journeys on the isolated `compose.triage23.yaml` stack | Triage inbox, origin, recovery and session isolation |
+| Deploy executor | The deploy-executor journey over docker-socket-proxy, then with the proxy stopped | Signed operations, rollback/restart idempotency and the proxy deny list |
 | Quality gate | Candidate/head/base summary retained 30 days | No skipped or failed required stage becomes an approval |
 
 The check image is separate from runtime. It owns Ruff, Import Linter, mypy,
@@ -48,8 +50,8 @@ exception requires governance review, rather than a broad ignore.
 Compose network starts migration and synthetic seed before API and web become
 healthy. The Playwright runner has no application source mount and does not
 start Uvicorn: it receives only the browser test inputs and calls `http://web`.
-Its production-image scope is deliberately limited to the same-origin API-client
-seam and production proxy behavior; it is not represented as full UI coverage.
+It is not represented as full UI coverage; the seeded real-stack journeys below
+add the incident flows.
 The existing static-web job retains the showcase interaction and accessibility
 coverage separately. A second runner reaches a deliberately bad Nginx upstream
 and is required to fail its API assertion; a pass is treated as a broken
@@ -66,6 +68,42 @@ docker compose -f compose.yaml -f compose.e2e.yaml --project-name issue183-demo 
 
 Use a unique project name and only remove that project. The local `.env` remains
 untracked and synthetic; do not print, commit, attach or reuse credentials.
+
+### Real-stack journeys
+
+The journeys below self-skip without their seeds, so a plain Playwright run never
+proves them. `scripts/run_real_journeys.sh` seeds and runs them the same way in CI
+and locally, with only `docker compose` on the host:
+
+- `incidents` (production-browser job): demo grants (`--seed-mcp`,
+  `provision_demo.py`), then one stamped incident per journey for
+  `war-room-runs-real`, `war-room-reasoning-real`, `review-mitigation-real`,
+  `war-room-follow-real` and `postmortem-journey`. Stamps are fresh per run and
+  separate per journey, because two of them approve their incident. The follow
+  journey's live incident is finished by a second seed once its test has begun;
+  the postmortem incident is resolved over the HTTP API as `demo-human`.
+- `executor` (deploy-executor job): the `executor-e2e` profile, then the
+  socket-down case after stopping `docker-socket-proxy`.
+- T23 (triage-review job) keeps its own `scripts/run_triage23_review.sh`, which
+  requires exactly 55 passed and no skipped tests.
+
+Only the one-off seed container mounts `scripts/` read-only and receives the
+audit key; the runner and the served images are unchanged. The script forces the
+OpenRouter keys empty, so no investigation reaches a model provider. A journey
+passes only if Playwright exits 0 and reports passed tests and none skipped.
+Logs, Playwright artifacts and `summary.txt` land in `JOURNEY_ARTIFACTS`
+(default: a new temporary directory). Local reproduction, with a synthetic `.env`
+that has a random `AUDIT_HMAC_KEY` and, for the executor,
+`DEPLOY_EXECUTOR_SIGNING_KEY`:
+
+```sh
+COMPOSE_PROJECT_NAME=journeys-demo scripts/run_real_journeys.sh incidents
+COMPOSE_PROJECT_NAME=journeys-demo scripts/run_real_journeys.sh executor
+docker compose -f compose.yaml -f compose.e2e.yaml --project-name journeys-demo --profile e2e --profile executor-e2e down -v --remove-orphans
+scripts/run_triage23_review.sh
+```
+
+The executor journey builds the host-wide `demo/probe:1.0.0` and `1.1.0` tags.
 
 ## Informational diagnostics
 

@@ -67,6 +67,10 @@ Run the contract harness as a one-shot profile:
 docker compose --profile harness run --rm harness
 ```
 
+The harness mounts `schemas/` and `scripts/` read-only and works on a copy in a `tmpfs` at
+`/workspace`. Anything it generates there, such as release projections or manifests, disappears
+with the container unless you copy it out through an explicit writable mount.
+
 Prove issue #14 deterministically against an isolated PostgreSQL container and recording provider:
 
 ```bash

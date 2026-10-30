@@ -10,6 +10,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { useTheme } from "@/hooks/use-theme";
+import { appMode } from "@/lib/mode";
 import { incidentStatus } from "@/lib/status";
 import { useStore } from "@/lib/store";
 import { SEVERITY } from "@/lib/vocabulary";
@@ -19,7 +20,8 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
   const incidents = useStore((s) => s.incidents);
   const alerts = useStore((s) => s.alerts);
   const setTheme = useTheme((s) => s.setTheme);
-  const newAlerts = alerts.filter((alert) => alert.status === "new");
+  // The seeded alert commands belong to the simulator, not to the live inbox.
+  const newAlerts = appMode === "mock" ? alerts.filter((alert) => alert.status === "new") : [];
 
   const go = (to: string) => {
     onOpenChange(false);

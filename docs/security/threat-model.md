@@ -35,6 +35,7 @@ Authoritative decisions: [ADR-004](../../schemas/adrs/ADR-004-grants.md),
 |---|---|---|
 | Authentication and exact grants | Current | ADR-004; grant absence is default deny and names confer no role. |
 | Resource hiding | Current | Missing and unauthorized resources both return `403 resource_unavailable` before routing. |
+| Denial-cause confidentiality | Current | The decision engine records one audit-only cause per denial, in fixed precedence `principal_inactive` > `resource_missing` > `resource_inactive` > `grant_not_applicable`. The cause is persisted only in the audit event; API responses and ordinary logs expose only the non-enumerating denial. |
 | Audit durability | Current | Metadata-only audit is append-only and failure suppresses result release. |
 | Catalog integrity | Current | `tests/test_security_catalogs.py` validates seeded identities and catalog structure. |
 
