@@ -108,6 +108,13 @@ evaluation across the flagd restart, so the store went on failing after `reset`
 until `checkout` itself was restarted. The overlay sets `FLAGD_CACHE=disabled`
 for it, so `fail` and `reset` take effect without touching `checkout`.
 
+**`checkout` and `product-catalog` get 64M.** Upstream caps both at 20M, which
+their binary and files fill as page cache, so they re-read from disk without
+pause: on an 8-CPU host the load reached ~30, `product-catalog`'s p95 15 s, and
+the latency and error rules of [alert intake](alert-intake.md) fired on the
+cascade (`recommendation`, `frontend`, `frontend-proxy`) with nothing injected.
+With 64M the same host stays at a load of ~5 and a 20 min watch fires no rule.
+
 **`down` confirms what it removed.** A `down` against a mismatched project name
 returns success and removes nothing, so it checks afterwards that no container
 labelled with the project survived.

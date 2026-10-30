@@ -28,6 +28,14 @@ services:
     environment:
       FLAGD_CACHE: disabled
     ports: !reset []
+    # Upstream caps checkout and product-catalog at 20M, which their binary and
+    # files fill as page cache: both re-read from disk without pause, the host's
+    # load reached ~30 on 8 CPUs, product-catalog's p95 15 s, and Midnight's rules
+    # fired on the cascade with nothing injected (#765). 64M ends it.
+    deploy: &page-cache-headroom
+      resources:
+        limits:
+          memory: 64M
 
   # Grafana MCP: read-only, minimal tool categories, caller authentication and
   # no published port. It joins the demo network to reach Grafana and a
@@ -119,7 +127,9 @@ services:
     # Node auto-instrumentation also runs in the upstream healthcheck process.
     healthcheck:
       timeout: 20s
-  product-catalog: {ports: !reset []}
+  product-catalog:
+    ports: !reset []
+    deploy: *page-cache-headroom
   quote: {ports: !reset []}
   recommendation: {ports: !reset []}
   shipping: {ports: !reset []}
