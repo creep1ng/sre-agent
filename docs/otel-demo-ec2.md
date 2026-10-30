@@ -195,11 +195,30 @@ python3 scripts/otel_ec2.py connect --local-port 18690 --remote-port 8090
 Open `http://127.0.0.1:18690/`, add a product to the cart and place the order.
 With `fail` applied, Place Order leaves you on the cart (`POST /api/checkout`
 answers 500; the store shows no error banner). After `reset` it reaches
-"Your order is complete!". With a console session, the Alertas view polls
-`GET /v1/alerts` every 15 s; the rule reads a 2-minute window of span metrics
-that reach Prometheus about once a minute. Measured on 2026-10-19:
-`checkout payment calls failing` fired about 70 s after the first failed payment
-and cleared about 95 s after `reset`.
+"Your order is complete!".
+
+## Alerts from the instance's Grafana (#765)
+
+`prepare-mcp` also provisions Midnight's rules and webhook contact point
+(`demo/grafana/alerting/midnight.yaml`, see [alert intake](alert-intake.md)) in the
+instance's Grafana, with a secret it generates in `alert-intake.env` beside the MCP
+token. Grafana reads its provisioning from `/etc/midnight-provisioning`, outside
+upstream's bind mount, so the upstream checkout stays untouched. SSM forwards only
+from this host to the instance, so Grafana cannot reach the local API: it posts to an
+outbox on the instance (`mcp_guest.py serve-outbox`, a systemd unit listening on the
+Docker bridge gateway for Grafana and on remote loopback 17801 for the drain; it keeps
+the last 200 deliveries in memory). `connect-mcp` hands the secret off with the token,
+forwards 17801 to local port `--local-port + 2` and relays each delivery, body and
+`Authorization` unchanged, to `--intake-url` (default
+`http://127.0.0.1:8000/v1/alert-intake/grafana`, the API's published port). With
+`SRE_OTEL_MODE=aws`, `setup_sre.py` reads the same `alert-intake.env` from
+`DEMO_STATE_DIR` and gives the API the secret, so a firing rule opens the incident with
+nobody at the console. Not yet run on an instance: the EC2 verification, including how
+the generic span-error rules behave on the store's normal traffic, is pending.
+
+Grafana's anonymous user is Admin upstream, so anyone who reaches `/grafana` through
+`connect` can read the contact point and its secret. The secret guards only this
+demo's intake.
 
 ## AWS references
 
