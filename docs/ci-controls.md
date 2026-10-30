@@ -9,8 +9,10 @@ only after the hosted pilot and administrative activation in
 
 Each required job has a timeout, Actions permissions are `contents: read`, and
 all actions use reviewed full SHAs. Pull requests stop before expensive stages
-when an earlier required stage fails; scheduled diagnostics retain `always()`
-paths for investigation. The final gate accepts only `success` from every
+when the runtime or checks image fails. After the checks image, the unit, contract,
+static-web and composed-stack paths run in parallel, so a unit failure no longer
+holds back the browser jobs; scheduled diagnostics retain `always()` paths for
+investigation. The final gate accepts only `success` from every
 required job; failed, cancelled, skipped, neutral, or missing work fails closed.
 
 The one exception is a documentation-only pull request. The `changes` job runs first and
@@ -35,7 +37,8 @@ revalidate every published release, which takes about 15 minutes. Otherwise the 
 | Checks image | Ruff, `lint-imports`, scoped strict mypy, shell and declarative validators | Style, architecture imports, typed interfaces and contract metadata |
 | Unit and contracts | Locked Compose Python checks and Node harness | Application behavior and published schemas |
 | Compose smoke | Candidate API, web, database, migration, seed and harness | Startup and composed-service behavior |
-| Production browser | Containerized Playwright against the candidate API/web images and isolated PostgreSQL, then the seeded real-stack incident journeys | Delivered image, proxy, network and browser behavior; war room, mitigation review and postmortem against the real API |
+| Production browser | Containerized Playwright against the candidate API/web images and isolated PostgreSQL | Delivered image, proxy, network and browser behavior |
+| Real journeys | The seeded real-stack incident journeys on their own candidate stack | War room, mitigation review and postmortem against the real API |
 | Triage review | The 55 T23 triage journeys on the isolated `compose.triage23.yaml` stack | Triage inbox, origin, recovery and session isolation |
 | Deploy executor | The deploy-executor journey over docker-socket-proxy, then with the proxy stopped | Signed operations, rollback/restart idempotency and the proxy deny list |
 | Quality gate | Candidate/head/base summary retained 30 days | No skipped or failed required stage becomes an approval |
@@ -91,7 +94,7 @@ The journeys below self-skip without their seeds, so a plain Playwright run neve
 proves them. `scripts/run_real_journeys.sh` seeds and runs them the same way in CI
 and locally, with only `docker compose` on the host:
 
-- `incidents` (production-browser job): demo grants (`--seed-mcp`,
+- `incidents` (real-journeys job): demo grants (`--seed-mcp`,
   `provision_demo.py`), then one stamped incident per journey for
   `war-room-runs-real`, `war-room-reasoning-real`, `review-mitigation-real`,
   `war-room-follow-real` and `postmortem-journey`. Stamps are fresh per run and

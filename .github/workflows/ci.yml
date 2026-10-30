@@ -153,9 +153,10 @@ jobs:
       - name: Run static showcase browser smoke
         run: npm run test:browser
 
+  # The composed stack builds its own images, so it runs alongside unit and contracts.
   compose-smoke:
-    needs: [changes, unit, contracts, static-web]
-    if: ${{ always() && (github.event_name == 'schedule' || (needs.unit.result == 'success' && (needs.contracts.result == 'success' || (needs.contracts.result == 'skipped' && needs.changes.outputs.contracts == 'false')) && needs.static-web.result == 'success')) }}
+    needs: checks-image
+    if: ${{ always() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -226,10 +227,6 @@ jobs:
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} up --build --wait db api web
       - name: Run browser journeys against candidate images
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} --profile e2e run --build --rm e2e
-      - name: Run the seeded real-stack incident journeys without a model provider
-        env:
-          COMPOSE_PROJECT_NAME: ci-browser-${{ github.run_id }}
-        run: scripts/run_real_journeys.sh incidents
       - name: Verify a bad proxy fails the browser journey
         run: |
           docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} --profile e2e-negative up --build --wait web-bad-proxy
@@ -257,6 +254,37 @@ jobs:
       - name: Remove the scoped browser stack
         if: always()
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} down -v --remove-orphans
+
+  real-journeys:
+    needs: compose-smoke
+    if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Create ephemeral browser inputs
+        run: |
+          cp .env.example .env
+          python - <<'PY'
+          from pathlib import Path
+          from secrets import token_hex
+
+          path = Path(".env")
+          content = path.read_text()
+          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}"):
+              content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
+          content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
+          content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
+          content = content.replace("<set-long-random-audit-hmac-key>", token_hex(32), 1)
+          path.write_text(content)
+          PY
+      - name: Run the seeded real-stack incident journeys without a model provider
+        env:
+          COMPOSE_PROJECT_NAME: ci-journeys-${{ github.run_id }}
+        run: scripts/run_real_journeys.sh incidents
+      - name: Remove the scoped journeys stack
+        if: always()
+        run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-journeys-${{ github.run_id }} --profile e2e down -v --remove-orphans
 
   triage-review:
     needs: compose-smoke
@@ -298,6 +326,7 @@ jobs:
       - static-web
       - compose-smoke
       - production-browser
+      - real-journeys
       - triage-review
       - deploy-executor
     if: ${{ always() }}
@@ -314,6 +343,7 @@ jobs:
       STATIC_WEB_RESULT: ${{ needs.static-web.result }}
       COMPOSE_SMOKE_RESULT: ${{ needs.compose-smoke.result }}
       PRODUCTION_BROWSER_RESULT: ${{ needs.production-browser.result }}
+      REAL_JOURNEYS_RESULT: ${{ needs.real-journeys.result }}
       TRIAGE_REVIEW_RESULT: ${{ needs.triage-review.result }}
       DEPLOY_EXECUTOR_RESULT: ${{ needs.deploy-executor.result }}
       PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -337,6 +367,7 @@ jobs:
           static-web=${STATIC_WEB_RESULT}
           compose-smoke=${COMPOSE_SMOKE_RESULT}
           production-browser=${PRODUCTION_BROWSER_RESULT}
+          real-journeys=${REAL_JOURNEYS_RESULT}
           triage-review=${TRIAGE_REVIEW_RESULT}
           deploy-executor=${DEPLOY_EXECUTOR_RESULT}
           EOF
@@ -366,6 +397,7 @@ jobs:
             "static-web:${STATIC_WEB_RESULT}" \
             "compose-smoke:${COMPOSE_SMOKE_RESULT}" \
             "production-browser:${PRODUCTION_BROWSER_RESULT}" \
+            "real-journeys:${REAL_JOURNEYS_RESULT}" \
             "triage-review:${TRIAGE_REVIEW_RESULT}" \
             "deploy-executor:${DEPLOY_EXECUTOR_RESULT}"; do
             job="${result%%:*}"
