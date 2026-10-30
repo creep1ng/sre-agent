@@ -81,6 +81,8 @@ services:
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       INCIDENT_HARNESS_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
       RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+      # Read by scripts/provision_demo.py only: the deploy-executor's change.write credential.
+      DEPLOY_EXECUTOR_CHANGES_API_KEY: ${DEPLOY_EXECUTOR_CHANGES_API_KEY:-}
       TRIAGE_AGENT_MODEL: ${TRIAGE_AGENT_MODEL:?TRIAGE_AGENT_MODEL is required}
       TRIAGE_AGENT_PROVIDER: ${TRIAGE_AGENT_PROVIDER:?TRIAGE_AGENT_PROVIDER is required}
       REMEDIATION_AGENT_MODEL: ${REMEDIATION_AGENT_MODEL:?REMEDIATION_AGENT_MODEL is required}
@@ -375,6 +377,10 @@ services:
     environment:
       DOCKER_API_URL: http://docker-socket-proxy:2375
       DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
+      # The deploy-executor principal's change.write credential (#770, scripts/provision_demo.py),
+      # so each rollback is a change event; empty records nothing.
+      DEPLOY_EXECUTOR_CHANGES_URL: http://api:8000
+      DEPLOY_EXECUTOR_CHANGES_API_KEY: ${DEPLOY_EXECUTOR_CHANGES_API_KEY:-}
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -441,6 +447,8 @@ services:
       DEPLOY_EXECUTOR_ARTIFACT_DIR: /artifacts
       PLAYWRIGHT_JSON_OUTPUT_NAME: /artifacts/report.json
       DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
+      # Reads the rollback's change event back (change-events-real, #770).
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:-}
     depends_on:
       deploy-executor:
         condition: service_healthy

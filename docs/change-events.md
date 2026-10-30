@@ -62,3 +62,15 @@ of the `GET /v1/changes` that served them, so the citation leads back to the rea
 client answers this tool itself and never forwards it to Grafana MCP; the gateway only exposes its
 closed list of MCP tools (`query_prometheus`, `query_elasticsearch`), and the `midnight_` prefix
 keeps a future MCP tool from taking the name.
+
+## Rollbacks
+
+The deploy-executor records each rollback it completes as `source: deploy-executor`,
+`kind: rollback`, `version` = the image it rolled back to, keyed by its execution id. It uses
+`DEPLOY_EXECUTOR_CHANGES_API_KEY`, a credential of the agent principal `deploy-executor` that
+holds `change.write` only; `scripts/provision_demo.py` creates that principal, its credential and
+the grant from the key in `.env`, so the demo setup needs no console step. Without the key it
+records nothing. The record is sent after the rollback has answered and never changes that
+answer: a failed record is logged without the key. The executor reaches the API over the
+internal `executor-call` network it already shares with it. What this adds to the executor's
+attack surface is in [deploy-executor.md](deploy-executor.md#known-limitations-of-the-academic-demo).
