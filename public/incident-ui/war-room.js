@@ -85,6 +85,7 @@ const shortDayFormat = new Intl.DateTimeFormat("es-CO", {
 const state = {
   incidentId: null,
   incidentState: null,
+  runs: [],
   runId: null,
   selectedRunId: null,
   cursor: null,
@@ -603,6 +604,20 @@ function renderReasoning(result) {
   nodes["evidence-block"].hidden = evidence.length === 0;
 }
 
+// A declared incident starts its investigation; one still investigating whose runs all ended
+// (none running or waiting for a human) is retried with a new run (#761).
+function canStartRun() {
+  if (state.incidentState === "active") return true;
+  return (
+    state.incidentState === "investigating" &&
+    !(state.runs ?? []).some(
+      (run) =>
+        run?.current_state === "investigating" &&
+        (run?.status === "running" || run?.status === "awaiting_human"),
+    )
+  );
+}
+
 let runActionInFlight = false;
 const live = { timer: null, since: 0 };
 
@@ -686,7 +701,7 @@ async function beginRun(resumeRunId = null) {
   if (runActionInFlight) return;
   const resume = resumeRunId !== null && resumeRunId !== undefined;
   if (resume && resumeRunId !== state.runId) return;
-  if (!resume && state.incidentState !== "active") return;
+  if (!resume && !canStartRun()) return;
   runActionInFlight = true;
   nodes["run-start"].disabled = true;
   nodes["run-resume"].disabled = true;
@@ -787,7 +802,10 @@ async function loadAll() {
     renderReasoning(reasoning);
     showLive(runId, runState);
     scheduleLive(true);
-    nodes["run-start"].hidden = state.incidentState !== "active";
+    state.runs = Array.isArray(detail.runs) ? detail.runs : [];
+    nodes["run-start"].hidden = !canStartRun();
+    nodes["run-start"].textContent =
+      state.incidentState === "active" ? "Iniciar investigación" : "Reintentar investigación";
     nodes["run-start"].disabled = runActionInFlight;
     nodes["run-resume"].disabled = runActionInFlight;
     nodes["load-more"].hidden = !state.hasMore;

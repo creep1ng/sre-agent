@@ -35,6 +35,15 @@ TRANSITION_SUMMARIES = {
     "start_postmortem": "Postmortem started.",
     "close_incident": "Incident closed.",
 }
+# A run that ended without a terminal workflow state; a new run of the incident may retry.
+TERMINATED_SUMMARIES = {
+    "completed": "Investigation concluded; the run ended.",
+    "max_steps": "Investigation run ended: step budget exhausted; a new run may retry.",
+    "needs_human": "Investigation run ended: it needs a human; a new run may retry.",
+    "invalid_output": "Investigation run ended: invalid agent output; a new run may retry.",
+    "upstream_unavailable": "Investigation run ended: a provider was unavailable; "
+    "a new run may retry.",
+}
 
 
 class UnsupportedWorkflowDataError(Exception):
@@ -116,6 +125,8 @@ def event_summary(payload: Any) -> str:
         patch = payload.get("run_patch")
         if isinstance(patch, dict) and patch.get("terminated_reason") == "denied":
             return "Authorization denied; the investigation waits for a human to escalate."
+        if isinstance(patch, dict) and patch.get("terminated_reason") in TERMINATED_SUMMARIES:
+            return TERMINATED_SUMMARIES[patch["terminated_reason"]]
         outcome = payload.get("outcome")
         action = outcome.get("action") if isinstance(outcome, dict) else None
         summaries = {
