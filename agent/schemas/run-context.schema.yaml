@@ -112,6 +112,15 @@ $defs:
       approval_status: { enum: [pending, approved, rejected, changes_requested] }
       execution_mode: { enum: [simulated, human] }
       based_on_hypothesis: { type: [string, "null"], pattern: '^hyp_[a-z0-9_-]{1,60}$' }
+      operation:
+        description: The deploy-executor operation, as incident-state 1.2.0 records it (#722).
+        type: object
+        additionalProperties: false
+        required: [service, operation, parameters]
+        properties:
+          service: { type: string, minLength: 1, maxLength: 200 }
+          operation: { type: string, minLength: 1, maxLength: 100 }
+          parameters: { type: object, additionalProperties: { type: string, maxLength: 128 } }
       created_by: { enum: [human, agent] }
       created_at: { type: string, format: date-time }
 

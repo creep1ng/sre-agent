@@ -9,9 +9,12 @@
 # 1.1.0 (issue #701): additive minor. `$defs/alert` gains optional `triage_status`
 # and `incident_id` so GET /v1/alerts can report each alert's triage decision.
 # Every 1.0.0 document stays valid; the workflow is still incident-response 1.0.0.
+#
+# 1.2.0 (issue #722): additive minor. `mitigation_strategy` gains optional `operation`, the
+# deploy-executor operation an approval runs. Every 1.1.0 document stays valid.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:incident-state:1.1.0
+$id: urn:sre-agent:schema:incident-state:1.2.0
 title: IncidentState
 type: object
 additionalProperties: false
@@ -271,8 +274,24 @@ $defs:
         enum: [simulated, human]
         default: simulated
       based_on_hypothesis: { type: [string, "null"], pattern: '^hyp_[a-z0-9_-]{1,60}$' }
+      operation: { $ref: '#/$defs/operation' }
       created_by: { enum: [human, agent] }
       created_at: { type: string, format: date-time }
+
+  operation:
+    description: >-
+      One operation the deploy-executor enrols for the incident's service, with its parameters
+      (schemas/executor/1.0.0). Absent for a service with no catalog, which stays simulated.
+    type: object
+    additionalProperties: false
+    required: [service, operation, parameters]
+    properties:
+      service: { type: string, minLength: 1, maxLength: 200 }
+      operation: { type: string, minLength: 1, maxLength: 100 }
+      parameters:
+        type: object
+        propertyNames: { minLength: 1, maxLength: 64 }
+        additionalProperties: { type: string, minLength: 1, maxLength: 128 }
 
   postmortem:
     type: object

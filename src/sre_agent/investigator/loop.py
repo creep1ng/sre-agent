@@ -33,6 +33,7 @@ from sre_agent.investigator.contract import (
     ToolInvocation,
     Turn,
     UseTool,
+    operation_problem,
     parse_action,
     task_id_for,
     unknown_references,
@@ -55,6 +56,19 @@ MAX_OUTPUT = 65_536
 T = TypeVar("T")
 BOK_RESULTS = 5
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
+# What a person reads when the run cannot propose the mitigation itself (#722).
+NO_OPERATION = {
+    "es": "La mitigación propuesta no nombra una operación válida del deploy-executor",
+    "en": "The proposed mitigation names no valid deploy-executor operation",
+}
+UNREADABLE = {
+    "es": "No se pudo leer el catálogo del deploy-executor: la mitigación la decide una persona.",
+    "en": "The deploy-executor's catalog could not be read: a person decides the mitigation.",
+}
+
+
+class InvalidOperation(InvalidOutput):
+    """A mitigation that does not name an operation its service can run."""
 
 
 def _new_id(prefix: str) -> str:
@@ -284,13 +298,28 @@ async def investigate(
             if isinstance(action, ProposeMitigation) and not request.context.hypotheses:
                 # The runtime proposes a mitigation only for a recorded, cited hypothesis.
                 raise InvalidOutput("propose a cited hypothesis before a mitigation")
+            if isinstance(action, ProposeMitigation) and not request.operations_unavailable:
+                if problem := operation_problem(action, request):
+                    raise InvalidOperation(problem)
         except InvalidOutput as error:
             turns.append(turn)
+            if feedback is not None and isinstance(error, InvalidOperation):
+                # Retried with the validation error and still invalid: a person decides.
+                reason = f"{NO_OPERATION[language]}: {error}"
+                return finish(
+                    "needs_human", outcome=RequestHuman(action="request_human", reason=reason)
+                )
             if feedback is not None:
                 return finish("invalid_output", detail=str(error))
             feedback = str(error)
             continue
         feedback = None
+        if isinstance(action, ProposeMitigation) and request.operations_unavailable:
+            turns.append(turn)
+            return finish(
+                "needs_human",
+                outcome=RequestHuman(action="request_human", reason=UNREADABLE[language]),
+            )
         if isinstance(action, SearchBoK):
             ask = action
             if bok is None or ask.collection not in request.bok_collections():

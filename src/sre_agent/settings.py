@@ -21,6 +21,8 @@ class Settings:
     openrouter_management_key: str | None = field(default=None, repr=False)
     investigator_gateway: GatewaySettings | None = field(default=None, repr=False)
     investigator_output_language: OutputLanguage = "es"
+    # The deploy-executor's base URL: its catalog tells the agent what it may propose (#722).
+    deploy_executor_url: str | None = None
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -67,4 +69,5 @@ class Settings:
             openrouter_management_key=environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None,
             investigator_gateway=investigator_gateway,
             investigator_output_language=language,
+            deploy_executor_url=environment.get("DEPLOY_EXECUTOR_URL") or None,
         )
