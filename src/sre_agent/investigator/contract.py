@@ -268,18 +268,25 @@ def parse_action(text: str) -> Action:
 
 # Why a hypothesis was rejected when none of its citations is measured data (#760).
 UNMEASURED = "no cited evidence is measured data"
+# Sources that describe how things should be or how they were, never what is happening now.
+UNMEASURED_SOURCES = frozenset({"bok", "incident_memory"})
 
 
 def unfounded_citations(
     action: Action, request: InvestigationRequest, collected: Collection[CollectedEvidence] = ()
 ) -> list[str]:
-    """A hypothesis's citations when none is measured data: each returned no data (#760) or is a
-    knowledge-base fragment, which describes how things should be, not what happened."""
+    """A hypothesis's citations when none is measured data: each returned no data (#760), is a
+    knowledge-base fragment, which describes how things should be, or recalls a past incident
+    (#773), which describes what happened before, not now."""
     if not isinstance(action, ProposeHypothesis):
         return []
     unmeasured = {item.evidence_id for item in request.context.evidence if item.empty}
-    unmeasured |= {item.evidence_id for item in request.context.evidence if item.source == "bok"}
-    unmeasured |= {item.evidence_id for item in collected if item.empty or item.source == "bok"}
+    unmeasured |= {
+        item.evidence_id for item in request.context.evidence if item.source in UNMEASURED_SOURCES
+    }
+    unmeasured |= {
+        item.evidence_id for item in collected if item.empty or item.source in UNMEASURED_SOURCES
+    }
     cited = action.supporting_evidence
     return list(cited) if all(ref in unmeasured for ref in cited) else []
 
