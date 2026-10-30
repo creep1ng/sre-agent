@@ -4,6 +4,7 @@ scripted. The model plays the scenario its alert names and says every evidence s
 hypothesis; Prometheus answers one series per service, Elasticsearch no documents."""
 
 import json
+import os
 import re
 import secrets
 
@@ -24,6 +25,7 @@ TOOLS = {
 FINDINGS = {
     "query_prometheus": "checkout registra 12 llamadas con error y payment ninguna.",
     "query_elasticsearch": "Los logs de payment muestran el cobro rechazado.",
+    "bok.search": "El runbook dice que reiniciar payment restablece los cobros.",
 }
 
 
@@ -38,18 +40,20 @@ def decide(state: dict) -> dict:
             "verification_check": "Las llamadas con error de checkout vuelven a cero.",
             "based_on_hypothesis": incident["hypotheses"][-1]["hypothesis_id"],
         }
-    wanted = list(TOOLS)[1:] if "[e2e:logs-only]" in incident["alert"]["summary"] else TOOLS
+    logs_only = re.search(r"\[e2e:(logs-only|bok-and-logs)\]", incident["alert"]["summary"])
+    wanted = list(TOOLS)[1:] if logs_only else TOOLS
     for tool in wanted:
         if tool not in {item["tool"] for item in collected}:
             return {"action": "use_tool", "tool": tool, "arguments": TOOLS[tool]}
+    cited = incident["evidence"] + collected  # evidence already on the incident, then this run's
     return {
         "action": "propose_hypothesis",
         "statement": "checkout falla al cobrar porque payment no responde.",
         "confidence": "medium",
-        "supporting_evidence": [item["evidence_id"] for item in collected],
+        "supporting_evidence": [item["evidence_id"] for item in cited],
         "verdicts": {
             item["evidence_id"]: {"verdict": "supports", "finding": FINDINGS[item["tool"]]}
-            for item in collected
+            for item in cited
         },
     }
 
@@ -80,5 +84,7 @@ class ScriptedMCP:
 
 
 if __name__ == "__main__":
-    application = create_application(llm_provider=ScriptedModel(), mcp_client=ScriptedMCP())
+    # E2E_REAL_MODEL=1 keeps the gateway's own provider (OPENROUTER_API_KEY) for acceptance.
+    model = None if os.environ.get("E2E_REAL_MODEL") == "1" else ScriptedModel()
+    application = create_application(llm_provider=model, mcp_client=ScriptedMCP())
     uvicorn.run(application, host="0.0.0.0", port=8000)

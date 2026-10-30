@@ -16,6 +16,7 @@ from typing import TypeVar
 from uuid import UUID
 
 from sre_agent.investigator.contract import (
+    UNMEASURED,
     CollectedEvidence,
     FailureDiagnostic,
     InvalidOutput,
@@ -36,6 +37,7 @@ from sre_agent.investigator.contract import (
     UseTool,
     parse_action,
     task_id_for,
+    unfounded_citations,
     unknown_references,
 )
 from sre_agent.investigator.ports import (
@@ -299,6 +301,10 @@ async def investigate(
             unknown = unknown_references(action, request, {item.evidence_id for item in evidence})
             if unknown:
                 raise InvalidOutput("unknown references: " + ", ".join(unknown))
+            if unfounded := unfounded_citations(action, request, evidence):
+                # Empty or BoK evidence alone never supports a hypothesis: the model is told why.
+                cited = ", ".join(unfounded)
+                raise InvalidOutput(f"{UNMEASURED} ({cited}: empty or bok); cite a query with data")
             if isinstance(action, ProposeMitigation) and not request.context.hypotheses:
                 # The runtime proposes a mitigation only for a recorded, cited hypothesis.
                 raise InvalidOutput("propose a cited hypothesis before a mitigation")

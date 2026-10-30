@@ -29,6 +29,7 @@ from sre_agent.incident.runtime import (
 )
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
+    UNMEASURED,
     Conclude,
     IncidentContext,
     InvestigationRequest,
@@ -330,15 +331,7 @@ class InvestigationRunDispatcher:
                 run_id,
                 actor_reference,
                 status="unknown",
-                # A tool held past INVESTIGATOR_TOOL_TIMEOUT_SECONDS names the timeout (#719); any
-                # other tool that did not answer is a cause distinct from the model provider (#705).
-                reason_code="tool_timeout"
-                if result.failure_diagnostic is not None
-                and result.failure_diagnostic.stage == "tool_timeout"
-                else "investigation_tool_unavailable"
-                if result.status == "upstream_unavailable"
-                and (result.detail or "").startswith("tool failed:")
-                else f"investigation_{result.status}",
+                reason_code=_ended_reason(result),
                 request_ids=all_request_ids,
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
@@ -891,3 +884,16 @@ def _terminated_reason(reason_code: str, result_status: str | None) -> str:
 
 def _unique_ids(values: Sequence[UUID]) -> list[UUID]:
     return list(dict.fromkeys(values))
+
+
+def _ended_reason(result: InvestigationResult) -> str:
+    """The receipt's reason; a hypothesis rejected for citing no measured data says so (#760)."""
+    if result.status == "invalid_output" and (result.detail or "").startswith(UNMEASURED):
+        return "investigation_no_measured_evidence"
+    # A tool held past INVESTIGATOR_TOOL_TIMEOUT_SECONDS names the timeout (#719); any other tool
+    # that did not answer is a cause distinct from the model provider (#705).
+    if result.failure_diagnostic is not None and result.failure_diagnostic.stage == "tool_timeout":
+        return "tool_timeout"
+    if result.status == "upstream_unavailable" and (result.detail or "").startswith("tool failed:"):
+        return "investigation_tool_unavailable"
+    return f"investigation_{result.status}"

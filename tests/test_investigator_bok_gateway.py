@@ -18,8 +18,16 @@ from fastapi.testclient import TestClient
 from test_control_acceptance import ADMIN_KEY, AUDIT_KEY, DATABASE_URL, SEED_ENV, headers
 from test_control_acceptance import client as _client_fixture  # noqa: F401
 from test_control_acceptance import migrated_acceptance_database as _database_fixture  # noqa: F401
-from test_investigator_bok import CONCLUDE, OPERATIONS, RESPONSE, allowed, request_for, search
-from test_investigator_loop import Provider, ScriptedGateway, hypothesis, ids
+from test_investigator_bok import (
+    CITE_FRAGMENT,
+    CONCLUDE,
+    OPERATIONS,
+    RESPONSE,
+    allowed,
+    request_for,
+    search,
+)
+from test_investigator_loop import Provider, ScriptedGateway, ids
 
 from sre_agent.application import create_application
 from sre_agent.bok.owner import seed_bok_demo
@@ -113,7 +121,7 @@ def test_a_granted_collection_answers_with_a_citation_that_reads_back(
 ) -> None:
     grant(client, RESPONSE)
     grant(client, RESPONSE, "bok.read")
-    result, _, _ = harness([RESPONSE], search(), hypothesis("ev_00000000"))
+    result, _, _ = harness([RESPONSE], search(), CITE_FRAGMENT)
 
     assert result.status == "completed"
     [item] = result.evidence
@@ -221,7 +229,7 @@ def test_the_audit_keeps_decision_and_resource_but_no_query_or_fragment(
     with psycopg.connect(DATABASE_URL) as connection:
         before = [row for (row,) in connection.execute("SELECT event_id FROM audit_events")]
     grant(client, RESPONSE)
-    harness([RESPONSE], search(), hypothesis("ev_00000000"))
+    harness([RESPONSE], search(), CITE_FRAGMENT)
     denied, _, _ = harness([RESPONSE, OPERATIONS], search(OPERATIONS, "rollback readiness"))
 
     with psycopg.connect(DATABASE_URL) as connection:
