@@ -1,0 +1,11 @@
+Issue #759 E2E, phase cycle
+PASS grant, revoke, grant again: 201 200 204 403 201 200: [201, 200, 204, 403, 201, 200]
+PASS a second identical active grant answers 409 grant_conflict: {'error': {'code': 'grant_conflict', 'message': 'An active grant with this principal, action and resource, or a grant with this grant_id, already exists.'}, 'request_id': 'f420ea34-f5f1-4d67-91de-25742357d6f4', 'retryable': False}
+PASS the audit holds grant, revoke, grant again and the refused duplicate: [('grants.create', 201, 'grant_matched'), ('grants.revoke', 204, 'grant_matched'), ('grants.create', 201, 'grant_matched'), ('grants.create', 409, 'status_conflict')]
+PASS both rows remain: the revoked one and the active one: [('grant-e2e759-9aeedbf4-a', 'revoked'), ('grant-e2e759-9aeedbf4-b', 'active')]
+PASS two seed-owned grants revoked before the seed reruns: [204, 204]
+Issue #759 E2E, phase after-seed
+PASS the seed rerun converged and names each revoked grant: ['mcp seed converged', 'seed drift: grant grant-incident-harness-invoke-remediation-agent is revoked; left revoked', 'seed converged', 'seed drift: grant grant-setup-human-alert-read is revoked; left revoked', 'demo permissions converged...
+PASS the operator's revocations are kept: [('revoked',), ('revoked',)]
+PASS /health/ready answers 200 on the new revision: (200, {'status': 'ok', 'dependency': 'postgresql'}, '20261030_01')
+PASS uniqueness holds only among active grants: ("CREATE UNIQUE INDEX uq_grants_active_direct ON public.grants USING btree (principal_id, action, resource_type, resource_id) WHERE ((status)::text = 'active'::text)",)
