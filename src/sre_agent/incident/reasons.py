@@ -22,6 +22,7 @@ DISPATCH_CAUSES = {
     "tool_timeout": "an MCP tool did not answer within the investigator's tool timeout.",
     "investigation_max_steps": "the agent used its whole step budget.",
     "investigation_invalid_output": "the model returned output the harness cannot use.",
+    "investigation_no_measured_evidence": "no cited evidence had measured data.",
     "investigator_failed": "the investigator failed unexpectedly.",
     "result_persistence_uncertain": "the result could not be confirmed as saved.",
     "stale_incident_snapshot": "the incident changed while the agent investigated.",
