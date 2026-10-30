@@ -25,7 +25,21 @@ decision buttons (#767) are out of scope.
    ```
 
    Telegram sends `/start <code>`. A valid code links the chat and is spent; a used, expired or
-   unknown code is rejected. A chat that is not linked only gets a "not linked" reply.
+   unknown code is rejected. A chat that is not linked gets one "not linked" reply, once.
+
+4. List the linked chats (chat id and link time, no codes) or revoke one; a revoked chat gets no
+   further incident messages, including those still queued. These commands are not audited yet.
+
+   ```sh
+   docker compose --profile telegram run --rm telegram-gateway python -m sre_agent.chat.telegram links
+   docker compose --profile telegram run --rm telegram-gateway python -m sre_agent.chat.telegram unlink CHAT_ID
+   ```
+
+## What leaves your host
+
+Messages carry the incident id, the alert summary and the model's conclusion, which may quote
+logs. They travel to Telegram's servers unredacted, and bot chats are not end-to-end encrypted:
+link only a chat you would trust with that content.
 
 ## How messages are delivered
 
@@ -34,13 +48,15 @@ decision buttons (#767) are out of scope.
   replaying a producer never queues the same message twice.
 - The `run_events_chat_outbox` trigger queues `investigation_ack` when a dispatch writes its
   intent receipt and `investigation_conclusion` when it writes its outcome receipt, in the same
-  transaction. Any code path that dispatches an investigation, including Grafana alerts (#765),
-  therefore notifies without chat-specific code.
+  transaction. Any dispatch path that writes the dispatch receipts, which #765 (Grafana alerts) is
+  expected to use, therefore notifies without chat-specific code.
 - The gateway sends the oldest due message of each chat, keeping the row locked until the send
-  is recorded. A failed send is retried with exponential backoff (up to 60 s, 10 attempts) and
-  `last_error` keeps the method and HTTP status only. Stopping the gateway lets it finish the
-  current send, so a restart delivers each pending message once. A gateway killed between a
-  send and its commit sends that message again: delivery is at least once in that window.
+  is recorded. A failed send is retried with exponential backoff (up to 60 s, 10 attempts, or the
+  wait a 429 asks for); a 400 or 403 is final and logged. `last_error` keeps the method, the HTTP
+  status and Telegram's error text. Texts over 3900 characters are cut and point to the console.
+- Delivery is at least once; a send interrupted mid-flight may repeat. A stop (20 s grace) lets
+  the current send finish, but a send that times out or a gateway killed before its commit is
+  sent again, because Telegram has no idempotency key. The dedup key makes duplicates rare.
 
 ## Extending
 

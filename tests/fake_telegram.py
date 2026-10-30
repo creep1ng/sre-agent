@@ -1,14 +1,13 @@
 """Fake Telegram Bot API for the #766 E2E: getMe, getUpdates (long polling) and sendMessage.
 
-Like Telegram, it keeps an update until a getUpdates offset above its id confirms it, and it
-answers 401 to any other token. `/_test/*` lets the E2E play the user: inject messages, read
-what the bot sent (with the time each send arrived) and fail the next sends.
+Like Telegram, it keeps an update until a getUpdates offset above its id confirms it, answers
+401 to any other token and 400 to a text over 4096 characters. `/_test/*` lets the E2E play the
+user: inject messages, read what the bot sent (with the time each send arrived) and fail sends.
 
-    uvicorn fake_telegram:app --app-dir tests --port 8081   # FAKE_TELEGRAM_TOKEN required
+    uvicorn fake_telegram:app --app-dir tests --port 8081
 """
 
 import asyncio
-import os
 from datetime import UTC, datetime
 from html import escape
 from typing import Any
@@ -16,7 +15,8 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-TOKEN = os.environ["FAKE_TELEGRAM_TOKEN"]
+# Synthetic, never a real bot's: scripts/run_telegram_e2e.sh gives the gateway the same one.
+TOKEN = "7000001:fake-e2e-token"
 app = FastAPI()
 updates: list[dict[str, Any]] = []
 sent: list[dict[str, Any]] = []
@@ -52,6 +52,8 @@ async def bot(token: str, method: str, request: Request) -> JSONResponse:
         if state["fail_sends"] > 0:
             state["fail_sends"] -= 1
             return _reply(status=502, description="Bad Gateway (fake failure)")
+        if not 1 <= len(fields["text"]) <= 4096:
+            return _reply(status=400, description="Bad Request: message is too long")
         record = {
             "message_id": len(sent) + 1,
             "chat_id": fields["chat_id"],

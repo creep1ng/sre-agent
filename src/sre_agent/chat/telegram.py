@@ -2,6 +2,7 @@
 
     python -m sre_agent.chat.telegram gateway       # answer updates and drain the outbox
     python -m sre_agent.chat.telegram link [--ttl-seconds N]   # print a one-time link
+    python -m sre_agent.chat.telegram links | unlink CHAT_ID   # list or revoke linked chats
 
 The bot token travels only in request paths. httpx logs those paths at INFO, so its logger is
 held at WARNING, and errors name the method and status, never the URL.
@@ -40,7 +41,13 @@ class BotApi:
         except ValueError:
             body = {}
         if reply.status_code != 200 or not body.get("ok"):
-            raise DeliveryError(f"{method}: HTTP {reply.status_code} {body.get('description', '')}")
+            # 400 (malformed, too long) and 403 (bot blocked) never succeed for that message;
+            # 401 and 404 mean a bad token, which the operator fixes, so those are retried.
+            raise DeliveryError(
+                f"{method}: HTTP {reply.status_code} {body.get('description', '')}",
+                final=reply.status_code in (400, 403),
+                retry_after=(body.get("parameters") or {}).get("retry_after"),
+            )
         return body["result"]
 
     async def send(self, chat_id: int, message: str) -> None:
@@ -98,7 +105,7 @@ async def gateway(database_url: str, api_url: str, token: str, poll_seconds: int
             me = await bot.call("getMe")
             logger.info("telegram gateway started as @%s", me.get("username"))
             poller = asyncio.create_task(_poll(bot, store, poll_seconds))
-            # A stop finishes the message being sent, so a restart never repeats it.
+            # A stop finishes the message being sent; only a kill mid-send repeats it.
             await _deliver(bot, store, stopping)
             poller.cancel()
             await asyncio.gather(poller, return_exceptions=True)
@@ -117,10 +124,25 @@ async def link(database_url: str, api_url: str, token: str, ttl: timedelta) -> s
     return f"https://t.me/{me['username']}?start={code} (expires {expires_at.isoformat()})"
 
 
+async def manage_links(database_url: str, unlink_chat_id: int | None) -> str:
+    database = Database(database_url)
+    try:
+        store = ChatStore(database)
+        if unlink_chat_id is not None:
+            removed = await store.unlink(unlink_chat_id)
+            return f"chat {unlink_chat_id} {'unlinked' if removed else 'was not linked'}"
+        rows = await store.links()
+    finally:
+        await database.dispose()
+    return "\n".join(f"{chat_id} linked {at.isoformat()}" for chat_id, at in rows) or "no chats"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m sre_agent.chat.telegram")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("gateway")
+    commands.add_parser("links")
+    commands.add_parser("unlink").add_argument("chat_id", type=int)
     link_parser = commands.add_parser("link")
     link_parser.add_argument(
         "--ttl-seconds", type=int, default=900, choices=range(1, 86401), metavar="1..86400"
@@ -129,6 +151,9 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
     database_url, token = os.environ.get("DATABASE_URL"), os.environ.get("TELEGRAM_BOT_TOKEN")
+    if database_url and arguments.command in ("links", "unlink"):
+        print(asyncio.run(manage_links(database_url, getattr(arguments, "chat_id", None))))
+        return
     if not database_url or not token:
         raise SystemExit("DATABASE_URL and TELEGRAM_BOT_TOKEN are required")
     api_url = os.environ.get("TELEGRAM_API_URL") or "https://api.telegram.org"
