@@ -98,18 +98,7 @@ test("release tooling admits 2.3.0 alongside the new 2.8.0 release", async () =>
   assert.deepEqual(result.releases.slice(-2), ["2.7.0", "2.8.0"]);
 });
 test("release tooling admits and discovers additive 2.4.0 over 2.3.0", async () => {
-  const command = spawnSync(
-    process.execPath,
-    [fileURLToPath(new URL("../release.mjs", import.meta.url)), "validate", "--release", "2.4.0"],
-    { encoding: "utf8" },
-  );
-  assert.doesNotMatch(command.stderr, /Usage:/);
-
-  // Discovery only: validate:releases revalidates every published release in its own CI step.
-  const root = fileURLToPath(new URL("../../releases/", import.meta.url));
-  const releases = await validatePublishedReleases(root, async () => ({ artifacts: 1, results: 1 }));
-  assert.equal(releases.releases.at(-1), "2.8.0");
-
+  // 2.4.0 is validated in full by mcp-release.test.mjs; discovery is the sibling 2.3.0 test.
   const manifest = parse(await readFile(new URL("../../releases/2.4.0/manifest.yaml", import.meta.url), "utf8"));
   assert.deepEqual(manifest.baseline, {
     previous_release: "2.3.0",

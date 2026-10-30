@@ -45,7 +45,7 @@ const command = (consumer, version) => ["issue-130", "issue-129", "issue-184", "
 const versionedPolicy = (version) => Object.fromEntries(Object.entries(POLICY).map(([consumer, values]) => [consumer, values.map((value) => value.replaceAll("1.0.0", version).replaceAll("{version}", version))]));
 const sorted = (value) => Array.isArray(value) ? value.map(sorted) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])])) : value;
 const digest = (value) => `sha256:${createHash("sha256").update(value).digest("hex")}`, canonical = (value) => JSON.stringify(sorted(value));
-async function walk(root, prefix = "") { const files = []; for (const entry of (await readdir(join(root, prefix), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) { const path = join(prefix, entry.name); if (entry.isDirectory()) files.push(...await walk(root, path)); else if (entry.isFile()) files.push(path.split(sep).join("/")); } return files; }
+async function walk(root, prefix = "") { const files = []; for (const entry of (await readdir(join(root, prefix), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) { const path = join(prefix, entry.name); if (entry.isDirectory()) files.push(...await walk(root, path)); else if (entry.isFile()) files.push(path.split(sep).join("/")); else throw new Error(`${path} is not a regular file; a release holds only regular files`); } return files; }
 const fileHash = async (path) => digest(await readFile(path));
 const exact = (value, keys, label) => { if (!value || typeof value !== "object" || Array.isArray(value) || canonical(Object.keys(value).sort()) !== canonical([...keys].sort())) throw new Error(`${label} contains unknown or missing fields`); };
 async function parsed(path) { return parse(await readFile(path, "utf8")); }
@@ -382,6 +382,7 @@ export async function validatePublishedReleases(
 // The lock pins each published manifest by digest. The manifest already pins every other file
 // of its release and the ADRs, so a matching manifest digest plus a manifest that still matches
 // the files proves the release is unchanged without rerunning its conformance and evidence.
+// newestVersion compares only major.minor.patch; baseline() rejects pre-release tags today.
 const releasesLock = join(schemas, "releases.lock.json");
 const newestVersion = (versions) => [...versions].sort((a, b) => {
   const [left, right] = [a, b].map((version) => version.split(/[.+-]/, 3).map(Number));
@@ -398,19 +399,21 @@ export async function assertLockedRelease(version, lock, root = join(schemas, "r
   return { artifacts: Object.values(manifest.inventory).flat().length, locked: true };
 }
 
-// Pull requests and pushes fully validate only the newest release, the one a contract change can
-// add; every older release is checked against its pinned digest. The schedule runs validate-all.
-export async function validateLockedReleases(root = join(schemas, "releases"), lockPath = releasesLock, validator = validateRelease) {
-  const versions = await publishedVersions(root), lock = JSON.parse(await readFile(lockPath, "utf8")), newest = newestVersion(versions);
+// Every release is first checked against its pinned digest. Then each release the base lock does
+// not pin yet (a pull request can add several, or backport an older one) is validated in full.
+// Without a base lock, only the newest release is. The schedule runs validate-all instead.
+export async function validateLockedReleases(root = join(schemas, "releases"), lockPath = releasesLock, validator = validateRelease, baseLockPath = null) {
+  const versions = await publishedVersions(root), lock = JSON.parse(await readFile(lockPath, "utf8"));
+  const base = baseLockPath ? JSON.parse(await readFile(baseLockPath, "utf8")) : null, newest = newestVersion(versions);
   const unknown = Object.keys(lock).filter((version) => !versions.includes(version));
   if (unknown.length) throw new Error(`releases.lock.json pins unpublished releases [${unknown.join(", ")}]`);
+  const locked = new Map();
+  for (const version of versions) locked.set(version, await assertLockedRelease(version, lock, root));
+  const full = versions.filter((version) => (base ? !base[version] : version === newest));
   const results = [];
-  for (const version of versions) {
-    const locked = await assertLockedRelease(version, lock, root);
-    results.push({ version, ...(version === newest ? await validator(version) : locked) });
-  }
+  for (const version of versions) results.push({ version, ...(full.includes(version) ? await validator(version) : locked.get(version)) });
   assertEveryPublishedRelease(versions, results.map(({ version }) => version));
-  return { releases: versions, fully_validated: [newest], results };
+  return { releases: versions, fully_validated: full, results };
 }
 
 // Records releases that the lock does not pin yet, after validating each of them in full. A pinned

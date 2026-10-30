@@ -29,15 +29,21 @@ harness image (`docker/harness*`), `compose.yaml` or this workflow. The harness 
 mounts only `schemas/` and `scripts/`, and none of its CI commands reads `scripts/`. Otherwise
 the gate requires `contracts` to be `skipped`, and `compose-smoke` accepts that skip.
 
-When `contracts` runs on a pull request or a push to `main`, it validates only the newest
-published release in full and checks every older one against `schemas/releases.lock.json`
-(`validate:releases:locked`). The lock pins the digest of each release's `manifest.yaml`, and
-the manifest pins the digest of every other file of that release and of the ADRs, so changing
-any published file fails: either the recomputed manifest differs from the committed one or the
-manifest no longer matches its pinned digest. A step before the harness also fails when the
-change edits or removes a digest the base commit already pinned, so a release cannot be
-rewritten together with its lock entry. The nightly schedule still revalidates every release in
-full (`validate:releases`). Publishing a release adds its digest with
+When `contracts` runs on a pull request or a push to `main`, it checks every published release
+against `schemas/releases.lock.json` and validates in full only the releases that the base
+commit's lock does not pin yet (`validate:releases:locked -- --base <base lock>`). A pull
+request that adds several releases, or backports an older one, validates each of them in full.
+The lock pins the digest of each release's `manifest.yaml`, and the manifest pins the digest of
+every other file of that release and of the ADRs, so changing any published file fails: either
+the recomputed manifest differs from the committed one or the manifest no longer matches its
+pinned digest. A step before the harness also fails when the change edits or removes a digest
+the base commit already pinned, so a release cannot be rewritten together with its lock entry.
+That step reads the base lock from `HEAD^1`: the base of a pull request's merge commit, or the
+previous commit for a push to `main`, which receives one merge or squash per push. Only a base
+without a lock counts as empty; any other git error fails the step. The nightly schedule, and a
+pull request that changes `schemas/tooling/` or the harness image (`docker/harness*`), still
+revalidate every release in full (`validate:releases`), because a tooling change can break an
+old release. Publishing a release adds its digest with
 `npm --prefix schemas/tooling run lock:releases`, which validates the unpinned releases in full
 first.
 
