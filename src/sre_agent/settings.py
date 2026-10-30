@@ -23,8 +23,10 @@ class Settings:
     investigator_tool_timeout_seconds: float = 30.0
     investigator_output_language: OutputLanguage = "es"
     openrouter_base_url: str = "https://openrouter.ai"
-    # Grafana alert intake (#765): the contact point's secret.
+    # Grafana alert intake (#765): the contact point's secret, and the operator the integration
+    # declares incidents for; None records episodes and leaves them to the console.
     alert_intake_secret: str | None = field(default=None, repr=False)
+    alert_intake_principal_id: str | None = "demo-human"
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -99,4 +101,6 @@ class Settings:
             investigator_output_language=language,
             openrouter_base_url=base_url,
             alert_intake_secret=environment.get("ALERT_INTAKE_GRAFANA_SECRET") or None,
+            alert_intake_principal_id=environment.get("ALERT_INTAKE_PRINCIPAL_ID", "demo-human")
+            or None,
         )

@@ -225,7 +225,10 @@ def create_application(
             alert_intake_router(
                 AlertIntakeService(
                     database,
+                    workflow,
+                    investigation_dispatcher,
                     secret=runtime_settings.alert_intake_secret,
+                    principal_id=runtime_settings.alert_intake_principal_id,
                     audit=audit_store or PostgresAuditStore(database.sessions),
                     projector=AuditProjector(runtime_settings.audit_hmac_key.encode()),
                 )

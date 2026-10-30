@@ -5,7 +5,13 @@ send. The contact point authenticates with the integration's own secret as a Bea
 wrong or missing secret gets 401 and leaves only an audit event, before the body is read. The
 body, its alerts and their labels are capped. Each alert is one episode, keyed by Grafana's
 fingerprint and the instant it started firing: a repeated delivery adds to the same episode and
-`resolved` closes it.
+`resolved` closes it. A new firing episode joins any open incident of its service, even one whose
+episode already resolved, so a flapping rule does not pay for a second investigation; otherwise
+it declares one through the triage command, which starts the investigation (#704). The dispatch
+runs after the response, as the console's declare does. The integration acts for one configured
+operator, and the triage decision names `grafana` as the responsible system, so the timeline
+never claims a human decided it. Without that operator the episode is recorded and stays `new`
+in the inbox for the console.
 """
 
 import hashlib
@@ -18,14 +24,24 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.types import String
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import AuditStore
+from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.database import Database
-from sre_agent.triage.service import SEVERITIES
+from sre_agent.persistence.repositories import PrincipalRepository
+from sre_agent.triage.service import (
+    ELIGIBLE,
+    SEVERITIES,
+    InvestigationDispatcher,
+    TriageError,
+    TriageService,
+)
 
 SOURCE = "grafana"
 DEFAULT_SEVERITY = "sev3"
@@ -52,6 +68,16 @@ ON CONFLICT (source, fingerprint, starts_at) DO UPDATE SET
   status = CASE WHEN alert_episodes.status = 'resolved' THEN 'resolved' ELSE EXCLUDED.status END,
   resolved_at = COALESCE(alert_episodes.resolved_at, EXCLUDED.resolved_at)
 RETURNING *""")
+# The incident a new episode joins: the oldest one still open for the same service, whoever
+# declared it and whatever happened to the episode that opened it.
+_TARGET = text("""
+SELECT incident_id FROM incident.incidents
+WHERE state->'alert'->>'service' = :service AND state->>'state' = ANY(:states)
+ORDER BY created_at LIMIT 1""").bindparams(bindparam("states", type_=ARRAY(String())))
+_OPENED = text(
+    "UPDATE incident.alert_episodes SET incident_id = :incident_id,"
+    " investigation_run_id = :run_id WHERE episode_id = :episode_id"
+)
 
 
 def _instant(value: Any) -> datetime | None:
@@ -126,13 +152,19 @@ class AlertIntakeService:
     def __init__(
         self,
         database: Database,
+        workflow: IncidentWorkflow,
+        investigator: InvestigationDispatcher | None,
         *,
         secret: str,
+        principal_id: str | None,
         audit: AuditStore,
         projector: AuditProjector,
     ) -> None:
         self._database = database
+        self._triage = TriageService(database, workflow)
+        self._investigator = investigator
         self._secret = secret.encode()
+        self._principal_id = principal_id
         self._audit = audit
         self._projector = projector
 
@@ -151,7 +183,7 @@ class AlertIntakeService:
             headers=headers,
         )
 
-    async def receive(self, request: Request) -> JSONResponse:
+    async def receive(self, request: Request, background: BackgroundTasks) -> JSONResponse:
         request_id = uuid4()
         started = monotonic()
         if not self._authentic(request.headers.get("authorization")):
@@ -186,6 +218,27 @@ class AlertIntakeService:
         episodes = [episode for alert in alerts if (episode := _episode(alert, group_key))]
         try:
             recorded = [await self._record(episode) for episode in episodes]
+            principal = None
+            if self._principal_id is not None:
+                async with self._database.sessions() as session:
+                    principal = await PrincipalRepository(session).get(self._principal_id)
+            if principal is None or principal.status != "active":
+                # Recorded, not opened: the episode waits in the inbox for the console, and a
+                # redelivery tries again once the operator exists.
+                _log.warning("alert intake: no active operator; episodes recorded only")
+            else:
+                for row in recorded:
+                    if row["status"] != "firing":
+                        continue
+                    if row["incident_id"] is None:
+                        await self._open_or_join(row, principal, background)
+                    elif row["investigation_run_id"] and self._investigator is not None:
+                        # A redelivery re-dispatches a run still pending; the claim is idempotent.
+                        background.add_task(
+                            self._investigator.dispatch,
+                            row["incident_id"],
+                            row["investigation_run_id"],
+                        )
         except Exception:
             _log.exception("alert intake: storage failed")
             return self._error(503, "storage_unavailable", request_id)
@@ -197,6 +250,54 @@ class AlertIntakeService:
         values = episode | {"labels": json.dumps(episode["labels"]), "now": datetime.now(UTC)}
         async with self._database.transaction() as session:
             return dict((await session.execute(_UPSERT, values)).mappings().one())
+
+    async def _open_or_join(
+        self, row: dict[str, Any], principal: Any, background: BackgroundTasks
+    ) -> None:
+        lookup = {"service": row["service"], "states": sorted(ELIGIBLE)}
+        async with self._database.transaction() as session:
+            target = (await session.execute(_TARGET, lookup)).scalar_one_or_none()
+        # Every input below comes from the stored episode, so a redelivery after a crash
+        # replays the same triage command instead of conflicting with it.
+        command: dict[str, Any] = {
+            "alert_id": row["episode_id"],
+            "expected_version": 1,
+            "idempotency_key": f"grafana-intake:{row['episode_id']}",
+            "responsible_system": SOURCE,
+        }
+        if target is not None:
+            command |= {
+                "operation": "triage_link",
+                "reason": f"Grafana rule {row['rule']} on {row['service']} joins open incident.",
+                "target_incident_id": target,
+            }
+        else:
+            command |= {
+                "operation": "triage_declare",
+                "reason": f"Grafana rule {row['rule']} fired on {row['service']}.",
+                "severity": row["severity"],
+                "impact": f"Grafana rule {row['rule']} is firing on {row['service']}.",
+                "alert_context": {
+                    "service": row["service"],
+                    "summary": row["summary"],
+                    "observed_at": _iso(row["starts_at"]),
+                    "source": SOURCE,
+                    "severity": row["severity"],
+                },
+            }
+        try:
+            result = await self._triage.execute(principal, **command)
+        except TriageError as error:
+            # The episode stays in the inbox without an incident; the operator decides.
+            _log.warning("alert intake: %s not opened: %s", row["episode_id"], error.code)
+            return
+        incident_id, run_id = result.incident_id, result.investigation_run_id
+        opened = {"episode_id": row["episode_id"], "incident_id": incident_id, "run_id": run_id}
+        async with self._database.transaction() as session:
+            await session.execute(_OPENED, opened)
+        row["incident_id"] = incident_id
+        if incident_id and run_id and self._investigator is not None:
+            background.add_task(self._investigator.dispatch, incident_id, run_id)
 
 
 async def _bounded_body(request: Request) -> bytes | None:
@@ -216,7 +317,7 @@ def alert_intake_router(service: AlertIntakeService) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/alert-intake/grafana")
-    async def receive(request: Request) -> JSONResponse:
-        return await service.receive(request)
+    async def receive(request: Request, background: BackgroundTasks) -> JSONResponse:
+        return await service.receive(request, background)
 
     return router
