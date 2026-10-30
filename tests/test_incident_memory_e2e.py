@@ -7,12 +7,14 @@ postmortem, write it, approve it and close. Ways this can fail:
    version and close event.
 3. The source record the memory names does not resolve to the approved postmortem.
 4. An entry can be rewritten after the fact.
-The run leaves `memory-change.json` in RECALL_ARTIFACT_DIR (default test-results/issue-773).
+The run leaves `memory-change.json` in RECALL_ARTIFACT_DIR/issue-773 (default: the
+temporary directory).
 """
 
 import asyncio
 import json
 import os
+import tempfile
 from pathlib import Path
 
 import psycopg
@@ -34,7 +36,7 @@ from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import GrantRepository
 from sre_agent.settings import Settings
 
-ARTIFACTS = Path(os.environ.get("RECALL_ARTIFACT_DIR", "test-results/issue-773"))
+ARTIFACTS = Path(os.environ.get("RECALL_ARTIFACT_DIR") or tempfile.gettempdir()) / "issue-773"
 INCIDENT = "inc-memory-closed"
 CONTENT = {
     "summary": "Release 1.5.0 of sre-checkout failed orders; the rollback restored them.",
