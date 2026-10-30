@@ -1,4 +1,5 @@
 import { ApiClientError } from "/public/api/client.js";
+import { hrefFor } from "/public/console/routes.js";
 
 // The reasoning the incident recorded from its investigation (hypotheses, the evidence they cite
 // and the proposed mitigation). It arrives only with run.read_context, in the `reasoning` block
@@ -155,13 +156,23 @@ export function hypothesisBlock(hypotheses) {
   return { block, current };
 }
 
+// A recalled memory (#773) names the closed incident whose approved postmortem it came from.
+const MEMORY_RECORD = /^\/v1\/incidents\/([^/]+)\/postmortem$/;
+
 export function evidenceItem(item, citedIds) {
   const entry = element("li", "reasoning__evidence");
   const head = element("p", "reasoning__evidence-head");
-  head.append(element("span", "ma-badge ma-badge--plain", item.tool ?? item.source ?? "evidencia"));
-  if (item.datasource_uid) head.append(" ", element("span", "ma-mono", item.datasource_uid));
-  if (item.time_window) head.append(` · ventana ${item.time_window}`);
-  if (item.source) head.append(` · fuente ${item.source}`);
+  const memory = item.source === "incident_memory" ? MEMORY_RECORD.exec(item.query ?? "") : null;
+  if (memory) {
+    const link = element("a", "", "Recuerdo de incidente cerrado");
+    link.href = hrefFor("postmortem", { incident_id: memory[1] });
+    head.append(link, " ", element("span", "ma-mono", memory[1]));
+  } else {
+    head.append(element("span", "ma-badge ma-badge--plain", item.tool ?? item.source ?? "evidencia"));
+    if (item.datasource_uid) head.append(" ", element("span", "ma-mono", item.datasource_uid));
+    if (item.time_window) head.append(` · ventana ${item.time_window}`);
+    if (item.source) head.append(` · fuente ${item.source}`);
+  }
   if (citedIds.has(item.evidence_id)) {
     const cited = element("span", "ma-badge", "Citada por la hipótesis");
     cited.dataset.tone = "info";
@@ -174,8 +185,9 @@ export function evidenceItem(item, citedIds) {
   if (shown) head.append(" ", badge(VERDICT[item.empty ? "empty" : item.verdict]));
   entry.append(head);
   if (shown && item.finding) entry.append(element("p", "reasoning__finding", item.finding));
-  if (item.query) entry.append(element("code", "reasoning__query", item.query));
+  if (item.query && !memory) entry.append(element("code", "reasoning__query", item.query));
   entry.append(element("p", "reasoning__result", resultSummary(item.summary)));
+  if (memory) return entry;
   const request = element("p", "reasoning__request ma-muted");
   // Tool evidence names the governed MCP request; knowledge-base evidence names the model reply.
   request.append(

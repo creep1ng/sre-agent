@@ -72,6 +72,20 @@ alert, the postmortem cause, the mitigation that was approved, the strategy, the
 and the summary), when it entered (`indexed_at`), and where it came from (the incident, the
 approved postmortem version and the close event). Migration `20261030_01`.
 
+When an investigation starts, the dispatcher looks up memories for the same service only.
+It uses the BoK's PostgreSQL English full-text search (`websearch_to_tsquery`, `ts_rank_cd`;
+see [BoK retrieval](bok-retrieval.md)) over any word of the alert's signal and summary except
+the service name's own words, which every memory of the service contains. A memory with the
+same stored `signal` is recalled even when no word matches, and ranks first; then the text rank
+decides. A memory of another signal is not filtered out. Recall returns at most three, each cut to 2,000 characters. Each memory reaches
+the investigator as evidence with `source: incident_memory`, and its `query` is the record it
+came from (`/v1/incidents/{incident_id}/postmortem`). Recall only returns memories joined to
+their approved postmortem revision. The investigator rejects a citation of any evidence id it
+was not given, so it can only cite memories that have a source record. Only a memory the
+outcome cites is kept in the incident evidence. Memory is advisory: if recall fails, the
+failure is logged, the investigation continues without it, and the run's outcome receipt
+notes `memory_recall_unavailable`.
+
 | Route | Action | Notes |
 | --- | --- | --- |
 | `GET /v1/incident-memory/changes` | `run.read_context` | Change log, newest first, up to 100 entries: `memory_id`, `operation` (`added`), `incident_id`, `source_record`, `postmortem_id`, `postmortem_version`, `close_event_id`, `service`, `signal`, `indexed_at`, `content`. |
