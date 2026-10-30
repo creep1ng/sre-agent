@@ -60,6 +60,21 @@ may create only the profile's ephemeral/one-shot resources; do not add `docker c
 or another global teardown to PR reproduction instructions. If a demonstration needs a running
 service, use its existing scoped Compose service and document the safe, project-specific cleanup.
 
+Container pitfalls that silently invalidate evidence:
+
+- Piping a script into `docker run` without `-i` exits 0 without executing it, because stdin is
+  not attached. Prefer mounting the script read-only and require the artifact it writes; when
+  comparing hashes between host and container, compare the digest only, not whole `sha256sum`
+  lines, whose paths differ.
+- Playwright deletes its `outputDir` at startup, so pointing it at a bind-mount root fails with
+  `EACCES`. Use a child of the mount (as `compose.triage23.yaml` does with
+  `PLAYWRIGHT_OUTPUT_DIR: /artifacts/test-results`) or a path under `/tmp`.
+- The static browser suites (`playwright.config.js`, `playwright.api.config.js`) expect the
+  loopback origin `http://127.0.0.1:4173`: run Playwright in the server container's network
+  namespace. A non-loopback HTTP origin such as `http://web` is not a secure context and lacks
+  `crypto.randomUUID`; never stub it or weaken assertions to pass. See
+  [issue 25 closure verification](evidence/issue-25-closure-verification.md).
+
 This policy governs contributor-facing PR reproduction and demo commands. It does not prescribe
 or validate internal GitHub Actions runner steps. The current metadata validator checks only a
 nonempty fenced command block; a human reviewer must verify that the PR follows this container
@@ -81,6 +96,11 @@ Unacceptable: only a test count, unrelated screenshot, example.com link,
 placeholder, invented SVG, generated capture, or a claimed live integration
 demonstrated with a fixture.
 
+Host screenshots in the repository: commit them under `docs/evidence/` (for example
+`docs/evidence/issue-720/`) and link them with a GitHub URL pinned to the full pushed commit SHA,
+such as `https://github.com/creep1ng/sre-agent/blob/` followed by the 40-character SHA, the path,
+and `?raw=true`. A SHA-pinned link stays immutable after later pushes.
+
 Screenshots, any recordings, commands and artifacts must exclude API keys,
 Authorization headers, personal data, full prompts/outputs and sensitive request
 payloads. Use controlled synthetic data. Never upload `.env` or unfiltered dumps.
@@ -94,6 +114,10 @@ reviews evidence freshness, scope, size, governance changes, and risk once when 
 whether to merge. Keep independent work in focused PRs when that improves reviewability,
 but no fixed line-count exception is enforced.
 
+Reviewers may use Codex or other bots to assist a review. The human reviewer validates every
+finding, restates it plainly and actionably, and remains the accountable acceptance step; a bot
+finding is never an acceptance by itself.
+
 If multiple open PRs share the exact same head SHA, `pr-governance` fails closed because
 commit statuses cannot distinguish them. Use distinct candidates or close the redundant
 proposal before asking for acceptance.
@@ -104,6 +128,37 @@ proposal before asking for acceptance.
 placeholders, a missing screenshot HTTPS reference, a video that is neither an HTTPS reference nor the exact documented deferral, stale base SHA, unsupported delivery/evidence kinds, and incomplete size data. It never executes supplied
 commands, downloads evidence, judges videos, or verifies that a named OpenSpec
 path really satisfies the issue. A human checks those claims and the DoD checklist.
+
+## Field formats the validator enforces
+
+`.github/governance/pr-evidence.cjs` strips HTML comments, then checks each required section:
+
+- A section fails if it contains the whole words `TODO`, `TBD`, or `PLACEHOLDER` in any letter
+  case, anywhere, including explanatory prose and quoted text. Any `<...>` text also fails it,
+  including autolinks such as `<https://...>` and angle-bracket variables in commands. A line
+  holding only `...`, `…`, or `[ ]` fails too. Rephrase instead.
+- `Tested SHA` is the bare 40-character lowercase hexadecimal SHA, alone in the section: no
+  backticks, label, or annotation.
+- `Base SHA` equals the PR API `base.sha` exactly. Copy it from
+  `gh pr view N --json baseRefOid`, not from a local `origin/main`, which can differ.
+- `Delivery route` is exactly `direct` or `sdd`, `Evidence kind` exactly one of the documented
+  kinds, and `Security` exactly `Sanitized: yes`, all without backticks or extra prose.
+
+## When `pr-governance` fails
+
+`pr-governance` is a commit status published by the `pr-governance.yml` reconciliation workflow,
+not a check run. Its description only says the policy is incomplete; the specific errors appear
+only in that workflow run's job summary. To reproduce the result locally, validate the PR's API
+data with the default-branch validator, which treats the body as data and never executes it:
+
+```sh
+gh api repos/creep1ng/sre-agent/pulls/183 > /tmp/pr-183.json
+docker run --rm -i -v "$PWD/.github/governance:/governance:ro" node:22-alpine \
+  node -e 'const {validate}=require("/governance/pr-evidence.cjs");let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(validate({pr:JSON.parse(d)})))' < /tmp/pr-183.json
+```
+
+An empty list means the structure passes. When fixing a field with `gh pr edit --body-file`,
+replace the whole field value rather than appending to it.
 
 The workflow loads policy only from the resolved default-branch commit, never the
 PR branch, and uses no repository secrets. `statuses: write` is limited to the
