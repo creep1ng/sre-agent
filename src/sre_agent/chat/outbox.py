@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from secrets import token_urlsafe
@@ -21,10 +22,21 @@ from sre_agent.persistence.database import Database
 
 MAX_ATTEMPTS = 10
 MAX_BACKOFF_SECONDS = 60
+# Telegram rejects texts over 4096 characters; model text alone may reach 4000.
+MAX_TEXT = 3900
+
+logger = logging.getLogger("sre_agent.chat.outbox")
 
 
 class DeliveryError(Exception):
-    """A send that may succeed later; its message must not carry secrets."""
+    """A failed send; its message must not carry secrets.
+
+    `final` marks a send the chat will never accept; `retry_after` is the wait Telegram asked for.
+    """
+
+    def __init__(self, message: str, *, final: bool = False, retry_after: float | None = None):
+        super().__init__(message)
+        self.final, self.retry_after = final, retry_after
 
 
 async def enqueue(
@@ -100,7 +112,29 @@ class ChatStore:
                 {"chat_id": chat_id},
             )
             if linked is None:
-                await enqueue(session, chat_id=chat_id, kind="not_linked", dedup_key=reply_key)
+                # Once per chat, so a stranger cannot fill the queue ahead of the operator.
+                await enqueue(session, chat_id=chat_id, kind="not_linked", dedup_key="not_linked")
+
+    async def links(self) -> list[tuple[int, datetime]]:
+        async with self.database.transaction() as session:
+            rows = await session.execute(
+                text("SELECT chat_id, linked_at FROM incident.chat_links ORDER BY linked_at")
+            )
+            return [(row.chat_id, row.linked_at) for row in rows]
+
+    async def unlink(self, chat_id: int) -> bool:
+        """Remove a chat from the allow list and drop what is still queued for it."""
+        async with self.database.transaction() as session:
+            removed = await session.scalar(
+                text("DELETE FROM incident.chat_links WHERE chat_id = :chat_id RETURNING chat_id"),
+                {"chat_id": chat_id},
+            )
+            await session.execute(
+                text("""UPDATE incident.chat_outbox SET attempts = :max, last_error = 'unlinked'
+                    WHERE chat_id = :chat_id AND sent_at IS NULL"""),
+                {"chat_id": chat_id, "max": MAX_ATTEMPTS},
+            )
+        return removed is not None
 
     async def deliver_next(self, send: Callable[[int, str], Awaitable[None]]) -> bool:
         """Send the oldest due message of one chat; False when nothing is due.
@@ -133,12 +167,15 @@ class ChatStore:
                 body = await RENDERERS[row["kind"]](session, row["payload"])
             except Exception as error:
                 # A message that cannot be rendered never will be: stop retrying it.
-                await self._failed(session, row, f"render: {type(error).__name__}", final=True)
+                failure = DeliveryError(f"render: {type(error).__name__}", final=True)
+                await self._failed(session, row, failure)
                 return True
+            if len(body) > MAX_TEXT:
+                body = body[:MAX_TEXT] + "… (texto completo en la consola)"
             try:
                 await send(row["chat_id"], body)
             except DeliveryError as error:
-                await self._failed(session, row, str(error), final=False)
+                await self._failed(session, row, error)
                 return True
             await session.execute(
                 text("""UPDATE incident.chat_outbox SET sent_at = clock_timestamp(),
@@ -148,18 +185,18 @@ class ChatStore:
             return True
 
     @staticmethod
-    async def _failed(
-        session: AsyncSession, row: Mapping[str, Any], error: str, *, final: bool
-    ) -> None:
-        attempts = MAX_ATTEMPTS if final else row["attempts"] + 1
-        delay = min(2 ** row["attempts"], MAX_BACKOFF_SECONDS)
+    async def _failed(session: AsyncSession, row: Mapping[str, Any], error: DeliveryError) -> None:
+        if error.final:
+            logger.warning("chat message %s dropped: %s", row["message_id"], error)
+        attempts = MAX_ATTEMPTS if error.final else row["attempts"] + 1
+        delay = error.retry_after or min(2 ** row["attempts"], MAX_BACKOFF_SECONDS)
         await session.execute(
             text("""UPDATE incident.chat_outbox SET attempts = :attempts, last_error = :error,
                 next_attempt_at = clock_timestamp() + make_interval(secs => :delay)
                 WHERE message_id = :message_id"""),
             {
                 "attempts": attempts,
-                "error": error[:200],
+                "error": str(error)[:200],
                 "delay": delay,
                 "message_id": row["message_id"],
             },
@@ -195,7 +232,9 @@ async def _investigation_conclusion(session: AsyncSession, payload: Mapping[str,
     )
     header = f"Investigación terminada: {label}\nEjecución {payload['run_id']}."
     if receipt.get("status") != "success" or not isinstance(outcome, Mapping):
-        return f"{header}\nSin conclusión ({receipt.get('reason_code', receipt.get('status'))})."
+        code = receipt.get("reason_code") or receipt.get("status")
+        reason = REASONS.get(code, "la investigación no terminó")
+        return f"{header}\nSin conclusión: {reason} ({code})."
     match outcome.get("action"):
         case "propose_hypothesis":
             detail = f"Hipótesis ({outcome['confidence']}): {outcome['statement']}"
@@ -206,6 +245,27 @@ async def _investigation_conclusion(session: AsyncSession, payload: Mapping[str,
         case _:
             detail = f"Necesita una persona: {outcome.get('reason', '')}"
     return f"{header}\n{detail}"
+
+
+# Reason codes of the dispatch outcome receipt (gateway/investigation.py), for the operator.
+REASONS = {
+    "producer_interrupted": "la investigación se interrumpió antes de terminar",
+    "harness_not_configured": "no hay un modelo configurado para investigar",
+    "harness_identity_unavailable": "la identidad del investigador no está disponible",
+    "mcp_discovery_denied": "no hay permiso para usar las herramientas de observabilidad",
+    "mcp_discovery_rejected": "las herramientas de observabilidad rechazaron la conexión",
+    "mcp_discovery_transient": "las herramientas de observabilidad no respondieron",
+    "investigator_failed": "el investigador falló",
+    "stale_incident_snapshot": "el incidente cambió mientras se investigaba",
+    "governed_call_denied": "se denegó una consulta del investigador",
+    "investigation_mcp_contract_rejected": "una herramienta respondió fuera de contrato",
+    "investigation_denied": "se denegó la investigación",
+    "investigation_max_steps": "se agotaron los pasos sin llegar a una conclusión",
+    "investigation_invalid_output": "el modelo respondió en un formato no válido",
+    "investigation_pre_dispatch_rejected": "la solicitud al modelo se rechazó antes de enviarla",
+    "investigation_upstream_unavailable": "el proveedor del modelo no respondió",
+    "result_persistence_uncertain": "no se pudo confirmar que el resultado se guardó",
+}
 
 
 def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitable[str]]:
