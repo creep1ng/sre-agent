@@ -20,6 +20,7 @@ class Settings:
     grafana_mcp_token: str | None = field(default=None, repr=False)
     openrouter_management_key: str | None = field(default=None, repr=False)
     investigator_gateway: GatewaySettings | None = field(default=None, repr=False)
+    investigator_tool_timeout_seconds: float = 30.0
     investigator_output_language: OutputLanguage = "es"
     openrouter_base_url: str = "https://openrouter.ai"
 
@@ -66,6 +67,13 @@ class Settings:
                 pass
             case _:
                 raise ValueError("INVESTIGATOR_OUTPUT_LANGUAGE must be es or en")
+        try:
+            tool_timeout = float(environment.get("INVESTIGATOR_TOOL_TIMEOUT_SECONDS") or "30")
+        except ValueError:
+            raise ValueError("INVESTIGATOR_TOOL_TIMEOUT_SECONDS must be numeric") from None
+        # The gateway's MCP transport stops at 30 s (MCP_TIMEOUT_SECONDS), so more never helps.
+        if not 0 < tool_timeout <= 30:
+            raise ValueError("INVESTIGATOR_TOOL_TIMEOUT_SECONDS must be between 0 and 30")
         return cls(
             database_url,
             api_key,
@@ -76,6 +84,7 @@ class Settings:
             mcp_token,
             openrouter_management_key=environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None,
             investigator_gateway=investigator_gateway,
+            investigator_tool_timeout_seconds=tool_timeout,
             investigator_output_language=language,
             openrouter_base_url=base_url,
         )

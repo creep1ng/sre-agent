@@ -6,8 +6,8 @@
 # incidents: builds (or reuses) the production-browser stack (compose.yaml + compose.e2e.yaml),
 #   seeds the demo grants and one stamped incident per journey, then runs war-room-runs-real,
 #   war-room-reasoning-real, review-mitigation-real, war-room-follow-real, postmortem-journey and
-#   change-events-real, and last the #758 consumption-limit E2E, which restarts the API against the
-#   local OpenRouter stand-in of compose.consumption-e2e.yaml.
+#   change-events-real, and last the #758 consumption-limit and #719 provider-retry E2Es, which
+#   restart the API against the local OpenRouter stand-in of compose.consumption-e2e.yaml.
 # executor: the deploy-executor journey (#720/#743), the rollback recorded as a change event
 #   (change-events-real, #770) by the deploy-executor principal that provision_demo.py creates
 #   from DEPLOY_EXECUTOR_CHANGES_API_KEY, and the socket-down case.
@@ -139,22 +139,34 @@ incidents() {
 }
 
 # consumption: scripts/consumption_limits_e2e.py, after the browser journeys because it points
-# the API at the stand-in (the forced-empty OpenRouter keys are replaced by the overlay's fakes).
+# the API at the stand-in (the forced-empty OpenRouter keys are replaced by the overlay's fakes);
+# then scripts/provider_retry_e2e.py (#719), with the API restarted on short provider and tool
+# timeouts.
 consumption() {
-  local compose=("${COMPOSE[@]}" -f "$ROOT/compose.consumption-e2e.yaml" --profile consumption-e2e)
+  stand_in consumption consumption-e2e issue-758-e2e.txt compose.consumption-e2e.yaml
+  stand_in provider-retry provider-retry-e2e issue-719-e2e.txt compose.consumption-e2e.yaml \
+    compose.provider-retry-e2e.yaml
+}
+
+# stand_in NAME SERVICE SUMMARY OVERLAY...: restarts the API with the overlays, then runs SERVICE.
+stand_in() {
+  local name=$1 service=$2 summary=$3 compose=("${COMPOSE[@]}") overlay
   local rc=0 start=$SECONDS verdict=PASS
-  mkdir -p "$ARTIFACTS/consumption"
-  "${compose[@]}" up --build --wait api
+  shift 3
+  for overlay; do compose+=(-f "$ROOT/$overlay"); done
+  compose+=(--profile "$service")
+  mkdir -p "$ARTIFACTS/$name"
+  "${compose[@]}" up --build --wait api fake-openrouter
   "${compose[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" -e HOME=/tmp \
-    -e ARTIFACT_DIR=/artifacts -v "$ARTIFACTS/consumption:/artifacts" consumption-e2e \
-    > "$ARTIFACTS/consumption.log" 2>&1 || rc=$?
-  cat "$ARTIFACTS/consumption.log"
+    -e ARTIFACT_DIR=/artifacts -v "$ARTIFACTS/$name:/artifacts" "$service" \
+    > "$ARTIFACTS/$name.log" 2>&1 || rc=$?
+  cat "$ARTIFACTS/$name.log"
   if ((rc != 0)); then
     verdict=FAIL
     failed=1
   fi
-  printf '%-20s %s rc=%s [%s] %ss\n' consumption "$verdict" "$rc" \
-    "$(tail -n 1 "$ARTIFACTS/consumption/issue-758-e2e.txt" 2> /dev/null || echo no summary)" \
+  printf '%-20s %s rc=%s [%s] %ss\n' "$name" "$verdict" "$rc" \
+    "$(tail -n 1 "$ARTIFACTS/$name/$summary" 2> /dev/null || echo no summary)" \
     "$((SECONDS - start))" | tee -a "$ARTIFACTS/summary.txt"
 }
 

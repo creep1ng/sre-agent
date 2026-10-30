@@ -24,7 +24,8 @@ capabilities without making ORM, DTO, or provider models authoritative.
   driver messages, DSNs, and credentials.
 - The `/v1/principals` and `/v1/credentials` routes expose the real governed administrative API.
 - `POST /v1/responses` validates and authenticates before logical-resource authorization, resolves
-  routing only after allow, makes at most one OpenRouter request, commits a protected terminal
+  routing only after allow, makes one OpenRouter request (a second only after an initial 503,
+  see [investigator](investigator.md#provider-503-and-tool-timeout)), commits a protected terminal
   audit event, then releases the normalized result.
 
 The provider secret and timeout are API-only Compose settings. Seed services receive an explicit
