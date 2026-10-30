@@ -613,7 +613,10 @@ function canStartRun() {
     !(state.runs ?? []).some(
       (run) =>
         run?.current_state === "investigating" &&
-        (run?.status === "running" || run?.status === "awaiting_human"),
+        (run?.status === "running" || run?.status === "awaiting_human") &&
+        // A denied run stored before #788 waits for `escalate`, which the API refuses; the
+        // run summary has no pending command, so only the run on screen can tell.
+        !(run.run_id === state.runState?.run_id && state.runState?.pending_command === "escalate"),
     )
   );
 }

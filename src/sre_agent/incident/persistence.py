@@ -216,6 +216,7 @@ class IncidentUnitOfWork(Protocol):
         intent_event: EventDraft,
         interrupted_decision: DecisionDraft,
         interrupted_event: EventDraft,
+        interrupted_termination: EventDraft | None = None,
     ) -> Literal["claimed", "active", "complete", "interrupted"]: ...
 
     async def complete_run_dispatch(
