@@ -80,6 +80,16 @@ people, never a retry: an administrator must grant the denied capability again, 
 must answer the escalation. The `escalate` command is still refused
 (`src/sre_agent/incident/commands.py`), so a blocked run cannot be resumed yet.
 
+Every other ending terminates the run (issue #761). In the same transaction as the terminal
+receipt, a `run_terminated` event sets `status` `terminated` (or `completed` for `conclude`),
+`pending_command` null and a `terminated_reason`: `upstream_unavailable`, `max_steps`,
+`invalid_output`, or `needs_human` for the rest. This covers an interrupted dispatch replayed
+as `unknown`, an exception after the claim (`investigator_failed`, only its type is logged)
+and a mitigation a human sends back. The incident stays in `investigating`. Only a human
+retries: `POST .../runs` with `objective: investigate` opens a new run through
+`continue_investigation`, refused with 409 for an agent, beside a live run, or for the loser
+of two concurrent retries. The ended run is never redispatched.
+
 Every outcome with a harness result also writes, in the same transaction, the run's turns as
 its sensitive context: the input sent, the model output, the tool invocation when the tool
 answered and the gateway request id. `GET .../runs/{run_id}/context` reads them back only with

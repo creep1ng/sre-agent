@@ -285,9 +285,11 @@ class IncidentRuntime:
                 # A retry: the incident is still under investigation but its runs ended. The
                 # new run reopens it through the human's evidence_sufficiency decision, never
                 # beside a run that is still working or waiting for a human.
+                if request.actor != "human":
+                    raise InvalidTransitionError("only a human retries an investigation")
                 await self._refuse_beside_live_run(work, incident)
                 transition_id = "continue_investigation"
-                inputs = {"remaining_step_budget": 1}
+                inputs = {"human_retry": True}
             now = self._clock()
             run = await work.runs.add(
                 self._id_factory("run"),
@@ -319,6 +321,8 @@ class IncidentRuntime:
                 run is not None
                 and run.state.get("current_state") == state
                 and run.state.get("status") in LIVE_RUN_STATUSES
+                # A denied run stored before #788 waits for `escalate`, which nothing accepts.
+                and run.state.get("pending_command") != "escalate"
             ):
                 raise InvalidTransitionError(f"run '{run_id}' is still live on this incident")
 
@@ -549,7 +553,12 @@ class IncidentRuntime:
                 raise PreconditionFailedError(
                     "triage_declare requires nonblank operator impact of at most 2000 characters"
                 )
-        if transition_id == "continue_investigation" and inputs.get("remaining_step_budget", 0) < 1:
+        # A human retry opens a new run: the step budget it checks belongs to the agent's run.
+        if (
+            transition_id == "continue_investigation"
+            and not inputs.get("human_retry")
+            and inputs.get("remaining_step_budget", 0) < 1
+        ):
             raise PreconditionFailedError("continue_investigation requires remaining step budget")
         if transition_id == "propose_mitigation":
             hypotheses = state.get("hypotheses") or []

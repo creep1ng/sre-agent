@@ -570,6 +570,7 @@ class PostgresIncidentUnitOfWork:
         intent_event: EventDraft,
         interrupted_decision: DecisionDraft,
         interrupted_event: EventDraft,
+        interrupted_termination: EventDraft | None = None,
     ) -> Literal["claimed", "active", "complete", "interrupted"]:
         lock_name = self._dispatch_lock_name(incident_id, run_id)
         if self._dispatch_connection is not None:
@@ -620,11 +621,14 @@ class PostgresIncidentUnitOfWork:
             for receipt in receipts
         )
         if pending or receipts:
+            events: tuple[EventDraft, ...] = (interrupted_event,)
+            if interrupted_termination is not None:
+                events += (interrupted_termination,)
+                await self._patch_run(
+                    incident_id, run_id, interrupted_termination.payload["run_patch"]
+                )
             await self._append_run_events(
-                incident_id,
-                run_id,
-                decision=interrupted_decision,
-                events=(interrupted_event,),
+                incident_id, run_id, decision=interrupted_decision, events=events
             )
             await self.commit()
             return "interrupted"
@@ -690,8 +694,6 @@ class PostgresIncidentUnitOfWork:
         ]
         if run_patches != ([run_patch] if run_patch is not None else []):
             raise ValueError("a dispatch ends its run only through one escalation or termination")
-        if run_patch is not None and not set(run_patch) <= RUN_PATCH_FIELDS:
-            raise ValueError("a dispatch outcome never moves the workflow state of its run")
         if incident_patch is not None:
             if (
                 expected_incident_version is None
@@ -729,15 +731,20 @@ class PostgresIncidentUnitOfWork:
             if updated.scalar_one_or_none() is None:
                 raise IncidentStaleWriteError(f"stale investigation result: {incident_id}/{run_id}")
         if run_patch is not None:
-            # No version bump: blocking or ending a run is no transition; replay applies the event.
-            await self._require_session().execute(
-                text("""UPDATE incident.runs SET state=state || CAST(:run_patch AS jsonb)
-                    WHERE run_id=:run_id AND incident_id=:incident_id"""),
-                {"run_patch": _document(run_patch), "run_id": run_id, "incident_id": incident_id},
-            )
+            await self._patch_run(incident_id, run_id, run_patch)
         await self._append_contexts(incident_id, run_id, contexts)
         await self._append_run_events(incident_id, run_id, decision=decision, events=events)
         return True
+
+    async def _patch_run(self, incident_id: str, run_id: str, run_patch: JsonDocument) -> None:
+        if not set(run_patch) <= RUN_PATCH_FIELDS:
+            raise ValueError("a dispatch outcome never moves the workflow state of its run")
+        # No version bump: blocking or ending a run is no transition; replay applies the event.
+        await self._require_session().execute(
+            text("""UPDATE incident.runs SET state=state || CAST(:run_patch AS jsonb)
+                WHERE run_id=:run_id AND incident_id=:incident_id"""),
+            {"run_patch": _document(run_patch), "run_id": run_id, "incident_id": incident_id},
+        )
 
     async def _append_contexts(
         self, incident_id: str, run_id: str, contexts: Sequence[TextContextRecord]

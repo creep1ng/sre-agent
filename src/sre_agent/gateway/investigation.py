@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -43,6 +44,7 @@ from sre_agent.investigator.ports import EvidenceUnavailable
 from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
+logger = logging.getLogger(__name__)
 
 
 class InvestigationRunDispatcher:
@@ -112,6 +114,10 @@ class InvestigationRunDispatcher:
                     reason_code="producer_interrupted",
                     now=now,
                 ),
+                # Nothing resumes an interrupted dispatch: its run ends and a human retries.
+                interrupted_termination=self._termination_event(
+                    termination("needs_human", now), (), now
+                ),
             )
             if claim == "active":
                 return
@@ -140,6 +146,23 @@ class InvestigationRunDispatcher:
                     return
                 assert actor_reference is not None
                 await self._investigate(work, incident_id, run_id, principal, actor_reference)
+            except Exception as error:
+                # Any other failure still ends the run, so a human can retry it. Only the
+                # exception type is logged: its message may carry provider or tool content.
+                logger.error(
+                    "investigation_dispatch_failed incident_id=%s run_id=%s error=%s",
+                    incident_id,
+                    run_id,
+                    type(error).__name__,
+                )
+                await self._finish(
+                    work,
+                    incident_id,
+                    run_id,
+                    actor_reference,
+                    status="unknown",
+                    reason_code="investigator_failed",
+                )
             finally:
                 await work.release_run_dispatch(incident_id, run_id)
 

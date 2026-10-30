@@ -13,7 +13,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -35,7 +35,13 @@ from sre_agent.application import create_application
 from sre_agent.gateway.mcp import MCPUpstreamTimeout, PrometheusQuery
 from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
 from sre_agent.incident.persistence import DecisionDraft, EventDraft
-from sre_agent.incident.runtime import ActorReference, IncidentCommand, IncidentRuntime, RunStart
+from sre_agent.incident.runtime import (
+    ActorReference,
+    IncidentCommand,
+    IncidentRuntime,
+    InvalidTransitionError,
+    RunStart,
+)
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.investigator.client import MCPGatewayClient
 from sre_agent.persistence.database import Database
@@ -1732,6 +1738,9 @@ def test_late_investigation_result_cannot_cross_terminal_unknown_receipt(
     ]
     assert len(decisions) == 3
     assert decisions[-1]["reason"] == "interrupted investigation dispatch"
+    # The interrupted dispatch ended its run (#761): it no longer blocks a retry.
+    assert event_payloads[-1]["run_patch"]["terminated_reason"] == "needs_human"
+    assert _active_state(run_id)[0]["status"] == "terminated"
 
 
 def test_cancelled_dispatch_lock_commit_does_not_leave_a_pooled_session_lock(
@@ -1995,3 +2004,86 @@ def test_a_run_that_ends_without_a_proposal_terminates_and_a_retry_reaches_mitig
     _, first_events, _ = _database_rows(incident_id, first_run)
     # One outcome receipt: the first run was never redispatched.
     assert [receipt["phase"] for receipt in _receipts(first_events)].count("outcome") == 1
+
+
+def test_a_dispatch_that_raises_ends_its_run_without_logging_the_message(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Issue #761: an unexpected exception after the claim still ends the run."""
+    incident_id = "inc-investigator-raises"
+    _add_incident(incident_id)
+    _grant_run_access()
+
+    async def fail(*_args: Any, **_kwargs: Any) -> None:
+        raise RuntimeError("secret-marker-761")
+
+    monkeypatch.setattr(IncidentRuntime, "current", fail)
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=ScriptedLLM(), mcp=ScriptedMCP())
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        started = _start(client, incident_id, "investigation-raises-0001")
+    assert started.status_code == 201, started.text
+    run = started.json()
+    assert (run["status"], run["terminated_reason"]) == ("terminated", "needs_human")
+    _, events, _ = _database_rows(incident_id, run["run_id"])
+    assert _receipts(events)[-1]["reason_code"] == "investigator_failed"
+    assert "investigation_dispatch_failed" in caplog.text
+    assert "secret-marker-761" not in caplog.text
+
+
+class GatedLLM(ScriptedLLM):
+    """Holds every model call until the test opens the gate, so a run stays live."""
+
+    def __init__(self) -> None:
+        super().__init__({"action": "request_human", "reason": "Need an owner."})
+        self.entered, self.gate = threading.Event(), threading.Event()
+
+    async def create(self, request: ProviderRequest) -> ProviderResult:
+        self.entered.set()
+        if not await asyncio.to_thread(self.gate.wait, 10):
+            raise TimeoutError("test did not open the gate")
+        return await super().create(request)
+
+
+def test_a_retry_is_refused_beside_a_live_run_for_an_agent_and_for_a_concurrent_retry() -> None:
+    """Issue #761: one live run per incident, and only a human retries."""
+    incident_id = "inc-investigator-retry-conflict"
+    _add_incident(incident_id)
+    _grant_run_access()
+    llm = GatedLLM()
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=llm, mcp=ScriptedMCP())
+    with _serve(app, port) as base_url, ThreadPoolExecutor(max_workers=2) as executor:
+        with httpx.Client(base_url=base_url, timeout=15) as client:
+            _add_agent_mcp_grants(client, "positive")
+        first = executor.submit(_start_with_http, base_url, incident_id, "retry-conflict-first")
+        assert llm.entered.wait(15), "the first run did not reach the model"
+        beside = _start_with_http(base_url, incident_id, "retry-conflict-beside")
+        llm.gate.set()
+        assert first.result(timeout=20).status_code == 201
+        llm.entered.clear()
+        llm.gate.clear()
+        retries = [
+            executor.submit(_start_with_http, base_url, incident_id, f"retry-conflict-{n}")
+            for n in (1, 2)
+        ]
+        done, _ = wait(retries, timeout=20, return_when=FIRST_COMPLETED)
+        llm.gate.set()
+        statuses = sorted(future.result(timeout=20).status_code for future in retries)
+    assert beside.status_code == 409 and beside.json()["error"]["code"] == "run_conflict"
+    assert len(done) == 1 and statuses == [201, 409]
+
+    async def agent_retry() -> None:
+        database = Database(DATABASE_URL)
+        workflow = load_incident_workflow(ROOT / "agent/workflows/incident-response.yaml")
+        runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
+        try:
+            with pytest.raises(InvalidTransitionError, match="only a human"):
+                await runtime.start_run(
+                    RunStart("retry-conflict-agent", incident_id, "investigate", actor="agent")
+                )
+        finally:
+            await database.dispose()
+
+    asyncio.run(agent_retry())
