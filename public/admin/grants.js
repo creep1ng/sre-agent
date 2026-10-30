@@ -65,6 +65,8 @@ const GRANT_ADMITTED_ACTIONS = {
     "alert.dismiss",
     "alert.associate",
     "incident.declare",
+    "change.read",
+    "change.write",
   ],
   administrative_control: ["admin.read", "admin.write"],
 };
