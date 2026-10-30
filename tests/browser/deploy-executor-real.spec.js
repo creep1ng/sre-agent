@@ -174,7 +174,10 @@ test("with the socket proxy stopped, readiness and operations answer 503 and not
 //    key that line named, so that key runs again (it must answer 409 execution_unknown and leave
 //    the probe untouched), or the operator cannot see the unknown operation in /v1/executions, or
 //    a new key no longer runs; 10. a damaged earlier line is skipped silently and operations run
-//    on a journal that lost records, instead of readiness 503 naming the line and 503 journal_corrupt.
+//    on a journal that lost records, instead of readiness 503 naming the line and 503 journal_corrupt;
+// 11. a full disk cuts an intent mid-write while the process stays up: the request crashes without
+//    a code, or reaches Docker without its intent on disk, or the fragment stays and the next
+//    record glues onto it, so the next start answers journal_corrupt forever.
 test("journal: a last line cut off mid-write starts the executor and keeps that key unknown", async ({ page }) => {
   test.skip(process.env.DEPLOY_EXECUTOR_JOURNAL !== "tail", "requires DEPLOY_EXECUTOR_JOURNAL=tail");
   mkdirSync(ARTIFACTS, { recursive: true });
@@ -224,4 +227,31 @@ test("journal: a damaged earlier line leaves readiness 503 with a reason and run
   await page.goto(`${EXECUTOR}/health/ready`);
   await page.screenshot({ path: `${ARTIFACTS}/journal-damaged-ready.png` });
   writeFileSync(`${ARTIFACTS}/journal-damaged.json`, JSON.stringify(steps, null, 2));
+});
+
+// Run twice by scripts/run_real_journeys.sh: on a full tmpfs journal (full), then after it frees
+// the space (freed). Nothing reached Docker the first time, so the same key runs the second time.
+test("journal: a full disk cuts an append short and leaves the line boundary", async () => {
+  const phase = process.env.DEPLOY_EXECUTOR_JOURNAL;
+  test.skip(phase !== "full" && phase !== "freed", "requires DEPLOY_EXECUTOR_JOURNAL=full|freed");
+  mkdirSync(ARTIFACTS, { recursive: true });
+  const api = await request.newContext();
+  const steps = [];
+  const step = (name, response) => { steps.push({ step: name, response }); return response; };
+  expect(step("ready", await call(api, "GET", `${EXECUTOR}/health/ready`)).status).toBe(200);
+  const before = (await call(api, "GET", `${EXECUTOR}/v1/services/probe`)).body;
+  const key = process.env.JOURNAL_KEY;
+  const body = { service: "probe" };
+  const headers = signature("POST", "/v1/operations/deployment.restart", key, JSON.stringify(body));
+  const answer = step("restart", await call(api, "POST", `${EXECUTOR}/v1/operations/deployment.restart`, { key, body, headers }));
+  if (phase === "full") {
+    expect(answer.status).toBe(503);
+    expect(answer.body.error.code).toBe("journal_unwritable");
+    expect(untouched(before, (await call(api, "GET", `${EXECUTOR}/v1/services/probe`)).body), "Docker was called").toBe(true);
+    expect(step("ready after", await call(api, "GET", `${EXECUTOR}/health/ready`)).status).toBe(200);
+  } else {
+    expect(answer.status).toBe(200);
+    expect(answer.body.outcome).toBe("restarted");
+  }
+  writeFileSync(`${ARTIFACTS}/journal-disk-${phase}.json`, JSON.stringify(steps, null, 2));
 });

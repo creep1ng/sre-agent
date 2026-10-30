@@ -7,7 +7,7 @@
 #   seeds the demo grants and one stamped incident per journey, then runs war-room-runs-real,
 #   war-room-reasoning-real, review-mitigation-real, war-room-follow-real and postmortem-journey.
 # executor: the deploy-executor journey (#720/#743), its socket-down case, and its journal cut
-#   mid-write then damaged in the middle (#762).
+#   mid-write, damaged in the middle and cut short by a full disk (#762).
 # Compose reads the untracked .env (from .env.example). The OpenRouter keys are forced empty, so
 # no investigation reaches a model provider. Remove the project afterwards with
 #   docker compose -f compose.yaml -f compose.e2e.yaml --project-name <unique> --profile e2e \
@@ -137,6 +137,7 @@ executor() {
     deploy-executor-real --reporter=line,json --grep "socket proxy stopped"
   "${compose[@]}" start docker-socket-proxy
   executor_journal "${compose[@]}"
+  executor_journal_volume "${compose[@]}"
 }
 
 # #762: cut a restart intent mid-write, as a crash or a full disk would, then damage a middle line.
@@ -177,6 +178,48 @@ path = "/var/lib/deploy-executor/executions.jsonl"
 lines = open(path).read().splitlines(keepends=True)
 open(path, "w").writelines(lines[:-2] + lines[-1:])'
   "${compose[@]}" restart deploy-executor
+  "${compose[@]}" up -d --wait deploy-executor
+}
+
+# #762: a full disk while the executor stays up.
+executor_journal_volume() {
+  local compose=("$@") key full=("$@" -f "$ARTIFACTS/compose.disk-full.yaml")
+  key="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+  # A 64 KiB tmpfs journal: the next intent is written in part, then the write fails (ENOSPC).
+  cat > "$ARTIFACTS/compose.disk-full.yaml" << 'EOF'
+services:
+  deploy-executor:
+    environment: {DEPLOY_EXECUTOR_JOURNAL: /var/lib/deploy-executor-full/executions.jsonl}
+    tmpfs: ["/tmp", "/var/lib/deploy-executor-full:size=64k,uid=65532,gid=65532,mode=0700"]
+EOF
+  "${full[@]}" up -d --wait deploy-executor
+  "${full[@]}" exec -T deploy-executor python -c '
+directory = "/var/lib/deploy-executor-full"
+with open(f"{directory}/executions.jsonl", "w") as journal:
+    journal.write("\n" * 3996)  # blank lines, skipped at load: 100 bytes left in its page
+try:
+    with open(f"{directory}/filler", "wb", buffering=0) as filler:
+        while True:
+            filler.write(bytes(4096))
+except OSError as error:
+    print("filled:", error.strerror)'
+  run_journey executor-journal-disk-full executor-e2e -e DEPLOY_EXECUTOR_JOURNAL=full \
+    -e JOURNAL_KEY="$key" -- deploy-executor-real --reporter=line,json --grep "journal: a full disk"
+  "${full[@]}" exec -T deploy-executor python -c '
+import os
+path = "/var/lib/deploy-executor-full/executions.jsonl"
+raw = open(path, "rb").read()
+print(f"after the failed append: size={len(raw)} ends_with_newline={raw.endswith(bytes([10]))}")
+os.remove("/var/lib/deploy-executor-full/filler")' | tee "$ARTIFACTS/executor-journal-disk-full.journal"
+  run_journey executor-journal-freed executor-e2e -e DEPLOY_EXECUTOR_JOURNAL=freed \
+    -e JOURNAL_KEY="$key" -- deploy-executor-real --reporter=line,json --grep "journal: a full disk"
+  # What the next start reads: the same file, no damaged line, the retried key bound once.
+  "${full[@]}" exec -T deploy-executor python -c '
+from pathlib import Path
+from sre_agent.executor.app import Journal
+journal = Journal(Path("/var/lib/deploy-executor-full/executions.jsonl"))
+print(f"reloaded: problem={journal.problem} records={len(journal.records)}")' \
+    | tee -a "$ARTIFACTS/executor-journal-disk-full.journal"
   "${compose[@]}" up -d --wait deploy-executor
 }
 

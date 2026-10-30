@@ -10,6 +10,7 @@ replay after an execution returns the stored result.
 from __future__ import annotations
 
 import asyncio
+import errno
 import hashlib
 import json
 import logging
@@ -69,6 +70,12 @@ def _digest(value: str) -> str:
 
 
 _SALVAGED = re.compile(r'"(binding|payload_digest|execution_id|operation|service)":"([^"\\]*)"')
+_SALVAGED_PARAMETERS = re.compile(r'"parameters":\{((?:"\w+":"[^"\\]*",?)*)')
+_PAIR = re.compile(r'"(\w+)":"([^"\\]*)"')
+
+
+class JournalUnwritable(Exception):
+    """An append failed (a full disk, a read-only volume) and the file was left as it was."""
 
 
 class Journal:
@@ -76,18 +83,29 @@ class Journal:
 
     A last line cut off mid-write (#762) is replaced, atomically, by a complete ``truncated``
     record keeping the fragment and whatever key it still names, which then answers
-    ``execution_unknown``. A damaged line before the last one sets ``corruption`` instead: the
-    executor starts but refuses every operation until an operator repairs the file.
+    ``execution_unknown``. A damaged line before the last one, or a journal that cannot be
+    written, sets ``problem`` instead: the executor starts but refuses every operation until an
+    operator repairs the file or the volume.
     """
 
     def __init__(self, path: Path) -> None:
         self._path = path
         self.records: dict[str, dict[str, Any]] = {}
         self.results: list[dict[str, Any]] = []
-        self.corruption: str | None = None
-        if not path.exists():
-            return
-        raw = path.read_bytes()
+        self.problem: tuple[str, str] | None = None  # (error code, reason)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not os.access(path.parent, os.W_OK):
+                raise PermissionError(errno.EROFS, f"{path.parent} is not writable")
+            if path.exists():
+                self._load(path.read_bytes())
+        except OSError as error:  # no crash at import, so no restart loop
+            reason = f"the journal cannot be written: {error.strerror}"
+            self.problem = ("journal_unwritable", reason)
+        if self.problem is not None:
+            logger.error("deploy-executor journal %s: %s", path, self.problem[1])
+
+    def _load(self, raw: bytes) -> None:
         lines = [(number, line) for number, line in enumerate(raw.split(b"\n"), 1) if line.strip()]
         for position, (number, line) in enumerate(lines):
             try:
@@ -95,22 +113,29 @@ class Journal:
             except ValueError:
                 if position == len(lines) - 1:
                     self._recover_tail(raw, line)
-                elif self.corruption is None:
-                    self.corruption = f"line {number} of the journal is not a complete record"
+                    return
+                if self.problem is None:
+                    reason = f"line {number} of the journal is not a complete record"
+                    self.problem = ("journal_corrupt", reason)
             except (KeyError, TypeError):
-                if self.corruption is None:
-                    self.corruption = f"line {number} of the journal is not a journal record"
-        if lines and self.corruption is None and not raw.endswith(b"\n"):
-            with path.open("ab") as stream:  # a complete last record that lost its newline
+                if self.problem is None:
+                    reason = f"line {number} of the journal is not a journal record"
+                    self.problem = ("journal_corrupt", reason)
+        if lines and self.problem is None and not raw.endswith(b"\n"):
+            with self._path.open("ab") as stream:  # a complete last record that lost its newline
                 stream.write(b"\n")
-        if self.corruption is not None:
-            logger.error("deploy-executor journal %s: %s", path, self.corruption)
+                stream.flush()
+                os.fsync(stream.fileno())
 
     def _recover_tail(self, raw: bytes, line: bytes) -> None:
         fragment = line.decode("utf-8", errors="replace")
+        found = _SALVAGED_PARAMETERS.search(fragment)
+        parameters = dict(_PAIR.findall(found.group(1))) if found else {}
         record = {
             "kind": "truncated",
             **dict(_SALVAGED.findall(fragment)),
+            # A rollback's to_tag tells the operator which version it may have rolled to.
+            **({"parameters": parameters} if parameters else {}),
             "fragment": fragment,
             "recovered_at": datetime.now(UTC).isoformat(timespec="milliseconds"),
         }
@@ -121,6 +146,7 @@ class Journal:
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, self._path)
+        self._sync_directory()
         logger.warning(
             "deploy-executor journal: the last line was cut off mid-write; kept as a truncated "
             "record for binding %s, which answers execution_unknown",
@@ -133,7 +159,7 @@ class Journal:
             # The operation may have run: list it as unknown, and bind its key if it is known.
             if "binding" in record:
                 self.records[record["binding"]] = record
-            names = ("execution_id", "operation", "service", "recovered_at")
+            names = ("execution_id", "operation", "service", "parameters", "recovered_at")
             self.results.append(
                 {
                     "status": 409,
@@ -149,10 +175,36 @@ class Journal:
         if record["kind"] == "result":
             self.results.append({"status": record["status"], **record["response"]})
 
+    def _sync_directory(self) -> None:
+        descriptor = os.open(self._path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+
     def append(self, record: dict[str, Any]) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        with self._path.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(record, separators=(",", ":")) + "\n")
+        line = (json.dumps(record, separators=(",", ":")) + "\n").encode()
+        size = 0
+        try:
+            descriptor = os.open(self._path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o666)
+            try:
+                size = os.fstat(descriptor).st_size
+                written = 0
+                while written < len(line):
+                    written += os.write(descriptor, line[written:])
+                if record["kind"] == "intent":  # on disk before the first Docker call
+                    os.fsync(descriptor)
+            except OSError:
+                # A partial write (a full disk) must not leave a fragment for the next record
+                # to glue onto, or the next start would answer journal_corrupt forever.
+                os.ftruncate(descriptor, size)
+                raise
+            finally:
+                os.close(descriptor)
+            if size == 0:
+                self._sync_directory()
+        except OSError as error:
+            raise JournalUnwritable(error.strerror or str(error)) from error
         self._index(record)
 
 
@@ -193,8 +245,8 @@ class Executor:
         )
         if rejection is not None:
             return _error(401, rejection, _SIGNATURE_MESSAGES[rejection])
-        if self._journal.corruption is not None:
-            return _error(503, "journal_corrupt", self._journal.corruption)
+        if self._journal.problem is not None:
+            return _error(503, *self._journal.problem)
         operation = OPERATIONS.get(operation_name)
         if operation is None:
             return _error(404, "operation_not_enrolled", f"'{operation_name}' is not an operation")
@@ -237,7 +289,13 @@ class Executor:
                     else record["response"]
                 )
                 return JSONResponse(replay, status_code=record["status"])
-            return await self._run(operation_name, service, payload, binding, payload_digest)
+            try:
+                return await self._run(operation_name, service, payload, binding, payload_digest)
+            except JournalUnwritable as error:
+                # No intent on disk means Docker was never called; a lost result leaves the key
+                # bound to its intent, which answers execution_unknown.
+                message = f"the journal could not be written: {error}"
+                return _error(503, "journal_unwritable", message)
 
     async def _run(
         self,
@@ -339,8 +397,8 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
             return JSONResponse(
                 {"status": "unavailable", "dependency": "signing_key"}, status_code=503
             )
-        if journal.corruption is not None:  # fail closed without a restart loop (#762)
-            body = {"status": "unavailable", "dependency": "journal", "reason": journal.corruption}
+        if journal.problem is not None:  # fail closed without a restart loop (#762)
+            body = {"status": "unavailable", "dependency": "journal", "reason": journal.problem[1]}
             return JSONResponse(body, status_code=503)
         try:
             await docker.ping()

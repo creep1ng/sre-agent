@@ -35,7 +35,9 @@ only the executor joins.
 | Socket proxy down | readiness 503; operations 503 `docker_unavailable` | E2E with the proxy stopped |
 | Executor died between intent and result | 409 `execution_unknown` on replay; never re-executed | journal rule |
 | Journal's last line cut off mid-write (#762) | the executor starts, readiness 200; the fragment is kept in a `truncated` record; a key it names answers 409 `execution_unknown` and is listed in `GET /v1/executions`; new keys run | E2E `journal-tail` |
-| A damaged journal line before the last one (#762) | no restart loop: readiness 503 `dependency: journal` naming the line; operations 503 `journal_corrupt`; nothing runs until an operator repairs the file | E2E `journal-tail` |
+| A damaged journal line before the last one (#762) | no restart loop: readiness 503 `dependency: journal` naming the line; operations 503 `journal_corrupt`; nothing runs until an operator repairs the file | E2E `journal-damaged` |
+| A full disk cuts an append short while the executor stays up (#762) | the file is truncated back to its last complete line; the request answers 503 `journal_unwritable`; an intent that failed never reached Docker; the next start finds no damage | E2E `journal-disk-full` |
+| Journal volume read-only (#762) | no restart loop: readiness 503 `dependency: journal`; operations 503 `journal_unwritable` | manual: the journal volume mounted `:ro` (PR #826) |
 | Any API family other than containers/images | 403 at the proxy | E2E against `/info`, `/networks`, `/volumes`, `/version`, `/events`, `/exec/*/start` |
 | No signature, wrong key, body tampered after signing, signature for another key, stale timestamp (#743) | 401 `signature_missing`, `signature_invalid` or `signature_expired`; container and journal untouched | fixtures `signature-*` |
 | A negative fixture sent signed | its own code, never 401: the signature is checked first | the eight fixtures above, now signed |
@@ -75,13 +77,18 @@ re-executed, the rule the runtime applies to lost investigator dispatches (#567)
 A crash or a full disk can cut the journal's last line short (#762). At start the executor treats
 an unparseable last line as an interrupted write: it rewrites the file atomically, replacing that
 line with a complete `truncated` record that keeps the fragment and whatever binding, payload
-digest, execution id, operation and service the fragment still names. Since the intent is written
-before the first Docker call, a cut intent that lost its binding never reached Docker; a cut result
-follows a complete intent. Either way the key answers 409 `execution_unknown`, whatever its payload,
+digest, execution id, operation, service and rollback `to_tag` the fragment still names. An intent
+is written and `fsync`ed before the first Docker call, so a cut intent, even one that lost its
+binding, never reached Docker, and after a power loss its key cannot run twice; a cut result
+follows an intent already on disk. Either way the key answers 409 `execution_unknown`, whatever its payload,
 and `GET /v1/executions` lists the record as a 409 `execution_unknown` entry so the operator learns
 an operation may have run. A damaged line anywhere else is not an interrupted write, so the executor
 does not guess: it starts, readiness answers 503 with `dependency: journal` and the line number,
 and every operation answers 503 `journal_corrupt` until an operator repairs the file and restarts it.
+An append that fails while the executor stays up (a full disk) truncates the file back to its last
+complete line, so the next record cannot glue onto a fragment, and answers 503 `journal_unwritable`.
+A journal directory the executor cannot write leaves it running with readiness 503 instead of a
+restart loop.
 `GET /v1/executions` lists the results; `GET /v1/services/{service}` shows the live container and
 the locally present tags of its repository, which is what a proposal needs to pick `to_tag`.
 
