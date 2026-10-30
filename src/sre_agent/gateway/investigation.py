@@ -56,10 +56,12 @@ class InvestigationRunDispatcher:
         *,
         http: Any = None,
         language: OutputLanguage = "es",
+        tool_timeout_seconds: float = 10.0,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language = language
         self.gateway_settings = gateway_settings
+        self.limits = Limits(tool_timeout_seconds=tool_timeout_seconds)
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
 
@@ -186,7 +188,8 @@ class InvestigationRunDispatcher:
         # A cited hypothesis with steps left is recorded through continue_investigation and
         # the run goes on with the remaining budget, so the agent can still reach the
         # evidence_sufficiency decision and propose a mitigation for that hypothesis.
-        limits, offset = Limits(), 0
+        tool_timeout = self.limits.tool_timeout_seconds
+        limits, offset = self.limits, 0
         run_mcp_ids: list[UUID] = []
         while True:
             try:
@@ -246,7 +249,9 @@ class InvestigationRunDispatcher:
                 )
                 return
             offset += len(result.turns)
-            limits = Limits(max_steps=result.remaining_step_budget)
+            limits = Limits(
+                max_steps=result.remaining_step_budget, tool_timeout_seconds=tool_timeout
+            )
 
         all_request_ids = _unique_ids(request_ids)
         mcp_request_ids = _unique_ids(run_mcp_ids)
@@ -288,7 +293,10 @@ class InvestigationRunDispatcher:
                 run_id,
                 actor_reference,
                 status="unknown",
-                reason_code=f"investigation_{result.status}",
+                reason_code="tool_timeout"
+                if result.failure_diagnostic is not None
+                and result.failure_diagnostic.stage == "tool_timeout"
+                else f"investigation_{result.status}",
                 request_ids=all_request_ids,
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,

@@ -1,5 +1,6 @@
 # ruff: noqa: E501, I001
 
+import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
 from time import monotonic
@@ -209,6 +210,7 @@ class PostgresAuditStore:
 
 
 # fmt: off
+PROVIDER_503_RETRY_DELAY_SECONDS = 1.0
 ERRORS = {
     401: ("authentication_failed", "Authentication failed."), 403: ("resource_unavailable", "Resource unavailable."),
     422: ("contract_validation_failed", "Request validation failed."), 502: ("provider_evidence_invalid", "Provider response was invalid."),
@@ -320,7 +322,7 @@ class ResponsesService:  # noqa: E305
         # No database alias lookup is performed after this point.
         invocation_attribution = RequestAttribution.from_assignment(request_id, assignment)
         try:
-            result = await self.provider.create(provider_request)
+            result = await self._provider_create(provider_request)
             attribution = invocation_attribution.with_credit(
                 model=result.credited_model,
                 provider=result.credited_provider,
@@ -355,6 +357,17 @@ class ResponsesService:  # noqa: E305
                                           provider=failure.credited_provider,
                                       ),
                                       consumption_policy_version=admission.policy_version)
+
+    async def _provider_create(self, provider_request: ProviderRequest):
+        """Retry once only an HTTP 503 (#719): unstreamed, it carries no output and no charge.
+        A timeout, dropped connection or other status may follow an accepted request."""
+        try:
+            return await self.provider.create(provider_request)
+        except ProviderFailure as failure:
+            if failure.http_status != 503:
+                raise
+        await asyncio.sleep(PROVIDER_503_RETRY_DELAY_SECONDS)
+        return await self.provider.create(provider_request)
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, consumption: Consumption | None = None,

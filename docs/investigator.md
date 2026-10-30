@@ -40,6 +40,23 @@ The limits (6 steps, 45 s per gateway call, 10 s per tool) are fixed in the chan
 `design.md`. A timeout, network error, or 5xx is not automatically retried: the remote
 call may have completed even when its response was lost.
 
+### Provider 503 and tool timeout
+
+Issue #719, from the 2026-10-19 demo (two runs lost to a provider 503, one to an Elasticsearch
+timeout). Failure modes, written before the code:
+
+| Scenario | Expected |
+| --- | --- |
+| The provider answers HTTP 503 to a model call | The gateway waits 1 s and sends it once more; the second answer is the call's answer. The request is not streamed, so a 503 carries no output and no charge |
+| The provider answers 503 twice | No third attempt: the gateway answers 503 `upstream_unavailable`, audited, and the run ends `upstream_unavailable` |
+| The provider times out, drops the connection or answers 429, 500, 502 or 529 | Never retried: the provider may have accepted the request, so the outcome is ambiguous |
+| The gateway answers 503 after the provider answered (audit or settlement) | Never retried by the investigator: the call was accepted and audited |
+| A tool does not answer within `INVESTIGATOR_TOOL_TIMEOUT_SECONDS` | The run ends `upstream_unavailable` with the receipt's `reason_code: tool_timeout` and the diagnostic stage `tool_timeout` |
+
+`INVESTIGATOR_TOOL_TIMEOUT_SECONDS` (default `10`, greater than 0 and at most 60) bounds each MCP
+tool call the investigator makes. The gateway's own MCP transport stops at 30 s, so a value above
+30 ends as the gateway's `upstream_timeout` instead. Change it in `.env` and recreate `api`.
+
 The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
 before a governed call, followed by one terminal `success`, `confirmed_failure`, or
 `unknown` outcome. Pending is not terminal; a concurrent idempotent start leaves an

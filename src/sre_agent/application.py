@@ -133,6 +133,7 @@ def create_application(
         runtime_settings.investigator_gateway,
         http=shared_investigator_client,
         language=runtime_settings.investigator_output_language,
+        tool_timeout_seconds=runtime_settings.investigator_tool_timeout_seconds,
     )
     application.include_router(
         runs_router(

@@ -1,0 +1,50 @@
+# Issue #719 E2E (commands in the #719 PR): the real API and investigator, with
+# scripts/provider_standin.py as OpenRouter and Grafana MCP.
+services:
+  api:
+    environment:
+      OPENROUTER_BASE_URL: http://provider-standin:8080
+      OPENROUTER_API_KEY: standin-inference-key
+      OPENROUTER_TIMEOUT_SECONDS: "3"
+      INVESTIGATOR_TOOL_TIMEOUT_SECONDS: "2"
+      GRAFANA_MCP_ENDPOINT: http://provider-standin:8080/mcp
+      GRAFANA_MCP_TOKEN: standin-mcp-token
+    depends_on:
+      provider-standin: {condition: service_healthy}
+
+  seed:
+    volumes: ["./scripts:/e2e:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  provider-standin:
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/provider_standin.py"]
+    environment:
+      STANDIN_MODEL: ${TRIAGE_AGENT_MODEL:?TRIAGE_AGENT_MODEL is required}
+      STANDIN_PROVIDER: ${TRIAGE_AGENT_PROVIDER:?TRIAGE_AGENT_PROVIDER is required}
+      MCP_DELAY_SECONDS: "5"
+    volumes: ["./scripts/provider_standin.py:/e2e/provider_standin.py:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/__log')"]
+      interval: 2s
+      retries: 20
+    networks: [runtime]
+
+  provider-retry-e2e:
+    profiles: ["provider-retry-e2e"]
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/provider_retry_e2e.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      API_URL: http://api:8000
+      STANDIN_URL: http://provider-standin:8080
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      INCIDENT_HARNESS_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
+      ARTIFACT_DIR: /artifacts
+    volumes:
+      - ./scripts/provider_retry_e2e.py:/e2e/provider_retry_e2e.py:ro
+      - ${PROVIDER_RETRY_E2E_ARTIFACTS:-/tmp/issue-719}:/artifacts
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [runtime]
