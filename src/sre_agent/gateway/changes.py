@@ -4,14 +4,15 @@ A change event is a deploy, a rollback or a CI result, sent by an integration (t
 GitHub Actions step in .github/actions/record-change, or the deploy-executor after a rollback).
 ``change.write`` gates the record and ``change.read`` the list, both over the incident workflow.
 The source's own run id makes the record idempotent: resending the same
-(source, external_id, service) returns the stored event with 200 and adds nothing, so the
-first write wins. Recording never opens an incident nor interrupts anyone; a failed CI run is
+(source, external_id, service) with the same payload returns the stored event with 200 and adds
+nothing, while the same key with a different payload answers 409, so a colliding key is never
+dropped silently. Recording never opens an incident nor interrupts anyone; a failed CI run is
 just a change with ``status: failed`` for the readers that weigh it.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from secrets import token_hex
 from typing import Annotated, Any, Literal
 from uuid import uuid4
@@ -25,6 +26,8 @@ from sre_agent.gateway.authentication import AuthenticationFailed, authorize_gov
 
 WORKFLOW = ("incident_workflow", "incident-response")
 Service = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")]
+# A clock a little ahead is tolerated; an event dated later than this is refused.
+FUTURE_SKEW = timedelta(minutes=5)
 _COLUMNS = (
     "change_id, source, external_id, service, kind, status, version, commit_sha, ref, author,"
     " url, occurred_at, recorded_at, recorded_by"
@@ -118,6 +121,9 @@ class ChangeEventsService:
         except ValidationError as error:
             return self._invalid(request_id, error)
         now = datetime.now(UTC)
+        if event.occurred_at is not None and event.occurred_at > now + FUTURE_SKEW:
+            detail = "occurred_at: more than 5 minutes in the future"
+            return self._error(request_id, 422, "contract_validation_failed", detail)
         values = event.model_dump() | {
             "change_id": f"chg_{token_hex(8)}",
             "occurred_at": event.occurred_at or now,
@@ -130,6 +136,11 @@ class ChangeEventsService:
                 row = inserted or (await session.execute(_STORED, values)).mappings().one()
         except Exception:
             return self._error(request_id, 503, "storage_unavailable")
+        # Without its own time, a resend keeps the stored one; every other field must match.
+        sent = event.model_dump(exclude={"occurred_at"} if event.occurred_at is None else None)
+        if inserted is None and any(row[name] != value for name, value in sent.items()):
+            detail = "This (source, external_id, service) was recorded with another payload."
+            return self._error(request_id, 409, "change_conflict", detail)
         return JSONResponse(
             {"change": _view(row), "created": inserted is not None, "request_id": request_id},
             status_code=201 if inserted is not None else 200,

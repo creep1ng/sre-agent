@@ -6,10 +6,12 @@ import { mkdirSync, writeFileSync } from "node:fs";
 // GitHub Actions run sends after a deploy and after a red CI run. Ways this can fail:
 // 1. an integration credential with only change.write cannot record a deploy, or the stored
 //    event loses its service, version, commit, author, ref, link or time;
-// 2. resending the same run (the step retries, or a job runs it twice) adds a second event;
+// 2. resending the same run (the step retries, or a job runs it twice) adds a second event, or
+//    the same key with another payload is answered "already recorded" and silently dropped;
 // 3. a red CI run on main is refused, stored as a success, or needs more than change.write;
 // 4. the integration key can read the history, or a reader without change.write can write;
-// 5. the history is not newest first, or holds events of another service.
+// 5. the history is not newest first, or holds events of another service;
+// 6. an event dated well in the future is stored and stays first in every history.
 const ENABLED = process.env.SRE_REAL_BACKEND === "1";
 const ADMIN_KEY = process.env.ADMIN_HUMAN_API_KEY ?? "";
 const DEMO_KEY = process.env.DEMO_HUMAN_API_KEY ?? "";
@@ -72,6 +74,11 @@ test("a deploy and a red CI run are recorded once each and read back newest firs
   expect(first).toMatchObject({ status: 201, created: true, change_id: expect.stringMatching(/^chg_[0-9a-f]{16}$/) });
   const resent = note("deploy resent", await send(key, deployRun, deploy));
   expect(resent).toEqual({ ...first, status: 200, created: false });
+  const clash = note("deploy resent with another version", await send(key, deployRun, { version: "demo/checkout:1.6.0" }));
+  expect(clash.status).toBe(409);
+  const writer = await request.newContext({ extraHTTPHeaders: { authorization: `Bearer ${key}` } });
+  const ahead = runEvent(`${Date.now()}4`, { occurred_at: new Date(Date.now() + 10 * 60_000).toISOString() });
+  expect(note("dated 10 min ahead", { status: (await writer.post(`${BASE}/api/v1/changes`, { data: ahead })).status() }).status).toBe(422);
 
   // 2. A red CI run on main: recorded as a failed change, with the same credential.
   const ci = note("ci failed", await send(key, `${Date.now()}2`, { kind: "ci", status: "failed" }));
