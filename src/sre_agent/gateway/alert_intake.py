@@ -2,13 +2,10 @@
 
 Midnight builds no detection: the user's Grafana rules fire and this route records what they
 send. The contact point authenticates with the integration's own secret as a Bearer value; a
-wrong or missing secret gets 401 and leaves only an audit event. Each alert is one episode,
-keyed by Grafana's fingerprint and the instant it started firing: a repeated delivery adds to
-the same episode and `resolved` closes it. A new firing episode joins the open incident of its
-notification group or service, or else declares one through the triage command, which starts
-the investigation (#704); the dispatch runs after the response, as the console's declare does.
-The integration acts for one configured operator, and the triage decision names `grafana` as
-the responsible system, so the timeline never claims a human decided it.
+wrong or missing secret gets 401 and leaves only an audit event, before the body is read. The
+body, its alerts and their labels are capped. Each alert is one episode, keyed by Grafana's
+fingerprint and the instant it started firing: a repeated delivery adds to the same episode and
+`resolved` closes it.
 """
 
 import hashlib
@@ -21,27 +18,24 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import bindparam, text
-from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.types import String
+from sqlalchemy import text
 
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import AuditStore
-from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.repositories import PrincipalRepository
-from sre_agent.triage.service import (
-    ELIGIBLE,
-    SEVERITIES,
-    InvestigationDispatcher,
-    TriageError,
-    TriageService,
-)
+from sre_agent.triage.service import SEVERITIES
 
 SOURCE = "grafana"
 DEFAULT_SEVERITY = "sev3"
+# Grafana's conventional severity label values, and Midnight's own.
+SEVERITY = {"critical": "sev1", "warning": "sev2", "info": "sev3"} | {s: s for s in SEVERITIES}
+MAX_BODY_BYTES = 512 * 1024
+MAX_ALERTS = 100
+MAX_LABELS = 64
+MAX_LABEL_KEY = 128
+MAX_LABEL_VALUE = 1024
 _FRACTION = re.compile(r"(\.\d{6})\d+")
 _SLUG = re.compile(r"[^a-z0-9]+")
 _log = logging.getLogger(__name__)
@@ -58,19 +52,6 @@ ON CONFLICT (source, fingerprint, starts_at) DO UPDATE SET
   status = CASE WHEN alert_episodes.status = 'resolved' THEN 'resolved' ELSE EXCLUDED.status END,
   resolved_at = COALESCE(alert_episodes.resolved_at, EXCLUDED.resolved_at)
 RETURNING *""")
-# The incident a new episode joins: one still open, opened by an episode of the same notification
-# group or the same service that is still firing.
-_TARGET = text("""
-SELECT e.incident_id FROM incident.alert_episodes e
-JOIN incident.incidents i ON i.incident_id = e.incident_id
-WHERE e.status = 'firing' AND e.episode_id <> :episode_id
-  AND (e.group_key = :group_key OR e.service = :service)
-  AND i.state->>'state' = ANY(:states)
-ORDER BY e.first_received_at LIMIT 1""").bindparams(bindparam("states", type_=ARRAY(String())))
-_OPENED = text(
-    "UPDATE incident.alert_episodes SET incident_id = :incident_id,"
-    " investigation_run_id = :run_id WHERE episode_id = :episode_id"
-)
 
 
 def _instant(value: Any) -> datetime | None:
@@ -92,6 +73,17 @@ def _text(mapping: dict[str, Any], key: str) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
+def _labels_fit(alert: Any) -> bool:
+    labels = alert.get("labels") if isinstance(alert, dict) else None
+    return not isinstance(labels, dict) or (
+        len(labels) <= MAX_LABELS
+        and all(
+            len(str(key)) <= MAX_LABEL_KEY and len(str(value)) <= MAX_LABEL_VALUE
+            for key, value in labels.items()
+        )
+    )
+
+
 def _episode(alert: Any, group_key: str | None) -> dict[str, Any] | None:
     """Normalize one Grafana alert; None when it lacks what an episode needs."""
     if not isinstance(alert, dict):
@@ -105,12 +97,10 @@ def _episode(alert: Any, group_key: str | None) -> dict[str, Any] | None:
         return None
     if status not in {"firing", "resolved"}:
         return None
-    labels = {str(key): str(value)[:200] for key, value in labels.items()}
+    labels = {str(key): str(value) for key, value in labels.items()}
     rule = (labels.get("alertname") or "grafana-alert")[:200]
     service = (labels.get("service_name") or labels.get("service") or "unknown")[:200]
-    severity = labels.get("severity")
-    if severity not in SEVERITIES:
-        severity = DEFAULT_SEVERITY
+    severity = SEVERITY.get(labels.get("severity", "").strip().lower(), DEFAULT_SEVERITY)
     summary = " ".join(
         part for part in (_text(annotations, "summary"), _text(annotations, "description")) if part
     )
@@ -136,19 +126,13 @@ class AlertIntakeService:
     def __init__(
         self,
         database: Database,
-        workflow: IncidentWorkflow,
-        investigator: InvestigationDispatcher | None,
         *,
         secret: str,
-        principal_id: str,
         audit: AuditStore,
         projector: AuditProjector,
     ) -> None:
         self._database = database
-        self._triage = TriageService(database, workflow)
-        self._investigator = investigator
         self._secret = secret.encode()
-        self._principal_id = principal_id
         self._audit = audit
         self._projector = projector
 
@@ -167,12 +151,10 @@ class AlertIntakeService:
             headers=headers,
         )
 
-    async def receive(
-        self, raw: Any, authorization: str | None, background: BackgroundTasks
-    ) -> JSONResponse:
+    async def receive(self, request: Request) -> JSONResponse:
         request_id = uuid4()
         started = monotonic()
-        if not self._authentic(authorization):
+        if not self._authentic(request.headers.get("authorization")):
             try:
                 await self._audit.append(
                     self._projector.control_event(
@@ -188,20 +170,22 @@ class AlertIntakeService:
             except Exception:
                 _log.exception("alert intake: the rejected delivery could not be audited")
             return self._error(401, "authentication_failed", request_id)
+        body = await _bounded_body(request)
+        if body is None:
+            return self._error(413, "payload_too_large", request_id)
+        try:
+            raw = json.loads(body)
+        except ValueError:
+            raw = None
         alerts = raw.get("alerts") if isinstance(raw, dict) else None
         if not isinstance(alerts, list):
             return self._error(422, "invalid_payload", request_id)
+        if len(alerts) > MAX_ALERTS or not all(_labels_fit(alert) for alert in alerts):
+            return self._error(413, "payload_too_large", request_id)
         group_key = raw.get("groupKey") if isinstance(raw.get("groupKey"), str) else None
         episodes = [episode for alert in alerts if (episode := _episode(alert, group_key))]
         try:
-            async with self._database.sessions() as session:
-                principal = await PrincipalRepository(session).get(self._principal_id)
-            if principal is None or principal.status != "active":
-                return self._error(503, "intake_operator_unavailable", request_id)
             recorded = [await self._record(episode) for episode in episodes]
-            for row in recorded:
-                if row["status"] == "firing" and row["incident_id"] is None:
-                    await self._open_or_join(row, principal, background)
         except Exception:
             _log.exception("alert intake: storage failed")
             return self._error(503, "storage_unavailable", request_id)
@@ -214,65 +198,25 @@ class AlertIntakeService:
         async with self._database.transaction() as session:
             return dict((await session.execute(_UPSERT, values)).mappings().one())
 
-    async def _open_or_join(
-        self, row: dict[str, Any], principal: Any, background: BackgroundTasks
-    ) -> None:
-        keys = ("episode_id", "group_key", "service")
-        lookup = {key: row[key] for key in keys} | {"states": sorted(ELIGIBLE)}
-        async with self._database.transaction() as session:
-            target = (await session.execute(_TARGET, lookup)).scalar_one_or_none()
-        # Every input below comes from the stored episode, so a redelivery after a crash
-        # replays the same triage command instead of conflicting with it.
-        command: dict[str, Any] = {
-            "alert_id": row["episode_id"],
-            "expected_version": 1,
-            "idempotency_key": f"grafana-intake:{row['episode_id']}",
-            "responsible_system": SOURCE,
-        }
-        if target is not None:
-            command |= {
-                "operation": "triage_link",
-                "reason": f"Grafana rule {row['rule']} on {row['service']} joins open incident.",
-                "target_incident_id": target,
-            }
-        else:
-            command |= {
-                "operation": "triage_declare",
-                "reason": f"Grafana rule {row['rule']} fired on {row['service']}.",
-                "severity": row["severity"],
-                "impact": f"Grafana rule {row['rule']} is firing on {row['service']}.",
-                "alert_context": {
-                    "service": row["service"],
-                    "summary": row["summary"],
-                    "observed_at": _iso(row["starts_at"]),
-                    "source": SOURCE,
-                    "severity": row["severity"],
-                },
-            }
-        try:
-            result = await self._triage.execute(principal, **command)
-        except TriageError as error:
-            # The episode stays in the inbox without an incident; the operator decides.
-            _log.warning("alert intake: %s not opened: %s", row["episode_id"], error.code)
-            return
-        incident_id, run_id = result.incident_id, result.investigation_run_id
-        opened = {"episode_id": row["episode_id"], "incident_id": incident_id, "run_id": run_id}
-        async with self._database.transaction() as session:
-            await session.execute(_OPENED, opened)
-        row["incident_id"] = incident_id
-        if not result.replayed and incident_id and run_id and self._investigator is not None:
-            background.add_task(self._investigator.dispatch, incident_id, run_id)
+
+async def _bounded_body(request: Request) -> bytes | None:
+    """The body, or None past MAX_BODY_BYTES, by its declared length or by the bytes read."""
+    declared = request.headers.get("content-length")
+    if declared is not None and (not declared.isdigit() or int(declared) > MAX_BODY_BYTES):
+        return None
+    body = bytearray()
+    async for chunk in request.stream():
+        body += chunk
+        if len(body) > MAX_BODY_BYTES:
+            return None
+    return bytes(body)
 
 
 def alert_intake_router(service: AlertIntakeService) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/alert-intake/grafana")
-    async def receive(request: Request, background: BackgroundTasks) -> JSONResponse:
-        try:
-            raw = await request.json()
-        except Exception:
-            raw = None
-        return await service.receive(raw, request.headers.get("authorization"), background)
+    async def receive(request: Request) -> JSONResponse:
+        return await service.receive(request)
 
     return router

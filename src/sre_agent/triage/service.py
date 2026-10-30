@@ -272,7 +272,6 @@ class TriageService:
         alert_context: dict[str, Any] | None = None,
         target_incident_id: str | None = None,
         idempotency_key: str,
-        responsible_system: str | None = None,
     ) -> TriageResult:
         self._check(
             operation,
@@ -307,15 +306,10 @@ class TriageService:
                 await self._authorize(session, principal, "run.read")
             if not self._principal_may_issue(principal, operation):
                 raise TriageError(403, "operator_required")
-            # An integration (#765) decides for its operator: the origin stays automatic and
-            # names the integration, never the operator.
-            decision_origin = (
-                "manual"
-                if principal.kind == "human" and responsible_system is None
-                else "external_automatic"
+            decision_origin = "manual" if principal.kind == "human" else "external_automatic"
+            responsible_system = (
+                principal.principal_id if decision_origin == "external_automatic" else None
             )
-            if decision_origin == "external_automatic" and responsible_system is None:
-                responsible_system = principal.principal_id
             idem = IdempotencyRepository(session)
             try:
                 binding = await idem.claim_or_replay(
