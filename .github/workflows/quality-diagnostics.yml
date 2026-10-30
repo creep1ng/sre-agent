@@ -72,8 +72,10 @@ jobs:
       - name: Create local-only Compose inputs
         run: cp .env.example .env
       - name: Measure branch coverage in the locked checks container
+        # /app is not writable by the checks user, so the data file lives in /tmp.
         run: >-
-          docker compose --project-name diagnostics-coverage-${{ github.run_id }} --profile checks run --build --rm python-checks
+          docker compose --project-name diagnostics-coverage-${{ github.run_id }} --profile checks run --build --rm
+          -e COVERAGE_FILE=/tmp/.coverage python-checks
           sh -c 'coverage run --branch --source=src/sre_agent -m pytest && coverage report --format=total'
       - name: Remove disposable coverage services
         if: always()

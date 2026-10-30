@@ -40,6 +40,11 @@ asyncio_default_fixture_loop_scope = "function"
 pythonpath = [".", "src"]
 testpaths = ["tests"]
 
+[tool.coverage.run]
+# SQLAlchemy's asyncio layer switches greenlets; without greenlet tracing the
+# service code reached through HTTP tests is reported as unexecuted.
+concurrency = ["thread", "greenlet"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
