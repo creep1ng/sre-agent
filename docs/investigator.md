@@ -51,15 +51,14 @@ An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs bef
 upstream tool call, so no external effect was dispatched. Transient or ambiguous failures
 remain `unknown`.
 
-A denial blocks the run for a human (issue #39). A `denied` result, or an MCP discovery
+A denial ends the run for a human (issues #39, #788). A `denied` result, or an MCP discovery
 answered with 401 or 403, keeps its `confirmed_failure` receipt (`governed_call_denied` or
-`mcp_discovery_denied`) and, in the same transaction, the run becomes `awaiting_human` with
-`pending_command` `escalate` and `terminated_reason` `denied`, through an `escalation` event
-that replay applies. This is the workflow's escalation: the incident keeps its state and
-version, and nothing is retried with another identity, endpoint or resource. Resuming takes
-people, never a retry: an administrator must grant the denied capability again, and a human
-must answer the escalation. The `escalate` command is still refused
-(`src/sre_agent/incident/commands.py`), so a blocked run cannot be resumed yet.
+`mcp_discovery_denied`) and, in the same transaction, an `escalation` event that replay
+applies sets the run `terminated` with `terminated_reason` `denied` and no pending command.
+This is the workflow's escalation: the incident keeps its state and version, and nothing is
+retried with another identity, endpoint or resource. The `escalate` command stays deferred
+(`src/sre_agent/incident/commands.py`), so no run announces it. The way out takes people: an
+administrator grants the denied capability, then a human retries with a new run.
 
 Every other ending terminates the run (issue #761). In the same transaction as the terminal
 receipt, a `run_terminated` event sets `status` `terminated` (or `completed` for `conclude`),
