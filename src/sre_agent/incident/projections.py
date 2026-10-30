@@ -42,8 +42,8 @@ TERMINATED_SUMMARIES = {
     "max_steps": "Investigation run ended: step budget exhausted; a new run may retry.",
     "needs_human": "Investigation run ended: it needs a human; a new run may retry.",
     "invalid_output": "Investigation run ended: invalid agent output; a new run may retry.",
-    "upstream_unavailable": "Investigation run ended: a provider was unavailable; "
-    "a new run may retry.",
+    "upstream_unavailable": "Investigation run ended: the model provider or an MCP tool "
+    "was unavailable; a new run may retry.",
 }
 
 
@@ -132,7 +132,7 @@ def dispatch_cause(receipt: dict[str, Any]) -> str | None:
         isinstance(agent, str) and re.fullmatch(IDENTIFIER_PATTERN, agent)
     ):
         return (
-            f"the agent identity '{agent}' is inactive; "
+            f"the configured identity '{agent}' is inactive or not an agent; "
             "reactivate it in Principals or ask an administrator."
         )
     return DISPATCH_CAUSES[code]

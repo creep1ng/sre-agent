@@ -4,8 +4,11 @@
 # Events are ordered and cursor-paginated (ADR-008). No prompts, no secrets, no
 # raw tool arguments: this is the safe, UI-facing projection.
 #
-# 1.1.0 (issue #704): additive minor. Each event gains an optional, allow-listed
-# `reason_code` naming why an investigation did not start. Every 1.0.0 page stays valid.
+# 1.1.0 (issues #704, #705): additive minor. Each event gains an optional
+# `reason_code` naming why an investigation did not start or did not finish. The server
+# projects only codes from its allow-list (`src/sre_agent/incident/reasons.py`); the schema
+# keeps a pattern, not an enum, so adding a code needs no new contract version.
+# Every 1.0.0 page stays valid.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
 $id: urn:sre-agent:schema:run-event:1.1.0

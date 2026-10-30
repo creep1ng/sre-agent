@@ -2132,7 +2132,10 @@ def test_an_inactive_agent_identity_is_named_and_a_retry_after_reactivation_adva
         retry = _start(client, incident_id, "investigation-reason-identity-retry")
     assert first.status_code == 201 and first.json()["terminated_reason"] == "needs_human"
     assert ending["reason_code"] == "harness_identity_unavailable"
-    assert "'incident-harness' is inactive; reactivate it in Principals" in ending["summary"]
+    assert (
+        "'incident-harness' is inactive or not an agent; reactivate it in Principals"
+        in ending["summary"]
+    )
     assert retry.status_code == 201 and retry.json()["current_state"] == "mitigating"
 
 

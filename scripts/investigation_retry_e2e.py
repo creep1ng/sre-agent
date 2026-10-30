@@ -70,6 +70,9 @@ def set_harness(status: str) -> None:
         admin=True,
     )
     print(f"incident-harness -> {status}: HTTP {changed['status']}")
+    if changed["status"] != 200:
+        # A harness left inactive would fail every later investigation on the stack.
+        raise SystemExit(f"FAIL: incident-harness -> {status} answered {changed['status']}")
 
 
 def main() -> int:
