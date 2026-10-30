@@ -48,5 +48,7 @@ commit, ref, author and the idempotency key
 (`<repository>/actions/runs/<run id>/attempts/<attempt>/jobs/<job id>/<kind>`) from the run
 itself, so a resent step never duplicates the event, a re-run attempt records a new one, and a
 `ci` job and a `deploy` job of the same run are two events. Using the step twice in one job with
-the same kind and service but another payload answers `409`, which the step reports. When Midnight does not record the event the step warns and the deploy stays green;
-set `fail-on-error: "true"` to fail it instead.
+the same kind and service but another payload answers `409`, which the step reports. When
+Midnight does not record the event (unreachable, refused, an unexpected answer) the step warns
+and the deploy stays green; set `fail-on-error: "true"` to fail it instead. Its messages never
+include the API key.
