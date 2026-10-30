@@ -31,6 +31,10 @@ LOCATOR = (
     "/v1/bok/collections/demo-incident-response/versions/1.0.0/chunks/incident-triage/severity/0"
 )
 CONCLUDE = '{"action": "conclude", "summary": "No guidance applies.", "supporting_evidence": []}'
+# A conclusion cites the fragment; a hypothesis that cites only BoK is rejected (#760).
+CITE_FRAGMENT = json.dumps(
+    {"action": "conclude", "summary": "Found.", "supporting_evidence": ["ev_00000000"]}
+)
 UNAVAILABLE, FAILED = f"bok collection unavailable: {RESPONSE}", f"bok search failed: {RESPONSE}"
 REJECTED = f"bok answer rejected: {RESPONSE}"
 NOT_READY = GatewayError("transient", 503, code="index_unavailable", request_id=UUID(int=2))
@@ -105,9 +109,7 @@ def state_of(call: dict[str, str]) -> dict[str, Any]:
 
 
 def test_a_fragment_becomes_citable_evidence_that_keeps_its_provenance() -> None:
-    # A conclusion cites it; a hypothesis that cites only BoK is rejected (#760).
-    cite = {"action": "conclude", "summary": "Found.", "supporting_evidence": ["ev_00000000"]}
-    gateway, bok = ScriptedGateway(search(), json.dumps(cite)), BoK([fragment()])
+    gateway, bok = ScriptedGateway(search(), CITE_FRAGMENT), BoK([fragment()])
     result = run(gateway, bok, allowed())
 
     assert result.status == "completed"
