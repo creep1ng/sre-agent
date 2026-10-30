@@ -61,6 +61,7 @@ def demo_grants():
         ("mcp.discovery", "mcp_server", "grafana-mcp"),
         ("mcp.invoke", "mcp_tool", "query_prometheus"),
         ("mcp.invoke", "mcp_tool", "query_elasticsearch"),
+        ("change.read", "incident_workflow", "incident-response"),
     ):
         yield {
             "grant_id": "grant-setup-agent-" + resource,
