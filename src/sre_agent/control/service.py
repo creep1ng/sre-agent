@@ -53,6 +53,8 @@ ERRORS: dict[int, tuple[str, str]] = {
 ERROR_MESSAGES = {
     "policy_unavailable": "The consumption policy is unavailable.",
     "status_conflict": "The status was changed by another request.",
+    "grant_conflict": "An active grant with this principal, action and resource, "
+    "or a grant with this grant_id, already exists.",
     "credential_inactive": "The credential is not active.",
     "credential_issuance_failed": "Credential issuance could not be completed.",
 }
@@ -572,6 +574,7 @@ class ControlService:  # noqa: E305
             "validation_error": "contract_validation_failed",
             "invalid_idempotency_key": "contract_validation_failed",
             "idempotency_conflict": "status_conflict",
+            "grant_conflict": "status_conflict",
             "credential_inactive": "contract_validation_failed",
             "rotation_failed": "upstream_failed",
             "credential_issuance_failed": "upstream_failed",
@@ -1688,7 +1691,9 @@ class ControlService:  # noqa: E305
                     status_code=binding.outcome.response_status,
                     media_type="application/json",
                 )
-        except (IdempotencyConflictError, IntegrityError):
+        except (IdempotencyConflictError, IntegrityError) as conflict:
+            # A new key whose grant collides with an active one (or reuses a grant_id) is
+            # not an idempotency problem; say what actually conflicts.
             return await self._finish(
                 request_id,
                 started,
@@ -1696,7 +1701,11 @@ class ControlService:  # noqa: E305
                 "authorization",
                 operation,
                 action,
-                error_code="idempotency_conflict",
+                error_code=(
+                    "grant_conflict"
+                    if isinstance(conflict, IntegrityError)
+                    else "idempotency_conflict"
+                ),
                 context=context,
                 resource_ref=("administrative_control", "grants"),
                 decision=evaluation.decision,
