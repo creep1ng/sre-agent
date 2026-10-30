@@ -271,7 +271,8 @@ def unfounded_citations(
     """A hypothesis's citations when every one names evidence that returned no data (#760)."""
     if not isinstance(action, ProposeHypothesis):
         return []
-    empty = {item.evidence_id for item in [*request.context.evidence, *collected] if item.empty}
+    empty = {item.evidence_id for item in request.context.evidence if item.empty}
+    empty |= {item.evidence_id for item in collected if item.empty}
     cited = action.supporting_evidence
     return list(cited) if all(ref in empty for ref in cited) else []
 
