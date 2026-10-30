@@ -1,9 +1,11 @@
 import { expect, request, test } from "@playwright/test";
+import { spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-// Issue #770 against the REAL stack: FastAPI and PostgreSQL behind the web proxy, fed what a
-// GitHub Actions run sends after a deploy and after a red CI run. Ways this can fail:
+// Issue #770 against the REAL stack: FastAPI and PostgreSQL behind the web proxy, fed by the
+// reusable GitHub Actions step's own script (.github/actions/record-change/record_change.py)
+// after a deploy and after a red CI run. Ways this can fail:
 // 1. an integration credential with only change.write cannot record a deploy, or the stored
 //    event loses its service, version, commit, author, ref, link or time;
 // 2. resending the same run (the step retries, or a job runs it twice) adds a second event, or
@@ -18,6 +20,7 @@ const DEMO_KEY = process.env.DEMO_HUMAN_API_KEY ?? "";
 const STAMP = process.env.SEED_STAMP ?? randomBytes(5).toString("hex");
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://web";
 const ARTIFACTS = process.env.CHANGE_EVENTS_ARTIFACT_DIR ?? "/artifacts/change-events";
+const ACTION = process.env.RECORD_CHANGE_SCRIPT ?? "/e2e/actions/record-change/record_change.py";
 const SERVICE = "sre-checkout";
 const WORKFLOW = { resource_type: "incident_workflow", resource_id: "incident-response" };
 
@@ -30,24 +33,42 @@ test.afterEach(() => {
   writeFileSync(`${ARTIFACTS}/transcript.json`, JSON.stringify(transcript, null, 2));
 });
 
-// One run of a workflow, as the GitHub step describes it: the same run always sends the same event.
-const runEvent = (run, extra) => ({
-  source: "github-actions",
-  external_id: `creep1ng/sre-agent/actions/runs/${run}/attempts/1`,
-  service: SERVICE,
-  kind: "deploy",
-  commit_sha: createHash("sha1").update(run).digest("hex"),
-  ref: "main",
-  author: "octo-dev",
-  url: `https://github.com/creep1ng/sre-agent/actions/runs/${run}`,
-  ...extra,
-});
+// One job of a workflow run, as the GitHub step keys it (action.yml): run, attempt, job and kind.
+const runEvent = (run, extra) => {
+  const event = { source: "github-actions", service: SERVICE, kind: "deploy", ...extra };
+  return {
+    external_id: `creep1ng/sre-agent/actions/runs/${run}/attempts/1/jobs/${event.kind === "ci" ? "test" : "release"}/${event.kind}`,
+    commit_sha: createHash("sha1").update(run).digest("hex"),
+    ref: "main",
+    author: "octo-dev",
+    url: `https://github.com/creep1ng/sre-agent/actions/runs/${run}`,
+    ...event,
+  };
+};
 
-async function send(key, run, extra = {}) {
-  const client = await request.newContext({ extraHTTPHeaders: { authorization: `Bearer ${key}` } });
-  const response = await client.post(`${BASE}/api/v1/changes`, { data: runEvent(run, extra) });
-  const body = await response.json();
-  return { status: response.status(), change_id: body.change?.change_id, created: body.created };
+// What the GitHub step does: its own script, with the env that action.yml gives it.
+function send(key, run, extra = {}) {
+  const event = runEvent(run, extra);
+  const env = {
+    PATH: process.env.PATH,
+    MIDNIGHT_URL: `${BASE}/api`,
+    MIDNIGHT_API_KEY: key,
+    FAIL_ON_ERROR: "true",
+    CHANGE_SOURCE: event.source,
+    CHANGE_EXTERNAL_ID: event.external_id,
+    CHANGE_SERVICE: event.service,
+    CHANGE_KIND: event.kind,
+    CHANGE_STATUS: event.status ?? "",
+    CHANGE_VERSION: event.version ?? "",
+    CHANGE_COMMIT: event.commit_sha,
+    CHANGE_REF: event.ref,
+    CHANGE_AUTHOR: event.author,
+    CHANGE_URL: event.url,
+  };
+  const step = spawnSync("python3", [ACTION], { env, encoding: "utf8" });
+  const output = `${step.stdout}${step.stderr}`.trim();
+  const [, state, change_id, status] = output.match(/(already recorded|recorded) (chg_[0-9a-f]{16}) \((\d{3})\)/) ?? [];
+  return { status: Number(status ?? output.match(/answered (\d{3})/)?.[1]), change_id, created: state && state === "recorded" };
 }
 
 test("a deploy and a red CI run are recorded once each and read back newest first", async ({ browser }) => {
@@ -70,25 +91,26 @@ test("a deploy and a red CI run are recorded once each and read back newest firs
   // 1. The deploy of the broken release, then the same run sent again.
   const deployRun = `${Date.now()}1`;
   const deploy = { version: "demo/checkout:1.5.0" };
-  const first = note("deploy", await send(key, deployRun, deploy));
+  const first = note("deploy", send(key, deployRun, deploy));
   expect(first).toMatchObject({ status: 201, created: true, change_id: expect.stringMatching(/^chg_[0-9a-f]{16}$/) });
-  const resent = note("deploy resent", await send(key, deployRun, deploy));
+  const resent = note("deploy resent", send(key, deployRun, deploy));
   expect(resent).toEqual({ ...first, status: 200, created: false });
-  const clash = note("deploy resent with another version", await send(key, deployRun, { version: "demo/checkout:1.6.0" }));
+  const clash = note("deploy resent with another version", send(key, deployRun, { version: "demo/checkout:1.6.0" }));
   expect(clash.status).toBe(409);
   const writer = await request.newContext({ extraHTTPHeaders: { authorization: `Bearer ${key}` } });
   const ahead = runEvent(`${Date.now()}4`, { occurred_at: new Date(Date.now() + 10 * 60_000).toISOString() });
   expect(note("dated 10 min ahead", { status: (await writer.post(`${BASE}/api/v1/changes`, { data: ahead })).status() }).status).toBe(422);
 
-  // 2. A red CI run on main: recorded as a failed change, with the same credential.
-  const ci = note("ci failed", await send(key, `${Date.now()}2`, { kind: "ci", status: "failed" }));
+  // 2. A red CI job on main in the same run (post-deploy checks): its own failed change, not
+  // "already recorded" under the deploy's key, with the same credential.
+  const ci = note("ci failed", send(key, deployRun, { kind: "ci", status: "failed" }));
   expect(ci).toMatchObject({ status: 201, created: true });
 
   // 3. Each side holds one action only.
   const integrationRead = await request.newContext({ extraHTTPHeaders: { authorization: `Bearer ${key}` } });
   const denied = note("integration reads", { status: (await integrationRead.get(`${BASE}/api/v1/changes`)).status() });
   expect(denied.status).toBe(403);
-  expect(note("reader writes", await send(DEMO_KEY, `${Date.now()}3`)).status).toBe(403);
+  expect(note("reader writes", send(DEMO_KEY, `${Date.now()}3`)).status).toBe(403);
 
   // 4. The history of sre-checkout since this test began: two events, newest first.
   const query = `service=${SERVICE}&since=${encodeURIComponent(started)}`;
