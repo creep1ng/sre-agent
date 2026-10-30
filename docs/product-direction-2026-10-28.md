@@ -20,7 +20,7 @@ post-demo backlog is being reshaped until the evaluated demo of 2026-11-04.
 | #758 Any active consumption limit makes every `/v1/responses` call answer 429 | P0 |
 | #759 A revoked grant cannot be granted again | P0 |
 | #760 A hypothesis is accepted although all its cited evidence is empty | P0 |
-| #761 A dispatch that does not end in denial leaves the run running forever and blocks retry | P0. The maintainer said P1; it was raised because it is the cause of the retry failure in #705. |
+| #761 A dispatch that does not end in denial leaves the run running forever and blocks retry | P1. Raised to P0 on 2026-10-28 because it causes the retry failure in #705; the maintainer lowered it back to P1 on 2026-10-29. |
 | #762 A torn line in the deploy-executor journal causes a restart loop | P1 |
 | #705 Show why a dispatch failed and allow retry | P0 |
 
@@ -61,8 +61,9 @@ The five-point personal-agent post that inspired the principles could not be tra
 - Compete on guarantees, not intelligence. The agent can run only catalog operations, critical ones
   need approval, and every action leaves a receipt and is never repeated when its outcome is
   ambiguous. This answers the two most common objections.
-- The DIY gaps are the details to compete on. The engine already has step budgets, dispatch
-  receipts, idempotency, consumption limits and the executor catalog.
+- The DIY gaps are the details to compete on. The engine has the pieces: step budgets, dispatch
+  receipts, idempotency, consumption limits and the executor catalog. Today #758, #761 and #762
+  break three of them, so they are a target rather than a guarantee.
 - The narrower persona self-hosts client apps with Docker Compose on one to three VPS. People who
   buy managed platforms have less operational pain. The executor's Compose-only scope fits them.
 
@@ -83,8 +84,85 @@ The five-point personal-agent post that inspired the principles could not be tra
 - **Baseline.** The same scenarios given to Claude Code with the same Grafana MCP and alert text.
 - **Report.** Every run, failures included.
 
-## Pending decisions
+## Second round of decisions
 
-- Keep #761 at P0 or lower it to P1.
-- Keep the 2026-10-30 release candidate of #730 or move it to 2026-11-04.
-- Which EP-8 console stories to freeze.
+The maintainer answered the review the same day. [The vision and values draft](vision.md) turns
+these decisions into the criteria that order the backlog.
+
+| Decision | Note |
+| --- | --- |
+| Keep the structured catalog of predefined operations and add routines composed of catalog operations, defined by the user or proposed by the agent. | Agent-proposed routines enter the catalog only after the operator approves them. |
+| Add an autonomy mode for operators who want to rest from on-call: chosen operations run without approval. | It is set per operation and never adds capabilities. The catalog, not a risk model, is what prevents a deletion like PocketOS's. |
+| Detection stays out of scope. Signals come in through APIs and MCP for agentic queries. Statistical per-service failure rules may come later. | Today `gateway/alerts.py` evaluates one hard-coded rule, and only while the inbox polls. |
+| Two distributions: open source self-hosted for those who accept its maintenance, and a paid cloud later where the user keeps no server running and configures no bot. | Pricing is open: subscription or per successful resolution. |
+| The engine, with memory and mature primitives, is the product; anyone can put their own interface on it or use ours. | |
+| The maintainer implements the Telegram channel. | |
+| Memory: index closed postmortems with the BoK full-text search, recall them by service and signal when an investigation starts, and keep a change log. A weekly job proposes BoK entries, skill changes or alert mutes and never applies them. | Postgres already holds incidents, hypotheses, mitigations and postmortems. |
+| Deploys become change events with a 10 to 15 minute before-and-after watch: silence when healthy, one message with the change and a rollback on regression, and red CI on main goes to the digest. Dogfood it on `arte-webpage` and `frantic`. | |
+| Write the vision and values of the project and order the backlog around them. | Draft in [vision.md](vision.md). |
+
+## Open questions raised by the second round
+
+- **No decision model exists yet.** Every mitigation requires human approval. Risk is static tags
+  per catalog operation (`touches_data`, `blast_radius`, `downtime`, `reversible`) plus a level the
+  model declares in its proposal. A model that judges another model's action can be wrong or be
+  steered by log content, so it may decide when to ask, never what is allowed.
+- **Pricing per resolution conflicts with silence.** It pays more when more breaks and when the agent
+  acts instead of waiting, "success" is hard to attribute, and a freelancer's incident volume is low
+  and irregular. Intercom Fin's per-resolution price works at high volume with a clear criterion.
+- **Which persona the cloud plan targets first.** People on managed platforms have the least
+  operational pain; people who self-host on a VPS have the most and also suffer maintaining one more
+  server. Splitting plans by who runs Midnight, not by where the apps run, avoids charging the
+  persona with the least pain.
+- **The dogfood repositories do not exercise the executor.** `arte-webpage` verifies in GitHub
+  Actions and deploys staging by hand to S3 and CloudFront with an archived rollback artifact.
+  `frantic` lives on Gitea, verifies in Gitea Actions and deploys with AWS CDK by hand. Neither runs
+  on Docker Compose nor emits Prometheus metrics. They fit a watch-only trial with synthetic HTTP
+  checks; the rollback demo stays on `sre-checkout`.
+- **Detection without rebuilding it.** Grafana alert rules provisioned in the demo stack, sent to
+  Midnight through a webhook contact point, would cover the blind evaluation and remove the
+  poll-only gap, with the rules living in the user's Grafana.
+
+## Third round of decisions (2026-10-29)
+
+The maintainer answered the second round and asked for the backlog to 2026-12-04, recorded in
+[backlog-2026-12-04.md](backlog-2026-12-04.md).
+
+| Decision | Issue |
+| --- | --- |
+| Catalog operations may run without approval, chosen per operation. | #769 |
+| By default, operations carry a risk classification and a decision model assesses which set is safe. A spike inspired by the permission levels of Claude Code and Codex designs it first. The recommendation going in: the model may only move an operation from running alone to asking, never the reverse. | #768 |
+| In the harness, the agent never sees keys or secrets but may see environment variables to diagnose. How depends on the user's infrastructure, for example secrets stored as `String` instead of `SecureString` in SSM. | #780 |
+| Pricing: a flat subscription with investigations included. | |
+| Plans split by who operates Midnight, not by where the apps run. | |
+| Midnight ingests the observability solution the customer already has. | #765 |
+| The engine is exposed through MCP and webhooks: "we give you the engine, connect it and view it wherever you want". An engineer can ask Claude through MCP for the most recurring incidents, cross them with the code and propose fixes; that does not make Midnight replaceable by Claude Code. | #777, #778 |
+| Change events integrate only with GitHub Actions. Gitea is dropped: most users live on GitHub, and a single integration keeps the scope small. Other forges can still call the generic endpoint. | #770 |
+| EP-10 and EP-11 come first, by 2026-11-03, when the maintainer meets a professor for feedback before the presentation. EP-13 tasks such as the vision, the feedback and the blind evaluation run in parallel. The governance bugs #758 and #759 move to M2, outside the demo path. | #784, #785, #787 |
+| Horizon to 2026-12-04, with the evaluated demo on 2026-11-04 and the release candidate of #730 moved to that date. EP-8 console stories that the chat flow does not need are frozen. | #730, #732 |
+
+## Fourth round of decisions (2026-10-29)
+
+| Decision | Issue |
+| --- | --- |
+| #761 goes back to P1. | #761 |
+| The vision and values are accepted. `AGENTS.md` summarizes them and asks every product change to weigh them. | #764 |
+| #758 and #759 come back to M1: they are small to finish. | #758, #759 |
+| The maintainer takes every issue of the new epics EP-10 to EP-13, so the rest of the team keeps EP-8, EP-9 and the bugs. | #784 to #787 |
+| #487 closes if its acceptance criteria hold on `main`; otherwise the missing part is finished and merged first. | #487 |
+
+## Pending decision: #487
+
+Checked on `main` at `578f6316` on 2026-10-29, #487 does not meet its criteria, and most of what is
+missing is frozen work:
+
+- CA1 and CA5 hold; CA2 and CA4 hold under the scope agreed in the issue comments.
+- CA7, the shared session, and the part of CA3 that depends on it wait for #486, which is frozen.
+- CA6 needs the governance views to follow #57 (units 4 and 5 of `ht-web-shell.md`), about 300 to
+  500 lines of governance UI, which belongs to the later teams tier.
+- CA3 and CA8 lack a real-stack revoked-grant scenario, about 60 to 80 lines, on the old console
+  that #715 retires.
+
+Finishing #487 therefore means unfreezing #486 and governance work before 2026-12-04. The
+alternative is to close it after moving CA7 to #486, the entry and old sidebar to #715, and CA6 to
+the governance backlog. The maintainer decides.
