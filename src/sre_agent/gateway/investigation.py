@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -40,11 +41,12 @@ from sre_agent.investigator.contract import (
 )
 from sre_agent.investigator.loop import investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
+from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemoryRepository
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
-from sre_agent.persistence.memories import PostgresIncidentMemoryRepository
 from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
+logger = logging.getLogger(__name__)
 
 
 class InvestigationRunDispatcher:
@@ -65,6 +67,8 @@ class InvestigationRunDispatcher:
         self.gateway_settings = gateway_settings
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
+        # Run notes for its outcome receipt, such as memory_recall_unavailable (#773).
+        self._notes: dict[str, list[str]] = {}
 
     async def after_start(self, started: TransitionResult) -> None:
         if not any(
@@ -138,6 +142,7 @@ class InvestigationRunDispatcher:
                 assert actor_reference is not None
                 await self._investigate(work, incident_id, run_id, principal, actor_reference)
             finally:
+                self._notes.pop(run_id, None)
                 await work.release_run_dispatch(incident_id, run_id)
 
     async def _configured_agent(self) -> PrincipalContext | None:
@@ -191,7 +196,7 @@ class InvestigationRunDispatcher:
         # evidence_sufficiency decision and propose a mitigation for that hypothesis.
         limits, offset = Limits(), 0
         run_mcp_ids: list[UUID] = []
-        recalled = await self._recall(context, view.incident_state)
+        recalled = await self._recall(run_id, context, view.incident_state)
         while True:
             known = {item.evidence_id for item in context.evidence}
             try:
@@ -209,6 +214,7 @@ class InvestigationRunDispatcher:
                     language=self.language,
                     recalled=[item for item in recalled if item.evidence_id not in known],
                 )
+                result = _cited_memories_only(result, recalled)
             except Exception:
                 await self._finish(
                     work,
@@ -345,11 +351,12 @@ class InvestigationRunDispatcher:
             )
 
     async def _recall(
-        self, context: IncidentContext, state: Mapping[str, Any]
+        self, run_id: str, context: IncidentContext, state: Mapping[str, Any]
     ) -> list[CollectedEvidence]:
-        """Closed incidents of this service and signal (#773), each linked to its postmortem.
+        """Closed incidents of this service (#773), each linked to its postmortem.
 
-        Memory is advisory: when it cannot be read, the investigation goes on without it.
+        Memory is advisory: when it cannot be read, the investigation goes on without it and
+        the run's outcome receipt notes memory_recall_unavailable.
         """
         alert = state.get("alert")
         origin = alert.get("origin") if isinstance(alert, Mapping) else None
@@ -362,18 +369,21 @@ class InvestigationRunDispatcher:
                     context.alert.summary,
                     context.incident_id,
                 )
-        except Exception:
+        except Exception as error:
+            logger.warning(
+                "incident memory recall unavailable for run %s: %s", run_id, type(error).__name__
+            )
+            self._notes[run_id] = ["memory_recall_unavailable"]
             return []
-        now = datetime.now(UTC)
         return [
             CollectedEvidence(
                 evidence_id=f"ev_{memory.memory_id}",
                 source=MEMORY_SOURCE,
                 tool="memory.recall",
-                datasource_uid=memory.incident_id,
+                datasource_uid=None,
                 query=memory.source_record,
-                summary=memory.content,
-                collected_at=now,
+                summary=memory.content[:RECALL_CONTENT],
+                collected_at=memory.indexed_at,
             )
             for memory in found
         ]
@@ -674,9 +684,8 @@ class InvestigationRunDispatcher:
             run_id=run_id,
         )
 
-    @classmethod
     def _receipt_event(
-        cls,
+        self,
         incident_id: str,
         run_id: str,
         actor_reference: ActorReference | None,
@@ -705,6 +714,8 @@ class InvestigationRunDispatcher:
             receipt["result_status"] = result_status
         if diagnostic is not None:
             receipt["diagnostic"] = dict(diagnostic)
+        if phase == "outcome" and self._notes.get(run_id):
+            receipt["notes"] = self._notes[run_id]
         return EventDraft(
             event_id=f"evt_{token_hex(8)}",
             kind="dispatch_receipt",
@@ -818,6 +829,16 @@ class InvestigationRunDispatcher:
             "reference_version": actor.reference_version,
             "principal_id": actor.principal_id,
         }
+
+
+def _cited_memories_only(
+    result: InvestigationResult, recalled: Sequence[CollectedEvidence]
+) -> InvestigationResult:
+    """A recalled memory becomes evidence of this incident only when the outcome cites it."""
+    cited = set(getattr(result.outcome, "supporting_evidence", ()))
+    memories = {item.evidence_id for item in recalled} - cited
+    evidence = [item for item in result.evidence if item.evidence_id not in memories]
+    return result.model_copy(update={"evidence": evidence})
 
 
 def _unique_ids(values: Sequence[UUID]) -> list[UUID]:

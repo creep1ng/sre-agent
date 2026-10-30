@@ -115,6 +115,16 @@ exactly that chunk. An empty search is an answer; 401 and 403 end the run as `de
 network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
 body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
 
+## Recalled incidents
+
+An `investigate` dispatch seeds the run with up to three memories of closed incidents of the
+same service (issue #773, see [incident postmortem](incident-postmortem.md)). Each is evidence
+with `source: incident_memory`, no `datasource_uid`, the source incident's postmortem as `query`
+and its `indexed_at` as `collected_at`. The model may cite them like any other evidence. Only a
+memory the outcome cites is kept in the incident evidence and in the result event's
+`evidence_references`. If recall fails, the run goes on without memories and its outcome receipt
+lists `memory_recall_unavailable` in `notes`.
+
 ## Output language
 
 `INVESTIGATOR_OUTPUT_LANGUAGE` (`es` by default, or `en`) sets the language of the model's prose:
