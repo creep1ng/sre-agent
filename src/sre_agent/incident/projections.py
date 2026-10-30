@@ -111,6 +111,8 @@ def event_summary(payload: Any) -> str:
             status = receipt.get("status")
             if status == "pending":
                 return "Investigation dispatch started."
+            if receipt.get("reason_code") == "investigation_no_measured_evidence":
+                return "Investigation dispatch ended: no cited evidence had measured data."
             if status in {"success", "confirmed_failure", "unknown"}:
                 return f"Investigation dispatch ended: {status}."
         patch = payload.get("run_patch")

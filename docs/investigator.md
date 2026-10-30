@@ -102,8 +102,11 @@ The model gives them in `verdicts` of `propose_hypothesis`, keyed by evidence id
 invalid verdict is recorded as `inconclusive`, not rejected. The harness, not the model, measures
 whether a tool answered with data: a Prometheus query without series or a log query without
 documents is recorded with `empty: true` and as `inconclusive`, whatever the model says. A
-hypothesis whose citations are all empty evidence is invalid output (issue #760): the model is told
-why and asked again, and a second such answer ends the run without a hypothesis. The fields
+hypothesis that cites no measured data is invalid output (issue #760): every citation is empty
+evidence or a BoK fragment (`source: bok`), which describes what should happen, not what did. The
+model is told why and asked again. A second such answer ends the dispatch without a hypothesis, and
+its receipt carries `reason_code: investigation_no_measured_evidence`, shown in the timeline as "no
+cited evidence had measured data". The fields
 are optional in incident-state 1.2.0 and the run context, so earlier documents stay valid. On the
 evidence the current hypothesis cites, the war room shows «Respalda la hipótesis», «Contradice» or
 «No concluyente»; on any empty evidence, «No encontró nada». Reproduce it against the real API,

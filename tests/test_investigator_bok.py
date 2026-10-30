@@ -105,7 +105,9 @@ def state_of(call: dict[str, str]) -> dict[str, Any]:
 
 
 def test_a_fragment_becomes_citable_evidence_that_keeps_its_provenance() -> None:
-    gateway, bok = ScriptedGateway(search(), hypothesis("ev_00000000")), BoK([fragment()])
+    # A conclusion cites it; a hypothesis that cites only BoK is rejected (#760).
+    cite = {"action": "conclude", "summary": "Found.", "supporting_evidence": ["ev_00000000"]}
+    gateway, bok = ScriptedGateway(search(), json.dumps(cite)), BoK([fragment()])
     result = run(gateway, bok, allowed())
 
     assert result.status == "completed"

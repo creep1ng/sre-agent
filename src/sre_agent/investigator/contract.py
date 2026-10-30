@@ -88,7 +88,8 @@ class EvidenceContext(_Projection):
     query: Annotated[str, Field(max_length=4000)] | None = None
     time_window: Annotated[str, Field(max_length=200)] | None = None
     summary: Annotated[str, Field(min_length=1, max_length=8000)]
-    empty: bool = False
+    # Only empty evidence says so, so the prompt of evidence with data does not change (#760).
+    empty: bool = Field(default=False, exclude_if=lambda value: not value)
 
 
 class IncidentContext(_Projection):
@@ -265,16 +266,22 @@ def parse_action(text: str) -> Action:
         raise InvalidOutput("; ".join(problems)) from None
 
 
+# Why a hypothesis was rejected when none of its citations is measured data (#760).
+UNMEASURED = "no cited evidence is measured data"
+
+
 def unfounded_citations(
     action: Action, request: InvestigationRequest, collected: Collection[CollectedEvidence] = ()
 ) -> list[str]:
-    """A hypothesis's citations when every one names evidence that returned no data (#760)."""
+    """A hypothesis's citations when none is measured data: each returned no data (#760) or is a
+    knowledge-base fragment, which describes how things should be, not what happened."""
     if not isinstance(action, ProposeHypothesis):
         return []
-    empty = {item.evidence_id for item in request.context.evidence if item.empty}
-    empty |= {item.evidence_id for item in collected if item.empty}
+    unmeasured = {item.evidence_id for item in request.context.evidence if item.empty}
+    unmeasured |= {item.evidence_id for item in request.context.evidence if item.source == "bok"}
+    unmeasured |= {item.evidence_id for item in collected if item.empty or item.source == "bok"}
     cited = action.supporting_evidence
-    return list(cited) if all(ref in empty for ref in cited) else []
+    return list(cited) if all(ref in unmeasured for ref in cited) else []
 
 
 def unknown_references(

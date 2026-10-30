@@ -27,6 +27,7 @@ from sre_agent.incident.runtime import (
 )
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
+    UNMEASURED,
     Conclude,
     IncidentContext,
     InvestigationRequest,
@@ -288,7 +289,7 @@ class InvestigationRunDispatcher:
                 run_id,
                 actor_reference,
                 status="unknown",
-                reason_code=f"investigation_{result.status}",
+                reason_code=_ended_reason(result),
                 request_ids=all_request_ids,
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
@@ -788,3 +789,10 @@ class InvestigationRunDispatcher:
 
 def _unique_ids(values: Sequence[UUID]) -> list[UUID]:
     return list(dict.fromkeys(values))
+
+
+def _ended_reason(result: InvestigationResult) -> str:
+    """The receipt's reason; a hypothesis rejected for citing no measured data says so (#760)."""
+    if result.status == "invalid_output" and (result.detail or "").startswith(UNMEASURED):
+        return "investigation_no_measured_evidence"
+    return f"investigation_{result.status}"
