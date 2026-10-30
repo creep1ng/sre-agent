@@ -93,7 +93,10 @@ paths:
         it first: one the executor's catalog no longer offers answers 409 `precondition_failed`,
         one the agent holds no `mitigation.execute` grant for 403 `operation_not_authorized`, and
         an executor not configured or not readable 503 `executor_unavailable`; none of them
-        changes state or version.
+        changes state or version. Only then does the executor run it, signed, and the incident
+        moves to verifying with its receipt (`execution_mode: executed`). A failure the executor
+        answers is 409 `execution_failed`, 503 when the executor marks it retryable, and the
+        incident stays mitigating.
       parameters:
         - { $ref: '#/components/parameters/IncidentId' }
         - { $ref: '#/components/parameters/RunId' }

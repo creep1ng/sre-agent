@@ -23,6 +23,8 @@ class Settings:
     investigator_output_language: OutputLanguage = "es"
     # The deploy-executor's base URL: its catalog tells the agent what it may propose (#722).
     deploy_executor_url: str | None = None
+    # What signs the operation an approval runs; the executor checks it (#743, #722).
+    deploy_executor_signing_key: str | None = field(default=None, repr=False)
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -70,4 +72,5 @@ class Settings:
             investigator_gateway=investigator_gateway,
             investigator_output_language=language,
             deploy_executor_url=environment.get("DEPLOY_EXECUTOR_URL") or None,
+            deploy_executor_signing_key=environment.get("DEPLOY_EXECUTOR_SIGNING_KEY") or None,
         )

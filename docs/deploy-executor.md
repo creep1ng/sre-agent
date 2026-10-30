@@ -1,6 +1,6 @@
 # Deploy executor: governed remediation over docker-socket-proxy
 
-Issue #720 (epic #733, umbrella #697). Approving a mitigation today only moves the workflow
+Issue #720 (epic #733, umbrella #697). Without it, approving a mitigation only moves the workflow
 (`execution_mode: simulated`); the operator applies it by hand. The deploy-executor makes the
 product apply it: a container that executes **named operations with a strict schema** against the
 Docker Engine, through `docker-socket-proxy` with only the `containers` and `images` families
@@ -181,6 +181,14 @@ demonstrable agentic remediation for the demo, not a simulated one.
   integration branch `feature/722-mitigation-execute`; one final PR from that branch to `main`
   closes #722. #723 owns the agent's verification, the return to `investigating` and the full
   scenario up to `resolved`.
+
+The gateway follows that order on `approve_mitigation` (`src/sre_agent/gateway/execution.py`).
+The api needs `DEPLOY_EXECUTOR_URL` and the executor's own `DEPLOY_EXECUTOR_SIGNING_KEY`, and the
+key it sends is `mitexec-{run_id}-{mitigation_id}`. A refusal answers 409 `precondition_failed`
+(the catalog no longer offers it), 403 `operation_not_authorized` (no grant) or 503
+`executor_unavailable`; a failure the executor answers is 409 `execution_failed`, 503 when the
+executor marks it retryable. None of them moves the incident. Otherwise the incident moves to
+`verifying` with `execution_mode: executed` and the receipt in `mitigation_strategy.execution`.
 
 ## What the vendors do
 

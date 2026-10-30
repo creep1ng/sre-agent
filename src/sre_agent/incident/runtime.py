@@ -75,6 +75,8 @@ class IncidentCommand:
     inputs: Mapping[str, Any] | None = None
     extra_events: tuple[EventDraft, ...] = ()
     contexts: tuple[TextContextRecord, ...] = ()
+    # The deploy-executor's receipt for the operation an approval ran (#722).
+    execution: Mapping[str, Any] | None = None
 
     def payload_sha256(self) -> str:
         payload = asdict(self)
@@ -91,6 +93,8 @@ class IncidentCommand:
             payload.pop("extra_events")
         # The turns travel with the dispatch's result events, which the hash already covers.
         payload.pop("contexts")
+        # The receipt is what the approval did, not what was asked: a retry hashes the same.
+        payload.pop("execution")
         if self.expected_incident_version is None:
             # Additive fields must not invalidate idempotent retries from older clients.
             payload.pop("expected_incident_version")
@@ -638,6 +642,9 @@ class IncidentRuntime:
                 "reject": "rejected",
                 "request_changes": "changes_requested",
             }[outcome]
+            if outcome == "approve" and command.execution is not None:
+                # It ran through the deploy-executor (#722): no longer simulated.
+                strategy.update(execution_mode="executed", execution=dict(command.execution))
             incident["mitigation_strategy"] = strategy
             if outcome in {"approve", "reject"}:
                 # The human gate's answer, listed where the incident shows its approvals.
