@@ -152,10 +152,13 @@ async def investigate(
     skills: SkillSource | None = None,
     bok: BoKSource | None = None,
     language: OutputLanguage = "es",
+    recalled: Sequence[CollectedEvidence] = (),
 ) -> InvestigationResult:
     limits = limits or Limits()
     turns: list[Turn] = []
-    evidence: list[CollectedEvidence] = []
+    # Past incidents recalled for this run (#773) are evidence the model may cite, each with
+    # the record it came from; nothing else enters memory evidence.
+    evidence: list[CollectedEvidence] = list(recalled)
     request_ids: list[UUID] = []
     mcp_request_ids: list[UUID] = []
     feedback: str | None = None

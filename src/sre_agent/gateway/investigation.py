@@ -27,6 +27,7 @@ from sre_agent.incident.runtime import (
 )
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
+    CollectedEvidence,
     Conclude,
     IncidentContext,
     InvestigationRequest,
@@ -39,6 +40,8 @@ from sre_agent.investigator.contract import (
 )
 from sre_agent.investigator.loop import investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
+from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
+from sre_agent.persistence.memories import PostgresIncidentMemoryRepository
 from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
@@ -188,7 +191,9 @@ class InvestigationRunDispatcher:
         # evidence_sufficiency decision and propose a mitigation for that hypothesis.
         limits, offset = Limits(), 0
         run_mcp_ids: list[UUID] = []
+        recalled = await self._recall(context, view.incident_state)
         while True:
+            known = {item.evidence_id for item in context.evidence}
             try:
                 result = await investigate(
                     InvestigationRequest(
@@ -202,6 +207,7 @@ class InvestigationRunDispatcher:
                     self.evidence,
                     limits,
                     language=self.language,
+                    recalled=[item for item in recalled if item.evidence_id not in known],
                 )
             except Exception:
                 await self._finish(
@@ -337,6 +343,40 @@ class InvestigationRunDispatcher:
                 result_status=result.status,
                 contexts=contexts,
             )
+
+    async def _recall(
+        self, context: IncidentContext, state: Mapping[str, Any]
+    ) -> list[CollectedEvidence]:
+        """Closed incidents of this service and signal (#773), each linked to its postmortem.
+
+        Memory is advisory: when it cannot be read, the investigation goes on without it.
+        """
+        alert = state.get("alert")
+        origin = alert.get("origin") if isinstance(alert, Mapping) else None
+        signal = origin.get("signal") if isinstance(origin, Mapping) else None
+        try:
+            async with self.sessions() as session:
+                found = await PostgresIncidentMemoryRepository(session).recall(
+                    context.alert.service,
+                    signal if isinstance(signal, str) else None,
+                    context.alert.summary,
+                    context.incident_id,
+                )
+        except Exception:
+            return []
+        now = datetime.now(UTC)
+        return [
+            CollectedEvidence(
+                evidence_id=f"ev_{memory.memory_id}",
+                source=MEMORY_SOURCE,
+                tool="memory.recall",
+                datasource_uid=memory.incident_id,
+                query=memory.source_record,
+                summary=memory.content,
+                collected_at=now,
+            )
+            for memory in found
+        ]
 
     async def _continue(
         self,

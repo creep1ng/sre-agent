@@ -2,9 +2,13 @@
 
 A closed incident enters memory in the same transaction as its close, from the postmortem
 version a human approved. Each row is append-only and is the memory change log: what entered,
-when, and from which incident, postmortem version and close event.
+when, and from which incident, postmortem version and close event. Recall reuses the BoK's
+PostgreSQL English full-text search (docs/bok-retrieval.md), only within the same service, and
+only through the approved revision a citation links to: a memory without that source record
+is never returned, so it can never be cited.
 """
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,7 +18,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+SOURCE = "incident_memory"
+RECALL_LIMIT = 3
 MAX_CONTENT = 6000
+_WORD = re.compile(r"[a-z0-9]{3,}")
 _COLUMNS = """m.memory_id, m.incident_id, m.postmortem_id, m.postmortem_version,
   m.close_event_id, m.service, m.signal, m.content, m.indexed_at"""
 
@@ -64,6 +71,12 @@ def memory_content(state: Mapping[str, Any], postmortem: Mapping[str, Any]) -> s
     return "\n".join(line for line in lines if not line.endswith(": "))[:MAX_CONTENT]
 
 
+def recall_query(signal: str | None, summary: str) -> str:
+    """Any word of the signal or the alert, in websearch syntax (`a or b`)."""
+    words = dict.fromkeys(_WORD.findall(f"{signal or ''} {summary}".casefold()))
+    return " or ".join(word for word in list(words)[:40] if word != "or")
+
+
 def _memory(row: Any) -> IncidentMemory:
     return IncidentMemory(**{field: row[field] for field in IncidentMemory.__dataclass_fields__})
 
@@ -106,6 +119,32 @@ class PostgresIncidentMemoryRepository:
                 "now": now,
             },
         )
+
+    async def recall(
+        self, service: str, signal: str | None, summary: str, incident_id: str
+    ) -> list[IncidentMemory]:
+        """Closed incidents of exactly this service whose memory matches the signal or alert."""
+        query = recall_query(signal, summary)
+        if not query:
+            return []
+        rows = await self._session.execute(
+            text(f"""SELECT {_COLUMNS} FROM incident.incident_memories m
+              JOIN incident.postmortem_revisions r
+                ON r.postmortem_id = m.postmortem_id AND r.version = m.postmortem_version
+              CROSS JOIN websearch_to_tsquery('english', :query) q
+              WHERE m.service = :service AND m.incident_id <> :incident_id
+                AND to_tsvector('english', m.content) @@ q
+              ORDER BY ts_rank_cd(to_tsvector('english', m.content), q) DESC,
+                       m.indexed_at DESC, m.memory_id
+              LIMIT :limit"""),
+            {
+                "query": query,
+                "service": service,
+                "incident_id": incident_id,
+                "limit": RECALL_LIMIT,
+            },
+        )
+        return [_memory(row) for row in rows.mappings()]
 
     async def changes(self, limit: int = 100) -> list[IncidentMemory]:
         """The change log, newest first."""
