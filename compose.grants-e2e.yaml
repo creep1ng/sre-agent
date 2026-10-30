@@ -8,6 +8,7 @@
 # The summary lands in docs/evidence/issue-759/ (GRANTS_E2E_ARTIFACTS overrides it).
 services:
   seed:
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ./scripts:/e2e:ro
       - ${GRANTS_E2E_ARTIFACTS:-./docs/evidence/issue-759}:/artifacts

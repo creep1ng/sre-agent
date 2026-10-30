@@ -4,7 +4,8 @@
 Phase `cycle`: as admin-human, grant restricted-harness `admin.read` on the principals list,
 revoke it and grant it again under a new grant_id and Idempotency-Key. Its access goes
 200 -> 403 -> 200 and the audit holds the three grant events. A second identical active grant
-answers 409 `grant_conflict`. Then one core seed grant and one setup grant are revoked.
+answers 409 `grant_conflict`; reusing the revoked grant_id answers 409 `grant_id_conflict`.
+Then one core seed grant and one setup grant are revoked.
 Phase `after-seed` (after the seed and provision_demo.py ran again): the seed output names
 both revoked grants as drift, they stay revoked, /health/ready answers 200 on the partial
 unique index revision. Appends to $ARTIFACT_DIR/issue-759-e2e.txt; exits 1 on a failed check.
@@ -74,12 +75,12 @@ def cycle(db: psycopg.Connection) -> None:
         observed == [201, 200, 204, 403, 201, 200],
         observed,
     )
-    status, duplicate = grant(f"grant-e2e759-{STAMP}-c")
-    code = duplicate["error"]["code"]
+    refused = [grant(f"grant-e2e759-{STAMP}-c"), grant(first)]
     check(
-        "a second identical active grant answers 409 grant_conflict",
-        (status, code) == (409, "grant_conflict"),
-        duplicate,
+        "a duplicate active grant answers grant_conflict, a reused id grant_id_conflict",
+        [(status, body["error"]["code"]) for status, body in refused]
+        == [(409, "grant_conflict"), (409, "grant_id_conflict")],
+        [body["error"] for _, body in refused],
     )
     rows = db.execute(
         "SELECT operation, response_status, reason_code FROM audit_events "
@@ -92,9 +93,10 @@ def cycle(db: psycopg.Connection) -> None:
         ("grants.revoke", 204),
         ("grants.create", 201),
         ("grants.create", 409),
+        ("grants.create", 409),
     ]
     check(
-        "the audit holds grant, revoke, grant again and the refused duplicate",
+        "the audit holds grant, revoke, grant again and both refusals",
         [r[:2] for r in rows] == expected,
         rows,
     )
