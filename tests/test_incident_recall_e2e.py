@@ -6,15 +6,13 @@ The first incident is investigated and closed through the postmortem flow. Ways 
    receives it without the postmortem it came from, so the citation links nowhere.
 2. The recorded hypothesis cites the memory, but the incident evidence does not keep the link.
 3. A service without history receives the memories of another service.
-The run leaves `recall.json` in RECALL_ARTIFACT_DIR (default test-results/issue-773).
+The run leaves `recall.json` in RECALL_ARTIFACT_DIR/issue-773 (default: the temp dir).
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-import os
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -33,7 +31,7 @@ from test_incident_investigator_http import (  # noqa: F401  (module fixture)
     _serve,
     migrated_database,
 )
-from test_incident_memory_e2e import CONTENT, _grant_context_read
+from test_incident_memory_e2e import ARTIFACTS, CONTENT, _grant_context_read
 
 from sre_agent.application import create_application
 from sre_agent.gateway.providers import ProviderRequest, ProviderResult
@@ -41,7 +39,6 @@ from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
 from sre_agent.settings import Settings
 
-ARTIFACTS = Path(os.environ.get("RECALL_ARTIFACT_DIR", "test-results/issue-773"))
 SIGNAL = "checkout.requests"
 SUMMARY = (
     "sre-checkout orders failing: 42% errors over the last 30s (threshold 10%). Evidence:"
