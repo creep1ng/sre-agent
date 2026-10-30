@@ -19,6 +19,7 @@ from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.attribution import RequestAttribution
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
+from sre_agent.gateway.consumption_affordability import text_input_bound
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
 from sre_agent.governance.dto import AuditEvent, Consumption
 from sre_agent.persistence.models import RequestAttributionRow
@@ -216,6 +217,7 @@ ERRORS = {
 }
 ERROR_MESSAGES = {
     "audit_unavailable": "Audit unavailable.",
+    "incident_not_found": "Incident not found.",
 }
 
 
@@ -278,17 +280,22 @@ class ResponsesService:  # noqa: E305
         # reserves the exposure. Gating it on catalog configuration let an
         # active provider with no catalog reach the provider unchecked.
         service = self.admission or ConsumptionAdmissionService(self.sessions)
+        # The catalog prices the routed model; the alias is only our own name for it.
         admission = await service.admit(
-            incident_id=identifiers.get("incident_id"), model=request.model,
+            incident_id=identifiers.get("incident_id"), model=assignment.concrete_model,
             provider=assignment.inference_provider, catalog=self.endpoint_catalog,
             now=datetime.now(UTC),
             request_id=request_id,
+            # The contract's input is one text message with no instructions or tools.
+            input_tokens=text_input_bound((request.input,)),
         )
         if not admission.allowed:
-            status = 503 if admission.retryable else 429
+            status = (503 if admission.retryable
+                      else 422 if admission.denial_reason == "resource_not_found" else 429)
             return await self._finish(request_id, started, status, "authorization",
                                       context=context, alias=request.model, decision=decision,
                                       reason=admission.denial_reason or "consumption_bounds_unavailable",
+                                      error_code="incident_not_found" if status == 422 else None,
                                       retryable=status in {429, 503, 504}, identifiers=identifiers,
                                       consumption_policy_version=(
                                           None if admission.denial_reason == "policy_unavailable"
