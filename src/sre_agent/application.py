@@ -217,7 +217,7 @@ def create_application(
             projector=mcp_projector,
         )
         application.include_router(mcp_router(mcp_service))
-    application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
+    application.include_router(alerts_router(LiveAlertsService(database.sessions)))
     application.include_router(changes_router(ChangeEventsService(database.sessions)))
     # Intake answers only when its secret is set and a 401 can be audited.
     if runtime_settings.alert_intake_secret and runtime_settings.audit_hmac_key:
