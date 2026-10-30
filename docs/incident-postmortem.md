@@ -89,3 +89,13 @@ notes `memory_recall_unavailable`.
 | Route | Action | Notes |
 | --- | --- | --- |
 | `GET /v1/incident-memory/changes` | `run.read_context` | Change log, newest first, up to 100 entries: `memory_id`, `operation` (`added`), `incident_id`, `source_record`, `postmortem_id`, `postmortem_version`, `close_event_id`, `service`, `signal`, `indexed_at`, `content`. |
+
+Recall cost. Each memory reaches the model cut to 2,000 characters, so recall adds at most
+3 × 2,000 = 6,000 characters to every turn, roughly 1,500 input tokens at about four
+characters per token. Measured on 2026-10-30 with `tests/test_incident_recall_e2e.py` and one
+memory: the recall query took between 2.2 and 8.3 ms at p50 (five runs of 20 rounds) against
+PostgreSQL in Compose, on a table with a single memory row, so it says nothing about a large
+table. The memory added 1,374 characters to the first turn's input (4,087 instead of 2,713).
+With `openai/gpt-4o-mini`, OpenRouter counted 1,048 instead of 704 input tokens on that turn
+(+344). The run's `recall.json` records these values each time; `RECALL_REAL_LLM=1` adds the
+provider's counted usage.
