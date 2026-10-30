@@ -1,0 +1,34 @@
+{
+  "sanitized": true,
+  "environment": "local demo: scripts/demo_env.py up (OTel Demo 3.0.0 + compose.demo.yaml) and scripts/setup_sre.py (SRE_OTEL_MODE=local, paid LLM disabled), stack tip w765-5n",
+  "provisioned_in_grafana": {
+    "rules": [
+      {"title": "service-error-rate", "for": "1m", "severity": "critical", "group_by": ["alertname", "service_name"]},
+      {"title": "service-latency-p95", "for": "1m", "severity": "warning", "group_by": ["alertname", "service_name"]},
+      {"title": "sre-checkout-orders-error-rate", "for": "1m", "severity": "warning", "group_by": ["alertname", "service_name"]}
+    ],
+    "contact_point": {"name": "midnight-intake", "type": "webhook", "url": "http://api:8000/v1/alert-intake/grafana"},
+    "upstream_checkout_git_status": "clean after up (no mountpoint created in otel-demo/)"
+  },
+  "intake_unauthenticated_post": 401,
+  "injection": {
+    "command": "demo_env.py fail --service sre-checkout",
+    "started_at": "2026-10-30T14:04:43Z",
+    "release_1_5_0_running_at": "2026-10-30T14:05:03Z",
+    "episode_recorded_at": "2026-10-30T14:06:27.227Z",
+    "investigation_dispatch_intent_at": "2026-10-30T14:06:27.886Z",
+    "seconds_from_1_5_0_running_to_dispatch": 84.9,
+    "episode_id": "alt-sre-checkout-71b3455594e2edd0",
+    "severity": "sev2",
+    "incident_id": "inc-f40226cbb6827db745c0cdd43564a525",
+    "investigation_run_id": "run_b0b6d71a8fe62262",
+    "triage": {"status": "declared", "decision_origin": "external_automatic", "responsible_system": "grafana"},
+    "console_action": "none; the screenshot was taken after the decision"
+  },
+  "reset": {"command": "demo_env.py reset --service sre-checkout", "at": "2026-10-30T14:14:41Z", "episode_resolved_at": "2026-10-30T14:15:00Z"},
+  "baseline_without_injection": {
+    "observed": "with no failure injected, service-error-rate fired for frontend-proxy and service-latency-p95 for frontend, frontend-proxy, flagd, product-catalog and recommendation; intake declared 5 incidents before the injection",
+    "host": "shared host, load average about 35 on 8 CPUs during the run; recommendation p50 15000 ms, so the store itself was slow",
+    "conclusion": "not a representative baseline; the baseline check stays pending for the EC2 session"
+  }
+}

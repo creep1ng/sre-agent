@@ -1,0 +1,97 @@
+{
+  "run": "f4335f5a",
+  "pass": true,
+  "checks": [
+    {
+      "check": "401 without the secret, one audit event per delivery, nothing recorded",
+      "pass": true,
+      "status": 401,
+      "oversized_status": 401,
+      "audit_401": [
+        0,
+        2
+      ],
+      "code": "authentication_failed"
+    },
+    {
+      "check": "a firing alert declares an incident and dispatches its investigation",
+      "pass": true,
+      "episode": "alt-cart-f4335f5a-0370f58a9dc7f11b",
+      "incident": "inc-1f4da5289b3e0515afb88f5443aa0c9d",
+      "run": "run_7174a1d92a611152"
+    },
+    {
+      "check": "the same delivery again opens nothing new",
+      "pass": true,
+      "received_count": 2,
+      "incidents": [
+        1,
+        1
+      ]
+    },
+    {
+      "check": "later alerts of the service join its open incident, also after the first resolved",
+      "pass": true,
+      "episodes": [
+        [
+          "alt-cart-f4335f5a-0370f58a9dc7f11b",
+          "resolved",
+          3,
+          "inc-1f4da5289b3e0515afb88f5443aa0c9d"
+        ],
+        [
+          "alt-cart-f4335f5a-07cfee62556d53fa",
+          "firing",
+          1,
+          "inc-1f4da5289b3e0515afb88f5443aa0c9d"
+        ],
+        [
+          "alt-cart-f4335f5a-dc6ed3fdb5e0943f",
+          "firing",
+          1,
+          "inc-1f4da5289b3e0515afb88f5443aa0c9d"
+        ]
+      ]
+    },
+    {
+      "check": "one grouped payload opens one incident per service",
+      "pass": true,
+      "incidents": [
+        "inc-2fe35655ea9734de4b2dde64caac8534",
+        "inc-1bc3d389321f225496f76c0cbe8e911f"
+      ]
+    },
+    {
+      "check": "a resolved before its firing opens nothing and stays resolved",
+      "pass": true,
+      "status": "resolved",
+      "received_count": 2
+    },
+    {
+      "check": "an oversized body or more than 100 alerts is refused",
+      "pass": true,
+      "statuses": [
+        413,
+        413
+      ]
+    },
+    {
+      "check": "GET /v1/alerts lists firing episodes live with their decision, resolved ones apart",
+      "pass": true,
+      "live": [
+        "alt-ad-f4335f5a-756bc71b5ec122f8",
+        "alt-cart-f4335f5a-07cfee62556d53fa",
+        "alt-cart-f4335f5a-dc6ed3fdb5e0943f",
+        "alt-payment-f4335f5a-cc07a0deefe7c176"
+      ]
+    },
+    {
+      "check": "GET /v1/alerts refuses a caller without alert.read and an anonymous one",
+      "pass": true,
+      "statuses": [
+        403,
+        401
+      ]
+    }
+  ]
+}
