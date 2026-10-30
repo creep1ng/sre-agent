@@ -52,3 +52,13 @@ the same kind and service but another payload answers `409`, which the step repo
 Midnight does not record the event (unreachable, refused, an unexpected answer) the step warns
 and the deploy stays green; set `fail-on-error: "true"` to fail it instead. Its messages never
 include the API key.
+
+## The investigator
+
+An investigation whose identity holds `change.read` (`scripts/provision_demo.py` grants it to
+`incident-harness`) is offered the tool `midnight_recent_changes` with a `service` argument. It
+returns the service's last ten changes as evidence the hypothesis can cite, with the `request_id`
+of the `GET /v1/changes` that served them, so the citation leads back to the read. The investigator
+client answers this tool itself and never forwards it to Grafana MCP; the gateway only exposes its
+closed list of MCP tools (`query_prometheus`, `query_elasticsearch`), and the `midnight_` prefix
+keeps a future MCP tool from taking the name.
