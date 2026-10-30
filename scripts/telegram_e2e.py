@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -83,6 +84,7 @@ def incident_texts(chat_id: int) -> list[str]:
 
 def linking(code: str, expired_code: str) -> None:
     say(STRANGER, "hola, ¿qué incidentes hay?")
+    say(STRANGER, "¿hola?")
     say(OPERATOR, f"/start {code}")
     wait_for(lambda: sent(OPERATOR) and sent(STRANGER))
     say(LATECOMER, f"/start {code}")
@@ -97,6 +99,7 @@ def linking(code: str, expired_code: str) -> None:
             "a used code is rejected": "no es válido" in sent(LATECOMER)[0]["text"],
             "an expired code is rejected": "no es válido" in sent(EXPIRED)[0]["text"],
             "an unlinked chat is told to link": "no está vinculado" in sent(STRANGER)[0]["text"],
+            "an unlinked chat is told only once": len(sent(STRANGER)) == 1,
             "only the operator chat is allowed": links == [(OPERATOR,)],
         },
     )
@@ -127,6 +130,7 @@ def dispatch(incident_id: str) -> None:
             "the acknowledgment arrives first": messages[0]["text"].startswith("Investigando"),
             f"the acknowledgment arrives in under 5 s ({latency:.3f} s)": 0 <= latency < 5,
             "the conclusion follows": messages[1]["text"].startswith("Investigación terminada"),
+            "the conclusion gives a readable reason": "Sin conclusión (" not in messages[1]["text"],
             "unlinked chats receive no incident information": not any(
                 incident_texts(chat) for chat in (STRANGER, LATECOMER, EXPIRED)
             ),
@@ -179,8 +183,41 @@ def delivered(section: str) -> None:
     )
 
 
+def unlinked(incident_id: str) -> None:
+    before, removed, after = (
+        Path(f"/artifacts/{name}.txt").read_text().strip()
+        for name in ("links-before", "unlink", "links-after")
+    )
+    run_id = start_run(incident_id)
+    wait_for(
+        lambda: sql(
+            "SELECT 1 FROM incident.run_events WHERE run_id=%s AND kind='dispatch_receipt' "
+            "AND payload->'dispatch_receipt'->>'phase'='outcome'",
+            run_id,
+        ),
+        60,
+    )
+    time.sleep(3)  # a message queued for the run would be sent by now
+    record(
+        "unlinked",
+        {"links_before": before, "unlink": removed, "links_after": after, "run_id": run_id},
+        {
+            "links lists the operator chat without codes": re.fullmatch(
+                rf"{OPERATOR} linked \S+", before
+            )
+            is not None,
+            "unlink revokes the operator chat": removed == f"chat {OPERATOR} unlinked",
+            "no chat is linked afterwards": after == "no chats",
+            "nothing about the new run is queued": outbox(run_id) == [],
+            "nothing about the new run reaches Telegram": not any(
+                run_id in m["text"] for m in sent()
+            ),
+        },
+    )
+
+
 if __name__ == "__main__":
     phase, *arguments = sys.argv[1:]
-    {"linking": linking, "dispatch": dispatch, "pending": pending, "delivered": delivered}[phase](
-        *arguments
-    )
+    phases = {"linking": linking, "dispatch": dispatch, "pending": pending}
+    phases |= {"delivered": delivered, "unlinked": unlinked}
+    phases[phase](*arguments)
