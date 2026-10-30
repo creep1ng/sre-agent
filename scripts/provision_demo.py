@@ -20,6 +20,7 @@ def demo_grants():
         "alert.dismiss",
         "alert.associate",
         "incident.declare",
+        "change.read",
     ):
         yield {
             "grant_id": "grant-setup-human-" + action.replace(".", "-"),

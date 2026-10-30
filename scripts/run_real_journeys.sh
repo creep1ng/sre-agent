@@ -5,7 +5,8 @@
 #
 # incidents: builds (or reuses) the production-browser stack (compose.yaml + compose.e2e.yaml),
 #   seeds the demo grants and one stamped incident per journey, then runs war-room-runs-real,
-#   war-room-reasoning-real, review-mitigation-real, war-room-follow-real and postmortem-journey.
+#   war-room-reasoning-real, review-mitigation-real, war-room-follow-real, postmortem-journey and
+#   change-events-real.
 # executor: the deploy-executor journey (#720/#743) and its socket-down case.
 # Compose reads the untracked .env (from .env.example). The OpenRouter keys are forced empty, so
 # no investigation reaches a model provider. Remove the project afterwards with
@@ -123,6 +124,8 @@ EOF
   kill "$follower" 2> /dev/null || true
   wait "$follower" || echo "war-room-follow: the second seed did not finish (see its log)"
   run_journey postmortem e2e -e POSTMORTEM_INCIDENT="inc-vc-pm$STAMP" -- postmortem-journey
+  run_journey change-events e2e -e SRE_REAL_BACKEND=1 -e SEED_STAMP="ch$STAMP" \
+    -e CHANGE_EVENTS_ARTIFACT_DIR=/artifacts -- change-events-real
 }
 
 executor() {
