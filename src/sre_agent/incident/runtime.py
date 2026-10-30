@@ -158,13 +158,10 @@ def termination(reason: str, now: datetime) -> dict[str, Any]:
 
 def escalation(reason: str, now: datetime) -> tuple[str, dict[str, Any]]:
     """The trigger and the run fields of an escalation: the transition is blocked and a human
-    notified, never a state change. The run waits for the human's `escalate` command."""
-    return ESCALATION_TRIGGERS[reason], {
-        "status": "awaiting_human",
-        "pending_command": "escalate",
-        "terminated_reason": reason,
-        "updated_at": now.isoformat(),
-    }
+    notified, never a state change. The run ends without announcing `escalate`, a command this
+    workflow version defers (#788): the human restores what was denied and retries with a new
+    run of the incident."""
+    return ESCALATION_TRIGGERS[reason], termination(reason, now)
 
 
 @dataclass(frozen=True, slots=True)

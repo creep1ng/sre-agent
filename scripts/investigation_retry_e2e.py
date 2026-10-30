@@ -9,6 +9,10 @@ ARTIFACT as JSON. It exits non-zero when a run stays `running` or the retry is r
 With DEACTIVATE_HARNESS=1 (issue #705) the administrator sets the agent identity
 `incident-harness` inactive for the first attempt and reactivates it before the retry, so the
 first ending names the identity and the retry gets past it.
+
+With REVOKE_GRANT=<grant id> (issue #788) the administrator revokes that grant before the first
+attempt, so the run is denied: it must end with no pending command the API would refuse, and
+the retry must still be accepted.
 """
 
 from __future__ import annotations
@@ -40,7 +44,9 @@ def call(
     request = urllib.request.Request(BASE + path, data, headers, method=method)
     try:
         with urllib.request.urlopen(request, timeout=60) as reply:
-            return {"request": f"{method} {path}", "status": reply.status, "body": json.load(reply)}
+            raw = reply.read()
+            body = json.loads(raw) if raw else None
+            return {"request": f"{method} {path}", "status": reply.status, "body": body}
     except urllib.error.HTTPError as error:
         return {"request": f"{method} {path}", "status": error.code, "body": json.load(error)}
 
@@ -76,6 +82,10 @@ def set_harness(status: str) -> None:
 
 
 def main() -> int:
+    revoke = os.environ.get("REVOKE_GRANT")
+    if revoke:
+        revoked = call("DELETE", f"/v1/grants/{revoke}", admin=True)
+        print(f"revoke {revoke}: HTTP {revoked['status']}")
     deactivate = os.environ.get("DEACTIVATE_HARNESS") == "1"
     if deactivate:
         set_harness("inactive")
@@ -105,6 +115,10 @@ def main() -> int:
             print(f"    #{event['sequence']} {event['kind']}: {event['summary']}{reason}")
         if run["status"] == "running":
             failures.append(f"{name} run {run['run_id']} is still running")
+        if run["pending_command"] not in (None, "approve_mitigation"):
+            failures.append(
+                f"{name} run announces '{run['pending_command']}', which the API defers"
+            )
     print(
         f"incident {INCIDENT}: state={detail['body']['state']} runs="
         f"{[(r['run_id'], r['status']) for r in detail['body']['runs']]}"
