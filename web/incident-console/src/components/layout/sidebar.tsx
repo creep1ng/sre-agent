@@ -1,4 +1,4 @@
-import { InboxIcon, LayersIcon, SearchIcon } from "lucide-react";
+import { ExternalLinkIcon, InboxIcon, LandmarkIcon, LayersIcon, SearchIcon } from "lucide-react";
 import { NavLink } from "react-router";
 import { AgentAvatar, Logo } from "@/components/brand";
 import { StatusDot } from "@/components/badges";
@@ -101,6 +101,22 @@ export function Sidebar({
         <NavItem to="/" icon={InboxIcon} label="Bandeja" count={inbox.attention} highlight />
         <NavItem to="/incidentes" icon={LayersIcon} label="Incidentes" count={inbox.active.length} />
       </nav>
+
+      {/* The administration console still lives outside the new console: one link, a new tab. */}
+      <div className="mt-2 border-t border-sidebar-border pt-3">
+        <nav aria-label="Administración">
+          <a
+            href="/public/admin/principals.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+          >
+            <LandmarkIcon className="size-4" aria-hidden="true" />
+            <span className="flex-1">Gobierno de IA</span>
+            <ExternalLinkIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+          </a>
+        </nav>
+      </div>
 
       <div className="mt-auto flex flex-col gap-3">
         <AgentPresence inbox={inbox} />
