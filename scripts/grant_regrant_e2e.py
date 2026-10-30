@@ -135,7 +135,7 @@ def after_seed(db: psycopg.Connection) -> None:
     ).fetchone()
     check(
         "/health/ready answers 200 on the new revision",
-        status == 200 and version == "20261030_02",
+        status == 200 and version == "20261030_03",
         (status, ready, version),
     )
     check("uniqueness holds only among active grants", bool(index) and "WHERE" in index[0], index)
