@@ -1,0 +1,8 @@
+# The uid the provisioned rules query; on the demo it is the store's own Prometheus.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: webstore-metrics
+    type: prometheus
+    url: ${PROMETHEUS_URL}
+    isDefault: true

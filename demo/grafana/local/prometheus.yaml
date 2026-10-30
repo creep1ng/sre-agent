@@ -1,0 +1,5 @@
+# The local stand-in for the store's Prometheus (#765): the OTLP receiver promotes the same
+# resource attributes upstream promotes, so the provisioned rules match the same labels.
+otlp:
+  keep_identifying_resource_attributes: true
+  promote_resource_attributes: [service.name, service.namespace, service.version, service.instance.id]
