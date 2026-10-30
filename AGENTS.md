@@ -8,6 +8,18 @@ Read [the team workflow](docs/team-workflow.md) before contributing and
 - User and scope: build for independent freelancers maintaining several services.
   This is an academic project with no SRE on-call team, no imminent production,
   and no complex edge-case validation required.
+- Vision and values: weigh every product change against [the vision](docs/vision.md)
+  and name in the issue or PR the value it serves; a change that serves none waits.
+  The goal: a freelancer can close the laptop at night while Midnight watches the
+  signals they already have and wakes them only when a human decision changes the
+  outcome. The values, in short:
+  1. Silence is the default.
+  2. What is not in the catalog cannot happen.
+  3. Every action is accountable.
+  4. Memory has provenance; the agent proposes, the human approves.
+  5. The engine is the product; interfaces are clients.
+  6. We claim only what we measured.
+  7. Pocket-sized economics: under USD 1 per user per month.
 - Real evidence only: never use invented SVGs nor generated captures. Provide real
   FastAPI output, SQL queries, UI, or exact instructions to repeat the expected behavior.
 - Use direct work for bounded, understood changes. Record the selected route in the PR.
