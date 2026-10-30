@@ -42,7 +42,7 @@ const revokeErrorDetail = document.getElementById("revoke-error-detail");
 const revokeSubmit = document.getElementById("revoke-submit");
 const revokeCancel = document.getElementById("revoke-cancel");
 
-// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:343-364 (#480).
+// Mirror of GRANT_ADMITTED_ACTIONS in src/sre_agent/control/service.py:345-367 (#480).
 // Frontend-only guide: the backend admits only these exact per-type actions
 // and rejects anything else with 422 without mutation. Keep in sync manually;
 // drift mitigation: tests/browser/grants.spec.js asserts the exact per-type
@@ -67,6 +67,7 @@ const GRANT_ADMITTED_ACTIONS = {
     "incident.declare",
   ],
   administrative_control: ["admin.read", "admin.write"],
+  service_operation: ["mitigation.execute"],
 };
 // Seeded administrative-control resources (mirrors seeds.ADMIN_RESOURCES).
 // The catalog never enumerates administrative_control by design

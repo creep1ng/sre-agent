@@ -107,7 +107,9 @@ audit and the database volume. Conflicting/revoked grants fail; setup does not
 silently reactivate authority, rotate secrets or reconcile changed routes.
 The demo human receives workflow/triage permissions; `incident-harness` has its
 own LLM seed grant and direct discovery plus two read-only MCP invocation grants.
-It receives no run approval. `restricted-harness` receives no setup grants.
+It receives no run approval. Setup catalogs the enrolled operations of `sre-checkout`, the
+demo's own service, as `service_operation` resources and grants it only `mitigation.execute` on
+`sre-checkout:deployment.rollback` (#722). `restricted-harness` receives no setup grants.
 Audit is read using the existing admin human, not broad audit authority for the
 investigator. Provider/MCP secrets stay API-owned; the standalone harness is
 confined to its internal API-consumer network.
