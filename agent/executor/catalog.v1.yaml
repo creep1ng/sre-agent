@@ -8,8 +8,8 @@
 schema_version: "v1"
 
 # `compose_project: self` selects containers of the executor's own Compose
-# project, read from its container labels. Cross-project targets (the OTel
-# store of #724) declare the project explicitly.
+# project, read from its container labels. Cross-project targets (the demo's
+# sre-checkout of #721, the OTel store of #724) declare the project explicitly.
 defaults:
   compose_project: self
 
@@ -23,3 +23,10 @@ services:
   - service: web
     compose_service: web
     operations: [deployment.restart]
+  # The demo's second service (#721), in otel-demo; the store's checkout has no catalog (#722).
+  # demo/checkout:1.4.0 is healthy, `demo_env.py fail --service sre-checkout` deploys 1.5.0.
+  - service: sre-checkout
+    compose_project: otel-demo
+    compose_service: sre-checkout
+    image_repository: demo/checkout
+    operations: [deployment.rollback, deployment.restart]

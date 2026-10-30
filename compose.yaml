@@ -406,6 +406,30 @@ services:
     restart: "no"
     networks: [runtime, executor-call, executor-boundary]
 
+  # Runs the second-service journey (tests/browser/checkout-alert-real.spec.js, #721) against
+  # the local demo's sre-checkout: the inbox through web, and the rollback signed as the
+  # gateway will sign it (#722). Start it detached, run `demo_env.py fail --service sre-checkout`
+  # when it logs READY, and mount a host directory on /artifacts to keep the evidence.
+  checkout-e2e:
+    profiles: ["checkout-e2e"]
+    build:
+      context: .
+      dockerfile: docker/e2e.Dockerfile
+    command: ["npx", "playwright", "test", "--config=playwright.production.config.js", "checkout-alert-real", "--reporter=line,json"]
+    environment:
+      CHECKOUT_ALERT_E2E: "1"
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
+      CHECKOUT_ALERT_ARTIFACT_DIR: /artifacts
+      PLAYWRIGHT_JSON_OUTPUT_NAME: /artifacts/report.json
+    depends_on:
+      web:
+        condition: service_healthy
+      deploy-executor:
+        condition: service_healthy
+    restart: "no"
+    networks: [runtime, executor-call]
+
 volumes:
   postgres_data:
   executor_journal:

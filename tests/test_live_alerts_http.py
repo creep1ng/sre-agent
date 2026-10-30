@@ -3,7 +3,8 @@
 Failure modes: anonymous caller; no alert.read; no mcp.invoke on query_prometheus; MCP
 unavailable; empty result; malformed sample; id changing within an episode or reused by the
 next; unaudited evaluation; an alert triage cannot declare; a triage decision missing from the
-list, reported without its incident, or carried over to the next episode. Real PostgreSQL,
+list, reported without its incident, or carried over to the next episode; the demo's own
+checkout alerting under a service name a store rule also emits (#722). Real PostgreSQL,
 seeds, grants and audit; only the Grafana MCP upstream is scripted. With LIVE_ALERTS_TRANSCRIPT
 set, the GET /v1/alerts bodies of the triage journey are written there as the review artifact.
 """
@@ -43,13 +44,15 @@ ALERT_KEYS = {"alert_id", "service", "severity", "status", "observed_at", "summa
 class ScriptedMCP:
     def __init__(self) -> None:
         self.next: Any = {"data": []}
+        # The second service's rule (#721): no samples, so it never fires, unless a step says so.
+        self.orders: Any = {"data": []}
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         self.calls.append((tool_name, arguments))
         if isinstance(self.next, Exception):
             raise self.next
-        return self.next
+        return self.next if "PaymentService" in arguments["expr"] else self.orders
 
 
 def ratio(value: str) -> dict[str, Any]:
@@ -120,8 +123,8 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
         empty = alerts()
         assert empty.status_code == 200, empty.text
         assert empty.json()["alerts"] == []
-        assert [rule["state"] for rule in empty.json()["rules"]] == ["no_data"]
-        assert mcp_invocations() == audited + 1
+        assert [rule["state"] for rule in empty.json()["rules"]] == ["no_data", "no_data"]
+        assert mcp_invocations() == audited + 2
         assert mcp.calls[-1][0] == "query_prometheus"
 
         # Healthy traffic below the threshold.
@@ -218,6 +221,13 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
         assert listed(next_episode["alert_id"], "after triage_dismiss") == ("dismissed", None)
         if path := os.environ.get("LIVE_ALERTS_TRANSCRIPT"):
             Path(path).write_text(json.dumps(transcript, indent=2) + "\n")
+
+        # The demo's own checkout alerts as sre-checkout, which no store rule emits (#722).
+        mcp.orders = ratio("1")
+        [ours] = [item for item in alerts().json()["alerts"] if item["service"] == "sre-checkout"]
+        assert ours["origin"]["condition"].startswith("checkout-orders-error-rate:")
+        assert 'service_name="sre-checkout"' in mcp.calls[-1][1]["expr"]
+        assert 'service_name="sre-checkout"' in ours["summary"]
 
         # Without mcp.invoke on query_prometheus the governed path denies.
         with psycopg.connect(URL, autocommit=True) as conn:

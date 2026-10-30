@@ -3,6 +3,7 @@
 
 Usage:
     python scripts/demo_env.py up|fail|verify|reset|down
+    python scripts/demo_env.py fail|reset --service sre-checkout   # the second service (#721)
 
 Every operation is idempotent and bounded to the Compose project declared in
 demo/manifest.yaml, removes nothing outside it, and never writes to upstream.
@@ -205,7 +206,10 @@ def digest_drift(cfg: dict) -> list[str]:
             ref, _, digest = line.partition("\t")
             recorded[ref.strip()] = digest.strip()
     problems = []
+    built = cfg["second_service"]["image_repository"] + ":"
     for ref in run(compose(cfg) + ["config", "--images"], capture=True).split():
+        if ref.startswith(built):  # built here from docker/ (#721), never pulled
+            continue
         if ref not in recorded:
             problems.append(f"{ref}: not recorded in digests.lock")
             continue
@@ -301,6 +305,14 @@ def op_reset(cfg: dict) -> None:
     print("Flag baseline restored.")
 
 
+def deploy_second_service(cfg: dict, release: str) -> None:
+    """Recreate the second service on one release; --wait returns once it is healthy (#721)."""
+    second = cfg["second_service"]
+    os.environ["DEMO_CHECKOUT_VERSION"] = second[release]
+    run(compose(cfg) + ["up", "-d", "--build", "--no-deps", "--wait", second["compose_service"]])
+    print(f"{second['service']} runs {second['image_repository']}:{second[release]}.")
+
+
 def op_down(cfg: dict) -> None:
     project = cfg["compose"]["project_name"]
     run(compose(cfg) + ["down"])
@@ -327,10 +339,19 @@ OPERATIONS = {"up": op_up, "fail": op_fail, "verify": op_verify, "reset": op_res
 def main() -> None:
     parser = argparse.ArgumentParser(description="Operate the demo environment.")
     parser.add_argument("operation", choices=sorted(OPERATIONS))
-    operation = parser.parse_args().operation
+    parser.add_argument(
+        "--service", choices=["sre-checkout"], help="fail or reset the demo's own service"
+    )
+    arguments = parser.parse_args()
+    if arguments.service and arguments.operation not in {"fail", "reset"}:
+        parser.error("--service applies to fail and reset only")
     require_docker()
     ensure_mcp_token()
-    OPERATIONS[operation](manifest())
+    if arguments.service:
+        release = "broken_release" if arguments.operation == "fail" else "healthy_release"
+        deploy_second_service(manifest(), release)
+        return
+    OPERATIONS[arguments.operation](manifest())
 
 
 if __name__ == "__main__":

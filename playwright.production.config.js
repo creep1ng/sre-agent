@@ -15,12 +15,14 @@ const liveInvestigation = process.env.LIVE_INVESTIGATION === "1" ? ["war-room-lo
 const liveAlertsTriage = process.env.LIVE_ALERTS_TRIAGE ? ["alerts-triage-status-real.spec.js"] : [];
 // The deploy-executor journey needs the executor, the socket proxy and the probe (issue #720).
 const executorJourney = process.env.DEPLOY_EXECUTOR_E2E === "1" ? ["deploy-executor-real.spec.js"] : [];
+// The second-service journey needs the local demo's sre-checkout and the executor (issue #721).
+const checkoutJourney = process.env.CHECKOUT_ALERT_E2E === "1" ? ["checkout-alert-real.spec.js"] : [];
 
 export default defineConfig({
   testDir: "tests/browser",
   testMatch: triageReview
     ? triageTests
-    : [...existingTests, ...postmortemJourney, ...languageJourney, ...liveInvestigation, ...liveAlertsTriage, ...executorJourney],
+    : [...existingTests, ...postmortemJourney, ...languageJourney, ...liveInvestigation, ...liveAlertsTriage, ...executorJourney, ...checkoutJourney],
   outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results/production-browser",
   reporter: [["line"]],
   use: {

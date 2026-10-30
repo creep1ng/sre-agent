@@ -103,6 +103,16 @@ failure_injection:
   flag: paymentUnreachable
   ui_path: "/feature"
 
+# The second enrolled service (#721), our own and not the store's. `fail --service sre-checkout`
+# deploys the broken release, `reset --service sre-checkout` the healthy one; the deploy-executor
+# rolls it back between the same tags, built into the local image store, not a registry.
+second_service:
+  service: sre-checkout
+  compose_service: sre-checkout
+  image_repository: demo/checkout
+  healthy_release: "1.4.0"
+  broken_release: "1.5.0"  # 3 of every 10 orders answer 500
+
 flag_baseline:
   # `reset` restores this state. It does NOT switch every flag off:
   # loadGeneratorTraffic sustains the synthetic traffic CA2 requires to keep
