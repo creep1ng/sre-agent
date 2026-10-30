@@ -156,7 +156,10 @@ def event_summary(payload: Any) -> str:
                 return f"{ended} Cause: {cause}" if cause else ended
         patch = payload.get("run_patch")
         if isinstance(patch, dict) and patch.get("terminated_reason") == "denied":
-            return "Authorization denied; the investigation waits for a human to escalate."
+            return (
+                "Authorization denied; an administrator must grant the capability, "
+                "then a new run may retry."
+            )
         if isinstance(patch, dict) and patch.get("terminated_reason") in TERMINATED_SUMMARIES:
             return TERMINATED_SUMMARIES[patch["terminated_reason"]]
         outcome = payload.get("outcome")

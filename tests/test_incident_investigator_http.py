@@ -69,7 +69,8 @@ SEED_ENV = {
     "REMEDIATION_AGENT_PROVIDER": "anthropic",
 }
 NOW = datetime(2026, 10, 6, 12, tzinfo=UTC)
-BLOCKED = {"status": "awaiting_human", "pending_command": "escalate", "terminated_reason": "denied"}
+# A denied run ends for a human; it announces no command the API defers (#788).
+BLOCKED = {"status": "terminated", "pending_command": None, "terminated_reason": "denied"}
 
 
 @pytest.fixture(scope="module", autouse=True)
