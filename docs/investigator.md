@@ -36,9 +36,10 @@ The investigator's internal result status describes the bounded loop:
 | `upstream_unavailable` | A gateway or tool call was unavailable, timed out, or returned a retryable error |
 | `max_steps` | Six turns passed without a final answer |
 
-The limits (6 steps, 45 s per gateway call, 10 s per tool) are fixed in the change's
-`design.md`. A timeout, network error, or 5xx is not automatically retried: the remote
-call may have completed even when its response was lost.
+The limits (6 steps, 45 s per gateway call) are fixed in the change's `design.md`; the
+per-tool limit is `INVESTIGATOR_TOOL_TIMEOUT_SECONDS` (below). A timeout, network error, or
+5xx is not automatically retried: the remote call may have completed even when its response
+was lost. The one exception is the gateway's own retry of a provider 503 (below).
 
 ### Provider 503 and tool timeout
 
@@ -47,15 +48,16 @@ timeout). Failure modes, written before the code:
 
 | Scenario | Expected |
 | --- | --- |
-| The provider answers HTTP 503 to a model call | The gateway waits 1 s and sends it once more; the second answer is the call's answer. The request is not streamed, so a 503 carries no output and no charge |
+| The provider answers HTTP 503 to a model call within 5 s, reporting no tokens or cost | The gateway waits 1 s and sends it once more, with only the time left of `OPENROUTER_TIMEOUT_SECONDS`, so the whole call never outlasts it (30 s by default, under the investigator's 45 s). The request is not streamed, so such a 503 carries no output and no charge. The call keeps one reservation, settled once at the second answer's usage |
+| The 503 took 5 s or more, or reports tokens or cost | Not retried: the provider may have worked on the request |
 | The provider answers 503 twice | No third attempt: the gateway answers 503 `upstream_unavailable`, audited, and the run ends `upstream_unavailable` |
 | The provider times out, drops the connection or answers 429, 500, 502 or 529 | Never retried: the provider may have accepted the request, so the outcome is ambiguous |
 | The gateway answers 503 after the provider answered (audit or settlement) | Never retried by the investigator: the call was accepted and audited |
 | A tool does not answer within `INVESTIGATOR_TOOL_TIMEOUT_SECONDS` | The run ends `upstream_unavailable` with the receipt's `reason_code: tool_timeout` and the diagnostic stage `tool_timeout` |
 
-`INVESTIGATOR_TOOL_TIMEOUT_SECONDS` (default `10`, greater than 0 and at most 60) bounds each MCP
-tool call the investigator makes. The gateway's own MCP transport stops at 30 s, so a value above
-30 ends as the gateway's `upstream_timeout` instead. Change it in `.env` and recreate `api`.
+`INVESTIGATOR_TOOL_TIMEOUT_SECONDS` (default `30`, greater than 0 and at most 30) bounds each MCP
+tool call the investigator makes. The cap is the gateway's own MCP transport timeout
+(`MCP_TIMEOUT_SECONDS`, 30 s). Change it in `.env` and recreate `api`.
 
 The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
 before a governed call, followed by one terminal `success`, `confirmed_failure`, or

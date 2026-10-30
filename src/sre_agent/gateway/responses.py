@@ -210,7 +210,7 @@ class PostgresAuditStore:
 
 
 # fmt: off
-PROVIDER_503_RETRY_DELAY_SECONDS = 1.0
+PROVIDER_503_RETRY_DELAY_SECONDS, PROVIDER_503_RETRY_WITHIN_SECONDS = 1.0, 5.0
 ERRORS = {
     401: ("authentication_failed", "Authentication failed."), 403: ("resource_unavailable", "Resource unavailable."),
     422: ("contract_validation_failed", "Request validation failed."), 502: ("provider_evidence_invalid", "Provider response was invalid."),
@@ -240,9 +240,10 @@ def _empty_consumption(availability: Literal["absent", "unavailable"]) -> Consum
 class ResponsesService:  # noqa: E305
     def __init__(self, sessions: Any, provider: LLMProvider, audit: AuditStore,
                  projector: AuditProjector, admission: Any = None,
-                 endpoint_catalog: Any = None) -> None:
+                 endpoint_catalog: Any = None, provider_timeout_seconds: float = 30.0) -> None:
         self.sessions, self.provider, self.audit, self.projector = sessions, provider, audit, projector
         self.admission, self.endpoint_catalog = admission, endpoint_catalog
+        self.provider_timeout_seconds = provider_timeout_seconds
 
     async def create(self, raw: Any, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
@@ -359,15 +360,28 @@ class ResponsesService:  # noqa: E305
                                       consumption_policy_version=admission.policy_version)
 
     async def _provider_create(self, provider_request: ProviderRequest):
-        """Retry once only an HTTP 503 (#719): unstreamed, it carries no output and no charge.
-        A timeout, dropped connection or other status may follow an accepted request."""
+        """Retry once only a fast, uncharged HTTP 503 (#719): unstreamed, it carries no output.
+        A timeout, dropped connection or other status may follow an accepted request, so it is
+        never retried. Both attempts together never outlast the provider timeout."""
+        started = monotonic()
         try:
             return await self.provider.create(provider_request)
         except ProviderFailure as failure:
-            if failure.http_status != 503:
+            elapsed, used = monotonic() - started, failure.consumption
+            # Any reported usage, complete or partial, means the provider did work: not retried.
+            charged = used is not None and (
+                any((used.input_tokens, used.output_tokens, used.total_tokens))
+                or Decimal(used.billed_usd or "0") > 0)
+            left = self.provider_timeout_seconds - elapsed - PROVIDER_503_RETRY_DELAY_SECONDS
+            if (failure.http_status != 503 or charged or left <= 0
+                    or elapsed >= PROVIDER_503_RETRY_WITHIN_SECONDS):
                 raise
         await asyncio.sleep(PROVIDER_503_RETRY_DELAY_SECONDS)
-        return await self.provider.create(provider_request)
+        try:
+            async with asyncio.timeout(left):
+                return await self.provider.create(provider_request)
+        except TimeoutError:
+            raise ProviderFailure("timeout", consumption=_empty_consumption("unavailable")) from None
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, consumption: Consumption | None = None,

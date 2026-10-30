@@ -56,7 +56,7 @@ class InvestigationRunDispatcher:
         *,
         http: Any = None,
         language: OutputLanguage = "es",
-        tool_timeout_seconds: float = 10.0,
+        tool_timeout_seconds: float = 30.0,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language = language

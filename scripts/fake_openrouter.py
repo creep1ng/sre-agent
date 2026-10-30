@@ -15,6 +15,11 @@ Otherwise it returns a completed response with exact usage; given an investigato
 proposes a hypothesis citing the incident's evidence, then a mitigation based on it.
 `GET /__log` lists each request's path and status, and for responses the prompt's byte count
 and the `max_output_tokens` it received.
+
+For #719, `POST /__plan` queues the next answers to responses: `503`, `"late503"` (a 503 after
+LATE_SECONDS), `"charged503"` (a 503 that reports usage) or `"slow"` (a reply after SLOW_SECONDS).
+`/mcp` initializes and holds each tools/call for MCP_DELAY_SECONDS; given an incident without
+evidence, the investigator is told to call query_prometheus.
 """
 
 import json
@@ -50,7 +55,10 @@ ENDPOINTS = [
         "pricing": {"prompt": "0.0000001", "completion": "0.0000002", "discount": 0},
     },
 ]
+DELAYS = {name: float(os.environ.get(f"{name}_SECONDS", "5")) for name in ("LATE", "SLOW")}
+MCP_DELAY = float(os.environ.get("MCP_DELAY_SECONDS", "5"))
 LOG: list[dict] = []
+PLAN: list[object] = []
 LOCK = threading.Lock()
 
 
@@ -58,6 +66,15 @@ def next_action(prompt: str) -> str:
     if "State: " not in prompt:
         return "Fake OpenRouter reply."
     incident = json.loads(prompt.split("State: ", 1)[1].split("\n", 1)[0])["incident"]
+    if not incident["evidence"]:
+        arguments = {"datasource_uid": "webstore-metrics", "expr": "up", "query_type": "instant"}
+        return json.dumps(
+            {
+                "action": "use_tool",
+                "tool": "query_prometheus",
+                "arguments": arguments | {"end_time": "now"},
+            }
+        )
     if incident["hypotheses"]:
         return json.dumps(
             {
@@ -117,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
         return
 
     def _send(self, status: int, payload: object, **facts: object) -> None:
-        if self.path not in {"/health", "/__log"}:
+        if self.path not in {"/health", "/__log", "/__plan"}:
             with LOCK:
                 LOG.append({"method": self.command, "path": self.path, "status": status} | facts)
         encoded = json.dumps(payload).encode()
@@ -139,6 +156,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", "0"))))
+        if self.path == "/__plan":
+            with LOCK:
+                PLAN[:] = body["responses"]
+            return self._send(200, {"planned": len(PLAN)})
+        if self.path == "/mcp":
+            return self._mcp(body)
         if self.path != "/api/v1/responses" or body.get("model") != MODEL:
             return self._send(404, {"error": {"message": "Not Found", "code": 404}})
         if not self._authorized("responses"):
@@ -157,7 +180,29 @@ class Handler(BaseHTTPRequestHandler):
             if cap is not None and (cap > completion or prompt_bytes + cap > window):
                 message = "max_output_tokens exceeds the endpoint's limits"
                 return self._send(400, {"error": {"message": message, "code": 400}}, **facts)
+        with LOCK:
+            planned = PLAN.pop(0) if PLAN else 200
+        time.sleep(
+            DELAYS["LATE"] if planned == "late503" else DELAYS["SLOW"] if planned == "slow" else 0
+        )
+        if planned in {503, "late503", "charged503"}:
+            unavailable = {"error": {"message": "No endpoints available", "code": 503}}
+            if planned == "charged503":  # complete, priced usage, as a 200 reports it
+                reply = completed(body["input"])
+                unavailable |= {"usage": reply["usage"], "created_at": reply["created_at"]}
+            return self._send(503, unavailable, **facts)
         self._send(200, completed(body["input"]), **facts)
+
+    def _mcp(self, body: dict) -> None:
+        if body.get("method") == "initialize":
+            result = {"protocolVersion": "2025-03-26", "capabilities": {}, "serverInfo": {}}
+            return self._send(200, {"jsonrpc": "2.0", "id": body["id"], "result": result})
+        if body.get("method") == "tools/call":
+            time.sleep(MCP_DELAY)
+            result = {"content": [{"type": "text", "text": "{}"}]}
+            reply = {"jsonrpc": "2.0", "id": body["id"], "result": result}
+            return self._send(200, reply, rpc="tools/call")
+        self._send(202, None)
 
     def _authorized(self, route: str) -> bool:
         return self.headers.get("Authorization") == f"Bearer {KEYS[route]}"

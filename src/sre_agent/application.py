@@ -190,7 +190,7 @@ def create_application(
         )
     if provider is not None and runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
-        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()), endpoint_catalog=endpoint_catalog or application.state.endpoint_catalog)  # noqa: E501  # fmt: skip
+        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()), endpoint_catalog=endpoint_catalog or application.state.endpoint_catalog, provider_timeout_seconds=runtime_settings.openrouter_timeout_seconds)  # noqa: E501  # fmt: skip
         application.include_router(responses_router(service))
     configured_mcp_client = mcp_client
     if configured_mcp_client is None and runtime_settings.grafana_mcp_endpoint:
