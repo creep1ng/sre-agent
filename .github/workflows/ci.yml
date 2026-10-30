@@ -15,7 +15,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A pull request that only changes documentation no code reads skips every build and test
+  # job; pushes to main and scheduled runs always run them all.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Classify the changed paths
+        id: classify
+        run: |
+          docs_only=false
+          if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
+            # The pull_request checkout is the merge commit; its first parent is the base.
+            changed="$(git diff --name-only HEAD^1 HEAD)"
+            docs_only=true
+            [ -n "${changed}" ] || docs_only=false
+            while IFS= read -r path; do
+              [ -n "${path}" ] || continue
+              case "${path}" in
+                docs/*) ;;
+                */*) docs_only=false; continue ;;
+                *.md) ;;
+                *) docs_only=false; continue ;;
+              esac
+              # A document that code, tests or tooling name is an input, not documentation.
+              if git grep -qF -e "${path}" -- ':!docs/' ':!*.md'; then
+                echo "${path} is read outside the documentation"
+                docs_only=false
+              fi
+            done <<< "${changed}"
+            printf '%s\n' "${changed}"
+          fi
+          echo "docs_only=${docs_only}"
+          echo "docs_only=${docs_only}" >> "${GITHUB_OUTPUT}"
+
   configuration-lock:
+    needs: changes
+    if: ${{ needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -240,6 +282,7 @@ jobs:
   quality-gate:
     name: Quality gate
     needs:
+      - changes
       - configuration-lock
       - checks-image
       - unit
@@ -253,6 +296,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      CHANGES_RESULT: ${{ needs.changes.result }}
+      DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
       CONFIGURATION_LOCK_RESULT: ${{ needs.configuration-lock.result }}
       CHECKS_IMAGE_RESULT: ${{ needs.checks-image.result }}
       UNIT_RESULT: ${{ needs.unit.result }}
@@ -273,6 +318,8 @@ jobs:
           base=${BASE_SHA}
           github-sha=${GITHUB_SHA}
           event=${GITHUB_EVENT_NAME}
+          changes=${CHANGES_RESULT}
+          docs-only=${DOCS_ONLY}
           configuration-lock=${CONFIGURATION_LOCK_RESULT}
           checks-image=${CHECKS_IMAGE_RESULT}
           unit=${UNIT_RESULT}
@@ -294,6 +341,13 @@ jobs:
       - name: Require every mandatory job to succeed
         run: |
           failures=0
+          if [ "${CHANGES_RESULT}" != "success" ]; then
+            echo "changes ended as ${CHANGES_RESULT}; quality gate requires success."
+            exit 1
+          fi
+          # Only a documentation-only pull request may skip, and then every job must have skipped.
+          expected=success
+          if [ "${DOCS_ONLY}" = "true" ]; then expected=skipped; fi
           for result in \
             "configuration-lock:${CONFIGURATION_LOCK_RESULT}" \
             "checks-image:${CHECKS_IMAGE_RESULT}" \
@@ -306,8 +360,8 @@ jobs:
             "deploy-executor:${DEPLOY_EXECUTOR_RESULT}"; do
             job="${result%%:*}"
             status="${result#*:}"
-            if [ "${status}" != "success" ]; then
-              echo "${job} ended as ${status}; quality gate requires success."
+            if [ "${status}" != "${expected}" ]; then
+              echo "${job} ended as ${status}; quality gate requires ${expected}."
               failures=1
             fi
           done

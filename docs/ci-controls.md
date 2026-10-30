@@ -13,8 +13,18 @@ when an earlier required stage fails; scheduled diagnostics retain `always()`
 paths for investigation. The final gate accepts only `success` from every
 required job; failed, cancelled, skipped, neutral, or missing work fails closed.
 
+The one exception is a documentation-only pull request. The `changes` job runs first and
+classifies the pull request as documentation-only when every changed path is under `docs/` or
+is a root-level `*.md` file, and no file outside `docs/` and `*.md` names that path. For
+example, `tests/test_mcp_overlay.py` reads `docs/governed-grafana-mcp-demo.md`, so a change to
+that runbook runs the full path. A documentation-only pull request skips every build and test
+job, and the gate then requires each of them to be `skipped` and `changes` to be `success`.
+Pushes to `main` and scheduled runs never skip, so they still run the full path after a
+documentation-only merge.
+
 | Stage | Control | Boundary protected |
 | --- | --- | --- |
+| Changes | Classify the pull request's changed paths | Only documentation no code reads skips the path |
 | Configuration lock | Build the runtime image with `uv sync --locked --no-dev` | Manifest/lock drift and runtime dependency resolution |
 | Checks image | Ruff, `lint-imports`, scoped strict mypy, shell and declarative validators | Style, architecture imports, typed interfaces and contract metadata |
 | Unit and contracts | Locked Compose Python checks and Node harness | Application behavior and published schemas |
