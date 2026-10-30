@@ -127,6 +127,29 @@ share a run-scoped PostgreSQL transaction lock. A transition emitted by an inves
 must still see that dispatch's pending intent before it can update incident state, so a
 late provider response cannot replace a terminal `unknown` receipt.
 
+## Evidence verdicts
+
+Each piece of evidence recorded with a hypothesis carries a verdict on it (issue #707):
+`supports`, `contradicts` or `inconclusive`, with a one-line `finding` in the output language.
+The model gives them in `verdicts` of `propose_hypothesis`, keyed by evidence id; a missing or
+invalid verdict is recorded as `inconclusive`, not rejected. The harness, not the model, measures
+whether a tool answered with data: a Prometheus query without series or a log query without
+documents is recorded with `empty: true` and as `inconclusive`, whatever the model says. The fields
+are optional in incident-state 1.2.0 and the run context, so earlier documents stay valid. On the
+evidence the current hypothesis cites, the war room shows «Respalda la hipótesis», «Contradice» or
+«No concluyente»; on any empty evidence, «No encontró nada». Reproduce it against the real API,
+with a scripted model and Grafana MCP:
+
+    C="scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml"
+    $C up --build --wait db api web
+    $C run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    $C run --rm -T seed python /e2e/provision_demo.py
+    mkdir -p /tmp/evidence-verdict-e2e  # default artifact dir (EVIDENCE_VERDICT_ARTIFACTS)
+    HOST_UID=$(id -u) HOST_GID=$(id -g) $C --profile verdict-e2e run --rm verdict-e2e
+    $C --profile e2e run --rm --no-deps -u "$(id -u)" -e HOME=/tmp -e EVIDENCE_DIR=/artifacts \
+      -v "$PWD/scripts:/e2e/scripts:ro" -v /tmp/evidence-verdict-e2e:/artifacts \
+      e2e node scripts/capture_evidence_verdict.mjs
+
 ## Skills
 
 A request pins exact Skill versions in `skills` (issue #32). The harness resolves them through
