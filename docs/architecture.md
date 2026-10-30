@@ -70,6 +70,14 @@ before any provider contact:
 - An active limit needs conservative bounds from the endpoint catalog: the endpoint's maximum
   prompt tokens and its prices, plus a dynamically capped `max_output_tokens`. A missing,
   expired, or unusable catalog fails closed with `consumption_bounds_unavailable`.
+- The catalog is queried for the routed model (`/api/v1/models/{author}/{slug}/endpoints`),
+  never the alias. OpenRouter usually reports `max_prompt_tokens: null`; the endpoint's
+  `context_length` bounds a missing prompt or completion cap, and a null or absent
+  `pricing.request` means no per-request fee. Missing prompt or completion prices, or two
+  endpoints of the same provider, still fail closed. The catalog needs
+  `OPENROUTER_MANAGEMENT_API_KEY`; without it every call under an active limit answers 429.
+- A reservation needs an existing incident: an unknown `incident_id` under an active limit
+  answers 422 audited as `resource_not_found`.
 - Each admitted request keeps the policy version it was admitted under, and its reservation stays
   booked until exact usage settles; an uncertain settlement keeps the reservation.
 - Monthly limits use half-open UTC calendar months (`[first day 00:00, next first day 00:00)`),

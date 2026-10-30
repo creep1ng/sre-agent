@@ -278,14 +278,16 @@ class ResponsesService:  # noqa: E305
         # reserves the exposure. Gating it on catalog configuration let an
         # active provider with no catalog reach the provider unchecked.
         service = self.admission or ConsumptionAdmissionService(self.sessions)
+        # The catalog prices the routed model; the alias is only our own name for it.
         admission = await service.admit(
-            incident_id=identifiers.get("incident_id"), model=request.model,
+            incident_id=identifiers.get("incident_id"), model=assignment.concrete_model,
             provider=assignment.inference_provider, catalog=self.endpoint_catalog,
             now=datetime.now(UTC),
             request_id=request_id,
         )
         if not admission.allowed:
-            status = 503 if admission.retryable else 429
+            status = (503 if admission.retryable
+                      else 422 if admission.denial_reason == "resource_not_found" else 429)
             return await self._finish(request_id, started, status, "authorization",
                                       context=context, alias=request.model, decision=decision,
                                       reason=admission.denial_reason or "consumption_bounds_unavailable",

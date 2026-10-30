@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from sre_agent.gateway.consumption_affordability import (
     AffordabilityDenied,
@@ -145,18 +146,24 @@ class ConsumptionAdmissionService:
             # Share the server-generated request identity with audit, without
             # adding a second correlation field or changing historical rows.
             reservation_id = str(request_id) if request_id is not None else uuid4().hex
-            await ConsumptionReservationRepository(session).create(
-                reservation_id,
-                incident_id=incident_id,
-                period_start=period,
-                policy_version=int(version),
-                model=model,
-                provider=provider,
-                token_exposure=token_exposure if incident_limit is not None else None,
-                usd_exposure=usd_exposure if monthly_limit is not None else None,
-                created_at=now,
-            )
-            await session.commit()
+            try:
+                await ConsumptionReservationRepository(session).create(
+                    reservation_id,
+                    incident_id=incident_id,
+                    period_start=period,
+                    policy_version=int(version),
+                    model=model,
+                    provider=provider,
+                    token_exposure=token_exposure if incident_limit is not None else None,
+                    usd_exposure=usd_exposure if monthly_limit is not None else None,
+                    created_at=now,
+                )
+                await session.commit()
+            except IntegrityError as error:
+                # The caller names the incident; an unknown one cannot hold a reservation.
+                if "fk_consumption_reservation_incident" not in str(error.orig):
+                    raise
+                return AdmissionResult(False, None, int(version), None, "resource_not_found", False)
             return AdmissionResult(
                 True,
                 envelope.max_output_tokens,

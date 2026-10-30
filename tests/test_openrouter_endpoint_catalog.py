@@ -109,7 +109,7 @@ async def test_catalog_retrieves_and_selects_unique_provider_with_management_key
 
     assert len(seen) == 1
     assert seen[0].method == "GET"
-    assert seen[0].url.raw_path == b"/api/v1/models/openai%2Fgpt-4o-mini/endpoints"
+    assert seen[0].url.raw_path == b"/api/v1/models/openai/gpt-4o-mini/endpoints"
     assert seen[0].headers["Authorization"] == f"Bearer {MANAGEMENT_KEY}"
     assert selected.model == MODEL
     assert selected.provider == "OpenAI"

@@ -83,9 +83,14 @@ class OpenRouterEndpointCatalog:
         observed_at = self._clock()
         if not _aware(observed_at):
             raise EndpointCatalogUnavailable
+        # OpenRouter addresses a model as `/models/{author}/{slug}/endpoints`; an
+        # escaped `/` (%2F) or a bare alias answers 404.
+        segments = model.split("/")
+        if len(segments) != 2 or any(part in {"", ".", ".."} for part in segments):
+            raise EndpointCatalogUnavailable
         try:
             response = await self._client.get(
-                f"/api/v1/models/{quote(model, safe='')}/endpoints",
+                f"/api/v1/models/{'/'.join(quote(part, safe='') for part in segments)}/endpoints",
                 headers={"Authorization": f"Bearer {self._management_key}"},
             )
             if not response.is_success:
@@ -120,8 +125,16 @@ def _endpoint_metadata(raw: object, model: str, valid_until: datetime) -> Endpoi
     if not isinstance(raw, Mapping):
         raise ValueError
     provider = raw.get("provider_name")
+    # OpenRouter reports `max_prompt_tokens: null` for most endpoints. Neither the
+    # prompt nor the completion can exceed the context window, so the context length
+    # is the conservative bound for a missing cap.
+    context_length = raw.get("context_length")
     prompt_tokens = raw.get("max_prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = context_length
     completion_tokens = raw.get("max_completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = context_length
     if (
         not isinstance(provider, str)
         or not provider.strip()
@@ -142,7 +155,9 @@ def _endpoint_metadata(raw: object, model: str, valid_until: datetime) -> Endpoi
         valid_until=valid_until,
         prompt_price=_price(pricing.get("prompt")),
         completion_price=_price(pricing.get("completion")),
-        request_price=_price(pricing.get("request")),
+        # A null or absent per-request fee means the endpoint charges none; prompt and
+        # completion prices stay required, so their absence still fails closed.
+        request_price=_price(pricing.get("request")) or Decimal(0),
     )
 
 
