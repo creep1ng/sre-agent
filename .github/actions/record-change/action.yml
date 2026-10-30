@@ -1,7 +1,7 @@
 name: Record change in Midnight
 description: >-
   Send a deploy, rollback or CI result to Midnight's POST /v1/changes once the job has done it,
-  so the investigator can answer "what changed". Idempotent by run id and attempt.
+  so the investigator can answer "what changed". Idempotent by run attempt, job and kind.
 inputs:
   midnight-url:
     description: Base URL of the Midnight API, for example https://midnight.example.com/api.
@@ -38,7 +38,7 @@ runs:
         CHANGE_KIND: ${{ inputs.kind }}
         CHANGE_STATUS: ${{ inputs.status }}
         CHANGE_VERSION: ${{ inputs.version }}
-        CHANGE_EXTERNAL_ID: ${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        CHANGE_EXTERNAL_ID: ${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs/${{ github.job }}/${{ inputs.kind }}
         CHANGE_COMMIT: ${{ github.sha }}
         CHANGE_REF: ${{ github.ref_name }}
         CHANGE_AUTHOR: ${{ github.actor }}

@@ -51,9 +51,10 @@ def send() -> str:
             if error.code < 500 or attempt == 2:
                 detail = error.read()[:500]
                 raise RuntimeError(f"Midnight answered {error.code}: {detail!r}") from None
-        except urllib.error.URLError as error:
+        except OSError as error:  # unreachable, refused, reset or timed out: send it again
             if attempt == 2:
-                raise RuntimeError(f"Midnight is unreachable: {error.reason}") from None
+                reason = getattr(error, "reason", error)
+                raise RuntimeError(f"Midnight is unreachable: {reason}") from None
         time.sleep(2 * (attempt + 1))
     raise AssertionError("unreachable")
 
@@ -61,9 +62,11 @@ def send() -> str:
 if __name__ == "__main__":
     try:
         print(f"Change event {send()}.")
-    except (KeyError, RuntimeError) as error:
+    except Exception as error:
         # The deploy already happened: by default a missing record warns instead of failing it.
-        message = f"change event not recorded: {error}"
+        # Whatever went wrong (no URL, a timeout, a reply that is not JSON) takes this path; the
+        # messages name the URL and the answer, never the key, which only travels in a header.
+        message = f"change event not recorded: {type(error).__name__}: {error}"
         if os.environ.get("FAIL_ON_ERROR", "false") == "true":
             sys.exit(f"::error::{message}")
         print(f"::warning::{message}")
