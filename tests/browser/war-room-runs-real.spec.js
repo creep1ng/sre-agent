@@ -35,14 +35,23 @@ test("starting one investigation shows the created run and keeps it across reloa
   const runId = await page.locator("#run-select").inputValue();
   expect(runId).toMatch(/^run_[0-9a-z]{8,32}$/);
   await expect(page.locator("#run-state")).toContainText(`${runId} ·`);
-  await expect(page.locator("#run-start")).toBeHidden();
+  // This stack has no Grafana MCP: the run ends with its reason instead of staying "en curso",
+  // and the incident offers a retry (#761).
+  await expect(page.locator("#run-terminated")).toHaveText("Run terminado: hace falta intervención humana.");
+  await expect(page.locator("#run-start")).toHaveText("Reintentar investigación");
 
   // A reload re-derives the same run from the stored detail; nothing starts another one.
   await page.reload();
   await connectConsole(page, DEMO_KEY);
   await expect(page.locator("#run-select option")).toHaveCount(1);
   await expect(page.locator("#run-select")).toHaveValue(runId);
-  await expect(page.locator("#run-start")).toBeHidden();
+
+  // The retry opens a second run of the same incident.
+  await page.locator("#run-start").click();
+  await expect(page.locator("#run-select option")).toHaveCount(2);
+  await expect(page.locator("#run-select")).not.toHaveValue(runId);
+  await expect(page.locator("#run-terminated")).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath("war-room-retry.png"), fullPage: true });
 });
 
 test("a double click keeps one run in detail.runs", async ({ page }) => {
@@ -56,7 +65,8 @@ test("a double click keeps one run in detail.runs", async ({ page }) => {
   const runId = await page.locator("#run-select").inputValue();
   expect(runId).toMatch(/^run_[0-9a-z]{8,32}$/);
   await expect(page.locator("#run-state")).toContainText(`${runId} ·`);
-  await expect(page.locator("#run-start")).toBeHidden();
+  await expect(page.locator("#run-start")).toHaveText("Reintentar investigación");
+  await expect(page.locator("#run-select option")).toHaveCount(1);
 });
 
 test("restricted-harness stays at 403 without any success state", async ({ page }) => {
