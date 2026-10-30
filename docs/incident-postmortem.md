@@ -76,8 +76,8 @@ When an investigation starts, the dispatcher looks up memories for the same serv
 It uses the BoK's PostgreSQL English full-text search (`websearch_to_tsquery`, `ts_rank_cd`;
 see [BoK retrieval](bok-retrieval.md)) over any word of the alert's signal and summary except
 the service name's own words, which every memory of the service contains. A memory with the
-same stored `signal` ranks first, then the text rank; a memory of another signal is not
-filtered out. Recall returns at most three, each cut to 2,000 characters. Each memory reaches
+same stored `signal` is recalled even when no word matches, and ranks first; then the text rank
+decides. A memory of another signal is not filtered out. Recall returns at most three, each cut to 2,000 characters. Each memory reaches
 the investigator as evidence with `source: incident_memory`, and its `query` is the record it
 came from (`/v1/incidents/{incident_id}/postmortem`). Recall only returns memories joined to
 their approved postmortem revision. The investigator rejects a citation of any evidence id it

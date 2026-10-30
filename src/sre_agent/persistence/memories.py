@@ -129,12 +129,12 @@ class PostgresIncidentMemoryRepository:
     async def recall(
         self, service: str, signal: str | None, summary: str, incident_id: str
     ) -> list[IncidentMemory]:
-        """Closed incidents of exactly this service whose memory matches the alert's words.
+        """Closed incidents of exactly this service: the same signal, or the alert's words.
 
         The same signal ranks first, then the text rank; another signal is not filtered out.
         """
         query = recall_query(service, signal, summary)
-        if not query:
+        if not query and not signal:
             return []
         rows = await self._session.execute(
             text(f"""SELECT {_COLUMNS} FROM incident.incident_memories m
@@ -142,7 +142,8 @@ class PostgresIncidentMemoryRepository:
                 ON r.postmortem_id = m.postmortem_id AND r.version = m.postmortem_version
               CROSS JOIN websearch_to_tsquery('english', :query) q
               WHERE m.service = :service AND m.incident_id <> :incident_id
-                AND to_tsvector('english', m.content) @@ q
+                AND (to_tsvector('english', m.content) @@ q
+                     OR m.signal = CAST(:signal AS text))
               ORDER BY (m.signal IS NOT DISTINCT FROM CAST(:signal AS text)) DESC,
                        ts_rank_cd(to_tsvector('english', m.content), q) DESC,
                        m.indexed_at DESC, m.memory_id
