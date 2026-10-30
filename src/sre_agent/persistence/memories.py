@@ -1,0 +1,117 @@
+"""Incident memory: closed incidents recalled when a new investigation starts (issue #773).
+
+A closed incident enters memory in the same transaction as its close, from the postmortem
+version a human approved. Each row is append-only and is the memory change log: what entered,
+when, and from which incident, postmortem version and close event.
+"""
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime
+from secrets import token_hex
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+MAX_CONTENT = 6000
+_COLUMNS = """m.memory_id, m.incident_id, m.postmortem_id, m.postmortem_version,
+  m.close_event_id, m.service, m.signal, m.content, m.indexed_at"""
+
+
+@dataclass(frozen=True, slots=True)
+class IncidentMemory:
+    memory_id: str
+    incident_id: str
+    postmortem_id: str
+    postmortem_version: int
+    close_event_id: str
+    service: str
+    signal: str | None
+    content: str
+    indexed_at: datetime
+
+    @property
+    def source_record(self) -> str:
+        """The approved postmortem this memory came from, as the API serves it."""
+        return f"/v1/incidents/{self.incident_id}/postmortem"
+
+
+def _mapping(value: Any) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
+
+
+def _text(value: Any) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def memory_content(state: Mapping[str, Any], postmortem: Mapping[str, Any]) -> str:
+    """What the next investigation reads: the alert, the cause and what fixed it."""
+    alert = _mapping(state.get("alert"))
+    strategy = _mapping(state.get("mitigation_strategy"))
+    cause = _mapping(postmortem.get("cause"))
+    steps = [_text(step) for step in strategy.get("steps") or [] if _text(step)]
+    lines = [
+        f"Incident {_text(state.get('incident_id'))} on {_text(alert.get('service'))}, closed.",
+        f"Alert: {_text(alert.get('summary'))}",
+        f"Cause ({_text(cause.get('certainty'))}): {_text(cause.get('statement'))}",
+        f"Mitigation approved: {_text(strategy.get('description'))}"
+        + (f" Steps: {'; '.join(steps)}" if steps else ""),
+        f"Postmortem strategy: {_text(postmortem.get('strategy'))}",
+        f"Verification: {_text(postmortem.get('verification'))}",
+        f"Summary: {_text(postmortem.get('summary'))}",
+    ]
+    return "\n".join(line for line in lines if not line.endswith(": "))[:MAX_CONTENT]
+
+
+def _memory(row: Any) -> IncidentMemory:
+    return IncidentMemory(**{field: row[field] for field in IncidentMemory.__dataclass_fields__})
+
+
+class PostgresIncidentMemoryRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def remember(
+        self,
+        state: Mapping[str, Any],
+        approval: Mapping[str, Any],
+        close_event_id: str,
+        now: datetime,
+    ) -> None:
+        """Index the approved postmortem version of a closing incident; a replay adds nothing."""
+        alert = _mapping(state.get("alert"))
+        origin = _mapping(alert.get("origin"))
+        postmortem = await self._session.scalar(
+            text("""SELECT content FROM incident.postmortem_revisions
+              WHERE postmortem_id=:postmortem_id AND version=:version"""),
+            {"postmortem_id": approval["postmortem_id"], "version": approval["postmortem_version"]},
+        )
+        await self._session.execute(
+            text("""INSERT INTO incident.incident_memories
+              (memory_id, incident_id, postmortem_id, postmortem_version, close_event_id,
+               service, signal, content, indexed_at)
+              VALUES (:memory_id, :incident_id, :postmortem_id, :version, :close_event_id,
+                      :service, :signal, :content, :now)
+              ON CONFLICT (incident_id) DO NOTHING"""),
+            {
+                "memory_id": f"mem_{token_hex(8)}",
+                "incident_id": state["incident_id"],
+                "postmortem_id": approval["postmortem_id"],
+                "version": approval["postmortem_version"],
+                "close_event_id": close_event_id,
+                "service": _text(alert.get("service")),
+                "signal": _text(origin.get("signal")) or None,
+                "content": memory_content(state, _mapping(postmortem)),
+                "now": now,
+            },
+        )
+
+    async def changes(self, limit: int = 100) -> list[IncidentMemory]:
+        """The change log, newest first."""
+        rows = await self._session.execute(
+            text(f"""SELECT {_COLUMNS} FROM incident.incident_memories m
+              ORDER BY m.indexed_at DESC, m.memory_id LIMIT :limit"""),
+            {"limit": limit},
+        )
+        return [_memory(row) for row in rows.mappings()]

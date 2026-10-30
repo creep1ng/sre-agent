@@ -62,3 +62,16 @@ Errors use the run error envelope:
 - `422 invalid_postmortem`: the minimum content is not met.
 - `422 unknown_event_reference`.
 - `503 storage_unavailable`.
+
+## Incident memory (#773)
+
+Closing an incident also indexes it as a memory, in the same transaction: if the memory
+cannot be written, the close fails too. `incident.incident_memories` holds one append-only
+row per closed incident. The row is the memory change log. It records what entered (the
+alert, the postmortem cause, the mitigation that was approved, the strategy, the verification
+and the summary), when it entered (`indexed_at`), and where it came from (the incident, the
+approved postmortem version and the close event). Migration `20261030_01`.
+
+| Route | Action | Notes |
+| --- | --- | --- |
+| `GET /v1/incident-memory/changes` | `run.read_context` | Change log, newest first, up to 100 entries: `memory_id`, `operation` (`added`), `incident_id`, `source_record`, `postmortem_id`, `postmortem_version`, `close_event_id`, `service`, `signal`, `indexed_at`, `content`. |
