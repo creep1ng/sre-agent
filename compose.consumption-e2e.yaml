@@ -1,0 +1,37 @@
+# Issue #758: the real API, database and investigator with OpenRouter replaced by
+# scripts/fake_openrouter.py. Start it, with scripts/ mounted on the seed:
+#   docker compose -f compose.yaml -f compose.consumption-e2e.yaml up --build --wait db api
+#   ... run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
+#   ... run --rm -T seed python /e2e/provision_demo.py
+services:
+  api:
+    environment:
+      OPENROUTER_BASE_URL: http://fake-openrouter:8080
+      OPENROUTER_ALLOW_INSECURE_BASE_URL: "1"
+      OPENROUTER_API_KEY: fake-inference-key
+      OPENROUTER_MANAGEMENT_API_KEY: fake-management-key
+      # Mounts the MCP routes the investigator lists before its first turn. The scripted
+      # investigation cites the incident's evidence, so this upstream is never called.
+      GRAFANA_MCP_ENDPOINT: http://fake-openrouter:8080/mcp
+      GRAFANA_MCP_TOKEN: fake-mcp-token
+    depends_on:
+      fake-openrouter: {condition: service_healthy}
+
+  seed:
+    volumes: ["./scripts:/e2e:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  fake-openrouter:
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/fake_openrouter.py"]
+    environment:
+      FAKE_MODEL: ${TRIAGE_AGENT_MODEL:?TRIAGE_AGENT_MODEL is required}
+      FAKE_PROVIDER: ${TRIAGE_AGENT_PROVIDER:?TRIAGE_AGENT_PROVIDER is required}
+      FAKE_INFERENCE_KEY: fake-inference-key
+      FAKE_MANAGEMENT_KEY: fake-management-key
+    volumes: ["./scripts/fake_openrouter.py:/e2e/fake_openrouter.py:ro"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      retries: 20
+    networks: [runtime]
