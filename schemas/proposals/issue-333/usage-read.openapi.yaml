@@ -207,3 +207,4 @@ components:
             known: { type: integer, minimum: 0 }
             incomplete: { type: integer, minimum: 0 }
             unknown: { type: integer, minimum: 0 }
+# Throwaway: a non-tooling schemas change to time the locked contracts path (#811).
