@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sre_agent.incident.persistence import (
+    RUN_PATCH_EVENTS,
     DecisionDraft,
     EventDraft,
     IncidentRecord,
@@ -136,6 +137,25 @@ OBJECTIVE_TRANSITIONS = {
 ESCALATION_TRIGGERS = {"denied": "authorization denied for a capability required by the objective"}
 
 
+# A run that a human sends back to investigating has no agent working on it: it ends, and
+# the next investigation of the incident is a new run (see `start_run`).
+RETURNS_TO_INVESTIGATION = frozenset({"reject_mitigation", "verification_failed"})
+LIVE_RUN_STATUSES = frozenset({"running", "awaiting_human"})
+
+
+def termination(reason: str, now: datetime) -> dict[str, Any]:
+    """The run fields of a run that ended without reaching a terminal workflow state.
+
+    The incident keeps its state; only a new run (a human retry) investigates it again.
+    """
+    return {
+        "status": "completed" if reason == "completed" else "terminated",
+        "pending_command": None,
+        "terminated_reason": reason,
+        "updated_at": now.isoformat(),
+    }
+
+
 def escalation(reason: str, now: datetime) -> tuple[str, dict[str, Any]]:
     """The trigger and the run fields of an escalation: the transition is blocked and a human
     notified, never a state change. The run waits for the human's `escalate` command."""
@@ -259,6 +279,15 @@ class IncidentRuntime:
             incident = await work.incidents.get(request.incident_id)
             if incident is None:
                 raise IncidentNotFoundError(request.incident_id)
+            inputs = None
+            retry = incident.state.get("state") == "investigating"
+            if request.objective == "investigate" and retry:
+                # A retry: the incident is still under investigation but its runs ended. The
+                # new run reopens it through the human's evidence_sufficiency decision, never
+                # beside a run that is still working or waiting for a human.
+                await self._refuse_beside_live_run(work, incident)
+                transition_id = "continue_investigation"
+                inputs = {"remaining_step_budget": 1}
             now = self._clock()
             run = await work.runs.add(
                 self._id_factory("run"),
@@ -277,8 +306,21 @@ class IncidentRuntime:
                 transition_id=transition_id,
                 actor=request.actor,
                 actor_reference=request.actor_reference,
+                inputs=inputs,
             )
             return await self._apply(work, command, payload_hash, incident, run)
+
+    @staticmethod
+    async def _refuse_beside_live_run(work: IncidentUnitOfWork, incident: IncidentRecord) -> None:
+        state = incident.state.get("state")
+        for run_id in await work.runs.list_ids(incident.incident_id):
+            run = await work.runs.get_for_incident(run_id, incident.incident_id)
+            if (
+                run is not None
+                and run.state.get("current_state") == state
+                and run.state.get("status") in LIVE_RUN_STATUSES
+            ):
+                raise InvalidTransitionError(f"run '{run_id}' is still live on this incident")
 
     async def _apply(
         self,
@@ -388,8 +430,8 @@ class IncidentRuntime:
                             )
                         incident_state.update(patch)
                     continue
-                if event.kind == "escalation":
-                    # A run blocked for a human made no transition, so its version stays.
+                if event.kind in RUN_PATCH_EVENTS:
+                    # A run blocked for a human or ended made no transition: its version stays.
                     run_state.update(event.payload["run_patch"])
                     continue
                 if event.kind != "state_change":
@@ -661,6 +703,8 @@ class IncidentRuntime:
             run.update(status="completed", pending_command=None, terminated_reason="completed")
         elif transition.target == "mitigating":
             run.update(status="awaiting_human", pending_command="approve_mitigation")
+        elif transition.transition_id in RETURNS_TO_INVESTIGATION:
+            run.update(termination("needs_human", now))
         else:
             run.update(status="running", pending_command=None, terminated_reason=None)
         return incident, run

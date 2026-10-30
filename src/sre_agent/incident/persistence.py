@@ -15,6 +15,9 @@ from sre_agent.incident.postmortem import PostmortemRecord
 JsonDocument = Mapping[str, Any]
 # What a dispatch outcome may change in its run without a transition: never its workflow state.
 RUN_PATCH_FIELDS = frozenset({"status", "pending_command", "terminated_reason", "updated_at"})
+# The events through which a dispatch outcome blocks (escalation) or ends (run_terminated) its
+# run without a workflow transition. Replay applies their `run_patch`.
+RUN_PATCH_EVENTS = frozenset({"escalation", "run_terminated"})
 
 
 @dataclass(frozen=True, slots=True)

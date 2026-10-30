@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from sre_agent.application import create_application
 from sre_agent.gateway.mcp import MCPUpstreamTimeout, PrometheusQuery
-from sre_agent.gateway.providers import ProviderRequest, ProviderResult
+from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
 from sre_agent.incident.persistence import DecisionDraft, EventDraft
 from sre_agent.incident.runtime import ActorReference, IncidentCommand, IncidentRuntime, RunStart
 from sre_agent.incident.workflow import load_incident_workflow
@@ -1022,8 +1022,8 @@ def test_mcp_contract_rejection_before_dispatch_is_confirmed_failure() -> None:
     assert receipts[-1]["reason_code"] == "investigation_mcp_contract_rejected"
     assert receipts[-1]["mcp_request_ids"] and _context_turns(run_id) == 1
     run_state = _active_state(run_id)[0]
-    # A contract rejection is no denial: the run is not blocked for a human.
-    assert (run_state["current_state"], run_state["status"]) == ("investigating", "running")
+    # A contract rejection is no denial: the run ends instead of waiting for a human (#761).
+    assert (run_state["current_state"], run_state["status"]) == ("investigating", "terminated")
     with psycopg.connect(DATABASE_URL) as connection:
         audit_count = connection.execute(
             "SELECT count(*) FROM audit_events WHERE correlation ->> 'request_id' = %s",
@@ -1883,3 +1883,115 @@ def test_invalid_model_output_retains_all_governed_http_audits(recover: bool) ->
             {"recover": recover, "correlated_response_audits": correlated, "replay_unchanged": True}
         )
     )
+
+
+class UnavailableOnceLLM(ScriptedLLM):
+    """The provider answers 503 to the first model call only, as in the 2026-10-19 rehearsal."""
+
+    async def create(self, request: ProviderRequest) -> ProviderResult:
+        if not getattr(self, "failed", False):
+            self.failed = True
+            raise ProviderFailure("unavailable")
+        return await super().create(request)
+
+
+def _send_command(client: httpx.Client, incident_id: str, run_id: str, command: str) -> int:
+    version = client.get(
+        f"/v1/incidents/{incident_id}", headers={"Authorization": f"Bearer {HUMAN_KEY}"}
+    ).json()["version"]
+    return client.post(
+        f"/v1/incidents/{incident_id}/runs/{run_id}/commands",
+        headers={
+            "Authorization": f"Bearer {HUMAN_KEY}",
+            "Idempotency-Key": f"command-{command}-{run_id}",
+        },
+        json={
+            "command": command,
+            "expected_incident_version": version,
+            "actor": "human",
+            "actor_reference": {"reference_version": "1.0.0", "principal_id": "demo-human"},
+        },
+    ).status_code
+
+
+@pytest.mark.parametrize(
+    ("ending", "terminated_reason"),
+    [
+        ("mcp_unconfigured", "needs_human"),
+        ("request_human", "needs_human"),
+        ("provider_503", "upstream_unavailable"),
+        ("reject_mitigation", "needs_human"),
+    ],
+)
+def test_a_run_that_ends_without_a_proposal_terminates_and_a_retry_reaches_mitigating(
+    ending: str, terminated_reason: str
+) -> None:
+    """Issue #761: no ending leaves the run running; the same incident accepts a new run."""
+    incident_id = f"inc-investigator-retry-{ending.replace('_', '-')}"
+    _add_incident(incident_id)
+    _grant_run_access()
+    llm: ScriptedLLM = {
+        "request_human": ScriptedLLM({"action": "request_human", "reason": "Need an owner."}),
+        "provider_503": UnavailableOnceLLM(),
+    }.get(ending, ScriptedLLM())
+    mcp = ScriptedMCP()
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=llm, mcp=mcp)
+    if ending == "mcp_unconfigured":
+        # Compose's default: no Grafana MCP endpoint, so the MCP routes are not mounted.
+        settings = Settings.from_environment(
+            SEED_ENV
+            | {
+                "DATABASE_URL": DATABASE_URL,
+                "AUDIT_HMAC_KEY": AUDIT_KEY,
+                "INVESTIGATOR_GATEWAY_URL": f"http://127.0.0.1:{port}",
+                "INVESTIGATOR_GATEWAY_API_KEY": HARNESS_KEY,
+                "INVESTIGATOR_MODEL_ALIAS": "triage-agent",
+            }
+        )
+        app = create_application(settings, llm_provider=llm, mcp_client=None)
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        first = _start(client, incident_id, f"investigation-retry-{ending}-first")
+        assert first.status_code == 201
+        first_run = first.json()["run_id"]
+        if ending == "reject_mitigation":
+            assert first.json()["current_state"] == "mitigating"
+            assert _send_command(client, incident_id, first_run, "reject_mitigation") == 202
+        ended = client.get(
+            f"/v1/incidents/{incident_id}/runs/{first_run}",
+            headers={"Authorization": f"Bearer {HUMAN_KEY}"},
+        ).json()
+        llm_calls_of_first_run = len(llm.requests)
+    assert ended["current_state"] == "investigating"
+    assert (ended["status"], ended["pending_command"], ended["terminated_reason"]) == (
+        "terminated",
+        None,
+        terminated_reason,
+    )
+    if ending == "provider_503":
+        # The ambiguous provider call is never repeated inside the run that saw it.
+        assert llm_calls_of_first_run == 0
+
+    # The operator fixed the cause; the retry runs against a working provider and MCP.
+    llm.final_outcome = None
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=llm, mcp=mcp)
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        retry = _start(client, incident_id, f"investigation-retry-{ending}-second")
+        replay = _start(client, incident_id, f"investigation-retry-{ending}-second")
+        detail = client.get(
+            f"/v1/incidents/{incident_id}", headers={"Authorization": f"Bearer {HUMAN_KEY}"}
+        ).json()
+    assert retry.status_code == 201, retry.text
+    assert replay.status_code == 200 and replay.json()["run_id"] == retry.json()["run_id"]
+    assert retry.json()["run_id"] != first_run
+    assert (retry.json()["current_state"], retry.json()["pending_command"]) == (
+        "mitigating",
+        "approve_mitigation",
+    )
+    assert detail["state"] == "mitigating"
+    assert [run["status"] for run in detail["runs"]] == ["terminated", "awaiting_human"]
+    _, first_events, _ = _database_rows(incident_id, first_run)
+    # One outcome receipt: the first run was never redispatched.
+    assert [receipt["phase"] for receipt in _receipts(first_events)].count("outcome") == 1

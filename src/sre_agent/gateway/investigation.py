@@ -24,6 +24,7 @@ from sre_agent.incident.runtime import (
     IncidentRuntime,
     IncidentView,
     escalation,
+    termination,
 )
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
@@ -66,9 +67,12 @@ class InvestigationRunDispatcher:
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
 
     async def after_start(self, started: TransitionResult) -> None:
+        # A run opens with start_investigation, or with continue_investigation when a human
+        # retries an incident whose earlier runs ended.
         if not any(
             event.kind == "state_change"
-            and event.payload.get("transition_id") == "start_investigation"
+            and event.payload.get("transition_id")
+            in {"start_investigation", "continue_investigation"}
             for event in started.events
         ):
             return
@@ -442,15 +446,27 @@ class InvestigationRunDispatcher:
         if command is not None:
             await self.runtime.execute(command)
             return
+        # No transition follows this outcome, so the run ends here and a human decides the next.
+        run_patch = termination(
+            {"conclude": "completed", "propose_hypothesis": "max_steps"}.get(
+                result.outcome.action, "needs_human"
+            ),
+            now,
+        )
         await work.complete_run_dispatch(
             incident_id,
             run_id,
             decision=self._decision(
                 incident_id, run_id, actor_reference, now, "accepted investigation result"
             ),
-            events=(outcome_event, receipt_event),
+            events=(
+                outcome_event,
+                receipt_event,
+                self._termination_event(run_patch, request_ids, now, reached),
+            ),
             expected_incident_version=expected_incident_version,
             incident_patch=incident_patch,
+            run_patch=run_patch,
             contexts=contexts,
         )
 
@@ -593,8 +609,13 @@ class InvestigationRunDispatcher:
             )
         ]
         reason = "investigation dispatch outcome"
-        run_patch: dict[str, Any] | None = None
-        if escalate is not None:
+        run_patch: dict[str, Any]
+        if escalate is None:
+            # Nothing else will act on this run: it ends with the reason, and a human retries
+            # with a new run. An `unknown` outcome is never redispatched inside this run.
+            run_patch = termination(_terminated_reason(reason_code, result_status), now)
+            events.append(self._termination_event(run_patch, request_ids, now))
+        else:
             # The incident keeps its state; the run waits for a human and is never retried.
             reason, run_patch = escalation(escalate, now)
             events.append(
@@ -617,6 +638,24 @@ class InvestigationRunDispatcher:
             events=events,
             run_patch=run_patch,
             contexts=contexts,
+        )
+
+    @staticmethod
+    def _termination_event(
+        run_patch: Mapping[str, Any],
+        request_ids: Sequence[UUID],
+        now: datetime,
+        state: str = "investigating",
+    ) -> EventDraft:
+        return EventDraft(
+            event_id=f"evt_{token_hex(8)}",
+            kind="run_terminated",
+            payload={
+                "state": state,
+                "run_patch": dict(run_patch),
+                "request_id": str(request_ids[-1]) if request_ids else None,
+            },
+            occurred_at=now,
         )
 
     @classmethod
@@ -786,6 +825,15 @@ class InvestigationRunDispatcher:
             "reference_version": actor.reference_version,
             "principal_id": actor.principal_id,
         }
+
+
+def _terminated_reason(reason_code: str, result_status: str | None) -> str:
+    """The run-state contract's reason for a dispatch that ended without a transition."""
+    if result_status in {"max_steps", "invalid_output", "upstream_unavailable", "needs_human"}:
+        return result_status
+    if reason_code == "mcp_discovery_transient":
+        return "upstream_unavailable"
+    return "needs_human"
 
 
 def _unique_ids(values: Sequence[UUID]) -> list[UUID]:
