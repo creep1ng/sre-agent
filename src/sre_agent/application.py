@@ -67,7 +67,7 @@ def create_application(
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
         shared_provider_client = provider_client or httpx.AsyncClient(
-            base_url="https://openrouter.ai",
+            base_url=runtime_settings.openrouter_base_url,
             timeout=runtime_settings.openrouter_timeout_seconds,
         )
         provider = OpenRouterProvider(
@@ -75,7 +75,7 @@ def create_application(
         )
     if endpoint_catalog is None and runtime_settings.openrouter_management_key:
         shared_endpoint_catalog_client = httpx.AsyncClient(
-            base_url="https://openrouter.ai",
+            base_url=runtime_settings.openrouter_base_url,
             timeout=runtime_settings.openrouter_timeout_seconds,
         )
         endpoint_catalog = OpenRouterEndpointCatalog(
