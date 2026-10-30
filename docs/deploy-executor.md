@@ -192,9 +192,9 @@ demonstrable agentic remediation for the demo, not a simulated one.
   operation can fix.
 - **Service names.** The proposal looks up operations by the alert's `service`, so an enrolled
   service needs a name no other source emits. Our second service (#721) is `sre-checkout`
-  everywhere: catalog, the `checkout-orders-error-rate` rule, its `service.name`,
-  `demo_env.py --service` and the grants. The store's `checkout`, alerted by
-  `checkout-payment-error-rate`, keeps its name and stays without a catalog; sharing `checkout`
+  everywhere: catalog, the Grafana rule `sre-checkout-orders-error-rate` (#765), its
+  `service.name`, `demo_env.py --service` and the grants. The store's `checkout`, alerted by the
+  generic `service-error-rate` rule, keeps its name and stays without a catalog; sharing `checkout`
   would hand a store payment incident the rollback of an unrelated service (decided on 2026-10-28
   in #751).
 - **Order on approval.** Check the incident is still `mitigating` at `expected_incident_version`,

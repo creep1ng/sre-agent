@@ -49,7 +49,8 @@ its own orders and pushes `checkout_requests_total` to the demo's collector ever
 5 s. `fail --service sre-checkout` builds and deploys `demo/checkout:1.5.0`, which
 answers 500 to 3 of every 10 orders; `reset --service sre-checkout` deploys `1.4.0`
 again. The deploy-executor rolls it back between the same two tags, kept in the
-local image store; the gateway rule `checkout-orders-error-rate` alerts on it.
+local image store; the provisioned Grafana rule `sre-checkout-orders-error-rate` alerts on it
+(see [alert intake](alert-intake.md)).
 The store's `checkout` keeps its name and has no catalog (#722).
 
 ## Typical run
@@ -76,6 +77,7 @@ and traces, and how to read it, is in [demo-signals.md](demo-signals.md).
 | `otel-demo/` | Upstream checkout at the pinned tag | No |
 | `.demo-state/flagd/` | Flag definitions the project owns and edits | No |
 | `.demo-state/grafana-mcp.env` | Grafana MCP caller token, created by `up` | No |
+| `.demo-state/alert-intake.env` | Secret Grafana's contact point sends to the API's alert intake (#765), created by `up` | No |
 | `demo/manifest.yaml` | What the environment is made of | Yes |
 | `demo/digests.lock` | Digests validated for the pinned version | Yes |
 | `compose.demo.yaml` | Overlay: owned flag directory, no flag cache in `checkout`, Grafana MCP, the second service `sre-checkout`, reset of undeclared host ports | Yes |
@@ -110,6 +112,23 @@ for it, so `fail` and `reset` take effect without touching `checkout`.
 returns success and removes nothing, so it checks afterwards that no container
 labelled with the project survived.
 
+## Alert intake (#765)
+
+The demo's Grafana provisions Midnight's rules and webhook contact point from
+`demo/grafana/alerting/` (see [alert intake](alert-intake.md)) and posts what fires
+to `http://api:8000/v1/alert-intake/grafana` over `sre-mcp-boundary`, with the secret
+in `.demo-state/alert-intake.env`. `scripts/setup_sre.py` passes the same file to
+the API, so a stack started after `up` receives the alerts and opens the incident
+with nobody at the console. Grafana reads its provisioning from
+`/etc/midnight-provisioning`, outside upstream's bind mount, so nothing is written
+into `otel-demo/`. Upstream's datasources and dashboards stay; its email contact
+point and two example rules are not loaded.
+
+Upstream grants Grafana's anonymous user Admin, and the proxy serves Grafana on
+`127.0.0.1:8090/grafana`: anyone on this host can read the contact point, secret
+included, from Grafana's UI or API. Acceptable for a local demo whose secret
+guards nothing else. To rotate it, delete the file, run `up` and rerun the setup.
+
 ## Grafana MCP
 
 `grafana-mcp` runs `grafana/mcp-grafana` 1.3.0 inside the demo. It answers only
@@ -125,7 +144,8 @@ its networks.
 - **No published port.** A `Host` allowlist (`grafana-mcp:8000`) also answers
   HTTP 403 to any other host name.
 - **Networks.** The demo network, to reach Grafana, and `sre-mcp-boundary`, an
-  internal network reserved for the gateway. The project's `runtime` network,
+  internal network reserved for the gateway. Grafana joins it too, only to post
+  its alerts to the API's intake (#765). The project's `runtime` network,
   where the harness runs, is not attached: the harness can neither resolve nor
   route to the MCP.
 

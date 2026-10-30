@@ -10,7 +10,8 @@ import { connectConsole } from "./support/console-session.mjs";
 //    store's `checkout`, which a store rule also alerts on, is enrolled too (#722);
 // 2. after `demo_env.py fail --service sre-checkout` it does not run 1.5.0, or 1.4.0 is not in
 //    the image store to roll back to;
-// 3. its alert is not in the inbox within 60 s of 1.5.0 starting, or the store's rule fires too;
+// 3. its alert is not in the inbox within 120 s of 1.5.0 starting (Grafana's rule holds 1 min
+//    before it fires, #765), or the store's rule fires too;
 // 4. the rollback, signed as the gateway will sign it (#722), does not bring back 1.4.0;
 // 5. after the rollback Grafana never sends `resolved`, so the episode stays open in the inbox.
 // Since #765 the alert is Grafana's provisioned rule, delivered to intake.
@@ -43,7 +44,7 @@ function signature(method, path, key, data) {
   return { "x-executor-timestamp": timestamp, "x-executor-signature": `v1=${mac}` };
 }
 
-test("the sre-checkout alert reaches the inbox within 60 s of 1.5.0 and closes after the rollback", async ({ page }) => {
+test("the sre-checkout alert reaches the inbox within 120 s of 1.5.0 and closes after the rollback", async ({ page }) => {
   test.setTimeout(900_000);
   mkdirSync(ARTIFACTS, { recursive: true });
   const executor = await request.newContext();
@@ -78,8 +79,8 @@ test("the sre-checkout alert reaches the inbox within 60 s of 1.5.0 and closes a
   const deployed = Date.parse(broken.container.started_at);
   timings.broken_started_at = broken.container.started_at;
 
-  // 3. The inbox polls on its own every 15 s; the card must be there within a minute.
-  await expect(card).toBeVisible({ timeout: Math.max(1_000, deployed + 60_000 - Date.now()) });
+  // 3. The inbox polls on its own every 15 s; the card must be there within two minutes.
+  await expect(card).toBeVisible({ timeout: Math.max(1_000, deployed + 120_000 - Date.now()) });
   timings.seconds_to_inbox = (Date.now() - deployed) / 1000;
   await card.click();
   await page.screenshot({ path: `${ARTIFACTS}/inbox-firing.png`, fullPage: true });
@@ -112,5 +113,5 @@ test("the sre-checkout alert reaches the inbox within 60 s of 1.5.0 and closes a
   await page.goto(`${EXECUTOR}/v1/services/${SERVICE}`);
   await page.screenshot({ path: `${ARTIFACTS}/service-after-rollback.png`, fullPage: true });
   test.info().annotations.push({ type: "timings", description: JSON.stringify(timings) });
-  expect(timings.seconds_to_inbox).toBeLessThan(60);
+  expect(timings.seconds_to_inbox).toBeLessThan(120);
 });

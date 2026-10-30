@@ -92,7 +92,24 @@ services:
   email: {ports: !reset []}
   flagd-ui: {ports: !reset []}
   frontend: {ports: !reset []}
-  grafana: {ports: !reset []}
+  # Midnight's alert rules and webhook contact point (#765). Grafana reads its provisioning from
+  # a directory of its own: a file mounted inside upstream's provisioning mount would make Docker
+  # create its mountpoint in the upstream checkout. Upstream's datasources and dashboards stay;
+  # its alerting files (an email contact point and two example rules) give way to ours. The
+  # secret is the one demo_env.py generates; Grafana joins the gateway's network only to post
+  # its alerts to the API's intake.
+  grafana:
+    ports: !reset []
+    environment:
+      GF_PATHS_PROVISIONING: /etc/midnight-provisioning
+      ALERT_INTAKE_URL: ${ALERT_INTAKE_URL:-http://api:8000/v1/alert-intake/grafana}
+    env_file:
+      - ${DEMO_STATE_DIR:?run operations through scripts/demo_env.py}/alert-intake.env
+    volumes:
+      - ./src/grafana/provisioning/datasources:/etc/midnight-provisioning/datasources:ro
+      - ./src/grafana/provisioning/dashboards:/etc/midnight-provisioning/dashboards:ro
+      - ../demo/grafana/alerting:/etc/midnight-provisioning/alerting:ro
+    networks: [default, mcp-boundary]
   image-provider: {ports: !reset []}
   jaeger: {ports: !reset []}
   opensearch: {ports: !reset []}

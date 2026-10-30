@@ -94,7 +94,7 @@ grafana_mcp:
   caller_token: ".demo-state/grafana-mcp.env"  # created by up, git-ignored; the gateway holds it (#187)
   networks:
     default: "opentelemetry-demo, to reach Grafana"
-    mcp-boundary: "sre-mcp-boundary, internal, reserved for the gateway (#187)"
+    mcp-boundary: "sre-mcp-boundary, internal, reserved for the gateway (#187); Grafana joins it only to post alerts to the API's intake (#765)"
   grafana_access: "anonymous; upstream grants Admin, so read-only rests on --disable-write"
   probe_from: opensearch  # the MCP image has no HTTP client
 
