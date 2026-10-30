@@ -89,6 +89,11 @@ paths:
         `authorization` assertion with run.approve as the explicit human approval (422 when
         absent). A workflow guard that refuses the command answers 409 `precondition_failed`
         and changes neither state nor version.
+        When the mitigation names a deploy-executor operation (#722), approve_mitigation checks
+        it first: one the executor's catalog no longer offers answers 409 `precondition_failed`,
+        one the agent holds no `mitigation.execute` grant for 403 `operation_not_authorized`, and
+        an executor not configured or not readable 503 `executor_unavailable`; none of them
+        changes state or version.
       parameters:
         - { $ref: '#/components/parameters/IncidentId' }
         - { $ref: '#/components/parameters/RunId' }
@@ -197,7 +202,7 @@ components:
       headers: { WWW-Authenticate: { schema: { type: string, const: Bearer } } }
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { unauthenticated: { $ref: './examples/http/error-401.json' } } } }
     Forbidden:
-      description: The principal is not authorized for this run or command
+      description: The principal is not authorized for this run or command, or the agent holds no grant for the approved operation
       content: { application/json: { schema: { $ref: 'urn:sre-agent:schema:error-envelope:2.0.0' }, examples: { attribution_mismatch: { $ref: './examples/http/error-403.json' } } } }
     NotFound:
       description: Incident or run does not exist for this principal
