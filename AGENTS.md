@@ -21,6 +21,15 @@ Read [the team workflow](docs/team-workflow.md) before contributing and
   - Tautological tests considered harmful.
   - Change-detector tests considered harmful.
   - Do not create regression tests for bug fixes without a genuine gap in behavior testing.
+- Real E2E environment (do not ask the user for these again):
+  - Local stacks: run each task in its own worktree with `scripts/create-worktree.sh`,
+    `scripts/bootstrap-worktree.py` and `scripts/worktree-compose` so stacks do not
+    collide; tear down with `scripts/worktree-compose down -v --remove-orphans`.
+    See [isolated worktree environments](docs/codex-worktrees.md).
+  - AWS OTel Demo: use `scripts/otel_ec2.py` (`status`, `up`, `connect`,
+    `connect-mcp`, `extend`, `down`). The expected AWS account id lives in
+    `~/.config/sre-agent/otel-account`; export it as
+    `OTEL_DEMO_EXPECTED_ACCOUNT_ID`. See [OTel Demo on EC2](docs/otel-demo-ec2.md).
 - Before adding a migration, table, governed route, resource type or audit operation, follow
   the [change checklist](docs/architecture.md#change-checklist).
 - Preserve existing tests and runtime boundaries unless the requested change
