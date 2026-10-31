@@ -188,7 +188,8 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
       const events = ((await timeline.json()) as { events: Array<Record<string, any>> }).events;
       const blocked = events.filter((event) => event.reason_code === "run_start_not_authorized");
       expect(blocked).toHaveLength(1);
-      expect(blocked[0].summary).toBe("Investigation did not start: the declarant lacks the run.start grant.");
+      // The dispatch-cause catalogue of #705 words it (src/sre_agent/incident/reasons.py).
+      expect(blocked[0].summary).toContain("Cause: the declarant lacks the run.start grant");
       writeFileSync(
         `${dir}/verification.json`,
         JSON.stringify(
