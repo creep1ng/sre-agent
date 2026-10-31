@@ -16,7 +16,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from os import environ
@@ -30,6 +30,7 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.background import BackgroundTask
 
 from sre_agent.executor.catalog import OPERATIONS, EnrolledService, load_catalog
 from sre_agent.executor.docker import DockerClient, DockerInvalid, DockerTimeout, DockerUnavailable
@@ -216,8 +217,10 @@ class Executor:
         journal: Journal,
         signing_key: bytes | None,
         signature_window: float,
+        record_change: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
         self._catalog = catalog
+        self._record_change = record_change
         self._operations = operations
         self._journal = journal
         self._signing_key = signing_key
@@ -354,7 +357,13 @@ class Executor:
             "duration_ms": int((monotonic() - started) * 1000),
         }
         self._journal.append({"kind": "result", **base, "status": 200, "response": body})
-        return JSONResponse(body)
+        response = JSONResponse(body)
+        if outcome == "rolled_back" and self._record_change is not None:
+            # Sent after the answer (#770): the rollback neither waits for it nor depends on it.
+            event = {"source": "deploy-executor", "external_id": execution_id, "kind": "rollback"}
+            event |= {"service": service.service, "version": after["image"]}
+            response.background = BackgroundTask(self._record_change, event)
+        return response
 
 
 def create_executor_application(settings: Mapping[str, str] = environ) -> FastAPI:
@@ -372,12 +381,30 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
         float(settings.get("DEPLOY_EXECUTOR_SETTLE_SECONDS", "30")),
     )
     signing_key = usable_key(settings.get("DEPLOY_EXECUTOR_SIGNING_KEY"))
+    changes_url = settings.get("DEPLOY_EXECUTOR_CHANGES_URL", "").rstrip("/")
+    changes_key = settings.get("DEPLOY_EXECUTOR_CHANGES_API_KEY", "")
+
+    async def record_change(event: dict[str, Any]) -> None:
+        # Best effort (#770): the rollback already happened, a missing record never fails it.
+        try:
+            response = await client.post(
+                f"{changes_url}/v1/changes",
+                json=event,
+                headers={"Authorization": f"Bearer {changes_key}"},
+                timeout=10,
+            )
+            response.raise_for_status()
+        except Exception as error:  # only the type: a transport message can quote the header
+            name = type(error).__name__
+            logger.warning("rollback %s not recorded: %s", event["external_id"], name)
+
     executor = Executor(
         catalog,
         operations,
         journal,
         signing_key,
         float(settings.get("DEPLOY_EXECUTOR_SIGNATURE_WINDOW_SECONDS", "300")),
+        record_change if changes_url and changes_key else None,
     )
 
     @asynccontextmanager

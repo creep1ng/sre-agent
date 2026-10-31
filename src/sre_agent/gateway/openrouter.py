@@ -282,6 +282,7 @@ def _failure(
         kind,
         retry_after=retry_after,
         consumption=consumption,
+        http_status=response.status_code,
     )
 
 

@@ -24,7 +24,11 @@ from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator
 
 from sre_agent.application import create_application
-from sre_agent.gateway.endpoint_catalog import EndpointCatalogSnapshot, EndpointMetadata
+from sre_agent.gateway.endpoint_catalog import (
+    EndpointCatalogSnapshot,
+    EndpointCatalogUnavailable,
+    EndpointMetadata,
+)
 from sre_agent.gateway.providers import ProviderFailure, ProviderRequest, ProviderResult
 from sre_agent.governance.dto import AllowDecisionEvidence, Consumption, PricingContext
 from sre_agent.persistence.database import Database
@@ -90,7 +94,10 @@ class Catalog:
     def __init__(self, current: EndpointCatalogSnapshot) -> None:
         self._current = current
 
-    async def fetch(self, _model: str) -> EndpointCatalogSnapshot:
+    async def fetch(self, model: str) -> EndpointCatalogSnapshot:
+        # OpenRouter answers 404 for an alias such as `triage-agent`.
+        if model != self._current.model:
+            raise EndpointCatalogUnavailable
         return self._current
 
 

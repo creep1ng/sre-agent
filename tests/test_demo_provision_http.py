@@ -150,14 +150,12 @@ def test_demo_permissions_converge_and_http_journey_remains_governed():
             conn.execute(
                 "UPDATE grants SET status='revoked' WHERE grant_id='grant-setup-human-alert-read'"
             )
-        try:
-            asyncio.run(prepare())
-        except RuntimeError as error:
-            assert "grant-setup-human-alert-read" in str(error)
-            assert all(key not in str(error) for key in KEYS.values())
-        else:
-            raise AssertionError("revoked grant must not be restored")
+        asyncio.run(prepare())
         with psycopg.connect(URL) as conn:
+            status = conn.execute(
+                "SELECT status FROM grants WHERE grant_id='grant-setup-human-alert-read'"
+            ).fetchone()
+            assert status == ("revoked",), "revoked grant must not be restored"
             conn.execute(
                 "UPDATE grants SET status='active' WHERE grant_id='grant-setup-human-alert-read'"
             )
