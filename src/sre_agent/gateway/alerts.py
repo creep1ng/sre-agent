@@ -10,6 +10,10 @@ starts a new one. The summary also says where the rule's evidence lives (metric,
 index and field): it is the only alert text an investigation receives, and without it the
 model guessed field names, found nothing and the run ended without a mitigation. Each listed
 alert carries its triage decision (incident-state 1.1.0) read from the triage store.
+
+The episodes Grafana sent to ``POST /v1/alert-intake/grafana`` (#765) are listed too, under
+their episode id: firing ones in ``alerts``, the live view, and those resolved in the last day in
+``resolved``, so a consumer tells them apart without leaving the canonical alert shape.
 """
 
 import hashlib
@@ -22,6 +26,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.mcp import MCPGatewayService
@@ -29,6 +34,7 @@ from sre_agent.incident.signals import SOURCE
 from sre_agent.triage.store import TriageRepository
 
 DETECTOR = "sre-agent-alert-rules"
+INTAKE_DETECTOR = "grafana-alerting"
 WORKFLOW = ("incident_workflow", "incident-response")
 # Triage store status -> alert triage_status; an alert without a stored decision is `new`.
 TRIAGE_STATUS = {
@@ -37,6 +43,11 @@ TRIAGE_STATUS = {
     "linked": "linked",
     "dismissed": "dismissed",
 }
+_EPISODES = text("""
+SELECT e.*, t.status AS triage, t.incident_id AS triage_incident_id
+FROM incident.alert_episodes e LEFT JOIN alert_triage t ON t.alert_id = e.episode_id
+WHERE e.status = 'firing' OR e.resolved_at > now() - interval '1 day'
+ORDER BY e.last_received_at DESC LIMIT 100""")
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,7 +135,7 @@ def _sample(result: dict[str, Any]) -> float | None:
 
 
 def _iso(moment: datetime) -> str:
-    return moment.isoformat(timespec="seconds").replace("+00:00", "Z")
+    return moment.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 class LiveAlertsService:
@@ -158,12 +169,11 @@ class LiveAlertsService:
             return self._error(request_id, 503, "storage_unavailable", True)
         if evaluation.decision.decision != "allow":
             return self._error(request_id, 403, "not_authorized", False)
-        if self._mcp is None:
-            return self._error(request_id, 503, "alert_source_unavailable", True)
         evaluated_at = datetime.now(UTC)
         alerts: list[dict[str, Any]] = []
         rules: list[dict[str, Any]] = []
-        for rule in RULES:
+        # Without the governed MCP only the episodes intake recorded are listed.
+        for rule in RULES if self._mcp is not None else ():
             response = await self._mcp.invoke(
                 "query_prometheus",
                 {
@@ -197,10 +207,19 @@ class LiveAlertsService:
             rules.append({"rule_id": rule.rule_id, "state": state, "value": value})
         try:
             await self._attach_triage(alerts)
+            async with self._sessions() as session:
+                episodes = [self._episode(row) for row in await session.execute(_EPISODES)]
         except Exception:
             return self._error(request_id, 503, "storage_unavailable", True)
+        alerts += [alert for firing, alert in episodes if firing]
+        resolved = [alert for firing, alert in episodes if not firing]
         return JSONResponse(
-            {"evaluated_at": _iso(evaluated_at), "rules": rules, "alerts": alerts},
+            {
+                "evaluated_at": _iso(evaluated_at),
+                "rules": rules,
+                "alerts": alerts,
+                "resolved": resolved,
+            },
             headers={"Cache-Control": "no-store"},
         )
 
@@ -213,6 +232,31 @@ class LiveAlertsService:
                 decision = await repository.get(alert["alert_id"]) or {}
                 alert["triage_status"] = TRIAGE_STATUS.get(decision.get("status"), "new")
                 alert["incident_id"] = decision.get("incident_id")
+
+    @staticmethod
+    def _episode(row: Any) -> tuple[bool, dict[str, Any]]:
+        """One intake episode as a canonical alert, and whether it is still firing."""
+        row = row._mapping
+        firing = row["status"] == "firing"
+        resolved = row["resolved_at"] or row["last_received_at"]
+        return firing, {
+            "alert_id": row["episode_id"],
+            "service": row["service"],
+            "severity": row["severity"],
+            "status": "new",
+            "observed_at": _iso(row["starts_at"]),
+            "summary": row["summary"],
+            "source": row["source"],
+            "origin": {
+                "signal": row["rule"],
+                "condition": f"{row['rule']}: "
+                + ("firing" if firing else f"resolved at {_iso(resolved)}"),
+                "detector": INTAKE_DETECTOR,
+                "observed_at": _iso(row["last_received_at"]),
+            },
+            "triage_status": TRIAGE_STATUS.get(row["triage"], "new"),
+            "incident_id": row["triage_incident_id"],
+        }
 
     @staticmethod
     def _alert(

@@ -9,7 +9,7 @@ import { mountedView } from "../console/view.js";
     default: "/public/fixtures/alerts.json",
     empty: "/public/fixtures/alerts-empty.json",
   });
-  // Live alerts come from GET /v1/alerts (gateway rules over governed MCP); fixtures only on request.
+  // Live alerts come from GET /v1/alerts (gateway rules over governed MCP, and the episodes Grafana sent to intake, #765); fixtures only on request.
   const LIVE_POLL_MS = 15000;
   const CONTEXT_FIELDS = Object.freeze(["service", "summary", "observed_at", "source", "severity"]);
   const LIVE_SEVERITY = Object.freeze({ sev1: "critical", sev2: "warning", sev3: "info", sev4: "info" });
