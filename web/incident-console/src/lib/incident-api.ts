@@ -26,6 +26,7 @@ export interface RunSummary {
 
 export interface IncidentDetail {
   incident_id: string;
+  workflow_version: string;
   state: string;
   severity: Severity | null;
   impact: string | null;
@@ -184,9 +185,9 @@ export const incidentApi = {
   changes: (token: string, service: string, signal: AbortSignal) =>
     call(token, `/changes?service=${encodeURIComponent(service)}&limit=5`, signal, isChanges),
   /** Starts an investigation run; the same key replays the same run instead of opening another. */
-  investigate: (token: string, id: string, key: string, signal: AbortSignal) =>
+  investigate: (token: string, id: string, workflowVersion: string, key: string, signal: AbortSignal) =>
     call(token, `${at(id)}/runs`, signal, isRun, {
-      body: { workflow_version: "1.0.0", objective: "investigate" },
+      body: { workflow_version: workflowVersion, objective: "investigate" },
       key,
     }),
 };

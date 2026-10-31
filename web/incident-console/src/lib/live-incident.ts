@@ -68,7 +68,7 @@ export function useLiveIncident(incidentId: string | undefined) {
   const [state, setState] = useState<LiveIncident>(EMPTY);
   const stateRef = useRef(state);
   stateRef.current = state;
-  const pollRef = useRef<() => void>(() => undefined);
+  const pollRef = useRef<() => Promise<RunState[] | null>>(async () => null);
   const controller = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -79,11 +79,14 @@ export function useLiveIncident(incidentId: string | undefined) {
     setState(EMPTY);
     let alive = true;
     let timer: number | undefined;
+    let paused = false; // A hidden tab stops asking until it shows again.
     // What each run's events were read up to, so a poll only asks for what is new.
     const known = new Map<string, { version: number; cursor: string | null; events: RunEvent[]; state: RunState }>();
+    let reasoned = ""; // The events the reasoning on screen was read with.
 
-    async function poll() {
+    async function poll(): Promise<RunState[] | null> {
       let busy = false;
+      let runs: RunState[] | null = null;
       window.clearTimeout(timer);
       controller.current?.abort();
       const abort = new AbortController();
@@ -110,26 +113,30 @@ export function useLiveIncident(incidentId: string | undefined) {
           }
           known.set(summary.run_id, { version: summary.version, cursor, events, state: run });
         }
-        const runs = detail.runs.flatMap((summary) => known.get(summary.run_id)?.state ?? []);
-        const latest = runs.at(-1);
-        let reasoning: LiveIncident["reasoning"] = null;
-        if (latest) {
+        const current = detail.runs.flatMap((summary) => known.get(summary.run_id)?.state ?? []);
+        runs = current;
+        const latest = current.at(-1);
+        const seen = `${latest?.run_id}:${[...known.values()].reduce((total, run) => total + run.events.length, 0)}`;
+        let reasoning: LiveIncident["reasoning"] = latest && seen === reasoned ? stateRef.current.reasoning : null;
+        if (latest && seen !== reasoned) {
           const read = await incidentApi.reasoning(token!, incidentId!, latest.run_id, signal);
           reasoning = read.kind === "forbidden" ? "forbidden" : read.kind === "ok" ? read.body.reasoning : stateRef.current.reasoning;
+          if (read.kind === "ok" || read.kind === "forbidden") reasoned = seen;
         }
         let changes: LiveIncident["changes"] = null;
         if (detail.alert?.service) {
           const read = await incidentApi.changes(token!, detail.alert.service, signal);
           changes = read.kind === "forbidden" ? "forbidden" : read.kind === "ok" ? read.body.changes : stateRef.current.changes;
         }
-        if (!alive) return;
+        if (!alive || signal.aborted) return null;
         const events = detail.runs.flatMap(
           (summary) => known.get(summary.run_id)?.events.map((event) => ({ ...event, run_id: summary.run_id })) ?? [],
         );
-        busy = investigating(runs);
-        setState((current) => ({ ...current, phase: "ready", stale: false, detail, runs, events, reasoning, changes }));
+        busy = investigating(current);
+        setState((s) => ({ ...s, phase: "ready", stale: false, detail, runs: current, events, reasoning, changes }));
       } catch (error) {
-        if (!alive || (error as { name?: string }).name === "AbortError") return;
+        // An aborted poll was replaced by another one, which keeps the only loop.
+        if (!alive || signal.aborted || (error as { name?: string }).name === "AbortError") return null;
         const phase = error instanceof Stop ? error.phase : "error";
         // A failed read keeps what is on screen; a rejected credential or a lost grant does not.
         setState((current) =>
@@ -137,20 +144,32 @@ export function useLiveIncident(incidentId: string | undefined) {
             ? { ...current, stale: true }
             : { ...EMPTY, phase, starting: current.starting },
         );
-        if (phase === "auth") return;
+        if (phase === "auth") return null;
       }
-      if (!alive) return;
+      if (!alive || signal.aborted) return null;
+      paused = document.visibilityState === "hidden";
       const fast = busy || stateRef.current.starting;
-      timer = window.setTimeout(() => void poll(), fast ? WORKING_POLL_MS : IDLE_POLL_MS);
+      if (!paused) timer = window.setTimeout(() => void poll(), fast ? WORKING_POLL_MS : IDLE_POLL_MS);
+      return runs;
     }
 
-    pollRef.current = () => void poll();
+    const resume = () => {
+      if (paused && document.visibilityState === "visible") void poll();
+    };
+    document.addEventListener("visibilitychange", resume);
+    // Connecting again, even with the same key, asks again after a rejected one.
+    const reconnected = useLive.subscribe((now, before) => {
+      if (now.phase === "connecting" && before.phase !== "connecting") void poll();
+    });
+    pollRef.current = poll;
     void poll();
     return () => {
       alive = false;
       window.clearTimeout(timer);
       controller.current?.abort();
-      pollRef.current = () => undefined;
+      document.removeEventListener("visibilitychange", resume);
+      reconnected();
+      pollRef.current = async () => null;
     };
   }, [token, incidentId]);
 
@@ -163,11 +182,12 @@ export function useLiveIncident(incidentId: string | undefined) {
     if (!token || !incidentId || current.starting) return;
     const key = `investigate-${incidentId}-after-${current.runs.at(-1)?.run_id ?? "none"}`;
     setState((s) => ({ ...s, starting: true, startError: null }));
-    window.setTimeout(() => pollRef.current(), 1_000);
+    window.setTimeout(() => void pollRef.current(), 1_000);
     let result: ApiResult<RunState>;
     try {
       // The API answers when the dispatch ends; the poll shows the run meanwhile.
-      result = await incidentApi.investigate(token, incidentId, key, new AbortController().signal);
+      const version = current.detail?.workflow_version ?? "1.0.0";
+      result = await incidentApi.investigate(token, incidentId, version, key, new AbortController().signal);
     } catch {
       result = { kind: "transient" };
     }
@@ -178,7 +198,7 @@ export function useLiveIncident(incidentId: string | undefined) {
           ? "Tu credencial no puede iniciar investigaciones."
           : "No pudimos pedir la investigación. Inténtalo de nuevo.";
     setState((s) => ({ ...s, starting: false, startError }));
-    pollRef.current();
+    void pollRef.current();
   }, [token, incidentId]);
 
   return { ...state, investigate };
