@@ -4,10 +4,12 @@ import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { HypothesisProse } from "@/features/incident/live/hypothesis";
+import { Proposal, operationCall } from "@/features/incident/live/proposal";
 import { Prose } from "@/features/incident/live/say";
 import { PHASES, agentStatus, phaseOf, type AgentStatus } from "@/features/incident/live/status";
 import { buildStory, claimsOf, code } from "@/features/incident/live/story";
 import { Timeline } from "@/features/incident/live/timeline";
+import { useDecision } from "@/features/incident/live/use-decision";
 import { useT } from "@/i18n";
 import { useLiveIncident, type IncidentPhase, type LiveIncident } from "@/lib/live-incident";
 import { cn } from "@/lib/utils";
@@ -79,13 +81,18 @@ function Start({ live, status }: { live: LiveIncident & { investigate: () => Pro
 export function LiveIncidentPage() {
   const { incidentId } = useParams();
   const live = useLiveIncident(incidentId);
+  const decision = useDecision(live);
   const t = useT("incident");
   if (live.phase !== "ready" || !live.detail) return <Blocked phase={live.phase === "ready" ? "loading" : live.phase} />;
 
   const { detail } = live;
   const status = agentStatus(live);
-  const story = buildStory(live);
-  const hypothesis = typeof live.reasoning === "object" ? live.reasoning?.hypotheses.at(-1) : undefined;
+  const story = buildStory(live, decision.me);
+  const reasoning = typeof live.reasoning === "object" ? live.reasoning : null;
+  const hypothesis = reasoning?.hypotheses.at(-1);
+  const mitigation = reasoning?.mitigation_strategy;
+  const operation = mitigation ? operationCall(mitigation) : null;
+  const decided = story.findLast((entry) => /^event\.(approved|rejected)/.test(entry.line.key));
   const waiting = status.kind === "waiting";
   return (
     <article className="mx-auto w-full max-w-4xl min-w-0 px-4 py-8 sm:px-8 lg:px-14 lg:py-12">
@@ -103,6 +110,19 @@ export function LiveIncidentPage() {
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
       {hypothesis && <HypothesisProse hypothesis={hypothesis} claims={claimsOf(live, story)} />}
       <Timeline story={story} status={status} />
+      {mitigation && (
+        <div className="mb-14">
+          <Proposal
+            mitigation={mitigation}
+            pending={waiting && detail.state === "mitigating"}
+            decision={decided}
+            sending={decision.sending}
+            error={decision.error}
+            canDecide={Boolean(decision.me)}
+            onDecide={(choice) => waiting && void decision.decide(choice, status.run)}
+          />
+        </div>
+      )}
       <details className="border-t pt-4 text-sm text-[var(--dim)]">
         <summary className="cursor-pointer">{t("technical")}</summary>
         <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 font-mono text-xs">
@@ -112,6 +132,8 @@ export function LiveIncidentPage() {
           <dd>{`incident-response ${detail.workflow_version} · ${detail.state}`}</dd>
           <dt>{t("technical.runs")}</dt>
           <dd>{live.runs.map((run) => `${run.run_id} · ${run.status}`).join(", ")}</dd>
+          {operation && <dt>{t("technical.operation")}</dt>}
+          {operation && <dd>{operation}</dd>}
           {detail.alert && <dt>{t("technical.alert")}</dt>}
           {detail.alert && <dd>{detail.alert.alert_id}</dd>}
         </dl>
