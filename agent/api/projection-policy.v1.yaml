@@ -49,6 +49,7 @@ safe_projection:
     - "state"
     - "pending_command"
     - "terminated_reason"
+    - "reason_code"
     - "kind"
     - "events"
     # A one-line, already-summarised description. Never raw model or tool output.

@@ -1,0 +1,33 @@
+# Issue #759 E2E: revoke and grant again through the real API and database.
+#   docker compose -f compose.yaml -f compose.grants-e2e.yaml up --build --wait db api
+#   ... run --rm -T seed sh -c 'python -m sre_agent.persistence.seeds --seed-mcp && python /e2e/provision_demo.py'
+#   ... --profile grants-e2e run --rm grants-e2e cycle
+#   ... run --rm -T seed sh -c '{ python -m sre_agent.persistence.seeds --seed-mcp &&
+#         python -m sre_agent.persistence.seeds && python /e2e/provision_demo.py; } > /artifacts/seed-rerun.txt 2>&1'
+#   ... --profile grants-e2e run --rm grants-e2e after-seed
+# The summary lands in docs/evidence/issue-759/ (GRANTS_E2E_ARTIFACTS overrides it).
+services:
+  seed:
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    volumes:
+      - ./scripts:/e2e:ro
+      - ${GRANTS_E2E_ARTIFACTS:-./docs/evidence/issue-759}:/artifacts
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  grants-e2e:
+    profiles: ["grants-e2e"]
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    entrypoint: ["python", "/e2e/grant_regrant_e2e.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      API_URL: http://api:8000
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+      ARTIFACT_DIR: /artifacts
+    volumes:
+      - ./scripts/grant_regrant_e2e.py:/e2e/grant_regrant_e2e.py:ro
+      - ${GRANTS_E2E_ARTIFACTS:-./docs/evidence/issue-759}:/artifacts
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [runtime]
