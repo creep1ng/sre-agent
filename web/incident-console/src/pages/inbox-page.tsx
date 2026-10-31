@@ -9,6 +9,7 @@ import { AlertCard } from "@/features/inbox/alert-card";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { DeclareDialog } from "@/features/inbox/declare-dialog";
 import { IncidentCard } from "@/features/inbox/incident-card";
+import { LiveInbox } from "@/features/inbox/live-inbox";
 import { MenuServiceFilter, type ServiceStatus } from "@/features/inbox/service-filter";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime, formatDuration, formatTime, plural } from "@/lib/format";
@@ -127,7 +128,12 @@ const LIVE_STATE: Partial<Record<LivePhase, { title: string; body: string; actio
   },
 };
 
+/** Live mode reads the real API in the RC-2 inbox; `?mock` keeps the simulator's inbox. */
 export function InboxPage() {
+  return appMode === "live" ? <LiveInbox /> : <MockInboxPage />;
+}
+
+function MockInboxPage() {
   const now = useNow();
   const live = appMode === "live";
   const mockInbox = useInbox(now);
