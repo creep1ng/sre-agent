@@ -9,6 +9,7 @@ from typing import Any
 from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
+from sre_agent.gateway.alert_intake import AlertIntakeService, alert_intake_router
 from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
 from sre_agent.gateway.changes import ChangeEventsService, changes_router
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
@@ -218,6 +219,18 @@ def create_application(
         application.include_router(mcp_router(mcp_service))
     application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
     application.include_router(changes_router(ChangeEventsService(database.sessions)))
+    # Intake answers only when its secret is set and a 401 can be audited.
+    if runtime_settings.alert_intake_secret and runtime_settings.audit_hmac_key:
+        application.include_router(
+            alert_intake_router(
+                AlertIntakeService(
+                    database,
+                    secret=runtime_settings.alert_intake_secret,
+                    audit=audit_store or PostgresAuditStore(database.sessions),
+                    projector=AuditProjector(runtime_settings.audit_hmac_key.encode()),
+                )
+            )
+        )
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
     # A dispatch that a restart cut short has no process left to end it (#704). Without a
     # gateway a dispatch ends its run in the same call, so only an investigating API sweeps.
