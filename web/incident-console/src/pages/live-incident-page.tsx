@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { AgentStatusPanel, STATUS_LABEL, agentStatus } from "@/features/incident/live/agent-status";
+import { StoryColumn } from "@/features/incident/live/story-column";
 import { Row } from "@/features/incident/technical-details";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime } from "@/lib/format";
@@ -83,6 +84,7 @@ export function LiveIncidentPage() {
           <AgentStatusPanel live={live} status={status} onStart={() => void live.investigate()} />
         </div>
       </div>
+      <StoryColumn live={live} />
       <Sheet open={detailsOpen} onOpenChange={setDetailsOpen}>
         <SheetContent className="w-full sm:max-w-md" aria-describedby={undefined}>
           <SheetHeader>
