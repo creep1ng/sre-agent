@@ -1,3 +1,13 @@
+# The previous console's operations addresses open the new console (#715). Decisions,
+# postmortem and governance have no /app equivalent yet and keep their page. LEGACY_CONSOLE=keep
+# serves every old address as before; the old console's own browser suites run that way.
+map "${LEGACY_CONSOLE}:$arg_view:$arg_incident_id" $console_redirect {
+    default "";
+    "~^redirect:(alerts|triage)?:" /app/;
+    "~^redirect:war-room:(?<war_room_incident>[A-Za-z0-9_.-]+)$" /app/incidentes/$war_room_incident;
+    "~^redirect:war-room:" /app/incidentes;
+}
+
 server {
     listen 80;
     server_name _;
@@ -54,6 +64,15 @@ server {
         proxy_set_header Host $host;
         proxy_set_header Cookie "";
         add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'" always;
+    }
+
+    location ~ ^/(index\.html)?$ {
+        absolute_redirect off;
+        if ($console_redirect) {
+            return 302 $console_redirect;
+        }
+        add_header Content-Security-Policy "default-src 'self'; connect-src 'self'; object-src 'none'" always;
+        try_files /index.html =404;
     }
 
     location / {

@@ -1,4 +1,4 @@
-import { InboxIcon, LayersIcon, MonitorIcon, MoonIcon, SirenIcon, SunIcon } from "lucide-react";
+import { FileTextIcon, InboxIcon, LayersIcon, MonitorIcon, MoonIcon, SirenIcon, SunIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import {
   CommandDialog,
@@ -39,6 +39,9 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
           </CommandItem>
           <CommandItem onSelect={() => go("/incidentes")}>
             <LayersIcon /> Incidentes
+          </CommandItem>
+          <CommandItem onSelect={() => go("/postmortems")}>
+            <FileTextIcon /> Postmortems
           </CommandItem>
         </CommandGroup>
         {newAlerts.length > 0 && (
