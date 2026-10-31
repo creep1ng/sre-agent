@@ -50,6 +50,9 @@ python3 scripts/otel_ec2.py extend --hours 1      # if less than ~2.5 h remain
 `setup_sre.py` grants demo-human `alert.*`, `incident.declare`, `run.*`, `run.read_context`
 (hypothesis, evidence, mitigation and postmortem text) and `invoke` on `llm_model/triage-agent`
 (postmortem draft); it probes the governed MCP calls and fails until Grafana answers (rerun it).
+The seed is a reset to zero: every rerun restores any seed grant a person revoked, as a new
+`<grant id>-restored-N` row (#851). To keep a seed grant revoked for safety, change the seed, not
+the grant; a revoke shown live in the governance segment comes back on the next setup.
 
 **Never run `prepare-mcp` before the store answers.** In the rehearsal it ran at minute 5 while
 the guest bootstrap was still pulling images; both `compose up`s raced on the `otel-collector`
