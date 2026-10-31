@@ -7,3 +7,6 @@ services:
     ports: !reset []
   web:
     ports: !reset []
+    # The old console's browser suites still open its / and its alerts, triage and war room (#870).
+    environment:
+      LEGACY_CONSOLE: keep
