@@ -202,6 +202,7 @@ class InvestigationRunDispatcher:
             view = await self.runtime.current(incident_id, run_id)
             context = IncidentContext.model_validate(view.incident_state)
             assert self.evidence is not None and self.gateway is not None
+            assert self.gateway_settings is not None
             capabilities, discovery_id = await self.evidence.discover()
             request_ids.append(discovery_id)
         except EvidenceUnavailable as error:
@@ -223,7 +224,8 @@ class InvestigationRunDispatcher:
         # A cited hypothesis with steps left is recorded through continue_investigation and
         # the run goes on with the remaining budget, so the agent can still reach the
         # evidence_sufficiency decision and propose a mitigation for that hypothesis.
-        limits, offset = Limits(), 0
+        model_timeout = self.gateway_settings.timeout_seconds
+        limits, offset = Limits(gateway_timeout_seconds=model_timeout), 0
         run_mcp_ids: list[UUID] = []
         while True:
             try:
@@ -283,7 +285,9 @@ class InvestigationRunDispatcher:
                 )
                 return
             offset += len(result.turns)
-            limits = Limits(max_steps=result.remaining_step_budget)
+            limits = Limits(
+                max_steps=result.remaining_step_budget, gateway_timeout_seconds=model_timeout
+            )
 
         all_request_ids = _unique_ids(request_ids)
         mcp_request_ids = _unique_ids(run_mcp_ids)
