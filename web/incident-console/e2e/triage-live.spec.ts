@@ -113,17 +113,17 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
     } else {
       await pinned.getByRole("button", { name: "Descartar" }).click();
       await page.getByRole("radio", { name: "Falsa alarma" }).click();
-      // Another tab acts while the popover is open: it bumps the version, or decides first.
-      const before = await version(api, alertId);
+      // Another tab acts while the popover is open: it bumps the version, or decides first. On an
+      // untouched alert the first command creates the row at the version the popover read, so
+      // bumping it takes a second one.
       const raced =
         scenario === "dismiss"
-          ? await command(api, alertId, { operation: "open_triage", expected_version: before })
-          : await command(api, alertId, {
-              operation: "triage_dismiss",
-              expected_version: before,
-              reason: "Descartada desde otra pestaña.",
-            });
-      expect(raced.status()).toBe(200);
+          ? [{ operation: "open_triage" }, { operation: "open_triage" }]
+          : [{ operation: "triage_dismiss", reason: "Descartada desde otra pestaña." }];
+      for (const data of raced) {
+        const response = await command(api, alertId, { ...data, expected_version: await version(api, alertId) });
+        expect(response.status()).toBe(200);
+      }
       await page.getByRole("button", { name: "Descartar alerta" }).click();
     }
 
