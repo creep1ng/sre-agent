@@ -1,0 +1,18 @@
+# Investigation journeys of the new console (#708): real API, database, investigator and web
+# proxy; the model and Grafana MCP are scripts/console_investigation_upstreams.py.
+# Commands: scripts/run_console_journeys.sh.
+services:
+  api:
+    command: ["python", "/e2e/console_investigation_upstreams.py"]
+    volumes: ["./scripts/console_investigation_upstreams.py:/e2e/console_investigation_upstreams.py:ro"]
+    environment:
+      STEP_SECONDS: "${STEP_SECONDS:-2}"
+
+  seed:
+    volumes: ["./scripts:/app/scripts:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  incident-console-e2e:
+    environment:
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      LIVE_INVESTIGATION: "1"

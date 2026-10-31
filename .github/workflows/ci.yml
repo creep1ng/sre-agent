@@ -89,7 +89,7 @@ jobs:
           -e DEMO_DATABASE_URL=postgresql://demo@demo-db:5432/demo
           sre-agent-checks:${{ github.sha }} sh -c
           'python scripts/assert_test_database_isolated.py &&
-          shellcheck docker/harness-entrypoint.sh scripts/worktree-compose scripts/run_real_journeys.sh &&
+          shellcheck docker/harness-entrypoint.sh scripts/worktree-compose scripts/run_real_journeys.sh scripts/run_console_journeys.sh &&
           ruff check --no-cache . && ruff format --check --no-cache . &&
           uv lock --check --no-cache && lint-imports --no-cache &&
           mypy --cache-dir=/tmp/mypy src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py
@@ -260,7 +260,7 @@ jobs:
     needs: compose-smoke
     if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Create ephemeral browser inputs
@@ -286,6 +286,21 @@ jobs:
       - name: Remove the scoped journeys stack
         if: always()
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-journeys-${{ github.run_id }} --profile e2e down -v --remove-orphans
+      - name: Run the new console's live investigation journeys with a scripted model
+        env:
+          COMPOSE_PROJECT_NAME: ci-console-${{ github.run_id }}
+        run: scripts/run_console_journeys.sh
+      - name: Retain the console journeys' screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: console-journeys-${{ github.sha }}
+          path: web/incident-console/e2e/artifacts/live-investigation*
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Remove the scoped console stack
+        if: always()
+        run: docker compose -f compose.yaml -f compose.e2e.yaml -f compose.console-e2e.yaml --project-name ci-console-${{ github.run_id }} --profile e2e down -v --remove-orphans
 
   triage-review:
     needs: compose-smoke
