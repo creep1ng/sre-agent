@@ -59,10 +59,12 @@ class InvestigationRunDispatcher:
         *,
         http: Any = None,
         language: OutputLanguage = "es",
+        tool_timeout_seconds: float = 30.0,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language = language
         self.gateway_settings = gateway_settings
+        self.limits = Limits(tool_timeout_seconds=tool_timeout_seconds)
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
 
@@ -224,8 +226,10 @@ class InvestigationRunDispatcher:
         # A cited hypothesis with steps left is recorded through continue_investigation and
         # the run goes on with the remaining budget, so the agent can still reach the
         # evidence_sufficiency decision and propose a mitigation for that hypothesis.
+        tool_timeout = self.limits.tool_timeout_seconds
         model_timeout = self.gateway_settings.timeout_seconds
-        limits, offset = Limits(gateway_timeout_seconds=model_timeout), 0
+        limits = Limits(gateway_timeout_seconds=model_timeout, tool_timeout_seconds=tool_timeout)
+        offset = 0
         run_mcp_ids: list[UUID] = []
         while True:
             try:
@@ -286,7 +290,9 @@ class InvestigationRunDispatcher:
                 return
             offset += len(result.turns)
             limits = Limits(
-                max_steps=result.remaining_step_budget, gateway_timeout_seconds=model_timeout
+                max_steps=result.remaining_step_budget,
+                gateway_timeout_seconds=model_timeout,
+                tool_timeout_seconds=tool_timeout,
             )
 
         all_request_ids = _unique_ids(request_ids)
@@ -329,8 +335,12 @@ class InvestigationRunDispatcher:
                 run_id,
                 actor_reference,
                 status="unknown",
-                # A tool that did not answer is a different cause than the model provider (#705).
-                reason_code="investigation_tool_unavailable"
+                # A tool held past INVESTIGATOR_TOOL_TIMEOUT_SECONDS names the timeout (#719); any
+                # other tool that did not answer is a cause distinct from the model provider (#705).
+                reason_code="tool_timeout"
+                if result.failure_diagnostic is not None
+                and result.failure_diagnostic.stage == "tool_timeout"
+                else "investigation_tool_unavailable"
                 if result.status == "upstream_unavailable"
                 and (result.detail or "").startswith("tool failed:")
                 else f"investigation_{result.status}",

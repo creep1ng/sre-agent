@@ -19,6 +19,7 @@ DISPATCH_CAUSES = {
     "investigation_mcp_contract_rejected": "an MCP call did not match the tool contract.",
     "investigation_upstream_unavailable": "the model provider was unavailable.",
     "investigation_tool_unavailable": "an MCP tool failed or did not answer in time.",
+    "tool_timeout": "an MCP tool did not answer within the investigator's tool timeout.",
     "investigation_max_steps": "the agent used its whole step budget.",
     "investigation_invalid_output": "the model returned output the harness cannot use.",
     "investigator_failed": "the investigator failed unexpectedly.",
