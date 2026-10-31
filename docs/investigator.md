@@ -273,3 +273,19 @@ the request id the gateway audited. From a worktree with `.env` and `.env.worktr
     scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml down -v --remove-orphans
 
 The report goes to `$INVESTIGATOR_TIMEOUT_ARTIFACTS` (default `/tmp/investigator-timeout-e2e`).
+
+## Provider evidence
+
+The gateway checks that the pinned provider answered. OpenRouter may answer from a second endpoint
+of that provider when the first fails (#880): on 2026-10-31 `anthropic/claude-haiku-5.5` reported
+a 400 and then a 200, both from "Anthropic". The gateway accepts such an answer as the pinned
+provider's only in the first case below; the others are rejected with 502 `upstream_invalid`:
+
+| Evidence in `openrouter_metadata` | Result |
+| --- | --- |
+| Every attempt and every selected endpoint names the pinned provider and the same model; only the last attempt answered 200; `attempt` equals the attempts listed | Accepted, credited to the pinned provider |
+| Any attempt or selected endpoint names another provider | Rejected: an implicit fallback |
+| `attempt` differs from the number of attempts listed | Rejected |
+| The last attempt did not answer 200, or an earlier one did | Rejected |
+| The attempts or the selected endpoints disagree on the model | Rejected |
+| No attempts listed | Accepted only as attempt 1 with one selected endpoint, as before |

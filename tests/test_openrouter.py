@@ -471,6 +471,83 @@ async def test_invalid_or_extra_provider_evidence_fails_closed(
     assert captured.value.retry_after is None
 
 
+# OpenRouter may retry inside the pinned provider, across its own endpoints (#880): seen on
+# 2026-10-31 for anthropic/claude-haiku-5.5, a 400 then a 200, both named "Anthropic".
+SAME_PROVIDER_RETRY = {
+    "attempt": 2,
+    "endpoints": {
+        "total": 10,
+        "available": [
+            {"provider": "OpenAI", "model": MODEL, "selected": True},
+            {"provider": "OpenAI", "model": MODEL, "selected": True},
+        ],
+    },
+    "attempts": [
+        {"provider": "OpenAI", "model": MODEL, "status": 400},
+        {"provider": "OpenAI", "model": MODEL, "status": 200},
+    ],
+}
+
+
+@pytest.mark.asyncio
+async def test_a_retry_inside_the_pinned_provider_is_that_provider_answering() -> None:
+    body = successful_response(**SAME_PROVIDER_RETRY)
+    adapter, client = provider(httpx.MockTransport(lambda _request: httpx.Response(200, json=body)))
+    try:
+        result = await adapter.create(REQUEST)
+    finally:
+        await client.aclose()
+    assert (result.provider, result.credited_provider) == (PROVIDER, PROVIDER)
+    assert result.credited_model == MODEL
+
+
+def _retry(**changes: object) -> dict[str, object]:
+    metadata = json.loads(json.dumps(SAME_PROVIDER_RETRY))
+    for path, value in changes.items():
+        *parents, leaf = path.split("__")
+        target = metadata
+        for key in parents:
+            target = target[int(key)] if isinstance(target, list) else target[key]
+        if isinstance(target, list):
+            target[int(leaf)] = value
+        else:
+            target[leaf] = value
+    return successful_response(**metadata)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        # Another provider answered or was tried: an implicit fallback.
+        _retry(attempts__0__provider="Other"),
+        _retry(attempts__1__provider="Other"),
+        _retry(endpoints__available__1__provider="Other"),
+        # The attempt count disagrees with the attempts listed.
+        _retry(attempt=3),
+        _retry(attempt=1),
+        # The last attempt did not succeed, or an earlier one already had.
+        _retry(attempts__1__status=500),
+        _retry(attempts__0__status=200),
+        # The attempts or the selected endpoints disagree on the model.
+        _retry(attempts__0__model="other/model"),
+        _retry(endpoints__available__1__model="other/model"),
+        # Without an attempts list only a single first attempt is evidence.
+        _retry(attempts=None),
+    ],
+)
+async def test_a_retry_that_is_not_the_pinned_provider_alone_fails_closed(
+    body: dict[str, object],
+) -> None:
+    adapter, client = provider(httpx.MockTransport(lambda _request: httpx.Response(200, json=body)))
+    try:
+        with pytest.raises(ProviderFailure) as captured:
+            await adapter.create(REQUEST)
+    finally:
+        await client.aclose()
+    assert captured.value.kind == "evidence_invalid"
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "retry_after", "kind", "expected_retry_after"),

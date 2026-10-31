@@ -162,20 +162,34 @@ def _selected_model(metadata: Any, request: ProviderRequest) -> str:
         if isinstance(available, list)
         else []
     )
-    evidence = selected[0] if len(selected) == 1 else {}
     attempts = metadata.get("attempts")
+    # OpenRouter may retry inside the pinned provider, across that provider's own endpoints
+    # (#880). Every attempt and selected endpoint must then name it and the same model, and only
+    # the last attempt may have succeeded; another provider anywhere is an implicit fallback.
+    count = len(attempts) if isinstance(attempts, list) and attempts else 1
+    if attempts is None and len(selected) != 1:
+        selected = []
+    evidence = selected[0] if selected else {}
+    same = all(
+        _matches_provider(item, request) and item.get("model") == evidence.get("model")
+        for item in selected
+    )
     valid_attempts = attempts is None or (
         isinstance(attempts, list)
-        and len(attempts) == 1
-        and _matches_provider(attempts[0], request)
-        and attempts[0].get("model") == evidence.get("model")
-        and attempts[0].get("status") == 200
+        and len(attempts) == count
+        and all(
+            _matches_provider(attempt, request)
+            and attempt.get("model") == evidence.get("model")
+            and (attempt.get("status") == 200) == (index == count - 1)
+            for index, attempt in enumerate(attempts)
+        )
     )
     if not (
         metadata.get("requested") == request.model
         and metadata.get("strategy") == "direct"
-        and metadata.get("attempt") == 1
+        and metadata.get("attempt") == count
         and _matches_provider(evidence, request)
+        and same
         and valid_attempts
     ):
         raise ProviderFailure("evidence_invalid")
