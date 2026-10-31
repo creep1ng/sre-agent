@@ -3,6 +3,7 @@ import { NavLink } from "react-router";
 import { AgentAvatar, Logo } from "@/components/brand";
 import { StatusDot } from "@/components/badges";
 import { Kbd } from "@/components/ui/kbd";
+import { appMode } from "@/lib/mode";
 import type { InboxModel } from "@/lib/selectors";
 import { incidentStatus } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -119,7 +120,8 @@ export function Sidebar({
       </div>
 
       <div className="mt-auto flex flex-col gap-3">
-        <AgentPresence inbox={inbox} />
+        {/* The live inbox does not know what the agent is doing; only the simulator does. */}
+        {appMode === "mock" && <AgentPresence inbox={inbox} />}
         <AccountMenu onConnect={onConnect} />
       </div>
     </div>

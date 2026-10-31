@@ -17,11 +17,12 @@ import { SEVERITY } from "@/lib/vocabulary";
 
 export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
-  const incidents = useStore((s) => s.incidents);
+  const stored = useStore((s) => s.incidents);
   const alerts = useStore((s) => s.alerts);
   const setTheme = useTheme((s) => s.setTheme);
-  // The seeded alert commands belong to the simulator, not to the live inbox.
+  // The seeded alerts and incidents belong to the simulator; the API has no incident list yet.
   const newAlerts = appMode === "mock" ? alerts.filter((alert) => alert.status === "new") : [];
+  const incidents = appMode === "mock" ? stored : [];
 
   const go = (to: string) => {
     onOpenChange(false);
@@ -52,7 +53,7 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
             ))}
           </CommandGroup>
         )}
-        <CommandGroup heading="Incidentes">
+        <CommandGroup heading={incidents.length > 0 ? "Incidentes" : undefined}>
           {incidents.map((incident) => (
             <CommandItem
               key={incident.id}
