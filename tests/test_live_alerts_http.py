@@ -1,18 +1,20 @@
-"""Live alert inbox over the governed MCP path, written before the endpoint.
+"""Live alert inbox, written before the endpoint; since #765 its alerts come from intake.
 
-Failure modes: anonymous caller; no alert.read; no mcp.invoke on query_prometheus; MCP
-unavailable; empty result; malformed sample; id changing within an episode or reused by the
-next; unaudited evaluation; an alert triage cannot declare; a triage decision missing from the
-list, reported without its incident, or carried over to the next episode; the demo's own
-checkout alerting under a service name a store rule also emits (#722). Real PostgreSQL,
-seeds, grants and audit; only the Grafana MCP upstream is scripted. With LIVE_ALERTS_TRANSCRIPT
-set, the GET /v1/alerts bodies of the triage journey are written there as the review artifact.
+Failure modes: anonymous caller; no alert.read; an alert invented without a delivery; id
+changing within an episode or reused by the next; a resolved episode left in the live list; an
+alert triage cannot declare; a triage decision missing from the list, reported without its
+incident, or carried over to the next episode; the demo's own checkout alerting under a service
+name a store rule also emits (#722). Real PostgreSQL, seeds, grants and audit; Grafana's
+deliveries are posted to intake, whose operator is unset so the console triages. With
+LIVE_ALERTS_TRANSCRIPT set, the GET /v1/alerts bodies of the triage journey are written there
+as the review artifact.
 """
 
 import asyncio
 import json
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +24,6 @@ from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
-from sre_agent.gateway.mcp import MCPUpstreamUnavailable
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import SeedSettings, seed, seed_mcp_demo
 from sre_agent.settings import Settings
@@ -39,24 +40,26 @@ KEYS = {
 }
 ROUTE = (("MODEL", "openai/gpt-4o-mini"), ("PROVIDER", "openai"))
 ALERT_KEYS = {"alert_id", "service", "severity", "status", "observed_at", "summary", "source"}
+SECRET = "grafana-intake-" + "s" * 24
+# Relative to now: the list keeps an episode resolved only within the last day.
+NOW = datetime.now(UTC).replace(microsecond=0)
 
 
-class ScriptedMCP:
-    def __init__(self) -> None:
-        self.next: Any = {"data": []}
-        # The second service's rule (#721): no samples, so it never fires, unless a step says so.
-        self.orders: Any = {"data": []}
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
-        self.calls.append((tool_name, arguments))
-        if isinstance(self.next, Exception):
-            raise self.next
-        return self.next if "PaymentService" in arguments["expr"] else self.orders
+def ago(minutes: int) -> str:
+    return (NOW - timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")
 
 
-def ratio(value: str) -> dict[str, Any]:
-    return {"data": [{"metric": {}, "value": [1792380000.0, value]}]}
+def grafana(status: str, service: str, starts_at: str, rule: str = "service-error-rate") -> Any:
+    """One Grafana Alerting webhook delivery with a single alert."""
+    alert = {
+        "status": status,
+        "fingerprint": f"{rule}-{service}",
+        "startsAt": starts_at,
+        "endsAt": ago(60) if status == "resolved" else "0001-01-01T00:00:00Z",
+        "labels": {"alertname": rule, "service_name": service, "severity": "critical"},
+        "annotations": {"summary": f"{service}: 100% of spans failed over the last 2 min."},
+    }
+    return {"groupKey": f"{rule}:{service}", "status": status, "alerts": [alert]}
 
 
 def prepare_database() -> None:
@@ -85,90 +88,54 @@ def prepare_database() -> None:
     asyncio.run(prepare())
 
 
-def mcp_invocations() -> int:
-    with psycopg.connect(URL) as conn:
-        sql = "SELECT count(*) FROM audit_events WHERE operation='mcp.invoke'"
-        return conn.execute(sql).fetchone()[0]
-
-
 def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
     prepare_database()
-    mcp = ScriptedMCP()
     app = create_application(
         settings=Settings(
             database_url=URL,
             audit_hmac_key="x" * 32,
-            grafana_mcp_endpoint="http://grafana-mcp:8000/mcp",
-            grafana_mcp_token="scripted-token",
-        ),
-        mcp_client=mcp,
+            alert_intake_secret=SECRET,
+            alert_intake_principal_id=None,
+        )
     )
     with TestClient(app) as client:
+
+        def deliver(payload: Any) -> None:
+            headers = {"Authorization": "Bearer " + SECRET}
+            response = client.post("/v1/alert-intake/grafana", json=payload, headers=headers)
+            assert response.status_code == 200, response.text
 
         def alerts(key: str | None = "DEMO_HUMAN_API_KEY") -> Any:
             headers = {"Authorization": "Bearer " + KEYS[key]} if key else {}
             return client.get("/v1/alerts", headers=headers)
 
-        # Anonymous and ungranted callers never reach the upstream.
+        # Anonymous and ungranted callers see nothing.
         assert alerts(None).status_code == 401
         denied = alerts("RESTRICTED_HARNESS_API_KEY")
         assert denied.status_code == 403
         assert denied.json()["error"]["code"] == "not_authorized"
         # incident-harness may invoke MCP but has no alert.read.
         assert alerts("INCIDENT_HARNESS_API_KEY").status_code == 403
-        assert mcp.calls == []
 
-        # No traffic: empty result is "no data", never an invented alert.
-        audited = mcp_invocations()
+        # Nothing delivered: an empty list, never an invented alert.
         empty = alerts()
         assert empty.status_code == 200, empty.text
-        assert empty.json()["alerts"] == []
-        assert [rule["state"] for rule in empty.json()["rules"]] == ["no_data", "no_data"]
-        assert mcp_invocations() == audited + 2
-        assert mcp.calls[-1][0] == "query_prometheus"
+        assert (empty.json()["alerts"], empty.json()["resolved"]) == ([], [])
 
-        # Healthy traffic below the threshold.
-        mcp.next = ratio("0")
-        assert alerts().json()["alerts"] == []
-
-        # Upstream down: retryable 503, nothing invented.
-        mcp.next = MCPUpstreamUnavailable()
-        down = alerts()
-        assert (down.status_code, down.json()["retryable"]) == (503, True)
-        assert down.json()["error"]["code"] == "alert_source_unavailable"
-
-        # Malformed samples fail closed.
-        for malformed in (
-            {"data": [{"metric": {}, "value": [1792380000.0, "not-a-number"]}]},
-            {"data": [{"metric": {}}]},
-            {"data": [{"metric": {}, "value": [1, "1"]}, {"metric": {}, "value": [1, "1"]}]},
-        ):
-            mcp.next = malformed
-            bad = alerts()
-            assert bad.status_code == 502, malformed
-            assert bad.json()["error"]["code"] == "alert_source_invalid"
-
-        # Firing: one canonical alert, same id and observed_at on every poll.
-        mcp.next = ratio("1")
+        # Firing: one canonical alert, same id and observed_at on every poll and redelivery.
+        deliver(grafana("firing", "checkout", ago(90)))
         first = alerts()
         assert first.status_code == 200, first.text
         [alert] = first.json()["alerts"]
         assert set(alert) == ALERT_KEYS | {"origin", "triage_status", "incident_id"}
         assert (alert["service"], alert["severity"], alert["status"]) == ("checkout", "sev1", "new")
         assert (alert["triage_status"], alert["incident_id"]) == ("new", None)
-        assert first.json()["rules"][0]["state"] == "firing"
+        assert alert["origin"]["condition"] == "service-error-rate: firing"
+        deliver(grafana("firing", "checkout", ago(90)))
         [again] = alerts().json()["alerts"]
         assert {k: again[k] for k in ("alert_id", "observed_at")} == {
             k: alert[k] for k in ("alert_id", "observed_at")
         }
-
-        # A window without samples keeps the open episode listed (no flapping).
-        mcp.next = {"data": []}
-        gap = alerts().json()
-        assert gap["rules"][0]["state"] == "no_data"
-        assert [item["alert_id"] for item in gap["alerts"]] == [alert["alert_id"]]
-        assert "no samples" in gap["alerts"][0]["origin"]["condition"]
-        mcp.next = ratio("1")
 
         # Triage accepts the live id and the operator-confirmed alert facts.
         def command(alert_id: str, operation: str, **body: Any) -> Any:
@@ -205,9 +172,11 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
         assert listed(alert["alert_id"], "after triage_declare") == ("declared", incident_id)
 
         # Resolution ends the episode; the next one gets a new id.
-        mcp.next = ratio("0")
-        assert alerts().json()["alerts"] == []
-        mcp.next = ratio("1")
+        deliver(grafana("resolved", "checkout", ago(90)))
+        ended = alerts().json()
+        assert ended["alerts"] == []
+        assert [item["alert_id"] for item in ended["resolved"]] == [alert["alert_id"]]
+        deliver(grafana("firing", "checkout", ago(30)))
         [next_episode] = alerts().json()["alerts"]
         assert next_episode["alert_id"] != alert["alert_id"]
 
@@ -223,20 +192,7 @@ def test_live_alerts_are_governed_stable_per_episode_and_triageable() -> None:
             Path(path).write_text(json.dumps(transcript, indent=2) + "\n")
 
         # The demo's own checkout alerts as sre-checkout, which no store rule emits (#722).
-        mcp.orders = ratio("1")
+        rule = "sre-checkout-orders-error-rate"
+        deliver(grafana("firing", "sre-checkout", ago(29), rule))
         [ours] = [item for item in alerts().json()["alerts"] if item["service"] == "sre-checkout"]
-        assert ours["origin"]["condition"].startswith("checkout-orders-error-rate:")
-        assert 'service_name="sre-checkout"' in mcp.calls[-1][1]["expr"]
-        assert 'service_name="sre-checkout"' in ours["summary"]
-
-        # Without mcp.invoke on query_prometheus the governed path denies.
-        with psycopg.connect(URL, autocommit=True) as conn:
-            conn.execute(
-                "UPDATE grants SET status='revoked'"
-                " WHERE grant_id='grant-demo-human-mcp-query-prometheus'"
-            )
-        calls = len(mcp.calls)
-        forbidden = alerts()
-        assert forbidden.status_code == 403
-        assert forbidden.json()["error"]["code"] == "alert_source_forbidden"
-        assert len(mcp.calls) == calls
+        assert ours["origin"]["condition"] == f"{rule}: firing"

@@ -12,14 +12,15 @@ import { connectConsole } from "./support/console-session.mjs";
 //    the image store to roll back to;
 // 3. its alert is not in the inbox within 60 s of 1.5.0 starting, or the store's rule fires too;
 // 4. the rollback, signed as the gateway will sign it (#722), does not bring back 1.4.0;
-// 5. after the rollback the rule never evaluates `ok`, so the episode stays open in the inbox.
+// 5. after the rollback Grafana never sends `resolved`, so the episode stays open in the inbox.
+// Since #765 the alert is Grafana's provisioned rule, delivered to intake.
 const ENABLED = process.env.CHECKOUT_ALERT_E2E === "1";
 const DEMO_KEY = process.env.DEMO_HUMAN_API_KEY ?? "";
 const SIGNING_KEY = process.env.DEPLOY_EXECUTOR_SIGNING_KEY ?? "";
 const EXECUTOR = process.env.DEPLOY_EXECUTOR_URL ?? "http://deploy-executor:8000";
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://web";
 const ARTIFACTS = process.env.CHECKOUT_ALERT_ARTIFACT_DIR ?? "test-results/issue-721";
-const RULE = "checkout-orders-error-rate";
+const RULE = "sre-checkout-orders-error-rate";
 const SERVICE = "sre-checkout";
 const ROLLBACK = "/v1/operations/deployment.rollback";
 
@@ -84,7 +85,7 @@ test("the sre-checkout alert reaches the inbox within 60 s of 1.5.0 and closes a
   await page.screenshot({ path: `${ARTIFACTS}/inbox-firing.png`, fullPage: true });
   const firing = note("alerts firing", { body: await alerts() });
   expect(ours(firing.body)).toEqual([expect.objectContaining({ service: SERVICE, severity: "sev2", status: "new" })]);
-  expect(firing.body.rules.find((rule) => rule.rule_id === "checkout-payment-error-rate").state).not.toBe("firing");
+  expect(firing.body.alerts.filter((alert) => alert.service === "checkout")).toEqual([]);
 
   // 4. Rollback through the executor, signed as #722 will sign it.
   const key = randomUUID();
@@ -100,12 +101,12 @@ test("the sre-checkout alert reaches the inbox within 60 s of 1.5.0 and closes a
   const rolledBack = Date.now();
   timings.rolled_back_at = new Date(rolledBack).toISOString();
 
-  // 5. Once the window holds only the healthy release the rule is `ok` and the episode closes.
+  // 5. Once the window holds only the healthy release Grafana resolves the episode.
   await expect(card).toHaveCount(0, { timeout: 180_000 });
   timings.seconds_to_close = (Date.now() - rolledBack) / 1000;
   const after = note("alerts after rollback", { body: await alerts() });
-  expect(after.body.rules.find((rule) => rule.rule_id === RULE).state).toBe("ok");
   expect(ours(after.body)).toEqual([]);
+  expect(ours({ alerts: after.body.resolved })).toEqual(expect.arrayContaining([expect.objectContaining({ service: SERVICE })]));
   await page.screenshot({ path: `${ARTIFACTS}/inbox-recovered.png`, fullPage: true });
   note("checkout after", { response: await checkout() });
   await page.goto(`${EXECUTOR}/v1/services/${SERVICE}`);
