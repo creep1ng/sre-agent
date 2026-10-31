@@ -378,6 +378,7 @@ class TriageService:
                 impact,
                 alert_context,
                 target_incident_id,
+                responsible_system=responsible_system,
             )
             persisted = await repository.write(
                 alert_id=alert_id,
@@ -514,6 +515,8 @@ class TriageService:
         impact: str | None,
         alert_context: dict[str, Any] | None,
         target_incident_id: str | None,
+        *,
+        responsible_system: str | None = None,
     ) -> _TransitionOutcome:
         if operation == "triage_link":
             if target_incident_id is None:
@@ -626,10 +629,16 @@ class TriageService:
                     command_id=self._investigation_command_id(incident_id),
                     incident_id=incident_id,
                     objective="investigate",
-                    actor="human",
-                    actor_reference=ActorReference(
-                        principal_id=principal.principal_id,
-                        display_name=principal.display_name,
+                    # An automatic declaration (#765) starts the run as the system that
+                    # declared; a person's declaration starts it as that person.
+                    actor="human" if responsible_system is None else "system",
+                    actor_reference=(
+                        ActorReference(
+                            principal_id=principal.principal_id,
+                            display_name=principal.display_name,
+                        )
+                        if responsible_system is None
+                        else ActorReference(principal_id=responsible_system)
                     ),
                 ),
                 work=units,
