@@ -1,7 +1,13 @@
 # Live-triage E2E (#703, #704): real API, database, web proxy and new console. The model concludes
 # at once and the Grafana MCP stand-in fires every alert rule unless
-# $LIVE_TRIAGE_FAULTS/{rule id} reads `ok` (scripts/live_triage_upstreams.py).
-# Commands: docs/evidence/issue-704/README.md.
+# $LIVE_TRIAGE_FAULTS/{rule id} reads `ok` (scripts/live_triage_upstreams.py). With .env and
+# .env.worktree, F="-f compose.e2e.yaml -f compose.live-triage-e2e.yaml":
+#   scripts/worktree-compose $F up --build --wait db api web incident-console
+#   scripts/worktree-compose $F run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
+#   scripts/worktree-compose $F run --rm --no-deps -T seed python /e2e/provision_demo.py
+#   LIVE_DECLARE=1 scripts/worktree-compose $F --profile e2e run --rm --no-deps incident-console-e2e \
+#     npx playwright test e2e/declare-live.spec.ts   # or LIVE_TRIAGE=..., AUTO_INVESTIGATE=...
+#   scripts/worktree-compose $F down -v --remove-orphans
 services:
   api:
     command: ["python", "/e2e/live_triage_upstreams.py"]
