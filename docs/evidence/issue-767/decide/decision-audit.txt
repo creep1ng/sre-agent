@@ -1,0 +1,4 @@
+incident_id | transition | outcome | principal | channel | decided_at
+inc-767-approve-63471aa2 | apply_mitigation | approve | demo-human | telegram | 2026-10-31 21:31:55.504114+00:00
+inc-767-console-63471aa2 | reject_mitigation | reject | demo-human | None | 2026-10-31 21:32:05.429722+00:00
+inc-767-reject-63471aa2 | reject_mitigation | reject | demo-human | telegram | 2026-10-31 21:32:10.994741+00:00
