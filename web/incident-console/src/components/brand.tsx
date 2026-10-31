@@ -1,30 +1,24 @@
-import { useId } from "react";
 import { cn } from "@/lib/utils";
 
-/** The midnight.agent moon mark, drawn with currentColor so it follows the theme. */
+/**
+ * The Nocturno crescent. It follows the theme through currentColor; the pixel stays mist, because
+ * amber is reserved for decisions.
+ */
 export function BrandMark({ className }: { className?: string }) {
-  const mask = useId();
   return (
-    <svg viewBox="0 0 64 64" className={className} aria-hidden="true">
-      <defs>
-        <mask id={mask}>
-          <rect width="64" height="64" fill="white" />
-          <circle cx="39" cy="22" r="14" fill="black" />
-        </mask>
-      </defs>
-      <circle cx="30" cy="30" r="17" fill="none" stroke="currentColor" strokeWidth="4.5" mask={`url(#${mask})`} />
-      <circle cx="22" cy="38" r="3.2" fill="currentColor" />
-      <circle cx="30.5" cy="37" r="1.8" fill="currentColor" opacity="0.55" />
-      <path d="M40 32h11" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
+      <path fill="currentColor" d="M19 3.5A12.5 12.5 0 1 0 28.5 21 10.5 10.5 0 0 1 19 3.5z" />
+      <rect x="21" y="8" width="5" height="5" fill="var(--mist)" />
     </svg>
   );
 }
 
+/** The wordmark stays mono and lowercase. */
 export function Logo({ className }: { className?: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-2 text-primary", className)}>
-      <BrandMark className="size-8 shrink-0" />
-      <span className="font-display text-[1.35rem] leading-none tracking-tight text-foreground">midnight.agent</span>
+    <span className={cn("inline-flex items-center gap-2.5 text-[var(--mark)]", className)}>
+      <BrandMark className="size-6 shrink-0" />
+      <span className="font-mono text-base leading-none font-medium text-foreground">midnight</span>
     </span>
   );
 }
@@ -34,7 +28,7 @@ export function AgentAvatar({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-agent-solid text-agent-solid-foreground ring-1 ring-white/10",
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-agent-solid text-agent-solid-foreground ring-1 ring-border",
         className,
       )}
     >

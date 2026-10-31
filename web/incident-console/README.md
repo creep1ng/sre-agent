@@ -67,7 +67,7 @@ Chosen by the maintainer on 2026-10-19 among live alternatives:
 | Story (incident) | An integrated column beside the incident, one hairline apart, no card. |
 | Findings and decisions | Inside the story: findings, the hypothesis and proposals unfold in place. |
 | Closure summary | Hero time to resolve plus a phase bar (ordinal ramp) with its table twin; no stat cards or lists. |
-| Agent identity | Midnight violet (`#6655c7`, `#b4a2f2` in dark; 5.7:1 and 7.4:1 on the card): "Agente" in that color, "Tú" in ink, "Sistema" in gray, and the agent avatar in the same violet everywhere. |
+| Agent identity | Nocturno mist (`--mist`): "Agente" in that color, "Tú" in ink, "Sistema" in gray. |
 
 ## The journey in 7 clicks
 
@@ -155,6 +155,18 @@ Backend gaps:
   dispatch failure reason (#692).
 - "Ya la apliqué" is new: today the workflow goes from approval straight to `verifying`. It can
   be a timeline note, or an agent stability watch on the alert's signal.
+
+## Theme (RC-2, #870)
+
+- **Tokens.** Every colour is a Nocturno token in `src/index.css` (`--night`, `--moon`, `--mist`,
+  `--rule`, …), copied from `docs/design/brand-round-1/06-consola-dia-noche.html`. Night is the
+  base; without `html.dark` the light theme only reassigns tokens. The shadcn/ui names (`--background`, `--primary`, …)
+  are derived from them once, so primitives follow both themes.
+- **Amber** lives in `--star` (fills, Tailwind `bg-star`, with `text-on-star`) and `--star-ink`
+  (text, `text-star-ink`). Use them only where a human decision is pending; `--warning` is not
+  amber.
+- **Type.** Fraunces (`font-display`), Newsreader (`font-sans`, the body) and JetBrains Mono
+  (`font-mono`), self-hosted through `@fontsource-variable`. `<code>` is mono on `--code`.
 
 ## Stack
 

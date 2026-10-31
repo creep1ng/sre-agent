@@ -1,10 +1,9 @@
-import "@fontsource/offside/400.css";
-import "@fontsource/spline-sans/400.css";
-import "@fontsource/spline-sans/500.css";
-import "@fontsource/spline-sans/600.css";
-import "@fontsource/spline-sans/700.css";
-import "@fontsource/monaspace-neon/400.css";
-import "@fontsource/monaspace-neon/500.css";
+// Self-hosted, never from a CDN: Fraunces for display, Newsreader for text, JetBrains Mono for code.
+import "@fontsource-variable/fraunces/opsz.css";
+import "@fontsource-variable/fraunces/opsz-italic.css";
+import "@fontsource-variable/newsreader/opsz.css";
+import "@fontsource-variable/newsreader/opsz-italic.css";
+import "@fontsource-variable/jetbrains-mono/index.css";
 import "./index.css";
 
 import { StrictMode } from "react";
