@@ -172,6 +172,24 @@ Backend gaps:
   gives the theme on screen and re-renders on OS changes; `useApplyTheme()` is mounted once in
   `App`.
 
+## Languages (RC-2, #870)
+
+Spanish and English. `src/i18n/index.ts` holds `useLanguage()` (`language`, `setLanguage`; stored
+as `midnight-language`, else English when `navigator.language` starts with `en`, else Spanish),
+`useT(namespace)` and `LOCALES` for `Intl` formatters. The account menu switches the language.
+
+To translate a feature, add one namespace instead of editing shared files:
+
+1. `src/i18n/es/<namespace>.ts` exports the Spanish messages as `default` and registers them with
+   `declare module "@/i18n" { interface Namespaces { <namespace>: typeof messages } }`
+   (see `es/shell.ts`).
+2. `src/i18n/en/<namespace>.ts` exports the English ones with
+   `satisfies Messages<typeof messages>`, so a missing or extra key fails the build.
+3. In components: `const t = useT("<namespace>")`, then `t("key")` or `t("key", { id })` for
+   `{id}` placeholders. Unknown keys fail the build; plural forms are separate keys.
+
+Both files are picked up by `import.meta.glob`; nothing else needs registering.
+
 ## Stack
 
 Vite 8, React 19, TypeScript 7, Tailwind CSS 4, shadcn/ui on Radix, lucide icons, sonner,
