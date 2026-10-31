@@ -219,6 +219,10 @@ def create_application(
     application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
     application.include_router(changes_router(ChangeEventsService(database.sessions)))
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
+    # A dispatch that a restart cut short has no process left to end it (#704). Without a
+    # gateway a dispatch ends its run in the same call, so only an investigating API sweeps.
+    if runtime_settings.investigator_gateway is not None:
+        application.add_event_handler("startup", investigation_dispatcher.end_interrupted)
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:
         application.add_event_handler("shutdown", shared_provider_client.aclose)

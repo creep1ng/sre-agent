@@ -10,6 +10,8 @@ from secrets import token_hex
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import text
+
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.incident.persistence import (
     DecisionDraft,
@@ -49,6 +51,17 @@ from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
 logger = logging.getLogger(__name__)
+
+# Runs whose dispatch wrote its intent and no outcome: at startup none has a dispatcher here.
+_INTERRUPTED_RUNS = text("""SELECT r.incident_id, r.run_id FROM incident.runs r
+    WHERE r.state->>'status' = 'running'
+      AND EXISTS (SELECT 1 FROM incident.run_events e WHERE e.run_id = r.run_id
+                  AND e.kind = 'dispatch_receipt'
+                  AND e.payload->'dispatch_receipt'->>'phase' = 'intent')
+      AND NOT EXISTS (SELECT 1 FROM incident.run_events e WHERE e.run_id = r.run_id
+                      AND e.kind = 'dispatch_receipt'
+                      AND e.payload->'dispatch_receipt'->>'phase' = 'outcome')
+    ORDER BY r.run_id""")
 
 
 class InvestigationRunDispatcher:
@@ -91,10 +104,52 @@ class InvestigationRunDispatcher:
 
         Callers may hand off after the declaration/start response is committed.
         The claim and receipts make a duplicate hand-off converge instead of
-        starting a second investigation.
+        starting a second investigation. A failure before the claim (the agent identity
+        cannot be read, the claim itself fails) still ends the run with
+        `investigator_failed`, so it never stays `running` with no dispatcher (#704).
         """
+        try:
+            await self._dispatch(incident_id, run_id)
+        except Exception as error:
+            logger.error(
+                "investigation_handoff_failed incident_id=%s run_id=%s error=%s",
+                incident_id,
+                run_id,
+                type(error).__name__,
+            )
+            await self._dispatch(incident_id, run_id, end_reason="investigator_failed")
 
-        principal = await self._configured_agent()
+    async def end_interrupted(self) -> None:
+        """At startup, end every run whose dispatch lost its process (an API restart).
+
+        Its pending intent becomes `producer_interrupted` and the run ends `needs_human`;
+        nothing redispatches it, a person retries with a new run. A run another live
+        process still dispatches keeps its claim and is left alone.
+        """
+        try:
+            async with self.sessions() as session:
+                rows = (await session.execute(_INTERRUPTED_RUNS)).all()
+        except Exception as error:
+            logger.error("investigation_sweep_failed error=%s", type(error).__name__)
+            return
+        for incident_id, run_id in rows:
+            try:
+                await self._dispatch(incident_id, run_id, end_reason="producer_interrupted")
+            except Exception as error:
+                logger.error(
+                    "investigation_sweep_failed incident_id=%s run_id=%s error=%s",
+                    incident_id,
+                    run_id,
+                    type(error).__name__,
+                )
+
+    async def _dispatch(
+        self, incident_id: str, run_id: str, *, end_reason: str | None = None
+    ) -> None:
+        """Claim the run and investigate it; with `end_reason`, a run nothing dispatches any
+        more: a pending intent becomes `producer_interrupted`, a run never claimed ends at once
+        with `end_reason`, and a live claim elsewhere or a finished dispatch is kept."""
+        principal = await self._configured_agent() if end_reason is None else None
         actor_reference = (
             ActorReference(principal_id=principal.principal.principal_id)
             if principal is not None
@@ -137,6 +192,11 @@ class InvestigationRunDispatcher:
                 return
             try:
                 if claim != "claimed":
+                    return
+                if end_reason is not None:
+                    await self._finish(
+                        work, incident_id, run_id, None, status="unknown", reason_code=end_reason
+                    )
                     return
                 if self.gateway_settings is None or self.gateway is None or self.evidence is None:
                     await self._finish(

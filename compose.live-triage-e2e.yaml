@@ -1,0 +1,30 @@
+# Live-triage E2E (#703, #704): real API, database, web proxy and new console. The model concludes
+# at once and the Grafana MCP stand-in fires every alert rule unless
+# $LIVE_TRIAGE_FAULTS/{rule id} reads `ok` (scripts/live_triage_upstreams.py). With .env and
+# .env.worktree, F="-f compose.e2e.yaml -f compose.live-triage-e2e.yaml":
+#   scripts/worktree-compose $F up --build --wait db api web incident-console
+#   scripts/worktree-compose $F run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
+#   scripts/worktree-compose $F run --rm --no-deps -T seed python /e2e/provision_demo.py
+#   LIVE_DECLARE=1 scripts/worktree-compose $F --profile e2e run --rm --no-deps incident-console-e2e \
+#     npx playwright test e2e/declare-live.spec.ts   # or LIVE_TRIAGE=..., AUTO_INVESTIGATE=...
+#   scripts/worktree-compose $F down -v --remove-orphans
+services:
+  api:
+    command: ["python", "/e2e/live_triage_upstreams.py"]
+    volumes:
+      - ./scripts/live_triage_upstreams.py:/e2e/live_triage_upstreams.py:ro
+      - ${LIVE_TRIAGE_FAULTS:-/tmp/live-triage-faults}:/fault:ro
+
+  seed:
+    volumes: ["./scripts:/e2e:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  incident-console-e2e:
+    environment:
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      LIVE_DECLARE: ${LIVE_DECLARE:-0}
+      LIVE_TRIAGE: ${LIVE_TRIAGE:-}
+      AUTO_INVESTIGATE: ${AUTO_INVESTIGATE:-}
+      FAULT_DIR: /fault
+    volumes:
+      - ${LIVE_TRIAGE_FAULTS:-/tmp/live-triage-faults}:/fault
