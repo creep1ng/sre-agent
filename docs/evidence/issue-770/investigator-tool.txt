@@ -1,0 +1,6 @@
+change.read probe as incident-harness: 200
+source: change-events
+query: /v1/changes?service=sre-checkout
+request_id: 6bae3030-270d-46bd-b046-45cd9ce3c125
+summary: [{"kind": "deploy", "status": "succeeded", "version": "demo/checkout:1.5.0", "commit_sha": "52073a4de220b6a7ca01d0d314be1da649876a97", "author": "local-operator", "url": null, "occurred_at": "2026-10-30T06:38:27Z"}, {"kind": "ci", "status": "failed", "version": null, "commit_sha": "7d8ddf21cdc48875a23aff3bdd214397f03e3ce5", "author": "octo-dev", "url": "https://github.com/creep1ng/sre-agent/actions/runs/17933421345601", "occurred_at": "2026-10-30T06:35:36Z"}, {"kind": "deploy", "status": "succeeded", "version": "demo/checkout:1.5.0", "commit_sha": "7d8ddf21cdc48875a23aff3bdd214397f03e3ce5", "author": "octo-dev", "url": "https://github.com/creep1ng/sre-agent/actions/runs/17933421345601", "occurred_at": "2026-10-30T06:35:35Z"}]
+restricted-harness probe: 403 (tool not offered)
