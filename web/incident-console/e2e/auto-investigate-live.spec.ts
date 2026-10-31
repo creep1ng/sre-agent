@@ -162,6 +162,18 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
       );
       expect(startsAfter).toHaveLength(1);
 
+      // The incident page does not read live runs yet (#708): show the FastAPI events of the run
+      // the server started, once its dispatch ended, in a page that holds the reader's key.
+      await expect
+        .poll(async () => (await detailOf()).runs.find((run) => run.run_id === investigation!.run_id)?.status, {
+          timeout: 60_000,
+        })
+        .not.toBe("running");
+      const api = await page.context().browser()!.newPage({ extraHTTPHeaders: { authorization: `Bearer ${DEMO_KEY}` } });
+      await api.goto(`${BASE}/api/v1/incidents/${declared.incidentId}/runs/${investigation!.run_id}/events`);
+      await api.screenshot({ path: `${dir}/run-events-api.png`, fullPage: true });
+      await api.close();
+
       writeFileSync(
         `${dir}/verification.json`,
         JSON.stringify(
