@@ -28,6 +28,8 @@ export interface LiveIncident {
   changes: ChangeEvent[] | "forbidden" | null;
   /** An investigation request is in flight. */
   starting: boolean;
+  /** When the last request was sent and the run it follows. */
+  requested: { at: number; after: string | undefined } | null;
   startError: string | null;
 }
 
@@ -40,6 +42,7 @@ const EMPTY: LiveIncident = {
   reasoning: null,
   changes: null,
   starting: false,
+  requested: null,
   startError: null,
 };
 
@@ -181,7 +184,7 @@ export function useLiveIncident(incidentId: string | undefined) {
     const current = stateRef.current;
     if (!token || !incidentId || current.starting) return;
     const key = `investigate-${incidentId}-after-${current.runs.at(-1)?.run_id ?? "none"}`;
-    setState((s) => ({ ...s, starting: true, startError: null }));
+    setState((s) => ({ ...s, starting: true, startError: null, requested: { at: Date.now(), after: current.runs.at(-1)?.run_id } }));
     window.setTimeout(() => void pollRef.current(), 1_000);
     let result: ApiResult<RunState>;
     try {
@@ -191,12 +194,17 @@ export function useLiveIncident(incidentId: string | undefined) {
     } catch {
       result = { kind: "transient" };
     }
+    // A refusal is fine only when another run started meanwhile (#704 starts one on declare).
+    const after = result.kind === "conflict" ? await pollRef.current() : null;
+    const refused = after !== null && after.at(-1)?.run_id === current.runs.at(-1)?.run_id;
     const startError =
-      result.kind === "ok" || result.kind === "conflict"
+      result.kind === "ok" || (result.kind === "conflict" && !refused)
         ? null
         : result.kind === "forbidden"
           ? "Tu credencial no puede iniciar investigaciones."
-          : "No pudimos pedir la investigación. Inténtalo de nuevo.";
+          : refused
+            ? "La API no aceptó la investigación. Inténtalo de nuevo en unos segundos."
+            : "No pudimos pedir la investigación. Inténtalo de nuevo.";
     setState((s) => ({ ...s, starting: false, startError }));
     void pollRef.current();
   }, [token, incidentId]);

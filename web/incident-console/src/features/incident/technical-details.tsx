@@ -13,7 +13,7 @@ const WORKFLOW_STATE: Record<Incident["state"], string> = {
   closed: "closed · completed",
 };
 
-function Row({ label, values }: { label: string; values: string[] }) {
+export function Row({ label, values }: { label: string; values: string[] }) {
   return (
     <div className="border-b py-3 last:border-b-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
