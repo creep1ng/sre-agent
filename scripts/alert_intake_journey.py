@@ -2,7 +2,8 @@
 
 scripts/run_real_journeys.sh runs it in the seed container after the other incident journeys,
 with the API's ALERT_INTAKE_GRAFANA_SECRET and its operator demo-human. Each delivery has the
-shape Grafana Alerting's webhook contact point sends. Ways intake can fail, each checked below:
+shape Grafana Alerting's webhook contact point sends, timed relative to now. Ways intake can fail,
+each checked below:
 1. a delivery without the right secret is accepted, reads the body, or leaves more than one audit
    event and no other trace;
 2. a firing alert opens no incident, or its investigation is never dispatched;
@@ -24,6 +25,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import psycopg
@@ -34,7 +36,13 @@ SECRET = os.environ["ALERT_INTAKE_GRAFANA_SECRET"]
 DATABASE = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
 OUT = os.environ.get("ARTIFACT_DIR", "/artifacts")
 RUN = uuid4().hex[:8]  # Fresh services per run, so a rerun on the same database starts clean.
+# Relative to now: GET /v1/alerts keeps an episode resolved only within the last day.
+NOW = datetime.now(UTC).replace(microsecond=0)
 checks: list[dict] = []
+
+
+def ago(minutes: int) -> str:
+    return (NOW - timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")
 
 
 def http(method: str, url: str, body: bytes | None = None, key: str | None = None) -> tuple:
@@ -55,7 +63,7 @@ def alert(service: str, status: str, starts: str, rule: str = "service-error-rat
         "labels": {"alertname": rule, "service_name": service, "severity": "critical"},
         "annotations": {"summary": f"{service}: spans failing over the last 2 min."},
         "startsAt": starts,
-        "endsAt": "2026-10-30T09:00:00Z" if status == "resolved" else "0001-01-01T00:00:00Z",
+        "endsAt": ago(1) if status == "resolved" else "0001-01-01T00:00:00Z",
         "fingerprint": f"{rule}-{service}",
     }
 
@@ -112,7 +120,7 @@ def main() -> None:
     a, b, c, d = (f"{name}-{RUN}" for name in ("cart", "payment", "ad", "email"))
 
     before = (audits(), incidents())
-    status, body = deliver(alert(a, "firing", "2026-10-30T08:00:00Z"), key="not-the-secret")
+    status, body = deliver(alert(a, "firing", ago(60)), key="not-the-secret")
     oversized = http("POST", INTAKE, b"{" + b" " * (600 * 1024) + b"}", "not-the-secret")[0]
     after = (audits(), incidents())
     check(
@@ -127,7 +135,7 @@ def main() -> None:
         code=body["error"]["code"],
     )
 
-    status, body = deliver(alert(a, "firing", "2026-10-30T08:00:00Z"))
+    status, body = deliver(alert(a, "firing", ago(60)))
     [(first, state, count, incident, run)] = episode(a)
     check(
         "a firing alert declares an incident and dispatches its investigation",
@@ -138,7 +146,7 @@ def main() -> None:
     )
 
     total = incidents()
-    status, _ = deliver(alert(a, "firing", "2026-10-30T08:00:00Z"))
+    status, _ = deliver(alert(a, "firing", ago(60)))
     [(_, _, count, again, _)] = episode(a)
     check(
         "the same delivery again opens nothing new",
@@ -147,9 +155,9 @@ def main() -> None:
         incidents=[total, incidents()],
     )
 
-    status, _ = deliver(alert(a, "firing", "2026-10-30T08:01:00Z", "service-latency-p95"))
-    deliver(alert(a, "resolved", "2026-10-30T08:00:00Z"))
-    flap = deliver(alert(a, "firing", "2026-10-30T08:05:00Z"))[0]
+    status, _ = deliver(alert(a, "firing", ago(59), "service-latency-p95"))
+    deliver(alert(a, "resolved", ago(60)))
+    flap = deliver(alert(a, "firing", ago(55)))[0]
     rows = episode(a)
     check(
         "later alerts of the service join its open incident, also after the first resolved",
@@ -161,9 +169,7 @@ def main() -> None:
         episodes=[row[:4] for row in rows],
     )
 
-    status, _ = deliver(
-        alert(b, "firing", "2026-10-30T08:02:00Z"), alert(c, "firing", "2026-10-30T08:02:00Z")
-    )
+    status, _ = deliver(alert(b, "firing", ago(58)), alert(c, "firing", ago(58)))
     [(_, _, _, for_b, _)], [(_, _, _, for_c, _)] = episode(b), episode(c)
     check(
         "one grouped payload opens one incident per service",
@@ -172,8 +178,8 @@ def main() -> None:
     )
 
     total = incidents()
-    early = deliver(alert(d, "resolved", "2026-10-30T08:03:00Z"))[0]
-    late = deliver(alert(d, "firing", "2026-10-30T08:03:00Z"))[0]
+    early = deliver(alert(d, "resolved", ago(57)))[0]
+    late = deliver(alert(d, "firing", ago(57)))[0]
     [(late_episode, state, count, opened, _)] = episode(d)
     check(
         "a resolved before its firing opens nothing and stays resolved",
@@ -182,7 +188,7 @@ def main() -> None:
         received_count=count,
     )
 
-    many = deliver(*[alert(f"x{n}-{RUN}", "firing", "2026-10-30T08:04:00Z") for n in range(101)])[0]
+    many = deliver(*[alert(f"x{n}-{RUN}", "firing", ago(56)) for n in range(101)])[0]
     large = http("POST", INTAKE, b"{" + b" " * (600 * 1024) + b"}", SECRET)[0]
     check(
         "an oversized body or more than 100 alerts is refused",
