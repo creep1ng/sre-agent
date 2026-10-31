@@ -21,6 +21,8 @@ from provision_incident_workflow import (
     provision,
 )
 
+OTEL_DEMO_STORE = "otel-demo-store@1.0.0"
+
 
 def demo_grants():
     workflow = {"resource_type": "incident_workflow", "resource_id": "incident-response"}
@@ -62,9 +64,11 @@ def demo_grants():
         ("mcp.invoke", "mcp_tool", "query_prometheus"),
         ("mcp.invoke", "mcp_tool", "query_elasticsearch"),
         ("change.read", "incident_workflow", "incident-response"),
+        # The store's topology for the investigator's hypotheses (#718); BoK is not evidence.
+        ("bok.search", "bok_collection", OTEL_DEMO_STORE),
     ):
         yield {
-            "grant_id": "grant-setup-agent-" + resource,
+            "grant_id": "grant-setup-agent-" + resource.replace("@", "-").replace(".", "-"),
             "principal_id": "incident-harness",
             "action": action,
             "resource": {"resource_type": kind, "resource_id": resource},
@@ -152,6 +156,11 @@ async def provision_demo(service, bearer, executor_changes_key=None):
     ):
         if not (status == 201 and active) and not await _restored(service, body):
             raise RuntimeError("workflow grant conflict: " + body["grant_id"])
+    # The demo BoK collections a grant names must exist; the BoK seed converges them.
+    from sre_agent.bok.owner import seed_bok_demo
+
+    async with service.sessions() as session, session.begin():
+        await seed_bok_demo(session)
     for body in demo_grants():
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
         if response.status_code == 201 and await _granted(service, body):

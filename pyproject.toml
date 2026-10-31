@@ -35,6 +35,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"sre_agent.bok" = ["*.json"]
+
 [tool.pytest.ini_options]
 asyncio_default_fixture_loop_scope = "function"
 pythonpath = [".", "src"]

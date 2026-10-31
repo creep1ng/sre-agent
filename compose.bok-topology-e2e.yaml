@@ -1,0 +1,48 @@
+# Store-topology BoK E2E (#718): real API, database and investigator; the model and Grafana MCP
+# are scripts/bok_topology_upstreams.py. Commands: docs/investigator.md.
+services:
+  api:
+    command: ["python", "/e2e/bok_topology_upstreams.py"]
+    volumes: ["./scripts/bok_topology_upstreams.py:/e2e/bok_topology_upstreams.py:ro"]
+
+  seed:
+    volumes: ["./scripts:/e2e:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  bok-topology-e2e:
+    profiles: ["bok-topology-e2e"]
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/bok_topology_e2e.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      API_URL: http://api:8000
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      INCIDENT_HARNESS_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
+      ARTIFACT_DIR: /artifacts
+    volumes:
+      - ./scripts/bok_topology_e2e.py:/e2e/bok_topology_e2e.py:ro
+      - ${BOK_TOPOLOGY_ARTIFACTS:-/tmp/bok-topology-e2e}:/artifacts
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [runtime]
+
+  # The revoked phase in the browser: its war room and the audit view of the denied search.
+  bok-topology-capture:
+    profiles: ["bok-topology-capture"]
+    build: {context: ., dockerfile: docker/e2e.Dockerfile}
+    command: ["node", "/e2e/capture_issue718_war_room.mjs"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      BASE_URL: http://web
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      REPORT: /artifacts/bok-topology-e2e.json
+      OUT: /artifacts
+    volumes:
+      - ./scripts/capture_issue718_war_room.mjs:/e2e/capture_issue718_war_room.mjs:ro
+      - ${BOK_TOPOLOGY_ARTIFACTS:-/tmp/bok-topology-e2e}:/artifacts
+    depends_on:
+      web: {condition: service_healthy}
+    networks: [runtime]

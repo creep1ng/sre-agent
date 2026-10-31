@@ -10,6 +10,9 @@ from secrets import token_hex
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
+
+from sre_agent.gateway.authentication import authorize_governed_access_for_context
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.incident.persistence import (
     DecisionDraft,
@@ -30,6 +33,7 @@ from sre_agent.incident.runtime import (
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
     UNMEASURED,
+    Capability,
     CollectedEvidence,
     Conclude,
     IncidentContext,
@@ -41,10 +45,11 @@ from sre_agent.investigator.contract import (
     ProposeMitigation,
     RequestHuman,
 )
-from sre_agent.investigator.loop import investigate
+from sre_agent.investigator.loop import BOK_UNAVAILABLE, investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
 from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemoryRepository
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
+from sre_agent.persistence.models import ResourceRow
 from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
@@ -71,8 +76,10 @@ class InvestigationRunDispatcher:
         self.limits = Limits(tool_timeout_seconds=tool_timeout_seconds)
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
-        # Run notes for its outcome receipt, such as memory_recall_unavailable (#773).
+        # What a run's outcome receipt adds: its notes, such as memory_recall_unavailable (#773)
+        # and bok_unavailable, and the BoK collections it offered (#718).
         self._notes: dict[str, list[str]] = {}
+        self._bok_offered: dict[str, list[str]] = {}
 
     async def after_start(self, started: TransitionResult) -> None:
         # A run opens with start_investigation, or with continue_investigation when a human
@@ -172,7 +179,14 @@ class InvestigationRunDispatcher:
                 )
             finally:
                 self._notes.pop(run_id, None)
+                self._bok_offered.pop(run_id, None)
                 await work.release_run_dispatch(incident_id, run_id)
+
+    def _note(self, run_id: str, note: str) -> None:
+        """Add a note to the run's outcome receipt, keeping the ones already there."""
+        notes = self._notes.setdefault(run_id, [])
+        if note not in notes:
+            notes.append(note)
 
     async def _configured_agent(self) -> PrincipalContext | None:
         if self.gateway_settings is None:
@@ -188,6 +202,38 @@ class InvestigationRunDispatcher:
         ):
             return None
         return context
+
+    async def _bok_capabilities(self, run_id: str, principal: PrincipalContext) -> list[Capability]:
+        """The active BoK collection versions this identity may search, as MCP discovery offers
+        tools: each passes the same evaluation the search route repeats on every call. The BoK
+        is not evidence, so when this fails the run goes on without it."""
+        allowed: list[str] = []
+        try:
+            async with self.sessions() as session:
+                candidates = sorted(
+                    await session.scalars(
+                        select(ResourceRow.resource_id).where(
+                            ResourceRow.resource_type == "bok_collection",
+                            ResourceRow.status == "active",
+                        )
+                    )
+                )
+            for collection in candidates:
+                evaluation = await authorize_governed_access_for_context(
+                    self.sessions, principal, "bok.search", "bok_collection", collection
+                )
+                if evaluation.decision.decision == "allow":
+                    allowed.append(collection)
+        except Exception as error:
+            # Only the exception type is logged: its message may carry database content.
+            logger.warning("bok_offer_failed run_id=%s error=%s", run_id, type(error).__name__)
+            self._note(run_id, "bok_unavailable")
+            allowed = []
+        self._bok_offered[run_id] = allowed
+        return [
+            Capability(resource_type="bok_collection", resource_id=item, action="bok.search")
+            for item in allowed
+        ]
 
     async def _configured_agent_id(self) -> str | None:
         """The configured agent identity even when it cannot run, so the cause can name it."""
@@ -214,6 +260,7 @@ class InvestigationRunDispatcher:
             assert self.gateway_settings is not None
             capabilities, discovery_id = await self.evidence.discover()
             request_ids.append(discovery_id)
+            capabilities += await self._bok_capabilities(run_id, principal)
         except EvidenceUnavailable as error:
             if error.request_id is not None:
                 request_ids.append(error.request_id)
@@ -253,6 +300,7 @@ class InvestigationRunDispatcher:
                     self.gateway,
                     self.evidence,
                     limits,
+                    bok=self.gateway,
                     language=self.language,
                     recalled=[item for item in recalled if item.evidence_id not in known],
                 )
@@ -271,6 +319,13 @@ class InvestigationRunDispatcher:
                 return
             request_ids.extend(result.request_ids)
             run_mcp_ids.extend(result.mcp_request_ids)
+            if any(
+                turn.tool_invocation.tool == "bok.search"
+                and (turn.tool_invocation.result_summary or "").startswith(BOK_UNAVAILABLE)
+                for turn in result.turns
+                if turn.tool_invocation is not None
+            ):
+                self._note(run_id, "bok_unavailable")
             contexts = self._contexts(incident_id, run_id, result, offset)
             if not (
                 result.status == "completed"
@@ -419,7 +474,7 @@ class InvestigationRunDispatcher:
             logger.warning(
                 "incident memory recall unavailable for run %s: %s", run_id, type(error).__name__
             )
-            self._notes[run_id] = ["memory_recall_unavailable"]
+            self._note(run_id, "memory_recall_unavailable")
             return []
         return [
             CollectedEvidence(
@@ -807,6 +862,8 @@ class InvestigationRunDispatcher:
             receipt["diagnostic"] = dict(diagnostic)
         if agent_principal_id is not None:
             receipt["agent_principal_id"] = agent_principal_id
+        if phase == "outcome" and run_id in self._bok_offered:
+            receipt["bok_collections"] = self._bok_offered[run_id]
         if phase == "outcome" and self._notes.get(run_id):
             receipt["notes"] = self._notes[run_id]
         return EventDraft(

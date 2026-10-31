@@ -19,9 +19,11 @@ fixture-based drafts of this runbook (T1/T2/T3 slices, `pm_demo0001`, unpublishe
 - A private env file (mode 0600) as in [setup-sre.md](setup-sre.md), with four distinct `sre_`
   keys, `SRE_OTEL_MODE=aws`, a unique `SRE_SETUP_PROJECT`, free ports, explicit
   `SRE_RUNTIME_SUBNET`/`SRE_CONSUMER_SUBNET` if Docker pools are exhausted, and for the paid
-  investigation: `SRE_ENABLE_PAID_LLM=1`, `OPENROUTER_API_KEY`, `OPENROUTER_TIMEOUT_SECONDS=60`
-  (the investigator then waits 75 s per model call, 135 s with `OPENROUTER_MANAGEMENT_API_KEY`;
-  see [investigator.md](investigator.md)),
+  investigation: `SRE_ENABLE_PAID_LLM=1`, `OPENROUTER_API_KEY`, `OPENROUTER_TIMEOUT_SECONDS=120`
+  (the investigator then waits 135 s per model call, 255 s with `OPENROUTER_MANAGEMENT_API_KEY`;
+  see [investigator.md](investigator.md)). With 60 s, a real run with the store topology BoK (#718)
+  ended `upstream_unavailable` on an 80 s model call; a faster model instead of 120 s is a decision
+  pending with the maintainer. The BoK search uses one of the investigator's 6 steps. Also
   `TRIAGE_AGENT_MODEL=deepseek/deepseek-v4.1-flash`, `TRIAGE_AGENT_PROVIDER=decart` (same for
   `REMEDIATION_AGENT_*`). `DEMO_STATE_DIR` points at a **new** state directory per AWS instance.
 - `export OTEL_DEMO_EXPECTED_ACCOUNT_ID=…` in the operator shell (private; never shown).
