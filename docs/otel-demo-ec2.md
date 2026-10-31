@@ -213,8 +213,14 @@ forwards 17801 to local port `--local-port + 2` and relays each delivery, body a
 `http://127.0.0.1:8000/v1/alert-intake/grafana`, the API's published port). With
 `SRE_OTEL_MODE=aws`, `setup_sre.py` reads the same `alert-intake.env` from
 `DEMO_STATE_DIR` and gives the API the secret, so a firing rule opens the incident with
-nobody at the console. Not yet run on an instance: the EC2 verification, including how
-the generic span-error rules behave on the store's normal traffic, is pending.
+nobody at the console. Measured on an instance on 2026-10-31
+([record](evidence/issue-765/ec2-paymentfailure.json)): a 20 min healthy watch fired
+no rule; `paymentFailure` at 100% opened `payment` and `checkout` and dispatched both
+investigations 103.5 s and 164.9 s after the flag, and both resolved 87 s after `reset`.
+To inject it, edit `paymentFailure` in the flag working copy over SSM as `fail` does
+(`fail` itself turns on `paymentUnreachable`). If `/` on port 8090 refuses after
+`prepare-mcp`, check that `frontend-proxy` is running; the connect-mcp tunnel can end
+after about 25 idle minutes, so reconnect before a run.
 
 Grafana's anonymous user is Admin upstream, so anyone who reaches `/grafana` through
 `connect` can read the contact point and its secret. The secret guards only this
