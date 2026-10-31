@@ -236,7 +236,7 @@ Action = UseTool | SearchBoK | Outcome
 
 
 class FailureDiagnostic(_Strict):
-    stage: Literal["mcp_response_validation", "gateway_transport"]
+    stage: Literal["mcp_response_validation", "gateway_transport", "tool_timeout"]
     kind: Literal["denied", "transient", "rejected"]
     http_status: Annotated[int, Field(ge=100, le=599)] | None = None
     request_id: UUID | None = None

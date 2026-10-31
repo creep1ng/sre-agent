@@ -396,6 +396,8 @@ async def investigate(
                     http_status=error.status,
                     request_id=error.request_id,
                 )
+            elif isinstance(error, TimeoutError):
+                failure_diagnostic = FailureDiagnostic(stage="tool_timeout", kind="transient")
             elif (
                 isinstance(error, EvidenceUnavailable)
                 and error.kind == "rejected"

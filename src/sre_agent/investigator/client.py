@@ -8,6 +8,7 @@ its own models, so the investigator never imports gateway code.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
@@ -306,6 +307,20 @@ class _ElasticsearchResult(BaseModel):
     warnings: list[str]
 
 
+# The gateway's change history (#770), offered as one more tool when this identity can read it.
+# The client answers it itself, before any MCP call; the midnight_ prefix keeps it apart from the
+# gateway's closed list of Grafana MCP tools (query_prometheus, query_elasticsearch).
+CHANGES_TOOL = "midnight_recent_changes"
+_CHANGES_SCHEMA: dict[str, JsonValue] = {
+    "type": "object",
+    "description": "Recent deploys, rollbacks and CI results of one service, newest first.",
+    "properties": {"service": {"type": "string"}},
+    "required": ["service"],
+    "additionalProperties": False,
+}
+_CHANGE_FIELDS = ("kind", "status", "version", "commit_sha", "author", "url", "occurred_at")
+
+
 class MCPGatewayClient:
     """Use only the configured gateway identity and its currently visible tools."""
 
@@ -325,20 +340,33 @@ class MCPGatewayClient:
                 kind="rejected",
                 request_id=_response_request_id(response),
             ) from None
-        return (
-            [
+        capabilities = [
+            Capability(
+                resource_type=tool.resource_type,
+                resource_id=tool.tool_id,
+                action="invoke",
+                input_schema=tool.input_schema,
+            )
+            for tool in discovery.tools
+        ]
+        try:
+            probe = await self._send("GET", "/v1/changes", params={"limit": 1})
+        except EvidenceUnavailable:
+            probe = None
+        if probe is not None and probe.status_code == 200:
+            capabilities.append(
                 Capability(
-                    resource_type=tool.resource_type,
-                    resource_id=tool.tool_id,
+                    resource_type="mcp_tool",
+                    resource_id=CHANGES_TOOL,
                     action="invoke",
-                    input_schema=tool.input_schema,
+                    input_schema=_CHANGES_SCHEMA,
                 )
-                for tool in discovery.tools
-            ],
-            discovery.request_id,
-        )
+            )
+        return capabilities, discovery.request_id
 
     async def collect(self, tool: str, arguments: Mapping[str, JsonValue]) -> ToolResult:
+        if tool == CHANGES_TOOL:
+            return await self._changes(arguments.get("service"))
         query = arguments.get("query")
         if tool == "query_elasticsearch" and isinstance(query, str):
             arguments = {**arguments, "query": _SERVICE_FIELD.sub(_service_term, query)}
@@ -379,6 +407,33 @@ class MCPGatewayClient:
             time_window=time_window if isinstance(time_window, str) else None,
             request_id=request_id,
             empty=empty,
+        )
+
+    async def _changes(self, service: JsonValue) -> ToolResult:
+        response = await self._send(
+            "GET", "/v1/changes", params={"service": str(service), "limit": 10}
+        )
+        if response.status_code == 422:
+            # A service name the gateway refuses is an answer the model can correct.
+            raise EvidenceUnavailable("invalid service", kind="rejected", code="upstream_invalid")
+        if response.status_code != 200:
+            self._raise_error(response)
+        try:
+            changes = [
+                {name: item[name] for name in _CHANGE_FIELDS} for item in response.json()["changes"]
+            ]
+        except (KeyError, TypeError, ValueError):
+            raise EvidenceUnavailable("change history was invalid", kind="rejected") from None
+        # Cut at a whole change, newest kept, never in the middle of one.
+        summary = f"No change recorded for {service}."
+        for count in range(len(changes), 0, -1):
+            if len(summary := json.dumps(changes[:count])) <= 8000:
+                break
+        return ToolResult(
+            source="change-events",
+            summary=summary,
+            query=f"/v1/changes?service={service}",
+            request_id=_response_request_id(response),
         )
 
     async def _send(self, method: str, path: str, **kwargs: Any) -> httpx.Response:

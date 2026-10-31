@@ -1,0 +1,5 @@
+mcp seed converged
+seed drift: grant grant-incident-harness-invoke-remediation-agent is revoked; left revoked
+seed converged
+seed drift: grant grant-setup-human-alert-read is revoked; left revoked
+demo permissions converged; restricted identity unchanged
