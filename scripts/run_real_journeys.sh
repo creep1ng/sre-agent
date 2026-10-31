@@ -5,9 +5,9 @@
 #
 # incidents: builds (or reuses) the production-browser stack (compose.yaml + compose.e2e.yaml),
 #   seeds the demo grants and one stamped incident per journey, then runs war-room-runs-real,
-#   war-room-reasoning-real, review-mitigation-real, war-room-follow-real, postmortem-journey and
-#   change-events-real, and last the #758 consumption-limit and #719 provider-retry E2Es, which
-#   restart the API against the local OpenRouter stand-in of compose.consumption-e2e.yaml.
+#   war-room-reasoning-real, review-mitigation-real, incident-list-real, war-room-follow-real,
+#   postmortem-journey and change-events-real, and last the #758 consumption-limit and #719
+#   provider-retry E2Es, which restart the API against the local OpenRouter stand-in of compose.consumption-e2e.yaml.
 # executor: the deploy-executor journey (#720/#743), the rollback recorded as a change event
 #   (change-events-real, #770) by the deploy-executor principal that provision_demo.py creates
 #   from DEPLOY_EXECUTOR_CHANGES_API_KEY, the socket-down case, and its journal cut mid-write,
@@ -117,15 +117,19 @@ incidents() {
   "${COMPOSE[@]}" --profile e2e build e2e
   "${SEED[@]}" -e SEED_STAMP="wr$STAMP" seed python scripts/seed_war_room_runs.py
   # One incident per journey: review-mitigation and war-room-follow both approve theirs.
-  for prefix in rs rv fw pm; do seed_incident "$prefix$STAMP"; done
+  # incident-list reads li waiting for a decision and lr recovered (#870).
+  for prefix in rs rv fw pm li lr; do seed_incident "$prefix$STAMP"; done
   seed_incident "lv$STAMP" start_investigation
   resolve_incident "pm$STAMP"
+  resolve_incident "lr$STAMP"
 
   run_journey war-room-runs e2e -e SRE_REAL_BACKEND=1 -e SEED_STAMP="wr$STAMP" -- war-room-runs-real
   run_journey war-room-reasoning e2e -e SRE_REAL_BACKEND=1 -e SEED_STAMP="rs$STAMP" -- \
     war-room-reasoning-real
   run_journey review-mitigation e2e -e SRE_REAL_BACKEND=1 -e SEED_STAMP="rv$STAMP" -- \
     review-mitigation-real
+  run_journey incident-list e2e -e SRE_REAL_BACKEND=1 -e SEED_STAMP="li$STAMP" \
+    -e RESOLVED_STAMP="lr$STAMP" -e INCIDENT_LIST_ARTIFACT_DIR=/artifacts -- incident-list-real
   rm -f "$ARTIFACTS/war-room-follow.log"
   finish_live_incident > "$ARTIFACTS/war-room-follow-second-seed.log" 2>&1 &
   follower=$!
