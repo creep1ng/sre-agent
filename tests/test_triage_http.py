@@ -1491,13 +1491,17 @@ def test_declare_starts_investigation_as_declarant_and_replays_idempotently() ->
     runs = detail.json()["runs"]
     assert len(runs) == 2
     investigation = next(run for run in runs if run["current_state"] == "investigating")
-    assert investigation["status"] == "running"
+    # No harness is configured here, so the server's dispatch ends the run (#761); it is
+    # never left pending.
+    assert investigation["status"] != "pending"
 
     events = client.get(
         f"/v1/incidents/{incident_id}/runs/{investigation['run_id']}/events",
         headers={"Authorization": BEARERS["starter"]},
     )
     assert events.status_code == 200, events.text
+    summaries = [event["summary"] for event in events.json()["events"]]
+    assert "Investigation dispatch started." in summaries
     start = next(
         event for event in events.json()["events"] if event["summary"] == "Investigation started."
     )
