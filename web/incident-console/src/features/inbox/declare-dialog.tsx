@@ -17,12 +17,12 @@ import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNow } from "@/hooks/use-now";
-import { declareAlert, readTriageVersion } from "@/lib/api";
+import { declareAlert } from "@/lib/api";
 import { formatDayTime } from "@/lib/format";
 import { useLive } from "@/lib/live";
 import { useStore } from "@/lib/store";
-import { markTriaged, TRIAGE_FAILURE } from "@/lib/triage";
-import type { Alert, Severity } from "@/lib/types";
+import { markTriaged, TRIAGE_FAILURE, useTriageSubmission } from "@/lib/triage";
+import type { Alert, LiveAlert, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SEVERITIES, SEVERITY, TONE_CLASSES } from "@/lib/vocabulary";
 
@@ -57,37 +57,28 @@ export function SeverityPicker({ value, onChange }: { value: Severity; onChange:
 
 export function DeclareDialog({ alert, onOpenChange }: { alert: Alert | null; onOpenChange: (open: boolean) => void }) {
   const declare = useStore((s) => s.declare);
-  const token = useLive((s) => s.token);
-  const liveAlerts = useLive((s) => s.alerts);
   const navigate = useNavigate();
   const now = useNow();
   const [severity, setSeverity] = useState<Severity>("sev1");
   const [impact, setImpact] = useState("");
-  const [version, setVersion] = useState<number | null>(null);
-  const [pending, setPending] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
+  // The alert as the dialog opened on it: the 15 s poll may drop it while the operator writes.
+  const [snapshot, setSnapshot] = useState<LiveAlert | undefined>();
+  const live = useTriageSubmission(alert?.live ? alert.id : undefined, alert !== null);
+  const { pending, failure } = live;
 
   useEffect(() => {
     if (!alert) return;
     setSeverity(alert.severity);
     setImpact(alert.suggestedImpact);
-    setFailure(null);
-    setVersion(null);
-    // The version is read when the dialog opens: a decision taken meanwhile makes it stale.
-    if (alert.live && token) void readTriageVersion(token, alert.id).then(setVersion);
-  }, [alert, token]);
+    setSnapshot(useLive.getState().alerts.find((item) => item.alert_id === alert.id));
+  }, [alert]);
 
   async function submitLive(source: Alert) {
-    const live = liveAlerts.find((item) => item.alert_id === source.id);
-    if (!token || !live || !impact.trim()) return;
-    setPending(true);
-    setFailure(null);
-    const result = await declareAlert(token, live, { severity, impact: impact.trim() }, version ?? 1);
-    setPending(false);
-    if (result.kind !== "ok") {
-      setFailure(TRIAGE_FAILURE.declare[result.kind]);
-      return;
-    }
+    if (!impact.trim()) return live.fail("Cuenta qué notan tus clientes para declarar el incidente.");
+    if (!snapshot) return live.fail(TRIAGE_FAILURE.declare.transient);
+    const input = { severity, impact: impact.trim() };
+    const result = await live.send(JSON.stringify(input), (token, attempt) => declareAlert(token, snapshot, input, attempt));
+    if (result.kind !== "ok") return live.fail(TRIAGE_FAILURE.declare[result.kind]);
     markTriaged(source.id, "declared", result.incidentId);
     onOpenChange(false);
     toast.success("Incidente declarado", { description: source.title });
@@ -151,7 +142,7 @@ export function DeclareDialog({ alert, onOpenChange }: { alert: Alert | null; on
 
               <div className="flex items-center gap-3 rounded-lg bg-secondary px-3 py-2.5 text-sm">
                 <AgentAvatar />
-                <span>Al declararlo, el agente empieza a investigar de inmediato.</span>
+                <span>Al declararlo, el agente empieza a investigar si tu credencial puede iniciar investigaciones.</span>
               </div>
 
               {failure && (

@@ -72,19 +72,26 @@ export async function readTriageVersion(token: string, alertId: string): Promise
 
 type Command = { operation: "triage_declare"; reason: string } & Record<string, unknown>;
 
-function idempotencyKey(command: Command): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${command.operation.replace("triage_", "")}-${hex}`;
+/** What one submission sends: a manual retry of it reuses both, so a lost answer is replayed. */
+export interface TriageAttempt {
+  key: string;
+  version: number;
 }
 
-async function postCommand(token: string, alertId: string, command: Command, version: number) {
+export type TriageSent = { result: TriageResult; attempt: TriageAttempt };
+
+export function newAttempt(version: number): TriageAttempt {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return { key: `triage-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`, version };
+}
+
+async function postCommand(token: string, alertId: string, command: Command, attempt: TriageAttempt) {
   const response = await fetch(triagePath(alertId, "/commands"), {
     method: "POST",
-    headers: { ...headers(token), "Content-Type": "application/json", "Idempotency-Key": idempotencyKey(command) },
+    headers: { ...headers(token), "Content-Type": "application/json", "Idempotency-Key": attempt.key },
     credentials: "omit",
     cache: "no-store",
-    body: JSON.stringify({ ...command, expected_version: version }),
+    body: JSON.stringify({ ...command, expected_version: attempt.version }),
   });
   try {
     const body = (await response.json()) as { incident_id?: unknown; error?: { code?: unknown } };
@@ -100,24 +107,27 @@ async function postCommand(token: string, alertId: string, command: Command, ver
 
 /**
  * Sends one decision through POST /v1/alerts/{id}/triage/commands; the server decides. A version
- * that went stale while the operator was choosing is read again and retried once, with a new key.
+ * that went stale while the operator was choosing is read again and retried once with a new key;
+ * the attempt that was sent last comes back, for a manual retry to replay.
  */
-async function sendCommand(token: string, alertId: string, command: Command, version: number): Promise<TriageResult> {
+async function sendCommand(token: string, alertId: string, command: Command, attempt: TriageAttempt): Promise<TriageSent> {
+  const done = (result: TriageResult): TriageSent => ({ result, attempt });
   try {
-    let sent = await postCommand(token, alertId, command, version);
+    let sent = await postCommand(token, alertId, command, attempt);
     if (sent.status === 409 && sent.code === "stale_version") {
       const fresh = await readTriageVersion(token, alertId);
-      if (fresh === null) return { kind: "transient" };
-      sent = await postCommand(token, alertId, command, fresh);
+      if (fresh === null) return done({ kind: "transient" });
+      attempt = newAttempt(fresh);
+      sent = await postCommand(token, alertId, command, attempt);
     }
-    if (sent.status === 200 || sent.status === 201) return { kind: "ok", incidentId: sent.incidentId };
-    if (sent.status === 401) return { kind: "auth" };
-    if (sent.status === 403) return { kind: "forbidden" };
-    if (sent.status === 409) return { kind: "conflict" };
-    if (sent.status === 400 || sent.status === 404 || sent.status === 422) return { kind: "rejected" };
-    return { kind: "transient" };
+    if (sent.status === 200 || sent.status === 201) return done({ kind: "ok", incidentId: sent.incidentId });
+    if (sent.status === 401) return done({ kind: "auth" });
+    if (sent.status === 403) return done({ kind: "forbidden" });
+    if (sent.status === 409) return done({ kind: "conflict" });
+    if (sent.status === 400 || sent.status === 404 || sent.status === 422) return done({ kind: "rejected" });
+    return done({ kind: "transient" });
   } catch {
-    return { kind: "transient" };
+    return done({ kind: "transient" });
   }
 }
 
@@ -125,9 +135,9 @@ export async function declareAlert(
   token: string,
   alert: LiveAlert,
   input: DeclareInput,
-  version: number,
-): Promise<TriageResult> {
-  const result = await sendCommand(
+  attempt: TriageAttempt,
+): Promise<TriageSent> {
+  const sent = await sendCommand(
     token,
     alert.alert_id,
     {
@@ -143,9 +153,9 @@ export async function declareAlert(
         severity: alert.severity,
       },
     },
-    version,
+    attempt,
   );
-  return result.kind === "ok" && !result.incidentId ? { kind: "transient" } : result;
+  return sent.result.kind === "ok" && !sent.result.incidentId ? { ...sent, result: { kind: "transient" } } : sent;
 }
 
 /** Same-origin read of the real alert list. It never surfaces server codes or details. */
