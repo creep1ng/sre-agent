@@ -289,3 +289,28 @@ provider's only in the first case below; the others are rejected with 502 `upstr
 | The last attempt did not answer 200, or an earlier one did | Rejected |
 | The attempts or the selected endpoints disagree on the model | Rejected |
 | No attempts listed | Accepted only as attempt 1 with one selected endpoint, as before |
+
+## Demo model
+
+Issue #880 measured the demo's model on 2026-10-31 with the real investigator and governed gateway
+([measurements](evidence/issue-880/README.md)). The demo uses `anthropic/claude-haiku-5.5` on
+provider `anthropic` (`TRIAGE_AGENT_MODEL`, `TRIAGE_AGENT_PROVIDER`) with the default
+`OPENROUTER_TIMEOUT_SECONDS=30`: the investigator then waits 45 s per model call, 75 s with
+`OPENROUTER_MANAGEMENT_API_KEY`. Its calls took 1.6 to 8.1 s and a whole investigation 24 to 27 s,
+for about USD 0.0035. The previous `z-ai/glm-5.3-flash` on `relace` ran with 60 s and still had
+calls of up to 80.6 s (#718).
+
+Candidates that do not fit the [provider evidence](#provider-evidence) check: `z-ai/glm-5.3-flash`
+on `z-ai` (OpenRouter names that provider "Z.AI") and `openai/gpt-6-luna` on `openai` (its dated model has three OpenAI endpoints
+in the catalog, and a dated model is confirmed only against one). Repeat a measurement, one paid
+investigation per command, with the provider key in `.env`:
+
+    scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml up --build --wait db api web
+    scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml run --rm -T seed python /e2e/provision_demo.py
+    E2E_REAL_MODEL=1 scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml --profile verdict-e2e run --rm \
+      -v ./scripts/model_candidate_e2e.py:/e2e/m.py:ro -e ADMIN_HUMAN_API_KEY -e MODEL -e PROVIDER verdict-e2e python /e2e/m.py
+
+`E2E_REAL_MODEL=1` must also be set for the `up`, so the API keeps the real provider. `MODEL`,
+`PROVIDER` and `ADMIN_HUMAN_API_KEY` come from the shell; the record is appended to
+`$EVIDENCE_VERDICT_ARTIFACTS/measurements.jsonl`.

@@ -1,0 +1,170 @@
+{
+  "issue": 880,
+  "date": "2026-10-31",
+  "setup": "compose.evidence-verdict-e2e.yaml with E2E_REAL_MODEL=1: real API, PostgreSQL, investigator and governed gateway calling OpenRouter; Grafana MCP scripted (Prometheus: checkout 12, frontend 24, payment 0 error calls; Elasticsearch: no documents). One investigation per run, started over HTTP as demo-human by scripts/model_candidate_e2e.py; latency, tokens and billed cost come from the gateway's responses.create audit rows (OpenRouter usage.cost), the credited model and provider from GET /v1/usage/requests.",
+  "real_llm_runs": 5,
+  "billed_usd_recorded": "0.006817825",
+  "billed_usd_note": "Sum of the costs OpenRouter reported for runs 2-5; run 1's single rejected call is not recorded.",
+  "not_run": [
+    {
+      "model": "z-ai/glm-5.3-flash",
+      "provider": "z-ai",
+      "reason": "OpenRouter's catalog names this endpoint 'Z.AI' (tag z-ai/fp8); the gateway requires the answering provider's name to equal the pinned slug ignoring case, and 'z.ai' != 'z-ai', so every answer would be rejected as provider evidence. Not spent on a paid run."
+    }
+  ],
+  "catalog_2026_10_31": "OpenRouter public /api/v1/models/<id>/endpoints at 21:20Z: anthropic/claude-haiku-5.5 on Anthropic USD 0.10/0.50 per M input/output tokens, uptime 1 d 100 %; openai/gpt-6-luna on OpenAI 0.10/0.50, 100 %; z-ai/glm-5.3-flash on Z.AI 0.15/0.50, 100 %; on Relace 0.0149/0.1543, 100 %.",
+  "runs": [
+    {
+      "run": "1",
+      "measured_at": "2026-10-31T21:30:48.817636+00:00",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "anthropic",
+      "gateway": "main 35d0e1f7 (unchanged)",
+      "openrouter_timeout_seconds": 60,
+      "credited_providers": [],
+      "credited_models": [],
+      "model_calls": 0,
+      "call_latency_s": [],
+      "max_call_latency_s": null,
+      "total_investigation_s": 3.8,
+      "input_tokens": null,
+      "output_tokens": null,
+      "billed_usd": null,
+      "all_outputs_json_objects": null,
+      "actions": [],
+      "incident_state": "investigating",
+      "receipt": {
+        "summary": "Investigation dispatch ended: unknown. Cause: the model provider was unavailable.",
+        "reason_code": "investigation_upstream_unavailable"
+      },
+      "hypotheses": [],
+      "mitigation": null,
+      "calls": [],
+      "note": "Ended after 3.8 s with no turn. This driver version read only turns' calls, so the failed call's audit row was not captured before teardown; its cost is not recorded here. Run 2 shows the cause."
+    },
+    {
+      "run": "2",
+      "measured_at": "2026-10-31T21:34:42+00:00",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "anthropic",
+      "gateway": "bypassed: one request with the gateway's exact body (provider.order=[anthropic], allow_fallbacks=false, data_collection=deny, store=false, stream=false), max_output_tokens 32, 'Reply with the word OK.'",
+      "http_status": 200,
+      "elapsed_s": 1.92,
+      "input_tokens": 17,
+      "output_tokens": 4,
+      "billed_usd": "0.0000037",
+      "openrouter_metadata": {
+        "requested": "anthropic/claude-haiku-5.5",
+        "strategy": "direct",
+        "summary": "available=2, attempts=2, selected=Anthropic",
+        "attempt": 2,
+        "endpoints": {"total": 10, "available": [{"provider": "Anthropic", "model": "anthropic/claude-haiku-5.5-20261007", "selected": true}, {"provider": "Anthropic", "model": "anthropic/claude-haiku-5.5-20261007", "selected": true}]},
+        "attempts": [{"provider": "Anthropic", "model": "anthropic/claude-haiku-5.5-20261007", "status": 400}, {"provider": "Anthropic", "model": "anthropic/claude-haiku-5.5-20261007", "status": 200}]
+      },
+      "note": "OpenRouter retried inside the pinned provider: attempt 1 answered 400, attempt 2 answered 200, both named Anthropic. The gateway on main accepted only attempt 1 with one attempt and one selected endpoint, so it rejected this answer as provider evidence. Run 1 matches it."
+    },
+    {
+      "run": "3",
+      "measured_at": "2026-10-31T21:44:33.176325+00:00",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "anthropic",
+      "gateway": "this branch (same-provider retry accepted)",
+      "openrouter_timeout_seconds": 60,
+      "credited_providers": ["anthropic"],
+      "credited_models": ["anthropic/claude-haiku-5.5-20261007"],
+      "model_calls": 6,
+      "call_latency_s": [2.31, 1.616, 2.401, 5.998, 5.058, 5.687],
+      "max_call_latency_s": 5.998,
+      "total_investigation_s": 24.3,
+      "input_tokens": 12646,
+      "output_tokens": 3774,
+      "billed_usd": "0.0031516",
+      "all_outputs_json_objects": true,
+      "actions": ["use_tool:midnight_recent_changes", "use_tool:query_elasticsearch", "use_tool:query_prometheus", "propose_hypothesis", "use_tool:query_elasticsearch", "propose_mitigation"],
+      "incident_state": "mitigating",
+      "receipt": {
+        "summary": "Investigation dispatch ended: success.",
+        "reason_code": null
+      },
+      "hypotheses": [
+        "Los errores 5xx de checkout se originan en el propio servicio checkout y no en payment, sin un cambio reciente registrado que lo explique."
+      ],
+      "mitigation": "Investigar en el propio servicio checkout (logs de error y estado de sus instancias) antes de cualquier cambio, ya que no hay cambios registrados que lo expliquen.",
+      "calls": [
+        {"latency_s": 2.31, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 1675, "output_tokens": 87, "billed_usd": "0.000211"},
+        {"latency_s": 1.616, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 1795, "output_tokens": 220, "billed_usd": "0.0002895"},
+        {"latency_s": 2.401, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2016, "output_tokens": 332, "billed_usd": "0.0003676"},
+        {"latency_s": 5.998, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2378, "output_tokens": 1169, "billed_usd": "0.0008223"},
+        {"latency_s": 5.058, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2284, "output_tokens": 951, "billed_usd": "0.0007039"},
+        {"latency_s": 5.687, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2498, "output_tokens": 1015, "billed_usd": "0.0007573"}
+      ]
+    },
+    {
+      "run": "4",
+      "measured_at": "2026-10-31T21:48:32.606986+00:00",
+      "model": "openai/gpt-6-luna",
+      "provider": "openai",
+      "gateway": "this branch (same-provider retry accepted)",
+      "openrouter_timeout_seconds": 60,
+      "credited_providers": [],
+      "credited_models": [],
+      "model_calls": 1,
+      "call_latency_s": [2.74],
+      "max_call_latency_s": 2.74,
+      "total_investigation_s": 4.5,
+      "input_tokens": 1120,
+      "output_tokens": 56,
+      "billed_usd": "0.000167925",
+      "all_outputs_json_objects": null,
+      "actions": [],
+      "incident_state": "investigating",
+      "receipt": {
+        "summary": "Investigation dispatch ended: unknown. Cause: the model provider was unavailable.",
+        "reason_code": "investigation_upstream_unavailable"
+      },
+      "hypotheses": [],
+      "mitigation": null,
+      "calls": [
+        {"latency_s": 2.74, "status": 502, "stage": "upstream", "reason_code": "upstream_invalid", "credited_model": null, "credited_provider": null, "input_tokens": 1120, "output_tokens": 56, "billed_usd": "0.000167925"}
+      ],
+      "note": "The gateway answered 502 upstream_invalid on the first call: the provider evidence check rejected the answer. OpenRouter lists three OpenAI endpoints (openai, openai/flex, openai/fast) for the dated model openai/gpt-6-luna-20260922, and the gateway confirms a dated model only against exactly one catalog endpoint. Not changed here: it is not the chosen model."
+    },
+    {
+      "run": "5",
+      "measured_at": "2026-10-31T21:50:19.580307+00:00",
+      "model": "anthropic/claude-haiku-5.5",
+      "provider": "anthropic",
+      "gateway": "this branch (same-provider retry accepted)",
+      "openrouter_timeout_seconds": 30,
+      "credited_providers": ["anthropic"],
+      "credited_models": ["anthropic/claude-haiku-5.5-20261007"],
+      "model_calls": 6,
+      "call_latency_s": [2.195, 1.896, 3.86, 5.777, 8.057, 4.553],
+      "max_call_latency_s": 8.057,
+      "total_investigation_s": 27.4,
+      "input_tokens": 12646,
+      "output_tokens": 4460,
+      "billed_usd": "0.0034946",
+      "all_outputs_json_objects": true,
+      "actions": ["use_tool:midnight_recent_changes", "use_tool:query_elasticsearch", "use_tool:query_prometheus", "propose_hypothesis", "propose_hypothesis", "request_human"],
+      "incident_state": "investigating",
+      "receipt": {
+        "summary": "Investigation dispatch ended: success.",
+        "reason_code": null
+      },
+      "hypotheses": [
+        "Los errores 5xx del checkout se originan en el propio servicio checkout (en su manejo o en sus llamadas salientes a payment), no en el servicio payment, que no registra respuestas 5xx.",
+        "Los errores 5xx de checkout se originan en el propio servicio checkout (en su manejo o en sus llamadas salientes a payment), no en payment, que no registra respuestas 5xx."
+      ],
+      "mitigation": null,
+      "calls": [
+        {"latency_s": 2.195, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 1673, "output_tokens": 111, "billed_usd": "0.0002228"},
+        {"latency_s": 1.896, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 1793, "output_tokens": 244, "billed_usd": "0.0003013"},
+        {"latency_s": 3.86, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2013, "output_tokens": 612, "billed_usd": "0.0005073"},
+        {"latency_s": 5.777, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2415, "output_tokens": 1053, "billed_usd": "0.000768"},
+        {"latency_s": 8.057, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2306, "output_tokens": 1646, "billed_usd": "0.0010536"},
+        {"latency_s": 4.553, "status": 200, "stage": "response", "reason_code": null, "credited_model": "anthropic/claude-haiku-5.5-20261007", "credited_provider": "anthropic", "input_tokens": 2446, "output_tokens": 794, "billed_usd": "0.0006416"}
+      ]
+    }
+  ]
+}
