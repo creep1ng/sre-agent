@@ -1,0 +1,316 @@
+"""Grafana alert intake against the composed API with synthetic deliveries (#765).
+
+scripts/run_real_journeys.sh runs it in the seed container after the other incident journeys,
+with the API's ALERT_INTAKE_GRAFANA_SECRET, its operator demo-human, and TELEGRAM_LINK_CODE from a
+Telegram gateway pointed at the fake Bot API. Each delivery has the shape Grafana Alerting's
+webhook contact point sends, timed relative to now. Ways intake can fail, each checked below:
+1. a delivery without the right secret is accepted, reads the body, or leaves more than one audit
+   event and no other trace;
+2. a firing alert opens no incident, or its investigation is never dispatched, starts as a person
+   instead of the system that declared it, or never reaches the linked chat; no person sends a
+   request before that check;
+3. the same delivery again opens a second incident or a second episode;
+4. a second alert of a service with an open incident opens another incident, also after the
+   first episode resolved (a flapping rule paying for a second investigation);
+5. one grouped payload with alerts of two services opens one incident, or joins them to the
+   first service's incident;
+6. a `resolved` that arrives before its `firing` opens an incident, or the late `firing` reopens it;
+7. an oversized body or too many alerts is accepted;
+8. GET /v1/alerts lists a resolved episode as live, loses a triage decision or the mapped
+   severity, or answers a caller without alert.read.
+The artifact holds ids, statuses and counts, never a secret.
+"""
+
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
+import psycopg
+
+API = os.environ.get("API_URL", "http://api:8000")
+INTAKE = f"{API}/v1/alert-intake/grafana"
+SECRET = os.environ["ALERT_INTAKE_GRAFANA_SECRET"]
+DATABASE = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
+OUT = os.environ.get("ARTIFACT_DIR", "/artifacts")
+FAKE_TELEGRAM = os.environ.get("FAKE_TELEGRAM_URL", "http://fake-telegram:8081")
+CHAT = 222  # The operator's chat in the fake Bot API.
+RUN = uuid4().hex[:8]  # Fresh services per run, so a rerun on the same database starts clean.
+# Relative to now: GET /v1/alerts keeps an episode resolved only within the last day.
+NOW = datetime.now(UTC).replace(microsecond=0)
+checks: list[dict] = []
+
+
+def ago(minutes: int) -> str:
+    return (NOW - timedelta(minutes=minutes)).isoformat().replace("+00:00", "Z")
+
+
+def http(method: str, url: str, body: bytes | None = None, key: str | None = None) -> tuple:
+    headers = {"Content-Type": "application/json"}
+    if key is not None:
+        headers["Authorization"] = f"Bearer {key}"
+    request = urllib.request.Request(url, body, headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as reply:
+            return reply.status, json.loads(reply.read() or b"null")
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read() or b"null")
+
+
+def alert(service: str, status: str, starts: str, rule: str = "service-error-rate") -> dict:
+    return {
+        "status": status,
+        "labels": {"alertname": rule, "service_name": service, "severity": "critical"},
+        "annotations": {"summary": f"{service}: spans failing over the last 2 min."},
+        "startsAt": starts,
+        "endsAt": ago(1) if status == "resolved" else "0001-01-01T00:00:00Z",
+        "fingerprint": f"{rule}-{service}",
+    }
+
+
+def deliver(*alerts: dict, key: str = SECRET) -> tuple:
+    payload = {"receiver": "midnight-intake", "groupKey": f"journey-{RUN}", "alerts": list(alerts)}
+    return http("POST", INTAKE, json.dumps(payload).encode(), key)
+
+
+def sql(query: str, *params: object) -> list[tuple]:
+    with psycopg.connect(DATABASE) as connection:
+        return connection.execute(query, params).fetchall()
+
+
+def episode(service: str) -> tuple:
+    return sql(
+        "SELECT episode_id, status, received_count, incident_id, investigation_run_id"
+        " FROM incident.alert_episodes WHERE service = %s ORDER BY first_received_at",
+        service,
+    )
+
+
+def incidents() -> int:
+    return sql("SELECT count(*) FROM incident.incidents")[0][0]
+
+
+def audits() -> int:
+    return sql(
+        "SELECT count(*) FROM audit_events WHERE operation = 'credentials.authenticate'"
+        " AND response_status = 401"
+    )[0][0]
+
+
+def check(name: str, passed: bool, **facts: object) -> None:
+    checks.append({"check": name, "pass": bool(passed), **facts})
+    print(f"{'PASS' if passed else 'FAIL'} {name} {json.dumps(facts, default=str)}", flush=True)
+
+
+def dispatched(run_id: str) -> bool:
+    until = time.monotonic() + 60
+    while time.monotonic() < until:
+        rows = sql(
+            "SELECT count(*) FROM incident.run_events WHERE run_id = %s"
+            " AND kind = 'dispatch_receipt' AND payload->'dispatch_receipt'->>'phase' = 'intent'",
+            run_id,
+        )
+        if rows[0][0]:
+            return True
+        time.sleep(1)
+    return False
+
+
+def wait(probe, seconds: float = 60) -> object:
+    until = time.monotonic() + seconds
+    while time.monotonic() < until:
+        if value := probe():
+            return value
+        time.sleep(0.5)
+    return None
+
+
+def link_chat(code: str) -> bool:
+    """The operator links their chat as in Telegram: /start with the gateway's one-time code."""
+    message = {"chat_id": CHAT, "text": f"/start {code}"}
+    http("POST", f"{FAKE_TELEGRAM}/_test/messages", json.dumps(message).encode())
+    return bool(wait(lambda: sql("SELECT 1 FROM incident.chat_links WHERE chat_id = %s", CHAT)))
+
+
+def automatic(episode_id: str, incident: str, run: str, delivered_at: datetime) -> None:
+    """No person acts: the investigation starts as Grafana and the linked chat hears of it."""
+    decisions = sql(
+        "SELECT document->>'transition_id', document->>'actor',"
+        " document->'actor_reference'->>'principal_id', run_id"
+        " FROM incident.decisions WHERE incident_id = %s ORDER BY decided_at",
+        incident,
+    )
+    started = [row[1:3] for row in decisions if row[0] == "start_investigation" and row[3] == run]
+    [origin] = sql(
+        "SELECT decision_origin, responsible_system FROM alert_triage WHERE alert_id = %s",
+        episode_id,
+    )
+    ack = wait(
+        lambda: sql(
+            "SELECT created_at, sent_at FROM incident.chat_outbox WHERE chat_id = %s"
+            " AND dedup_key = %s AND sent_at IS NOT NULL",
+            CHAT,
+            f"investigation_ack:{run}",
+        )
+    )
+    texts = [
+        m["text"]
+        for m in http("GET", f"{FAKE_TELEGRAM}/_test/sent")[1]
+        if run in m["text"] and m["text"].startswith("Investigando")
+    ]
+    [(run_at,)] = sql("SELECT created_at FROM incident.runs WHERE run_id = %s", run)
+    [(intent_at,)] = sql(
+        "SELECT occurred_at FROM incident.run_events WHERE run_id = %s"
+        " AND kind = 'dispatch_receipt' AND payload->'dispatch_receipt'->>'phase' = 'intent'",
+        run,
+    )
+    queued_at, sent_at = ack[0] if ack else (None, None)
+
+    def after(moment: datetime | None) -> float | None:
+        return None if moment is None else round((moment - delivered_at).total_seconds(), 3)
+
+    check(
+        "the automatic investigation starts as grafana and the linked chat gets its acknowledgment",
+        started == [("system", "grafana")]
+        and origin == ("external_automatic", "grafana")
+        and sent_at is not None
+        and len(texts) == 1,
+        investigation_start=started,
+        triage_decision=dict(zip(("decision_origin", "responsible_system"), origin, strict=True)),
+        decisions=[row[:3] for row in decisions],
+        acknowledgment=texts,
+        seconds_after_delivery={
+            "run_started": after(run_at),
+            "dispatch_intent": after(intent_at),
+            "ack_queued": after(queued_at),
+            "ack_sent_to_fake_bot_api": after(sent_at),
+        },
+    )
+
+
+def main() -> None:
+    a, b, c, d = (f"{name}-{RUN}" for name in ("cart", "payment", "ad", "email"))
+    linked = link_chat(os.environ["TELEGRAM_LINK_CODE"])
+    check("the operator's chat is linked through the fake Bot API", linked, chat=CHAT)
+
+    before = (audits(), incidents())
+    status, body = deliver(alert(a, "firing", ago(60)), key="not-the-secret")
+    oversized = http("POST", INTAKE, b"{" + b" " * (600 * 1024) + b"}", "not-the-secret")[0]
+    after = (audits(), incidents())
+    check(
+        "401 without the secret, one audit event per delivery, nothing recorded",
+        status == 401
+        and oversized == 401
+        and after == (before[0] + 2, before[1])
+        and not episode(a),
+        status=status,
+        oversized_status=oversized,
+        audit_401=[before[0], after[0]],
+        code=body["error"]["code"],
+    )
+
+    delivered_at = datetime.now(UTC)
+    status, body = deliver(alert(a, "firing", ago(60)))
+    [(first, state, count, incident, run)] = episode(a)
+    check(
+        "a firing alert declares an incident and dispatches its investigation",
+        status == 200 and state == "firing" and incident and run and dispatched(run),
+        episode=first,
+        incident=incident,
+        run=run,
+    )
+    automatic(first, incident, run, delivered_at)
+
+    total = incidents()
+    status, _ = deliver(alert(a, "firing", ago(60)))
+    [(_, _, count, again, _)] = episode(a)
+    check(
+        "the same delivery again opens nothing new",
+        status == 200 and count == 2 and again == incident and incidents() == total,
+        received_count=count,
+        incidents=[total, incidents()],
+    )
+
+    status, _ = deliver(alert(a, "firing", ago(59), "service-latency-p95"))
+    deliver(alert(a, "resolved", ago(60)))
+    flap = deliver(alert(a, "firing", ago(55)))[0]
+    rows = episode(a)
+    check(
+        "later alerts of the service join its open incident, also after the first resolved",
+        status == flap == 200
+        and len(rows) == 3
+        and {row[3] for row in rows} == {incident}
+        and incidents() == total
+        and [row[1] for row in rows] == ["resolved", "firing", "firing"],
+        episodes=[row[:4] for row in rows],
+    )
+
+    status, _ = deliver(alert(b, "firing", ago(58)), alert(c, "firing", ago(58)))
+    [(_, _, _, for_b, _)], [(_, _, _, for_c, _)] = episode(b), episode(c)
+    check(
+        "one grouped payload opens one incident per service",
+        status == 200 and for_b and for_c and len({for_b, for_c, incident}) == 3,
+        incidents=[for_b, for_c],
+    )
+
+    total = incidents()
+    early = deliver(alert(d, "resolved", ago(57)))[0]
+    late = deliver(alert(d, "firing", ago(57)))[0]
+    [(late_episode, state, count, opened, _)] = episode(d)
+    check(
+        "a resolved before its firing opens nothing and stays resolved",
+        early == late == 200 and state == "resolved" and opened is None and incidents() == total,
+        status=state,
+        received_count=count,
+    )
+
+    many = deliver(*[alert(f"x{n}-{RUN}", "firing", ago(56)) for n in range(101)])[0]
+    large = http("POST", INTAKE, b"{" + b" " * (600 * 1024) + b"}", SECRET)[0]
+    check(
+        "an oversized body or more than 100 alerts is refused",
+        many == large == 413 and not episode(f"x0-{RUN}"),
+        statuses=[many, large],
+    )
+
+    demo, restricted = os.environ["DEMO_HUMAN_API_KEY"], os.environ["RESTRICTED_HARNESS_API_KEY"]
+    status, listed = http("GET", f"{API}/v1/alerts", key=demo)
+    live = {item["alert_id"]: item for item in listed["alerts"]}
+    resolved = {item["alert_id"] for item in listed["resolved"]}
+    ours = [row for service in (a, b, c) for row in episode(service) if row[1] == "firing"]
+    check(
+        "GET /v1/alerts lists firing episodes live with their decision, resolved ones apart",
+        status == 200
+        and all(live[row[0]]["incident_id"] == row[3] for row in ours)
+        and {live[row[0]]["triage_status"] for row in ours} == {"declared", "linked"}
+        and {live[row[0]]["severity"] for row in ours} == {"sev1"}
+        and first in resolved
+        and late_episode in resolved
+        and first not in live,
+        live=sorted(row[0] for row in ours),
+    )
+    forbidden = http("GET", f"{API}/v1/alerts", key=restricted)
+    anonymous = http("GET", f"{API}/v1/alerts")[0]
+    check(
+        "GET /v1/alerts refuses a caller without alert.read and an anonymous one",
+        forbidden[0] == 403
+        and forbidden[1]["error"]["code"] == "not_authorized"
+        and anonymous == 401,
+        statuses=[forbidden[0], anonymous],
+    )
+
+    passed = all(item["pass"] for item in checks)
+    os.makedirs(OUT, exist_ok=True)
+    # One check per line, so the artifact reads (and diffs) check by check.
+    lines = ",\n".join("  " + json.dumps(item, default=str, ensure_ascii=False) for item in checks)
+    with open(f"{OUT}/alert-intake-journey.json", "w") as stream:
+        stream.write(f'{{"run": "{RUN}", "pass": {json.dumps(passed)}, "checks": [\n{lines}\n]}}\n')
+    print("PASS" if passed else "FAIL", flush=True)
+    sys.exit(0 if passed else 1)
+
+
+if __name__ == "__main__":
+    main()

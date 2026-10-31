@@ -7,7 +7,8 @@
 #   seeds the demo grants and one stamped incident per journey, then runs war-room-runs-real,
 #   war-room-reasoning-real, review-mitigation-real, war-room-follow-real, postmortem-journey and
 #   change-events-real, and last the #758 consumption-limit and #719 provider-retry E2Es, which
-#   restart the API against the local OpenRouter stand-in of compose.consumption-e2e.yaml.
+#   restart the API against the local OpenRouter stand-in of compose.consumption-e2e.yaml, then the
+#   Grafana alert intake journey (scripts/alert_intake_journey.py, #765).
 # executor: the deploy-executor journey (#720/#743), the rollback recorded as a change event
 #   (change-events-real, #770) by the deploy-executor principal that provision_demo.py creates
 #   from DEPLOY_EXECUTOR_CHANGES_API_KEY, the socket-down case, and its journal cut mid-write,
@@ -15,7 +16,7 @@
 # Compose reads the untracked .env (from .env.example). The OpenRouter keys are forced empty, so
 # no investigation reaches a model provider. Remove the project afterwards with
 #   docker compose -f compose.yaml -f compose.e2e.yaml --project-name <unique> --profile e2e \
-#     --profile executor-e2e down -v --remove-orphans
+#     --profile executor-e2e --profile telegram --profile telegram-e2e down -v --remove-orphans
 # One log per journey, the Playwright artifacts and summary.txt land in JOURNEY_ARTIFACTS
 # (default: a new temporary directory). A journey passes only when Playwright exits 0 and
 # reports passed tests and no skipped one: a self-skipped journey is not coverage.
@@ -24,6 +25,12 @@ set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${COMPOSE_PROJECT_NAME:?set a unique COMPOSE_PROJECT_NAME; this script never uses the default}"
 export COMPOSE_PROJECT_NAME OPENROUTER_API_KEY="" OPENROUTER_MANAGEMENT_API_KEY=""
+# A fresh intake secret per run; the .env placeholder never reaches the API.
+ALERT_INTAKE_GRAFANA_SECRET="$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n')"
+export ALERT_INTAKE_GRAFANA_SECRET
+# The intake journey's chat goes through the fake Bot API (tests/fake_telegram.py) only.
+export TELEGRAM_BOT_TOKEN="7000001:fake-e2e-token" TELEGRAM_API_URL="http://fake-telegram:8081"
+export TELEGRAM_POLL_TIMEOUT_SECONDS=5
 ARTIFACTS="${JOURNEY_ARTIFACTS:-$(mktemp -d "${TMPDIR:-/tmp}/real-journeys.XXXXXX")}"
 mkdir -p "$ARTIFACTS"
 COMPOSE=(docker compose --project-directory "$ROOT" -f "$ROOT/compose.yaml" -f "$ROOT/compose.e2e.yaml")
@@ -53,6 +60,20 @@ run_journey() {
     failed=1
   fi
   printf '%-20s %s rc=%s [%s] %ss\n' "$name" "$verdict" "$rc" "$counts" "$((SECONDS - start))" \
+    | tee -a "$ARTIFACTS/summary.txt"
+}
+
+# run_check NAME COMMAND...: a journey outside the browser; it passes when the command exits 0.
+run_check() {
+  local name=$1 rc=0 start=$SECONDS verdict=PASS
+  shift
+  "$@" > "$ARTIFACTS/$name.log" 2>&1 || rc=$?
+  cat "$ARTIFACTS/$name.log"
+  if ((rc != 0)); then
+    verdict=FAIL
+    failed=1
+  fi
+  printf '%-20s %s rc=%s %ss\n' "$name" "$verdict" "$rc" "$((SECONDS - start))" \
     | tee -a "$ARTIFACTS/summary.txt"
 }
 
@@ -137,6 +158,8 @@ incidents() {
   run_journey change-events e2e -e SRE_REAL_BACKEND=1 -e SEED_STAMP="ch$STAMP" \
     -e CHANGE_EVENTS_ARTIFACT_DIR=/artifacts -- change-events-real --grep-invert deploy-executor
   consumption
+  # Last: intake declares incidents of its own, which no journey above expects.
+  alert_intake
 }
 
 # consumption: scripts/consumption_limits_e2e.py, after the browser journeys because it points
@@ -169,6 +192,19 @@ stand_in() {
   printf '%-20s %s rc=%s [%s] %ss\n' "$name" "$verdict" "$rc" \
     "$(tail -n 1 "$ARTIFACTS/$name/$summary" 2> /dev/null || echo no summary)" \
     "$((SECONDS - start))" | tee -a "$ARTIFACTS/summary.txt"
+}
+
+# alert_intake: scripts/alert_intake_journey.py (#765), Grafana's deliveries against the API, with
+# a Telegram gateway on the fake Bot API so the automatic investigation's acknowledgment is seen.
+alert_intake() {
+  local telegram=("${COMPOSE[@]}" --profile telegram --profile telegram-e2e) code
+  mkdir -p "$ARTIFACTS/alert-intake"
+  "${telegram[@]}" up --build --wait fake-telegram telegram-gateway
+  code="$("${telegram[@]}" run --rm --no-deps -T telegram-gateway python -m sre_agent.chat.telegram \
+    link | grep -o 'start=[A-Za-z0-9_-]*' | cut -d= -f2)"
+  run_check alert-intake "${SEED[@]}" --user "$(id -u):$(id -g)" -e ALERT_INTAKE_GRAFANA_SECRET \
+    -e TELEGRAM_LINK_CODE="$code" -v "$ARTIFACTS/alert-intake:/artifacts" seed \
+    python scripts/alert_intake_journey.py
 }
 
 executor() {
