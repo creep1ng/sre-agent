@@ -89,13 +89,16 @@ test.describe("declarar desde la tarjeta contra la pila real", () => {
     await dialog.getByLabel("¿Qué notan tus clientes?").fill(impact);
     await expect.poll(() => exchanges.some((entry) => entry.path.endsWith("/triage/context"))).toBe(true);
 
-    // Another operator opens triage while this dialog is open: the version the dialog read is stale.
+    // Another operator works the alert while this dialog is open: the version the dialog read is
+    // stale. An untriaged alert and its first open_triage both read version 1, so open it twice.
     const before = await triageVersion(api, alertId!);
-    const opened = await api.post(`${BASE}/api/v1/alerts/${encodeURIComponent(alertId!)}/triage/commands`, {
-      headers: { "Idempotency-Key": `e2e-703-open-${Date.now().toString(36)}` },
-      data: { operation: "open_triage", expected_version: before },
-    });
-    expect(opened.status()).toBe(200);
+    for (const attempt of [1, 2]) {
+      const opened = await api.post(`${BASE}/api/v1/alerts/${encodeURIComponent(alertId!)}/triage/commands`, {
+        headers: { "Idempotency-Key": `e2e-703-open-${attempt}-${Date.now().toString(36)}` },
+        data: { operation: "open_triage", expected_version: await triageVersion(api, alertId!) },
+      });
+      expect(opened.status()).toBe(200);
+    }
     expect(await triageVersion(api, alertId!)).not.toBe(before);
     await page.screenshot({ path: `${dir}/2-dialog-prefilled.png` });
 
