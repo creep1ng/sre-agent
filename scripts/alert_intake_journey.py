@@ -7,8 +7,8 @@ webhook contact point sends, timed relative to now. Ways intake can fail, each c
 1. a delivery without the right secret is accepted, reads the body, or leaves more than one audit
    event and no other trace;
 2. a firing alert opens no incident, or its investigation is never dispatched, starts as a person
-   instead of the system that declared it, or never reaches the linked chat; no person sends a
-   request before that check;
+   instead of the system that declared it, or acknowledges in the chat instead of leaving the
+   message to the interrupt policy (#771); no person sends a request before that check;
 3. the same delivery again opens a second incident or a second episode;
 4. a second alert of a service with an open incident opens another incident, also after the
    first episode resolved (a flapping rule paying for a second investigation);
@@ -137,7 +137,8 @@ def link_chat(code: str) -> bool:
 
 
 def automatic(episode_id: str, incident: str, run: str, delivered_at: datetime) -> None:
-    """No person acts: the investigation starts as Grafana and the linked chat hears of it."""
+    """No person acts: the investigation starts as Grafana and, silence being the default
+    (#771), the chat hears nothing until the policy decides the investigation's result."""
     decisions = sql(
         "SELECT document->>'transition_id', document->>'actor',"
         " document->'actor_reference'->>'principal_id', run_id"
@@ -149,45 +150,42 @@ def automatic(episode_id: str, incident: str, run: str, delivered_at: datetime) 
         "SELECT decision_origin, responsible_system FROM alert_triage WHERE alert_id = %s",
         episode_id,
     )
-    ack = wait(
+    intent = wait(
         lambda: sql(
-            "SELECT created_at, sent_at FROM incident.chat_outbox WHERE chat_id = %s"
-            " AND dedup_key = %s AND sent_at IS NOT NULL",
-            CHAT,
-            f"investigation_ack:{run}",
+            "SELECT occurred_at FROM incident.run_events WHERE run_id = %s"
+            " AND kind = 'dispatch_receipt' AND payload->'dispatch_receipt'->>'phase' = 'intent'",
+            run,
         )
     )
-    texts = [
-        m["text"]
-        for m in http("GET", f"{FAKE_TELEGRAM}/_test/sent")[1]
-        if run in m["text"] and m["text"].startswith("Investigando")
-    ]
-    [(run_at,)] = sql("SELECT created_at FROM incident.runs WHERE run_id = %s", run)
-    [(intent_at,)] = sql(
-        "SELECT occurred_at FROM incident.run_events WHERE run_id = %s"
-        " AND kind = 'dispatch_receipt' AND payload->'dispatch_receipt'->>'phase' = 'intent'",
+    acks = sql(
+        "SELECT count(*) FROM incident.chat_outbox WHERE dedup_key = %s",
+        f"investigation_ack:{run}",
+    )
+    policy = sql(
+        "SELECT event_kind, decision, rule FROM incident.event_decisions"
+        " WHERE event_id IN (%s, %s) ORDER BY decision_id",
+        episode_id,
         run,
     )
-    queued_at, sent_at = ack[0] if ack else (None, None)
+    [(run_at,)] = sql("SELECT created_at FROM incident.runs WHERE run_id = %s", run)
 
     def after(moment: datetime | None) -> float | None:
         return None if moment is None else round((moment - delivered_at).total_seconds(), 3)
 
     check(
-        "the automatic investigation starts as grafana and the linked chat gets its acknowledgment",
+        "the automatic investigation starts as grafana and the chat gets no acknowledgment",
         started == [("system", "grafana")]
         and origin == ("external_automatic", "grafana")
-        and sent_at is not None
-        and len(texts) == 1,
+        and intent
+        and acks == [(0,)]
+        and policy[:1] == [("alert", "remember", "investigating")],
         investigation_start=started,
         triage_decision=dict(zip(("decision_origin", "responsible_system"), origin, strict=True)),
         decisions=[row[:3] for row in decisions],
-        acknowledgment=texts,
+        policy=policy,
         seconds_after_delivery={
             "run_started": after(run_at),
-            "dispatch_intent": after(intent_at),
-            "ack_queued": after(queued_at),
-            "ack_sent_to_fake_bot_api": after(sent_at),
+            "dispatch_intent": after(intent[0][0] if intent else None),
         },
     )
 
