@@ -178,14 +178,16 @@ action `bok.search`, each an exact `collection_id@version` (issue #34). The mode
 key, to `POST /v1/bok/collections/{collection_id}/versions/{version}/search` for five fragments at
 most and with no cache, so a revoked grant stops the next search. Each fragment is evidence with
 `source: bok`, its collection version as `datasource_uid` and, as `query`, the producer's read of
-exactly that chunk. An empty search is an answer; 401 and 403 end the run as `denied`, and a 5xx,
-network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
-body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
+exactly that chunk. An empty search is an answer. A 401, 403, 5xx, timeout (retried once) or other
+body is shown to the model as `the knowledge base is unavailable` and the run goes on (#718), its
+outcome receipt noting `bok_unavailable`. A failed search keeps the gateway's request id. None falls
+back to fixtures.
 
 An incident run offers every active collection version on which its identity passes the same
 `bok.search` evaluation the search route repeats, as MCP discovery offers tools (issue #718). Without
 a grant the collection is not offered and the investigation goes on; a direct search by that identity
-is answered 403 and audited as denied.
+is answered 403 and audited as denied. The outcome receipt lists the offered versions in
+`bok_collections`; if building the offer fails, none is offered and it notes `bok_unavailable`.
 
 The demo collection `otel-demo-store@1.0.0` (`src/sre_agent/bok/otel_demo_store.json`) describes the
 pinned OpenTelemetry Demo 3.0.0: which service calls which, the flagd flags each one reads and each

@@ -118,14 +118,16 @@ def _locator(item: BoKFragment) -> str:
     )
 
 
-def _bok_failure(error: GatewayError, collection: str) -> tuple[Status, str]:
+BOK_UNAVAILABLE = "the knowledge base is unavailable"
+
+
+def _bok_failure(error: GatewayError, collection: str) -> str:
     """Named after the collection version, never after its content."""
-    if error.kind == "denied":
-        return "denied", f"bok collection unavailable: {collection}"
     if error.kind == "transient":
         reason = error.code or error.status or "network"
-        return "upstream_unavailable", f"bok search failed: {collection} ({reason})"
-    return "needs_human", f"bok answer rejected: {collection}"
+    else:
+        reason = "denied" if error.kind == "denied" else "rejected"
+    return f"{BOK_UNAVAILABLE}: {collection} ({reason})"
 
 
 # Findings the harness writes itself, in the run's language (#707).
@@ -326,11 +328,17 @@ async def investigate(
             try:
                 found = await _attempts(partial(_search, bok, ask), limits)
             except GatewayError as error:
-                turns.append(turn)
                 if error.request_id is not None and error.request_id not in request_ids:
                     request_ids.append(error.request_id)
-                status, detail = _bok_failure(error, ask.collection)
-                return finish(status, detail=detail)
+                # The BoK explains mechanisms, it is not evidence: without it the run goes on,
+                # and the model sees the failure as the search's result (#718).
+                invocation = ToolInvocation(
+                    tool="bok.search",
+                    arguments={"collection": ask.collection, "query": ask.query},
+                    result_summary=_bok_failure(error, ask.collection),
+                )
+                turns.append(turn.model_copy(update={"tool_invocation": invocation}))
+                continue
             collected = [
                 CollectedEvidence(
                     evidence_id=new_id("ev"),
