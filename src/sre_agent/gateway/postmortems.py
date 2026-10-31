@@ -30,6 +30,7 @@ from sre_agent.incident.postmortem import (
 from sre_agent.incident.projections import IDENTIFIER_PATTERN
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
+from sre_agent.persistence.memories import PostgresIncidentMemoryRepository
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
 
 WRITE_ACTION, REVIEW_ACTION, READ_ACTION, CONTENT_ACTION = (
@@ -231,6 +232,42 @@ class PostmortemService:
             return error_envelope(request_id, 404, NOT_FOUND)
         return JSONResponse(project(record, with_content=CONTENT_ACTION in allowed), 200)
 
+    async def memory_changes(self, authorization: str | None) -> JSONResponse:
+        """The incident memory change log (#773): what entered, when and from which incident.
+
+        Memory content is postmortem text, so it leaves only with `run.read_context`.
+        """
+        request_id = uuid4()
+        _, _, error = await self._principal(request_id, authorization, (CONTENT_ACTION,))
+        if error is not None:
+            return error
+        try:
+            async with self.sessions() as session:
+                changes = await PostgresIncidentMemoryRepository(session).changes()
+        except Exception:
+            return error_envelope(request_id, 503)
+        return JSONResponse(
+            {
+                "changes": [
+                    {
+                        "memory_id": item.memory_id,
+                        "operation": "added",
+                        "incident_id": item.incident_id,
+                        "source_record": item.source_record,
+                        "postmortem_id": item.postmortem_id,
+                        "postmortem_version": item.postmortem_version,
+                        "close_event_id": item.close_event_id,
+                        "service": item.service,
+                        "signal": item.signal,
+                        "indexed_at": item.indexed_at.isoformat(),
+                        "content": item.content,
+                    }
+                    for item in changes
+                ]
+            },
+            200,
+        )
+
 
 def postmortems_router(service: PostmortemService) -> APIRouter:
     router = APIRouter()
@@ -254,5 +291,9 @@ def postmortems_router(service: PostmortemService) -> APIRouter:
     @router.get("/v1/incidents/{incident_id}/postmortem")
     async def read_postmortem(incident_id: str, request: Request) -> JSONResponse:
         return await service.read(incident_id, request.headers.get("authorization"))
+
+    @router.get("/v1/incident-memory/changes")
+    async def read_memory_changes(request: Request) -> JSONResponse:
+        return await service.memory_changes(request.headers.get("authorization"))
 
     return router
