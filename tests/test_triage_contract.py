@@ -65,7 +65,7 @@ def test_contract_schemas_and_paths() -> None:
     post = OPENAPI["paths"]["/v1/alerts/{alert_id}/triage/commands"]["post"]
     headers = {p["name"] for p in post["parameters"] if "name" in p}
     assert "Idempotency-Key" in headers
-    assert OPENAPI["info"]["version"] == "3.3.0"
+    assert OPENAPI["info"]["version"] == "3.4.0"
     assert SCHEMAS["triage-state"]["$id"] == "urn:sre-agent:schema:triage-state:2.0.0"
     assert post["requestBody"]["content"]["application/json"]["schema"]["$ref"] == (
         "urn:sre-agent:schema:triage-command:3.0.0"
@@ -88,7 +88,7 @@ def test_contract_schemas_and_paths() -> None:
     assert set(eligible["responses"]) == {"200", "400", "401", "403", "503"}
     eligible_schema = eligible["responses"]["200"]["content"]["application/json"]["schema"]
     assert eligible_schema == {"$ref": "#/components/schemas/EligibleIncidents"}
-    assert OPENAPI["info"]["version"] == "3.3.0"
+    assert OPENAPI["info"]["version"] == "3.4.0"
 
 
 def test_contract_refs_resolve() -> None:

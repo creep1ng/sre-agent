@@ -44,6 +44,7 @@ export const EVENT_KINDS = Object.freeze({
   hypothesis_proposed: Object.freeze({ label: "Hipótesis propuesta", tone: "info" }),
   investigation_result: Object.freeze({ label: "Resultado de investigación", tone: "info" }),
   dispatch_receipt: Object.freeze({ label: "Despacho de investigación", tone: "info" }),
+  run_start_blocked: Object.freeze({ label: "Investigación no iniciada", tone: "warning" }),
   mitigation_proposed: Object.freeze({ label: "Mitigación propuesta", tone: "warning" }),
   human_command: Object.freeze({ label: "Comando humano", tone: "warning" }),
   denial: Object.freeze({ label: "Denegado", tone: "critical" }),
