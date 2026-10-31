@@ -223,9 +223,9 @@ def setup(path, stop=False):
         ("API/web", ["up", "--build", "--no-deps", "--wait", "api", "web"]),
     ):
         output = run(compose + args, env, stage)
-        # Only the fixed drift notes cross over; other output may carry configuration.
+        # Only the fixed reset notes cross over; other output may carry configuration.
         for line in output.splitlines():
-            if line.startswith("seed drift: "):
+            if line.startswith("seed reset: "):
                 print("setup: " + line)
         print("setup: " + stage + " ready")
     base = "http://127.0.0.1:" + config.get("API_PORT", "8000")
