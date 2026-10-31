@@ -1,5 +1,5 @@
-# / and /index.html without a query serve the Midnight landing, whose «Abrir la consola» opens
-# /app/ (#870). The previous console keeps every address that carries a query, except the
+# / and /index.html without a view= serve the Midnight landing, whose «Abrir la consola» opens
+# /app/ (#870). The previous console keeps every address that names a view, except the
 # operations views /app already replaces (alerts, triage, war room), which redirect there.
 # Decisions, postmortem and governance keep their page until they move. LEGACY_CONSOLE=keep
 # serves the previous console at every old address, / included; the old console's suites run so.
@@ -10,7 +10,7 @@ map "${LEGACY_CONSOLE}:$arg_view:$arg_incident_id" $console_redirect {
     "~^redirect:war-room:" /app/incidentes;
 }
 
-map "${LEGACY_CONSOLE}:$args" $front_page {
+map "${LEGACY_CONSOLE}:$arg_view" $front_page {
     default /index.html;
     "redirect:" /landing/index.html;
 }
