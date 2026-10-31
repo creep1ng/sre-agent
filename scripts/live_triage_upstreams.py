@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """API of the live-triage E2E (#703, #704): the real application, with a model that concludes at
 once and a Grafana MCP stand-in. Each alert rule fires (value 1) unless the file named after its
-rule id in FAULT_DIR reads `ok`, so the host or the browser runner opens and ends real episodes."""
+rule id in FAULT_DIR reads `ok`, so the host or the browser runner opens and ends real episodes.
+A number in FAULT_DIR/model-delay holds each model answer that many seconds, so a dispatch can be
+interrupted while it waits (#704)."""
 
+import asyncio
 import json
 import os
 import secrets
@@ -21,6 +24,9 @@ REPLY = {"action": "conclude", "summary": "Modelo de prueba: sin evidencia adici
 
 class ConcludingModel:
     async def create(self, request: ProviderRequest) -> ProviderResult:
+        delay = FAULT_DIR / "model-delay"
+        if delay.is_file():
+            await asyncio.sleep(float(delay.read_text().strip() or 0))
         return ProviderResult(
             response_id=f"resp_{secrets.token_hex(8)}",
             model=request.model,
