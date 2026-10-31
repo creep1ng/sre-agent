@@ -52,7 +52,7 @@ export interface RunEvent {
   sequence: number;
   state: string | null;
   summary: string;
-  actor: { type: "human" | "agent" | "system"; reference?: { display_name?: string | null } | null };
+  actor: { type: "human" | "agent" | "system"; reference?: { principal_id?: string; display_name?: string | null } | null };
   reason_code: string | null;
   occurred_at: string;
 }
