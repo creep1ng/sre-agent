@@ -1,52 +1,53 @@
 # Live triage from the new console (#703) and the server-started investigation (#704)
 
 Browser journeys of the new console at `/app/` against the real API, PostgreSQL, the web proxy
-and the console image, recorded on 2026-10-31. Only the model and the Grafana MCP upstream are
-stand-ins (`compose.live-triage-e2e.yaml`, `scripts/live_triage_upstreams.py`): the model
-concludes at once and each alert rule fires unless `$LIVE_TRIAGE_FAULTS/{rule id}` reads `ok`.
-Live alerts still go through `GET /v1/alerts`, the governed MCP path and the caller's grants.
-No real LLM call was made.
+and the console image, recorded on 2026-10-31 on one fresh stack, in the order below. Only the
+model and the Grafana MCP upstream are stand-ins (`compose.live-triage-e2e.yaml`,
+`scripts/live_triage_upstreams.py`): the model concludes at once (or after
+`$LIVE_TRIAGE_FAULTS/model-delay` seconds) and each alert rule fires unless
+`$LIVE_TRIAGE_FAULTS/{rule id}` reads `ok`. Live alerts still go through `GET /v1/alerts`, the
+governed MCP path and the caller's grants. No real LLM call was made.
 
-| Folder | Candidate | Scenarios |
-| --- | --- | --- |
-| `pr2-declare/` | head of the declare PR | declare, with one stale-version retry |
-| `pr3-triage/` | head of the dismiss and link PR | dismiss, conflict, link |
-| `stack/` | head of the E2E PR, one fresh stack | all of the above, plus auto-investigate `granted` and `no-grant` |
+`stack/` holds one folder per scenario with its screenshots and the compact `verification.json`
+the spec wrote. The console's incident page does not read live incidents yet (#708), so the
+auto-investigate and dispatch-recovery folders record FastAPI's own events and timeline pages.
 
-Each folder holds the screenshots and a compact `verification.json` the spec wrote. The incident
-route renders «No encontramos ese incidente» for live incidents: reading them there is #708, so
-`stack/auto-investigate-*/` also records FastAPI's own events and timeline pages.
+| Folder | Scenario |
+| --- | --- |
+| `auto-investigate-granted/` | declare from the card; the run is not pending within 5 s; a replay adds no run |
+| `auto-investigate-no-grant/` | a declarant without `run.start`: a `run_start_blocked` event, no run |
+| `declare/` | prefilled dialog, one stale-version retry, a lost answer retried with the same key |
+| `triage-dismiss/`, `triage-conflict/`, `triage-link/` | dismiss with a stale retry, a Spanish refusal, link listing the incident by its alert |
+| `dispatch-recovery/` | API killed mid-dispatch, then restarted; a hand-off that fails before its claim |
 
 ## Reproduce
 
-From a worktree with `.env` (non-placeholder local keys) and `.env.worktree`
-(`scripts/bootstrap-worktree.py`):
+Every spec opens its own alert episode (`web/incident-console/e2e/live-faults.ts`), so they run
+one after another. From a checkout with `.env` (local `sre_` keys, `AUDIT_HMAC_KEY`):
 
 ```sh
 export LIVE_TRIAGE_FAULTS=/tmp/live-triage-faults; mkdir -p "$LIVE_TRIAGE_FAULTS"
-F="-f compose.e2e.yaml -f compose.live-triage-e2e.yaml"
-scripts/worktree-compose $F up --build --wait db api web incident-console
-scripts/worktree-compose $F run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
-scripts/worktree-compose $F run --rm --no-deps -T seed python /e2e/provision_demo.py
-run() { scripts/worktree-compose $F --profile e2e run --build --rm --no-deps incident-console-e2e \
-  sh -c "npx playwright test $1; s=\$?; chown -R $(id -u):$(id -g) e2e/artifacts /fault; exit \$s"; }
-AUTO_INVESTIGATE=granted run e2e/auto-investigate-live.spec.ts
+DC="docker compose --project-name live-triage-704 -f compose.yaml -f compose.e2e.yaml -f compose.live-triage-e2e.yaml"
+$DC up --build --wait db api web incident-console
+$DC run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
+$DC run --rm --no-deps -T seed python /e2e/provision_demo.py
+E2E="$DC --profile e2e run --build --rm --no-deps incident-console-e2e npx playwright test"
+AUTO_INVESTIGATE=granted $E2E e2e/auto-investigate-live.spec.ts
+AUTO_INVESTIGATE=no-grant $E2E e2e/auto-investigate-live.spec.ts
+LIVE_DECLARE=1 $E2E e2e/declare-live.spec.ts
+LIVE_TRIAGE=dismiss $E2E e2e/triage-live.spec.ts
+LIVE_TRIAGE=conflict $E2E e2e/triage-live.spec.ts
+LIVE_TRIAGE=link $E2E e2e/triage-live.spec.ts
+# An API restart in the middle of a dispatch (the spec holds the model, then stops):
+DISPATCH_RECOVERY=interrupt $E2E e2e/dispatch-recovery-live.spec.ts
+$DC kill api && $DC up -d --wait api
+DISPATCH_RECOVERY=interrupted $E2E e2e/dispatch-recovery-live.spec.ts
+# A hand-off that fails before its claim: the investigator's identity cannot be read.
+PSQL='psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+echo "UPDATE principals SET display_name='' WHERE principal_id='incident-harness';" | $DC exec -T db sh -c "$PSQL"
+DISPATCH_RECOVERY=handoff-failure $E2E e2e/dispatch-recovery-live.spec.ts
+echo "UPDATE principals SET display_name='Incident harness' WHERE principal_id='incident-harness';" | $DC exec -T db sh -c "$PSQL"
+$DC down -v --remove-orphans
 ```
 
-Each scenario consumes one `Nueva` alert. Before the next one, end and reopen both episodes:
-write `ok` to `$LIVE_TRIAGE_FAULTS/checkout-payment-error-rate` and
-`$LIVE_TRIAGE_FAULTS/checkout-orders-error-rate`, let the console (or any `GET /v1/alerts`) poll
-once, then delete both files. Then:
-
-```sh
-AUTO_INVESTIGATE=no-grant run e2e/auto-investigate-live.spec.ts
-LIVE_DECLARE=1 run e2e/declare-live.spec.ts
-LIVE_TRIAGE=dismiss run e2e/triage-live.spec.ts
-LIVE_TRIAGE=conflict run e2e/triage-live.spec.ts
-# link flips checkout-payment-error-rate itself; keep the other rule quiet so only one episode is new
-echo ok > "$LIVE_TRIAGE_FAULTS/checkout-orders-error-rate"
-LIVE_TRIAGE=link run e2e/triage-live.spec.ts
-scripts/worktree-compose $F down -v --remove-orphans
-```
-
-Artifacts land in `web/incident-console/e2e/artifacts/`.
+Artifacts land in `web/incident-console/e2e/artifacts/`, written by the runner's root user.
