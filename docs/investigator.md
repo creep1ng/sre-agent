@@ -131,6 +131,36 @@ share a run-scoped PostgreSQL transaction lock. A transition emitted by an inves
 must still see that dispatch's pending intent before it can update incident state, so a
 late provider response cannot replace a terminal `unknown` receipt.
 
+## Evidence verdicts
+
+Each piece of evidence recorded with a hypothesis carries a verdict on it (issue #707):
+`supports`, `contradicts` or `inconclusive`, with a one-line `finding` in the output language.
+The model gives them in `verdicts` of `propose_hypothesis`, keyed by evidence id; a missing or
+invalid verdict is recorded as `inconclusive`, not rejected. The harness, not the model, measures
+whether a tool answered with data: a Prometheus query without series or a log query without
+documents is recorded with `empty: true` and as `inconclusive`, whatever the model says. A
+hypothesis that cites no measured data is invalid output (issue #760): every citation is empty
+evidence, a BoK fragment (`source: bok`), which describes what should happen, not what did, or a
+recalled past incident (`source: incident_memory`, #773), which describes what happened before, not
+now. The
+model is told why and asked again. A second such answer ends the dispatch without a hypothesis, and
+its receipt carries `reason_code: investigation_no_measured_evidence`, shown in the timeline as "no
+cited evidence had measured data". The fields
+are optional in incident-state 1.2.0 and the run context, so earlier documents stay valid. On the
+evidence the current hypothesis cites, the war room shows «Respalda la hipótesis», «Contradice» or
+«No concluyente»; on any empty evidence, «No encontró nada». Reproduce it against the real API,
+with a scripted model and Grafana MCP:
+
+    C="scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml"
+    $C up --build --wait db api web
+    $C run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    $C run --rm -T seed python /e2e/provision_demo.py
+    mkdir -p /tmp/evidence-verdict-e2e  # default artifact dir (EVIDENCE_VERDICT_ARTIFACTS)
+    HOST_UID=$(id -u) HOST_GID=$(id -g) $C --profile verdict-e2e run --rm verdict-e2e
+    $C --profile e2e run --rm --no-deps -u "$(id -u)" -e HOME=/tmp -e EVIDENCE_DIR=/artifacts \
+      -v "$PWD/scripts:/e2e/scripts:ro" -v /tmp/evidence-verdict-e2e:/artifacts \
+      e2e node scripts/capture_evidence_verdict.mjs
+
 ## Skills
 
 A request pins exact Skill versions in `skills` (issue #32). The harness resolves them through
@@ -151,6 +181,16 @@ most and with no cache, so a revoked grant stops the next search. Each fragment 
 exactly that chunk. An empty search is an answer; 401 and 403 end the run as `denied`, and a 5xx,
 network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
 body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
+
+## Recalled incidents
+
+An `investigate` dispatch seeds the run with up to three memories of closed incidents of the
+same service (issue #773, see [incident postmortem](incident-postmortem.md)). Each is evidence
+with `source: incident_memory`, no `datasource_uid`, the source incident's postmortem as `query`
+and its `indexed_at` as `collected_at`. The model may cite them like any other evidence. Only a
+memory the outcome cites is kept in the incident evidence and in the result event's
+`evidence_references`. If recall fails, the run goes on without memories and its outcome receipt
+lists `memory_recall_unavailable` in `notes`.
 
 ## Output language
 

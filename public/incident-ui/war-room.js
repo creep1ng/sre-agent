@@ -50,6 +50,7 @@ const DISPATCH_CAUSES = Object.freeze({
   tool_timeout: "una herramienta de observabilidad superó el tiempo límite de la consulta",
   investigation_max_steps: "se agotaron los pasos sin llegar a una conclusión",
   investigation_invalid_output: "el modelo respondió en un formato no válido",
+  investigation_no_measured_evidence: "ninguna evidencia citada tenía datos medidos",
   investigator_failed: "el investigador falló",
   result_persistence_uncertain: "no se pudo confirmar que el resultado se guardó",
   stale_incident_snapshot: "el incidente cambió mientras se investigaba",

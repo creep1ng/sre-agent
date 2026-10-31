@@ -181,6 +181,11 @@
   font-size: var(--ma-font-size-sm);
 }
 
+.reasoning__finding {
+  font-size: var(--ma-font-size-sm);
+  font-weight: 600;
+}
+
 .reasoning__query {
   display: block;
   overflow-wrap: anywhere;
