@@ -115,13 +115,22 @@ should only appear in sanitized, current PR evidence when freshly verified.
 ## Cost and cleanup limits
 
 Before launching, the CLI queries account-wide month-to-date Cost Explorer data
-and adds a USD 3 session reserve. It fails closed if Cost Explorer is unavailable,
+and adds a reserve sized to the session it is about to start: the `t3a.xlarge`
+On-Demand rate in `us-east-1` plus an hourly margin for the root volume, public
+IPv4 address and egress (`instance_hourly_usd` and `hourly_margin_usd` in
+`DemoConfig`, about USD 0.20/h), multiplied by the session's lifetime (two hours by
+default, about USD 0.40). `extend` repeats the same check for the whole session up
+to its new deadline, before it touches the guest, tag or Scheduler, so a session is
+never extended past the budget. Both fail closed if Cost Explorer is unavailable,
 returns a currency other than USD, or the estimated total would exceed the USD
-10 monthly threshold. This is a prelaunch guard, not a billing guarantee: Cost
-Explorer is delayed, the reserve is an estimate rather than a live price quote,
-and ongoing account charges may continue after a launch is blocked. On the first
-UTC day of a month, the guard refuses launch because there is no completed
-in-month date range to query.
+10 monthly threshold.
+
+This is a prelaunch guard, not a billing guarantee. Cost Explorer data lags by up
+to about 24 hours, so hours a session has already run may not be billed yet; that
+is why `extend` reserves the session's full lifetime rather than only the added
+time. The rate is a published list price, not a live quote, and ongoing account
+charges may continue after a launch is blocked. On the first UTC day of a month,
+`up` and `extend` refuse because there is no completed in-month date range to query.
 
 The AWS Budget is delayed: billing data and budget actions are evaluated
 asynchronously, so the deny can arrive after spending has passed USD 10. This is
