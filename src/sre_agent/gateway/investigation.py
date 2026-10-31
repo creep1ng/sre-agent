@@ -10,6 +10,9 @@ from secrets import token_hex
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
+
+from sre_agent.gateway.authentication import authorize_governed_access_for_context
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.incident.persistence import (
     DecisionDraft,
@@ -30,6 +33,7 @@ from sre_agent.incident.runtime import (
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
     UNMEASURED,
+    Capability,
     CollectedEvidence,
     Conclude,
     IncidentContext,
@@ -45,6 +49,7 @@ from sre_agent.investigator.loop import investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
 from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemoryRepository
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
+from sre_agent.persistence.models import ResourceRow
 from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
@@ -189,6 +194,29 @@ class InvestigationRunDispatcher:
             return None
         return context
 
+    async def _bok_capabilities(self, principal: PrincipalContext) -> list[Capability]:
+        """The active BoK collection versions this identity may search, as MCP discovery offers
+        tools: each passes the same evaluation the search route repeats on every call."""
+        async with self.sessions() as session:
+            collections = await session.scalars(
+                select(ResourceRow.resource_id).where(
+                    ResourceRow.resource_type == "bok_collection", ResourceRow.status == "active"
+                )
+            )
+            candidates = sorted(collections)
+        allowed = []
+        for collection in candidates:
+            evaluation = await authorize_governed_access_for_context(
+                self.sessions, principal, "bok.search", "bok_collection", collection
+            )
+            if evaluation.decision.decision == "allow":
+                allowed.append(
+                    Capability(
+                        resource_type="bok_collection", resource_id=collection, action="bok.search"
+                    )
+                )
+        return allowed
+
     async def _configured_agent_id(self) -> str | None:
         """The configured agent identity even when it cannot run, so the cause can name it."""
         assert self.gateway_settings is not None
@@ -214,6 +242,7 @@ class InvestigationRunDispatcher:
             assert self.gateway_settings is not None
             capabilities, discovery_id = await self.evidence.discover()
             request_ids.append(discovery_id)
+            capabilities += await self._bok_capabilities(principal)
         except EvidenceUnavailable as error:
             if error.request_id is not None:
                 request_ids.append(error.request_id)
@@ -253,6 +282,7 @@ class InvestigationRunDispatcher:
                     self.gateway,
                     self.evidence,
                     limits,
+                    bok=self.gateway,
                     language=self.language,
                     recalled=[item for item in recalled if item.evidence_id not in known],
                 )
