@@ -104,6 +104,13 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
     }
 
     const declared = await declareFromCard(page, key);
+    // The incident page does not read live runs yet (#708): record FastAPI's own answer instead.
+    const apiShot = async (path: string, file: string) => {
+      const api = await page.context().browser()!.newPage({ extraHTTPHeaders: { authorization: `Bearer ${DEMO_KEY}` } });
+      await api.goto(`${BASE}/api${path}`);
+      await api.screenshot({ path: `${dir}/${file}`, fullPage: true });
+      await api.close();
+    };
     const detailOf = async () => {
       const response = await reader.get(`${BASE}/api/v1/incidents/${declared.incidentId}`);
       expect(response.status()).toBe(200);
@@ -162,17 +169,13 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
       );
       expect(startsAfter).toHaveLength(1);
 
-      // The incident page does not read live runs yet (#708): show the FastAPI events of the run
-      // the server started, once its dispatch ended, in a page that holds the reader's key.
+      // The events of the run the server started, once its dispatch ended.
       await expect
         .poll(async () => (await detailOf()).runs.find((run) => run.run_id === investigation!.run_id)?.status, {
           timeout: 60_000,
         })
         .not.toBe("running");
-      const api = await page.context().browser()!.newPage({ extraHTTPHeaders: { authorization: `Bearer ${DEMO_KEY}` } });
-      await api.goto(`${BASE}/api/v1/incidents/${declared.incidentId}/runs/${investigation!.run_id}/events`);
-      await api.screenshot({ path: `${dir}/run-events-api.png`, fullPage: true });
-      await api.close();
+      await apiShot(`/v1/incidents/${declared.incidentId}/runs/${investigation!.run_id}/events`, "run-events-api.png");
 
       writeFileSync(
         `${dir}/verification.json`,
@@ -202,6 +205,7 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
       expect(blocked).toHaveLength(1);
       // The dispatch-cause catalogue of #705 words it (src/sre_agent/incident/reasons.py).
       expect(blocked[0].summary).toContain("Cause: the declarant lacks the run.start grant");
+      await apiShot(`/v1/incidents/${declared.incidentId}/timeline`, "timeline-api.png");
       writeFileSync(
         `${dir}/verification.json`,
         JSON.stringify(
