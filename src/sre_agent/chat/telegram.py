@@ -20,8 +20,14 @@ from typing import Any
 
 import httpx
 
+from sre_agent.application import INCIDENT_WORKFLOW_PATH
+from sre_agent.chat.decisions import ChatDecisions
 from sre_agent.chat.outbox import ChatStore, DeliveryError, Keyboard
+from sre_agent.gateway.runs import RunCommandService
+from sre_agent.incident.runtime import IncidentRuntime
+from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
 
 logger = logging.getLogger("sre_agent.chat.telegram")
 
@@ -55,7 +61,26 @@ class BotApi:
         await self.call("sendMessage", chat_id=chat_id, text=message, **markup)
 
 
-async def _poll(bot: BotApi, store: ChatStore, poll_seconds: int) -> None:
+async def _tap(bot: BotApi, decisions: ChatDecisions, query: dict[str, Any]) -> None:
+    message = query.get("message") or {}
+    chat_id = (message.get("chat") or {}).get("id")
+    answer, decided = await decisions.tap(chat_id, str(query.get("data", "")))
+    try:
+        await bot.call("answerCallbackQuery", callback_query_id=query["id"], text=answer)
+        if decided is not None:
+            # Without reply_markup the buttons go away; an unchanged repeat answers 400.
+            await bot.call(
+                "editMessageText",
+                chat_id=chat_id,
+                message_id=message.get("message_id"),
+                text=decided[0],
+            )
+    except DeliveryError as error:
+        # A callback answered late expires; the decision itself is already recorded.
+        logger.info("callback reply not shown: %s", error)
+
+
+async def _poll(bot: BotApi, store: ChatStore, decisions: ChatDecisions, poll_seconds: int) -> None:
     # Telegram keeps an update until a later getUpdates offset confirms it, so a restart
     # replays unconfirmed updates; `receive` answers each update id at most once.
     offset = None
@@ -66,7 +91,7 @@ async def _poll(bot: BotApi, store: ChatStore, poll_seconds: int) -> None:
                 wait=poll_seconds + 10,
                 offset=offset,
                 timeout=poll_seconds,
-                allowed_updates=["message"],
+                allowed_updates=["message", "callback_query"],
             )
         except DeliveryError as error:
             logger.warning("polling failed: %s", error)
@@ -78,6 +103,9 @@ async def _poll(bot: BotApi, store: ChatStore, poll_seconds: int) -> None:
                 if isinstance(message.get("text"), str) and "chat" in message:
                     chat_id = message["chat"]["id"]
                     await store.receive(update["update_id"], chat_id, message["text"])
+                if "callback_query" in update:
+                    # A replayed tap is a replayed command: the runtime decides it once.
+                    await _tap(bot, decisions, update["callback_query"])
             except Exception as error:
                 # Unconfirmed, the update comes back with the next poll.
                 logger.warning("update not stored: %s", type(error).__name__)
@@ -103,9 +131,13 @@ async def gateway(database_url: str, api_url: str, token: str, poll_seconds: int
     try:
         async with httpx.AsyncClient(base_url=api_url) as http:
             bot, store = BotApi(http, token), ChatStore(database)
+            workflow = load_incident_workflow(INCIDENT_WORKFLOW_PATH)
+            runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
+            commands = RunCommandService(database.sessions, workflow, runtime)
+            decisions = ChatDecisions(database, commands)
             me = await bot.call("getMe")
             logger.info("telegram gateway started as @%s", me.get("username"))
-            poller = asyncio.create_task(_poll(bot, store, poll_seconds))
+            poller = asyncio.create_task(_poll(bot, store, decisions, poll_seconds))
             # A stop finishes the message being sent; only a kill mid-send repeats it.
             await _deliver(bot, store, stopping)
             poller.cancel()
