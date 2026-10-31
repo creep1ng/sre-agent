@@ -45,6 +45,7 @@ class ProviderFailure(Exception):
         consumption: Consumption | None = None,
         credited_model: ConcreteModel | None = None,
         credited_provider: ProviderName | None = None,
+        http_status: int | None = None,
     ) -> None:
         super().__init__(f"provider_{kind}")
         self.kind = kind
@@ -52,6 +53,7 @@ class ProviderFailure(Exception):
         self.consumption = consumption
         self.credited_model = credited_model
         self.credited_provider = credited_provider
+        self.http_status = http_status
 
 
 class LLMProvider(Protocol):

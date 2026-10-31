@@ -102,7 +102,10 @@ result. Without a usable key the executor fails closed: readiness 503 and every 
 Four layers, each answering one question: the network (only the api shares `executor-call`, so a
 container on `runtime` cannot even resolve the name) says who can reach it; the signature says the
 gateway produced this exact request; the grant (#722) says the agent may run that operation on
-that service; the human approval says this instance may run now.
+that service; the human approval says this instance may run now. One call goes the other way
+(#770): after answering a completed rollback, the executor sends `POST /v1/changes` to the api over
+the same `executor-call` network with its own `change.write` credential. That credential opens no
+operation and reads nothing; it only records changes.
 
 ## Known limitations of the academic demo
 
@@ -113,8 +116,15 @@ Stated so that the exposition does not overclaim; a green E2E hides none of them
 - The proxy gates API families, not fields. From inside the executor container, `POST
   /containers/create` with a host bind is an allowed call, so compromising that container is
   compromising the host. That is why it runs read-only, without capabilities, without privilege
-  escalation and with no secret beyond the verification key, and why the catalog, not the proxy,
-  is the action space.
+  escalation and with only two secrets, the verification key and the `change.write` credential
+  of the `deploy-executor` principal (#770), and why the catalog, not the proxy, is the action
+  space.
+- A compromised executor can forge change events: with that credential it can record deploys,
+  rollbacks or CI results of any service, and the investigator reads them as evidence ("what
+  changed"), so a forged event can steer a hypothesis. Each event names its `source` and
+  `recorded_by`, the investigator's evidence keeps the read's `request_id`, and the human approves
+  every mitigation; compromising the executor is compromising the host anyway. Without
+  `DEPLOY_EXECUTOR_CHANGES_API_KEY` nothing is recorded and the credential does not exist.
 - The host, its Docker socket and the administrator who grants are the root of trust by design.
 - No mTLS, no key rotation, no nonce beyond the `Idempotency-Key`; the window bounds a replay.
 - Single host, Compose only: no Kubernetes, no remote executor, no registry authentication.
