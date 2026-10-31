@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme, type ThemePreference } from "@/hooks/use-theme";
+import { useLanguage, useT, type Language } from "@/i18n";
 import { useLive } from "@/lib/live";
 import { appMode } from "@/lib/mode";
 import { LIVE_SCENARIOS } from "@/lib/scenarios";
@@ -43,6 +44,9 @@ export function AccountMenu({ onConnect }: { onConnect: () => void }) {
   const disconnect = useLive((s) => s.disconnect);
   const navigate = useNavigate();
   const live = appMode === "live";
+  const t = useT("shell");
+  const language = useLanguage((s) => s.language);
+  const setLanguage = useLanguage((s) => s.setLanguage);
 
   return (
     <DropdownMenu>
@@ -51,7 +55,7 @@ export function AccountMenu({ onConnect }: { onConnect: () => void }) {
           {live ? "API" : "DH"}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-mono text-[13px]">{live ? "Sesión de API" : "demo-human"}</span>
+          <span className="block truncate font-mono text-[13px]">{live ? t("account.apiSession") : "demo-human"}</span>
           <span
             className={cn(
               "flex items-center gap-1 text-xs",
@@ -62,38 +66,49 @@ export function AccountMenu({ onConnect }: { onConnect: () => void }) {
               className={cn("size-1.5 rounded-full", live && !token ? "bg-muted-foreground" : "bg-success")}
               aria-hidden="true"
             />
-            {live ? (token ? "Conectada" : "Sin conectar") : "Sesión activa"}
+            {live ? t(token ? "account.connected" : "account.disconnected") : t("account.active")}
           </span>
         </span>
         <ChevronsUpDownIcon className="size-4 text-muted-foreground" aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-64">
-        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Tema</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">{t("account.theme")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
           <DropdownMenuRadioItem value="system">
-            <MonitorIcon /> Sistema
+            <MonitorIcon /> {t("theme.system")}
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="light">
-            <SunIcon /> Claro
+            <SunIcon /> {t("theme.light")}
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="dark">
-            <MoonIcon /> Oscuro
+            <MoonIcon /> {t("theme.dark")}
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">{t("account.language")}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={language} onValueChange={(value) => setLanguage(value as Language)}>
+          {/* Each language is named in itself, so it reads the same from either side. */}
+          <DropdownMenuRadioItem value="es" lang="es">
+            Español
+          </DropdownMenuRadioItem>
+          <DropdownMenuRadioItem value="en" lang="en">
+            English
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
         {live ? (
           <>
             <DropdownMenuItem onSelect={onConnect}>
-              <KeyRoundIcon /> Conectar API
+              <KeyRoundIcon /> {t("account.connect")}
             </DropdownMenuItem>
             {token && (
               <DropdownMenuItem
                 onSelect={() => {
                   disconnect();
-                  toast.success("Credencial desconectada");
+                  toast.success(t("account.disconnected.toast"));
                 }}
               >
-                <LogOutIcon /> Desconectar
+                <LogOutIcon /> {t("account.disconnect")}
               </DropdownMenuItem>
             )}
           </>
