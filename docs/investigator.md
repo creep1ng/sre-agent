@@ -36,8 +36,12 @@ The investigator's internal result status describes the bounded loop:
 | `upstream_unavailable` | A gateway or tool call was unavailable, timed out, or returned a retryable error |
 | `max_steps` | Six turns passed without a final answer |
 
-The limits (6 steps, 45 s per gateway call, 10 s per tool) are fixed in the change's
-`design.md`. A timeout, network error, or 5xx is not automatically retried: the remote
+The limits (6 steps, 10 s per tool) are fixed in the change's `design.md`. A gateway call
+follows the provider timeout: `OPENROUTER_TIMEOUT_SECONDS` + 15 s, or 2 ×
+`OPENROUTER_TIMEOUT_SECONDS` + 15 s when `OPENROUTER_MANAGEMENT_API_KEY` configures the endpoint
+catalog (admission may fetch it before the provider call), at most 180 s. With the demo's 60 s
+that is 75 s, or 135 s with the catalog, so the run waits for a slow answer the gateway records
+and charges. A timeout, network error, or 5xx is not automatically retried: the remote
 call may have completed even when its response was lost.
 
 The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
@@ -51,15 +55,29 @@ An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs bef
 upstream tool call, so no external effect was dispatched. Transient or ambiguous failures
 remain `unknown`.
 
-A denial blocks the run for a human (issue #39). A `denied` result, or an MCP discovery
+A denial ends the run for a human (issues #39, #788). A `denied` result, or an MCP discovery
 answered with 401 or 403, keeps its `confirmed_failure` receipt (`governed_call_denied` or
-`mcp_discovery_denied`) and, in the same transaction, the run becomes `awaiting_human` with
-`pending_command` `escalate` and `terminated_reason` `denied`, through an `escalation` event
-that replay applies. This is the workflow's escalation: the incident keeps its state and
-version, and nothing is retried with another identity, endpoint or resource. Resuming takes
-people, never a retry: an administrator must grant the denied capability again, and a human
-must answer the escalation. The `escalate` command is still refused
-(`src/sre_agent/incident/commands.py`), so a blocked run cannot be resumed yet.
+`mcp_discovery_denied`) and, in the same transaction, an `escalation` event that replay
+applies sets the run `terminated` with `terminated_reason` `denied` and no pending command.
+This is the workflow's escalation: the incident keeps its state and version, and nothing is
+retried with another identity, endpoint or resource. The `escalate` command stays deferred
+(`src/sre_agent/incident/commands.py`), so no run announces it. The way out takes people: an
+administrator grants the denied capability, then a human retries with a new run.
+
+Every other ending terminates the run (issue #761). In the same transaction as the terminal
+receipt, a `run_terminated` event sets `status` `terminated` (or `completed` for `conclude`),
+`pending_command` null and a `terminated_reason`: `upstream_unavailable`, `max_steps`,
+`invalid_output`, or `needs_human` for the rest. This covers an interrupted dispatch replayed
+as `unknown`, an exception after the claim (`investigator_failed`, only its type is logged)
+and a mitigation a human sends back. The incident stays in `investigating`. Only a human
+retries: `POST .../runs` with `objective: investigate` opens a new run through
+`continue_investigation`, refused with 409 for an agent, beside a live run, or for the loser
+of two concurrent retries. The ended run is never redispatched. The receipt and the
+`run_terminated` event carry the ending's `reason_code`; the timeline projects only the codes
+in `src/sre_agent/incident/reasons.py`, each with a readable cause (issue #705), and the war
+room shows that cause in Spanish with the code in parentheses. An MCP tool that fails or does
+not answer is `investigation_tool_unavailable`, distinct from the model provider's
+`investigation_upstream_unavailable`; both store `terminated_reason` `upstream_unavailable`.
 
 Every outcome with a harness result also writes, in the same transaction, the run's turns as
 its sensitive context: the input sent, the model output, the tool invocation when the tool
@@ -152,3 +170,18 @@ What is simulated: the gateway answers and the evidence. What is real: the harne
 its HTTP client and the contract validation of every request. A run against the real
 gateway with a live model is a separate step and needs the provider key in the gateway's
 `.env`.
+
+## Slow provider demonstration
+
+`compose.investigator-timeout-e2e.yaml` runs the real API, database and investigator with
+`OPENROUTER_TIMEOUT_SECONDS=60` and a model that answers after 50 s
+(`scripts/investigator_timeout_upstreams.py`). The run must complete and its receipt must name
+the request id the gateway audited. From a worktree with `.env` and `.env.worktree`:
+
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml up --build --wait db api
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml run --rm --no-deps -T seed python /e2e/provision_demo.py
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml --profile timeout-e2e run --rm --build timeout-e2e
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml down -v --remove-orphans
+
+The report goes to `$INVESTIGATOR_TIMEOUT_ARTIFACTS` (default `/tmp/investigator-timeout-e2e`).

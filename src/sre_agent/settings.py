@@ -60,6 +60,15 @@ class Settings:
         investigator_gateway = (
             GatewaySettings.from_environment(environment) if investigator_configured else None
         )
+        management_key = environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None
+        if investigator_gateway is not None:
+            # One model call may wait for the endpoint catalog, then the provider; each is
+            # bounded by the provider timeout. 15 s covers the gateway's own work.
+            provider_calls = 2 if management_key else 1
+            model_timeout = min(provider_calls * timeout + 15, 180.0)
+            investigator_gateway = investigator_gateway.model_copy(
+                update={"timeout_seconds": model_timeout}
+            )
         language: OutputLanguage
         match environment.get("INVESTIGATOR_OUTPUT_LANGUAGE") or "es":
             case "es" | "en" as language:
@@ -74,7 +83,7 @@ class Settings:
             ReleaseMetadata.from_environment(environment),
             environment.get("GRAFANA_MCP_ENDPOINT") or None,
             mcp_token,
-            openrouter_management_key=environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None,
+            openrouter_management_key=management_key,
             investigator_gateway=investigator_gateway,
             investigator_output_language=language,
             openrouter_base_url=base_url,
