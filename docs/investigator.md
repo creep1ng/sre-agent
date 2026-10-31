@@ -182,6 +182,19 @@ exactly that chunk. An empty search is an answer; 401 and 403 end the run as `de
 network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
 body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
 
+An incident run offers every active collection version on which its identity passes the same
+`bok.search` evaluation the search route repeats, as MCP discovery offers tools (issue #718). Without
+a grant the collection is not offered and the investigation goes on; a direct search by that identity
+is answered 403 and audited as denied.
+
+The demo collection `otel-demo-store@1.0.0` (`src/sre_agent/bok/otel_demo_store.json`) describes the
+pinned OpenTelemetry Demo 3.0.0: which service calls which, the flagd flags each one reads and each
+flag's symptom, every fragment citing its upstream file at commit `1755859a`. `scripts/provision_demo.py`
+converges the demo collections and grants this one to `incident-harness`. It tells the model a
+mechanism to look for, for example that checkout depends on payment and that `paymentFailure` lives
+in flagd, so a restart does not end it. A fragment is not a measurement: the hypothesis still cites
+what the tools measured.
+
 ## Recalled incidents
 
 An `investigate` dispatch seeds the run with up to three memories of closed incidents of the
