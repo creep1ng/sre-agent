@@ -128,8 +128,8 @@ console's client). The backend gaps are listed after the table.
 |---|---|
 | Bandeja (read) | `GET /v1/alerts` |
 | Alert card · Qué detectamos | `GET /v1/alerts/{id}/triage/context` |
-| Alert card · Declarar incidente → Declarar e investigar | `POST /v1/alerts/{id}/triage/commands` (`open_triage`, then `triage_declare`), then `POST /v1/incidents/{id}/runs` (`objective: investigate`) |
-| Alert card · Descartar | Triage commands `open_triage`, then `triage_dismiss` with the reason |
+| Alert card · Declarar incidente → Declarar e investigar | `POST /v1/alerts/{id}/triage/commands` (`triage_declare`); the server opens the `investigate` run (#704) |
+| Alert card · Descartar | Triage command `triage_dismiss` with the reason |
 | Alert card · Vincular | `GET /v1/alerts/{id}/triage/eligible-incidents`, then `triage_link` |
 | Incident page (read) | `GET /v1/incidents/{id}`, `GET …/snapshot`, `GET …/timeline` |
 | Investigation card (live steps) | `GET /v1/incidents/{id}/runs/{run}` and `GET …/runs/{run}/events` |
