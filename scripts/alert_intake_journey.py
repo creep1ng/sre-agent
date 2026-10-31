@@ -1,12 +1,14 @@
 """Grafana alert intake against the composed API with synthetic deliveries (#765).
 
 scripts/run_real_journeys.sh runs it in the seed container after the other incident journeys,
-with the API's ALERT_INTAKE_GRAFANA_SECRET and its operator demo-human. Each delivery has the
-shape Grafana Alerting's webhook contact point sends, timed relative to now. Ways intake can fail,
-each checked below:
+with the API's ALERT_INTAKE_GRAFANA_SECRET, its operator demo-human, and TELEGRAM_LINK_CODE from a
+Telegram gateway pointed at the fake Bot API. Each delivery has the shape Grafana Alerting's
+webhook contact point sends, timed relative to now. Ways intake can fail, each checked below:
 1. a delivery without the right secret is accepted, reads the body, or leaves more than one audit
    event and no other trace;
-2. a firing alert opens no incident, or its investigation is never dispatched;
+2. a firing alert opens no incident, or its investigation is never dispatched, starts as a person
+   instead of the system that declared it, or never reaches the linked chat; no person sends a
+   request before that check;
 3. the same delivery again opens a second incident or a second episode;
 4. a second alert of a service with an open incident opens another incident, also after the
    first episode resolved (a flapping rule paying for a second investigation);
@@ -35,6 +37,8 @@ INTAKE = f"{API}/v1/alert-intake/grafana"
 SECRET = os.environ["ALERT_INTAKE_GRAFANA_SECRET"]
 DATABASE = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
 OUT = os.environ.get("ARTIFACT_DIR", "/artifacts")
+FAKE_TELEGRAM = os.environ.get("FAKE_TELEGRAM_URL", "http://fake-telegram:8081")
+CHAT = 222  # The operator's chat in the fake Bot API.
 RUN = uuid4().hex[:8]  # Fresh services per run, so a rerun on the same database starts clean.
 # Relative to now: GET /v1/alerts keeps an episode resolved only within the last day.
 NOW = datetime.now(UTC).replace(microsecond=0)
@@ -116,8 +120,82 @@ def dispatched(run_id: str) -> bool:
     return False
 
 
+def wait(probe, seconds: float = 60) -> object:
+    until = time.monotonic() + seconds
+    while time.monotonic() < until:
+        if value := probe():
+            return value
+        time.sleep(0.5)
+    return None
+
+
+def link_chat(code: str) -> bool:
+    """The operator links their chat as in Telegram: /start with the gateway's one-time code."""
+    message = {"chat_id": CHAT, "text": f"/start {code}"}
+    http("POST", f"{FAKE_TELEGRAM}/_test/messages", json.dumps(message).encode())
+    return bool(wait(lambda: sql("SELECT 1 FROM incident.chat_links WHERE chat_id = %s", CHAT)))
+
+
+def automatic(episode_id: str, incident: str, run: str, delivered_at: datetime) -> None:
+    """No person acts: the investigation starts as Grafana and the linked chat hears of it."""
+    decisions = sql(
+        "SELECT document->>'transition_id', document->>'actor',"
+        " document->'actor_reference'->>'principal_id', run_id"
+        " FROM incident.decisions WHERE incident_id = %s ORDER BY decided_at",
+        incident,
+    )
+    started = [row[1:3] for row in decisions if row[0] == "start_investigation" and row[3] == run]
+    [origin] = sql(
+        "SELECT decision_origin, responsible_system FROM alert_triage WHERE alert_id = %s",
+        episode_id,
+    )
+    ack = wait(
+        lambda: sql(
+            "SELECT created_at, sent_at FROM incident.chat_outbox WHERE chat_id = %s"
+            " AND dedup_key = %s AND sent_at IS NOT NULL",
+            CHAT,
+            f"investigation_ack:{run}",
+        )
+    )
+    texts = [
+        m["text"]
+        for m in http("GET", f"{FAKE_TELEGRAM}/_test/sent")[1]
+        if run in m["text"] and m["text"].startswith("Investigando")
+    ]
+    [(run_at,)] = sql("SELECT created_at FROM incident.runs WHERE run_id = %s", run)
+    [(intent_at,)] = sql(
+        "SELECT occurred_at FROM incident.run_events WHERE run_id = %s"
+        " AND kind = 'dispatch_receipt' AND payload->'dispatch_receipt'->>'phase' = 'intent'",
+        run,
+    )
+    queued_at, sent_at = ack[0] if ack else (None, None)
+
+    def after(moment: datetime | None) -> float | None:
+        return None if moment is None else round((moment - delivered_at).total_seconds(), 3)
+
+    check(
+        "the automatic investigation starts as grafana and the linked chat gets its acknowledgment",
+        started == [("system", "grafana")]
+        and origin == ("external_automatic", "grafana")
+        and sent_at is not None
+        and len(texts) == 1,
+        investigation_start=started,
+        triage_decision=dict(zip(("decision_origin", "responsible_system"), origin, strict=True)),
+        decisions=[row[:3] for row in decisions],
+        acknowledgment=texts,
+        seconds_after_delivery={
+            "run_started": after(run_at),
+            "dispatch_intent": after(intent_at),
+            "ack_queued": after(queued_at),
+            "ack_sent_to_fake_bot_api": after(sent_at),
+        },
+    )
+
+
 def main() -> None:
     a, b, c, d = (f"{name}-{RUN}" for name in ("cart", "payment", "ad", "email"))
+    linked = link_chat(os.environ["TELEGRAM_LINK_CODE"])
+    check("the operator's chat is linked through the fake Bot API", linked, chat=CHAT)
 
     before = (audits(), incidents())
     status, body = deliver(alert(a, "firing", ago(60)), key="not-the-secret")
@@ -135,6 +213,7 @@ def main() -> None:
         code=body["error"]["code"],
     )
 
+    delivered_at = datetime.now(UTC)
     status, body = deliver(alert(a, "firing", ago(60)))
     [(first, state, count, incident, run)] = episode(a)
     check(
@@ -144,6 +223,7 @@ def main() -> None:
         incident=incident,
         run=run,
     )
+    automatic(first, incident, run, delivered_at)
 
     total = incidents()
     status, _ = deliver(alert(a, "firing", ago(60)))
@@ -224,8 +304,10 @@ def main() -> None:
 
     passed = all(item["pass"] for item in checks)
     os.makedirs(OUT, exist_ok=True)
+    # One check per line, so the artifact reads (and diffs) check by check.
+    lines = ",\n".join("  " + json.dumps(item, default=str, ensure_ascii=False) for item in checks)
     with open(f"{OUT}/alert-intake-journey.json", "w") as stream:
-        json.dump({"run": RUN, "pass": passed, "checks": checks}, stream, indent=2, default=str)
+        stream.write(f'{{"run": "{RUN}", "pass": {json.dumps(passed)}, "checks": [\n{lines}\n]}}\n')
     print("PASS" if passed else "FAIL", flush=True)
     sys.exit(0 if passed else 1)
 
