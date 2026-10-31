@@ -17,9 +17,12 @@ import { Kbd } from "@/components/ui/kbd";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNow } from "@/hooks/use-now";
+import { declareAlert } from "@/lib/api";
 import { formatDayTime } from "@/lib/format";
+import { useLive } from "@/lib/live";
 import { useStore } from "@/lib/store";
-import type { Alert, Severity } from "@/lib/types";
+import { markTriaged, TRIAGE_FAILURE, useTriageSubmission } from "@/lib/triage";
+import type { Alert, LiveAlert, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SEVERITIES, SEVERITY, TONE_CLASSES } from "@/lib/vocabulary";
 
@@ -58,16 +61,37 @@ export function DeclareDialog({ alert, onOpenChange }: { alert: Alert | null; on
   const now = useNow();
   const [severity, setSeverity] = useState<Severity>("sev1");
   const [impact, setImpact] = useState("");
+  // The alert as the dialog opened on it: the 15 s poll may drop it while the operator writes.
+  const [snapshot, setSnapshot] = useState<LiveAlert | undefined>();
+  const live = useTriageSubmission(alert?.live ? alert.id : undefined, alert !== null);
+  const { pending, failure } = live;
 
   useEffect(() => {
     if (!alert) return;
     setSeverity(alert.severity);
     setImpact(alert.suggestedImpact);
+    setSnapshot(useLive.getState().alerts.find((item) => item.alert_id === alert.id));
   }, [alert]);
+
+  async function submitLive(source: Alert) {
+    if (!impact.trim()) return live.fail("Cuenta qué notan tus clientes para declarar el incidente.");
+    if (!snapshot) return live.fail(TRIAGE_FAILURE.declare.transient);
+    const input = { severity, impact: impact.trim() };
+    const result = await live.send(JSON.stringify(input), (token, attempt) => declareAlert(token, snapshot, input, attempt));
+    if (result.kind !== "ok") return live.fail(TRIAGE_FAILURE.declare[result.kind]);
+    markTriaged(source.id, "declared", result.incidentId);
+    onOpenChange(false);
+    toast.success("Incidente declarado", { description: source.title });
+    navigate(`/incidentes/${result.incidentId}`);
+  }
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (!alert) return;
+    if (!alert || pending) return;
+    if (alert.live) {
+      void submitLive(alert);
+      return;
+    }
     const id = declare(alert.id, { severity, impact });
     onOpenChange(false);
     if (id) {
@@ -118,16 +142,22 @@ export function DeclareDialog({ alert, onOpenChange }: { alert: Alert | null; on
 
               <div className="flex items-center gap-3 rounded-lg bg-secondary px-3 py-2.5 text-sm">
                 <AgentAvatar />
-                <span>Al declararlo, el agente empieza a investigar de inmediato.</span>
+                <span>Al declararlo, el agente empieza a investigar si tu credencial puede iniciar investigaciones.</span>
               </div>
+
+              {failure && (
+                <p role="alert" className="rounded-lg border border-critical-line bg-critical-soft px-3 py-2.5 text-sm text-critical">
+                  {failure}
+                </p>
+              )}
             </div>
 
             <DialogFooter className="border-t p-4">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" autoFocus>
-                <SirenIcon /> Declarar e investigar
+              <Button type="submit" autoFocus disabled={pending}>
+                <SirenIcon /> {pending ? "Declarando…" : "Declarar e investigar"}
                 <Kbd className="ml-1 hidden bg-white/15 text-current sm:inline-flex">Ctrl ⏎</Kbd>
               </Button>
             </DialogFooter>
