@@ -30,9 +30,9 @@ async function send(api: APIRequestContext, path: string, data: unknown, expecte
   return response.json();
 }
 
-/** Declares an incident from an alert of checkout, as the operator does from the inbox. */
-async function declare(summary: string): Promise<string> {
-  const demo = await client(process.env.DEMO_HUMAN_API_KEY!);
+/** Declares an incident from an alert of checkout; with run.start the server starts its investigation (#704). */
+async function declare(summary: string, key = process.env.DEMO_HUMAN_API_KEY!): Promise<string> {
+  const demo = await client(key);
   const alert = `alt-e2e708-${STAMP}-${randomBytes(3).toString("hex")}`;
   const context = { service: "checkout", severity: "sev2", source: "e2e-708", summary, observed_at: new Date().toISOString() };
   const declared = await send(demo, `/alerts/${alert}/triage/commands`, {
@@ -83,12 +83,21 @@ test.describe("investigación en vivo contra la API real", () => {
       version: "1.5.0", author: "ana", occurred_at: new Date(Date.now() - 5 * 60_000).toISOString(),
     };
     await send(await client(key), "/changes", deploy, 201);
+    // A declarant who may declare but not start runs: the incident waits for a person (#704).
+    const declarer = `declarer-no-run-${STAMP}`;
+    await send(admin, "/principals", { principal_id: declarer, kind: "human", display_name: "Declarer" }, 201);
+    const declarerKey = (await send(admin, `/principals/${declarer}/credentials`, {}, 201)).key;
+    for (const [index, action] of ["alert.read", "incident.declare"].entries()) {
+      await send(admin, "/grants", { grant_id: `grant-${declarer}-${index}`, principal_id: declarer, action, resource: workflow, effect: "allow" }, 201);
+    }
 
-    const incident = await declare("checkout no puede cobrar a payment");
+    const incident = await declare("checkout no puede cobrar a payment", declarerKey);
     record.investigated = incident;
     await open(page, incident);
     await expect(page.getByRole("heading", { level: 2, name: "Sin investigar" })).toBeVisible();
     const story = page.getByRole("complementary", { name: "Historia del incidente" });
+    await expect(story.getByText("La investigación no empezó")).toBeVisible();
+    await expect(story.getByText(/^Causa: quien declaró el incidente no tiene permiso para iniciar investigaciones/)).toBeVisible();
     // A rerun on the same database also lists the deploys of earlier runs.
     await expect(story.getByText("Despliegue de checkout 1.5.0").first()).toBeVisible();
 
@@ -99,12 +108,16 @@ test.describe("investigación en vivo contra la API real", () => {
 
     await expect(page.getByRole("heading", { level: 2, name: "Esperando tu decisión" })).toBeVisible({ timeout: 90_000 });
     await expect(page.getByText("El despliegue de checkout 1.5.0 rompió los cobros contra payment.").first()).toBeVisible();
+    const runs = (await (await (await client(process.env.DEMO_HUMAN_API_KEY!)).get(`${API}/incidents/${incident}`)).json()).runs;
+    await expect(page.getByRole("link", { name: "Abrir en Decisiones" })).toHaveAttribute(
+      "href",
+      `/?view=decisions&incident_id=${incident}&run_id=${runs.at(-1).run_id}`,
+    );
     for (const text of ["Consultó las métricas", "Consultó los logs", "Revisó los cambios recientes de checkout", "Propuso una hipótesis", "Propuso una mitigación", "Terminó de investigar"]) {
       await expect(story.getByText(text, { exact: true })).toBeVisible();
     }
     // Each cited evidence shows the verdict and the finding the investigator recorded (#707),
-    // and none when the API records no verdict.
-    const runs = (await (await (await client(process.env.DEMO_HUMAN_API_KEY!)).get(`${API}/incidents/${incident}`)).json()).runs;
+    // and none when the API records no verdict (#830 is not merged yet, so the API records none).
     const context = await (await client(process.env.DEMO_HUMAN_API_KEY!)).get(`${API}/incidents/${incident}/runs/${runs.at(-1).run_id}/context`);
     const judged = (await context.json()).reasoning.evidence.filter((item: { verdict?: string }) => item.verdict).length;
     record.evidenceWithVerdict = judged;
@@ -117,14 +130,15 @@ test.describe("investigación en vivo contra la API real", () => {
     record.investigatedRuns = await runCount(incident);
   });
 
-  test("un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {
+  test("la investigación empieza sola, un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {
+    // The declarant may start runs, so the server starts the investigation on declare (#704).
     const incident = await declare("checkout no puede cobrar a payment [e2e:falla]");
     record.retried = incident;
     await open(page, incident);
-    await page.getByRole("button", { name: "Investigar" }).click();
 
-    const stopped = page.getByRole("heading", { level: 2, name: "Detenido: El modelo respondió en un formato no válido" });
+    const stopped = page.getByRole("heading", { level: 2, name: "Detenido: el modelo respondió en un formato no válido" });
     await expect(stopped).toBeVisible({ timeout: 90_000 });
+    await expect(page.getByRole("button", { name: "Investigar", exact: true })).toHaveCount(0);
     const story = page.getByRole("complementary", { name: "Historia del incidente" });
     await expect(story.getByText("La investigación se detuvo")).toBeVisible();
     await expect(story.getByText("Causa: el modelo respondió en un formato no válido.")).toBeVisible();
@@ -142,6 +156,7 @@ test.describe("investigación en vivo contra la API real", () => {
     await expect(page.getByRole("heading", { level: 2, name: "Esperando tu decisión" })).toBeVisible({ timeout: 90_000 });
     await expect(story.getByText("La investigación se detuvo")).toBeVisible();
     await expect(story.getByText("Terminó de investigar")).toBeVisible();
+    await expect(story.getByText("Reintentaste la investigación")).toBeVisible();
     await page.screenshot({ path: `${DIR}/4-reintento.png`, fullPage: true });
     record.retriedRuns = { beforeRetry: before, afterRetry: await runCount(incident) };
   });

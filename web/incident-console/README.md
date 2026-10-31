@@ -36,17 +36,20 @@ to the API in its own follow-up PR, using the map below.
   (`…/runs/{run}`, `…/runs/{run}/events`, only what is new since the last cursor), the recorded
   reasoning (`…/runs/{run}/context`, needs `run.read_context`) and the service's recent changes
   (`GET /v1/changes?service=`, needs `change.read`), with the session's key. It asks every 2.5 s
-  while the agent investigates and every 15 s otherwise.
-- **Agent status.** «Sin investigar» (with **Investigar**), «Investigando…» with a timer,
-  «Esperando tu decisión» with the hypothesis and the proposed mitigation, or «Detenido: causa» in
-  Spanish (#705) with **Reintentar investigación**. Only a person retries; the same request key
-  replays the same run.
+  while the agent investigates and every 15 s otherwise, re-reads the reasoning only when the
+  events change, and stops asking while the tab is hidden.
+- **Agent status.** Declaring starts the investigation on the server (#704); «Sin investigar»
+  (with **Investigar**) shows only when it did not start. «Investigando…» with a timer,
+  «Esperando tu decisión» with the hypothesis, the proposed mitigation and a link to the previous
+  console's Decisions view, or «Detenido: causa» in Spanish (#705) with **Reintentar
+  investigación**. Only a person retries; the same request key replays the same run.
 - **Story.** One column, oldest first: run events in Spanish, each evidence with its verdict and
   finding when the investigator records them (#707), a recalled closed incident as a link
   «Recuerdo de incidente cerrado» (#773), the hypothesis, the mitigation and the service's
   deploys, rollbacks and CI results (#770). Ids stay in «Detalles técnicos».
 - **Still simulated.** Deciding on the mitigation (#709, #710) and the postmortem (#711) exist only
-  in mock mode.
+  in mock mode. Live mode hides the simulator's incidents from «Incidentes» and Ctrl K and its
+  agent card from the sidebar until the API lists incidents.
 - **Journeys.** `scripts/run_console_journeys.sh` runs `e2e/live-investigation.spec.ts` against
   the composed stack with a scripted model (`compose.console-e2e.yaml`); CI runs it in
   `real-journeys`. Screenshots land in `e2e/artifacts/live-investigation/`.
