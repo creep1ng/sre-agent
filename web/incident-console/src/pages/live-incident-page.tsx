@@ -3,9 +3,10 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
+import { HypothesisProse } from "@/features/incident/live/hypothesis";
 import { Prose } from "@/features/incident/live/say";
 import { PHASES, agentStatus, phaseOf, type AgentStatus } from "@/features/incident/live/status";
-import { buildStory, code } from "@/features/incident/live/story";
+import { buildStory, claimsOf, code } from "@/features/incident/live/story";
 import { Timeline } from "@/features/incident/live/timeline";
 import { useT } from "@/i18n";
 import { useLiveIncident, type IncidentPhase, type LiveIncident } from "@/lib/live-incident";
@@ -84,6 +85,7 @@ export function LiveIncidentPage() {
   const { detail } = live;
   const status = agentStatus(live);
   const story = buildStory(live);
+  const hypothesis = typeof live.reasoning === "object" ? live.reasoning?.hypotheses.at(-1) : undefined;
   const waiting = status.kind === "waiting";
   return (
     <article className="mx-auto w-full max-w-4xl min-w-0 px-4 py-8 sm:px-8 lg:px-14 lg:py-12">
@@ -99,6 +101,7 @@ export function LiveIncidentPage() {
       <Phases state={detail.state} waiting={waiting} />
       <Start live={live} status={status} />
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
+      {hypothesis && <HypothesisProse hypothesis={hypothesis} claims={claimsOf(live, story)} />}
       <Timeline story={story} status={status} />
       <details className="border-t pt-4 text-sm text-[var(--dim)]">
         <summary className="cursor-pointer">{t("technical")}</summary>
