@@ -1,3 +1,20 @@
+# / and /index.html without a view= serve the Midnight landing, whose «Abrir la consola» opens
+# /app/ (#870). The previous console keeps every address that names a view, except the
+# operations views /app already replaces (alerts, triage, war room), which redirect there.
+# Decisions, postmortem and governance keep their page until they move. LEGACY_CONSOLE=keep
+# serves the previous console at every old address, / included; the old console's suites run so.
+map "${LEGACY_CONSOLE}:$arg_view:$arg_incident_id" $console_redirect {
+    default "";
+    "~^redirect:(alerts|triage):" /app/;
+    "~^redirect:war-room:(?<war_room_incident>[A-Za-z0-9_.-]+)$" /app/incidentes/$war_room_incident;
+    "~^redirect:war-room:" /app/incidentes;
+}
+
+map "${LEGACY_CONSOLE}:$arg_view" $front_page {
+    default /index.html;
+    "redirect:" /landing/index.html;
+}
+
 server {
     listen 80;
     server_name _;
@@ -15,6 +32,12 @@ server {
         default_type application/json;
         add_header Cache-Control "no-store" always;
         return 200 '{"output_language":"${INVESTIGATOR_OUTPUT_LANGUAGE}"}';
+    }
+
+    # The landing's text/markdown alternate for agents (#870).
+    location = /llms.txt {
+        types { }
+        default_type "text/markdown; charset=utf-8";
     }
 
     location /api/ {
@@ -54,6 +77,15 @@ server {
         proxy_set_header Host $host;
         proxy_set_header Cookie "";
         add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'" always;
+    }
+
+    location ~ ^/(index\.html)?$ {
+        absolute_redirect off;
+        if ($console_redirect) {
+            return 302 $console_redirect;
+        }
+        add_header Content-Security-Policy "default-src 'self'; connect-src 'self'; object-src 'none'" always;
+        try_files $front_page =404;
     }
 
     location / {

@@ -105,6 +105,12 @@ docker compose -f compose.yaml -f compose.e2e.yaml --project-name issue183-demo 
 Use a unique project name and only remove that project. The local `.env` remains
 untracked and synthetic; do not print, commit, attach or reuse credentials.
 
+`compose.e2e.yaml` and `compose.triage23.yaml` set `LEGACY_CONSOLE=keep`, so these
+suites still open the previous console at `/` and its alerts, triage and war room.
+Production serves the Midnight landing at `/` and redirects those views to `/app`
+(#870); `compose-smoke` checks that routing, and
+`web/incident-console/e2e/landing.spec.ts` covers it in a browser on `compose.yaml` alone.
+
 ### Real-stack journeys
 
 The journeys below self-skip without their seeds, so a plain Playwright run never

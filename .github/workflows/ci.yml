@@ -222,6 +222,11 @@ jobs:
           curl --fail --silent http://127.0.0.1:8000/health/live
           curl --fail --silent http://127.0.0.1:8000/health/ready
           curl --fail --silent http://127.0.0.1:8080/health
+          # / is the landing; the views /app replaces redirect there (#870).
+          curl --fail --silent http://127.0.0.1:8080/ | grep -q 'src="/landing/landing.js"'
+          curl --fail --silent 'http://127.0.0.1:8080/?ref=smoke' | grep -q 'src="/landing/landing.js"'
+          curl --fail --silent --output /dev/null http://127.0.0.1:8080/llms.txt
+          test "$(curl --silent --output /dev/null --write-out '%{http_code} %{redirect_url}' 'http://127.0.0.1:8080/?view=alerts')" = "302 http://127.0.0.1:8080/app/"
           docker compose --project-name ci-smoke-${{ github.run_id }} --profile harness run --rm harness
           docker compose --project-name ci-smoke-${{ github.run_id }} --profile issue-14 run --build --rm issue-14-harness
       - name: Collect sanitised service state
