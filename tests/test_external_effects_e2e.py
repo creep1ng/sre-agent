@@ -222,6 +222,11 @@ def test_external_effect_recovery(mode: str) -> None:
                 applications.append(application)
                 restarted_url = f"http://127.0.0.1:{restarted_port}"
                 wait_for(lambda: ready(f"{restarted_url}/health/ready", application), "restart")
+                if mode in CRASHES:
+                    # Since #704 the restarted API ends a dispatch it lost, before any replay.
+                    state_before = _receipts(_database_rows(incident, run_id)[1])
+                    assert [r["status"] for r in state_before] == ["pending", "unknown"]
+                    assert state_before[-1]["reason_code"] == "producer_interrupted"
                 before_reads = witness.get("/observations").json()
                 with httpx.Client(base_url=restarted_url, timeout=15) as client:
                     headers = {"Authorization": f"Bearer {HUMAN_KEY}"}
