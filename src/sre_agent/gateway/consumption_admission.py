@@ -6,6 +6,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from sre_agent.gateway.consumption_affordability import (
     AffordabilityDenied,
@@ -48,6 +49,7 @@ class ConsumptionAdmissionService:
         catalog: object,
         now: datetime,
         request_id: UUID | None = None,
+        input_tokens: int | None = None,
     ) -> AdmissionResult:
         if now.tzinfo is None or now.utcoffset() is None:
             return AdmissionResult(False, None, 0, None, "consumption_bounds_unavailable", False)
@@ -126,6 +128,7 @@ class ConsumptionAdmissionService:
                     incident_tokens_remaining=incident_remaining,
                     monthly_usd_remaining=monthly_remaining,
                     now=check_at,
+                    input_tokens=input_tokens,
                 )
             except AffordabilityDenied:
                 return AdmissionResult(
@@ -145,18 +148,25 @@ class ConsumptionAdmissionService:
             # Share the server-generated request identity with audit, without
             # adding a second correlation field or changing historical rows.
             reservation_id = str(request_id) if request_id is not None else uuid4().hex
-            await ConsumptionReservationRepository(session).create(
-                reservation_id,
-                incident_id=incident_id,
-                period_start=period,
-                policy_version=int(version),
-                model=model,
-                provider=provider,
-                token_exposure=token_exposure if incident_limit is not None else None,
-                usd_exposure=usd_exposure if monthly_limit is not None else None,
-                created_at=now,
-            )
-            await session.commit()
+            try:
+                await ConsumptionReservationRepository(session).create(
+                    reservation_id,
+                    incident_id=incident_id,
+                    period_start=period,
+                    policy_version=int(version),
+                    model=model,
+                    provider=provider,
+                    token_exposure=token_exposure if incident_limit is not None else None,
+                    usd_exposure=usd_exposure if monthly_limit is not None else None,
+                    created_at=now,
+                )
+                await session.commit()
+            except IntegrityError as error:
+                # The caller names the incident; an unknown one cannot hold a reservation.
+                constraint = getattr(getattr(error.orig, "diag", None), "constraint_name", None)
+                if constraint != "fk_consumption_reservation_incident":
+                    raise
+                return AdmissionResult(False, None, int(version), None, "resource_not_found", False)
             return AdmissionResult(
                 True,
                 envelope.max_output_tokens,

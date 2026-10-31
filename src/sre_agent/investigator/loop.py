@@ -16,6 +16,7 @@ from typing import TypeVar
 from uuid import UUID
 
 from sre_agent.investigator.contract import (
+    UNMEASURED,
     CollectedEvidence,
     FailureDiagnostic,
     InvalidOutput,
@@ -25,6 +26,7 @@ from sre_agent.investigator.contract import (
     Outcome,
     OutputLanguage,
     PinnedSkill,
+    ProposeHypothesis,
     ProposeMitigation,
     RequestHuman,
     SearchBoK,
@@ -35,6 +37,7 @@ from sre_agent.investigator.contract import (
     UseTool,
     parse_action,
     task_id_for,
+    unfounded_citations,
     unknown_references,
 )
 from sre_agent.investigator.ports import (
@@ -123,6 +126,23 @@ def _bok_failure(error: GatewayError, collection: str) -> tuple[Status, str]:
         reason = error.code or error.status or "network"
         return "upstream_unavailable", f"bok search failed: {collection} ({reason})"
     return "needs_human", f"bok answer rejected: {collection}"
+
+
+# Findings the harness writes itself, in the run's language (#707).
+EMPTY = {"es": "La consulta no devolvió datos.", "en": "The query returned no data."}
+UNJUDGED = {"es": "El modelo no dio un veredicto válido.", "en": "The model gave no valid verdict."}
+
+
+def _judged(
+    item: CollectedEvidence, hypothesis: ProposeHypothesis, language: OutputLanguage
+) -> CollectedEvidence:
+    """The verdict the hypothesis gives this evidence; one already measured (empty) stays."""
+    if item.verdict is not None:
+        return item
+    given = hypothesis.verdicts.get(item.evidence_id)
+    if given is None:
+        return item.model_copy(update={"verdict": "inconclusive", "finding": UNJUDGED[language]})
+    return item.model_copy(update={"verdict": given.verdict, "finding": given.finding})
 
 
 def _pinned(skill: ResolvedSkill) -> PinnedSkill:
@@ -284,6 +304,10 @@ async def investigate(
             unknown = unknown_references(action, request, {item.evidence_id for item in evidence})
             if unknown:
                 raise InvalidOutput("unknown references: " + ", ".join(unknown))
+            if unfounded := unfounded_citations(action, request, evidence):
+                # Empty or BoK evidence alone never supports a hypothesis: the model is told why.
+                cited = ", ".join(unfounded)
+                raise InvalidOutput(f"{UNMEASURED} ({cited}: empty or bok); cite a query with data")
             if isinstance(action, ProposeMitigation) and not request.context.hypotheses:
                 # The runtime proposes a mitigation only for a recorded, cited hypothesis.
                 raise InvalidOutput("propose a cited hypothesis before a mitigation")
@@ -332,6 +356,8 @@ async def investigate(
             turns.append(turn)
             if isinstance(action, RequestHuman):
                 return finish("needs_human", outcome=action)
+            if isinstance(action, ProposeHypothesis):
+                evidence[:] = [_judged(item, action, language) for item in evidence]
             return finish("completed", outcome=action)
         if not request.authorizes_tool(action.tool):
             turns.append(turn)
@@ -379,6 +405,8 @@ async def investigate(
                     http_status=error.status,
                     request_id=error.request_id,
                 )
+            elif isinstance(error, TimeoutError):
+                failure_diagnostic = FailureDiagnostic(stage="tool_timeout", kind="transient")
             elif (
                 isinstance(error, EvidenceUnavailable)
                 and error.kind == "rejected"
@@ -409,6 +437,9 @@ async def investigate(
                 summary=result.summary[:8000],
                 collected_at=clock(),
                 request_id=result.request_id,
+                empty=result.empty,
+                verdict="inconclusive" if result.empty else None,
+                finding=EMPTY[language] if result.empty else None,
             )
         )
         invocation = ToolInvocation(

@@ -1,0 +1,29 @@
+# Issue #719 E2E, layered on compose.consumption-e2e.yaml: the real API and investigator, with
+# scripts/fake_openrouter.py (#809) as OpenRouter and Grafana MCP. CI runs it from
+# scripts/run_real_journeys.sh incidents; the #719 PR lists the commands to run it alone.
+services:
+  api:
+    environment:
+      OPENROUTER_ALLOW_INSECURE_BASE_URL: "1"
+      OPENROUTER_TIMEOUT_SECONDS: "8"
+      INVESTIGATOR_TOOL_TIMEOUT_SECONDS: "2"
+
+  fake-openrouter:
+    environment: {LATE_SECONDS: "6", SLOW_SECONDS: "10", MCP_DELAY_SECONDS: "5"}
+
+  provider-retry-e2e:
+    profiles: ["provider-retry-e2e"]
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/provider_retry_e2e.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      API_URL: http://api:8000
+      FAKE_OPENROUTER_URL: http://fake-openrouter:8080
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      INCIDENT_HARNESS_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
+    volumes: ["./scripts/provider_retry_e2e.py:/e2e/provider_retry_e2e.py:ro"]
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [runtime]

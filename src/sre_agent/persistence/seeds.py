@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from os import environ
 
-from sqlalchemy import insert, text, update
+from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_object_session
 from sqlalchemy.orm import defer
 
 from sre_agent.bok.owner import seed_bok_demo
@@ -187,6 +187,21 @@ def _require(
     for field, value in zip(fields, values, strict=True):
         if getattr(row, field) != value:
             raise SeedConflict(f"seed_state_conflict: {entity}.{field}")
+
+
+async def _require_grant(
+    row: GrantRow, fields: tuple[str, ...] | list[str], values: tuple[object, ...], entity: str
+) -> None:
+    """A revoked seed grant is an operator decision: report it as drift, never fail on it."""
+    kept = [
+        (field, value) for field, value in zip(fields, values, strict=True) if field != "status"
+    ]
+    _require(row, [field for field, _ in kept], tuple(value for _, value in kept), entity)
+    # Granted again under another grant_id, the authority is back: no drift to report.
+    key = ("principal_id", "action", "resource_type", "resource_id")
+    active = select(GrantRow).filter_by(status="active", **{k: getattr(row, k) for k in key})
+    if row.status == "revoked" and await async_object_session(row).scalar(active) is None:
+        print(f"seed drift: grant {row.grant_id} is revoked; left revoked")
 
 
 def _grant_id(alias: str) -> str:
@@ -512,7 +527,7 @@ async def _seed_session(
             tuple(resource_values),
             "resources",
         )
-        _require(
+        await _require_grant(
             grants_by_resource[route.alias],
             "principal_id action resource_type resource_id effect status created_at".split(),
             ("incident-harness", "invoke", "llm_model", route.alias, "allow", "active", SEED_TIME),
@@ -528,7 +543,7 @@ async def _seed_session(
         )
     by_grant = {row.grant_id: row for row in admin_grants}
     for grant_id, principal_id, action in ADMIN_GRANTS:
-        _require(
+        await _require_grant(
             by_grant[grant_id],
             "principal_id action resource_type effect status created_at".split(),
             (principal_id, action, "administrative_control", "allow", "active", SEED_TIME),
@@ -643,7 +658,7 @@ async def bootstrap_mcp_demo(session: AsyncSession) -> bool:
             session.add(GrantRow(**expected))
             created = True
         else:
-            _require(
+            await _require_grant(
                 existing_grant,
                 tuple(expected),
                 tuple(expected.values()),
