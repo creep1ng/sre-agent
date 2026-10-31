@@ -6,7 +6,8 @@
 # Links a chat with a one-time code, rejects a used and an expired code and a group chat,
 # measures the time from dispatch to acknowledgment, then stops the gateway, dispatches again,
 # fails the first send and restarts the gateway twice: each pending message must arrive once.
-# Finally it unlinks the chat and dispatches a third time: nothing may reach it. Writes
+# Then it proposes five mitigations: each must reach the chat as one decision message with
+# buttons. Finally it unlinks the chat and dispatches a third time: nothing may reach it. Writes
 # telegram-e2e.json, transcript.png, summary.txt and migrate.log, and always removes the project
 # (`down -v --remove-orphans`) on exit. Uses the repository's .env or, when there is none,
 # .env.example with synthetic keys for this run only.
@@ -67,7 +68,9 @@ phase pending "inc-37-start-tgb$STAMP"
 phase delivered after_first_restart
 "${COMPOSE[@]}" restart telegram-gateway
 phase delivered after_second_restart
+phase proposals "$STAMP" "$(link --principal demo-human)"
 chat links > "$ARTIFACTS/links-before.txt"
+chat unlink 777 > /dev/null
 chat unlink 222 > "$ARTIFACTS/unlink.txt"
 chat links > "$ARTIFACTS/links-after.txt"
 phase unlinked "inc-37-start-tgc$STAMP"

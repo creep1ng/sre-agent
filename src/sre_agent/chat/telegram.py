@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from sre_agent.chat.outbox import ChatStore, DeliveryError
+from sre_agent.chat.outbox import ChatStore, DeliveryError, Keyboard
 from sre_agent.persistence.database import Database
 
 logger = logging.getLogger("sre_agent.chat.telegram")
@@ -52,8 +52,9 @@ class BotApi:
             )
         return body["result"]
 
-    async def send(self, chat_id: int, message: str) -> None:
-        await self.call("sendMessage", chat_id=chat_id, text=message)
+    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> None:
+        markup = {"reply_markup": {"inline_keyboard": keyboard}} if keyboard else {}
+        await self.call("sendMessage", chat_id=chat_id, text=message, **markup)
 
 
 async def _poll(bot: BotApi, store: ChatStore, poll_seconds: int) -> None:

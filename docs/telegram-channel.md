@@ -2,8 +2,9 @@
 
 The operator links a Telegram chat once and then receives, in that chat, an acknowledgment when
 an investigation is dispatched and its conclusion when it ends (issue #766). The gateway uses
-long polling, so it needs no public URL and works behind NAT. Webhook mode, other channels and
-decision buttons (#767) are out of scope.
+long polling, so it needs no public URL and works behind NAT. When a run waits for a human
+decision on a proposed mitigation, the chat also gets one decision message with «Aprobar» and
+«Rechazar» buttons (#767). Webhook mode and other channels are out of scope.
 
 ## Set up
 
@@ -64,12 +65,28 @@ link only a chat you would trust with that content.
   the current send finish, but a send that times out or a gateway killed before its commit is
   sent again, because Telegram has no idempotency key. The dedup key makes duplicates rare.
 
+## Decision messages
+
+- The deferred constraint trigger `run_events_chat_decision` queues one `mitigation_decision`
+  message per linked chat when a `propose_mitigation` transition commits, after the dispatch
+  conclusion of the same transaction. Its payload binds the incident, the run, the proposal
+  (`mitigation_id`), when it was proposed, the incident version the human reviews, the link the
+  message went to and a random 32-hex token.
+- The message names the incident, the service, the cause (the hypothesis the proposal is based
+  on), the suspect change (the service's last deploy within 24 h before the alert), the proposal
+  in plain language, its risk and, as a detail, the catalog operation when the proposal has one.
+  It is the only message that carries the amber marker 🟠, and only while it waits.
+- The callback data is `a:` or `r:` and the token: no incident or run id. A chat linked before
+  #767 has no principal, so it gets the message without buttons and a hint to link again.
+- Once the proposal is decided, the message says who decided it (the principal's display name),
+  from where and when, without buttons and without the marker.
+
 ## Extending
 
 Other producers call `sre_agent.chat.outbox.enqueue(session, chat_id=..., kind=...,
 dedup_key=...)` inside their own transaction. A new message kind is one renderer in `RENDERERS`;
-the text is rendered when the message is sent. Approval buttons (#767) and the interruption
-budget (#771, digest versus interrupt) build on this table.
+the text is rendered when the message is sent, and a renderer may return an inline keyboard with
+it. The interruption budget (#771, digest versus interrupt) builds on this table.
 
 ## Verify
 

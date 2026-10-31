@@ -26,6 +26,9 @@ MAX_BACKOFF_SECONDS = 60
 MAX_TEXT = 3900
 
 logger = logging.getLogger("sre_agent.chat.outbox")
+# Telegram inline keyboard rows; a renderer returns one with its text to offer buttons.
+Keyboard = list[list[dict[str, str]]]
+Rendered = str | tuple[str, Keyboard | None]
 
 
 class DeliveryError(Exception):
@@ -157,7 +160,9 @@ class ChatStore:
             )
         return removed is not None
 
-    async def deliver_next(self, send: Callable[[int, str], Awaitable[None]]) -> bool:
+    async def deliver_next(
+        self, send: Callable[[int, str, Keyboard | None], Awaitable[None]]
+    ) -> bool:
         """Send the oldest due message of one chat; False when nothing is due.
 
         The row stays locked until the send is recorded, so two gateways never send it twice.
@@ -185,7 +190,7 @@ class ChatStore:
             if row is None:
                 return False
             try:
-                body = await RENDERERS[row["kind"]](session, row["payload"])
+                body, keyboard = _split(await RENDERERS[row["kind"]](session, row["payload"]))
             except Exception as error:
                 # A message that cannot be rendered never will be: stop retrying it.
                 failure = DeliveryError(f"render: {type(error).__name__}", final=True)
@@ -194,7 +199,7 @@ class ChatStore:
             if len(body) > MAX_TEXT:
                 body = body[:MAX_TEXT] + "… (texto completo en la consola)"
             try:
-                await send(row["chat_id"], body)
+                await send(row["chat_id"], body, keyboard)
             except DeliveryError as error:
                 await self._failed(session, row, error)
                 return True
@@ -260,7 +265,7 @@ async def _investigation_conclusion(session: AsyncSession, payload: Mapping[str,
         case "propose_hypothesis":
             detail = f"Hipótesis ({outcome['confidence']}): {outcome['statement']}"
         case "propose_mitigation":
-            detail = "Mitigación propuesta, pendiente de tu aprobación en la consola."
+            detail = "Mitigación propuesta: decide en el siguiente mensaje o en la consola."
         case "conclude":
             detail = f"Conclusión: {outcome['summary']}"
         case _:
@@ -294,6 +299,87 @@ REASONS = {
 }
 
 
+# Amber is reserved for human decisions: only the decision message carries this marker.
+DECISION_MARKER = "🟠"
+RISKS = {"low": "bajo", "medium": "medio", "high": "alto"}
+OUTCOMES = {"approve": "Aprobada", "reject": "Rechazada", "request_changes": "Devuelta"}
+RELINK = "Para decidir desde aquí, vuelve a vincular este chat a tu usuario."
+
+
+async def mitigation_decision(
+    session: AsyncSession, payload: Mapping[str, Any]
+) -> tuple[str, Keyboard | None]:
+    """The proposal and its buttons while it waits; who decided, and when, once it is decided."""
+    state = await session.scalar(
+        text("SELECT state FROM incident.incidents WHERE incident_id = :incident_id"),
+        {"incident_id": payload["incident_id"]},
+    )
+    strategy, alert = state.get("mitigation_strategy") or {}, state.get("alert") or {}
+    hypotheses = [h for h in state.get("hypotheses") or [] if isinstance(h, Mapping)]
+    basis = [h for h in hypotheses if h.get("hypothesis_id") == strategy.get("based_on_hypothesis")]
+    cause = (basis or hypotheses or [{}])[-1].get("statement")
+    lines = [f"{DECISION_MARKER} Decisión pendiente: {payload['incident_id']}"]
+    lines.append(f"Servicio: {alert.get('service', 'sin servicio')}")
+    lines += [f"Causa: {cause}"] if cause else []
+    if alert.get("service") and alert.get("observed_at"):
+        change = (
+            await session.execute(
+                text("""SELECT version, occurred_at FROM incident.change_events
+                    WHERE service = :service AND kind = 'deploy'
+                      AND occurred_at <= CAST(:observed AS timestamptz)
+                      AND occurred_at > CAST(:observed AS timestamptz) - interval '24 hours'
+                    ORDER BY occurred_at DESC LIMIT 1"""),
+                {"service": alert["service"], "observed": alert["observed_at"]},
+            )
+        ).one_or_none()
+        if change is not None:
+            when = change.occurred_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+            lines.append(f"Cambio sospechoso: despliegue {change.version or ''} ({when})")
+    lines.append(f"Propuesta: {strategy.get('description') or 'detalle en la consola'}")
+    if strategy.get("risk") in RISKS:
+        lines.append(f"Riesgo: {RISKS[strategy['risk']]}")
+    if isinstance(strategy.get("operation"), str):
+        lines.append(f"Detalle: operación del catálogo {strategy['operation']}")
+    if (
+        strategy.get("mitigation_id") == payload["mitigation_id"]
+        and strategy.get("approval_status") == "pending"
+    ):
+        if payload.get("principal_id") is None:
+            # Linked before #767: no human to decide as, so no buttons.
+            return "\n".join([*lines, RELINK]), None
+        token = payload["token"]
+        buttons = [{"text": "Aprobar", "callback_data": f"a:{token}"}]
+        buttons.append({"text": "Rechazar", "callback_data": f"r:{token}"})
+        return "\n".join(lines), [buttons]
+    # The first decision after this proposal is the one on it.
+    decided = (
+        await session.execute(
+            text("""SELECT d.document, p.display_name FROM incident.decisions d
+                LEFT JOIN principals p
+                  ON p.principal_id = d.document -> 'actor_reference' ->> 'principal_id'
+                WHERE d.run_id = :run_id AND d.decided_at >= CAST(:proposed_at AS timestamptz)
+                  AND d.document ->> 'transition_id' IN ('apply_mitigation', 'reject_mitigation')
+                ORDER BY d.decided_at LIMIT 1"""),
+            {"run_id": payload["run_id"], "proposed_at": payload["proposed_at"]},
+        )
+    ).one_or_none()
+    # Decided: the amber marker goes, since nothing waits for a human any more.
+    lines[0] = f"Decisión tomada: {payload['incident_id']}"
+    if decided is None:
+        return "\n".join([*lines, "Esta propuesta ya no está pendiente."]), None
+    decision, actor = decided.document, decided.document.get("actor_reference") or {}
+    who = decided.display_name or actor.get("principal_id")
+    where = "Telegram" if decision.get("channel") == "telegram" else "la consola"
+    when = datetime.fromisoformat(decision["decided_at"]).astimezone(UTC)
+    outcome = OUTCOMES.get(decision.get("outcome"), "Decidida")
+    lines.append(f"{outcome} por {who} desde {where}, {when:%Y-%m-%d %H:%M UTC}.")
+    return "\n".join(lines), None
+
+
+def _split(rendered: Rendered) -> tuple[str, Keyboard | None]:
+    return rendered if isinstance(rendered, tuple) else (rendered, None)
+
+
 def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitable[str]]:
     async def render(session: AsyncSession, payload: Mapping[str, Any]) -> str:
         return message
@@ -301,11 +387,12 @@ def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitabl
     return render
 
 
-RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[str]]] = {
+RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[Rendered]]] = {
+    "mitigation_decision": mitigation_decision,
     "investigation_ack": _investigation_ack,
     "investigation_conclusion": _investigation_conclusion,
     "link_confirmed": _fixed(
-        "Chat vinculado. Aquí recibirás el acuse y la conclusión de cada investigación."
+        "Chat vinculado. Aquí recibirás cada investigación y las mitigaciones que decidir."
     ),
     "link_rejected": _fixed("Este enlace no es válido, ya se usó o caducó. Pide uno nuevo."),
     "link_private_only": _fixed("Solo se vincula un chat privado con el bot. Abre el enlace ahí."),
