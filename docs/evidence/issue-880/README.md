@@ -10,11 +10,17 @@ audit rows, and the credited model and provider from `GET /v1/usage/requests`. R
 
 | Run | Model on provider | Gateway | Timeout | Calls (s) | Total | Tokens in/out | USD | Outcome |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `anthropic/claude-haiku-5.5` on `anthropic` | main | 60 | rejected first call | 3.8 s | not recorded | not recorded | `investigation_upstream_unavailable`, no turn |
-| 2 | same, one direct request (diagnostic) | bypassed | n/a | 1.9 | 1.9 s | 17/4 | 0.0000037 | 200 after OpenRouter retried inside Anthropic: attempt 1 answered 400, attempt 2 200 |
-| 3 | `anthropic/claude-haiku-5.5` on `anthropic` | this branch | 60 | 2.3, 1.6, 2.4, 6.0, 5.1, 5.7 | 24.3 s | 12 646/3 774 | 0.0031516 | success, `mitigating`: cited hypothesis and mitigation |
-| 4 | `openai/gpt-6-luna` on `openai` | this branch | 60 | 2.7 (502) | 4.5 s | 1 120/56 | 0.0001679 | `investigation_upstream_unavailable`: gateway 502 `upstream_invalid` |
-| 5 | `anthropic/claude-haiku-5.5` on `anthropic` | this branch | 30 | 2.2, 1.9, 3.9, 5.8, 8.1, 4.6 | 27.4 s | 12 646/4 460 | 0.0034946 | success: two cited hypotheses, then `request_human` |
+| 1 | Haiku 5.5 on `anthropic` | main | 60 | 1, rejected | 3.8 s | not recorded | not recorded | `upstream_unavailable`, no turn |
+| 2 | Haiku 5.5 on `anthropic`, one direct request | bypassed | n/a | 1.9 | 1.9 s | 17/4 | 0.0000037 | 200 after a 400, both Anthropic |
+| 3 | Haiku 5.5 on `anthropic` | this branch | 60 | 2.3, 1.6, 2.4, 6.0, 5.1, 5.7 | 24.3 s | 12 646/3 774 | 0.0031516 | success, `mitigating` |
+| 4 | GPT-6 Luna on `openai` | this branch | 60 | 2.7 | 4.5 s | 1 120/56 | 0.0001679 | 502 `upstream_invalid` |
+| 5 | Haiku 5.5 on `anthropic` | this branch | 30 | 2.2, 1.9, 3.9, 5.8, 8.1, 4.6 | 27.4 s | 12 646/4 460 | 0.0034946 | success, `request_human` |
+
+Models: `anthropic/claude-haiku-5.5`, `openai/gpt-6-luna`. Run 1 and 4 receipts:
+`investigation_upstream_unavailable`. Run 2 is a diagnostic request with the gateway's exact body
+outside the stack: OpenRouter's attempt 1 answered 400 and attempt 2 answered 200, both from
+Anthropic, which the gateway on main rejects (run 1). Run 3 proposed a cited hypothesis and a
+mitigation; run 5 recorded two cited hypotheses, then asked for a human.
 
 Five real runs; OpenRouter billed USD 0.0068 for runs 2 to 5. Run 1's cost is not recorded: that
 version of the script read only the turns' calls, and the stack was removed before the failed
