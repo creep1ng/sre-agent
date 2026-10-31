@@ -10,13 +10,14 @@ import { incidentStatus } from "@/lib/status";
 import { alertsOf, useStore } from "@/lib/store";
 import type { Incident } from "@/lib/types";
 
-export function IncidentsPage() {
+/** `closed` opens the history, where each closed incident keeps its postmortem. */
+export function IncidentsPage({ initialTab }: { initialTab?: "closed" }) {
   const now = useNow();
   const navigate = useNavigate();
   const incidents = useStore((s) => s.incidents);
   const alerts = useStore((s) => s.alerts);
-  const [tab, setTab] = useState<"active" | "closed">(() =>
-    incidents.some((i) => i.state !== "closed") ? "active" : "closed",
+  const [tab, setTab] = useState<"active" | "closed">(
+    () => initialTab ?? (incidents.some((i) => i.state !== "closed") ? "active" : "closed"),
   );
   const [query, setQuery] = useState("");
 

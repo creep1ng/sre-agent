@@ -92,6 +92,7 @@ export function App() {
             <Route index element={<InboxPage />} />
             <Route path="incidentes" element={<IncidentsPage />} />
             <Route path="incidentes/:incidentId" element={<IncidentPage />} />
+            <Route path="postmortems" element={<IncidentsPage key="postmortems" initialTab="closed" />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

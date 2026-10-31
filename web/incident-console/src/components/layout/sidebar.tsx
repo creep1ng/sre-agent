@@ -1,4 +1,4 @@
-import { ExternalLinkIcon, InboxIcon, LandmarkIcon, LayersIcon, SearchIcon } from "lucide-react";
+import { ExternalLinkIcon, FileTextIcon, InboxIcon, LandmarkIcon, LayersIcon, SearchIcon } from "lucide-react";
 import { NavLink } from "react-router";
 import { AgentAvatar, Logo } from "@/components/brand";
 import { StatusDot } from "@/components/badges";
@@ -100,6 +100,7 @@ export function Sidebar({
       <nav className="flex flex-col gap-1" aria-label="Principal">
         <NavItem to="/" icon={InboxIcon} label="Bandeja" count={inbox.attention} highlight />
         <NavItem to="/incidentes" icon={LayersIcon} label="Incidentes" count={inbox.active.length} />
+        <NavItem to="/postmortems" icon={FileTextIcon} label="Postmortems" />
       </nav>
 
       {/* The administration console still lives outside the new console: one link, a new tab. */}

@@ -105,6 +105,12 @@ docker compose -f compose.yaml -f compose.e2e.yaml --project-name issue183-demo 
 Use a unique project name and only remove that project. The local `.env` remains
 untracked and synthetic; do not print, commit, attach or reuse credentials.
 
+`compose.e2e.yaml` and `compose.triage23.yaml` set `LEGACY_CONSOLE=keep`, so these
+suites still open the previous console's alerts, triage and war room. Production
+redirects those addresses to the new console at `/app` (#715); the
+`incident-console` job runs the new console's journeys (`web/incident-console/e2e`)
+on `compose.yaml` alone, with the redirects on.
+
 ### Real-stack journeys
 
 The journeys below self-skip without their seeds, so a plain Playwright run never
