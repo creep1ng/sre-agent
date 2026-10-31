@@ -197,6 +197,20 @@ mechanism to look for, for example that checkout depends on payment and that `pa
 in flagd, so a restart does not end it. A fragment is not a measurement: the hypothesis still cites
 what the tools measured.
 
+The E2E runs the real API, database and investigator with a scripted model and Grafana MCP
+(`scripts/bok_topology_upstreams.py`): a checkout investigation searches the collection, its
+fragments carry the collection version and chunk locator, with the collection's index down the run
+goes on and its receipt notes `bok_unavailable`, and after the grant is revoked the next
+investigation runs without it. From a worktree with `.env` and `.env.worktree`:
+
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml up --build --wait db api
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml run --rm --no-deps -T seed python /e2e/provision_demo.py
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml --profile bok-topology-e2e run --rm --build bok-topology-e2e
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml down -v --remove-orphans
+
+The report goes to `$BOK_TOPOLOGY_ARTIFACTS` (default `/tmp/bok-topology-e2e`).
+
 ## Recalled incidents
 
 An `investigate` dispatch seeds the run with up to three memories of closed incidents of the
