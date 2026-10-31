@@ -125,6 +125,49 @@ services:
     restart: unless-stopped
     networks: [runtime]
 
+  # Telegram channel (#766): long polling, so no public URL. The token comes from the ignored
+  # .env and is never logged; TELEGRAM_API_URL points the E2E at fake-telegram.
+  telegram-gateway:
+    profiles: ["telegram"]
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["python", "-m", "sre_agent.chat.telegram", "gateway"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_API_URL: ${TELEGRAM_API_URL:-https://api.telegram.org}
+      TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Longer than the 10 s send timeout, so a stop lets the current send finish.
+    stop_grace_period: 20s
+    restart: unless-stopped
+    networks: [runtime]
+
+  fake-telegram:
+    profiles: ["telegram-e2e"]
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["uvicorn", "fake_telegram:app", "--app-dir", "/fake", "--host", "0.0.0.0", "--port", "8081"]
+    volumes:
+      - ./tests/fake_telegram.py:/fake/fake_telegram.py:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/_test/sent', timeout=2)",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    restart: "no"
+    networks: [runtime]
+
   python-checks:
     profiles: ["checks"]
     build:
