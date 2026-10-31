@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from sre_agent.incident.persistence import IncidentRecord, RunEvent, RunRecord, SnapshotRecord
+from sre_agent.incident.reasons import DISPATCH_CAUSES, PROJECTED_REASON_CODES
 from sre_agent.incident.workflow import IncidentWorkflow
 
 IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
@@ -34,6 +35,15 @@ TRANSITION_SUMMARIES = {
     "verification_passed": "Service verified stable.",
     "start_postmortem": "Postmortem started.",
     "close_incident": "Incident closed.",
+}
+# A run that ended without a terminal workflow state; a new run of the incident may retry.
+TERMINATED_SUMMARIES = {
+    "completed": "Investigation concluded; the run ended.",
+    "max_steps": "Investigation run ended: step budget exhausted; a new run may retry.",
+    "needs_human": "Investigation run ended: it needs a human; a new run may retry.",
+    "invalid_output": "Investigation run ended: invalid agent output; a new run may retry.",
+    "upstream_unavailable": "Investigation run ended: the model provider or an MCP tool "
+    "was unavailable; a new run may retry.",
 }
 
 
@@ -99,6 +109,35 @@ def actor_reference(document: Any) -> dict[str, Any] | None:
     }
 
 
+def safe_reason_code(payload: Any) -> str | None:
+    """Only allow-listed causes leave the persisted receipt metadata."""
+    if not isinstance(payload, dict):
+        return None
+    receipt = payload.get("dispatch_receipt")
+    if isinstance(receipt, dict):
+        code = receipt.get("reason_code")
+        if code in PROJECTED_REASON_CODES:
+            return code
+    code = payload.get("reason_code")
+    return code if code in PROJECTED_REASON_CODES else None
+
+
+def dispatch_cause(receipt: dict[str, Any]) -> str | None:
+    """The operator-readable cause of a dispatch ending, naming an inactive agent identity."""
+    code = receipt.get("reason_code")
+    if code not in DISPATCH_CAUSES:
+        return None
+    agent = receipt.get("agent_principal_id")
+    if code == "harness_identity_unavailable" and (
+        isinstance(agent, str) and re.fullmatch(IDENTIFIER_PATTERN, agent)
+    ):
+        return (
+            f"the configured identity '{agent}' is inactive or not an agent; "
+            "reactivate it in Principals or ask an administrator."
+        )
+    return DISPATCH_CAUSES[code]
+
+
 def event_summary(payload: Any) -> str:
     transition_id = payload.get("transition_id") if isinstance(payload, dict) else None
     if isinstance(transition_id, str) and transition_id in TRANSITION_SUMMARIES:
@@ -111,11 +150,20 @@ def event_summary(payload: Any) -> str:
             status = receipt.get("status")
             if status == "pending":
                 return "Investigation dispatch started."
+            if receipt.get("reason_code") == "investigation_no_measured_evidence":
+                return "Investigation dispatch ended: no cited evidence had measured data."
             if status in {"success", "confirmed_failure", "unknown"}:
-                return f"Investigation dispatch ended: {status}."
+                cause = dispatch_cause(receipt) if status != "success" else None
+                ended = f"Investigation dispatch ended: {status}."
+                return f"{ended} Cause: {cause}" if cause else ended
         patch = payload.get("run_patch")
         if isinstance(patch, dict) and patch.get("terminated_reason") == "denied":
-            return "Authorization denied; the investigation waits for a human to escalate."
+            return (
+                "Authorization denied; an administrator must grant the capability, "
+                "then a new run may retry."
+            )
+        if isinstance(patch, dict) and patch.get("terminated_reason") in TERMINATED_SUMMARIES:
+            return TERMINATED_SUMMARIES[patch["terminated_reason"]]
         outcome = payload.get("outcome")
         action = outcome.get("action") if isinstance(outcome, dict) else None
         summaries = {
@@ -150,6 +198,7 @@ def project_event(event: RunEvent, decision_document: Any) -> dict[str, Any]:
         "turn_id": event.turn_id,
         "task_id": gateway_task_id(event.turn_id),
         "request_id": request_id,
+        "reason_code": safe_reason_code(payload),
         "occurred_at": utc_iso(event.occurred_at),
     }
 

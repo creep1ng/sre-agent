@@ -24,6 +24,7 @@ jobs:
     outputs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
       contracts: ${{ steps.classify.outputs.contracts }}
+      releases: ${{ steps.classify.outputs.releases }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -34,6 +35,8 @@ jobs:
         run: |
           docs_only=false
           contracts=true
+          releases=validate:releases:locked
+          [ "${GITHUB_EVENT_NAME}" != schedule ] || releases=validate:releases
           if [ "${GITHUB_EVENT_NAME}" = pull_request ]; then
             # The pull_request checkout is the merge commit; its first parent is the base.
             changed="$(git diff --name-only HEAD^1 HEAD)"
@@ -57,11 +60,14 @@ jobs:
             if ! grep -qE '^(schemas/|docker/harness|compose\.yaml$|\.github/workflows/ci\.yml$)' <<< "${changed}"; then
               contracts=false
             fi
+            # A tooling or harness change can break an old release, so it revalidates them all.
+            if grep -qE '^(schemas/tooling/|docker/harness)' <<< "${changed}"; then
+              releases=validate:releases
+            fi
             printf '%s\n' "${changed}"
           fi
-          echo "docs_only=${docs_only} contracts=${contracts}"
-          echo "docs_only=${docs_only}" >> "${GITHUB_OUTPUT}"
-          echo "contracts=${contracts}" >> "${GITHUB_OUTPUT}"
+          echo "docs_only=${docs_only} contracts=${contracts} releases=${releases}"
+          printf 'docs_only=%s\ncontracts=%s\nreleases=%s\n' "${docs_only}" "${contracts}" "${releases}" >> "${GITHUB_OUTPUT}"
 
   configuration-lock:
     needs: changes
@@ -124,13 +130,37 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      # A pinned digest never changes, so rewriting a release together with its lock entry still fails.
+      # HEAD^1 is the base of a pull request's merge commit; a push to main compares only the
+      # previous commit, which is enough because main receives one merge or squash per push.
+      # Only a base without a lock counts as empty; any other git error fails the step.
+      - name: Keep every published release digest pinned
+        if: ${{ github.event_name != 'schedule' }}
+        run: |
+          base="${RUNNER_TEMP}/base-lock/releases.lock.json"
+          mkdir -p "${RUNNER_TEMP}/base-lock"
+          git cat-file -e 'HEAD^1^{commit}'
+          listed="$(git ls-tree --name-only HEAD^1 -- schemas/releases.lock.json)"
+          if [ -n "${listed}" ]; then git show HEAD^1:schemas/releases.lock.json > "${base}"; else echo '{}' > "${base}"; fi
+          jq -en --slurpfile base "${base}" --slurpfile head schemas/releases.lock.json \
+            '$base[0] | to_entries | all(.value == $head[0][.key])' ||
+            { echo "::error::schemas/releases.lock.json changed or removed a published release digest"; exit 1; }
       - name: Create local-only Compose inputs
-        run: cp .env.example .env
+        run: cp .env.example .env && mkdir -p "${RUNNER_TEMP}/base-lock"
+      # Pull requests and pushes check every release against its pinned digest and validate in
+      # full each release the base lock does not pin. The schedule, and a change to the tooling or
+      # the harness, revalidate every published release.
       - name: Run locked contract tooling in its container
+        env:
+          RELEASES: ${{ needs.changes.outputs.releases == 'validate:releases' && 'validate:releases' || 'validate:releases:locked -- --base /base-lock/releases.lock.json' }}
         run: >-
-          docker compose --project-name ci-contracts-${{ github.run_id }} --profile harness run --build --rm harness
-          sh -c 'npm --prefix schemas/tooling test && npm --prefix schemas/tooling run validate &&
-          npm --prefix schemas/tooling run validate:releases && npm --prefix schemas/tooling run lint:openapi'
+          docker compose --project-name ci-contracts-${{ github.run_id }} --profile harness run --build --rm
+          -v "${RUNNER_TEMP}/base-lock:/base-lock:ro" harness
+          sh -c "npm --prefix schemas/tooling test && npm --prefix schemas/tooling run validate &&
+          npm --prefix schemas/tooling run ${RELEASES} && npm --prefix schemas/tooling run lint:openapi"
       - name: Remove disposable contract services
         if: always()
         run: docker compose --project-name ci-contracts-${{ github.run_id }} --profile harness down -v --remove-orphans
@@ -174,6 +204,7 @@ jobs:
               "<set-unique-sre_-prefixed-key-with-32-plus-characters>": (
                   f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}",
                   f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}",
+                  f"sre_exec_{token_hex(16)}",
               ),
               "<lab/model>": ("openai/gpt-4o-mini", "anthropic/claude-sonnet-4"),
               "<provider>": ("openai", "anthropic"),
@@ -216,7 +247,7 @@ jobs:
 
           path = Path(".env")
           content = path.read_text()
-          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}"):
+          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}", f"sre_exec_{token_hex(16)}"):
               content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
           content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
           content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
@@ -271,7 +302,7 @@ jobs:
 
           path = Path(".env")
           content = path.read_text()
-          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}"):
+          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}", f"sre_exec_{token_hex(16)}"):
               content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
           content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
           content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
@@ -300,13 +331,26 @@ jobs:
     needs: compose-smoke
     if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Create ephemeral executor inputs
         run: |
           cp .env.example .env
-          sed -i "s/^DEPLOY_EXECUTOR_SIGNING_KEY=.*/DEPLOY_EXECUTOR_SIGNING_KEY=$(openssl rand -hex 32)/" .env
+          python - <<'PY'
+          from pathlib import Path
+          from secrets import token_hex
+
+          path = Path(".env")
+          content = path.read_text()
+          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}", f"sre_exec_{token_hex(16)}"):
+              content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
+          content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
+          content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
+          content = content.replace("<set-long-random-audit-hmac-key>", token_hex(32), 1)
+          content = content.replace("<set-long-random-executor-signing-key>", token_hex(32), 1)
+          path.write_text(content)
+          PY
       - name: Run the deploy-executor journey and its socket-down case
         env:
           COMPOSE_PROJECT_NAME: ci-executor-${{ github.run_id }}

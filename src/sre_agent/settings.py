@@ -20,7 +20,9 @@ class Settings:
     grafana_mcp_token: str | None = field(default=None, repr=False)
     openrouter_management_key: str | None = field(default=None, repr=False)
     investigator_gateway: GatewaySettings | None = field(default=None, repr=False)
+    investigator_tool_timeout_seconds: float = 30.0
     investigator_output_language: OutputLanguage = "es"
+    openrouter_base_url: str = "https://openrouter.ai"
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -34,6 +36,15 @@ class Settings:
             raise ValueError("OPENROUTER_TIMEOUT_SECONDS must be numeric") from None
         if not 0 < timeout <= 120:
             raise ValueError("OPENROUTER_TIMEOUT_SECONDS must be between 0 and 120")
+        base_url = environment.get("OPENROUTER_BASE_URL") or "https://openrouter.ai"
+        # Both OpenRouter keys travel to this host, so plain HTTP is only for the local
+        # stand-in that the consumption E2E runs (compose.consumption-e2e.yaml).
+        insecure = environment.get("OPENROUTER_ALLOW_INSECURE_BASE_URL") == "1"
+        if not base_url.startswith(("https://", "http://") if insecure else "https://"):
+            raise ValueError(
+                "OPENROUTER_BASE_URL must use https:// "
+                "(http:// only with OPENROUTER_ALLOW_INSECURE_BASE_URL=1 for the E2E)"
+            )
         mcp_token = (
             environment.get("GRAFANA_MCP_TOKEN")
             or environment.get("MCP_GRAFANA_SERVER_TOKEN")
@@ -56,6 +67,13 @@ class Settings:
                 pass
             case _:
                 raise ValueError("INVESTIGATOR_OUTPUT_LANGUAGE must be es or en")
+        try:
+            tool_timeout = float(environment.get("INVESTIGATOR_TOOL_TIMEOUT_SECONDS") or "30")
+        except ValueError:
+            raise ValueError("INVESTIGATOR_TOOL_TIMEOUT_SECONDS must be numeric") from None
+        # The gateway's MCP transport stops at 30 s (MCP_TIMEOUT_SECONDS), so more never helps.
+        if not 0 < tool_timeout <= 30:
+            raise ValueError("INVESTIGATOR_TOOL_TIMEOUT_SECONDS must be between 0 and 30")
         return cls(
             database_url,
             api_key,
@@ -66,5 +84,7 @@ class Settings:
             mcp_token,
             openrouter_management_key=environment.get("OPENROUTER_MANAGEMENT_API_KEY") or None,
             investigator_gateway=investigator_gateway,
+            investigator_tool_timeout_seconds=tool_timeout,
             investigator_output_language=language,
+            openrouter_base_url=base_url,
         )

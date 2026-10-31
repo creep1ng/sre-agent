@@ -94,6 +94,10 @@ $defs:
         description: The governed gateway request that returned this evidence.
         type: [string, "null"]
         format: uuid
+      # Additive for 1.0.0 readers: incident-state 1.2.0's evidence verdict (issue #707).
+      empty: { type: boolean }
+      verdict: { enum: [supports, contradicts, inconclusive, null] }
+      finding: { type: [string, "null"], maxLength: 300 }
 
   mitigationStrategy:
     type: object
