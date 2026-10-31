@@ -1,9 +1,9 @@
 """Prepare only explicit demo grants using the existing governed ControlService.
 
 Run in the seed container, after the ordinary and MCP seeds. No provider/MCP
-secret is needed. A revoked setup grant is reported as drift and left revoked;
-conflicting grants fail closed. This is not a second seed nor an authority repair
-tool. Partial progress is safe to rerun.
+secret is needed. A revoked setup grant is restored under a new id, as the seed
+restores its own (a reset to zero); conflicting grants fail closed. Partial
+progress is safe to rerun.
 """
 
 import asyncio
@@ -150,31 +150,30 @@ async def provision_demo(service, bearer, executor_changes_key=None):
         (existing.command_grant_status, existing.run_command_active, COMMAND_GRANT_BODY),
         (existing.approve_grant_status, existing.run_approve_active, APPROVE_GRANT_BODY),
     ):
-        if not (status == 201 and active) and not await _drifted(service, body):
+        if not (status == 201 and active) and not await _restored(service, body):
             raise RuntimeError("workflow grant conflict: " + body["grant_id"])
     for body in demo_grants():
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
         if response.status_code == 201 and await _granted(service, body):
             continue
         # The authority is active already, maybe under another id: convergence.
-        if await _already_active(service, body) or await _drifted(service, body):
+        if await _already_active(service, body) or await _restored(service, body):
             continue
         raise RuntimeError("demo grant conflict: " + body["grant_id"])
     if executor_changes_key:
         await provision_executor_changes(service, bearer, executor_changes_key)
 
 
-async def _drifted(service, body):
-    """An operator revoked this setup grant: report the drift and leave it revoked (#759)."""
+async def _restored(service, body):
+    """An operator revoked this setup grant: the setup grants it again (#759)."""
     from sre_agent.persistence.repositories import GrantRepository
+    from sre_agent.persistence.seeds import restore_grant
 
-    async with service.sessions() as session:
+    async with service.sessions() as session, session.begin():
         persisted = await GrantRepository(session).get(body["grant_id"])
-    if persisted is None or persisted.status != "revoked":
-        return False
-    if await _already_active(service, body):
-        return True
-    print(f"seed drift: grant {body['grant_id']} is revoked; left revoked")
+        if persisted is None or persisted.status != "revoked":
+            return False
+        await restore_grant(session, body["grant_id"])
     return True
 
 
