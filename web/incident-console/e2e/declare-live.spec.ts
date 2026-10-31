@@ -1,31 +1,25 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { freshEpisodes } from "./live-faults";
 
 /*
- * Issue #703 against the real stack: OTel demo with the checkout failure injected, setup_sre.py,
- * the web proxy, FastAPI and PostgreSQL. No route is answered by the test. Ways this can fail:
+ * Issue #703 against the live-triage stack (compose.live-triage-e2e.yaml: FastAPI, PostgreSQL and
+ * the web proxy; stand-in model and Grafana MCP). The spec opens its own alert episode. Only one
+ * route is touched, to drop the answer of a POST the server did process. Ways this can fail:
  * 1. the live card offers no declaration, or the dialog is not prefilled from the alert;
  * 2. the dialog declares in the browser only: the API has no triage decision or no incident;
  * 3. a version that went stale while the dialog was open ends in an error instead of one retry;
- * 4. the console does not land on the declared incident's route;
- * 5. the card does not show `Declarada` with a link to the incident.
- * One run declares one episode: a declared episode stays declared, so the next run needs
- * `demo_env.py reset` and `fail` for a new alert.
+ * 4. after a lost answer, the operator's retry sends a new key and reads as someone else's decision;
+ * 5. the console does not land on the declared incident's route;
+ * 6. the card does not show `Declarada` with a link to the incident.
  */
 
-const enabled = process.env.LIVE_DECLARE === "1" && Boolean(process.env.DEMO_HUMAN_API_KEY);
+const enabled = process.env.LIVE_DECLARE === "1" && Boolean(process.env.DEMO_HUMAN_API_KEY && process.env.FAULT_DIR);
 const BASE = process.env.BASE_URL ?? "http://127.0.0.1:8080";
 
 test.use({ video: "off", trace: "off" });
 
-interface Exchange {
-  at: string;
-  method: string;
-  path: string;
-  status: number;
-  code?: string;
-  expectedVersion?: number;
-}
+type Exchange = { at: string; method: string; path: string; status: number; code?: string; expectedVersion?: number; key?: string };
 
 async function triageVersion(api: APIRequestContext, alertId: string): Promise<number> {
   const response = await api.get(`${BASE}/api/v1/alerts/${encodeURIComponent(alertId)}/triage/context`);
@@ -35,7 +29,7 @@ async function triageVersion(api: APIRequestContext, alertId: string): Promise<n
 }
 
 test.describe("declarar desde la tarjeta contra la pila real", () => {
-  test.skip(!enabled, "Requiere LIVE_DECLARE=1 y DEMO_HUMAN_API_KEY con la falla de checkout inyectada");
+  test.skip(!enabled, "Requiere LIVE_DECLARE=1, DEMO_HUMAN_API_KEY y FAULT_DIR (compose.live-triage-e2e.yaml)");
 
   test("la declaración llega a la API, sobrevive a una versión obsoleta y queda en la tarjeta", async ({
     page,
@@ -60,6 +54,7 @@ test.describe("declarar desde la tarjeta contra la pila real", () => {
       if (entry.method === "POST") {
         const sent = response.request().postDataJSON() as { expected_version?: number } | null;
         entry.expectedVersion = sent?.expected_version;
+        entry.key = response.request().headers()["idempotency-key"];
         try {
           entry.code = ((await response.json()) as { error?: { code?: string } }).error?.code;
         } catch {
@@ -69,16 +64,16 @@ test.describe("declarar desde la tarjeta contra la pila real", () => {
       exchanges.push(entry);
     });
 
+    const [fresh] = await freshEpisodes(api, BASE, ["checkout-payment-error-rate"]);
     await page.goto("./");
     await page.getByRole("button", { name: "Conectar API" }).click();
     const connect = page.getByRole("dialog");
     await connect.getByLabel("Clave de API").fill(key);
     await connect.getByRole("button", { name: "Conectar", exact: true }).click();
 
-    const card = page.locator("article").filter({ hasText: "Nueva" }).first();
-    await expect(card).toBeVisible({ timeout: 300_000 });
-    const alertId = await card.getAttribute("data-alert-id");
-    expect(alertId).toMatch(/^alt-/);
+    const alertId = fresh;
+    const card = page.locator(`article[data-alert-id="${alertId}"]`);
+    await expect(card).toBeVisible({ timeout: 60_000 });
     await page.screenshot({ path: `${dir}/1-inbox-before.png`, fullPage: true });
 
     await card.getByRole("button", { name: "Declarar incidente" }).click();
@@ -102,25 +97,37 @@ test.describe("declarar desde la tarjeta contra la pila real", () => {
     expect(await triageVersion(api, alertId!)).not.toBe(before);
     await page.screenshot({ path: `${dir}/2-dialog-prefilled.png` });
 
+    // The retry after the stale version reaches the server, but its answer is lost on the way back.
+    let lost: { key?: string; status: number } | undefined;
+    await page.route("**/triage/commands", async (route) => {
+      const response = await route.fetch();
+      if (response.status() !== 201 || lost) return route.fulfill({ response });
+      lost = { key: route.request().headers()["idempotency-key"], status: response.status() };
+      await route.abort("connectionreset");
+    });
+    await dialog.getByRole("button", { name: /Declarar e investigar/ }).click();
+    await expect(dialog.getByRole("alert")).toHaveText("No pudimos declarar el incidente. Vuelve a intentarlo.");
+    await page.screenshot({ path: `${dir}/3-lost-answer.png` });
+    await page.unroute("**/triage/commands");
     await dialog.getByRole("button", { name: /Declarar e investigar/ }).click();
     await expect(dialog).toBeHidden({ timeout: 30_000 });
 
+    // 409 stale (key A), 201 lost (key B), then the operator's retry: key B again, replayed as 201.
     const posts = exchanges.filter((entry) => entry.method === "POST");
     expect(posts.map((entry) => entry.status)).toEqual([409, 201]);
     expect(posts[0].code).toBe("stale_version");
+    expect(posts[1].key).toBe(lost!.key);
+    expect(posts[0].key).not.toBe(lost!.key);
 
     const state = await api.get(`${BASE}/api/v1/alerts/${encodeURIComponent(alertId!)}/triage`);
     expect(state.status()).toBe(200);
     const triage = (await state.json()) as { status: string; incident_id: string; actor: string };
     expect(triage.status).toBe("declared");
     expect(triage.incident_id).toMatch(/^inc-/);
-    const incident = await api.get(`${BASE}/api/v1/incidents/${encodeURIComponent(triage.incident_id)}`);
-    expect(incident.status()).toBe(200);
+    expect((await api.get(`${BASE}/api/v1/incidents/${triage.incident_id}`)).status()).toBe(200);
 
-    // The console lands on the declared incident's route. Reading it live is #708: record what it shows.
+    // The console lands on the declared incident's route; reading it live is #708.
     await expect(page).toHaveURL(new RegExp(`/incidentes/${triage.incident_id}$`));
-    const incidentPage = await page.getByRole("heading", { level: 1 }).first().innerText();
-    await page.screenshot({ path: `${dir}/3-incident-route.png`, fullPage: true });
     await page.goBack();
 
     const declared = page.locator(`article[data-alert-id="${alertId}"]`);
@@ -130,24 +137,10 @@ test.describe("declarar desde la tarjeta contra la pila real", () => {
       new RegExp(`/incidentes/${triage.incident_id}$`),
     );
     await expect(declared.getByRole("button", { name: "Declarar incidente" })).toHaveCount(0);
-    await page.screenshot({ path: `${dir}/4-card-declared.png`, fullPage: true });
+    await page.screenshot({ path: `${dir}/5-card-declared.png`, fullPage: true });
 
-    writeFileSync(
-      `${dir}/verification.json`,
-      JSON.stringify(
-        {
-          sanitized: true,
-          alertId,
-          incidentId: triage.incident_id,
-          actor: triage.actor,
-          versionReadByDialog: before,
-          incidentPage,
-          exchanges,
-        },
-        null,
-        2,
-      ),
-    );
+    const verification = { sanitized: true, alertId, incidentId: triage.incident_id, actor: triage.actor, lostAnswer: lost };
+    writeFileSync(`${dir}/verification.json`, JSON.stringify({ ...verification, versionReadByDialog: before, exchanges }, null, 2));
     await api.dispose();
   });
 });
