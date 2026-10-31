@@ -1,0 +1,9 @@
+$ python scripts/demo_env.py fail --service sre-checkout
+ Container otel-demo-sre-checkout-1 Healthy 
+sre-checkout runs demo/checkout:1.5.0.
+$ docker ps --filter name=otel-demo-sre-checkout
+otel-demo-sre-checkout-1  demo/checkout:1.5.0  Up 10 minutes (healthy)
+$ docker compose ... run seed python record_real_deploy.py   # runs .github/actions/record-change/record_change.py
+integration local-deploy-20261030063827: change.write only
+first send: Change event recorded chg_a56ba66893a53624 (201).
+resend: Change event already recorded chg_a56ba66893a53624 (200).

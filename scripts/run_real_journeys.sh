@@ -5,10 +5,12 @@
 #
 # incidents: builds (or reuses) the production-browser stack (compose.yaml + compose.e2e.yaml),
 #   seeds the demo grants and one stamped incident per journey, then runs war-room-runs-real,
-#   war-room-reasoning-real, review-mitigation-real, war-room-follow-real and postmortem-journey,
-#   and last the #758 consumption-limit E2E, which restarts the API against the local OpenRouter
-#   stand-in of compose.consumption-e2e.yaml.
-# executor: the deploy-executor journey (#720/#743) and its socket-down case.
+#   war-room-reasoning-real, review-mitigation-real, war-room-follow-real, postmortem-journey and
+#   change-events-real, and last the #758 consumption-limit E2E, which restarts the API against
+#   the local OpenRouter stand-in of compose.consumption-e2e.yaml.
+# executor: the deploy-executor journey (#720/#743), the rollback recorded as a change event
+#   (change-events-real, #770) by the deploy-executor principal that provision_demo.py creates
+#   from DEPLOY_EXECUTOR_CHANGES_API_KEY, and the socket-down case.
 # Compose reads the untracked .env (from .env.example). The OpenRouter keys are forced empty, so
 # no investigation reaches a model provider. Remove the project afterwards with
 #   docker compose -f compose.yaml -f compose.e2e.yaml --project-name <unique> --profile e2e \
@@ -92,8 +94,9 @@ finish_live_incident() {
   return 1
 }
 
-incidents() {
-  local overlay="$ARTIFACTS/compose.seed.yaml" follower
+# Starts db, api and web, then seeds them with the demo grants and principals.
+start_seeded_stack() {
+  local overlay="$ARTIFACTS/compose.seed.yaml"
   # The seed image has no scripts/ and the compose seed service has no audit key.
   cat > "$overlay" <<EOF
 services:
@@ -103,9 +106,14 @@ services:
 EOF
   SEED=("${COMPOSE[@]}" -f "$overlay" run --rm --no-deps -T)
   "${COMPOSE[@]}" up --build --wait db api web
-  "${COMPOSE[@]}" --profile e2e build e2e
   "${SEED[@]}" seed python -m sre_agent.persistence.seeds --seed-mcp
   "${SEED[@]}" seed python scripts/provision_demo.py
+}
+
+incidents() {
+  local follower
+  start_seeded_stack
+  "${COMPOSE[@]}" --profile e2e build e2e
   "${SEED[@]}" -e SEED_STAMP="wr$STAMP" seed python scripts/seed_war_room_runs.py
   # One incident per journey: review-mitigation and war-room-follow both approve theirs.
   for prefix in rs rv fw pm; do seed_incident "$prefix$STAMP"; done
@@ -125,6 +133,8 @@ EOF
   kill "$follower" 2> /dev/null || true
   wait "$follower" || echo "war-room-follow: the second seed did not finish (see its log)"
   run_journey postmortem e2e -e POSTMORTEM_INCIDENT="inc-vc-pm$STAMP" -- postmortem-journey
+  run_journey change-events e2e -e SRE_REAL_BACKEND=1 -e SEED_STAMP="ch$STAMP" \
+    -e CHANGE_EVENTS_ARTIFACT_DIR=/artifacts -- change-events-real --grep-invert deploy-executor
   consumption
 }
 
@@ -150,10 +160,13 @@ consumption() {
 
 executor() {
   local compose=("${COMPOSE[@]}" --profile executor-e2e)
+  start_seeded_stack
   "${compose[@]}" build deploy-executor probe probe-previous executor-e2e
   "${compose[@]}" up -d --wait docker-socket-proxy deploy-executor probe
   run_journey executor executor-e2e -- deploy-executor-real --reporter=line,json \
     --grep-invert "socket proxy stopped"
+  run_journey executor-changes executor-e2e -e DEPLOY_EXECUTOR_CHANGES_E2E=1 \
+    -e CHANGE_EVENTS_ARTIFACT_DIR=/artifacts -- change-events-real --grep deploy-executor
   "${compose[@]}" stop docker-socket-proxy
   run_journey executor-socket-down executor-e2e -e DEPLOY_EXECUTOR_SOCKET_DOWN=1 -- \
     deploy-executor-real --reporter=line,json --grep "socket proxy stopped"

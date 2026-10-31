@@ -10,6 +10,7 @@ from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
 from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
+from sre_agent.gateway.changes import ChangeEventsService, changes_router
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.identity import router as identity_router
@@ -213,6 +214,7 @@ def create_application(
         )
         application.include_router(mcp_router(mcp_service))
     application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
+    application.include_router(changes_router(ChangeEventsService(database.sessions)))
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:
