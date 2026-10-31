@@ -47,6 +47,7 @@ const DISPATCH_CAUSES = Object.freeze({
   investigation_mcp_contract_rejected: "una consulta a una herramienta no cumplió su contrato",
   investigation_upstream_unavailable: "el proveedor del modelo no respondió",
   investigation_tool_unavailable: "una herramienta de observabilidad falló o no respondió a tiempo",
+  tool_timeout: "una herramienta de observabilidad superó el tiempo límite de la consulta",
   investigation_max_steps: "se agotaron los pasos sin llegar a una conclusión",
   investigation_invalid_output: "el modelo respondió en un formato no válido",
   investigator_failed: "el investigador falló",
