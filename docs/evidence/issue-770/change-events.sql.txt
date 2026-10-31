@@ -1,0 +1,10 @@
+     source      |   service    |   kind   |  status   |       version       |                                  external_id                                  |         recorded_by         
+-----------------+--------------+----------+-----------+---------------------+-------------------------------------------------------------------------------+-----------------------------
+ github-actions  | sre-checkout | deploy   | succeeded | demo/checkout:1.5.0 | creep1ng/sre-agent/actions/runs/17933421345601/attempts/1/jobs/release/deploy | gha-checkout-ch451e81de
+ github-actions  | sre-checkout | ci       | failed    |                     | creep1ng/sre-agent/actions/runs/17933421345601/attempts/1/jobs/test/ci        | gha-checkout-ch451e81de
+ deploy-executor | probe        | rollback | succeeded | demo/probe:1.0.0    | exe_56b75f715f7ecc7d                                                          | deploy-executor
+ deploy-executor | probe        | rollback | succeeded | demo/probe:1.1.0    | exe_588406603bd08b08                                                          | deploy-executor
+ deploy-executor | probe        | rollback | succeeded | demo/probe:1.0.0    | exe_c5e7fcab6b2b9a36                                                          | deploy-executor
+ deploy-executor | probe        | rollback | succeeded | demo/probe:1.1.0    | exe_bf7752ace05747ec                                                          | deploy-executor
+ local-deploy    | sre-checkout | deploy   | succeeded | demo/checkout:1.5.0 | demo_env/fail/sre-checkout/20261030063827/deploy                              | local-deploy-20261030063827
+(7 rows)

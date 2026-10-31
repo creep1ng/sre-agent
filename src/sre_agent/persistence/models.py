@@ -300,8 +300,14 @@ class GrantRow(Base):
         ),
         CK("effect='allow'", name="ck_grants_effect"),
         CK("status IN ('active','revoked')", name="ck_grants_status"),
-        UniqueConstraint(
-            "principal_id", "action", "resource_type", "resource_id", name="uq_grants_direct"
+        sa.Index(
+            "uq_grants_active_direct",
+            "principal_id",
+            "action",
+            "resource_type",
+            "resource_id",
+            unique=True,
+            postgresql_where=sa.text("status = 'active'"),
         ),
     )
     grant_id = mapped_column(String(64), primary_key=True)
