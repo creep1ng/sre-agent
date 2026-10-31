@@ -1,0 +1,33 @@
+Store-topology BoK E2E, stamp 53803560
+PASS granted: investigation run accepted: 201
+PASS granted: run context readable: 200
+PASS granted: run ended with a recorded receipt: {'phase': 'outcome', 'status': 'success', 'dispatch_id': 'run_da06fda7609b0ffe', 'request_ids': ['f290242e-4af8-4ffe-b733-16e4fc28be3f', 'ebd8d881-49c3-40cf-9d2f-1ab5ac381fd1', '89b6c083-96b6-4230-a2b5-0fd9b6fccd44', 'b4f8f0b9-d899-4a83-86f6-9e4d3a595b0a', 'beecc2ec-c78e-4edc-b3ad-69eb3e245b6e', '88421996-8b98-4788-9d3b-d01b496b8358'], 'result_status': 'completed', 'bok_collections': ['otel-demo-store@1.0.0'], 'mcp_request_ids': ['b4f8f0b9-d899-4a83-86f6-9e4d3a595b0a']}
+PASS granted: the run offers the collection: ['otel-demo-store@1.0.0']
+PASS granted: the receipt lists it: ['otel-demo-store@1.0.0']
+PASS granted: the investigator searched it: [{'tool': 'bok.search', 'arguments': {'query': 'checkout payment feature flag', 'collection': 'otel-demo-store@1.0.0'}, 'result_summary': 'ev_b7d99016c9d818d8, ev_052a900f5f168c27, ev_33699e3969085baa'}]
+PASS granted: every fragment carries the collection version: ['otel-demo-store@1.0.0', 'otel-demo-store@1.0.0', 'otel-demo-store@1.0.0']
+PASS granted: every fragment carries its chunk locator: ['/v1/bok/collections/otel-demo-store/versions/1.0.0/chunks/call-graph/checkout/0', '/v1/bok/collections/otel-demo-store/versions/1.0.0/chunks/checkout-place-order/payment-unreachable/0', '/v1/bok/collections/otel-demo-store/versions/1.0.0/chunks/payment-flags/payment-failure/0']
+PASS granted: fragments name checkout -> payment: , PRODUCT_CATALOG_ADDR, SHIPPING_ADDR). checkout depends on payment: every order charges the card through p
+PASS granted: fragments name paymentFailure: ugh payment, so the flagd feature flags paymentFailure (read by payment) and paymentUnreachabl
+PASS granted: the hypothesis cites a measurement besides the BoK: ['bok', 'bok', 'bok', 'grafana-mcp']
+PASS granted: the gateway audited the search: [('success', 200)]
+PASS granted: call-graph/checkout is the stored chunk of version 1.0.0: Store call graph (https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/compose.yaml): checkout calls cart, currenc
+PASS granted: checkout-place-order/payment-unreachable is the stored chunk of version 1.0.0: How checkout places an order (https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/checkout/main.go): The flag
+PASS granted: payment-flags/payment-failure is the stored chunk of version 1.0.0: Flags read by payment (https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/payment/charge.js): The flagd feat
+PASS unavailable: investigation run accepted: 201
+PASS unavailable: run context readable: 200
+PASS unavailable: run ended with a recorded receipt: {'notes': ['bok_unavailable'], 'phase': 'outcome', 'status': 'success', 'dispatch_id': 'run_00f8b25712a949f4', 'request_ids': ['e64267f4-80f5-467a-854c-7e116f5a471a', 'df76f07e-0054-442f-a4c8-551023456315', '5cd791d0-785d-4a18-81fe-9c9fd5636929', '1af46518-f029-4509-a639-09d9c537dd91', '5d89b3bc-ca79-4069-b93e-5fd1e90921e4', 'd66b188a-7510-453f-9db1-5604f2dc997b', 'ae2c8076-f4ab-4410-a45c-08c566e818f5'], 'result_status': 'completed', 'bok_collections': ['otel-demo-store@1.0.0'], 'mcp_request_ids': ['5d89b3bc-ca79-4069-b93e-5fd1e90921e4']}
+PASS unavailable: the model reads that the knowledge base is unavailable: ['the knowledge base is unavailable: otel-demo-store@1.0.0 (index_unavailable)']
+PASS unavailable: the investigation still records a hypothesis: ['hyp_e304ba5204473056']
+PASS unavailable: the receipt notes it: ['bok_unavailable']
+PASS the administrator revokes the investigator's grant: 204
+PASS revoked: investigation run accepted: 201
+PASS revoked: run context readable: 200
+PASS revoked: run ended with a recorded receipt: {'phase': 'outcome', 'status': 'success', 'dispatch_id': 'run_cad8be85170d9d9a', 'request_ids': ['c5e25c1b-9005-43e6-a092-e65aeee43a15', 'c1a0e60c-8bbc-402b-9a7a-d52cabcbf0c3', '9bb6dbac-9fa7-41b6-afa2-9c8eabd25125', 'bd398d17-bee1-417f-b726-8f1ee6923873', 'f184035d-f9cc-4354-ba12-e22ebebc8864'], 'result_status': 'completed', 'bok_collections': [], 'mcp_request_ids': ['9bb6dbac-9fa7-41b6-afa2-9c8eabd25125']}
+PASS revoked: the run no longer offers the collection: []
+PASS revoked: the receipt lists no collection: []
+PASS revoked: the investigation still records a hypothesis: ['hyp_42c2db0b137e3e59']
+PASS revoked: the run made no BoK search: []
+PASS revoked: a direct search is denied: 403
+PASS revoked: the gateway audited the denial: [('denied', 403)]
+PASS: 31/31 checks
