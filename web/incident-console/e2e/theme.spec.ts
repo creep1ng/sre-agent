@@ -1,9 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /*
- * RC-2 tokens (#870): the console follows the OS in Nocturno night and day. Amber appears only
- * where a human decision is pending, so the shell itself paints no amber. Screenshots land in
- * e2e/artifacts/issue-870.
+ * RC-2 theme (#870): the console follows the OS until the account menu forces light or dark, and
+ * the forced choice survives a reload. Amber appears only where a human decision is pending, so
+ * the shell itself paints no amber. Screenshots land in e2e/artifacts/issue-870.
  */
 
 const SHOTS = "e2e/artifacts/issue-870";
@@ -23,6 +23,11 @@ async function expectTheme(page: Page, theme: "light" | "dark") {
   if (theme === "dark") await expect(page.locator("html")).toHaveClass(dark);
   else await expect(page.locator("html")).not.toHaveClass(dark);
   await expect(page.locator("body")).toHaveCSS("background-color", theme === "dark" ? NIGHT : PAPER);
+}
+
+async function chooseTheme(page: Page, label: "Sistema" | "Claro" | "Oscuro") {
+  await page.getByRole("complementary").getByRole("button", { name: /demo-human/ }).click();
+  await page.getByRole("menuitemradio", { name: label }).click();
 }
 
 /** Every painted colour of the visible page, so a stray amber cannot hide in a border or an icon. */
@@ -46,6 +51,31 @@ test("the console follows the system theme and repaints when it changes", async 
   await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-family", /Fraunces/);
 
   await page.emulateMedia({ colorScheme: "light" });
+  await expectTheme(page, "light");
+});
+
+test("a forced theme wins over the system and survives a reload", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await freshStart(page);
+
+  await chooseTheme(page, "Claro");
+  await expectTheme(page, "light");
+  await page.reload();
+  await expectTheme(page, "light");
+  await page.getByRole("complementary").getByRole("button", { name: /demo-human/ }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Claro" })).toHaveAttribute("aria-checked", "true");
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS}/theme-forced-light-after-reload.png` });
+  await page.keyboard.press("Escape");
+
+  await chooseTheme(page, "Oscuro");
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.reload();
+  await expectTheme(page, "dark");
+
+  await chooseTheme(page, "Sistema");
+  await expectTheme(page, "light");
+  await page.reload();
   await expectTheme(page, "light");
 });
 

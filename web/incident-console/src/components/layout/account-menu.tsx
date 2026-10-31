@@ -68,16 +68,16 @@ export function AccountMenu({ onConnect }: { onConnect: () => void }) {
         <ChevronsUpDownIcon className="size-4 text-muted-foreground" aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" className="w-64">
-        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Apariencia</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Tema</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemePreference)}>
+          <DropdownMenuRadioItem value="system">
+            <MonitorIcon /> Sistema
+          </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="light">
             <SunIcon /> Claro
           </DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="dark">
             <MoonIcon /> Oscuro
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="system">
-            <MonitorIcon /> Como el sistema
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
