@@ -1,7 +1,7 @@
 """Telegram Bot API over long polling: no public URL, works behind NAT (issue #766).
 
     python -m sre_agent.chat.telegram gateway       # answer updates and drain the outbox
-    python -m sre_agent.chat.telegram link [--ttl-seconds N]   # print a one-time link
+    python -m sre_agent.chat.telegram link --principal ID [--ttl-seconds N]  # one-time link
     python -m sre_agent.chat.telegram links | unlink CHAT_ID   # list or revoke linked chats
 
 The bot token travels only in request paths. httpx logs those paths at INFO, so its logger is
@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 
-from sre_agent.chat.outbox import ChatStore, DeliveryError
+from sre_agent.chat.outbox import ChatStore, DeliveryError, Keyboard
 from sre_agent.persistence.database import Database
 
 logger = logging.getLogger("sre_agent.chat.telegram")
@@ -50,8 +50,9 @@ class BotApi:
             )
         return body["result"]
 
-    async def send(self, chat_id: int, message: str) -> None:
-        await self.call("sendMessage", chat_id=chat_id, text=message)
+    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> None:
+        markup = {"reply_markup": {"inline_keyboard": keyboard}} if keyboard else {}
+        await self.call("sendMessage", chat_id=chat_id, text=message, **markup)
 
 
 async def _poll(bot: BotApi, store: ChatStore, poll_seconds: int) -> None:
@@ -113,12 +114,14 @@ async def gateway(database_url: str, api_url: str, token: str, poll_seconds: int
         await database.dispose()
 
 
-async def link(database_url: str, api_url: str, token: str, ttl: timedelta) -> str:
+async def link(
+    database_url: str, api_url: str, token: str, ttl: timedelta, principal_id: str
+) -> str:
     database = Database(database_url)
     try:
         async with httpx.AsyncClient(base_url=api_url) as http:
             me = await BotApi(http, token).call("getMe")
-        code, expires_at = await ChatStore(database).issue_link_code(ttl)
+        code, expires_at = await ChatStore(database).issue_link_code(ttl, principal_id)
     finally:
         await database.dispose()
     return f"https://t.me/{me['username']}?start={code} (expires {expires_at.isoformat()})"
@@ -134,7 +137,8 @@ async def manage_links(database_url: str, unlink_chat_id: int | None) -> str:
         rows = await store.links()
     finally:
         await database.dispose()
-    return "\n".join(f"{chat_id} linked {at.isoformat()}" for chat_id, at in rows) or "no chats"
+    lines = (f"{chat} linked {at.isoformat()} as {who or 'nobody'}" for chat, at, who in rows)
+    return "\n".join(lines) or "no chats"
 
 
 def main() -> None:
@@ -144,6 +148,8 @@ def main() -> None:
     commands.add_parser("links")
     commands.add_parser("unlink").add_argument("chat_id", type=int)
     link_parser = commands.add_parser("link")
+    # The human the chat decides as (#767): whoever runs this already holds the database.
+    link_parser.add_argument("--principal", required=True, help="an active human principal id")
     link_parser.add_argument(
         "--ttl-seconds", type=int, default=900, choices=range(1, 86401), metavar="1..86400"
     )
@@ -160,7 +166,13 @@ def main() -> None:
     if arguments.command == "link":
         print(
             asyncio.run(
-                link(database_url, api_url, token, timedelta(seconds=arguments.ttl_seconds))
+                link(
+                    database_url,
+                    api_url,
+                    token,
+                    timedelta(seconds=arguments.ttl_seconds),
+                    arguments.principal,
+                )
             )
         )
         return

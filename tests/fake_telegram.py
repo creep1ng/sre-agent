@@ -1,4 +1,5 @@
-"""Fake Telegram Bot API for the #766 E2E: getMe, getUpdates (long polling) and sendMessage.
+"""Fake Telegram Bot API for the #766 and #767 E2Es: getMe, getUpdates (long polling) and
+sendMessage with inline keyboards.
 
 Like Telegram, it keeps an update until a getUpdates offset above its id confirms it, answers
 401 to any other token and 400 to a text over 4096 characters. `/_test/*` lets the E2E play the
@@ -59,6 +60,10 @@ async def bot(token: str, method: str, request: Request) -> JSONResponse:
             "chat_id": fields["chat_id"],
             "text": fields["text"],
             "received_at": datetime.now(UTC).isoformat(),
+            "buttons": [
+                [(b["text"], b["callback_data"]) for b in row]
+                for row in (fields.get("reply_markup") or {}).get("inline_keyboard", [])
+            ],
         }
         sent.append(record)
         return _reply(record)
@@ -94,7 +99,9 @@ async def fail_sends(request: Request) -> JSONResponse:
 async def transcript() -> HTMLResponse:
     rows = "".join(
         f"<tr><td>{item['message_id']}</td><td>{item['chat_id']}</td>"
-        f"<td>{escape(item['received_at'])}</td><td><pre>{escape(item['text'])}</pre></td></tr>"
+        f"<td>{escape(item['received_at'])}</td><td><pre>{escape(item['text'])}</pre>"
+        + "".join(f"[{escape(label)}] " for row in item["buttons"] for label, _ in row)
+        + "</td></tr>"
         for item in sent
     )
     return HTMLResponse(

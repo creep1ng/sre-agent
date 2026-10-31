@@ -1,4 +1,4 @@
-"""E2E phases of the Telegram channel (#766), driven by scripts/run_telegram_e2e.sh.
+"""E2E phases of the Telegram channel (#766, #767), driven by scripts/run_telegram_e2e.sh.
 
 Runs inside the seed container on the compose network: it plays the Telegram users through
 fake-telegram, starts investigations through the real API, reads the outbox with SQL and
@@ -7,6 +7,7 @@ appends every observation to /artifacts/telegram-e2e.json. Any failed check exit
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -202,8 +203,8 @@ def unlinked(incident_id: str) -> None:
         "unlinked",
         {"links_before": before, "unlink": removed, "links_after": after, "run_id": run_id},
         {
-            "links lists the operator chat without codes": re.fullmatch(
-                rf"{OPERATOR} linked \S+", before
+            "links lists the operator chat and its human without codes": re.fullmatch(
+                rf"{OPERATOR} linked \S+ as demo-human", before
             )
             is not None,
             "unlink revokes the operator chat": removed == f"chat {OPERATOR} unlinked",
@@ -216,8 +217,123 @@ def unlinked(incident_id: str) -> None:
     )
 
 
+# #767: four mitigation proposals for the broken sre-checkout deploy, one per journey.
+JOURNEYS = ("approve", "reject", "console", "unlinked")
+PROPOSALS = Path("/artifacts/proposals.json")
+TOKEN = re.compile(r"^[ar]:[0-9a-f]{32}$")
+
+
+async def _propose(stamp: str) -> dict[str, dict[str, str]]:
+    sys.path.insert(0, "/app/src")
+    from sre_agent.application import INCIDENT_WORKFLOW_PATH
+    from sre_agent.incident.runtime import ActorReference, IncidentCommand, IncidentRuntime
+    from sre_agent.incident.workflow import load_incident_workflow
+    from sre_agent.persistence.database import Database
+    from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
+
+    database, now = Database(os.environ["DATABASE_URL"]), datetime.now().astimezone()
+    runtime = IncidentRuntime(
+        load_incident_workflow(INCIDENT_WORKFLOW_PATH),
+        lambda: PostgresIncidentUnitOfWork(database),
+    )
+    alert = {"alert_id": f"alt-767-{stamp}", "service": "sre-checkout", "severity": "sev2"}
+    alert |= {"status": "triaged", "observed_at": "2026-10-31T10:05:00Z"}
+    alert |= {"summary": "Checkout 5xx above 5 %.", "source": "grafana-alerting"}
+    evidence = [{"evidence_id": "ev_767", "summary": "sre-checkout 5xx at 12 % since 10:01."}]
+    hypothesis = {"hypothesis_id": "hyp_767", "supporting_evidence": ["ev_767"]}
+    hypothesis["statement"] = "El despliegue v2.4.1 de sre-checkout rompió el pago."
+    proposals = {}
+    try:
+        for journey in JOURNEYS:
+            incident_id, run_id = f"inc-767-{journey}-{stamp}", f"run_767{journey[:4]}{stamp}"
+            state = {"workflow_id": "incident-response", "workflow_version": "1.0.0"}
+            state |= {"state": "active", "severity": "sev2", "impact": "Checkout falla."}
+            state |= {"alert": alert, "hypotheses": [], "evidence": [], "approvals": []}
+            state |= {"mitigation_strategy": None, "postmortem": None}
+            mitigation = {"mitigation_id": f"mit_767{journey}", "approval_status": "pending"}
+            mitigation |= {"description": "Volver sre-checkout a la versión anterior, v2.4.0."}
+            mitigation |= {"risk": "low", "operation": "deployment.rollback"}
+            mitigation |= {"based_on_hypothesis": "hyp_767"}
+            async with PostgresIncidentUnitOfWork(database) as work:
+                state["updated_at"] = now.isoformat()
+                await work.incidents.add(incident_id, state, now=now)
+                run = {"workflow_version": "1.0.0", "current_state": "active", "status": "running"}
+                await work.runs.add(run_id, incident_id, run, now=now)
+            agent = ActorReference(principal_id="incident-harness")
+            hypothesize = {"hypotheses": [hypothesis], "evidence": evidence}
+            steps = (
+                ("start_investigation", "system", None, {}),
+                ("continue_investigation", "agent", "continue_investigation",
+                 {"remaining_step_budget": 2, "incident_patch": hypothesize}),
+                ("propose_mitigation", "agent", "propose_mitigation",
+                 {"incident_patch": {"mitigation_strategy": mitigation, "evidence": evidence}}),
+            )  # fmt: skip
+            for step, actor, outcome, inputs in steps:
+                await runtime.execute(
+                    IncidentCommand(
+                        f"e2e-767-{step}-{run_id}", incident_id, run_id, step, actor,
+                        actor_reference=agent if outcome else None, outcome=outcome,
+                        inputs=inputs or None,
+                    )
+                )  # fmt: skip
+            proposals[journey] = {"incident_id": incident_id, "run_id": run_id}
+    finally:
+        await database.dispose()
+    return proposals
+
+
+def proposals(stamp: str) -> None:
+    sql(
+        "INSERT INTO incident.change_events (change_id, source, external_id, service, kind, "
+        "status, version, occurred_at, recorded_at, recorded_by) VALUES (%s, 'e2e', %s, "
+        "'sre-checkout', 'deploy', 'succeeded', 'v2.4.1', '2026-10-31T10:00:00Z', now(), "
+        "'telegram-e2e') RETURNING change_id",
+        f"chg_767_{stamp}",
+        f"deploy-{stamp}",
+    )
+    created = asyncio.run(_propose(stamp))
+    PROPOSALS.write_text(json.dumps(created))
+    messages = wait_for(lambda: len(prompts()) == len(JOURNEYS) and prompts())
+    buttons = [[label for label, _ in m["buttons"][0]] for m in messages]
+    data = [d for m in messages for _, d in m["buttons"][0]]
+    marked = [m for m in sent() if "🟠" in m["text"]]
+    record(
+        "proposals",
+        {"proposals": created, "messages": messages},
+        {
+            "one decision message per proposal reaches the operator chat": sorted(
+                m["text"].splitlines()[0] for m in messages
+            )
+            == sorted(f"🟠 Decisión pendiente: {p['incident_id']}" for p in created.values()),
+            "it names service, cause, suspect change, proposal and risk": all(
+                all(
+                    part in m["text"]
+                    for part in (
+                        "Servicio: sre-checkout",
+                        "Causa: El despliegue v2.4.1",
+                        "Cambio sospechoso: despliegue v2.4.1",
+                        "Propuesta: Volver sre-checkout a la versión anterior",
+                        "Riesgo: bajo",
+                        "Detalle: operación del catálogo deployment.rollback",
+                    )
+                )
+                for m in messages
+            ),
+            "each offers Aprobar and Rechazar": buttons == [["Aprobar", "Rechazar"]] * 4,
+            "the callback data is opaque": all(
+                TOKEN.fullmatch(d) and "inc-" not in d and "run_" not in d for d in data
+            ),
+            "only decision messages carry the decision marker": marked == messages,
+        },
+    )
+
+
+def prompts(chat_id: int = OPERATOR) -> list[dict[str, Any]]:
+    return [m for m in sent(chat_id) if m["text"].startswith("🟠")]
+
+
 if __name__ == "__main__":
     phase, *arguments = sys.argv[1:]
     phases = {"linking": linking, "dispatch": dispatch, "pending": pending}
-    phases |= {"delivered": delivered, "unlinked": unlinked}
+    phases |= {"delivered": delivered, "unlinked": unlinked, "proposals": proposals}
     phases[phase](*arguments)
