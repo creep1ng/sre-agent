@@ -1,0 +1,6 @@
+# Seeding for the alert-intake runs (#765), as scripts/run_real_journeys.sh does it: the seed image
+# has no scripts/ and the compose seed service has no audit key.
+services:
+  seed:
+    volumes: ["./scripts:/app/scripts:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
