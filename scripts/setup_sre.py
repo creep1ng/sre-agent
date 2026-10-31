@@ -140,6 +140,12 @@ def setup(path, stop=False):
         layer["services"]["api"]["environment"]["OPENROUTER_API_KEY"] = (
             "${OPENROUTER_API_KEY:?required}"
         )
+        # Consumption limits price each call from the endpoint catalog, which reads
+        # with its own management key; without it an active limit fails closed.
+        if config.get("OPENROUTER_MANAGEMENT_API_KEY"):
+            layer["services"]["api"]["environment"]["OPENROUTER_MANAGEMENT_API_KEY"] = (
+                "${OPENROUTER_MANAGEMENT_API_KEY:?required}"
+            )
     for network, setting in (
         ("runtime", "SRE_RUNTIME_SUBNET"),
         ("mcp-consumer", "SRE_CONSUMER_SUBNET"),

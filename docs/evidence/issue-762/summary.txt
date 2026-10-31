@@ -1,0 +1,19 @@
+executor             PASS rc=0 [1 passed] 114s
+executor-socket-down PASS rc=0 [1 passed] 12s
+executor-journal-tail PASS rc=0 [1 passed] 40s
+executor-journal-damaged PASS rc=0 [1 passed] 11s
+executor-journal-disk-full PASS rc=0 [1 passed] 11s
+executor-journal-freed PASS rc=0 [1 passed] 22s
+restarts=0 state=running
+# disk full (executor-journal-disk-full.journal)
+after the failed append: size=3996 ends_with_newline=True
+reloaded: problem=None records=1
+# tmpfs short write, same 64 KiB setup
+short write returned 100 of 400
+then No space left on device
+# journal volume mounted :ro
+readiness 503 {"status":"unavailable","dependency":"journal","reason":"the journal cannot be written: /var/lib/deploy-executor is not writable"}
+deploy-executor-1  | deploy-executor journal /var/lib/deploy-executor/executions.jsonl: the journal cannot be written: /var/lib/deploy-executor is not writable
+restarts=0 state=running
+# a rollback intent cut 30 bytes short: GET /v1/executions entry
+[{'status': 409, 'error': {'code': 'execution_unknown', 'message': "the journal's last line was cut off; this may have run"}, 'execution_id': 'exe_1', 'operation': 'deployment.rollback', 'service': 'probe', 'parameters': {'to_tag': '1.0.0'}, 'recovered_at': '2026-10-30T13:25:33.061+00:00'}]

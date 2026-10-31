@@ -29,6 +29,8 @@ from sre_agent.incident.runtime import (
 )
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
+    UNMEASURED,
+    CollectedEvidence,
     Conclude,
     IncidentContext,
     InvestigationRequest,
@@ -41,6 +43,8 @@ from sre_agent.investigator.contract import (
 )
 from sre_agent.investigator.loop import investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
+from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemoryRepository
+from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
 from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
@@ -59,12 +63,16 @@ class InvestigationRunDispatcher:
         *,
         http: Any = None,
         language: OutputLanguage = "es",
+        tool_timeout_seconds: float = 30.0,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language = language
         self.gateway_settings = gateway_settings
+        self.limits = Limits(tool_timeout_seconds=tool_timeout_seconds)
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
+        # Run notes for its outcome receipt, such as memory_recall_unavailable (#773).
+        self._notes: dict[str, list[str]] = {}
 
     async def after_start(self, started: TransitionResult) -> None:
         # A run opens with start_investigation, or with continue_investigation when a human
@@ -163,6 +171,7 @@ class InvestigationRunDispatcher:
                     reason_code="investigator_failed",
                 )
             finally:
+                self._notes.pop(run_id, None)
                 await work.release_run_dispatch(incident_id, run_id)
 
     async def _configured_agent(self) -> PrincipalContext | None:
@@ -224,10 +233,14 @@ class InvestigationRunDispatcher:
         # A cited hypothesis with steps left is recorded through continue_investigation and
         # the run goes on with the remaining budget, so the agent can still reach the
         # evidence_sufficiency decision and propose a mitigation for that hypothesis.
+        tool_timeout = self.limits.tool_timeout_seconds
         model_timeout = self.gateway_settings.timeout_seconds
-        limits, offset = Limits(gateway_timeout_seconds=model_timeout), 0
+        limits = Limits(gateway_timeout_seconds=model_timeout, tool_timeout_seconds=tool_timeout)
+        offset = 0
         run_mcp_ids: list[UUID] = []
+        recalled = await self._recall(run_id, context, view.incident_state)
         while True:
+            known = {item.evidence_id for item in context.evidence}
             try:
                 result = await investigate(
                     InvestigationRequest(
@@ -241,7 +254,9 @@ class InvestigationRunDispatcher:
                     self.evidence,
                     limits,
                     language=self.language,
+                    recalled=[item for item in recalled if item.evidence_id not in known],
                 )
+                result = _cited_memories_only(result, recalled)
             except Exception:
                 await self._finish(
                     work,
@@ -286,7 +301,9 @@ class InvestigationRunDispatcher:
                 return
             offset += len(result.turns)
             limits = Limits(
-                max_steps=result.remaining_step_budget, gateway_timeout_seconds=model_timeout
+                max_steps=result.remaining_step_budget,
+                gateway_timeout_seconds=model_timeout,
+                tool_timeout_seconds=tool_timeout,
             )
 
         all_request_ids = _unique_ids(request_ids)
@@ -329,11 +346,7 @@ class InvestigationRunDispatcher:
                 run_id,
                 actor_reference,
                 status="unknown",
-                # A tool that did not answer is a different cause than the model provider (#705).
-                reason_code="investigation_tool_unavailable"
-                if result.status == "upstream_unavailable"
-                and (result.detail or "").startswith("tool failed:")
-                else f"investigation_{result.status}",
+                reason_code=_ended_reason(result),
                 request_ids=all_request_ids,
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
@@ -382,6 +395,44 @@ class InvestigationRunDispatcher:
                 result_status=result.status,
                 contexts=contexts,
             )
+
+    async def _recall(
+        self, run_id: str, context: IncidentContext, state: Mapping[str, Any]
+    ) -> list[CollectedEvidence]:
+        """Closed incidents of this service (#773), each linked to its postmortem.
+
+        Memory is advisory: when it cannot be read, the investigation goes on without it and
+        the run's outcome receipt notes memory_recall_unavailable.
+        """
+        alert = state.get("alert")
+        origin = alert.get("origin") if isinstance(alert, Mapping) else None
+        signal = origin.get("signal") if isinstance(origin, Mapping) else None
+        try:
+            async with self.sessions() as session:
+                found = await PostgresIncidentMemoryRepository(session).recall(
+                    context.alert.service,
+                    signal if isinstance(signal, str) else None,
+                    context.alert.summary,
+                    context.incident_id,
+                )
+        except Exception as error:
+            logger.warning(
+                "incident memory recall unavailable for run %s: %s", run_id, type(error).__name__
+            )
+            self._notes[run_id] = ["memory_recall_unavailable"]
+            return []
+        return [
+            CollectedEvidence(
+                evidence_id=f"ev_{memory.memory_id}",
+                source=MEMORY_SOURCE,
+                tool="memory.recall",
+                datasource_uid=None,
+                query=memory.source_record,
+                summary=memory.content[:RECALL_CONTENT],
+                collected_at=memory.indexed_at,
+            )
+            for memory in found
+        ]
 
     async def _continue(
         self,
@@ -602,6 +653,9 @@ class InvestigationRunDispatcher:
                     "summary",
                     "collected_at",
                     "request_id",
+                    "empty",
+                    "verdict",
+                    "finding",
                 },
             )
             if document["evidence_id"] not in known:
@@ -720,9 +774,8 @@ class InvestigationRunDispatcher:
             run_id=run_id,
         )
 
-    @classmethod
     def _receipt_event(
-        cls,
+        self,
         incident_id: str,
         run_id: str,
         actor_reference: ActorReference | None,
@@ -754,6 +807,8 @@ class InvestigationRunDispatcher:
             receipt["diagnostic"] = dict(diagnostic)
         if agent_principal_id is not None:
             receipt["agent_principal_id"] = agent_principal_id
+        if phase == "outcome" and self._notes.get(run_id):
+            receipt["notes"] = self._notes[run_id]
         return EventDraft(
             event_id=f"evt_{token_hex(8)}",
             kind="dispatch_receipt",
@@ -848,6 +903,9 @@ class InvestigationRunDispatcher:
                         "time_window": item.time_window,
                         "summary": item.summary,
                         "request_id": str(item.request_id) if item.request_id else None,
+                        "empty": item.empty,
+                        "verdict": item.verdict,
+                        "finding": item.finding,
                     }
                     for item in result.evidence
                 ],
@@ -878,5 +936,28 @@ def _terminated_reason(reason_code: str, result_status: str | None) -> str:
     return "needs_human"
 
 
+def _cited_memories_only(
+    result: InvestigationResult, recalled: Sequence[CollectedEvidence]
+) -> InvestigationResult:
+    """A recalled memory becomes evidence of this incident only when the outcome cites it."""
+    cited = set(getattr(result.outcome, "supporting_evidence", ()))
+    memories = {item.evidence_id for item in recalled} - cited
+    evidence = [item for item in result.evidence if item.evidence_id not in memories]
+    return result.model_copy(update={"evidence": evidence})
+
+
 def _unique_ids(values: Sequence[UUID]) -> list[UUID]:
     return list(dict.fromkeys(values))
+
+
+def _ended_reason(result: InvestigationResult) -> str:
+    """The receipt's reason; a hypothesis rejected for citing no measured data says so (#760)."""
+    if result.status == "invalid_output" and (result.detail or "").startswith(UNMEASURED):
+        return "investigation_no_measured_evidence"
+    # A tool held past INVESTIGATOR_TOOL_TIMEOUT_SECONDS names the timeout (#719); any other tool
+    # that did not answer is a cause distinct from the model provider (#705).
+    if result.failure_diagnostic is not None and result.failure_diagnostic.stage == "tool_timeout":
+        return "tool_timeout"
+    if result.status == "upstream_unavailable" and (result.detail or "").startswith("tool failed:"):
+        return "investigation_tool_unavailable"
+    return f"investigation_{result.status}"

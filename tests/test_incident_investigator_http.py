@@ -1603,6 +1603,9 @@ def test_final_turn_hypothesis_is_persisted_without_an_unavailable_transition() 
             "time_window": persisted["time_window"],
             "summary": persisted["summary"],
             "request_id": persisted["request_id"],
+            "empty": persisted["empty"],
+            "verdict": persisted["verdict"],
+            "finding": persisted["finding"],
         }
     assert [
         event.get("transition_id") for event in event_payloads if event.get("transition_id")

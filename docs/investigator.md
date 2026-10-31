@@ -36,13 +36,32 @@ The investigator's internal result status describes the bounded loop:
 | `upstream_unavailable` | A gateway or tool call was unavailable, timed out, or returned a retryable error |
 | `max_steps` | Six turns passed without a final answer |
 
-The limits (6 steps, 10 s per tool) are fixed in the change's `design.md`. A gateway call
-follows the provider timeout: `OPENROUTER_TIMEOUT_SECONDS` + 15 s, or 2 ×
-`OPENROUTER_TIMEOUT_SECONDS` + 15 s when `OPENROUTER_MANAGEMENT_API_KEY` configures the endpoint
-catalog (admission may fetch it before the provider call), at most 180 s. With the demo's 60 s
-that is 75 s, or 135 s with the catalog, so the run waits for a slow answer the gateway records
-and charges. A timeout, network error, or 5xx is not automatically retried: the remote
-call may have completed even when its response was lost.
+The step limit (6 steps) is fixed in the change's `design.md`; the per-tool limit is
+`INVESTIGATOR_TOOL_TIMEOUT_SECONDS` (below). A gateway call follows the provider timeout:
+`OPENROUTER_TIMEOUT_SECONDS` + 15 s, or 2 × `OPENROUTER_TIMEOUT_SECONDS` + 15 s when
+`OPENROUTER_MANAGEMENT_API_KEY` configures the endpoint catalog (admission may fetch it before the
+provider call), at most 180 s. With the demo's 60 s that is 75 s, or 135 s with the catalog, so
+the run waits for a slow answer the gateway records and charges. A timeout, network error, or
+5xx is not automatically retried: the remote call may have completed even when its response
+was lost. The one exception is the gateway's own retry of a provider 503 (below).
+
+### Provider 503 and tool timeout
+
+Issue #719, from the 2026-10-19 demo (two runs lost to a provider 503, one to an Elasticsearch
+timeout). Failure modes, written before the code:
+
+| Scenario | Expected |
+| --- | --- |
+| The provider answers HTTP 503 to a model call within 5 s, reporting no tokens or cost | The gateway waits 1 s and sends it once more, with only the time left of `OPENROUTER_TIMEOUT_SECONDS`, so the whole call never outlasts it (30 s by default, under the investigator's gateway timeout above). The request is not streamed, so such a 503 carries no output and no charge. The call keeps one reservation, settled once at the second answer's usage |
+| The 503 took 5 s or more, or reports tokens or cost | Not retried: the provider may have worked on the request |
+| The provider answers 503 twice | No third attempt: the gateway answers 503 `upstream_unavailable`, audited, and the run ends `upstream_unavailable` |
+| The provider times out, drops the connection or answers 429, 500, 502 or 529 | Never retried: the provider may have accepted the request, so the outcome is ambiguous |
+| The gateway answers 503 after the provider answered (audit or settlement) | Never retried by the investigator: the call was accepted and audited |
+| A tool does not answer within `INVESTIGATOR_TOOL_TIMEOUT_SECONDS` | The run ends `upstream_unavailable` with the receipt's `reason_code: tool_timeout` and the diagnostic stage `tool_timeout` |
+
+`INVESTIGATOR_TOOL_TIMEOUT_SECONDS` (default `30`, greater than 0 and at most 30) bounds each MCP
+tool call the investigator makes. The cap is the gateway's own MCP transport timeout
+(`MCP_TIMEOUT_SECONDS`, 30 s). Change it in `.env` and recreate `api`.
 
 The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
 before a governed call, followed by one terminal `success`, `confirmed_failure`, or
@@ -112,6 +131,36 @@ share a run-scoped PostgreSQL transaction lock. A transition emitted by an inves
 must still see that dispatch's pending intent before it can update incident state, so a
 late provider response cannot replace a terminal `unknown` receipt.
 
+## Evidence verdicts
+
+Each piece of evidence recorded with a hypothesis carries a verdict on it (issue #707):
+`supports`, `contradicts` or `inconclusive`, with a one-line `finding` in the output language.
+The model gives them in `verdicts` of `propose_hypothesis`, keyed by evidence id; a missing or
+invalid verdict is recorded as `inconclusive`, not rejected. The harness, not the model, measures
+whether a tool answered with data: a Prometheus query without series or a log query without
+documents is recorded with `empty: true` and as `inconclusive`, whatever the model says. A
+hypothesis that cites no measured data is invalid output (issue #760): every citation is empty
+evidence, a BoK fragment (`source: bok`), which describes what should happen, not what did, or a
+recalled past incident (`source: incident_memory`, #773), which describes what happened before, not
+now. The
+model is told why and asked again. A second such answer ends the dispatch without a hypothesis, and
+its receipt carries `reason_code: investigation_no_measured_evidence`, shown in the timeline as "no
+cited evidence had measured data". The fields
+are optional in incident-state 1.2.0 and the run context, so earlier documents stay valid. On the
+evidence the current hypothesis cites, the war room shows «Respalda la hipótesis», «Contradice» or
+«No concluyente»; on any empty evidence, «No encontró nada». Reproduce it against the real API,
+with a scripted model and Grafana MCP:
+
+    C="scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml"
+    $C up --build --wait db api web
+    $C run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    $C run --rm -T seed python /e2e/provision_demo.py
+    mkdir -p /tmp/evidence-verdict-e2e  # default artifact dir (EVIDENCE_VERDICT_ARTIFACTS)
+    HOST_UID=$(id -u) HOST_GID=$(id -g) $C --profile verdict-e2e run --rm verdict-e2e
+    $C --profile e2e run --rm --no-deps -u "$(id -u)" -e HOME=/tmp -e EVIDENCE_DIR=/artifacts \
+      -v "$PWD/scripts:/e2e/scripts:ro" -v /tmp/evidence-verdict-e2e:/artifacts \
+      e2e node scripts/capture_evidence_verdict.mjs
+
 ## Skills
 
 A request pins exact Skill versions in `skills` (issue #32). The harness resolves them through
@@ -132,6 +181,16 @@ most and with no cache, so a revoked grant stops the next search. Each fragment 
 exactly that chunk. An empty search is an answer; 401 and 403 end the run as `denied`, and a 5xx,
 network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
 body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
+
+## Recalled incidents
+
+An `investigate` dispatch seeds the run with up to three memories of closed incidents of the
+same service (issue #773, see [incident postmortem](incident-postmortem.md)). Each is evidence
+with `source: incident_memory`, no `datasource_uid`, the source incident's postmortem as `query`
+and its `indexed_at` as `collected_at`. The model may cite them like any other evidence. Only a
+memory the outcome cites is kept in the incident evidence and in the result event's
+`evidence_references`. If recall fails, the run goes on without memories and its outcome receipt
+lists `memory_recall_unavailable` in `notes`.
 
 ## Output language
 
