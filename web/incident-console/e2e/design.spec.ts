@@ -7,8 +7,8 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  */
 
 const SHOTS = "e2e/artifacts/design";
-const AGENT_VIOLET = "rgb(102, 85, 199)";
-const INK = "rgb(30, 39, 73)";
+const AGENT_VIOLET = "rgb(102, 80, 176)";
+const INK = "rgb(20, 26, 51)";
 
 const settle = (page: Page) => page.waitForTimeout(600);
 
