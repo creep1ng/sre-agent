@@ -2,14 +2,14 @@ import { writeFileSync, rmSync } from "node:fs";
 import { expect, type APIRequestContext } from "@playwright/test";
 
 /*
- * The Grafana stand-in of compose.live-triage-e2e.yaml fires each rule unless
- * `$FAULT_DIR/{rule id}` reads `ok`. freshEpisodes ends every open episode and opens one per rule
- * in `firing`, so each live spec starts from untriaged alerts whatever ran before it.
+ * The Grafana stand-in of compose.live-triage-e2e.yaml delivers each rule to intake (#765),
+ * firing unless `$FAULT_DIR/{rule id}` reads `ok`. freshEpisodes ends every open episode and
+ * opens one per rule in `firing`, so each live spec starts from untriaged alerts whatever ran
+ * before it.
  */
 export const RULES = ["checkout-payment-error-rate", "checkout-orders-error-rate"] as const;
 
 interface LiveAlerts {
-  rules: { rule_id: string; state: string }[];
   alerts: { alert_id: string; triage_status: string }[];
 }
 
@@ -26,7 +26,7 @@ export async function freshEpisodes(
     return (await response.json()) as LiveAlerts;
   };
   for (const rule of RULES) writeFileSync(`${dir}/${rule}`, "ok");
-  await expect.poll(async () => (await read()).rules.every((rule) => rule.state === "ok")).toBe(true);
+  await expect.poll(async () => (await read()).alerts.length).toBe(0);
   for (const rule of firing) rmSync(`${dir}/${rule}`, { force: true });
   let fresh: string[] = [];
   await expect
