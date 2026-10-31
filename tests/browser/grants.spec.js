@@ -481,7 +481,7 @@ async function connectWithGrantRoutes(page, postStatus) {
         await route.fulfill({
           status: 409,
           contentType: "application/json",
-          body: JSON.stringify({ error: { code: "idempotency_conflict", message: "Grant already exists." } }),
+          body: JSON.stringify({ error: { code: "grant_conflict", message: "Grant already exists." } }),
         });
       }
       return;

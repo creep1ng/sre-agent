@@ -136,7 +136,9 @@ function describeCreateError(error) {
   // Create 404 names the outcome per the published contract; reads keep reveal-nothing copy.
   if (error?.kind === "not_found")
     return ["Reference not found (404)", "The Principal or Resource is absent or inactive. Nothing was created."];
-  if (error?.kind === "conflict")
+  if (error?.kind === "conflict" && error?.code === "grant_id_conflict")
+    return ["Grant id already used (409)", "A grant with this grant id already exists, active or revoked. Choose a new grant id. Nothing was created."];
+  if (error?.kind === "conflict" && error?.code === "grant_conflict")
     return ["Grant already exists (409 duplicate)", "An active grant already covers this Principal, action and Resource. Nothing was duplicated."];
   if (error?.kind === "api" && error?.code === "validation_error")
     return ["Invalid grant shape (422)", "The grant shape was rejected. Check the highlighted fields. Nothing was created."];

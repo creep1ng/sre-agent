@@ -1,15 +1,25 @@
 """Prepare only explicit demo grants using the existing governed ControlService.
 
 Run in the seed container, after the ordinary and MCP seeds. No provider/MCP
-secret is needed. Revoked or conflicting grants fail closed; this is not a
-second seed nor an authority repair tool. Partial progress is safe to rerun.
+secret is needed. A revoked setup grant is reported as drift and left revoked;
+conflicting grants fail closed. This is not a second seed nor an authority repair
+tool. Partial progress is safe to rerun.
 """
 
 import asyncio
 import os
 import sys
 
-from provision_incident_workflow import CATALOG_BODY, _granted, build_service, provision
+from provision_incident_workflow import (
+    APPROVE_GRANT_BODY,
+    CATALOG_BODY,
+    COMMAND_GRANT_BODY,
+    GRANT_BODY,
+    START_GRANT_BODY,
+    _granted,
+    build_service,
+    provision,
+)
 
 
 def demo_grants():
@@ -83,28 +93,38 @@ async def provision_demo(service, bearer):
         for name in ("status", "owner_id", "source", "source_ref")
     ):
         raise RuntimeError("workflow catalog conflict; retain state and review through domain API")
-    if not all(
-        (
-            existing.catalog_status == 201,
-            existing.grant_status == 201,
-            existing.start_grant_status == 201,
-            existing.command_grant_status == 201,
-            existing.approve_grant_status == 201,
-            existing.run_read_active,
-            existing.run_start_active,
-            existing.run_command_active,
-            existing.run_approve_active,
-        )
-    ):
+    if existing.catalog_status != 201:
         raise RuntimeError("workflow provisioning conflict; inspect existing workflow/grants")
+    for status, active, body in (
+        (existing.grant_status, existing.run_read_active, GRANT_BODY),
+        (existing.start_grant_status, existing.run_start_active, START_GRANT_BODY),
+        (existing.command_grant_status, existing.run_command_active, COMMAND_GRANT_BODY),
+        (existing.approve_grant_status, existing.run_approve_active, APPROVE_GRANT_BODY),
+    ):
+        if not (status == 201 and active) and not await _drifted(service, body):
+            raise RuntimeError("workflow grant conflict: " + body["grant_id"])
     for body in demo_grants():
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
         if response.status_code == 201 and await _granted(service, body):
             continue
-        # 409: the authority exists already. Active is convergence; revoked fails closed.
-        if response.status_code == 409 and await _already_active(service, body):
+        # The authority is active already, maybe under another id: convergence.
+        if await _already_active(service, body) or await _drifted(service, body):
             continue
         raise RuntimeError("demo grant conflict: " + body["grant_id"])
+
+
+async def _drifted(service, body):
+    """An operator revoked this setup grant: report the drift and leave it revoked (#759)."""
+    from sre_agent.persistence.repositories import GrantRepository
+
+    async with service.sessions() as session:
+        persisted = await GrantRepository(session).get(body["grant_id"])
+    if persisted is None or persisted.status != "revoked":
+        return False
+    if await _already_active(service, body):
+        return True
+    print(f"seed drift: grant {body['grant_id']} is revoked; left revoked")
+    return True
 
 
 async def main():
