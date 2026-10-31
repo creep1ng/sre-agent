@@ -17,6 +17,7 @@ const scenario = process.env.LIVE_TRIAGE ?? "";
 const enabled = ["dismiss", "link", "conflict"].includes(scenario) && Boolean(process.env.DEMO_HUMAN_API_KEY);
 const BASE = process.env.BASE_URL ?? "http://127.0.0.1:8080";
 const DIR = `e2e/artifacts/triage-${scenario}`;
+const FAULT_DIR = process.env.FAULT_DIR ?? "";
 
 test.use({ video: "off", trace: "off" });
 
@@ -77,13 +78,9 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
       await expect(page).toHaveURL(/\/incidentes\/inc-[^/]+$/, { timeout: 30_000 });
       destination = page.url().split("/").pop()!;
       await page.goBack();
-      const run = await api.post(`${BASE}/api/v1/incidents/${destination}/runs`, {
-        headers: { "Idempotency-Key": `e2e-703-run-${Date.now().toString(36)}` },
-        data: { workflow_version: "1.0.0", objective: "investigate" },
-      });
-      expect(run.status()).toBe(201);
       // Episode 2: the host ends the failure (`demo_env.py reset`) on need-reset and injects it
-      // again (`demo_env.py fail`) on need-fail; the API then reports a new real alert.
+      // again (`demo_env.py fail`) on need-fail; with FAULT_DIR (compose.live-triage-e2e.yaml)
+      // the runner flips the Grafana stand-in itself. The API then reports a new alert.
       const live = async () =>
         (await (await api.get(`${BASE}/api/v1/alerts`)).json()) as {
           rules: { state: string }[];
@@ -91,9 +88,12 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
         };
       const next = async () => (await live()).alerts.find((alert) => alert.alert_id !== first)?.alert_id ?? "";
       const deadline = Date.now() + 360_000;
+      const fault = (state: string) => FAULT_DIR && writeFileSync(`${FAULT_DIR}/checkout-payment-error-rate`, state);
       writeFileSync(`${DIR}/need-reset`, new Date().toISOString());
+      fault("ok");
       await expect.poll(async () => (await live()).rules[0].state, { timeout: 360_000, intervals: [5_000] }).toBe("ok");
       writeFileSync(`${DIR}/need-fail`, new Date().toISOString());
+      fault("firing");
       await expect.poll(next, { timeout: deadline - Date.now(), intervals: [5_000] }).toMatch(/^alt-/);
       alertId = await next();
       pinned = page.locator(`article[data-alert-id="${alertId}"]`);
@@ -113,11 +113,15 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
     } else {
       await pinned.getByRole("button", { name: "Descartar" }).click();
       await page.getByRole("radio", { name: "Falsa alarma" }).click();
-      // Another tab acts while the popover is open: it bumps the version, or decides first.
+      // Another tab acts while the popover is open: it bumps the version, or decides first. An
+      // untriaged alert and its first open_triage both read version 1, so it opens twice.
       const before = await version(api, alertId);
+      if (scenario === "dismiss") {
+        expect((await command(api, alertId, { operation: "open_triage", expected_version: before })).status()).toBe(200);
+      }
       const raced =
         scenario === "dismiss"
-          ? await command(api, alertId, { operation: "open_triage", expected_version: before })
+          ? await command(api, alertId, { operation: "open_triage", expected_version: await version(api, alertId) })
           : await command(api, alertId, {
               operation: "triage_dismiss",
               expected_version: before,
