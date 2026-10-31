@@ -16,18 +16,24 @@ decision buttons (#767) are out of scope.
    docker compose --profile telegram up -d --wait telegram-gateway
    ```
 
-3. Create a one-time link (15 minutes by default, `--ttl-seconds` from 1 to 86400) and open it
-   from the operator's Telegram account:
+3. Create a one-time link (15 minutes by default, `--ttl-seconds` from 1 to 86400) for the
+   operator's human principal and open it, in a private chat with the bot, from the operator's
+   Telegram account:
 
    ```sh
    docker compose --profile telegram run --rm telegram-gateway \
-     python -m sre_agent.chat.telegram link
+     python -m sre_agent.chat.telegram link --principal demo-human
    ```
 
    Telegram sends `/start <code>`. A valid code links the chat and is spent; a used, expired or
    unknown code is rejected. A chat that is not linked gets one "not linked" reply, once.
+   Only a private chat links: in a group the code is refused and stays unused, because every
+   member would act as one human. The link records the principal (only an active human is
+   accepted) and the Telegram user who opened it, for deciding from the chat (#767). Whoever can
+   run this command already holds the database and the bot token, so naming the principal grants
+   nothing they did not have. Chats linked before #767 have neither and must be linked again.
 
-4. List the linked chats (chat id and link time, no codes) or revoke one; a revoked chat gets no
+4. List the linked chats (chat id, link time and principal, no codes) or revoke one; a revoked chat gets no
    further incident messages, including those still queued. These commands are not audited yet.
 
    ```sh

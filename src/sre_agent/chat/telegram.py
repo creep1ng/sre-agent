@@ -1,7 +1,7 @@
 """Telegram Bot API over long polling: no public URL, works behind NAT (issue #766).
 
     python -m sre_agent.chat.telegram gateway       # answer updates and drain the outbox
-    python -m sre_agent.chat.telegram link [--ttl-seconds N]   # print a one-time link
+    python -m sre_agent.chat.telegram link --principal ID [--ttl-seconds N]  # one-time link
     python -m sre_agent.chat.telegram links | unlink CHAT_ID   # list or revoke linked chats
 
 The bot token travels only in request paths. httpx logs those paths at INFO, so its logger is
@@ -24,6 +24,8 @@ from sre_agent.chat.outbox import ChatStore, DeliveryError
 from sre_agent.persistence.database import Database
 
 logger = logging.getLogger("sre_agent.chat.telegram")
+# An update that fails this many times in a row is skipped, so it cannot hold back later ones.
+MAX_UPDATE_ATTEMPTS = 5
 
 
 class BotApi:
@@ -57,7 +59,7 @@ class BotApi:
 async def _poll(bot: BotApi, store: ChatStore, poll_seconds: int) -> None:
     # Telegram keeps an update until a later getUpdates offset confirms it, so a restart
     # replays unconfirmed updates; `receive` answers each update id at most once.
-    offset = None
+    offset, failures = None, 0
     while True:
         try:
             updates = await bot.call(
@@ -75,14 +77,20 @@ async def _poll(bot: BotApi, store: ChatStore, poll_seconds: int) -> None:
             message = update.get("message") or {}
             try:
                 if isinstance(message.get("text"), str) and "chat" in message:
-                    chat_id = message["chat"]["id"]
-                    await store.receive(update["update_id"], chat_id, message["text"])
+                    chat, user = message["chat"], (message.get("from") or {}).get("id")
+                    private = chat.get("type") == "private"
+                    await store.receive(
+                        update["update_id"], chat["id"], message["text"], private, user
+                    )
             except Exception as error:
-                # Unconfirmed, the update comes back with the next poll.
-                logger.warning("update not stored: %s", type(error).__name__)
-                await asyncio.sleep(2)
-                break
-            offset = update["update_id"] + 1
+                failures += 1
+                if failures < MAX_UPDATE_ATTEMPTS:
+                    # Unconfirmed, the update comes back with the next poll.
+                    logger.warning("update not stored: %s", type(error).__name__)
+                    await asyncio.sleep(2)
+                    break
+                logger.error("update %s skipped: %s", update["update_id"], type(error).__name__)
+            offset, failures = update["update_id"] + 1, 0
 
 
 async def _deliver(bot: BotApi, store: ChatStore, stopping: asyncio.Event) -> None:
@@ -113,12 +121,14 @@ async def gateway(database_url: str, api_url: str, token: str, poll_seconds: int
         await database.dispose()
 
 
-async def link(database_url: str, api_url: str, token: str, ttl: timedelta) -> str:
+async def link(
+    database_url: str, api_url: str, token: str, ttl: timedelta, principal_id: str
+) -> str:
     database = Database(database_url)
     try:
         async with httpx.AsyncClient(base_url=api_url) as http:
             me = await BotApi(http, token).call("getMe")
-        code, expires_at = await ChatStore(database).issue_link_code(ttl)
+        code, expires_at = await ChatStore(database).issue_link_code(ttl, principal_id)
     finally:
         await database.dispose()
     return f"https://t.me/{me['username']}?start={code} (expires {expires_at.isoformat()})"
@@ -134,7 +144,8 @@ async def manage_links(database_url: str, unlink_chat_id: int | None) -> str:
         rows = await store.links()
     finally:
         await database.dispose()
-    return "\n".join(f"{chat_id} linked {at.isoformat()}" for chat_id, at in rows) or "no chats"
+    lines = (f"{chat} linked {at.isoformat()} as {who or 'nobody'}" for chat, at, who in rows)
+    return "\n".join(lines) or "no chats"
 
 
 def main() -> None:
@@ -144,6 +155,8 @@ def main() -> None:
     commands.add_parser("links")
     commands.add_parser("unlink").add_argument("chat_id", type=int)
     link_parser = commands.add_parser("link")
+    # The human the chat decides as (#767): whoever runs this already holds the database.
+    link_parser.add_argument("--principal", required=True, help="an active human principal id")
     link_parser.add_argument(
         "--ttl-seconds", type=int, default=900, choices=range(1, 86401), metavar="1..86400"
     )
@@ -160,7 +173,13 @@ def main() -> None:
     if arguments.command == "link":
         print(
             asyncio.run(
-                link(database_url, api_url, token, timedelta(seconds=arguments.ttl_seconds))
+                link(
+                    database_url,
+                    api_url,
+                    token,
+                    timedelta(seconds=arguments.ttl_seconds),
+                    arguments.principal,
+                )
             )
         )
         return

@@ -70,7 +70,11 @@ async def user_message(request: Request) -> JSONResponse:
     fields = await request.json()
     update = {
         "update_id": state["next_update"],
-        "message": {"chat": {"id": fields["chat_id"]}, "text": fields["text"]},
+        "message": {
+            "chat": {"id": fields["chat_id"], "type": fields.get("chat_type", "private")},
+            "from": {"id": fields.get("from_id", fields["chat_id"])},
+            "text": fields["text"],
+        },
     }
     state["next_update"] += 1
     async with arrived:

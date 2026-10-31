@@ -7,6 +7,7 @@ appends every observation to /artifacts/telegram-e2e.json. Any failed check exit
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -22,6 +23,7 @@ import psycopg
 FAKE, API = "http://fake-telegram:8081", "http://api:8000"
 ARTIFACT = Path("/artifacts/telegram-e2e.json")
 OPERATOR, STRANGER, LATECOMER, EXPIRED = 222, 111, 333, 444
+GROUP = -100767  # a group the operator is in: Telegram reports the operator as the sender
 
 
 def http(method: str, url: str, body: Any = None, headers: dict[str, str] | None = None) -> Any:
@@ -33,8 +35,8 @@ def http(method: str, url: str, body: Any = None, headers: dict[str, str] | None
         return json.load(reply)
 
 
-def say(chat_id: int, text: str) -> None:
-    http("POST", f"{FAKE}/_test/messages", {"chat_id": chat_id, "text": text})
+def say(chat_id: int, text: str, **chat: Any) -> None:
+    http("POST", f"{FAKE}/_test/messages", {"chat_id": chat_id, "text": text} | chat)
 
 
 def sent(chat_id: int | None = None) -> list[dict[str, Any]]:
@@ -82,25 +84,33 @@ def incident_texts(chat_id: int) -> list[str]:
     return [m["text"] for m in sent(chat_id) if "inc-" in m["text"] or "run_" in m["text"]]
 
 
-def linking(code: str, expired_code: str) -> None:
+def linking(code: str, expired_code: str, group_code: str) -> None:
+    say(GROUP, f"/start {group_code}", chat_type="group", from_id=OPERATOR)
     say(STRANGER, "hola, ¿qué incidentes hay?")
     say(STRANGER, "¿hola?")
     say(OPERATOR, f"/start {code}")
     wait_for(lambda: sent(OPERATOR) and sent(STRANGER))
     say(LATECOMER, f"/start {code}")
     say(EXPIRED, f"/start {expired_code}")
-    wait_for(lambda: sent(LATECOMER) and sent(EXPIRED))
-    links = sql("SELECT chat_id FROM incident.chat_links ORDER BY chat_id")
+    wait_for(lambda: sent(LATECOMER) and sent(EXPIRED) and sent(GROUP))
+    links = sql("SELECT chat_id, principal_id, telegram_user_id FROM incident.chat_links")
+    group_code_used = sql(
+        "SELECT used_at FROM incident.chat_link_codes WHERE code_sha256=%s",
+        hashlib.sha256(group_code.encode()).hexdigest(),
+    )
     record(
         "linking",
-        {"replies": sent(), "chat_links": links},
+        {"replies": sent(), "chat_links": links, "group_code": group_code_used},
         {
             "the code links the operator chat": "vinculado" in sent(OPERATOR)[0]["text"],
             "a used code is rejected": "no es válido" in sent(LATECOMER)[0]["text"],
             "an expired code is rejected": "no es válido" in sent(EXPIRED)[0]["text"],
             "an unlinked chat is told to link": "no está vinculado" in sent(STRANGER)[0]["text"],
             "an unlinked chat is told only once": len(sent(STRANGER)) == 1,
-            "only the operator chat is allowed": links == [(OPERATOR,)],
+            "only the operator chat is allowed, as its human and Telegram user": links
+            == [(OPERATOR, "demo-human", OPERATOR)],
+            "a group chat cannot link": "chat privado" in sent(GROUP)[0]["text"],
+            "and its code stays unused": group_code_used == [(None,)],
         },
     )
 
@@ -132,7 +142,7 @@ def dispatch(incident_id: str) -> None:
             "the conclusion follows": messages[1]["text"].startswith("Investigación terminada"),
             "the conclusion gives a readable reason": "Sin conclusión (" not in messages[1]["text"],
             "unlinked chats receive no incident information": not any(
-                incident_texts(chat) for chat in (STRANGER, LATECOMER, EXPIRED)
+                incident_texts(chat) for chat in (STRANGER, LATECOMER, EXPIRED, GROUP)
             ),
         },
     )
@@ -202,8 +212,8 @@ def unlinked(incident_id: str) -> None:
         "unlinked",
         {"links_before": before, "unlink": removed, "links_after": after, "run_id": run_id},
         {
-            "links lists the operator chat without codes": re.fullmatch(
-                rf"{OPERATOR} linked \S+", before
+            "links lists the operator chat and its human without codes": re.fullmatch(
+                rf"{OPERATOR} linked \S+ as demo-human", before
             )
             is not None,
             "unlink revokes the operator chat": removed == f"chat {OPERATOR} unlinked",

@@ -72,39 +72,59 @@ class ChatStore:
     def __init__(self, database: Database) -> None:
         self.database = database
 
-    async def issue_link_code(self, ttl: timedelta) -> tuple[str, datetime]:
+    async def issue_link_code(self, ttl: timedelta, principal_id: str) -> tuple[str, datetime]:
+        """A code that links one chat to `principal_id`: its decisions are that human's (#767)."""
         code, now = token_urlsafe(24), datetime.now(UTC)
         async with self.database.transaction() as session:
+            human = await session.scalar(
+                text("""SELECT 1 FROM principals WHERE principal_id = :principal_id
+                    AND kind = 'human' AND status = 'active'"""),
+                {"principal_id": principal_id},
+            )
+            if human is None:
+                raise ValueError(f"{principal_id} is not an active human principal")
             await session.execute(
-                text("""INSERT INTO incident.chat_link_codes (code_sha256, created_at, expires_at)
-                    VALUES (:digest, :now, :expires_at)"""),
-                {"digest": _digest(code), "now": now, "expires_at": now + ttl},
+                text("""INSERT INTO incident.chat_link_codes
+                    (code_sha256, created_at, expires_at, principal_id)
+                    VALUES (:digest, :now, :expires_at, :principal_id)"""),
+                {"digest": _digest(code), "now": now, "expires_at": now + ttl}
+                | {"principal_id": principal_id},
             )
         return code, now + ttl
 
-    async def receive(self, update_id: int, chat_id: int, message: str) -> None:
+    async def receive(
+        self, update_id: int, chat_id: int, message: str, private: bool, user_id: int | None
+    ) -> None:
         """Answer one incoming message; a replayed update answers nothing new."""
         reply_key = f"update:{update_id}"
         command, _, code = message.strip().partition(" ")
         async with self.database.transaction() as session:
+            if command == "/start" and code and not private:
+                # A group's members would all decide as one human (#767): the code stays unused.
+                await enqueue(
+                    session, chat_id=chat_id, kind="link_private_only", dedup_key=reply_key
+                )
+                return
             if command == "/start" and code:
                 # Used, expired and unknown codes are rejected alike.
-                digest = await session.scalar(
+                used = await session.execute(
                     text("""UPDATE incident.chat_link_codes
                         SET used_at = clock_timestamp(), used_by_chat_id = :chat_id
                         WHERE code_sha256 = :digest AND used_at IS NULL
                           AND expires_at > clock_timestamp()
-                        RETURNING code_sha256"""),
+                        RETURNING code_sha256, principal_id"""),
                     {"chat_id": chat_id, "digest": _digest(code.strip())},
                 )
-                if digest is not None:
+                if (used := used.one_or_none()) is not None:
                     await session.execute(
-                        text("""INSERT INTO incident.chat_links (chat_id, code_sha256, linked_at)
-                            VALUES (:chat_id, :digest, clock_timestamp())
+                        text("""INSERT INTO incident.chat_links
+                            (chat_id, code_sha256, linked_at, principal_id, telegram_user_id)
+                            VALUES (:chat_id, :digest, clock_timestamp(), :principal, :user_id)
                             ON CONFLICT (chat_id) DO NOTHING"""),
-                        {"chat_id": chat_id, "digest": digest},
+                        {"chat_id": chat_id, "digest": used[0], "principal": used[1]}
+                        | {"user_id": user_id},
                     )
-                kind = "link_confirmed" if digest is not None else "link_rejected"
+                kind = "link_confirmed" if used is not None else "link_rejected"
                 await enqueue(session, chat_id=chat_id, kind=kind, dedup_key=reply_key)
                 return
             linked = await session.scalar(
@@ -115,12 +135,13 @@ class ChatStore:
                 # Once per chat, so a stranger cannot fill the queue ahead of the operator.
                 await enqueue(session, chat_id=chat_id, kind="not_linked", dedup_key="not_linked")
 
-    async def links(self) -> list[tuple[int, datetime]]:
+    async def links(self) -> list[tuple[int, datetime, str | None]]:
         async with self.database.transaction() as session:
             rows = await session.execute(
-                text("SELECT chat_id, linked_at FROM incident.chat_links ORDER BY linked_at")
+                text("""SELECT chat_id, linked_at, principal_id FROM incident.chat_links
+                    ORDER BY linked_at""")
             )
-            return [(row.chat_id, row.linked_at) for row in rows]
+            return [(row.chat_id, row.linked_at, row.principal_id) for row in rows]
 
     async def unlink(self, chat_id: int) -> bool:
         """Remove a chat from the allow list and drop what is still queued for it."""
@@ -287,5 +308,6 @@ RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[str]]
         "Chat vinculado. Aquí recibirás el acuse y la conclusión de cada investigación."
     ),
     "link_rejected": _fixed("Este enlace no es válido, ya se usó o caducó. Pide uno nuevo."),
+    "link_private_only": _fixed("Solo se vincula un chat privado con el bot. Abre el enlace ahí."),
     "not_linked": _fixed("Este chat no está vinculado. Ábrelo con un enlace de vinculación."),
 }
