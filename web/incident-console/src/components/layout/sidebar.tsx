@@ -1,9 +1,10 @@
-import { ExternalLinkIcon, InboxIcon, LandmarkIcon, LayersIcon, SearchIcon } from "lucide-react";
+import { ExternalLinkIcon, InboxIcon, LandmarkIcon, SearchIcon, SirenIcon } from "lucide-react";
 import { NavLink } from "react-router";
 import { AgentAvatar, Logo } from "@/components/brand";
 import { StatusDot } from "@/components/badges";
 import { Kbd } from "@/components/ui/kbd";
 import { useT } from "@/i18n";
+import { appMode } from "@/lib/mode";
 import type { InboxModel } from "@/lib/selectors";
 import { incidentStatus } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -28,7 +29,7 @@ function NavItem({
       end={to === "/"}
       className={({ isActive }) =>
         cn(
-          "group flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
+          "group flex h-10 items-center gap-3 rounded-lg px-3 text-base font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
           isActive && "bg-sidebar-accent text-foreground shadow-[inset_3px_0_0_var(--primary)]",
         )
       }
@@ -102,7 +103,10 @@ export function Sidebar({
 
       <nav className="flex flex-col gap-1" aria-label={t("nav.main")}>
         <NavItem to="/" icon={InboxIcon} label={t("nav.inbox")} count={inbox.attention} highlight />
-        <NavItem to="/incidentes" icon={LayersIcon} label={t("nav.incidents")} count={inbox.active.length} />
+        {/* The incident list still reads the simulator only, so live mode leaves it out. */}
+        {appMode === "mock" && (
+          <NavItem to="/incidentes" icon={SirenIcon} label={t("nav.incidents")} count={inbox.active.length} />
+        )}
       </nav>
 
       {/* The administration console still lives outside the new console: one link, a new tab. */}
@@ -112,7 +116,7 @@ export function Sidebar({
             href="/public/admin/principals.html"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
+            className="flex h-10 items-center gap-3 rounded-lg px-3 text-base font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
           >
             <LandmarkIcon className="size-4" aria-hidden="true" />
             <span className="flex-1">{t("nav.governance")}</span>

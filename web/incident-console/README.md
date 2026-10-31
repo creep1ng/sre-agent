@@ -190,6 +190,11 @@ To translate a feature, add one namespace instead of editing shared files:
 
 Both files are picked up by `import.meta.glob`; nothing else needs registering.
 
+## Navigation (RC-2, #870)
+
+Sections read in the text face with one lucide icon each. Live mode lists only screens backed by
+the API; the incident list and its search entries stay in `?mock` until they read it.
+
 ## Stack
 
 Vite 8, React 19, TypeScript 7, Tailwind CSS 4, shadcn/ui on Radix, lucide icons, sonner,
