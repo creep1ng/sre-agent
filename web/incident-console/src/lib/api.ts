@@ -48,6 +48,8 @@ export interface DeclareInput {
 export interface EligibleIncident {
   incident_id: string;
   state: string;
+  service?: string;
+  summary?: string;
 }
 
 function headers(token: string): Record<string, string> {
@@ -190,18 +192,17 @@ export async function declareAlert(
   return sent.result.kind === "ok" && !sent.result.incidentId ? { ...sent, result: { kind: "transient" } } : sent;
 }
 
-export async function dismissAlert(token: string, alertId: string, reason: string, version: number) {
-  return (await sendCommand(token, alertId, { operation: "triage_dismiss", reason }, newAttempt(version))).result;
+export function dismissAlert(token: string, alertId: string, reason: string, attempt: TriageAttempt) {
+  return sendCommand(token, alertId, { operation: "triage_dismiss", reason }, attempt);
 }
 
-export async function linkAlert(token: string, alertId: string, incidentId: string, version: number) {
-  const sent = await sendCommand(
+export function linkAlert(token: string, alertId: string, incidentId: string, attempt: TriageAttempt) {
+  return sendCommand(
     token,
     alertId,
     { operation: "triage_link", reason: "Vinculada desde la bandeja de la consola de incidentes.", target_incident_id: incidentId },
-    newAttempt(version),
+    attempt,
   );
-  return sent.result;
 }
 
 /** Same-origin read of the real alert list. It never surfaces server codes or details. */
