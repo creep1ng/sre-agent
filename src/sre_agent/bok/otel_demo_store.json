@@ -29,7 +29,7 @@
         {
           "section_id": "other-callers",
           "chunk_index": 0,
-          "content": "recommendation calls product-catalog (PRODUCT_CATALOG_ADDR). shipping calls quote (QUOTE_ADDR). cart stores carts in valkey-cart (VALKEY_ADDR). ad, currency, email, payment and product-catalog call no other store service. Source: compose.yaml services recommendation (line 587), shipping (line 629), cart (line 79)."
+          "content": "recommendation calls product-catalog (PRODUCT_CATALOG_ADDR). shipping calls quote (QUOTE_ADDR). cart stores carts in valkey-cart (VALKEY_ADDR). product-catalog reads the catalog from the PostgreSQL database astronomy-db (DB_CONNECTION_STRING), so an astronomy-db outage fails product-catalog. ad, currency, email, payment and product-catalog call no other store service. Source: compose.yaml services recommendation (line 587), shipping (line 629), cart (line 79), product-catalog (lines 503, 529, 541), astronomy-db (line 770)."
         }
       ]
     },
@@ -58,7 +58,7 @@
         {
           "section_id": "payment-failure",
           "chunk_index": 0,
-          "content": "The flagd feature flag paymentFailure is read by payment on every charge. Its value is a fraction (variants 10%, 25%, 50%, 75%, 90%, 100%); payment fails that share of charges with 'Payment request failed. Invalid token. demo.user_context.loyalty_level=gold', logs it as a warning and sets its span to error. The error propagates to checkout, whose PlaceOrder fails with 'failed to charge card'. Symptom: errors in payment and in checkout together, unlike paymentUnreachable. Source: src/payment/charge.js (lines 39-47), src/payment/index.js (lines 24-28)."
+          "content": "The flagd feature flag paymentFailure is read by payment on every charge. Its value is a fraction (variants 10%, 25%, 50%, 75%, 90% and 100%; the variant named 90% is 0.95); payment fails that share of charges with 'Payment request failed. Invalid token. demo.user_context.loyalty_level=gold', logs it as a warning and sets its span to error. The error propagates to checkout, whose PlaceOrder fails with 'failed to charge card'. Symptom: errors in payment and in checkout together, unlike paymentUnreachable. Source: src/payment/charge.js (lines 39-47), src/payment/index.js (lines 24-28), src/flagd/demo.flagd.json."
         }
       ]
     },
@@ -70,7 +70,7 @@
         {
           "section_id": "flagd",
           "chunk_index": 0,
-          "content": "The store's failures are flagd feature flags: services read each flag from flagd at request time, and every failure flag defaults to off in src/flagd/demo.flagd.json. Restarting the failing service reads the same flag value again, so it does not end the failure; setting the flag back to off does. In this repository's local demo the served file is .demo-state/flagd/demo.flagd.json, and scripts/demo_env.py reset restores the baseline and restarts flagd."
+          "content": "The store's failures are flagd feature flags: services read each flag from flagd at request time, and every failure flag defaults to off in src/flagd/demo.flagd.json. Restarting the failing service reads the same flag value again, so it does not end the failure; setting the flag back to off does. Local to this repository, not upstream: its local demo serves .demo-state/flagd/demo.flagd.json, and scripts/demo_env.py reset restores the baseline and restarts flagd."
         }
       ]
     },
@@ -82,7 +82,7 @@
         {
           "section_id": "cart-failure",
           "chunk_index": 0,
-          "content": "The flagd feature flag cartFailure is read by cart when it empties a cart. Its value is a fraction (10% to 100%); that share of EmptyCart calls goes to a Valkey store at badhost:1234 and fails. checkout empties the cart after placing an order. Source: src/cart/src/services/CartService.cs (lines 82-90), src/cart/src/Program.cs (line 60)."
+          "content": "The flagd feature flag cartFailure is read by cart when it empties a cart. Its value is a fraction (10% to 100%); that share of EmptyCart calls goes to a Valkey store at badhost:1234 and fails. checkout empties the cart after placing an order but ignores the EmptyCart error, so cartFailure does not fail orders; frontend's empty-cart request (DELETE /api/cart) does fail. Source: src/cart/src/services/CartService.cs (lines 82-90), src/cart/src/Program.cs (line 60), src/checkout/main.go (line 373), src/frontend/pages/api/cart.ts (lines 43-45)."
         },
         {
           "section_id": "failed-readiness-probe",
@@ -147,7 +147,7 @@
         {
           "section_id": "intl-shipping-slowdown",
           "chunk_index": 0,
-          "content": "The flagd feature flag intlShippingSlowdown is read by shipping for addresses outside the United States. Its value is seconds (5 or 10); shipping sleeps that long and logs 'Delaying international shipment due to intlShippingSlowdown feature flag'. Symptom: latency, not errors, in shipping and in its callers checkout and frontend. Source: shipping_service.rs (lines 65-93)."
+          "content": "The flagd feature flag intlShippingSlowdown is read by shipping only in ShipOrder (/ship-order), for addresses outside the United States, never in GetQuote (/get-quote). Its value is seconds (5 or 10); shipping sleeps that long and logs 'Delaying international shipment due to intlShippingSlowdown feature flag'. Only checkout calls ShipOrder, while frontend calls only GetQuote. Symptom: latency, not errors, in checkout PlaceOrder and through it in frontend's place-order request (/api/checkout), not in shipping quotes. Source: shipping_service.rs ship_order (lines 49-93, flag at 67, sleep at 92), src/checkout/main.go (lines 366, 619), src/frontend/gateways/http/Shipping.gateway.ts (line 31)."
         }
       ]
     },
