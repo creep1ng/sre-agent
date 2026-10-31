@@ -1,0 +1,122 @@
+[
+  {
+    "step": "rollback 1.0.0",
+    "at": "2026-10-30T06:37:54.205Z",
+    "status": 200,
+    "body": {
+      "execution_id": "exe_c5e7fcab6b2b9a36",
+      "operation": "deployment.rollback",
+      "service": "probe",
+      "parameters": {
+        "to_tag": "1.0.0"
+      },
+      "outcome": "rolled_back",
+      "replayed": false,
+      "before": {
+        "container_id": "3c8d78de6e950d982520825c77265a33014e329661cc952b55006c06e44786e1",
+        "name": "t3-fc43eb93-wt-814bc2b44b5e-probe-1",
+        "image": "demo/probe:1.1.0",
+        "state": "running",
+        "health": "healthy",
+        "started_at": "2026-10-30T06:37:31.514488453Z"
+      },
+      "after": {
+        "container_id": "6de543700d0d38c06b48d90e23e35a5819371f998d0cc1f94e61c2bfaa1854ff",
+        "name": "t3-fc43eb93-wt-814bc2b44b5e-probe-1",
+        "image": "demo/probe:1.0.0",
+        "state": "running",
+        "health": "healthy",
+        "started_at": "2026-10-30T06:37:51.198721994Z"
+      },
+      "executed_at": "2026-10-30T06:37:39.995Z",
+      "duration_ms": 14201
+    }
+  },
+  {
+    "step": "probe history",
+    "at": "2026-10-30T06:37:54.640Z",
+    "changes": [
+      {
+        "change_id": "chg_c4bff72296882857",
+        "source": "deploy-executor",
+        "external_id": "exe_c5e7fcab6b2b9a36",
+        "service": "probe",
+        "kind": "rollback",
+        "status": "succeeded",
+        "version": "demo/probe:1.0.0",
+        "commit_sha": null,
+        "ref": null,
+        "author": null,
+        "url": null,
+        "occurred_at": "2026-10-30T06:37:54Z",
+        "recorded_at": "2026-10-30T06:37:54Z",
+        "recorded_by": "deploy-executor"
+      },
+      {
+        "change_id": "chg_c45e7ecee74f5c07",
+        "source": "deploy-executor",
+        "external_id": "exe_588406603bd08b08",
+        "service": "probe",
+        "kind": "rollback",
+        "status": "succeeded",
+        "version": "demo/probe:1.1.0",
+        "commit_sha": null,
+        "ref": null,
+        "author": null,
+        "url": null,
+        "occurred_at": "2026-10-30T06:37:34Z",
+        "recorded_at": "2026-10-30T06:37:34Z",
+        "recorded_by": "deploy-executor"
+      },
+      {
+        "change_id": "chg_95387bdd7b811b42",
+        "source": "deploy-executor",
+        "external_id": "exe_56b75f715f7ecc7d",
+        "service": "probe",
+        "kind": "rollback",
+        "status": "succeeded",
+        "version": "demo/probe:1.0.0",
+        "commit_sha": null,
+        "ref": null,
+        "author": null,
+        "url": null,
+        "occurred_at": "2026-10-30T06:37:06Z",
+        "recorded_at": "2026-10-30T06:37:06Z",
+        "recorded_by": "deploy-executor"
+      }
+    ]
+  },
+  {
+    "step": "rollback 1.1.0",
+    "at": "2026-10-30T06:38:09.744Z",
+    "status": 200,
+    "body": {
+      "execution_id": "exe_bf7752ace05747ec",
+      "operation": "deployment.rollback",
+      "service": "probe",
+      "parameters": {
+        "to_tag": "1.1.0"
+      },
+      "outcome": "rolled_back",
+      "replayed": false,
+      "before": {
+        "container_id": "6de543700d0d38c06b48d90e23e35a5819371f998d0cc1f94e61c2bfaa1854ff",
+        "name": "t3-fc43eb93-wt-814bc2b44b5e-probe-1",
+        "image": "demo/probe:1.0.0",
+        "state": "running",
+        "health": "healthy",
+        "started_at": "2026-10-30T06:37:51.198721994Z"
+      },
+      "after": {
+        "container_id": "48e9604c8f4d9dfd7912d05710ada3907216aa925ebfb85cd7d393220c69900b",
+        "name": "t3-fc43eb93-wt-814bc2b44b5e-probe-1",
+        "image": "demo/probe:1.1.0",
+        "state": "running",
+        "health": "healthy",
+        "started_at": "2026-10-30T06:38:06.762325026Z"
+      },
+      "executed_at": "2026-10-30T06:37:54.945Z",
+      "duration_ms": 14795
+    }
+  }
+]
