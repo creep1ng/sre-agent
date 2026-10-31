@@ -49,10 +49,10 @@ request, so `/` and `/api/` keep working when the console container is absent.
   Screenshots (`screens/`, `design/`, `proxy/`, `live/`), videos and the HTML report land in
   `web/incident-console/e2e/artifacts/`. The journeys also check that no screen shows protocol
   details (`open_triage`, `run_`, `evt_`, «Versión esperada», …).
-- The suite has two modes. The design and journey specs opt into the simulator with `?mock`; the
-  live specs answer `GET /api/v1/alerts` with Playwright routes or, when `LIVE_INBOX=1` and
-  `DEMO_HUMAN_API_KEY` are set, connect the real key to the stack started by `setup_sre.py` and
-  wait for the injected OTel failure. Authentication specs disable video and traces.
+- The suite has two modes. The design and journey specs opt into the simulator with `?mock`.
+  The live inbox (RC-2) runs against the real API with `e2e/run-inbox-real.sh`, which seeds a
+  decision, a recovery and last night's changes, then runs `e2e/inbox-real.spec.ts`.
+  Authentication specs disable video and traces.
 - Demo controls live in the account menu (bottom of the sidebar) → **Escenario de demostración**,
   only in mock mode: simulate a new alert, make the agent fail, or reset the scenario. State
   persists in `localStorage`, so reloads keep the incident where it was.
