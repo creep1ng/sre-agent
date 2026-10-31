@@ -26,6 +26,9 @@ MAX_BACKOFF_SECONDS = 60
 MAX_TEXT = 3900
 
 logger = logging.getLogger("sre_agent.chat.outbox")
+# Telegram inline keyboard rows; a renderer returns one with its text to offer buttons.
+Keyboard = list[list[dict[str, str]]]
+Rendered = str | tuple[str, Keyboard | None]
 
 
 class DeliveryError(Exception):
@@ -72,13 +75,27 @@ class ChatStore:
     def __init__(self, database: Database) -> None:
         self.database = database
 
-    async def issue_link_code(self, ttl: timedelta) -> tuple[str, datetime]:
+    async def issue_link_code(self, ttl: timedelta, principal_id: str) -> tuple[str, datetime]:
+        """A code that links one chat to `principal_id`: its decisions are that human's (#767)."""
         code, now = token_urlsafe(24), datetime.now(UTC)
         async with self.database.transaction() as session:
+            human = await session.scalar(
+                text("""SELECT 1 FROM principals WHERE principal_id = :principal_id
+                    AND kind = 'human' AND status = 'active'"""),
+                {"principal_id": principal_id},
+            )
+            if human is None:
+                raise ValueError(f"{principal_id} is not an active human principal")
             await session.execute(
-                text("""INSERT INTO incident.chat_link_codes (code_sha256, created_at, expires_at)
-                    VALUES (:digest, :now, :expires_at)"""),
-                {"digest": _digest(code), "now": now, "expires_at": now + ttl},
+                text("""INSERT INTO incident.chat_link_codes
+                    (code_sha256, created_at, expires_at, principal_id)
+                    VALUES (:digest, :now, :expires_at, :principal_id)"""),
+                {
+                    "digest": _digest(code),
+                    "now": now,
+                    "expires_at": now + ttl,
+                    "principal_id": principal_id,
+                },
             )
         return code, now + ttl
 
@@ -89,22 +106,23 @@ class ChatStore:
         async with self.database.transaction() as session:
             if command == "/start" and code:
                 # Used, expired and unknown codes are rejected alike.
-                digest = await session.scalar(
+                used = await session.execute(
                     text("""UPDATE incident.chat_link_codes
                         SET used_at = clock_timestamp(), used_by_chat_id = :chat_id
                         WHERE code_sha256 = :digest AND used_at IS NULL
                           AND expires_at > clock_timestamp()
-                        RETURNING code_sha256"""),
+                        RETURNING code_sha256, principal_id"""),
                     {"chat_id": chat_id, "digest": _digest(code.strip())},
                 )
-                if digest is not None:
+                if (used := used.one_or_none()) is not None:
                     await session.execute(
-                        text("""INSERT INTO incident.chat_links (chat_id, code_sha256, linked_at)
-                            VALUES (:chat_id, :digest, clock_timestamp())
+                        text("""INSERT INTO incident.chat_links
+                            (chat_id, code_sha256, linked_at, principal_id)
+                            VALUES (:chat_id, :digest, clock_timestamp(), :principal_id)
                             ON CONFLICT (chat_id) DO NOTHING"""),
-                        {"chat_id": chat_id, "digest": digest},
+                        {"chat_id": chat_id, "digest": used[0], "principal_id": used[1]},
                     )
-                kind = "link_confirmed" if digest is not None else "link_rejected"
+                kind = "link_confirmed" if used is not None else "link_rejected"
                 await enqueue(session, chat_id=chat_id, kind=kind, dedup_key=reply_key)
                 return
             linked = await session.scalar(
@@ -115,12 +133,13 @@ class ChatStore:
                 # Once per chat, so a stranger cannot fill the queue ahead of the operator.
                 await enqueue(session, chat_id=chat_id, kind="not_linked", dedup_key="not_linked")
 
-    async def links(self) -> list[tuple[int, datetime]]:
+    async def links(self) -> list[tuple[int, datetime, str | None]]:
         async with self.database.transaction() as session:
             rows = await session.execute(
-                text("SELECT chat_id, linked_at FROM incident.chat_links ORDER BY linked_at")
+                text("""SELECT chat_id, linked_at, principal_id FROM incident.chat_links
+                    ORDER BY linked_at""")
             )
-            return [(row.chat_id, row.linked_at) for row in rows]
+            return [(row.chat_id, row.linked_at, row.principal_id) for row in rows]
 
     async def unlink(self, chat_id: int) -> bool:
         """Remove a chat from the allow list and drop what is still queued for it."""
@@ -136,7 +155,9 @@ class ChatStore:
             )
         return removed is not None
 
-    async def deliver_next(self, send: Callable[[int, str], Awaitable[None]]) -> bool:
+    async def deliver_next(
+        self, send: Callable[[int, str, Keyboard | None], Awaitable[None]]
+    ) -> bool:
         """Send the oldest due message of one chat; False when nothing is due.
 
         The row stays locked until the send is recorded, so two gateways never send it twice.
@@ -164,7 +185,7 @@ class ChatStore:
             if row is None:
                 return False
             try:
-                body = await RENDERERS[row["kind"]](session, row["payload"])
+                body, keyboard = _split(await RENDERERS[row["kind"]](session, row["payload"]))
             except Exception as error:
                 # A message that cannot be rendered never will be: stop retrying it.
                 failure = DeliveryError(f"render: {type(error).__name__}", final=True)
@@ -173,7 +194,7 @@ class ChatStore:
             if len(body) > MAX_TEXT:
                 body = body[:MAX_TEXT] + "… (texto completo en la consola)"
             try:
-                await send(row["chat_id"], body)
+                await send(row["chat_id"], body, keyboard)
             except DeliveryError as error:
                 await self._failed(session, row, error)
                 return True
@@ -239,7 +260,7 @@ async def _investigation_conclusion(session: AsyncSession, payload: Mapping[str,
         case "propose_hypothesis":
             detail = f"Hipótesis ({outcome['confidence']}): {outcome['statement']}"
         case "propose_mitigation":
-            detail = "Mitigación propuesta, pendiente de tu aprobación en la consola."
+            detail = "Mitigación propuesta: decide en el siguiente mensaje o en la consola."
         case "conclude":
             detail = f"Conclusión: {outcome['summary']}"
         case _:
@@ -273,6 +294,77 @@ REASONS = {
 }
 
 
+# Amber is reserved for human decisions: only the decision message carries this marker.
+DECISION_MARKER = "🟠"
+RISKS = {"low": "bajo", "medium": "medio", "high": "alto"}
+OUTCOMES = {"approve": "Aprobada", "reject": "Rechazada", "request_changes": "Devuelta"}
+
+
+async def mitigation_decision(
+    session: AsyncSession, payload: Mapping[str, Any]
+) -> tuple[str, Keyboard | None]:
+    """The proposal and its buttons while it waits; who decided, and when, once it is decided."""
+    state = await session.scalar(
+        text("SELECT state FROM incident.incidents WHERE incident_id = :incident_id"),
+        {"incident_id": payload["incident_id"]},
+    )
+    strategy, alert = state.get("mitigation_strategy") or {}, state.get("alert") or {}
+    hypotheses = [h for h in state.get("hypotheses") or [] if isinstance(h, Mapping)]
+    basis = [h for h in hypotheses if h.get("hypothesis_id") == strategy.get("based_on_hypothesis")]
+    cause = (basis or hypotheses or [{}])[-1].get("statement")
+    lines = [f"{DECISION_MARKER} Decisión pendiente: {payload['incident_id']}"]
+    lines.append(f"Servicio: {alert.get('service', 'sin servicio')}")
+    lines += [f"Causa: {cause}"] if cause else []
+    if alert.get("service") and alert.get("observed_at"):
+        change = (
+            await session.execute(
+                text("""SELECT version, occurred_at FROM incident.change_events
+                    WHERE service = :service AND kind = 'deploy'
+                      AND occurred_at <= CAST(:observed AS timestamptz)
+                      AND occurred_at > CAST(:observed AS timestamptz) - interval '24 hours'
+                    ORDER BY occurred_at DESC LIMIT 1"""),
+                {"service": alert["service"], "observed": alert["observed_at"]},
+            )
+        ).one_or_none()
+        if change is not None:
+            when = change.occurred_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+            lines.append(f"Cambio sospechoso: despliegue {change.version or ''} ({when})")
+    lines.append(f"Propuesta: {strategy.get('description') or 'detalle en la consola'}")
+    if strategy.get("risk") in RISKS:
+        lines.append(f"Riesgo: {RISKS[strategy['risk']]}")
+    if isinstance(strategy.get("operation"), str):
+        lines.append(f"Detalle: operación del catálogo {strategy['operation']}")
+    if (
+        strategy.get("mitigation_id") == payload["mitigation_id"]
+        and strategy.get("approval_status") == "pending"
+    ):
+        token = payload["token"]
+        buttons = [{"text": "Aprobar", "callback_data": f"a:{token}"}]
+        buttons.append({"text": "Rechazar", "callback_data": f"r:{token}"})
+        return "\n".join(lines), [buttons]
+    decision = await session.scalar(
+        text("""SELECT document FROM incident.decisions WHERE run_id = :run_id
+            AND document ->> 'transition_id' IN ('apply_mitigation', 'reject_mitigation')
+            ORDER BY decided_at DESC LIMIT 1"""),
+        {"run_id": payload["run_id"]},
+    )
+    # Decided: the amber marker goes, since nothing waits for a human any more.
+    lines[0] = f"Decisión tomada: {payload['incident_id']}"
+    if decision is None:
+        return "\n".join([*lines, "Esta propuesta ya no está pendiente."]), None
+    actor = decision.get("actor_reference") or {}
+    who = actor.get("display_name") or actor.get("principal_id")
+    where = "Telegram" if decision.get("channel") == "telegram" else "la consola"
+    when = datetime.fromisoformat(decision["decided_at"]).astimezone(UTC)
+    outcome = OUTCOMES.get(decision.get("outcome"), "Decidida")
+    lines.append(f"{outcome} por {who} desde {where}, {when:%Y-%m-%d %H:%M UTC}.")
+    return "\n".join(lines), None
+
+
+def _split(rendered: Rendered) -> tuple[str, Keyboard | None]:
+    return rendered if isinstance(rendered, tuple) else (rendered, None)
+
+
 def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitable[str]]:
     async def render(session: AsyncSession, payload: Mapping[str, Any]) -> str:
         return message
@@ -280,11 +372,12 @@ def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitabl
     return render
 
 
-RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[str]]] = {
+RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[Rendered]]] = {
+    "mitigation_decision": mitigation_decision,
     "investigation_ack": _investigation_ack,
     "investigation_conclusion": _investigation_conclusion,
     "link_confirmed": _fixed(
-        "Chat vinculado. Aquí recibirás el acuse y la conclusión de cada investigación."
+        "Chat vinculado. Aquí recibirás cada investigación y las mitigaciones que decidir."
     ),
     "link_rejected": _fixed("Este enlace no es válido, ya se usó o caducó. Pide uno nuevo."),
     "not_linked": _fixed("Este chat no está vinculado. Ábrelo con un enlace de vinculación."),

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Telegram channel E2E (#766) against the real API, Postgres and a fake Bot API:
+# Telegram channel E2E (#766, #767) against the real API, Postgres and a fake Bot API:
 #
 #   COMPOSE_PROJECT_NAME=<unique> [TELEGRAM_E2E_ARTIFACTS=<dir>] scripts/run_telegram_e2e.sh
 #
 # Links a chat with a one-time code, rejects a used and an expired code, measures the time from
 # dispatch to acknowledgment, then stops the gateway, dispatches again, fails the first send and
-# restarts the gateway twice: each pending message must arrive once. Finally it unlinks the chat
-# and dispatches a third time: nothing may reach it. Writes telegram-e2e.json, transcript.png
+# restarts the gateway twice: each pending message must arrive once. Then it proposes four
+# mitigations: each must reach the chat as one decision message with buttons. Finally it unlinks
+# the chat and dispatches a third time: nothing may reach it. Writes telegram-e2e.json, transcript.png
 # and summary.txt, and always removes the project (`down -v --remove-orphans`) on exit. Uses the
 # repository's .env or, when there is none, .env.example with synthetic keys for this run only.
 set -Eeuo pipefail
@@ -25,7 +26,7 @@ ENV_FILE="$ROOT/.env"
 if [[ ! -f "$ENV_FILE" ]]; then
   hex() { od -An -N32 -tx1 /dev/urandom | tr -d ' \n'; }
   env="$(<"$ROOT/.env.example")"
-  for role in admn demo inci rest; do
+  for role in admn demo inci rest exec; do
     env="${env/<set-unique-sre_-prefixed-key-with-32-plus-characters>/sre_${role}_$(hex)}"
   done
   env="${env//<set-long-random-audit-hmac-key>/$(hex)}"
@@ -53,8 +54,8 @@ for run in a b c; do
   "${SEED[@]}" -e SEED_STAMP="tg$run$STAMP" seed python scripts/seed_war_room_runs.py > /dev/null
 done
 
-code="$(link)"
-expired="$(link --ttl-seconds 1)"
+code="$(link --principal demo-human)"
+expired="$(link --principal demo-human --ttl-seconds 1)"
 sleep 2
 phase linking "$code" "$expired"
 phase dispatch "inc-37-start-tga$STAMP"
@@ -64,6 +65,7 @@ phase pending "inc-37-start-tgb$STAMP"
 phase delivered after_first_restart
 "${COMPOSE[@]}" restart telegram-gateway
 phase delivered after_second_restart
+phase proposals "$STAMP"
 chat links > "$ARTIFACTS/links-before.txt"
 chat unlink 222 > "$ARTIFACTS/unlink.txt"
 chat links > "$ARTIFACTS/links-after.txt"
