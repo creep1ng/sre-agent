@@ -190,7 +190,7 @@ To translate a feature, add one namespace instead of editing shared files:
 
 Both files are picked up by `import.meta.glob`; nothing else needs registering.
 
-## Navigation (RC-2, #870)
+## Navigation and account menu (RC-2, #870)
 
 - **Sections** read in the text face with one lucide icon each. Live mode lists only screens
   backed by the API; the incident list and its search entries stay in `?mock` until they read it.
@@ -198,6 +198,8 @@ Both files are picked up by `import.meta.glob`; nothing else needs registering.
   `localStorage` as `midnight.fold.<panel>`; `FoldButton` in `src/components/layout/fold-button.tsx`
   sets `aria-expanded` and `aria-controls`. The sidebar uses the panel `nav` and folds to a 64 px
   icon rail. A page's own side panel picks another panel name.
+- **Account menu.** The avatar opens one popover: language, theme and the session. Sign out drops
+  the in-memory credential and returns to the inbox's credential screen.
 
 ## Stack
 

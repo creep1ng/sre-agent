@@ -20,17 +20,14 @@ const shell = {
   "agent.idle": "Disponible",
   "agent.stopped": "Detenido · {id}",
   "account.apiSession": "Sesión de API",
-  "account.connected": "Conectada",
-  "account.disconnected": "Sin conectar",
-  "account.active": "Sesión activa",
+  "account.menu": "Tu cuenta",
+  "account.signOut": "Cerrar sesión",
   "account.theme": "Tema",
   "account.language": "Idioma",
   "theme.system": "Sistema",
   "theme.light": "Claro",
   "theme.dark": "Oscuro",
   "account.connect": "Conectar API",
-  "account.disconnect": "Desconectar",
-  "account.disconnected.toast": "Credencial desconectada",
 };
 
 export default shell;
