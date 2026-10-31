@@ -29,6 +29,11 @@ After the files exist, use `chmod 600 .env .demo-state/grafana-mcp.env`
 (adjust the token path if `DEMO_STATE_DIR` is elsewhere). Both files must belong
 to the setup caller. This is initial secret provisioning, not a recurring
 SRE grant/setup step.
+`up` also creates `.demo-state/alert-intake.env`, the secret the demo's Grafana sends
+to the API's alert intake (#765); when the file exists in `DEMO_STATE_DIR`, setup
+passes it to the API, so firing rules open incidents with nobody at the console
+([alert intake](alert-intake.md)). With `SRE_OTEL_MODE=aws`, `connect-mcp` hands
+the same file off beside the MCP token.
 Run `python scripts/demo_env.py verify` to verify the actual OTel composition.
 Setup consumes that prepared internal network/token; it never starts, resets,
 stops or destroys OTel and never imports files from another branch/worktree.
