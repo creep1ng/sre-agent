@@ -1,4 +1,4 @@
 Running 2 tests using 1 worker
-  ✓  1 e2e/live-investigation.spec.ts:73:3 › investigación en vivo contra la API real › la hipótesis, la evidencia con su veredicto y el cambio reciente aparecen sin recargar (28.0s)
-  ✓  2 e2e/live-investigation.spec.ts:120:3 › investigación en vivo contra la API real › un despacho fallido muestra su causa y solo una persona lo reintenta (1.1m)
-  2 passed (1.6m)
+  ✓  1 e2e/live-investigation.spec.ts:73:3 › investigación en vivo contra la API real › la hipótesis, la evidencia con su veredicto y el cambio reciente aparecen sin recargar (14.4s)
+  ✓  2 e2e/live-investigation.spec.ts:133:3 › investigación en vivo contra la API real › la investigación empieza sola, un despacho fallido muestra su causa y solo una persona lo reintenta (27.6s)
+  2 passed (42.9s)
