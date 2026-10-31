@@ -167,6 +167,10 @@ Backend gaps:
   amber.
 - **Type.** Fraunces (`font-display`), Newsreader (`font-sans`, the body) and JetBrains Mono
   (`font-mono`), self-hosted through `@fontsource-variable`. `<code>` is mono on `--code`.
+- **Hook.** `src/hooks/use-theme.ts`: `useTheme()` holds the preference (`system`, `light`,
+  `dark`; stored in `localStorage` as `midnight-theme`) and `setTheme`; `useResolvedTheme()`
+  gives the theme on screen and re-renders on OS changes; `useApplyTheme()` is mounted once in
+  `App`.
 
 ## Stack
 
