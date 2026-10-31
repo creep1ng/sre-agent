@@ -7,7 +7,10 @@
 # measures the time from dispatch to acknowledgment, then stops the gateway, dispatches again,
 # fails the first send and restarts the gateway twice: each pending message must arrive once.
 # Then it proposes five mitigations: each must reach the chat as one decision message with
-# buttons. Finally it unlinks the chat and dispatches a third time: nothing may reach it. Writes
+# buttons, and the taps decide them: approve, a double tap, taps from a stranger, a second linked
+# chat and another user, a human without run.approve and then deactivated, a console rejection,
+# a reject and a tap after the incident changed. Finally it unlinks the chat, dispatches a third
+# time and taps, before and after linking again: nothing may reach the chat or be decided. Writes
 # telegram-e2e.json, transcript.png, summary.txt and migrate.log, and always removes the project
 # (`down -v --remove-orphans`) on exit. Uses the repository's .env or, when there is none,
 # .env.example with synthetic keys for this run only.
@@ -68,12 +71,15 @@ phase pending "inc-37-start-tgb$STAMP"
 phase delivered after_first_restart
 "${COMPOSE[@]}" restart telegram-gateway
 phase delivered after_second_restart
+phase enlist
 phase proposals "$STAMP" "$(link --principal demo-human)"
+for step in approve double_tap stranger second viewer console reject stale; do phase "$step"; done
 chat links > "$ARTIFACTS/links-before.txt"
-chat unlink 777 > /dev/null
+for extra in 777 555 666; do chat unlink "$extra" > /dev/null; done
 chat unlink 222 > "$ARTIFACTS/unlink.txt"
 chat links > "$ARTIFACTS/links-after.txt"
 phase unlinked "inc-37-start-tgc$STAMP"
+phase unlinked_tap "$(link --principal demo-human)"
 "${COMPOSE[@]}" logs --no-color telegram-gateway > "$ARTIFACTS/telegram-gateway.log"
 if grep -q "$TELEGRAM_BOT_TOKEN" "$ARTIFACTS/telegram-gateway.log"; then
   echo "FAIL the gateway log contains the bot token" | tee -a "$ARTIFACTS/summary.txt"

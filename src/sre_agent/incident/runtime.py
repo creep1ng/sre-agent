@@ -759,7 +759,10 @@ class IncidentRuntime:
                 postmortem = incident_state["postmortem"]
                 approval["postmortem_id"] = postmortem["postmortem_id"]
                 approval["postmortem_version"] = postmortem_version
+        # Where a human decided, when not the console or the API (`telegram`, #767).
+        channel = (command.inputs or {}).get("channel")
         return {
+            **({"channel": channel} if channel else {}),
             "workflow_id": self._workflow.workflow_id,
             "workflow_version": self._workflow.version,
             "transition_id": transition.transition_id,

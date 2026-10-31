@@ -81,6 +81,31 @@ link only a chat you would trust with that content.
 - Once the proposal is decided, the message says who decided it (the principal's display name),
   from where and when, without buttons and without the marker.
 
+## Deciding from the chat
+
+- A tap sends `approve_mitigation` or `reject_mitigation` through the same `RunCommandService`
+  as `POST /v1/incidents/{id}/runs/{run}/commands`: the link's principal replaces the bearer
+  key, and the `run.approve` grant, the attribution check and the runtime are unchanged. The
+  decision record names the human and adds `"channel": "telegram"`.
+- A tap counts only from the chat and the Telegram user of the link the message was sent to.
+  Another chat, another user in the chat, or the same chat after unlinking, even if linked again,
+  decides nothing.
+- The idempotency key is `telegram-<choice>-<token>`, so a repeated tap replays its first result;
+  any other tap carries the reviewed incident version, which is stale once anyone decided. The
+  gateway edits the message to say who decided, from where and when, then answers the tap.
+- If the incident changed while the proposal still waits, the tap decides nothing: the old
+  message loses its buttons and the chat gets the proposal again, bound to the current version.
+- Executing an approved operation and the result message belong to #723 and #722.
+
+### What stops a chat from deciding
+
+The link is a standing credential for its human, used without an API key:
+
+- It stops: `unlink CHAT_ID` (immediately, and its buttons never come back), deactivating the
+  principal (`PUT /v1/principals/{id}/status`, the tap answers that the user is not active) and
+  revoking the principal's `run.approve` grant (the tap answers that there is no permission).
+- It does not stop: revoking or expiring the principal's API keys. Unlink the chat as well.
+
 ## Extending
 
 Other producers call `sre_agent.chat.outbox.enqueue(session, chat_id=..., kind=...,
@@ -92,4 +117,4 @@ it. The interruption budget (#771, digest versus interrupt) builds on this table
 
 `scripts/run_telegram_e2e.sh` runs the channel against the real API and Postgres with a fake Bot
 API (`tests/fake_telegram.py`, compose profile `telegram-e2e`) and writes `telegram-e2e.json`,
-`summary.txt` and `transcript.png`.
+`summary.txt`, `transcript.png` and `migrate.log`.
