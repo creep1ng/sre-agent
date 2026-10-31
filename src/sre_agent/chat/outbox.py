@@ -270,6 +270,9 @@ REASONS = {
     ),
     "tool_timeout": "una herramienta de observabilidad superó el tiempo límite de la consulta",
     "result_persistence_uncertain": "no se pudo confirmar que el resultado se guardó",
+    # Never a receipt (a `run_start_blocked` event), so no message carries it; kept for parity.
+    "run_start_not_authorized": "la investigación no empezó: quien declaró no tiene permiso "
+    "para iniciarla",
 }
 
 

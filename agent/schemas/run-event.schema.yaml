@@ -9,9 +9,13 @@
 # projects only codes from its allow-list (`src/sre_agent/incident/reasons.py`); the schema
 # keeps a pattern, not an enum, so adding a code needs no new contract version.
 # Every 1.0.0 page stays valid.
+#
+# 1.2.0 (issue #704): additive minor. Kind `run_start_blocked` records that a declaration opened
+# no investigation run, with its `reason_code` (for example `run_start_not_authorized`). It is
+# not a `dispatch_receipt`: no dispatch existed. Every 1.1.0 page stays valid.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:run-event:1.1.0
+$id: urn:sre-agent:schema:run-event:1.2.0
 title: RunEventPage
 type: object
 additionalProperties: false
@@ -40,7 +44,7 @@ $defs:
       kind:
         enum: [state_change, evidence_collected, hypothesis_proposed,
                mitigation_proposed, human_command, denial, escalation, run_terminated,
-               investigation_result, dispatch_receipt]
+               investigation_result, dispatch_receipt, run_start_blocked]
       sequence:
         type: integer
         minimum: 0

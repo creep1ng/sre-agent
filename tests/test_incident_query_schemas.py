@@ -55,7 +55,7 @@ def test_unknown_reference_is_not_silently_resolved() -> None:
 def test_run_event_schema_is_validated_fail_closed(tmp_path, monkeypatch) -> None:
     schemas, errors = gate.check_schemas()
     assert not errors
-    assert schemas["run-event"]["$id"] == "urn:sre-agent:schema:run-event:1.1.0"
+    assert schemas["run-event"]["$id"] == "urn:sre-agent:schema:run-event:1.2.0"
     broken_id = tmp_path / "run-event.schema.yaml"
     broken_id.write_text('{"$id": "bogus", "type": "object"}', encoding="utf-8")
     monkeypatch.setattr(gate, "RUN_EVENT_SCHEMA_PATH", broken_id)

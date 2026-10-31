@@ -409,12 +409,15 @@ def test_declare_persists_operator_impact_through_http_state_event_and_replay() 
         headers={"Authorization": BEARERS["op"]},
     )
     assert timeline.status_code == 200
-    receipt = next(
+    blocked = next(
         event
         for event in timeline.json()["events"]
         if event["reason_code"] == "run_start_not_authorized"
     )
-    assert "declarant lacks the run.start grant" in receipt["summary"]
+    # Its own kind, not a dispatch receipt: no dispatch existed, so no chat message announces
+    # the end of an investigation that never started.
+    assert blocked["kind"] == "run_start_blocked"
+    assert blocked["summary"].startswith("The investigation did not start: the declarant lacks")
 
 
 @pytest.mark.parametrize(

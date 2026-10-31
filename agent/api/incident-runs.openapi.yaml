@@ -137,7 +137,7 @@ paths:
           description: Ordered event page
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:run-event:1.1.0' }
+              schema: { $ref: 'urn:sre-agent:schema:run-event:1.2.0' }
               examples:
                 page: { $ref: './examples/http/events-page.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }

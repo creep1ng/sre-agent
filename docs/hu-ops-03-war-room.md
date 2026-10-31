@@ -7,7 +7,7 @@ Solo lectura: sin transiciones, sin harness, sin API de comentarios.
 
 ## Contratos consumidos (#189)
 
-`incident-detail:1.0.0`, `run-event:1.1.0` (timeline, con `reason_code`), `incident-snapshot:1.0.0`,
+`incident-detail:1.0.0`, `run-event:1.2.0` (timeline, con `reason_code`), `incident-snapshot:1.0.0`,
 `incident-queries.openapi.yaml:1.0.0`, `error-envelope:2.0.0`. Endpoints
 `GET /v1/incidents/{id}`, `/timeline`, `/snapshot` vía seam `public/api/client.js`
 (`getIncident`, `getIncidentTimeline`, `getIncidentSnapshot`) tras el proxy

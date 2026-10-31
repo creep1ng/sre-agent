@@ -29,9 +29,13 @@ DISPATCH_CAUSES = {
     "result_persistence_uncertain": "the result could not be confirmed as saved.",
     "stale_incident_snapshot": "the incident changed while the agent investigated.",
     "producer_interrupted": "the previous dispatch was interrupted.",
-    # Recorded by triage when the declarant may declare but not start runs (#704).
-    RUN_START_NOT_AUTHORIZED: "the declarant lacks the run.start grant; "
-    "an administrator must grant it, then a new run may retry.",
 }
 
-PROJECTED_REASON_CODES = frozenset(DISPATCH_CAUSES)
+# Why a declaration opened no investigation run (#704): a `run_start_blocked` event, never a
+# dispatch receipt, because no dispatch existed.
+START_CAUSES = {
+    RUN_START_NOT_AUTHORIZED: "the declarant lacks the run.start grant; "
+    "an administrator must grant it, then a person may start the investigation.",
+}
+
+PROJECTED_REASON_CODES = frozenset(DISPATCH_CAUSES) | frozenset(START_CAUSES)

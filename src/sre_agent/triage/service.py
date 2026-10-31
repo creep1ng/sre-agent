@@ -577,19 +577,14 @@ class TriageService:
         extra_events: tuple[EventDraft, ...] = ()
         if not may_start:
             extra_events = (
+                # Not a dispatch receipt: no dispatch existed, so nothing announces a
+                # conclusion (the chat outbox reacts only to receipts).
                 EventDraft(
                     event_id=f"evt_{_digest(f'run-start-blocked:{digest}')[:24]}",
-                    kind="dispatch_receipt",
+                    kind="run_start_blocked",
                     payload={
                         "state": "active",
-                        "dispatch_receipt": {
-                            "dispatch_id": run_id,
-                            "phase": "outcome",
-                            "status": "confirmed_failure",
-                            "reason_code": RUN_START_NOT_AUTHORIZED,
-                            "request_ids": [],
-                            "mcp_request_ids": [],
-                        },
+                        "reason_code": RUN_START_NOT_AUTHORIZED,
                         "request_id": None,
                     },
                     occurred_at=now,
