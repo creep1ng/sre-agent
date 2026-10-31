@@ -1,6 +1,8 @@
 # Live-triage E2E (#703, #704): real API, database, web proxy and new console. The model concludes
 # at once (or after $LIVE_TRIAGE_FAULTS/model-delay seconds) and the Grafana MCP stand-in fires
-# every alert rule unless $LIVE_TRIAGE_FAULTS/{rule id} reads `ok` (scripts/live_triage_upstreams.py).
+# every alert rule to intake (#765) unless $LIVE_TRIAGE_FAULTS/{rule id} reads `ok`
+# (scripts/live_triage_upstreams.py). Intake has no operator here, so the episodes stay `new` for
+# the console.
 # Each live spec opens its own fresh episodes (web/incident-console/e2e/live-faults.ts). With .env
 # and .env.worktree, F="-f compose.e2e.yaml -f compose.live-triage-e2e.yaml":
 #   scripts/worktree-compose $F up --build --wait db api web incident-console
@@ -17,6 +19,9 @@ services:
     volumes:
       - ./scripts/live_triage_upstreams.py:/e2e/live_triage_upstreams.py:ro
       - ${LIVE_TRIAGE_FAULTS:-/tmp/live-triage-faults}:/fault:ro
+    environment:
+      ALERT_INTAKE_GRAFANA_SECRET: live-triage-intake-secret-0123456789
+      ALERT_INTAKE_PRINCIPAL_ID: ""
 
   seed:
     volumes: ["./scripts:/e2e:ro"]
