@@ -21,12 +21,16 @@ async function freshMockStart(page: Page) {
 }
 
 test("las direcciones de la consola anterior abren la consola nueva", async ({ page }) => {
-  const root = await page.goto("/");
-  expect(root?.status()).toBe(200);
-  await expect(page).toHaveURL(/\/app\/$/);
-  await expect(page.getByRole("navigation", { name: "Principal" })).toBeVisible();
+  // / is the Midnight landing's address (#870), so it never redirects to /app; until the landing
+  // lands it serves what it served before.
+  for (const root of ["/", "/index.html"]) {
+    const response = await page.goto(root);
+    expect(response?.status(), root).toBe(200);
+    expect(response?.request().redirectedFrom(), root).toBeNull();
+    await expect(page, root).not.toHaveURL(/\/app\//);
+  }
   await settle(page);
-  await page.screenshot({ path: `${SHOTS}/01-raiz-abre-la-consola-nueva.png` });
+  await page.screenshot({ path: `${SHOTS}/01-raiz-no-redirige-a-la-consola.png` });
 
   // The simulator has incidents to land on; the flag lives in this tab's session.
   await freshMockStart(page);

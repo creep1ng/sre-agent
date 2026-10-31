@@ -36,17 +36,19 @@ From the repository root, with the usual `.env` (see `.env.example`):
 
 ```sh
 docker compose up -d --build --wait
-# console: http://127.0.0.1:8080/ (opens /app/)
+# console: http://127.0.0.1:8080/app/
+# /:       previous console until the Midnight landing replaces it (#870)
 ```
 
 The `incident-console` service builds this folder (`Dockerfile`, target `serve`) and the `web`
 proxy forwards `/app/` to it (`docker/nginx.conf.template`). The proxy resolves the console per
-request, so `/api/` keeps working when the console container is absent.
+request, so `/` and `/api/` keep working when the console container is absent.
 
-The previous console's alerts, triage and war room addresses (`/`, `/?view=…`,
+The previous console's alerts, triage and war room addresses (`/?view=…`,
 `/public/incident-ui/*.html`, `/public/admin/triage.html`) open their `/app` equivalent; a war room
 opens `/app/incidentes/<incident_id>`. Decisions, postmortem and governance keep their page until
-they have one. `LEGACY_CONSOLE=keep` on the `web` service turns the redirects off.
+they have one. Plain `/` does not redirect: it is the landing's address. `LEGACY_CONSOLE=keep` on
+the `web` service turns the redirects off.
 
 - Browser journeys (Playwright 1.63, pinned image), through the proxy:
   `HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose --profile e2e run --build --rm incident-console-e2e`.
