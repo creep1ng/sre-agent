@@ -34,6 +34,7 @@ export type TriageResult =
   | { kind: "auth" }
   | { kind: "forbidden" }
   | { kind: "conflict" }
+  | { kind: "ineligible" }
   | { kind: "rejected" }
   | { kind: "transient" };
 
@@ -42,6 +43,13 @@ export type TriageFailure = Exclude<TriageResult["kind"], "ok">;
 export interface DeclareInput {
   severity: Severity;
   impact: string;
+}
+
+export interface EligibleIncident {
+  incident_id: string;
+  state: string;
+  service?: string;
+  summary?: string;
 }
 
 function headers(token: string): Record<string, string> {
@@ -70,7 +78,32 @@ export async function readTriageVersion(token: string, alertId: string): Promise
   }
 }
 
-type Command = { operation: "triage_declare"; reason: string } & Record<string, unknown>;
+/** Incidents an alert can join: the server lists the open ones. */
+export async function fetchEligibleIncidents(
+  token: string,
+  alertId: string,
+): Promise<{ kind: "ok"; items: EligibleIncident[] } | { kind: "forbidden" } | { kind: "transient" }> {
+  try {
+    const response = await fetch(triagePath(alertId, "/eligible-incidents"), {
+      headers: headers(token),
+      credentials: "omit",
+      cache: "no-store",
+    });
+    if (response.status === 403) return { kind: "forbidden" };
+    if (response.status !== 200) return { kind: "transient" };
+    const body = (await response.json()) as { items?: unknown };
+    if (!Array.isArray(body.items)) return { kind: "transient" };
+    const items = body.items.filter(
+      (item): item is EligibleIncident =>
+        typeof item?.incident_id === "string" && typeof item?.state === "string",
+    );
+    return { kind: "ok", items };
+  } catch {
+    return { kind: "transient" };
+  }
+}
+
+type Command = { operation: "triage_declare" | "triage_dismiss" | "triage_link"; reason: string } & Record<string, unknown>;
 
 /** What one submission sends: a manual retry of it reuses both, so a lost answer is replayed. */
 export interface TriageAttempt {
@@ -123,6 +156,7 @@ async function sendCommand(token: string, alertId: string, command: Command, att
     if (sent.status === 200 || sent.status === 201) return done({ kind: "ok", incidentId: sent.incidentId });
     if (sent.status === 401) return done({ kind: "auth" });
     if (sent.status === 403) return done({ kind: "forbidden" });
+    if (sent.code === "destination_ineligible" || sent.code === "incident_not_found") return done({ kind: "ineligible" });
     if (sent.status === 409) return done({ kind: "conflict" });
     if (sent.status === 400 || sent.status === 404 || sent.status === 422) return done({ kind: "rejected" });
     return done({ kind: "transient" });
@@ -156,6 +190,19 @@ export async function declareAlert(
     attempt,
   );
   return sent.result.kind === "ok" && !sent.result.incidentId ? { ...sent, result: { kind: "transient" } } : sent;
+}
+
+export function dismissAlert(token: string, alertId: string, reason: string, attempt: TriageAttempt) {
+  return sendCommand(token, alertId, { operation: "triage_dismiss", reason }, attempt);
+}
+
+export function linkAlert(token: string, alertId: string, incidentId: string, attempt: TriageAttempt) {
+  return sendCommand(
+    token,
+    alertId,
+    { operation: "triage_link", reason: "Vinculada desde la bandeja de la consola de incidentes.", target_incident_id: incidentId },
+    attempt,
+  );
 }
 
 /** Same-origin read of the real alert list. It never surfaces server codes or details. */
