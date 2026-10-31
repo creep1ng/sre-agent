@@ -9,6 +9,8 @@ export default {
   "nav.governance": "AI governance",
   "nav.sections": "Console sections",
   "nav.title": "Navigation",
+  "nav.fold": "Collapse navigation",
+  "nav.unfold": "Expand navigation",
   "nav.open": "Open menu",
   "search.open": "Search or go to…",
   "search.label": "Search",

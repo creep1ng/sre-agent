@@ -33,7 +33,7 @@ import { LIVE_SCENARIOS } from "@/lib/scenarios";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-export function AccountMenu({ onConnect }: { onConnect: () => void }) {
+export function AccountMenu({ onConnect, folded = false }: { onConnect: () => void; folded?: boolean }) {
   const theme = useTheme((s) => s.theme);
   const setTheme = useTheme((s) => s.setTheme);
   const agentFailure = useStore((s) => s.settings.agentFailure);
@@ -50,7 +50,12 @@ export function AccountMenu({ onConnect }: { onConnect: () => void }) {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring/50">
+      <DropdownMenuTrigger
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring/50",
+          folded && "justify-center px-0 [&>span:not(:first-child)]:sr-only [&>svg]:hidden",
+        )}
+      >
         <span className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
           {live ? "API" : "DH"}
         </span>

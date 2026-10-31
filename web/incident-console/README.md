@@ -192,8 +192,12 @@ Both files are picked up by `import.meta.glob`; nothing else needs registering.
 
 ## Navigation (RC-2, #870)
 
-Sections read in the text face with one lucide icon each. Live mode lists only screens backed by
-the API; the incident list and its search entries stay in `?mock` until they read it.
+- **Sections** read in the text face with one lucide icon each. Live mode lists only screens
+  backed by the API; the incident list and its search entries stay in `?mock` until they read it.
+- **Side panels fold.** `useFolded(panel)` in `src/hooks/use-folded.ts` keeps the state in
+  `localStorage` as `midnight.fold.<panel>`; `FoldButton` in `src/components/layout/fold-button.tsx`
+  sets `aria-expanded` and `aria-controls`. The sidebar uses the panel `nav` and folds to a 64 px
+  icon rail. A page's own side panel picks another panel name.
 
 ## Stack
 

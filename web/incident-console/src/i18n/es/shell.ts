@@ -7,6 +7,8 @@ const shell = {
   "nav.governance": "Gobierno de IA",
   "nav.sections": "Secciones de la consola",
   "nav.title": "Navegación",
+  "nav.fold": "Plegar navegación",
+  "nav.unfold": "Desplegar navegación",
   "nav.open": "Abrir menú",
   "search.open": "Buscar o ir a…",
   "search.label": "Buscar",
