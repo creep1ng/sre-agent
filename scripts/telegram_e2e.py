@@ -332,8 +332,189 @@ def prompts(chat_id: int = OPERATOR) -> list[dict[str, Any]]:
     return [m for m in sent(chat_id) if m["text"].startswith("🟠")]
 
 
+def prompt(journey: str) -> dict[str, Any]:
+    incident_id = json.loads(PROPOSALS.read_text())[journey]["incident_id"]
+    # Pending or decided, the first line names the incident.
+    return next(m for m in sent(OPERATOR) if m["text"].split("\n")[0].endswith(incident_id))
+
+
+def tap(chat_id: int, message_id: int, data: str) -> str:
+    """Tap a button as Telegram reports it, and wait for the bot's answer to that tap."""
+    body = {"chat_id": chat_id, "message_id": message_id, "data": data}
+    query = http("POST", f"{FAKE}/_test/taps", body)["callback_query"]["id"]
+
+    def answered() -> str | None:
+        answers = http("GET", f"{FAKE}/_test/answers")["answers"]
+        return next((a["text"] for a in answers if a["callback_query_id"] == query), None)
+
+    return wait_for(answered)
+
+
+def press(chat_id: int, message: dict[str, Any], label: str) -> str:
+    return tap(chat_id, message["message_id"], dict(message["buttons"][0])[label])
+
+
+def decisions(journey: str) -> list[tuple]:
+    run_id = json.loads(PROPOSALS.read_text())[journey]["run_id"]
+    return sql(
+        "SELECT document->>'transition_id', document->>'outcome', "
+        "document->'actor_reference'->>'principal_id', document->>'actor', "
+        "document->>'channel', decided_at FROM incident.decisions WHERE run_id=%s "
+        "AND document->>'transition_id' IN ('apply_mitigation','reject_mitigation') "
+        "ORDER BY decided_at",
+        run_id,
+    )
+
+
+def approval_status(journey: str) -> str:
+    incident_id = json.loads(PROPOSALS.read_text())[journey]["incident_id"]
+    return sql(
+        "SELECT state->'mitigation_strategy'->>'approval_status' FROM incident.incidents "
+        "WHERE incident_id=%s",
+        incident_id,
+    )[0][0]
+
+
+def approve() -> None:
+    message = prompt("approve")
+    Path("/artifacts/approve-message.json").write_text(json.dumps(message))
+    answer, edited = press(OPERATOR, message, "Aprobar"), prompt("approve")
+    rows = decisions("approve")
+    record(
+        "approve",
+        {"answer": answer, "edited": edited, "decisions": rows},
+        {
+            "the tap records one approval": [r[:2] for r in rows]
+            == [("apply_mitigation", "approve")],
+            "as the linked human, through Telegram": rows[0][2:5]
+            == ("demo-human", "human", "telegram"),
+            "the mitigation is approved": approval_status("approve") == "approved",
+            "the answer says who decided": answer.startswith("Aprobada por Demo")
+            and "desde Telegram" in answer,
+            "the message shows who decided and loses its buttons": edited["buttons"] == []
+            and edited["text"].endswith(answer),
+        },
+    )
+
+
+def double_tap() -> None:
+    # The buttons as first sent: a client that has not refreshed the message can still tap them.
+    message = json.loads(Path("/artifacts/approve-message.json").read_text())
+    again, reject = press(OPERATOR, message, "Aprobar"), press(OPERATOR, message, "Rechazar")
+    rows = decisions("approve")
+    record(
+        "double_tap",
+        {"answers": [again, reject], "decisions": rows},
+        {
+            "a second tap decides nothing more": len(rows) == 1,
+            "both taps answer the decision already taken": again == reject
+            and again.startswith("Aprobada por"),
+            "the mitigation stays approved": approval_status("approve") == "approved",
+        },
+    )
+
+
+def stranger() -> None:
+    message = prompt("unlinked")
+    answer = press(STRANGER, message, "Aprobar")
+    record(
+        "stranger",
+        {"answer": answer, "decisions": decisions("unlinked")},
+        {
+            "a tap from an unlinked chat decides nothing": decisions("unlinked") == [],
+            "it is told the chat is not linked": "no está vinculado" in answer,
+            "the mitigation is still pending": approval_status("unlinked") == "pending",
+        },
+    )
+
+
+def console() -> None:
+    created = json.loads(PROPOSALS.read_text())["console"]
+    version = sql(
+        "SELECT version FROM incident.incidents WHERE incident_id=%s", created["incident_id"]
+    )[0][0]
+    # What the console's Decisions view sends for «Rechazar».
+    http(
+        "POST",
+        f"{API}/v1/incidents/{created['incident_id']}/runs/{created['run_id']}/commands",
+        {
+            "command": "reject_mitigation",
+            "actor": "human",
+            "actor_reference": {"reference_version": "1.0.0", "principal_id": "demo-human"},
+            "expected_incident_version": version,
+        },
+        {
+            "Authorization": "Bearer " + os.environ["DEMO_HUMAN_API_KEY"],
+            "Idempotency-Key": f"console-{created['run_id']}",
+        },
+    )
+    answer, edited = press(OPERATOR, prompt("console"), "Aprobar"), prompt("console")
+    rows = decisions("console")
+    record(
+        "console",
+        {"answer": answer, "edited": edited, "decisions": rows},
+        {
+            "Aprobar after a console rejection approves nothing": [r[:2] for r in rows]
+            == [("reject_mitigation", "reject")],
+            "the console decision has no chat channel": rows[0][4] is None,
+            "the mitigation stays rejected": approval_status("console") == "rejected",
+            "the answer gives the current state": answer.startswith("Rechazada por")
+            and "desde la consola" in answer,
+            "the message shows it and loses its buttons": edited["buttons"] == [],
+        },
+    )
+
+
+def reject() -> None:
+    answer, edited = press(OPERATOR, prompt("reject"), "Rechazar"), prompt("reject")
+    rows = decisions("reject")
+    record(
+        "reject",
+        {"answer": answer, "edited": edited, "decisions": rows},
+        {
+            "the tap records one rejection": [r[:2] for r in rows]
+            == [("reject_mitigation", "reject")],
+            "as the linked human, through Telegram": rows[0][2:5]
+            == ("demo-human", "human", "telegram"),
+            "the mitigation is rejected": approval_status("reject") == "rejected",
+            "the answer and the message say who rejected": answer.startswith("Rechazada por")
+            and edited["text"].endswith(answer)
+            and edited["buttons"] == [],
+        },
+    )
+
+
+def unlinked_tap() -> None:
+    answer = press(OPERATOR, prompt("unlinked"), "Aprobar")
+    audit = sql(
+        "SELECT d.incident_id, d.document->>'transition_id', d.document->>'outcome', "
+        "d.document->'actor_reference'->>'principal_id', d.document->>'channel', d.decided_at "
+        "FROM incident.decisions d WHERE d.incident_id LIKE 'inc-767-%%' AND "
+        "d.document->>'actor' = 'human' ORDER BY d.decided_at"
+    )
+    record(
+        "unlinked_tap",
+        {"answer": answer, "decision_audit": audit},
+        {
+            "a tap after unlinking decides nothing": decisions("unlinked") == [],
+            "it is told the chat is not linked": "no está vinculado" in answer,
+            "the mitigation is still pending": approval_status("unlinked") == "pending",
+            "the audit names the human and the channel of every decision": [
+                (row[1], row[3], row[4]) for row in audit
+            ]
+            == [
+                ("apply_mitigation", "demo-human", "telegram"),
+                ("reject_mitigation", "demo-human", None),
+                ("reject_mitigation", "demo-human", "telegram"),
+            ],
+        },
+    )
+
+
 if __name__ == "__main__":
     phase, *arguments = sys.argv[1:]
     phases = {"linking": linking, "dispatch": dispatch, "pending": pending}
     phases |= {"delivered": delivered, "unlinked": unlinked, "proposals": proposals}
+    phases |= {"approve": approve, "double_tap": double_tap, "stranger": stranger}
+    phases |= {"console": console, "reject": reject, "unlinked_tap": unlinked_tap}
     phases[phase](*arguments)

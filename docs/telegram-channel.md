@@ -28,14 +28,15 @@ decision on a proposed mitigation, the chat also gets one decision message with 
    The code records the principal and the link copies it: the chat decides as that human, under
    that human's grants. Only an active human principal is accepted. Whoever can run this command
    already holds the database and the bot token, so naming the principal here grants nothing
-   they did not have. Chats linked before #767 have no principal and will need linking again to
-   decide.
+   they did not have. Chats linked before #767 have no principal: they receive messages but a
+   tap decides nothing until the chat is linked again.
 
    Telegram sends `/start <code>`. A valid code links the chat and is spent; a used, expired or
    unknown code is rejected. A chat that is not linked gets one "not linked" reply, once.
 
 4. List the linked chats (chat id, link time and principal, no codes) or revoke one; a revoked
-   chat gets no further incident messages, including those still queued. These commands are not audited yet.
+   chat gets no further incident messages, including those still queued, and its taps decide
+   nothing. These commands are not audited yet.
 
    ```sh
    docker compose --profile telegram run --rm telegram-gateway python -m sre_agent.chat.telegram links
@@ -75,7 +76,18 @@ link only a chat you would trust with that content.
   on), the suspect change (the service's last deploy within 24 h before the alert), the proposal
   in plain language, its risk and, as a detail, the catalog operation when the proposal has one.
   It is the only message that carries the amber marker 🟠, and only while it waits.
-- Taps are not handled yet: deciding from the chat is the next work unit of #767.
+- The callback data is `a:` or `r:` and the token: no incident or run id. A tap looks the token
+  up for the tapping chat only, so a chat that is not linked, or not the one the message went
+  to, decides nothing.
+- A tap sends `approve_mitigation` or `reject_mitigation` through the same
+  `RunCommandService` as `POST /v1/incidents/{id}/runs/{run}/commands`: the link's principal
+  replaces the bearer key, and the `run.approve` grant, the attribution check and the runtime
+  are unchanged. The decision record names the human and adds `"channel": "telegram"`.
+- The idempotency key is `telegram-<choice>-<token>`, so a repeated tap replays its first
+  result; any other tap carries the reviewed incident version, which is stale once anyone
+  decided. Either way the gateway answers the tap with the current state and edits the message
+  to say who decided, from where and when, without buttons.
+- Executing an approved operation and the result message belong to #723 and #722.
 
 ## Extending
 
@@ -88,5 +100,5 @@ it. The interruption budget (#771, digest versus interrupt) builds on this table
 
 `scripts/run_telegram_e2e.sh` runs the channel against the real API and Postgres with a fake Bot
 API (`tests/fake_telegram.py`, compose profile `telegram-e2e`) and writes `telegram-e2e.json`,
-`summary.txt` and `transcript.png`. Since #767 it also checks the decision messages of four
-proposed mitigations.
+`summary.txt` and `transcript.png`. Since #767 it also approves, double-taps, taps from a
+stranger, taps after a console rejection, rejects, and taps after unlinking.

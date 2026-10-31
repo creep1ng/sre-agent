@@ -1,9 +1,10 @@
-"""Fake Telegram Bot API for the #766 and #767 E2Es: getMe, getUpdates (long polling) and
-sendMessage with inline keyboards.
+"""Fake Telegram Bot API for the #766 and #767 E2Es: getMe, getUpdates (long polling),
+sendMessage with inline keyboards, answerCallbackQuery and editMessageText.
 
 Like Telegram, it keeps an update until a getUpdates offset above its id confirms it, answers
-401 to any other token and 400 to a text over 4096 characters. `/_test/*` lets the E2E play the
-user: inject messages, read what the bot sent (with the time each send arrived) and fail sends.
+401 to any other token, 400 to a text over 4096 characters and to an edit that changes nothing.
+`/_test/*` lets the E2E play the user: inject messages and button taps, read what the bot sent
+(with the time each send arrived), the callback answers and the edits, and fail sends.
 
     uvicorn fake_telegram:app --app-dir tests --port 8081
 """
@@ -21,6 +22,8 @@ TOKEN = "7000001:fake-e2e-token"
 app = FastAPI()
 updates: list[dict[str, Any]] = []
 sent: list[dict[str, Any]] = []
+answers: list[dict[str, Any]] = []
+edits: list[dict[str, Any]] = []
 state = {"next_update": 1, "fail_sends": 0}
 arrived = asyncio.Condition()
 
@@ -67,7 +70,33 @@ async def bot(token: str, method: str, request: Request) -> JSONResponse:
         }
         sent.append(record)
         return _reply(record)
+    if method == "answerCallbackQuery":
+        answers.append({"callback_query_id": fields["callback_query_id"], "text": fields["text"]})
+        return _reply(True)
+    if method == "editMessageText":
+        message = next(
+            (
+                m
+                for m in sent
+                if (m["chat_id"], m["message_id"]) == (fields["chat_id"], fields["message_id"])
+            ),
+            None,
+        )
+        if message is None:
+            return _reply(status=400, description="Bad Request: message to edit not found")
+        if message["text"] == fields["text"] and not message["buttons"]:
+            return _reply(status=400, description="Bad Request: message is not modified")
+        message.update(text=fields["text"], buttons=[])
+        edits.append({**fields, "edited_at": datetime.now(UTC).isoformat()})
+        return _reply(message)
     return _reply(status=404, description="Not Found")
+
+
+async def _push(update: dict[str, Any]) -> JSONResponse:
+    async with arrived:
+        updates.append(update)
+        arrived.notify_all()
+    return JSONResponse(update)
 
 
 @app.post("/_test/messages")
@@ -78,15 +107,31 @@ async def user_message(request: Request) -> JSONResponse:
         "message": {"chat": {"id": fields["chat_id"]}, "text": fields["text"]},
     }
     state["next_update"] += 1
-    async with arrived:
-        updates.append(update)
-        arrived.notify_all()
-    return JSONResponse(update)
+    return await _push(update)
+
+
+@app.post("/_test/taps")
+async def tap(request: Request) -> JSONResponse:
+    """A button tap on message `message_id`, as Telegram sends it from chat `chat_id`."""
+    fields = await request.json()
+    query_id = f"cbq-{state['next_update']}"
+    message = {"message_id": fields["message_id"], "chat": {"id": fields["chat_id"]}}
+    update = {
+        "update_id": state["next_update"],
+        "callback_query": {"id": query_id, "data": fields["data"], "message": message},
+    }
+    state["next_update"] += 1
+    return await _push(update)
 
 
 @app.get("/_test/sent")
 async def sent_messages() -> JSONResponse:
     return JSONResponse(sent)
+
+
+@app.get("/_test/answers")
+async def callback_answers() -> JSONResponse:
+    return JSONResponse({"answers": answers, "edits": edits})
 
 
 @app.post("/_test/fail-sends")
@@ -104,8 +149,10 @@ async def transcript() -> HTMLResponse:
         + "</td></tr>"
         for item in sent
     )
+    taps = "".join(f"<li>{escape(item['text'])}</li>" for item in answers)
     return HTMLResponse(
         "<html><body style='font-family:sans-serif'><h3>Fake Telegram: messages the bot sent"
         "</h3><table border=1 cellpadding=4><tr><th>#</th><th>chat</th><th>received at</th>"
-        f"<th>text</th></tr>{rows}</table></body></html>"
+        f"<th>text</th></tr>{rows}</table><h3>Answers to button taps</h3><ol>{taps}</ol>"
+        "</body></html>"
     )
