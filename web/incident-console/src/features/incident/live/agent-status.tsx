@@ -1,4 +1,4 @@
-import { CircleCheckIcon, OctagonXIcon, PlayIcon, RotateCcwIcon } from "lucide-react";
+import { ArrowUpRightIcon, OctagonXIcon, PlayIcon, RotateCcwIcon } from "lucide-react";
 import { AgentAvatar } from "@/components/brand";
 import { ToneBadge } from "@/components/badges";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { endingCause } from "./causes";
 export type AgentStatus =
   | { kind: "idle" }
   | { kind: "working"; since: number }
-  | { kind: "waiting" }
+  | { kind: "waiting"; run: string }
   | { kind: "stopped"; cause: string }
   | { kind: "other"; state: string };
 
@@ -32,14 +32,18 @@ export function agentStatus(live: LiveIncident): AgentStatus {
   const run = runs.at(-1);
   const state = live.detail?.state ?? "";
   if (live.starting || (run?.status === "running" && run.current_state === "investigating")) {
+    // Until the requested run shows up, the clock counts from the click.
+    if (live.requested && live.runs.at(-1)?.run_id === live.requested.after) return { kind: "working", since: live.requested.at };
     const first = live.events.find((event) => event.run_id === run?.run_id);
     return { kind: "working", since: first ? Date.parse(first.occurred_at) : Date.now() };
   }
   if (!run) return state === "active" ? { kind: "idle" } : { kind: "other", state };
-  if (run.status === "awaiting_human") return { kind: "waiting" };
+  // A denied run stored before #788 waits for `escalate`, which nothing accepts: it stopped.
+  const escalated = run.pending_command === "escalate";
+  if (run.status === "awaiting_human" && !escalated) return { kind: "waiting", run: run.run_id };
   if (state === "investigating") {
     const events = live.events.filter((event) => event.run_id === run.run_id);
-    return { kind: "stopped", cause: endingCause(events, run.terminated_reason) };
+    return { kind: "stopped", cause: endingCause(events, escalated ? "denied" : run.terminated_reason) };
   }
   return { kind: "other", state };
 }
@@ -59,7 +63,11 @@ function StartButton({ live, onStart, label }: { live: LiveIncident; onStart: ()
       <Button onClick={onStart} disabled={live.starting}>
         {label === "Investigar" ? <PlayIcon /> : <RotateCcwIcon />} {label}
       </Button>
-      {live.startError && <span className="text-sm text-critical">{live.startError}</span>}
+      {live.startError && (
+        <span role="alert" className="text-sm text-critical">
+          {live.startError}
+        </span>
+      )}
     </>
   );
 }
@@ -74,7 +82,6 @@ export function AgentStatusPanel({ live, status, onStart }: { live: LiveIncident
       <Panel
         icon={avatar}
         title={<span className="text-shimmer">Investigando…</span>}
-        description="El agente consulta métricas, logs y cambios recientes. La historia se completa sola."
         meta={<Working since={status.since} />}
       />
     );
@@ -84,7 +91,6 @@ export function AgentStatusPanel({ live, status, onStart }: { live: LiveIncident
       <Panel
         icon={avatar}
         title="Sin investigar"
-        description="El agente todavía no ha investigado este incidente."
         footer={<StartButton live={live} onStart={onStart} label="Investigar" />}
       />
     );
@@ -99,7 +105,6 @@ export function AgentStatusPanel({ live, status, onStart }: { live: LiveIncident
           </span>
         }
         title={`Detenido: ${status.cause}`}
-        description="El incidente sigue abierto. Solo una persona puede pedir otra investigación."
         footer={<StartButton live={live} onStart={onStart} label="Reintentar investigación" />}
       />
     );
@@ -109,6 +114,17 @@ export function AgentStatusPanel({ live, status, onStart }: { live: LiveIncident
       tone={status.kind === "waiting" ? "attention" : "default"}
       icon={avatar}
       title={status.kind === "waiting" ? "Esperando tu decisión" : "El agente terminó por ahora"}
+      footer={
+        // Deciding on the mitigation stays in the previous console until #709/#710.
+        status.kind === "waiting" && (
+          <a
+            href={`/?view=decisions&incident_id=${encodeURIComponent(live.detail?.incident_id ?? "")}&run_id=${encodeURIComponent(status.run)}`}
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline dark:text-brand-line"
+          >
+            Abrir en Decisiones <ArrowUpRightIcon className="size-4" aria-hidden="true" />
+          </a>
+        )
+      }
     >
       {live.reasoning === "forbidden" && (
         <p className="text-sm text-muted-foreground">Tu credencial no permite leer el razonamiento del agente.</p>
@@ -139,11 +155,6 @@ export function AgentStatusPanel({ live, status, onStart }: { live: LiveIncident
             </ol>
           )}
         </PanelSection>
-      )}
-      {!hypothesis && !mitigation && live.reasoning !== "forbidden" && (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <CircleCheckIcon className="size-4 text-success" aria-hidden="true" /> La historia recoge lo que hizo.
-        </p>
       )}
     </Panel>
   );

@@ -18,6 +18,8 @@ export const DISPATCH_CAUSES: Record<string, string> = {
   investigator_failed: "el investigador falló",
   result_persistence_uncertain: "no se pudo confirmar que el resultado se guardó",
   stale_incident_snapshot: "el incidente cambió mientras se investigaba",
+  run_start_not_authorized:
+    "quien declaró el incidente no tiene permiso para iniciar investigaciones; un administrador debe concedérselo",
 };
 
 export const TERMINATED: Record<string, string> = {
@@ -35,7 +37,5 @@ export function capitalize(text: string): string {
 /** The cause of the last run that stopped without finishing, in Spanish. */
 export function endingCause(events: RunEvent[], terminatedReason: string | null): string {
   const code = events.findLast((event) => event.reason_code && DISPATCH_CAUSES[event.reason_code])?.reason_code;
-  return capitalize(
-    (code && DISPATCH_CAUSES[code]) ?? (terminatedReason && TERMINATED[terminatedReason]) ?? "la investigación no terminó",
-  );
+  return (code && DISPATCH_CAUSES[code]) ?? (terminatedReason && TERMINATED[terminatedReason]) ?? "la investigación no terminó";
 }
