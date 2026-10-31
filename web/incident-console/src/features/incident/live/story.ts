@@ -53,7 +53,13 @@ function eventEntry(event: RunEvent, reasoned: boolean): StoryEntry | null {
   const base = { id: event.event_id, at: Date.parse(event.occurred_at), actor: ACTOR[event.actor.type] ?? "system" };
   const cause = event.reason_code ? DISPATCH_CAUSES[event.reason_code] : undefined;
   if (event.kind === "dispatch_receipt" && event.summary.startsWith("Investigation dispatch ended:") && !event.summary.endsWith("success.")) {
-    return { ...base, text: "La investigación se detuvo", detail: `Causa: ${cause ?? "desconocida"}.`, tone: "critical" };
+    // #704 records why the investigation the declaration should start did not start.
+    const text = event.reason_code === "run_start_not_authorized" ? "La investigación no empezó" : "La investigación se detuvo";
+    return { ...base, text, detail: `Causa: ${cause ?? "desconocida"}.`, tone: "critical" };
+  }
+  // Only a person retries; the agent continuing within a run is not a story entry.
+  if (event.summary === "Investigation continued." && event.actor.type === "human") {
+    return { ...base, text: "Reintentaste la investigación" };
   }
   if (event.summary.startsWith("Authorization denied")) {
     return { ...base, text: "Se denegó un permiso del agente", detail: capitalize(`${TERMINATED.denied}.`), tone: "critical" };

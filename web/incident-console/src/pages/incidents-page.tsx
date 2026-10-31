@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime, formatDuration } from "@/lib/format";
+import { appMode } from "@/lib/mode";
 import { incidentStatus } from "@/lib/status";
 import { alertsOf, useStore } from "@/lib/store";
 import type { Incident } from "@/lib/types";
@@ -20,8 +21,10 @@ export function IncidentsPage() {
   );
   const [query, setQuery] = useState("");
 
-  const active = incidents.filter((i) => i.state !== "closed");
-  const closed = incidents.filter((i) => i.state === "closed");
+  // The simulator's incidents are not shown as real ones; the API has no incident list yet.
+  const listed = appMode === "mock" ? incidents : [];
+  const active = listed.filter((i) => i.state !== "closed");
+  const closed = listed.filter((i) => i.state === "closed");
   const rows = useMemo(() => {
     const list = tab === "active" ? active : closed;
     const q = query.trim().toLowerCase();
@@ -62,7 +65,11 @@ export function IncidentsPage() {
       <div className="overflow-hidden rounded-2xl border bg-card shadow-xs">
         {rows.length === 0 ? (
           <p className="px-5 py-12 text-center text-sm text-muted-foreground">
-            {tab === "active" ? "No hay incidentes abiertos." : "Todavía no hay incidentes cerrados."}
+            {appMode === "live"
+              ? "Abre los incidentes desde la bandeja."
+              : tab === "active"
+                ? "No hay incidentes abiertos."
+                : "Todavía no hay incidentes cerrados."}
           </p>
         ) : (
           <table className="w-full text-sm">
