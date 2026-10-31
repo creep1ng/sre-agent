@@ -149,7 +149,7 @@ async function call<T>(
   if (response.status === 403) return { kind: "forbidden" };
   if (response.status === 404) return { kind: "missing" };
   if (response.status === 409) return { kind: "conflict" };
-  if (response.status !== 200 && response.status !== 201) return { kind: "transient" };
+  if (![200, 201, 202].includes(response.status)) return { kind: "transient" };
   try {
     const body: unknown = await response.json();
     return accept(body) ? { kind: "ok", body } : { kind: "transient" };
@@ -183,6 +183,11 @@ export const incidentApi = {
     call(token, `${at(id)}/runs/${encodeURIComponent(run)}/context`, signal, isContext),
   changes: (token: string, service: string, signal: AbortSignal) =>
     call(token, `/changes?service=${encodeURIComponent(service)}&limit=5`, signal, isChanges),
+  whoami: (token: string, signal: AbortSignal) =>
+    call(token, "/whoami", signal, (body): body is { principal_id: string } => isObject(body) && typeof body.principal_id === "string"),
+  /** A governed human command on a run (approve_mitigation, reject_mitigation); the key replays one submission. */
+  command: (token: string, id: string, run: string, body: unknown, key: string, signal: AbortSignal) =>
+    call(token, `${at(id)}/runs/${encodeURIComponent(run)}/commands`, signal, isRun, { body, key }),
   /** Starts an investigation run; the same key replays the same run instead of opening another. */
   investigate: (token: string, id: string, workflowVersion: string, key: string, signal: AbortSignal) =>
     call(token, `${at(id)}/runs`, signal, isRun, { body: { workflow_version: workflowVersion, objective: "investigate" }, key }),
