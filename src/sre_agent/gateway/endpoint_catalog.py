@@ -28,6 +28,8 @@ class EndpointMetadata:
     prompt_price: Decimal | None
     completion_price: Decimal | None
     request_price: Decimal | None
+    context_length: int | None = None
+    tag: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,14 +49,42 @@ class EndpointCatalogSnapshot:
             or not provider.strip()
         ):
             raise EndpointCatalogUnavailable
-        matches = [
-            endpoint
-            for endpoint in self.endpoints
-            if endpoint.provider.casefold() == provider.casefold()
-        ]
-        if len(matches) != 1:
+        wanted = provider.casefold()
+        if "/" in wanted:
+            # An endpoint tag such as `fireworks/us` names exactly one endpoint.
+            matches = [e for e in self.endpoints if (e.tag or "").casefold() == wanted]
+        else:
+            # A provider slug routes to any of its endpoints, so price the worst of them.
+            matches = [
+                e
+                for e in self.endpoints
+                if wanted in {e.provider.casefold(), (e.tag or "").split("/")[0].casefold()}
+            ]
+        if not matches:
             raise EndpointCatalogUnavailable
-        return matches[0]
+        return matches[0] if len(matches) == 1 else _most_conservative(matches)
+
+
+def _most_conservative(matches: list[EndpointMetadata]) -> EndpointMetadata:
+    """Combine endpoints into the highest prices, input bound and the lowest output cap."""
+    contexts = [e.context_length for e in matches]
+    return EndpointMetadata(
+        model=matches[0].model,
+        provider=matches[0].provider,
+        max_prompt_tokens=max(e.max_prompt_tokens for e in matches),
+        max_completion_tokens=min(e.max_completion_tokens for e in matches),
+        valid_until=min(e.valid_until for e in matches),
+        prompt_price=_highest(e.prompt_price for e in matches),
+        completion_price=_highest(e.completion_price for e in matches),
+        request_price=_highest(e.request_price for e in matches),
+        context_length=None if None in contexts else min(contexts),  # type: ignore[type-var]
+    )
+
+
+def _highest(prices) -> Decimal | None:
+    # An unknown price on any candidate endpoint leaves the combined price unknown.
+    values = list(prices)
+    return None if None in values else max(values)
 
 
 class OpenRouterEndpointCatalog:
@@ -83,9 +113,14 @@ class OpenRouterEndpointCatalog:
         observed_at = self._clock()
         if not _aware(observed_at):
             raise EndpointCatalogUnavailable
+        # OpenRouter addresses a model as `/models/{author}/{slug}/endpoints`; an
+        # escaped `/` (%2F) or a bare alias answers 404.
+        segments = model.split("/")
+        if len(segments) != 2 or any(part in {"", ".", ".."} for part in segments):
+            raise EndpointCatalogUnavailable
         try:
             response = await self._client.get(
-                f"/api/v1/models/{quote(model, safe='')}/endpoints",
+                f"/api/v1/models/{'/'.join(quote(part, safe='') for part in segments)}/endpoints",
                 headers={"Authorization": f"Bearer {self._management_key}"},
             )
             if not response.is_success:
@@ -120,11 +155,25 @@ def _endpoint_metadata(raw: object, model: str, valid_until: datetime) -> Endpoi
     if not isinstance(raw, Mapping):
         raise ValueError
     provider = raw.get("provider_name")
+    # OpenRouter reports `max_prompt_tokens: null` for most endpoints. Neither the
+    # prompt nor the completion can exceed the context window, so the context length
+    # caps a missing limit; admission bounds the prompt by the request's own size.
+    context_length = raw.get("context_length")
     prompt_tokens = raw.get("max_prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = context_length
     completion_tokens = raw.get("max_completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = context_length
+    tag = raw.get("tag")
     if (
         not isinstance(provider, str)
         or not provider.strip()
+        or (tag is not None and not isinstance(tag, str))
+        or (
+            context_length is not None
+            and (type(context_length) is not int or not 0 < context_length <= MAX_ENDPOINT_TOKENS)
+        )
         or type(prompt_tokens) is not int
         or not 0 < prompt_tokens <= MAX_ENDPOINT_TOKENS
         or type(completion_tokens) is not int
@@ -142,7 +191,11 @@ def _endpoint_metadata(raw: object, model: str, valid_until: datetime) -> Endpoi
         valid_until=valid_until,
         prompt_price=_price(pricing.get("prompt")),
         completion_price=_price(pricing.get("completion")),
-        request_price=_price(pricing.get("request")),
+        # A null or absent per-request fee means the endpoint charges none; prompt and
+        # completion prices stay required, so their absence still fails closed.
+        request_price=_price(pricing.get("request")) or Decimal(0),
+        context_length=context_length,
+        tag=tag,
     )
 
 

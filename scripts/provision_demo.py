@@ -1,15 +1,25 @@
 """Prepare only explicit demo grants using the existing governed ControlService.
 
 Run in the seed container, after the ordinary and MCP seeds. No provider/MCP
-secret is needed. Revoked or conflicting grants fail closed; this is not a
-second seed nor an authority repair tool. Partial progress is safe to rerun.
+secret is needed. A revoked setup grant is reported as drift and left revoked;
+conflicting grants fail closed. This is not a second seed nor an authority repair
+tool. Partial progress is safe to rerun.
 """
 
 import asyncio
 import os
 import sys
 
-from provision_incident_workflow import CATALOG_BODY, _granted, build_service, provision
+from provision_incident_workflow import (
+    APPROVE_GRANT_BODY,
+    CATALOG_BODY,
+    COMMAND_GRANT_BODY,
+    GRANT_BODY,
+    START_GRANT_BODY,
+    _granted,
+    build_service,
+    provision,
+)
 
 
 def demo_grants():
@@ -20,6 +30,7 @@ def demo_grants():
         "alert.dismiss",
         "alert.associate",
         "incident.declare",
+        "change.read",
     ):
         yield {
             "grant_id": "grant-setup-human-" + action.replace(".", "-"),
@@ -50,6 +61,7 @@ def demo_grants():
         ("mcp.discovery", "mcp_server", "grafana-mcp"),
         ("mcp.invoke", "mcp_tool", "query_prometheus"),
         ("mcp.invoke", "mcp_tool", "query_elasticsearch"),
+        ("change.read", "incident_workflow", "incident-response"),
     ):
         yield {
             "grant_id": "grant-setup-agent-" + resource,
@@ -58,6 +70,53 @@ def demo_grants():
             "resource": {"resource_type": kind, "resource_id": resource},
             "effect": "allow",
         }
+
+
+def executor_changes_grant():
+    return {
+        "grant_id": "grant-setup-deploy-executor-change-write",
+        "principal_id": "deploy-executor",
+        "action": "change.write",
+        "resource": {"resource_type": "incident_workflow", "resource_id": "incident-response"},
+        "effect": "allow",
+    }
+
+
+async def provision_executor_changes(service, bearer, key):
+    """The deploy-executor's own credential (#770): change.write only, from the key in .env.
+
+    The control API issues random keys, so the credential row is written here, as the seed writes
+    the other demo keys; an existing one must hold this same key or provisioning fails closed.
+    """
+    from datetime import UTC, datetime
+
+    from sre_agent.persistence.api_keys import api_key_prefix, hash_api_key, verify_api_key
+    from sre_agent.persistence.models import CredentialRow
+
+    body = {"principal_id": "deploy-executor", "kind": "agent", "display_name": "Deploy executor"}
+    response = await service.create_principal(body, bearer, "setup-v1-principal-deploy-executor")
+    if response.status_code not in (200, 201, 409):
+        raise RuntimeError("deploy-executor principal conflict")
+    async with service.sessions() as session, session.begin():
+        stored = await session.get(CredentialRow, "credential-deploy-executor")
+        if stored is None:
+            now = datetime.now(UTC)
+            session.add(
+                CredentialRow(
+                    credential_id="credential-deploy-executor",
+                    principal_id="deploy-executor",
+                    prefix=api_key_prefix(key),
+                    key_hash=hash_api_key(key),
+                    status="active",
+                    created_at=now,
+                )
+            )
+        elif stored.status != "active" or not verify_api_key(key, stored.key_hash):
+            raise RuntimeError("deploy-executor credential conflict")
+    grant = executor_changes_grant()
+    response = await service.create_grant(grant, bearer, "setup-v1-" + grant["grant_id"])
+    if not (response.status_code in (201, 409) and await _already_active(service, grant)):
+        raise RuntimeError("demo grant conflict: " + grant["grant_id"])
 
 
 async def _already_active(service, body):
@@ -72,7 +131,7 @@ async def _already_active(service, body):
     return found is not None
 
 
-async def provision_demo(service, bearer):
+async def provision_demo(service, bearer, executor_changes_key=None):
     from sre_agent.persistence.repositories import CatalogRepository
 
     existing = await provision(service, bearer)
@@ -83,31 +142,44 @@ async def provision_demo(service, bearer):
         for name in ("status", "owner_id", "source", "source_ref")
     ):
         raise RuntimeError("workflow catalog conflict; retain state and review through domain API")
-    if not all(
-        (
-            existing.catalog_status == 201,
-            existing.grant_status == 201,
-            existing.start_grant_status == 201,
-            existing.command_grant_status == 201,
-            existing.approve_grant_status == 201,
-            existing.run_read_active,
-            existing.run_start_active,
-            existing.run_command_active,
-            existing.run_approve_active,
-        )
-    ):
+    if existing.catalog_status != 201:
         raise RuntimeError("workflow provisioning conflict; inspect existing workflow/grants")
+    for status, active, body in (
+        (existing.grant_status, existing.run_read_active, GRANT_BODY),
+        (existing.start_grant_status, existing.run_start_active, START_GRANT_BODY),
+        (existing.command_grant_status, existing.run_command_active, COMMAND_GRANT_BODY),
+        (existing.approve_grant_status, existing.run_approve_active, APPROVE_GRANT_BODY),
+    ):
+        if not (status == 201 and active) and not await _drifted(service, body):
+            raise RuntimeError("workflow grant conflict: " + body["grant_id"])
     for body in demo_grants():
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
         if response.status_code == 201 and await _granted(service, body):
             continue
-        # 409: the authority exists already. Active is convergence; revoked fails closed.
-        if response.status_code == 409 and await _already_active(service, body):
+        # The authority is active already, maybe under another id: convergence.
+        if await _already_active(service, body) or await _drifted(service, body):
             continue
         raise RuntimeError("demo grant conflict: " + body["grant_id"])
+    if executor_changes_key:
+        await provision_executor_changes(service, bearer, executor_changes_key)
+
+
+async def _drifted(service, body):
+    """An operator revoked this setup grant: report the drift and leave it revoked (#759)."""
+    from sre_agent.persistence.repositories import GrantRepository
+
+    async with service.sessions() as session:
+        persisted = await GrantRepository(session).get(body["grant_id"])
+    if persisted is None or persisted.status != "revoked":
+        return False
+    if await _already_active(service, body):
+        return True
+    print(f"seed drift: grant {body['grant_id']} is revoked; left revoked")
+    return True
 
 
 async def main():
+    from sre_agent.persistence.api_keys import is_api_key
     from sre_agent.persistence.database import Database
 
     if not all(
@@ -115,11 +187,16 @@ async def main():
     ):
         print("provision: database/admin/audit configuration required", file=sys.stderr)
         return 2
+    executor_changes_key = os.environ.get("DEPLOY_EXECUTOR_CHANGES_API_KEY", "")
+    if executor_changes_key and not is_api_key(executor_changes_key):
+        print("provision: DEPLOY_EXECUTOR_CHANGES_API_KEY must be an sre_ key", file=sys.stderr)
+        return 2
     db = Database(os.environ["DATABASE_URL"])
     try:
         await provision_demo(
             build_service(db, os.environ["AUDIT_HMAC_KEY"].encode()),
             "Bearer " + os.environ["ADMIN_HUMAN_API_KEY"],
+            executor_changes_key,
         )
     except Exception:
         # Third-party exception text may contain connection details or credentials.

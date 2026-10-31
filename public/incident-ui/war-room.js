@@ -30,8 +30,36 @@ const TERMINATION_REASONS = Object.freeze({
   max_steps: "Run terminado: se agotó el presupuesto de pasos del harness.",
   needs_human: "Run terminado: hace falta intervención humana.",
   invalid_output: "Run terminado: el harness entregó salidas inválidas.",
-  upstream_unavailable: "Run terminado: el proveedor no responde.",
+  upstream_unavailable: "Run terminado: el proveedor del modelo o una herramienta no responde.",
 });
+// Por qué terminó un despacho, por `reason_code` (#705), con la redacción del aviso de Telegram
+// (#800). El código va entre paréntesis para buscarlo en la documentación.
+const DISPATCH_CAUSES = Object.freeze({
+  producer_interrupted: "la investigación se interrumpió antes de terminar",
+  harness_not_configured: "no hay un modelo configurado para investigar",
+  harness_identity_unavailable:
+    "la identidad del investigador no está disponible; reactívala en Principales o pide ayuda a un administrador",
+  mcp_discovery_denied: "no hay permiso para usar las herramientas de observabilidad",
+  mcp_discovery_rejected:
+    "las herramientas de observabilidad no están configuradas o rechazaron la conexión",
+  mcp_discovery_transient: "las herramientas de observabilidad no respondieron",
+  governed_call_denied: "se denegó una consulta del investigador",
+  investigation_mcp_contract_rejected: "una consulta a una herramienta no cumplió su contrato",
+  investigation_upstream_unavailable: "el proveedor del modelo no respondió",
+  investigation_tool_unavailable: "una herramienta de observabilidad falló o no respondió a tiempo",
+  tool_timeout: "una herramienta de observabilidad superó el tiempo límite de la consulta",
+  investigation_max_steps: "se agotaron los pasos sin llegar a una conclusión",
+  investigation_invalid_output: "el modelo respondió en un formato no válido",
+  investigation_no_measured_evidence: "ninguna evidencia citada tenía datos medidos",
+  investigator_failed: "el investigador falló",
+  result_persistence_uncertain: "no se pudo confirmar que el resultado se guardó",
+  stale_incident_snapshot: "el incidente cambió mientras se investigaba",
+});
+
+function dispatchCause(code) {
+  const cause = DISPATCH_CAUSES[code];
+  return cause ? `${cause[0].toUpperCase()}${cause.slice(1)} (${code}).` : null;
+}
 
 function randomHex(bytes) {
   const values = new Uint8Array(bytes);
@@ -85,6 +113,7 @@ const shortDayFormat = new Intl.DateTimeFormat("es-CO", {
 const state = {
   incidentId: null,
   incidentState: null,
+  runs: [],
   runId: null,
   selectedRunId: null,
   cursor: null,
@@ -97,6 +126,7 @@ const state = {
   startedAt: null,
   lastState: null,
   lastDay: null,
+  endingCause: null,
   version: null,
   generation: 0,
   // Bumped on every session change: an answer from an earlier session never lands in this one.
@@ -367,6 +397,9 @@ function eventItem(event, position) {
   badge.dataset.tone = tone;
   head.append(title, badge);
   content.append(head);
+  const cause = dispatchCause(event.reason_code);
+  if (cause !== null) content.append(element("p", "ma-timeline__detail", `Causa: ${cause}`));
+  if (cause !== null && event.kind === "run_terminated") state.endingCause = event.reason_code;
 
   const reached = typeof event.state === "string" && event.state !== "" ? event.state : null;
   if (reached !== null && reached !== state.lastState) {
@@ -451,6 +484,7 @@ function renderEvents(events, { append } = {}) {
     state.startedAt = null;
     state.lastState = null;
     state.lastDay = null;
+    state.endingCause = null;
   }
 
   events.forEach((event) => {
@@ -557,7 +591,13 @@ function renderRunState(runState) {
   nodes["run-decide"].hidden = !deciding && next === null;
   const reason = runState.terminated_reason;
   if (typeof reason === "string" && reason !== "" && reason !== "denied") {
-    nodes["run-terminated"].textContent = TERMINATION_REASONS[reason] ?? `Run terminado (${reason}).`;
+    // La causa precisa del timeline gana a la razón genérica del run (una herramienta no es el
+    // proveedor del modelo).
+    const cause = reason === "completed" ? null : dispatchCause(state.endingCause);
+    nodes["run-terminated"].textContent =
+      cause !== null
+        ? `Run terminado: ${cause}`
+        : (TERMINATION_REASONS[reason] ?? `Run terminado (${reason}).`);
     nodes["run-terminated"].dataset.tone = reason === "completed" ? "success" : "warning";
     nodes["run-terminated"].hidden = false;
   } else {
@@ -601,6 +641,23 @@ function renderReasoning(result) {
   evidence.forEach((item) => nodes["evidence-list"].append(evidenceItem(item, cited)));
   nodes["evidence-title"].textContent = `Evidencia recolectada (${evidence.length})`;
   nodes["evidence-block"].hidden = evidence.length === 0;
+}
+
+// A declared incident starts its investigation; one still investigating whose runs all ended
+// (none running or waiting for a human) is retried with a new run (#761).
+function canStartRun() {
+  if (state.incidentState === "active") return true;
+  return (
+    state.incidentState === "investigating" &&
+    !(state.runs ?? []).some(
+      (run) =>
+        run?.current_state === "investigating" &&
+        (run?.status === "running" || run?.status === "awaiting_human") &&
+        // A denied run stored before #788 waits for `escalate`, which the API refuses; the
+        // run summary has no pending command, so only the run on screen can tell.
+        !(run.run_id === state.runState?.run_id && state.runState?.pending_command === "escalate"),
+    )
+  );
 }
 
 let runActionInFlight = false;
@@ -686,7 +743,7 @@ async function beginRun(resumeRunId = null) {
   if (runActionInFlight) return;
   const resume = resumeRunId !== null && resumeRunId !== undefined;
   if (resume && resumeRunId !== state.runId) return;
-  if (!resume && state.incidentState !== "active") return;
+  if (!resume && !canStartRun()) return;
   runActionInFlight = true;
   nodes["run-start"].disabled = true;
   nodes["run-resume"].disabled = true;
@@ -787,7 +844,10 @@ async function loadAll() {
     renderReasoning(reasoning);
     showLive(runId, runState);
     scheduleLive(true);
-    nodes["run-start"].hidden = state.incidentState !== "active";
+    state.runs = Array.isArray(detail.runs) ? detail.runs : [];
+    nodes["run-start"].hidden = !canStartRun();
+    nodes["run-start"].textContent =
+      state.incidentState === "active" ? "Iniciar investigación" : "Reintentar investigación";
     nodes["run-start"].disabled = runActionInFlight;
     nodes["run-resume"].disabled = runActionInFlight;
     nodes["load-more"].hidden = !state.hasMore;

@@ -1,0 +1,12 @@
+Investigator-timeout E2E, stamp 2b7fd4d8
+FAIL investigator timeout for provider 60 s is 75 s: 45.0
+FAIL investigator timeout for provider 60 s with the endpoint catalog is 135 s: 45.0
+FAIL investigator timeout for provider 120 s with the endpoint catalog is 180 s: 45.0
+PASS investigation run accepted: 201
+INFO run returned after 48.7 s
+INFO receipt: {"phase": "outcome", "status": "unknown", "diagnostic": {"kind": "transient", "stage": "gateway_transport", "request_id": null, "turn_count": 0, "http_status": null, "collected_evidence_count": 0}, "dispatch_id": "run_15b1b179e4488111", "reason_code": "investigation_upstream_unavailable", "request_ids": ["c14e4211-2fc6-4bf5-9a0e-adc42dcfd132"], "result_status": "upstream_unavailable", "mcp_request_ids": []}
+FAIL the run waited for the 50 s answer: 48.7 s
+FAIL the receipt ends in success: ('unknown', 'investigation_upstream_unavailable')
+PASS the gateway audited one completed model call: [(200, '3c70259b-bc2e-48b8-a3c3-ee14152d13a5')]
+FAIL the receipt names the audited request id: ['c14e4211-2fc6-4bf5-9a0e-adc42dcfd132']
+FAIL: 10 lines

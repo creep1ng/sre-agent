@@ -204,6 +204,7 @@ jobs:
               "<set-unique-sre_-prefixed-key-with-32-plus-characters>": (
                   f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}",
                   f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}",
+                  f"sre_exec_{token_hex(16)}",
               ),
               "<lab/model>": ("openai/gpt-4o-mini", "anthropic/claude-sonnet-4"),
               "<provider>": ("openai", "anthropic"),
@@ -246,7 +247,7 @@ jobs:
 
           path = Path(".env")
           content = path.read_text()
-          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}"):
+          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}", f"sre_exec_{token_hex(16)}"):
               content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
           content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
           content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
@@ -301,7 +302,7 @@ jobs:
 
           path = Path(".env")
           content = path.read_text()
-          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}"):
+          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}", f"sre_exec_{token_hex(16)}"):
               content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
           content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
           content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
@@ -330,13 +331,26 @@ jobs:
     needs: compose-smoke
     if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Create ephemeral executor inputs
         run: |
           cp .env.example .env
-          sed -i "s/^DEPLOY_EXECUTOR_SIGNING_KEY=.*/DEPLOY_EXECUTOR_SIGNING_KEY=$(openssl rand -hex 32)/" .env
+          python - <<'PY'
+          from pathlib import Path
+          from secrets import token_hex
+
+          path = Path(".env")
+          content = path.read_text()
+          for value in (f"sre_admn_{token_hex(16)}", f"sre_demo_{token_hex(16)}", f"sre_inci_{token_hex(16)}", f"sre_rest_{token_hex(16)}", f"sre_exec_{token_hex(16)}"):
+              content = content.replace("<set-unique-sre_-prefixed-key-with-32-plus-characters>", value, 1)
+          content = content.replace("<lab/model>", "openai/gpt-4o-mini", 1).replace("<lab/model>", "anthropic/claude-sonnet-4", 1)
+          content = content.replace("<provider>", "openai", 1).replace("<provider>", "anthropic", 1)
+          content = content.replace("<set-long-random-audit-hmac-key>", token_hex(32), 1)
+          content = content.replace("<set-long-random-executor-signing-key>", token_hex(32), 1)
+          path.write_text(content)
+          PY
       - name: Run the deploy-executor journey and its socket-down case
         env:
           COMPOSE_PROJECT_NAME: ci-executor-${{ github.run_id }}

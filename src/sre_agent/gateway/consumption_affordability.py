@@ -13,6 +13,19 @@ from sre_agent.gateway.endpoint_catalog import (
 
 MAX_PRICE_DIGITS = 128
 MAX_PRICE_EXPONENT = 128
+# Generous ceiling for the role and separator tokens a chat template adds per message.
+MESSAGE_OVERHEAD_TOKENS = 64
+
+
+def text_input_bound(messages: tuple[str, ...]) -> int:
+    """Return a guaranteed ceiling on the prompt tokens of a text-only request.
+
+    Byte-level tokenizers emit at most one token per UTF-8 byte, so the byte count
+    plus a fixed per-message overhead can never be exceeded. It is a bound, not an
+    estimate. A request with non-text parts has no such bound; leave the input
+    bound unset there and the endpoint's prompt capacity applies.
+    """
+    return sum(len(text.encode("utf-8")) + MESSAGE_OVERHEAD_TOKENS for text in messages)
 
 
 class AffordabilityDenied(Exception):
@@ -39,12 +52,15 @@ def calculate_affordability(
     incident_tokens_remaining: int | None,
     monthly_usd_remaining: Decimal | None,
     now: datetime,
+    input_tokens: int | None = None,
 ) -> AffordabilityEnvelope:
     """Return the positive output cap justified by all active consumption limits.
 
-    The endpoint's documented maximum prompt capacity is the conservative input
-    bound. No tokenizer estimate, provider inference, reservation, or admission
-    side effect is performed here.
+    The input bound is `input_tokens` (see `text_input_bound`) capped by the
+    endpoint's prompt capacity, or that capacity alone when unset. The output cap
+    leaves room for the input in the context window and in the incident balance.
+    No tokenizer estimate, provider inference, reservation, or admission side
+    effect is performed here.
     """
     try:
         endpoint = snapshot.select(provider, now=now)
@@ -52,13 +68,22 @@ def calculate_affordability(
         raise AffordabilityDenied from None
     _validate_endpoint(endpoint, snapshot.model, now)
     _validate_remaining(incident_tokens_remaining, monthly_usd_remaining)
+    if input_tokens is not None and (
+        type(input_tokens) is not int or not 0 < input_tokens <= MAX_ENDPOINT_TOKENS
+    ):
+        raise AffordabilityDenied
+    input_bound = (
+        endpoint.max_prompt_tokens
+        if input_tokens is None
+        else min(input_tokens, endpoint.max_prompt_tokens)
+    )
 
     output_ceiling = endpoint.max_completion_tokens
+    if endpoint.context_length is not None:
+        # Providers that check prompt plus output against the window reject more.
+        output_ceiling = min(output_ceiling, endpoint.context_length - input_bound)
     if incident_tokens_remaining is not None:
-        output_ceiling = min(
-            output_ceiling,
-            incident_tokens_remaining - endpoint.max_prompt_tokens,
-        )
+        output_ceiling = min(output_ceiling, incident_tokens_remaining - input_bound)
 
     input_cost: Decimal | None = None
     request_fee: Decimal | None = None
@@ -66,7 +91,7 @@ def calculate_affordability(
         prompt_price = _required_price(endpoint.prompt_price)
         completion_price = _required_price(endpoint.completion_price)
         request_fee = _required_price(endpoint.request_price)
-        input_cost = _token_cost(prompt_price, endpoint.max_prompt_tokens)
+        input_cost = _token_cost(prompt_price, input_bound)
         fixed_cost = _exact_sum(input_cost, request_fee)
         remaining_after_input = _exact_difference(monthly_usd_remaining, fixed_cost)
         if remaining_after_input < 0:
@@ -87,7 +112,7 @@ def calculate_affordability(
         model=endpoint.model,
         provider=endpoint.provider,
         max_output_tokens=output_ceiling,
-        conservative_input_tokens=endpoint.max_prompt_tokens,
+        conservative_input_tokens=input_bound,
         conservative_input_cost_usd=input_cost,
         request_fee_usd=request_fee,
     )
