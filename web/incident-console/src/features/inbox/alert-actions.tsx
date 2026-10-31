@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { dismissAlert, fetchEligibleIncidents, linkAlert, readTriageVersion, type EligibleIncident, type TriageResult } from "@/lib/api";
+import { dismissAlert, fetchEligibleIncidents, linkAlert, type EligibleIncident } from "@/lib/api";
 import { useLive } from "@/lib/live";
 import { incidentStatus } from "@/lib/status";
 import { useStore } from "@/lib/store";
-import { markTriaged, TRIAGE_FAILURE } from "@/lib/triage";
+import { markTriaged, TRIAGE_FAILURE, useTriageSubmission } from "@/lib/triage";
 import type { Alert, Incident } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DISMISS_REASONS } from "@/lib/vocabulary";
@@ -22,12 +22,12 @@ export function DismissPopover({ alert }: { alert: Alert }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<string>(DISMISS_REASONS[0]);
   const [other, setOther] = useState("");
-  const live = useLiveDecision(alert, open);
+  const live = useTriageSubmission(alert.live ? alert.id : undefined, open);
   const isOther = reason === "otro";
   const finalReason = isOther ? other.trim() : reason;
 
   async function confirmLive() {
-    const result = await live.send((token, version) => dismissAlert(token, alert.id, finalReason, version));
+    const result = await live.send(finalReason, (token, attempt) => dismissAlert(token, alert.id, finalReason, attempt));
     if (result.kind !== "ok") return live.fail(TRIAGE_FAILURE.dismiss[result.kind]);
     markTriaged(alert.id, "dismissed");
     setOpen(false);
@@ -102,7 +102,7 @@ export function LinkPopover({ alert, incidents }: { alert: Alert; incidents: Inc
   const link = useStore((s) => s.link);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const live = useLiveDecision(alert, open);
+  const live = useTriageSubmission(alert.live ? alert.id : undefined, open);
   const [eligible, setEligible] = useState<EligibleIncident[] | null>(null);
   const token = useLive((s) => s.token);
 
@@ -119,7 +119,7 @@ export function LinkPopover({ alert, incidents }: { alert: Alert; incidents: Inc
 
   async function chooseLive(incidentId: string) {
     if (live.pending) return;
-    const result = await live.send((key, version) => linkAlert(key, alert.id, incidentId, version));
+    const result = await live.send(incidentId, (key, attempt) => linkAlert(key, alert.id, incidentId, attempt));
     if (result.kind !== "ok") return live.fail(TRIAGE_FAILURE.link[result.kind]);
     markTriaged(alert.id, "linked", incidentId);
     setOpen(false);
@@ -157,13 +157,19 @@ export function LinkPopover({ alert, incidents }: { alert: Alert; incidents: Inc
                 {(eligible ?? []).map((incident) => (
                   <CommandItem
                     key={incident.incident_id}
-                    value={incident.incident_id}
+                    value={`${incident.incident_id} ${incident.service ?? ""} ${incident.summary ?? ""}`}
                     disabled={live.pending}
                     onSelect={() => void chooseLive(incident.incident_id)}
-                    className="flex items-center gap-2"
+                    className="flex-col items-start gap-1"
                   >
-                    <span className="flex-1 truncate font-mono text-xs">{incident.incident_id}</span>
-                    <span className="text-xs text-muted-foreground">{INCIDENT_STATE[incident.state] ?? "Abierto"}</span>
+                    <span className="flex w-full items-center gap-2">
+                      <span className="flex-1 truncate font-medium">{incident.summary ?? incident.incident_id}</span>
+                      <span className="text-xs text-muted-foreground">{INCIDENT_STATE[incident.state] ?? "Abierto"}</span>
+                    </span>
+                    <span className="flex w-full items-center gap-2 text-xs text-muted-foreground">
+                      {incident.service && <span>{incident.service}</span>}
+                      <span className="font-mono">{incident.incident_id}</span>
+                    </span>
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -202,32 +208,6 @@ const INCIDENT_STATE: Record<string, string> = {
   mitigating: "Mitigando",
   verifying: "Verificando",
 };
-
-/** A live decision reads the alert's version when its popover opens and sends one command at a time. */
-function useLiveDecision(alert: Alert, open: boolean) {
-  const token = useLive((s) => s.token);
-  const [version, setVersion] = useState<number | null>(null);
-  const [pending, setPending] = useState(false);
-  const [failure, setFailure] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || !alert.live || !token) return;
-    setFailure(null);
-    setVersion(null);
-    void readTriageVersion(token, alert.id).then(setVersion);
-  }, [open, alert.live, alert.id, token]);
-
-  async function send(command: (token: string, version: number) => Promise<TriageResult>): Promise<TriageResult> {
-    if (!token) return { kind: "auth" };
-    setPending(true);
-    setFailure(null);
-    const result = await command(token, version ?? 1);
-    setPending(false);
-    return result;
-  }
-
-  return { pending, failure, fail: setFailure, send };
-}
 
 function LiveFailure({ message }: { message: string | null }) {
   if (!message) return null;
