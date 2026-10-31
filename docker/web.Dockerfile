@@ -8,6 +8,8 @@ ENV INVESTIGATOR_OUTPUT_LANGUAGE=es
 COPY docker/nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY index.html design-system.html palette.css /usr/share/nginx/html/
 COPY public /usr/share/nginx/html/public
+COPY landing /usr/share/nginx/html/landing
+COPY landing/llms.txt /usr/share/nginx/html/llms.txt
 COPY scripts/showcase.js /usr/share/nginx/html/scripts/showcase.js
 COPY styles /usr/share/nginx/html/styles
 
