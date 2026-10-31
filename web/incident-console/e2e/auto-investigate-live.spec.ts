@@ -1,18 +1,18 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { freshEpisodes } from "./live-faults";
 
 /*
- * Issue #704 against the real stack, declaring from the new console (#703): OTel demo with the
- * checkout failure injected, setup_sre.py, the web proxy, FastAPI and PostgreSQL. No route is
- * answered by the test. Ways this can fail:
+ * Issue #704 against the live-triage stack (compose.live-triage-e2e.yaml), declaring from the new
+ * console (#703): FastAPI, PostgreSQL and the web proxy are real; the model and the Grafana MCP
+ * are stand-ins (scripts/live_triage_upstreams.py). No route is answered by the test, and it
+ * opens its own alert episode. Ways this can fail:
  * 1. the declaration does not open an `investigate` run, or opens it as someone else;
  * 2. the run is still `pending` (or missing) 5 s after the operator sent the declaration, or
  *    the first declaration opens more than one investigating run;
  * 3. replaying the exact request the console sent opens a second run or a second start;
  * 4. a declarant without run.start loses the declaration, or the timeline says nothing about
- *    why no investigation started, or a run appears anyway.
- * One run decides one episode (AUTO_INVESTIGATE=granted|no-grant): the next scenario needs
- * `demo_env.py reset` and `fail` for a new alert.
+ *    why no investigation started, words it as a dispatch that ended, or a run appears anyway.
  */
 
 const SCENARIO = process.env.AUTO_INVESTIGATE ?? "";
@@ -55,14 +55,13 @@ async function declarerWithoutRunStart(admin: APIRequestContext): Promise<string
   return ((await issued.json()) as { key: string }).key;
 }
 
-async function declareFromCard(page: Page, key: string) {
+async function declareFromCard(page: Page, key: string, alertId: string) {
   await page.goto("./");
   await page.getByRole("button", { name: "Conectar API" }).click();
   await page.getByRole("dialog").getByLabel("Clave de API").fill(key);
   await page.getByRole("dialog").getByRole("button", { name: "Conectar", exact: true }).click();
-  const card = page.locator("article").filter({ hasText: "Nueva" }).first();
-  await expect(card).toBeVisible({ timeout: 300_000 });
-  const alertId = (await card.getAttribute("data-alert-id"))!;
+  const card = page.locator(`article[data-alert-id="${alertId}"]`);
+  await expect(card).toBeVisible({ timeout: 60_000 });
   await card.getByRole("button", { name: "Declarar incidente" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("¿Qué notan tus clientes?").fill("Los clientes no pueden completar el pago en checkout.");
@@ -87,8 +86,8 @@ async function declareFromCard(page: Page, key: string) {
 
 test.describe("declarar inicia la investigación contra la pila real", () => {
   test.skip(
-    !["granted", "no-grant"].includes(SCENARIO) || !DEMO_KEY || (SCENARIO === "no-grant" && !ADMIN_KEY),
-    "Requiere AUTO_INVESTIGATE=granted|no-grant, DEMO_HUMAN_API_KEY (y ADMIN_HUMAN_API_KEY sin grant)",
+    !["granted", "no-grant"].includes(SCENARIO) || !DEMO_KEY || !process.env.FAULT_DIR || (SCENARIO === "no-grant" && !ADMIN_KEY),
+    "Requiere AUTO_INVESTIGATE=granted|no-grant, DEMO_HUMAN_API_KEY, FAULT_DIR (y ADMIN_HUMAN_API_KEY sin grant)",
   );
 
   test(`la declaración desde la consola nueva (${SCENARIO})`, async ({ page, playwright }) => {
@@ -103,7 +102,8 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
       await admin.dispose();
     }
 
-    const declared = await declareFromCard(page, key);
+    const [fresh] = await freshEpisodes(reader, BASE, ["checkout-payment-error-rate"]);
+    const declared = await declareFromCard(page, key, fresh);
     // The incident page does not read live runs yet (#708): record FastAPI's own answer instead.
     const apiShot = async (path: string, file: string) => {
       const api = await page.context().browser()!.newPage({ extraHTTPHeaders: { authorization: `Bearer ${DEMO_KEY}` } });
@@ -203,8 +203,10 @@ test.describe("declarar inicia la investigación contra la pila real", () => {
       const events = ((await timeline.json()) as { events: Array<Record<string, any>> }).events;
       const blocked = events.filter((event) => event.reason_code === "run_start_not_authorized");
       expect(blocked).toHaveLength(1);
-      // The dispatch-cause catalogue of #705 words it (src/sre_agent/incident/reasons.py).
-      expect(blocked[0].summary).toContain("Cause: the declarant lacks the run.start grant");
+      // Its own kind: no dispatch existed, so nothing words it as one that ended (#704).
+      expect(blocked[0].kind).toBe("run_start_blocked");
+      expect(blocked[0].summary).toMatch(/^The investigation did not start: the declarant lacks the run.start grant/);
+      expect(events.filter((event) => event.kind === "dispatch_receipt")).toHaveLength(0);
       await apiShot(`/v1/incidents/${declared.incidentId}/timeline`, "timeline-api.png");
       writeFileSync(
         `${dir}/verification.json`,
