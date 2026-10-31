@@ -1,0 +1,12 @@
+{
+  "sanitized": true,
+  "stamp": "0df837ff",
+  "investigated": "inc-1ba8251fed1103d314d5456d83c8c461",
+  "evidenceWithVerdict": 0,
+  "investigatedRuns": 2,
+  "retried": "inc-a375ba391af0e932ab736563df77f366",
+  "retriedRuns": {
+    "beforeRetry": 2,
+    "afterRetry": 3
+  }
+}
