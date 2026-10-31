@@ -150,6 +150,16 @@ def load_config(path, *, stopping=False):
         ):
             raise SetupError("MCP token file must contain only a valid MCP_GRAFANA_SERVER_TOKEN")
         network = values.get("SRE_MCP_NETWORK", "sre-mcp-boundary")
+    intake = state / "alert-intake.env"
+    if not stopping and intake.exists():
+        # The demo's Grafana sends its alerts with this secret (#765); the API checks it.
+        secret = literal_env(intake)
+        if (
+            set(secret) != {"ALERT_INTAKE_GRAFANA_SECRET"}
+            or len(secret["ALERT_INTAKE_GRAFANA_SECRET"]) < 32
+        ):
+            raise SetupError("alert intake file must contain only a valid secret")
+        values.update(secret)
     if not re.fullmatch(r"[a-z][a-z0-9_-]{2,63}", network):
         raise SetupError("SRE_MCP_NETWORK must identify the prepared private MCP boundary")
     values.update(
