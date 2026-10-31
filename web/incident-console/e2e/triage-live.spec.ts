@@ -1,23 +1,24 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { freshEpisodes } from "./live-faults";
 
 /*
- * Issue #703, dismiss and link from the live card against the real stack (OTel demo with the
- * checkout failure injected, setup_sre.py, the web proxy, FastAPI, PostgreSQL). No route is
- * answered by the test. LIVE_TRIAGE picks one scenario; each consumes its alert, so use a fresh
- * SRE stack per scenario. `link` needs two real episodes of the same stack, see below. Ways this
- * can fail:
+ * Issue #703, dismiss and link from the live card against the live-triage stack
+ * (compose.live-triage-e2e.yaml: the web proxy, FastAPI, PostgreSQL; stand-in model and Grafana
+ * MCP). No route is answered by the test. LIVE_TRIAGE picks one scenario, and each opens its own
+ * alert episode, so they run one after another on one stack. Ways this can fail:
  * 1. the card dismisses or links in the browser only: the API holds no decision;
  * 2. a version that went stale while the popover was open ends in an error instead of one retry;
- * 3. linking offers no real eligible incident, or links to another one;
+ * 3. linking offers no real eligible incident, links to another one, or lists it without its
+ *    service and summary;
  * 4. a refused decision shows a status code, a version or an operation instead of Spanish text.
  */
 
 const scenario = process.env.LIVE_TRIAGE ?? "";
-const enabled = ["dismiss", "link", "conflict"].includes(scenario) && Boolean(process.env.DEMO_HUMAN_API_KEY);
+const FAULT_DIR = process.env.FAULT_DIR ?? "";
+const enabled = ["dismiss", "link", "conflict"].includes(scenario) && Boolean(process.env.DEMO_HUMAN_API_KEY && FAULT_DIR);
 const BASE = process.env.BASE_URL ?? "http://127.0.0.1:8080";
 const DIR = `e2e/artifacts/triage-${scenario}`;
-const FAULT_DIR = process.env.FAULT_DIR ?? "";
 
 test.use({ video: "off", trace: "off" });
 
@@ -42,7 +43,7 @@ async function connect(page: Page, key: string) {
 }
 
 test.describe("descartar y vincular desde la tarjeta contra la pila real", () => {
-  test.skip(!enabled, "Requiere LIVE_TRIAGE=dismiss|link|conflict y DEMO_HUMAN_API_KEY con la falla inyectada");
+  test.skip(!enabled, "Requiere LIVE_TRIAGE=dismiss|link|conflict, DEMO_HUMAN_API_KEY y FAULT_DIR");
 
   test(`escenario ${scenario}`, async ({ page, playwright }) => {
     test.setTimeout(scenario === "link" ? 900_000 : 420_000);
@@ -61,13 +62,12 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
       posts.push({ status: response.status(), code });
     });
 
+    // One episode of one rule, so `link` sees exactly one new alert when it reopens the fault.
+    let [alertId] = await freshEpisodes(api, BASE, ["checkout-payment-error-rate"]);
     await page.goto("./");
     await connect(page, key);
-    const card = page.locator("article").filter({ hasText: "Nueva" }).first();
-    await expect(card).toBeVisible({ timeout: 300_000 });
-    let alertId = (await card.getAttribute("data-alert-id"))!;
-    expect(alertId).toMatch(/^alt-/);
     let pinned = page.locator(`article[data-alert-id="${alertId}"]`);
+    await expect(pinned).toBeVisible({ timeout: 60_000 });
     let destination: string | undefined;
 
     if (scenario === "link") {
@@ -78,24 +78,9 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
       await expect(page).toHaveURL(/\/incidentes\/inc-[^/]+$/, { timeout: 30_000 });
       destination = page.url().split("/").pop()!;
       await page.goBack();
-      // Episode 2: the host ends the failure (`demo_env.py reset`) on need-reset and injects it
-      // again (`demo_env.py fail`) on need-fail; with FAULT_DIR (compose.live-triage-e2e.yaml)
-      // the runner flips the Grafana stand-in itself. The API then reports a new alert.
-      const live = async () =>
-        (await (await api.get(`${BASE}/api/v1/alerts`)).json()) as {
-          rules: { state: string }[];
-          alerts: { alert_id: string }[];
-        };
-      const next = async () => (await live()).alerts.find((alert) => alert.alert_id !== first)?.alert_id ?? "";
-      const deadline = Date.now() + 360_000;
-      const fault = (state: string) => FAULT_DIR && writeFileSync(`${FAULT_DIR}/checkout-payment-error-rate`, state);
-      writeFileSync(`${DIR}/need-reset`, new Date().toISOString());
-      fault("ok");
-      await expect.poll(async () => (await live()).rules[0].state, { timeout: 360_000, intervals: [5_000] }).toBe("ok");
-      writeFileSync(`${DIR}/need-fail`, new Date().toISOString());
-      fault("firing");
-      await expect.poll(next, { timeout: deadline - Date.now(), intervals: [5_000] }).toMatch(/^alt-/);
-      alertId = await next();
+      // Episode 2 of the same rule: the stand-in ends the failure and fires it again.
+      [alertId] = await freshEpisodes(api, BASE, ["checkout-payment-error-rate"]);
+      expect(alertId).not.toBe(first);
       pinned = page.locator(`article[data-alert-id="${alertId}"]`);
       await expect(pinned).toBeVisible({ timeout: 60_000 });
       await expect
@@ -108,6 +93,8 @@ test.describe("descartar y vincular desde la tarjeta contra la pila real", () =>
       await pinned.getByRole("button", { name: "Vincular a un incidente" }).click();
       const option = page.getByRole("option").filter({ hasText: destination });
       await expect(option).toBeVisible({ timeout: 30_000 });
+      // The incident reads as the alert that opened it, not only as inc-<hex>.
+      await expect(option).toContainText("checkout");
       await page.screenshot({ path: `${DIR}/1-eligible.png` });
       await option.click();
     } else {
