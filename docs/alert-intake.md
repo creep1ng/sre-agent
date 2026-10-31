@@ -25,7 +25,9 @@ investigation, with nobody looking at the console. Issue: #765.
 - The integration acts for one operator principal (`ALERT_INTAKE_PRINCIPAL_ID`, default
   `demo-human`), which needs the triage and run grants the console uses (`scripts/provision_demo.py`
   gives them). The triage decision records `decision_origin: external_automatic` and
-  `responsible_system: grafana`, never a manual decision. With `ALERT_INTAKE_PRINCIPAL_ID=`
+  `responsible_system: grafana`, never a manual decision, and the investigation run starts with
+  actor `system` and reference `grafana` (#704). The `triage_declare` transition itself still
+  records the operator as its actor: the workflow allows only `human` there. With `ALERT_INTAKE_PRINCIPAL_ID=`
   (empty), an unknown or inactive operator, or without the grants, the episode is still recorded
   and stays in the inbox as `new` for the console; the journeys that triage a new card by hand
   run that way.
@@ -40,7 +42,7 @@ Configuration: `ALERT_INTAKE_GRAFANA_SECRET` (empty leaves the route unmounted) 
 
 ## Episode model
 
-`incident.alert_episodes` (migration `20261030_01`), one row per episode, for consumers such as
+`incident.alert_episodes` (migration `20261030_05`), one row per episode, for consumers such as
 the chat channel (#766) and the interruption budget (#771):
 
 | Column | Meaning |
@@ -90,7 +92,10 @@ error rules fire on the cascade: that is a real degradation, not rule noise.
 Non-interactive, in CI: `scripts/run_real_journeys.sh incidents` ends with
 `scripts/alert_intake_journey.py`, which posts Grafana-shaped payloads to the composed API and
 checks 401, replay, joining, a grouped payload, resolved before firing, the limits and
-`GET /v1/alerts` with its 403.
+`GET /v1/alerts` with its 403. Before the first delivery it links a chat through the fake Bot API
+(`fake-telegram`, with a Telegram gateway on its synthetic token), then checks the automatic path
+with no person acting: the run starts as `system`/`grafana` and the chat receives the
+investigation acknowledgment; it records the seconds from delivery to each step.
 
 Real Grafana, by hand: `compose.alert-intake.yaml` adds Grafana 13.1.0 with the same file, a
 Prometheus 3.13.1 that receives OTLP with the store's labels, `sre-checkout`, and the runner

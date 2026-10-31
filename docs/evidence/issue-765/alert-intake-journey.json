@@ -1,97 +1,13 @@
-{
-  "run": "f4335f5a",
-  "pass": true,
-  "checks": [
-    {
-      "check": "401 without the secret, one audit event per delivery, nothing recorded",
-      "pass": true,
-      "status": 401,
-      "oversized_status": 401,
-      "audit_401": [
-        0,
-        2
-      ],
-      "code": "authentication_failed"
-    },
-    {
-      "check": "a firing alert declares an incident and dispatches its investigation",
-      "pass": true,
-      "episode": "alt-cart-f4335f5a-0370f58a9dc7f11b",
-      "incident": "inc-1f4da5289b3e0515afb88f5443aa0c9d",
-      "run": "run_7174a1d92a611152"
-    },
-    {
-      "check": "the same delivery again opens nothing new",
-      "pass": true,
-      "received_count": 2,
-      "incidents": [
-        1,
-        1
-      ]
-    },
-    {
-      "check": "later alerts of the service join its open incident, also after the first resolved",
-      "pass": true,
-      "episodes": [
-        [
-          "alt-cart-f4335f5a-0370f58a9dc7f11b",
-          "resolved",
-          3,
-          "inc-1f4da5289b3e0515afb88f5443aa0c9d"
-        ],
-        [
-          "alt-cart-f4335f5a-07cfee62556d53fa",
-          "firing",
-          1,
-          "inc-1f4da5289b3e0515afb88f5443aa0c9d"
-        ],
-        [
-          "alt-cart-f4335f5a-dc6ed3fdb5e0943f",
-          "firing",
-          1,
-          "inc-1f4da5289b3e0515afb88f5443aa0c9d"
-        ]
-      ]
-    },
-    {
-      "check": "one grouped payload opens one incident per service",
-      "pass": true,
-      "incidents": [
-        "inc-2fe35655ea9734de4b2dde64caac8534",
-        "inc-1bc3d389321f225496f76c0cbe8e911f"
-      ]
-    },
-    {
-      "check": "a resolved before its firing opens nothing and stays resolved",
-      "pass": true,
-      "status": "resolved",
-      "received_count": 2
-    },
-    {
-      "check": "an oversized body or more than 100 alerts is refused",
-      "pass": true,
-      "statuses": [
-        413,
-        413
-      ]
-    },
-    {
-      "check": "GET /v1/alerts lists firing episodes live with their decision, resolved ones apart",
-      "pass": true,
-      "live": [
-        "alt-ad-f4335f5a-756bc71b5ec122f8",
-        "alt-cart-f4335f5a-07cfee62556d53fa",
-        "alt-cart-f4335f5a-dc6ed3fdb5e0943f",
-        "alt-payment-f4335f5a-cc07a0deefe7c176"
-      ]
-    },
-    {
-      "check": "GET /v1/alerts refuses a caller without alert.read and an anonymous one",
-      "pass": true,
-      "statuses": [
-        403,
-        401
-      ]
-    }
-  ]
-}
+{"run": "57e6d59b", "pass": true, "checks": [
+  {"check": "the operator's chat is linked through the fake Bot API", "pass": true, "chat": 222},
+  {"check": "401 without the secret, one audit event per delivery, nothing recorded", "pass": true, "status": 401, "oversized_status": 401, "audit_401": [0, 2], "code": "authentication_failed"},
+  {"check": "a firing alert declares an incident and dispatches its investigation", "pass": true, "episode": "alt-cart-57e6d59b-f8fa33aa121f77f6", "incident": "inc-4d43f903d9dd5a4159402965c28de44e", "run": "run_daf8a375ea408361"},
+  {"check": "the automatic investigation starts as grafana and the linked chat gets its acknowledgment", "pass": true, "investigation_start": [["system", "grafana"]], "triage_decision": {"decision_origin": "external_automatic", "responsible_system": "grafana"}, "decisions": [["triage_declare", "human", "demo-human"], ["start_investigation", "system", "grafana"], [null, "agent", "incident-harness"], [null, "agent", "incident-harness"]], "acknowledgment": ["Investigando inc-4d43f903d9dd5a4159402965c28de44e: cart-57e6d59b: spans failing over the last 2 min.\nEjecución run_daf8a375ea408361. Te escribo aquí cuando termine."], "seconds_after_delivery": {"run_started": 0.561, "dispatch_intent": 0.774, "ack_queued": 0.803, "ack_sent_to_fake_bot_api": 0.902}},
+  {"check": "the same delivery again opens nothing new", "pass": true, "received_count": 2, "incidents": [1, 1]},
+  {"check": "later alerts of the service join its open incident, also after the first resolved", "pass": true, "episodes": [["alt-cart-57e6d59b-f8fa33aa121f77f6", "resolved", 3, "inc-4d43f903d9dd5a4159402965c28de44e"], ["alt-cart-57e6d59b-b55102b1f17e8a9d", "firing", 1, "inc-4d43f903d9dd5a4159402965c28de44e"], ["alt-cart-57e6d59b-05961f66da0bd98a", "firing", 1, "inc-4d43f903d9dd5a4159402965c28de44e"]]},
+  {"check": "one grouped payload opens one incident per service", "pass": true, "incidents": ["inc-35d700ff8738ca38249ca6efc3e697f7", "inc-1fe3919f4ef651e38518ee5b746d3b82"]},
+  {"check": "a resolved before its firing opens nothing and stays resolved", "pass": true, "status": "resolved", "received_count": 2},
+  {"check": "an oversized body or more than 100 alerts is refused", "pass": true, "statuses": [413, 413]},
+  {"check": "GET /v1/alerts lists firing episodes live with their decision, resolved ones apart", "pass": true, "live": ["alt-ad-57e6d59b-2f170568df40e2b0", "alt-cart-57e6d59b-05961f66da0bd98a", "alt-cart-57e6d59b-b55102b1f17e8a9d", "alt-payment-57e6d59b-221db246ff7b60a1"]},
+  {"check": "GET /v1/alerts refuses a caller without alert.read and an anonymous one", "pass": true, "statuses": [403, 401]}
+]}
