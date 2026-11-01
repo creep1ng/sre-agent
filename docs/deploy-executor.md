@@ -220,6 +220,15 @@ key it sends is `mitexec-{run_id}-{mitigation_id}`. A refusal answers 409 `preco
 executor marks it retryable. None of them moves the incident. Otherwise the incident moves to
 `verifying` with `execution_mode: executed` and the receipt in `mitigation_strategy.execution`.
 
+Every approval that reaches the agent's identity is audited as `mitigation.execute`, however it
+ends: the agent and its grant decision, the operation as an HMAC resource reference, the status,
+the reason code and the latency, correlated with the request, the incident and the run
+(`GET /v1/audit-events?incident_id=`). Like every audit event it keeps no content: what ran and
+how it ended stays in the receipt. Nothing runs without `AUDIT_HMAC_KEY` (503
+`executor_unavailable`), and an operation that ran is not answered before its audit is written:
+if the write fails the approval answers 503 and moves nothing, and the retry sends the same key,
+so the executor replays its result.
+
 ## What the vendors do
 
 Official documentation, read on 2026-10-22; marketing claims are left out.

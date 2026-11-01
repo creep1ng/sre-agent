@@ -8,7 +8,10 @@ Written before the check (cases 1 to 5) and the call (6 and 7) existed. Ways thi
 5. a stale approval, or one without an operation, stops being answered as before;
 6. the approval moves to verifying and nothing runs, or the operation runs unsigned, with a key
    that does not bind it to the run and the mitigation, or twice when the approval is retried;
-7. an executor that fails, or answers nothing usable, still lets the incident move on.
+7. an executor that fails, or answers nothing usable, still lets the incident move on;
+8. an approval that reaches the executor leaves no audit of how it ended;
+9. an operation runs where nothing audits it, or one that ran is answered, and the incident
+   moved, without its audit (8 and 9 written before the audit existed).
 Principals and the human grants come from the #330 suite; this module adds the investigator's
 agent and its one grant, on the rollback of sre-checkout. Only the deploy-executor is scripted,
 as an HTTP server that serves its catalog and checks that every operation is signed.
@@ -20,6 +23,7 @@ import sys
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -36,6 +40,8 @@ from test_incident_command_http import (  # noqa: F401  (module fixture)
 )
 
 from sre_agent.executor.signature import verify
+from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.responses import PostgresAuditStore
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import CredentialRepository
 from sre_agent.settings import Settings
@@ -256,3 +262,82 @@ def test_an_executor_that_fails_keeps_the_incident_mitigating(case: str) -> None
     assert (response.status_code, response.json()["error"]["code"]) == expected, response.text
     assert len(CALLS) == 1 and _row(incident_id) == ("mitigating", 0)
     assert "execution" not in _strategy(incident_id)
+
+
+def _audit(incident_id: str) -> list[tuple[Any, ...]]:
+    """The mitigation.execute audit of an incident, found by its correlation reference."""
+    digest = AuditProjector(b"x" * 32).reference("incident_id", incident_id).digest
+    with psycopg.connect(DATABASE_URL) as connection:
+        return connection.execute(
+            "SELECT stage, outcome, response_status, reason_code, resource->>'resource_type', "
+            "identity->>'principal_kind' FROM audit_events "
+            "WHERE operation='mitigation.execute' AND correlation->'incident_ref'->>'digest'=%s",
+            (digest,),
+        ).fetchall()
+
+
+FAILED = (502, {"error": {"code": "execution_failed"}})
+# case: (operation, image running, executor answer, audit expected)
+RECORDS = {
+    "allowed": (ROLLBACK, "demo/checkout:1.5.0", None, ("response", "success", 200, None)),
+    "ungranted": (
+        RESTART,
+        "demo/checkout:1.5.0",
+        None,
+        ("authorization", "denied", 403, "no_matching_grant"),
+    ),
+    "unoffered": (
+        ROLLBACK,
+        "demo/checkout:1.4.0",
+        None,
+        ("upstream", "error", 409, "status_conflict"),
+    ),
+    "unreachable": (ROLLBACK, DOWN, None, ("upstream", "error", 503, "upstream_unavailable")),
+    "failed": (
+        ROLLBACK,
+        "demo/checkout:1.5.0",
+        FAILED,
+        ("upstream", "error", 409, "upstream_failed"),
+    ),
+}
+
+
+@pytest.mark.parametrize("case", RECORDS)
+def test_an_approval_that_reaches_the_executor_is_audited(case: str) -> None:
+    operation, running, answer, audit = RECORDS[case]
+    incident_id = f"inc-record-{case}"
+    _mitigating(incident_id, operation=operation)
+    with _executor(running, answer or (200, RESULT)) as url:
+        _send(incident_id, f"key-record-{case}", _body(), settings=_settings(url))
+    assert _audit(incident_id) == [(*audit, "service_operation", "agent")]
+
+
+def test_an_operation_never_runs_or_is_answered_without_its_audit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _mitigating("inc-unaudited", operation=ROLLBACK)
+    _mitigating("inc-audit-down", operation=ROLLBACK)
+
+    async def down(*_: Any) -> None:
+        raise ConnectionError("the audit store is down")
+
+    with _executor("demo/checkout:1.5.0") as url:
+        unaudited = replace(_settings(url), audit_hmac_key=None)
+        response = _send("inc-unaudited", "key-unaudited", _body(), settings=unaudited)
+        assert (response.status_code, response.json()["error"]["code"]) == (
+            503,
+            "executor_unavailable",
+        )
+        assert CALLS == [] and _row("inc-unaudited") == ("mitigating", 0)
+        monkeypatch.setattr(PostgresAuditStore, "append", down)
+        lost = _send("inc-audit-down", "key-audit-down", _body(), settings=_settings(url))
+        assert lost.status_code == 503 and _row("inc-audit-down") == ("mitigating", 0)
+        monkeypatch.undo()
+        retried = _send("inc-audit-down", "key-audit-down", _body(), settings=_settings(url))
+    assert retried.status_code == 202 and _row("inc-audit-down") == ("verifying", 1)
+    # Both carry the same key, so the real executor replays its result instead of running again.
+    key = f"mitexec-{RUNS['inc-audit-down']}-mit_disable_payment_flag"
+    assert [call[1] for call in CALLS] == [key, key]
+    assert _audit("inc-audit-down") == [
+        ("response", "success", 200, None, "service_operation", "agent")
+    ]

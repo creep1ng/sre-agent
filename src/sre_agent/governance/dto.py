@@ -628,6 +628,8 @@ class AuditEvent(StrictDTO):
         "catalog.read",
         "catalog.status.replace",
         "skills.resolve",
+        # The deploy-executor operation an approval runs (#722), by migration only.
+        "mitigation.execute",
     ]
     action: Literal[
         "authenticate",
@@ -702,6 +704,7 @@ class AuditEvent(StrictDTO):
             "mcp_tool",
             "skill",
             "bok_collection",
+            "service_operation",
         }
         if (
             self.stage in {"authorization", "routing", "upstream", "response"}

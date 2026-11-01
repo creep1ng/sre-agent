@@ -438,7 +438,8 @@ class AuditEventRow(Base):
             "'grants.create','grants.list','grants.revoke',"
             "'aliases.create','aliases.list','aliases.get',"
             "'aliases.assignment.replace','aliases.status.replace','catalog.create',"
-            "'catalog.list','catalog.read','bok.search','bok.read','consumption_limits.get','consumption_limits.replace')",
+            "'catalog.list','catalog.read','bok.search','bok.read','consumption_limits.get','consumption_limits.replace',"
+            "'mitigation.execute')",
             name="ck_audit_events_operation",
         ),
         CK(
