@@ -11,7 +11,9 @@ Written before the check (cases 1 to 5) and the call (6 and 7) existed. Ways thi
 7. an executor that fails, or answers nothing usable, still lets the incident move on;
 8. an approval that reaches the executor leaves no audit of how it ended;
 9. an operation runs where nothing audits it, or one that ran is answered, and the incident
-   moved, without its audit (8 and 9 written before the audit existed).
+   moved, without its audit (8 and 9 written before the audit existed);
+10. the timeline does not say what ran, or a refused approval leaves it silent (written before
+    the events existed).
 Principals and the human grants come from the #330 suite; this module adds the investigator's
 agent and its one grant, on the rollback of sre-checkout. Only the deploy-executor is scripted,
 as an HTTP server that serves its catalog and checks that every operation is signed.
@@ -30,7 +32,9 @@ from typing import Any
 
 import psycopg
 import pytest
+from fastapi.testclient import TestClient
 from test_incident_command_http import (  # noqa: F401  (module fixture)
+    BEARERS,
     DATABASE_URL,
     RUNS,
     _body,
@@ -39,6 +43,7 @@ from test_incident_command_http import (  # noqa: F401  (module fixture)
     authorized_database,
 )
 
+from sre_agent.application import create_application
 from sre_agent.executor.signature import verify
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import PostgresAuditStore
@@ -276,40 +281,71 @@ def _audit(incident_id: str) -> list[tuple[Any, ...]]:
         ).fetchall()
 
 
+def _timeline(incident_id: str) -> list[dict[str, Any]]:
+    path = f"/v1/incidents/{incident_id}/runs/{RUNS[incident_id]}/events"
+    with TestClient(create_application(_settings(None))) as client:
+        page = client.get(path, headers={"Authorization": BEARERS["demo-human"]})
+    assert page.status_code == 200, page.text
+    return list(page.json()["events"])
+
+
 FAILED = (502, {"error": {"code": "execution_failed"}})
-# case: (operation, image running, executor answer, audit expected)
+# case: (operation, image running, executor answer, audit expected, timeline event expected)
 RECORDS = {
-    "allowed": (ROLLBACK, "demo/checkout:1.5.0", None, ("response", "success", 200, None)),
+    "allowed": (ROLLBACK, "demo/checkout:1.5.0", None, ("response", "success", 200, None), None),
     "ungranted": (
         RESTART,
         "demo/checkout:1.5.0",
         None,
         ("authorization", "denied", 403, "no_matching_grant"),
+        ("denial", "operation_not_authorized"),
     ),
     "unoffered": (
         ROLLBACK,
         "demo/checkout:1.4.0",
         None,
         ("upstream", "error", 409, "status_conflict"),
+        ("human_command", "precondition_failed"),
     ),
-    "unreachable": (ROLLBACK, DOWN, None, ("upstream", "error", 503, "upstream_unavailable")),
+    "unreachable": (
+        ROLLBACK,
+        DOWN,
+        None,
+        ("upstream", "error", 503, "upstream_unavailable"),
+        ("human_command", "executor_unavailable"),
+    ),
     "failed": (
         ROLLBACK,
         "demo/checkout:1.5.0",
         FAILED,
         ("upstream", "error", 409, "upstream_failed"),
+        ("human_command", "execution_failed"),
     ),
 }
 
 
 @pytest.mark.parametrize("case", RECORDS)
-def test_an_approval_that_reaches_the_executor_is_audited(case: str) -> None:
-    operation, running, answer, audit = RECORDS[case]
+def test_an_approval_that_reaches_the_executor_is_audited_and_told_in_the_timeline(
+    case: str,
+) -> None:
+    operation, running, answer, audit, refusal = RECORDS[case]
     incident_id = f"inc-record-{case}"
     _mitigating(incident_id, operation=operation)
     with _executor(running, answer or (200, RESULT)) as url:
         _send(incident_id, f"key-record-{case}", _body(), settings=_settings(url))
     assert _audit(incident_id) == [(*audit, "service_operation", "agent")]
+    last = _timeline(incident_id)[-1]
+    if refusal is None:
+        assert (last["kind"], last["state"]) == ("state_change", "verifying")
+        assert last["summary"] == (
+            "Mitigation approved; the deploy-executor ran deployment.rollback on sre-checkout: "
+            "rolled_back (demo/checkout:1.5.0 → demo/checkout:1.4.0)."
+        )
+        return
+    assert (last["kind"], last["reason_code"]) == refusal
+    assert last["actor"]["reference"]["principal_id"] == "demo-human" and last["request_id"]
+    assert last["summary"].startswith("Approval not applied: ")
+    assert last["summary"].endswith(" The incident stays mitigating.")
 
 
 def test_an_operation_never_runs_or_is_answered_without_its_audit(

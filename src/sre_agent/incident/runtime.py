@@ -238,6 +238,41 @@ class IncidentRuntime:
                 run_version=run.version,
             )
 
+    async def record_refusal(
+        self,
+        incident_id: str,
+        run_id: str,
+        actor_reference: ActorReference,
+        *,
+        reason_code: str,
+        request_id: str,
+        denial: bool,
+    ) -> None:
+        """An approval refused before any transition, told in the run's timeline (#722): the
+        incident, the run and their versions stay as they were."""
+        now = self._clock()
+        decision = DecisionDraft(
+            decision_id=self._id_factory("dec"),
+            document={
+                "actor": "human",
+                "actor_reference": asdict(actor_reference),
+                "decision_point": "mitigation_approval",
+                "reason": f"approval not applied: {reason_code}",
+                "decided_at": now.isoformat(),
+            },
+            decided_at=now,
+            run_id=run_id,
+        )
+        payload = {"refused_command": "approve_mitigation", "reason_code": reason_code}
+        event = EventDraft(
+            event_id=self._id_factory("evt"),
+            kind="denial" if denial else "human_command",
+            payload={**payload, "request_id": request_id, "state": "mitigating"},
+            occurred_at=now,
+        )
+        async with self._unit_of_work() as work:
+            await work.record_run_events(incident_id, run_id, decision=decision, events=(event,))
+
     async def execute(self, command: IncidentCommand) -> TransitionResult:
         payload_hash = command.payload_sha256()
         async with self._unit_of_work() as work:

@@ -229,6 +229,12 @@ how it ended stays in the receipt. Nothing runs without `AUDIT_HMAC_KEY` (503
 if the write fails the approval answers 503 and moves nothing, and the retry sends the same key,
 so the executor replays its result.
 
+The timeline's `apply_mitigation` event tells what ran, on which service and how it ended, from
+the receipt. A refused or failed approval moves nothing but still enters the run's timeline: a
+`denial` event for 403 `operation_not_authorized` and a `human_command` event otherwise, each
+with the approver, the request id and the reason code, saying that the incident stays
+`mitigating`.
+
 ## What the vendors do
 
 Official documentation, read on 2026-10-22; marketing claims are left out.

@@ -10,6 +10,7 @@ The actor comes from the authenticated credential. A body cannot name a
 different actor, so a browser can never assert authority it was not granted.
 """
 
+import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
@@ -59,6 +60,7 @@ from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
 
+logger = logging.getLogger(__name__)
 START_ACTION = "run.start"
 # The range the contract admits. The store follows it: migration 20260928_14
 # widens transition_commits.command_id to varchar(200), so the boundary no
@@ -531,6 +533,19 @@ class RunCommandService:
                 transition = replace(transition, execution=execution)
             result = await self.runtime.execute(transition)
         except ExecutionRefused as refused:
+            # Nothing moved; the run's timeline still says why (#722), and the answer stands.
+            try:
+                await self.runtime.record_refusal(
+                    incident_id,
+                    run_id,
+                    request.actor_reference,
+                    reason_code=refused.code,
+                    request_id=str(request_id),
+                    denial=refused.status == 403,
+                )
+            except Exception as error:
+                # Only the type is logged, never the content.
+                logger.error("approval_refusal_record_failed error=%s", type(error).__name__)
             return error_envelope(request_id, refused.status, (refused.code, refused.message))
         except IncidentNotFoundError:
             return error_envelope(request_id, 404)
