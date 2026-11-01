@@ -35,6 +35,20 @@ class DemoController:
             raise DemoError("no shared OTel Demo session exists")
         return status
 
+    def _budget_guard(self, *, lifetime: timedelta, now: datetime, action: str) -> None:
+        try:
+            month_to_date = self.aws.month_to_date_cost(today=now)
+        except DemoError as exc:
+            raise DemoError(f"Cost Explorer budget guard failed; refusing {action}") from exc
+        reserve = self.config.session_estimate_usd(lifetime)
+        if month_to_date + reserve > self.config.monthly_budget_usd:
+            raise DemoError(
+                "estimated session would exceed the USD monthly budget "
+                f"(month-to-date ${month_to_date:.2f}, reserve ${reserve:.2f} "
+                f"for {lifetime.total_seconds() / 3600:.2f} h, "
+                f"budget ${self.config.monthly_budget_usd:.2f})"
+            )
+
     def up(self, *, now: datetime | None = None) -> dict[str, Any]:
         now = (now or datetime.now(UTC)).astimezone(UTC).replace(microsecond=0)
         with _host_lock(self.config.lock_path):
@@ -52,18 +66,7 @@ class DemoController:
                 if deadline <= now:
                     raise DemoError("shared OTel Demo termination deadline has passed")
                 return existing
-            try:
-                month_to_date = self.aws.month_to_date_cost(today=now)
-            except DemoError as exc:
-                raise DemoError("Cost Explorer prelaunch guard failed; refusing launch") from exc
-            projected = month_to_date + self.config.maximum_session_estimate_usd
-            if projected > self.config.monthly_budget_usd:
-                raise DemoError(
-                    "estimated session would exceed the USD monthly budget "
-                    f"(month-to-date ${month_to_date:.2f}, reserve "
-                    f"${self.config.maximum_session_estimate_usd:.2f}, "
-                    f"budget ${self.config.monthly_budget_usd:.2f})"
-                )
+            self._budget_guard(lifetime=self.config.default_ttl, now=now, action="launch")
             self._scheduler_preflight()
             expires = now + self.config.default_ttl
             network = self.aws.default_network()
@@ -106,15 +109,20 @@ class DemoController:
     def extend(self, *, extension: timedelta, now: datetime | None = None) -> datetime:
         self._scheduler_preflight()
         status = self._current()
+        now = (now or datetime.now(UTC)).astimezone(UTC)
         scheduled_deadline = self.aws.termination_deadline(instance_id=status["instance_id"])
         persisted_deadline = max(_parse_datetime(status["expires_at"]), scheduled_deadline)
+        created_at = _parse_datetime(status["created_at"])
         deadline = calculate_extended_deadline(
-            created_at=_parse_datetime(status["created_at"]),
+            created_at=created_at,
             current_deadline=persisted_deadline,
-            now=(now or datetime.now(UTC)).astimezone(UTC),
+            now=now,
             extension=extension,
             maximum_lifetime=self.config.maximum_lifetime,
         )
+        # Cost Explorer lags up to a day, so the hours already run are not
+        # reliably billed yet: reserve the whole extended session.
+        self._budget_guard(lifetime=deadline - created_at, now=now, action="extension")
         instance_id = status["instance_id"]
         command = (
             "sudo /usr/local/sbin/otel-demo-set-deadline "

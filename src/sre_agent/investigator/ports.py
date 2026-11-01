@@ -97,6 +97,8 @@ class ToolResult:
     query: str | None = None
     time_window: str | None = None
     request_id: UUID | None = None
+    # The tool answered with no data: no series, no log documents (#707).
+    empty: bool = False
 
 
 class EvidenceUnavailable(Exception):

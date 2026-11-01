@@ -24,7 +24,8 @@ capabilities without making ORM, DTO, or provider models authoritative.
   driver messages, DSNs, and credentials.
 - The `/v1/principals` and `/v1/credentials` routes expose the real governed administrative API.
 - `POST /v1/responses` validates and authenticates before logical-resource authorization, resolves
-  routing only after allow, makes at most one OpenRouter request, commits a protected terminal
+  routing only after allow, makes one OpenRouter request (a second only after an initial 503,
+  see [investigator](investigator.md#provider-503-and-tool-timeout)), commits a protected terminal
   audit event, then releases the normalized result.
 
 The provider secret and timeout are API-only Compose settings. Seed services receive an explicit
@@ -67,9 +68,26 @@ before any provider contact:
 
 - When neither an incident token limit nor a monthly USD limit is active, admission allows without
   a reservation.
-- An active limit needs conservative bounds from the endpoint catalog: the endpoint's maximum
-  prompt tokens and its prices, plus a dynamically capped `max_output_tokens`. A missing,
-  expired, or unusable catalog fails closed with `consumption_bounds_unavailable`.
+- An active limit needs guaranteed bounds, never estimates (#334, CA7), plus a dynamically capped
+  `max_output_tokens`. A missing, expired, or unusable catalog fails closed with
+  `consumption_bounds_unavailable`.
+- Input bound: the UTF-8 byte count of the request's text plus 64 tokens per message
+  (`text_input_bound`). Byte-level tokenizers emit at most one token per byte, so the prompt
+  cannot exceed it. It is capped by the endpoint's prompt capacity (`max_prompt_tokens`, or
+  `context_length` when OpenRouter reports null). A request with non-text parts would use that
+  capacity instead; `/v1/responses` input is a single text message today.
+- Output cap: the smallest of the endpoint's completion cap (or `context_length`), the context
+  window minus the input bound, the incident balance minus the input bound, and the output the
+  monthly balance can pay after the input and request fee.
+- The catalog is queried for the routed model (`/api/v1/models/{author}/{slug}/endpoints`),
+  never the alias. A null or absent `pricing.request` means no per-request fee; missing prompt or
+  completion prices still fail closed. A configured provider slug matches every endpoint of that
+  provider (by name or tag prefix) and uses the most conservative values across them: highest
+  prices, highest prompt capacity, lowest completion cap and context window. An endpoint tag with
+  a `/` (`fireworks/us`) matches that endpoint only. The catalog needs
+  `OPENROUTER_MANAGEMENT_API_KEY`; without it every call under an active limit answers 429.
+- A reservation needs an existing incident: an unknown `incident_id` under an active limit
+  answers 422 `incident_not_found`, audited as `resource_not_found`.
 - Each admitted request keeps the policy version it was admitted under, and its reservation stays
   booked until exact usage settles; an uncertain settlement keeps the reservation.
 - Monthly limits use half-open UTC calendar months (`[first day 00:00, next first day 00:00)`),

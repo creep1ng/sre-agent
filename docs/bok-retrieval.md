@@ -55,7 +55,9 @@ docker compose --env-file .env --profile checks run --build --rm python-checks s
 
 This is real PostgreSQL plus in-process HTTP acceptance, not hosted CI or a network
 producer walkthrough. Network captures and human review are separate delivery evidence.
-The two demo collections are synthetic; acceptance fixtures assign distinct exact grants.
+The two `demo-*` collections are synthetic; acceptance fixtures assign distinct exact grants.
+The third, `otel-demo-store@1.0.0`, is sourced from the pinned OpenTelemetry Demo; see
+[the investigator](investigator.md#bok).
 No live provider, Jev evaluation, vector retrieval or downstream runtime integration is
 part of this unit. Schema head is `20260929_16`, following the additive foundation merge.
 Downgrade preserves usage audit vocabulary and refuses to discard BoK audit evidence.

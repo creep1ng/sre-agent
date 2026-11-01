@@ -166,3 +166,22 @@ missing is frozen work:
 Finishing #487 therefore means unfreezing #486 and governance work before 2026-12-04. The
 alternative is to close it after moving CA7 to #486, the entry and old sidebar to #715, and CA6 to
 the governance backlog. The maintainer decides.
+
+Resolved on 2026-10-31: #487 stays in scope, see the fifth round.
+
+## Fifth round of decisions (2026-10-31)
+
+The maintainer reviewed the work shipped on 2026-10-30 and the local run of #765.
+
+| Decision | Reason | Issue |
+| --- | --- | --- |
+| The new console (`web/incident-console`, served at `/app/`) is the UI used from now on. The console stories frozen on 2026-10-29 that the chat-first flow needs come back to M1. | The features shipped on 2026-10-30 (verdict per evidence, recalled memories, dispatch causes, change events) were visible only in the old war room, so they could not be shown in the UI the product will use. | #703, #708, #709, #710, #711, #715 |
+| #487 stays in scope. Administration is re-evaluated inside `/app`, starting with the annotation session of #728 with the maintainer. One session serves operations and administration, which makes the SharedWorker stack of #486 obsolete. | This reverses "governance stays as it is" of 2026-10-28 for the solo tier's own settings: credentials, integrations, grants, audit and consumption. The solo admin still has to configure them. Multi-team governance stays out. | #487, #728, #847 |
+| The seed is a reset to zero: it restores the seed grants a human revoked and leaves an audit record of it. | Follow-up to #823: after #759 a revoked grant can be granted again, and the seed must return the demo to a known state. | #759, #823 |
+| The OTel store's topology goes into the BoK as content, not as a Skill. | The BoK informs the mechanism and measurements support the hypotheses. BoK entries and recalled memories never count as measured evidence. | #718, #831 |
+| Change events appear in the console's incident story, and later in the outbound webhooks and the MCP server. | A backend-only capability cannot be demonstrated. | #770, #777, #778 |
+| Correlating cascading alerts into one incident, and a minimum of failed spans in the error-rate rules, wait until after the demo of 2026-11-04. For the demo, a `paymentFailure` opens two incidents, `payment` and `checkout`. | The local run of 2026-10-30 measured both alerts and both investigations; the correlation criterion must be decided before it is built. | #845 |
+| The evidence for the `paymentFailure` criterion of #765 must come from the OTel demo on EC2. The local run of 2026-10-30 is recorded but does not close it. | The account's AWS Budget of USD 10 per month currently blocks the EC2 run. | #765 |
+| PRs that add Alembic revisions are renumbered and chained before each merge. | Several stacks each added `20261030_01`; merging them broke `main` until #846. | #846 |
+| The investigator's model-call timeout follows `OPENROUTER_TIMEOUT_SECONDS`. | A fixed 45 s cut calls the provider may take 60 s to answer. | #843, #844 |
+| The local OTel demo gives `product-catalog` and `checkout` 64 MiB of memory instead of upstream's 20 MiB. | At 20 MiB the store starves and fires false alerts. | #818 |

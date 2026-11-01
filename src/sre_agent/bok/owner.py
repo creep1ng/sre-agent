@@ -2,6 +2,7 @@
 
 import json
 from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
@@ -64,6 +65,11 @@ DEMO_BUNDLES: tuple[dict[str, Any], ...] = (
             }
         ],
     },
+)
+
+# The OpenTelemetry Demo store's topology and flags (issue #718), sourced from the pinned upstream.
+OTEL_DEMO_STORE: dict[str, Any] = json.loads(
+    (Path(__file__).parent / "otel_demo_store.json").read_text(encoding="utf-8")
 )
 
 
@@ -234,9 +240,9 @@ async def activate_version(
 
 
 async def seed_bok_demo(session: AsyncSession) -> bool:
-    """Converge two deterministic synthetic BoK owner versions and projections."""
+    """Converge the deterministic demo BoK owner versions and their catalog projections."""
     created = False
-    for bundle in DEMO_BUNDLES:
+    for bundle in (*DEMO_BUNDLES, OTEL_DEMO_STORE):
         collection_id, version = bundle["collection_id"], bundle["version"]
         created = await ingest_bundle(session, bundle) or created
         await activate_version(session, collection_id, version, expected_bundle=bundle)

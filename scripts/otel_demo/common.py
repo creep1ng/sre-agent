@@ -50,9 +50,18 @@ class DemoConfig:
     instance_profile_name: str = "OTelDemoInstanceProfile"
     image_size_gib: int = 30
     monthly_budget_usd: float = 10.0
-    maximum_session_estimate_usd: float = 3.0
+    # On-Demand Linux t3a.xlarge in us-east-1, https://aws.amazon.com/ec2/pricing/on-demand/
+    # (checked 2026-10-31). Standard CPU credits add no surplus charge.
+    instance_hourly_usd: float = 0.1504
+    # Margin for the 30 GiB gp3 root volume (~USD 0.0033/h), the public IPv4
+    # address (USD 0.005/h) and egress, rounded up.
+    hourly_margin_usd: float = 0.05
     lock_path: Path = Path(tempfile.gettempdir()) / "otel-demo-personal-us-east-1.lock"
     expected_account_id: str | None = None
+
+    def session_estimate_usd(self, lifetime: timedelta) -> float:
+        hours = lifetime.total_seconds() / 3600
+        return hours * (self.instance_hourly_usd + self.hourly_margin_usd)
 
 
 class AwsApi(Protocol):

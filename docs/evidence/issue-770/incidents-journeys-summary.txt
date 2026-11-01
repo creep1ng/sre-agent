@@ -1,0 +1,6 @@
+war-room-runs        PASS rc=0 [5 passed] 17s
+war-room-reasoning   PASS rc=0 [2 passed] 18s
+review-mitigation    PASS rc=0 [2 passed] 13s
+war-room-follow      PASS rc=0 [2 passed] 55s
+postmortem           FAIL rc=1 [1 failed] 29s
+change-events        PASS rc=0 [1 passed] 19s

@@ -3,8 +3,9 @@
 Failure modes: missing direct agent MCP grants, or an operation grant beyond sre-checkout's
 rollback (#722); inherited human authority;
 operator lacks triage/run grants; restricted identity gains authority; repeat
-rotates credentials/duplicates grants/loses incidents; revoked grants silently
-reactivated; provisioning errors leak credentials. No external or paid calls.
+rotates credentials/duplicates grants/loses incidents; a revoked setup grant is
+not restored, is restored over its own revocation history or is restored twice;
+provisioning errors leak credentials. No external or paid calls.
 """
 
 import asyncio
@@ -163,17 +164,17 @@ def test_demo_permissions_converge_and_http_journey_remains_governed():
             conn.execute(
                 "UPDATE grants SET status='revoked' WHERE grant_id='grant-setup-human-alert-read'"
             )
-        try:
-            asyncio.run(prepare())
-        except RuntimeError as error:
-            assert "grant-setup-human-alert-read" in str(error)
-            assert all(key not in str(error) for key in KEYS.values())
-        else:
-            raise AssertionError("revoked grant must not be restored")
+        asyncio.run(prepare())
+        asyncio.run(prepare())
         with psycopg.connect(URL) as conn:
-            conn.execute(
-                "UPDATE grants SET status='active' WHERE grant_id='grant-setup-human-alert-read'"
-            )
+            rows = conn.execute(
+                "SELECT grant_id, status FROM grants WHERE grant_id LIKE "
+                "'grant-setup-human-alert-read%' ORDER BY grant_id"
+            ).fetchall()
+            assert rows == [
+                ("grant-setup-human-alert-read", "revoked"),
+                ("grant-setup-human-alert-read-restored-1", "active"),
+            ], "the setup converges: a revoked grant is restored once, its history kept"
             conn.execute(
                 "UPDATE resources SET status='inactive' WHERE "
                 "resource_type='incident_workflow' AND resource_id='incident-response'"

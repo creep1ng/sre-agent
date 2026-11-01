@@ -1,5 +1,6 @@
 # ruff: noqa: E501, I001
 
+import asyncio
 from datetime import UTC, datetime
 from decimal import Decimal
 from time import monotonic
@@ -19,6 +20,7 @@ from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.attribution import RequestAttribution
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
+from sre_agent.gateway.consumption_affordability import text_input_bound
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
 from sre_agent.governance.dto import AuditEvent, Consumption
 from sre_agent.persistence.models import RequestAttributionRow
@@ -208,6 +210,7 @@ class PostgresAuditStore:
 
 
 # fmt: off
+PROVIDER_503_RETRY_DELAY_SECONDS, PROVIDER_503_RETRY_WITHIN_SECONDS = 1.0, 5.0
 ERRORS = {
     401: ("authentication_failed", "Authentication failed."), 403: ("resource_unavailable", "Resource unavailable."),
     422: ("contract_validation_failed", "Request validation failed."), 502: ("provider_evidence_invalid", "Provider response was invalid."),
@@ -216,6 +219,7 @@ ERRORS = {
 }
 ERROR_MESSAGES = {
     "audit_unavailable": "Audit unavailable.",
+    "incident_not_found": "Incident not found.",
 }
 
 
@@ -236,9 +240,10 @@ def _empty_consumption(availability: Literal["absent", "unavailable"]) -> Consum
 class ResponsesService:  # noqa: E305
     def __init__(self, sessions: Any, provider: LLMProvider, audit: AuditStore,
                  projector: AuditProjector, admission: Any = None,
-                 endpoint_catalog: Any = None) -> None:
+                 endpoint_catalog: Any = None, provider_timeout_seconds: float = 30.0) -> None:
         self.sessions, self.provider, self.audit, self.projector = sessions, provider, audit, projector
         self.admission, self.endpoint_catalog = admission, endpoint_catalog
+        self.provider_timeout_seconds = provider_timeout_seconds
 
     async def create(self, raw: Any, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
@@ -278,17 +283,22 @@ class ResponsesService:  # noqa: E305
         # reserves the exposure. Gating it on catalog configuration let an
         # active provider with no catalog reach the provider unchecked.
         service = self.admission or ConsumptionAdmissionService(self.sessions)
+        # The catalog prices the routed model; the alias is only our own name for it.
         admission = await service.admit(
-            incident_id=identifiers.get("incident_id"), model=request.model,
+            incident_id=identifiers.get("incident_id"), model=assignment.concrete_model,
             provider=assignment.inference_provider, catalog=self.endpoint_catalog,
             now=datetime.now(UTC),
             request_id=request_id,
+            # The contract's input is one text message with no instructions or tools.
+            input_tokens=text_input_bound((request.input,)),
         )
         if not admission.allowed:
-            status = 503 if admission.retryable else 429
+            status = (503 if admission.retryable
+                      else 422 if admission.denial_reason == "resource_not_found" else 429)
             return await self._finish(request_id, started, status, "authorization",
                                       context=context, alias=request.model, decision=decision,
                                       reason=admission.denial_reason or "consumption_bounds_unavailable",
+                                      error_code="incident_not_found" if status == 422 else None,
                                       retryable=status in {429, 503, 504}, identifiers=identifiers,
                                       consumption_policy_version=(
                                           None if admission.denial_reason == "policy_unavailable"
@@ -313,7 +323,7 @@ class ResponsesService:  # noqa: E305
         # No database alias lookup is performed after this point.
         invocation_attribution = RequestAttribution.from_assignment(request_id, assignment)
         try:
-            result = await self.provider.create(provider_request)
+            result = await self._provider_create(provider_request)
             attribution = invocation_attribution.with_credit(
                 model=result.credited_model,
                 provider=result.credited_provider,
@@ -348,6 +358,30 @@ class ResponsesService:  # noqa: E305
                                           provider=failure.credited_provider,
                                       ),
                                       consumption_policy_version=admission.policy_version)
+
+    async def _provider_create(self, provider_request: ProviderRequest):
+        """Retry once only a fast, uncharged HTTP 503 (#719): unstreamed, it carries no output.
+        A timeout, dropped connection or other status may follow an accepted request, so it is
+        never retried. Both attempts together never outlast the provider timeout."""
+        started = monotonic()
+        try:
+            return await self.provider.create(provider_request)
+        except ProviderFailure as failure:
+            elapsed, used = monotonic() - started, failure.consumption
+            # Any reported usage, complete or partial, means the provider did work: not retried.
+            charged = used is not None and (
+                any((used.input_tokens, used.output_tokens, used.total_tokens))
+                or Decimal(used.billed_usd or "0") > 0)
+            left = self.provider_timeout_seconds - elapsed - PROVIDER_503_RETRY_DELAY_SECONDS
+            if (failure.http_status != 503 or charged or left <= 0
+                    or elapsed >= PROVIDER_503_RETRY_WITHIN_SECONDS):
+                raise
+        await asyncio.sleep(PROVIDER_503_RETRY_DELAY_SECONDS)
+        try:
+            async with asyncio.timeout(left):
+                return await self.provider.create(provider_request)
+        except TimeoutError:
+            raise ProviderFailure("timeout", consumption=_empty_consumption("unavailable")) from None
 
     async def _finish(self, request_id, started, status, stage, *, payload=None,
                       error_code=None, retry_after=None, consumption: Consumption | None = None,
