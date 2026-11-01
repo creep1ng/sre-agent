@@ -1,0 +1,46 @@
+name: Record change in Midnight
+description: >-
+  Send a deploy, rollback or CI result to Midnight's POST /v1/changes once the job has done it,
+  so the investigator can answer "what changed". Idempotent by run attempt, job and kind.
+inputs:
+  midnight-url:
+    description: Base URL of the Midnight API, for example https://midnight.example.com/api.
+    required: true
+  api-key:
+    description: An integration credential with change.write; pass it from a secret.
+    required: true
+  service:
+    description: The service that changed, as Midnight names it (for example sre-checkout).
+    required: true
+  kind:
+    description: deploy, rollback or ci.
+    default: deploy
+  status:
+    description: >-
+      succeeded or failed. To record the job's own result, run the step with `if: always()`
+      and derive it from job.status (see docs/change-events.md).
+    default: succeeded
+  version:
+    description: The version or image that was deployed, for example demo/checkout:1.5.0.
+    default: ""
+  fail-on-error:
+    description: Fail this step when Midnight does not record the event (default warns only).
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/record_change.py"
+      env:
+        MIDNIGHT_URL: ${{ inputs.midnight-url }}
+        MIDNIGHT_API_KEY: ${{ inputs.api-key }}
+        CHANGE_SERVICE: ${{ inputs.service }}
+        CHANGE_KIND: ${{ inputs.kind }}
+        CHANGE_STATUS: ${{ inputs.status }}
+        CHANGE_VERSION: ${{ inputs.version }}
+        CHANGE_EXTERNAL_ID: ${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs/${{ github.job }}/${{ inputs.kind }}
+        CHANGE_COMMIT: ${{ github.sha }}
+        CHANGE_REF: ${{ github.ref_name }}
+        CHANGE_AUTHOR: ${{ github.actor }}
+        CHANGE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}

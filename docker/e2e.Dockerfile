@@ -12,6 +12,8 @@ COPY playwright.production.config.js ./
 COPY tests/browser ./tests/browser
 # The executor journey fires the contract's negative fixtures at the real executor (#720).
 COPY schemas/executor ./schemas/executor
+# The change-events journey runs the reusable GitHub Actions step's own script (#770).
+COPY .github/actions ./actions
 RUN chown -R pwuser:pwuser /e2e
 
 USER pwuser

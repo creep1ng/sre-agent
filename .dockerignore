@@ -1,6 +1,7 @@
 .git
 .github/*
 !.github/workflows/
+!.github/actions/
 .github/workflows/*
 !.github/workflows/ci.yml
 !.github/workflows/quality-diagnostics.yml

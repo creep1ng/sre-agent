@@ -1,0 +1,8 @@
+# Seed-container mounts for scripts/run_telegram_e2e.sh (#766): the E2E phases and their artifacts.
+services:
+  seed:
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ${TELEGRAM_E2E_ARTIFACTS:?set by scripts/run_telegram_e2e.sh}:/artifacts
+    environment:
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}

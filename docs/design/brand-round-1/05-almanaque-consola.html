@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Midnight · Consola en línea Almanaque</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,300..800&family=DM+Mono:wght@400;500&family=DM+Serif+Text:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  /* The console in the Almanaque line: two inks on paper. Blue is the system, orange is you.
+     Moon phases are the one recurring glyph: lifecycle progress and permission levels. */
+  :root {
+    --paper: #f4eddc; --paper-2: #ece3cd; --card: #fbf7ec;
+    --blue: #2d4fa0; --blue-soft: rgba(45,79,160,.1);
+    --orange: #ff6c3e; --orange-soft: rgba(255,108,62,.12);
+    --ink: #1b2340; --ink-2: #4a4f68; --ink-3: #8a8b9a;
+    --rule: rgba(27,35,64,.18);
+    --grot: "Bricolage Grotesque", system-ui, sans-serif; --mono: "DM Mono", ui-monospace, monospace; --serif: "DM Serif Text", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html { background: #d9cfb6; }
+  body { margin: 0; padding: 40px 0 80px; color: var(--ink); font: 400 16px/1.5 var(--grot); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  .nb { white-space: nowrap; }
+  .frame { position: relative; width: 1360px; margin: 0 auto 56px; background: var(--paper); border: 2px solid var(--ink); border-radius: 14px; overflow: hidden; box-shadow: 10px 10px 0 var(--blue); }
+  .frame::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: .5;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='260' height='260'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .1  0 0 0 0 .1  0 0 0 0 .2  0 0 0 .1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"); }
+  .halftone-b { background-image: radial-gradient(rgba(45,79,160,.9) 34%, transparent 36%); background-size: 6px 6px; }
+  .halftone-o { background-image: radial-gradient(rgba(255,108,62,.9) 34%, transparent 36%); background-size: 6px 6px; }
+
+  /* masthead */
+  .mast { display: flex; align-items: center; gap: 36px; height: 66px; padding: 0 32px; border-bottom: 3px double var(--ink); font: 500 13px/1 var(--mono); }
+  .logo { display: flex; align-items: center; gap: 10px; font: 800 21px/1 var(--grot); letter-spacing: -.02em; }
+  .logo svg { width: 30px; height: 30px; }
+  .mast nav { display: flex; gap: 4px; }
+  .mast nav a { padding: 9px 12px; border-radius: 999px; color: var(--ink-2); }
+  .mast nav a.on { background: var(--ink); color: var(--paper); }
+  .mast nav .n { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 99px; background: var(--orange); color: #fff; font-size: 11px; }
+  .mast .me { margin-left: auto; display: flex; gap: 14px; align-items: center; color: var(--ink-2); }
+  .mast .me span { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--ink); display: grid; place-items: center; font-size: 11px; color: var(--ink); }
+
+  h1 { font: 800 76px/.88 var(--grot); font-variation-settings: "wdth" 78; letter-spacing: -.035em; margin: 0; color: var(--blue); }
+  h1 .o { color: var(--orange); }
+  h2 { font: 800 34px/.95 var(--grot); font-variation-settings: "wdth" 80; letter-spacing: -.02em; margin: 0 0 18px; color: var(--blue); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; font: 600 15px/1 var(--grot); padding: 14px 18px; border: 2px solid var(--ink); border-radius: 999px; background: var(--card); }
+  .btn.go { background: var(--orange); border-color: var(--orange); color: #fff; box-shadow: 4px 4px 0 var(--ink); }
+
+  /* ---------- incident attention ---------- */
+  .inc { display: grid; grid-template-columns: minmax(0, 1fr) 360px; }
+  .inc main { padding: 48px 56px 64px; }
+  .meta { display: flex; gap: 14px; align-items: center; font: 500 13px/1 var(--mono); margin-bottom: 18px; }
+  .meta .tag { background: var(--orange); color: #fff; padding: 6px 9px; }
+  .meta span:not(.tag) { color: var(--ink-2); }
+  .phases { display: grid; grid-template-columns: repeat(6, 1fr); margin: 40px 0 44px; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+  .phase { padding: 16px 10px 14px; display: flex; flex-direction: column; align-items: center; gap: 10px; font: 500 12px/1 var(--mono); color: var(--ink-2); border-right: 1px solid var(--rule); }
+  .phase:last-child { border-right: 0; }
+  .phase svg { width: 30px; height: 30px; }
+  .phase.now { background: var(--orange-soft); color: var(--orange); }
+  .hyp { font: 400 28px/1.35 var(--serif); margin: 0 0 40px; max-width: 36ch; }
+  .hyp sup { font: 500 11px/0 var(--mono); color: var(--blue); margin-left: 2px; }
+  .eph { list-style: none; margin: 0 0 48px; padding: 0; position: relative; }
+  .eph::before { content: ""; position: absolute; left: 118px; top: 14px; bottom: 14px; border-left: 3px dotted var(--blue); }
+  .eph li { display: grid; grid-template-columns: 100px 40px minmax(0, 1fr); gap: 0; padding-bottom: 26px; align-items: start; }
+  .eph time { font: 800 22px/1 var(--grot); font-variation-settings: "wdth" 80; color: var(--blue); text-align: right; padding: 4px 12px 0 0; }
+  .eph .n { position: relative; z-index: 1; justify-self: center; width: 30px; height: 30px; border-radius: 50%; background: var(--paper); border: 2px solid var(--blue); display: grid; place-items: center; font: 500 12px/1 var(--mono); color: var(--blue); }
+  .eph .b { padding: 3px 0 0 12px; }
+  .eph p { margin: 0; font-size: 17px; }
+  .eph small { display: block; margin-top: 5px; font: 400 13px/1.4 var(--mono); color: var(--ink-3); }
+  .eph small i { font-style: normal; color: var(--blue); margin-right: 8px; }
+  .eph li.now time, .eph li.now .n { color: var(--orange); border-color: var(--orange); }
+  .eph li.now .n { background: var(--orange); color: #fff; }
+  .plan { border: 3px solid var(--orange); border-radius: 18px; background: var(--card); padding: 28px 30px 24px; position: relative; }
+  .plan h3 { font: 800 34px/1 var(--grot); font-variation-settings: "wdth" 82; margin: 0 0 16px; color: var(--orange); letter-spacing: -.02em; }
+  .plan ol { margin: 0 0 16px; padding-left: 22px; font-size: 17px; }
+  .plan li { padding: 3px 0; }
+  .plan li::marker { font: 500 13px var(--mono); color: var(--orange); }
+  .plan p { margin: 0 0 22px; color: var(--ink-2); }
+  .plan .acts { display: flex; gap: 12px; justify-content: flex-end; }
+  .inc aside { border-left: 2px solid var(--ink); background: var(--paper-2); padding: 48px 28px; }
+  .cl { margin-bottom: 26px; }
+  .cl h4 { font: 400 22px/1 var(--serif); margin: 0 0 8px; }
+  .sv { display: grid; grid-template-columns: 22px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--rule); font: 400 14px/1 var(--mono); }
+  .sv svg { width: 18px; height: 18px; }
+  .sv .v { color: var(--ink-3); }
+  .sv.hot { color: var(--orange); } .sv.hot .v { color: var(--orange); }
+
+  /* ---------- governance ---------- */
+  .gov { padding: 52px 56px 64px; }
+  .gov .top { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 56px; align-items: end; margin-bottom: 44px; }
+  .matrix { width: 100%; border-collapse: collapse; border-top: 3px solid var(--ink); }
+  .matrix th { font: 500 13px/1.3 var(--mono); text-align: center; padding: 16px 10px; border-bottom: 2px solid var(--ink); vertical-align: bottom; color: var(--ink-2); }
+  .matrix th:first-child { text-align: left; }
+  .matrix td { text-align: center; padding: 14px 10px; border-bottom: 1px solid var(--rule); }
+  .matrix td:first-child { text-align: left; }
+  .matrix td svg { width: 30px; height: 30px; display: block; margin: 0 auto 6px; }
+  .matrix td > span { font: 500 12px/1 var(--mono); }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .who b { font: 800 22px/1 var(--grot); font-variation-settings: "wdth" 85; }
+  .who small { display: block; font: 400 13px/1.3 var(--mono); color: var(--ink-3); margin-top: 3px; }
+  .who .ic { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--ink); display: grid; place-items: center; font: 500 12px/1 var(--mono); flex: none; }
+  .who .ic.mid { background: var(--blue); border-color: var(--blue); }
+  .who .ic svg { width: 22px; height: 22px; }
+  .key { display: flex; gap: 28px; justify-content: flex-end; margin-top: 14px; font: 400 13px/1 var(--mono); color: var(--ink-2); }
+  .key span { display: inline-flex; align-items: center; gap: 8px; }
+  .key svg { width: 18px; height: 18px; }
+  .budget { border: 2px solid var(--ink); border-radius: 18px; background: var(--card); padding: 24px 26px; }
+  .budget .num { font: 800 64px/.9 var(--grot); font-variation-settings: "wdth" 76; letter-spacing: -.03em; color: var(--blue); }
+  .budget .num span { color: var(--ink-3); font-size: .5em; letter-spacing: 0; }
+  .bar { position: relative; height: 22px; margin: 18px 0 10px; border: 2px solid var(--ink); border-radius: 999px; overflow: hidden; background: var(--paper); }
+  .bar i { position: absolute; inset: 0 auto 0 0; width: 41%; }
+  .budget p { margin: 0; color: var(--ink-2); font-size: 15px; }
+  .lower { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 56px; margin-top: 64px; }
+  .log { list-style: none; margin: 0; padding: 0; border-top: 3px solid var(--ink); }
+  .log li { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 18px; padding: 15px 0; border-bottom: 1px solid var(--rule); align-items: baseline; }
+  .log time { font: 500 13px/1 var(--mono); color: var(--ink-2); }
+  .log p { margin: 0; }
+  .log p b { font-weight: 700; }
+  .log a { font: 500 13px/1 var(--mono); color: var(--blue); text-decoration: underline; text-underline-offset: 3px; }
+  .log li.me time { color: var(--orange); }
+  .keys { list-style: none; margin: 0; padding: 0; border-top: 3px solid var(--ink); }
+  .keys li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--rule); align-items: center; }
+  .keys b { font: 700 17px/1.2 var(--grot); }
+  .keys code { display: block; font: 400 13px/1.5 var(--mono); color: var(--ink-3); margin-top: 3px; }
+  .keys .btn { padding: 9px 14px; font-size: 13px; }
+  .keys li.warn code { color: var(--orange); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 34 34"><circle cx="18" cy="17" r="13" fill="#ff6c3e" opacity=".9"/><circle cx="16" cy="16" r="13" fill="#2d4fa0" style="mix-blend-mode:multiply"/><circle cx="22" cy="11" r="10" fill="#f4eddc"/></symbol>
+  <!-- moon phases: 0 empty, 1 quarter, 2 half, 3 gibbous, 4 full -->
+  <symbol id="p0" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="p1" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 3a12 12 0 0 1 0 24a6 12 0 0 0 0-24z" fill="currentColor"/></symbol>
+  <symbol id="p2" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 3a12 12 0 0 1 0 24z" fill="currentColor"/></symbol>
+  <symbol id="p3" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="none" stroke="currentColor" stroke-width="2"/><path d="M15 3a12 12 0 0 1 0 24a6 12 0 0 1 0-24z" fill="currentColor"/></symbol>
+  <symbol id="p4" viewBox="0 0 30 30"><circle cx="15" cy="15" r="12" fill="currentColor" stroke="currentColor" stroke-width="2"/></symbol>
+</svg>
+
+<!-- ===================== Incident attention ===================== -->
+<div class="frame">
+  <div class="mast">
+    <a class="logo" href="#"><svg><use href="#mark" /></svg>midnight</a>
+    <nav><a href="#">Bandeja<span class="n">1</span></a><a class="on" href="#">Incidentes</a><a href="#">Servicios</a><a href="#gov">Gobierno</a></nav>
+    <div class="me"><span>RA</span></div>
+  </div>
+  <div class="inc">
+    <main>
+      <div class="meta"><span class="tag">Espera tu decisión</span><span>Tienda Ruiz · checkout</span><span>INC-0412</span></div>
+      <h1>Los pagos fallan tras el <span class="o">deploy del viernes.</span></h1>
+
+      <div class="phases" aria-label="Progreso del incidente">
+        <div class="phase" style="color:var(--blue)"><svg><use href="#p4" /></svg>Declarado</div>
+        <div class="phase" style="color:var(--blue)"><svg><use href="#p4" /></svg>Investigación</div>
+        <div class="phase now"><svg><use href="#p2" /></svg>Decisión</div>
+        <div class="phase"><svg><use href="#p0" /></svg>Recuperación</div>
+        <div class="phase"><svg><use href="#p0" /></svg>Postmortem</div>
+        <div class="phase"><svg><use href="#p0" /></svg>Cierre</div>
+      </div>
+
+      <p class="hyp">El nuevo timeout de <span class="nb">1&nbsp;s</span><sup>2</sup> es más corto que lo que tarda el proveedor de noche,<sup>3</sup> así que los cobros se cortan antes de confirmarse.<sup>4</sup> Ya pasó una vez.<sup>1</sup></p>
+
+      <ol class="eph" aria-label="Evidencia en orden cronológico">
+        <li><time>12 sep</time><span class="n">1</span><div class="b"><p>Mismo síntoma tras un cambio de timeout. Volviste a la versión anterior en 4 minutos.</p><small><i>contexto</i>incidente INC-0371</small></div></li>
+        <li><time>vie 19:12</time><span class="n">2</span><div class="b"><p>La v1.14 baja el timeout del proveedor de <span class="nb">10&nbsp;s</span> a <span class="nb">1&nbsp;s</span>.</p><small><i>apoya</i>deploy #212 · GitHub Actions</small></div></li>
+        <li><time>02:00</time><span class="n">3</span><div class="b"><p>El proveedor tarda <span class="nb">1,4&nbsp;s</span> en responder. De día tarda <span class="nb">0,6&nbsp;s</span>.</p><small><i>apoya</i>Grafana · latencia del proveedor</small></div></li>
+        <li><time>02:31</time><span class="n">4</span><div class="b"><p>El <span class="nb">38&nbsp;%</span> de los cobros falla por tiempo agotado.</p><small><i>apoya</i>logs de checkout · 412 líneas</small></div></li>
+        <li class="now"><time>02:47</time><span class="n">→</span><div class="b"><p>Midnight te escribe y espera tu decisión.</p></div></li>
+      </ol>
+
+      <div class="plan">
+        <h3>Volver checkout a la v1.13</h3>
+        <ol>
+          <li>Arranca checkout con la v1.13, la versión que funcionaba hasta el viernes.</li>
+          <li>Comprueba que responde sano y solo entonces retira la v1.14.</li>
+          <li>Si la v1.13 no arranca, deja la v1.14 como estaba y te avisa.</li>
+        </ol>
+        <p>No toca la base de datos ni la configuración. Guarda un recibo con tu aprobación.</p>
+        <div class="acts"><a class="btn" href="#">Rechazar</a><a class="btn go" href="#">Aprobar</a></div>
+      </div>
+    </main>
+    <aside>
+      <div class="cl"><h4>Tienda Ruiz</h4>
+        <div class="sv hot"><svg style="color:var(--orange)"><use href="#p4" /></svg><span>checkout</span><span class="v">38 % error</span></div>
+        <div class="sv"><svg style="color:var(--blue)"><use href="#p0" /></svg><span>catálogo</span><span class="v">bien</span></div></div>
+      <div class="cl"><h4>Ferretería Gómez</h4>
+        <div class="sv"><svg style="color:var(--blue)"><use href="#p0" /></svg><span>ferreteria-api</span><span class="v">bien</span></div>
+        <div class="sv"><svg style="color:var(--blue)"><use href="#p0" /></svg><span>panel-admin</span><span class="v">bien</span></div></div>
+      <div class="cl"><h4>Clínica Norte</h4>
+        <div class="sv"><svg style="color:var(--blue)"><use href="#p1" /></svg><span>blog-clinica</span><span class="v">en el resumen</span></div>
+        <div class="sv"><svg style="color:var(--blue)"><use href="#p0" /></svg><span>citas</span><span class="v">bien</span></div></div>
+    </aside>
+  </div>
+</div>
+
+<!-- ===================== Governance ===================== -->
+<div class="frame" id="gov">
+  <div class="mast">
+    <a class="logo" href="#"><svg><use href="#mark" /></svg>midnight</a>
+    <nav><a href="#">Bandeja<span class="n">1</span></a><a href="#">Incidentes</a><a href="#">Servicios</a><a class="on" href="#">Gobierno</a></nav>
+    <div class="me"><span>RA</span></div>
+  </div>
+  <div class="gov">
+    <div class="top">
+      <h1>Quién puede hacer <span class="o">qué.</span></h1>
+      <div class="budget">
+        <div class="num">0,41 <span>de 1,00 USD</span></div>
+        <div class="bar"><i class="halftone-b"></i></div>
+        <p>Gasto en modelos este mes. Al llegar al límite, Midnight sigue vigilando con reglas y te avisa.</p>
+      </div>
+    </div>
+
+    <table class="matrix">
+      <thead><tr><th></th><th>Leer señales<br />y logs</th><th>Investigar<br />con el modelo</th><th>Reiniciar<br />un servicio</th><th>Volver a una<br />versión anterior</th><th>Cambiar<br />este cuadro</th></tr></thead>
+      <tbody>
+        <tr><td><div class="who"><span class="ic">RA</span><div><b>Tú</b><small>sesión del navegador</small></div></div></td>
+          <td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td></tr>
+        <tr><td><div class="who"><span class="ic mid"><svg><use href="#mark" /></svg></span><div><b>Midnight</b><small>el agente de guardia</small></div></div></td>
+          <td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--orange)"><svg><use href="#p2" /></svg><span>te pregunta</span></td><td style="color:var(--orange)"><svg><use href="#p2" /></svg><span>te pregunta</span></td><td style="color:var(--ink-3)"><svg><use href="#p0" /></svg><span>no</span></td></tr>
+        <tr><td><div class="who"><span class="ic">CC</span><div><b>Claude Code</b><small>por MCP, desde tu portátil</small></div></div></td>
+          <td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--ink-3)"><svg><use href="#p0" /></svg><span>no</span></td><td style="color:var(--orange)"><svg><use href="#p2" /></svg><span>te pregunta</span></td><td style="color:var(--ink-3)"><svg><use href="#p0" /></svg><span>no</span></td><td style="color:var(--ink-3)"><svg><use href="#p0" /></svg><span>no</span></td></tr>
+        <tr><td><div class="who"><span class="ic">TG</span><div><b>Telegram</b><small>aprobaciones desde el chat</small></div></div></td>
+          <td style="color:var(--ink-3)"><svg><use href="#p0" /></svg><span>no</span></td><td style="color:var(--ink-3)"><svg><use href="#p0" /></svg><span>no</span></td><td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--blue)"><svg><use href="#p4" /></svg><span>sí</span></td><td style="color:var(--ink-3)"><svg><use href="#p0" /></svg><span>no</span></td></tr>
+      </tbody>
+    </table>
+
+    <div class="lower">
+      <section>
+        <h2>Lo que pasó, con recibo.</h2>
+        <ul class="log">
+          <li><time>sáb 02:51</time><p><b>Midnight</b> vuelve <b>checkout</b> a la v1.13. Arranca sano.</p><a href="#">recibo</a></li>
+          <li class="me"><time>sáb 02:49</time><p><b>Tú</b> apruebas volver <b>checkout</b> a la v1.13, desde Telegram.</p><a href="#">recibo</a></li>
+          <li><time>sáb 02:46</time><p><b>Midnight</b> usa el modelo para investigar INC-0412. 0,004 USD.</p><a href="#">detalle</a></li>
+          <li><time>jue 11:02</time><p><b>Claude Code</b> pide reiniciar <b>panel-admin</b>. Lo rechazaste.</p><a href="#">recibo</a></li>
+          <li class="me"><time>mar 09:15</time><p><b>Tú</b> das permiso a <b>Claude Code</b> para leer señales.</p><a href="#">recibo</a></li>
+        </ul>
+      </section>
+      <section>
+        <h2>Llaves.</h2>
+        <ul class="keys">
+          <li><div><b>Proveedor de modelos</b><code>OpenRouter · ····a91f · creada hace 40 días</code></div><a class="btn" href="#">Rotar</a></li>
+          <li><div><b>Ejecutor de despliegues</b><code>firma ed25519 · ····7c2e · solo la tiene el ejecutor</code></div><a class="btn" href="#">Rotar</a></li>
+          <li class="warn"><div><b>Claude Code</b><code>····d410 · caduca en 5 días</code></div><a class="btn" href="#">Renovar</a></li>
+          <li><div><b>Telegram</b><code>chat vinculado · @ricardo</code></div><a class="btn" href="#">Desvincular</a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</div>
+</body>
+</html>

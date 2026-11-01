@@ -97,7 +97,8 @@ RULES = (
         evidence="Evidence: Prometheus datasource webstore-metrics, metric checkout_requests_total"
         ' with service_namespace="sre-agent" and service_name="sre-checkout":'
         " http_response_status_code counts the answers and service_version names the release"
-        " that served them. The service sends no logs and no traces.",
+        " that served them. The service sends no logs and no traces. Its recent deploys and"
+        " rollbacks: tool midnight_recent_changes with service sre-checkout.",
     ),
 )
 

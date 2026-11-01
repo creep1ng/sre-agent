@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Midnight · Consola en línea Nocturno</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300;1,9..144,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* The console in the Nocturno line: the same tokens as the landing.
+     Amber appears only on what needs a human decision; everything else stays in moonlight. */
+  :root {
+    --night: #0a0e1d; --night-2: #11162c; --night-3: #1e2749; --panel: #141a33;
+    --moon: #e4d9ff; --text-2: #cfc6ee; --mist: #a797d7; --dim: #6f7396;
+    --star: #f2b45a; --star-soft: rgba(242,180,90,.1);
+    --ok: #7fc8a9;
+    --rule: rgba(228,217,255,.12);
+    --display: "Fraunces", Georgia, serif; --text: "Newsreader", Georgia, serif; --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { background: #05070f; }
+  body { margin: 0; color: var(--moon); font: 400 17px/1.55 var(--text); -webkit-font-smoothing: antialiased; padding: 40px 0 80px; }
+  a { color: inherit; text-decoration: none; }
+  .nb { white-space: nowrap; }
+  .frame { width: 1360px; margin: 0 auto 56px; border: 1px solid var(--rule); border-radius: 18px; overflow: hidden; background: var(--night); box-shadow: 0 40px 120px -40px rgba(0,0,0,.8); }
+
+  /* top bar */
+  .bar { display: flex; align-items: center; gap: 40px; padding: 0 32px; height: 64px; border-bottom: 1px solid var(--rule); font: 400 14px/1 var(--mono); }
+  .logo { display: inline-flex; align-items: center; gap: 10px; font: 500 16px/1 var(--mono); }
+  .logo svg { width: 24px; height: 24px; }
+  .bar nav { display: flex; gap: 6px; }
+  .bar nav a { padding: 9px 12px; border-radius: 8px; color: var(--dim); }
+  .bar nav a.on { color: var(--moon); background: var(--night-2); }
+  .bar nav a .n { display: inline-block; min-width: 18px; margin-left: 6px; padding: 2px 5px; border-radius: 99px; background: var(--star); color: var(--night); font-size: 11px; text-align: center; }
+  .bar .me { margin-left: auto; display: flex; align-items: center; gap: 18px; color: var(--dim); }
+  .bar kbd { font: 400 12px/1 var(--mono); padding: 6px 8px; border: 1px solid var(--rule); border-radius: 6px; color: var(--mist); }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; background: #2a3466; display: grid; place-items: center; color: var(--moon); font: 500 12px/1 var(--mono); }
+
+  h1 { font: 300 64px/1 var(--display); letter-spacing: -.03em; margin: 0; }
+  h1 em { font-style: italic; color: var(--star); }
+  h2 { font: 400 26px/1.1 var(--display); letter-spacing: -.01em; margin: 0 0 18px; }
+  sup { font: 500 10px/0 var(--mono); color: var(--mist); margin-left: 2px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; font: 500 14px/1 var(--mono); padding: 13px 16px; border-radius: 10px; border: 1px solid var(--rule); color: var(--moon); background: transparent; }
+  .btn.go { background: var(--star); color: var(--night); border-color: var(--star); }
+
+  /* ---------- inbox ---------- */
+  .inbox { display: grid; grid-template-columns: minmax(0, 1fr) 380px; min-height: 860px; }
+  .inbox main { padding: 56px 56px 64px; }
+  .inbox main > h1 { margin-bottom: 40px; }
+  .decision { border: 1px solid rgba(242,180,90,.45); background: linear-gradient(180deg, var(--star-soft), transparent 70%); border-radius: 18px; padding: 28px 30px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; }
+  .decision .who { font: 400 13px/1 var(--mono); color: var(--star); margin-bottom: 14px; display: flex; gap: 12px; }
+  .decision .who span + span { color: var(--dim); }
+  .decision h3 { font: 400 34px/1.1 var(--display); letter-spacing: -.015em; margin: 0 0 12px; }
+  .decision p { margin: 0 0 22px; color: var(--text-2); max-width: 56ch; }
+  .decision .acts { display: flex; gap: 10px; }
+  .chart svg { width: 100%; height: 150px; display: block; }
+  .night { margin-top: 64px; }
+  .row { display: grid; grid-template-columns: 70px minmax(0, 1fr) 110px; gap: 20px; padding: 16px 0; border-top: 1px solid var(--rule); align-items: baseline; }
+  .row time { font: 500 14px/1 var(--mono); color: var(--mist); }
+  .row .what b { font-weight: 500; }
+  .row .fate { font: 400 13px/1 var(--mono); color: var(--dim); text-align: right; }
+  .row.quiet { color: var(--text-2); }
+  .night h2 { color: var(--text-2); }
+  .decision { grid-template-columns: 250px minmax(0, 1fr); gap: 40px; padding: 34px 36px; border: 1px solid var(--star); border-left-width: 6px; background: rgba(242,180,90,.08); }
+  .decision .big { font: 300 112px/.85 var(--display); letter-spacing: -.04em; color: var(--star); }
+  .decision .big small { font-size: .45em; letter-spacing: 0; }
+  .decision .big + svg { width: 100%; height: 46px; margin-top: 14px; }
+  .decision h3 { font-size: 38px; }
+  .decision .btn { font-size: 15px; padding: 16px 20px; }
+  .coffee { margin-top: 64px; }
+  .coffee h2 { font: 300 40px/1.05 var(--display); letter-spacing: -.02em; margin-bottom: 24px; }
+  .coffee h2 em { font-style: italic; }
+  .tips { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .tip { padding: 26px 28px; border: 1px solid rgba(228,217,255,.22); border-radius: 16px; background: var(--panel); }
+  .tip b { display: block; font: 300 60px/1 var(--display); letter-spacing: -.03em; margin-bottom: 12px; }
+  .tip p { margin: 0; color: var(--text-2); }
+  .tip p strong { color: var(--moon); font-weight: 500; }
+  .inbox aside { border-left: 1px solid var(--rule); padding: 56px 32px; background: var(--night-2); }
+  .client { margin-bottom: 30px; }
+  .client h4 { font: italic 400 22px/1 var(--display); margin: 0 0 10px; }
+  .svc { display: grid; grid-template-columns: minmax(0,1fr) 90px 54px; gap: 12px; align-items: center; padding: 9px 0; border-top: 1px solid var(--rule); font: 400 14px/1 var(--mono); color: var(--text-2); }
+  .svc svg { width: 90px; height: 22px; }
+  .svc .v { text-align: right; color: var(--dim); }
+  .svc.hot { color: var(--star); } .svc.hot .v { color: var(--star); }
+  .digest { margin-top: 40px; padding: 22px; border: 1px solid var(--rule); border-radius: 14px; }
+  .digest h2 { font-size: 22px; margin-bottom: 12px; }
+  .digest p { margin: 0 0 10px; font-size: 16px; color: var(--text-2); }
+
+  /* ---------- incident ---------- */
+  .inc { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 980px; }
+  .inc main { padding: 48px 56px 64px; }
+  .inc .id { font: 500 13px/1 var(--mono); color: var(--mist); display: flex; gap: 14px; margin-bottom: 16px; }
+  .inc .id span:last-child { color: var(--star); }
+  .inc h1 { font-size: 54px; max-width: 18ch; }
+  .steps { display: flex; gap: 0; margin: 34px 0 48px; font: 400 13px/1 var(--mono); color: var(--dim); border-top: 1px solid var(--rule); }
+  .steps span { flex: 1; padding-top: 14px; position: relative; }
+  .steps span.done { color: var(--mist); }
+  .steps span.done::before, .steps span.now::before { content: ""; position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: var(--mist); }
+  .steps span.now { color: var(--star); } .steps span.now::before { background: var(--star); }
+  .hyp { font: 300 30px/1.35 var(--display); letter-spacing: -.01em; margin: 0 0 14px; max-width: 34ch; }
+  .conf { font: 400 13px/1 var(--mono); color: var(--mist); margin-bottom: 44px; }
+  .conf i { display: inline-block; width: 22px; height: 6px; border-radius: 3px; background: var(--mist); margin-right: 3px; vertical-align: 1px; }
+  .conf i.off { background: var(--night-3); }
+  .ev { list-style: none; margin: 0 0 48px; padding: 0; }
+  .ev li { display: grid; grid-template-columns: 34px minmax(0,1fr) 120px; gap: 14px; padding: 16px 0; border-top: 1px solid var(--rule); align-items: baseline; }
+  .ev .k { font: 500 13px/1 var(--mono); color: var(--mist); }
+  .ev .src { display: block; font: 400 13px/1.5 var(--mono); color: var(--dim); margin-top: 4px; }
+  .ev .vd { font: 400 13px/1 var(--mono); text-align: right; }
+  .vd.sup { color: var(--ok); } .vd.ctx { color: var(--dim); }
+  .tl { list-style: none; margin: 0 0 56px; padding: 0; }
+  .tl li { display: grid; grid-template-columns: 92px 40px minmax(0, 1fr); align-items: start; }
+  .tl time { font: 500 13px/1 var(--mono); color: var(--mist); text-align: right; padding: 7px 14px 0 0; }
+  .tl .dot { position: relative; align-self: stretch; }
+  .tl .dot::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: rgba(167,151,215,.45); }
+  .tl li:first-child .dot::before { top: 12px; } .tl li:last-child .dot::before { bottom: auto; height: 12px; }
+  .tl .dot span { position: relative; display: grid; place-items: center; width: 26px; height: 26px; margin: 0 auto; border-radius: 50%; background: var(--night); border: 1px solid var(--mist); font: 500 11px/1 var(--mono); color: var(--mist); }
+  .tl .gap { grid-column: 1 / -1; display: grid; grid-template-columns: 92px 40px 1fr; height: 26px; }
+  .tl .gap i { grid-column: 2; justify-self: center; width: 2px; background: repeating-linear-gradient(transparent 0 4px, rgba(167,151,215,.55) 4px 8px); }
+  .tl .body { padding: 2px 0 30px 6px; }
+  .tl .body p { margin: 0; }
+  .tl .src { display: block; font: 400 13px/1.5 var(--mono); color: var(--dim); margin-top: 6px; }
+  .tl .src em { font-style: normal; color: var(--ok); margin-right: 10px; }
+  .tl .src em.ctx { color: var(--mist); }
+  .tl li.now time, .tl li.now .dot span { color: var(--star); border-color: var(--star); }
+  .plan { border: 1px solid var(--star); border-radius: 16px; overflow: hidden; background: rgba(242,180,90,.05); }
+  .plan .in { padding: 28px 30px 8px; }
+  .plan h3 { font: 400 30px/1.1 var(--display); margin: 0 0 18px; letter-spacing: -.01em; }
+  .plan ol { margin: 0 0 18px; padding-left: 22px; color: var(--text-2); }
+  .plan ol li { padding: 4px 0; }
+  .plan ol li::marker { font: 500 13px var(--mono); color: var(--star); }
+  .plan p { margin: 0 0 20px; color: var(--mist); font-size: 16px; }
+  .plan .op { border: 0; border-radius: 0; } .plan .op .foot { justify-content: flex-end; }
+  .op { border: 1px solid rgba(242,180,90,.45); border-radius: 16px; overflow: hidden; }
+  .op pre { margin: 0; padding: 22px 24px; font: 400 15px/1.7 var(--mono); color: var(--text-2); background: var(--panel); }
+  .op pre b { color: var(--moon); font-weight: 500; } .op pre i { font-style: normal; color: var(--star); }
+  .op .foot { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-top: 1px solid var(--rule); }
+  .op .foot p { margin: 0 auto 0 6px; font-size: 15px; color: var(--text-2); }
+  .inc aside { border-left: 1px solid var(--rule); background: var(--night-2); padding: 48px 30px; }
+  .story { list-style: none; margin: 0; padding: 0; position: relative; }
+  .story::before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 1px; background: var(--rule); }
+  .story li { position: relative; padding: 0 0 24px 28px; }
+  .story li::before { content: ""; position: absolute; left: 0; top: 7px; width: 11px; height: 11px; border-radius: 50%; background: var(--night-2); border: 1px solid var(--mist); }
+  .story li.me::before { background: var(--moon); border-color: var(--moon); }
+  .story li.ask::before { background: var(--star); border-color: var(--star); border-radius: 2px; }
+  .story time { font: 500 12px/1 var(--mono); color: var(--dim); }
+  .story p { margin: 6px 0 0; font-size: 16px; color: var(--text-2); }
+  .story p b { color: var(--moon); font-weight: 500; }
+  .story .rec { display: block; margin-top: 4px; font: 400 12px/1.5 var(--mono); color: var(--mist); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 32 32"><path d="M19 3.5A12.5 12.5 0 1 0 28.5 21 10.5 10.5 0 0 1 19 3.5z" fill="#e4d9ff"/><rect x="21" y="8" width="5" height="5" fill="#f2b45a"/></symbol>
+</svg>
+
+<!-- ===================== Inbox ===================== -->
+<div class="frame">
+  <div class="bar">
+    <a class="logo" href="#"><svg><use href="#mark" /></svg>midnight</a>
+    <nav><a class="on" href="#">Bandeja<span class="n">1</span></a><a href="#">Incidentes</a><a href="#">Servicios</a><a href="#">Ajustes</a></nav>
+    <div class="me"><kbd>⌘K</kbd><span class="avatar">RA</span></div>
+  </div>
+  <div class="inbox">
+    <main>
+      <h1><em>Una</em> decisión te espera.</h1>
+
+      <article class="decision">
+        <div>
+          <div class="big">38<small>&nbsp;%</small></div>
+          <svg viewBox="0 0 250 46" aria-hidden="true"><polyline fill="none" stroke="#6f7396" stroke-width="1.5" points="0,42 30,41 60,42 90,41 120,42 140,41"/><polyline fill="none" stroke="#f2b45a" stroke-width="2" points="140,41 152,24 164,10 180,7 200,9 220,6 248,7"/></svg>
+        </div>
+        <div>
+          <div class="who"><span>Tienda Ruiz · checkout</span><span>esperando desde las 02:47</span></div>
+          <h3>Los pagos fallan desde las 02:31.</h3>
+          <p>El deploy del viernes bajó el timeout del proveedor de <span class="nb">10&nbsp;s</span> a <span class="nb">1&nbsp;s</span>. El 12 de septiembre lo resolviste volviendo a la versión anterior.</p>
+          <div class="acts"><a class="btn go" href="#inc">Volver a v1.13</a><a class="btn" href="#inc">Ver por qué</a></div>
+        </div>
+      </article>
+
+      <section class="coffee">
+        <h2>Mientras te tomas el café, <em>mira esto</em>.</h2>
+        <div class="tips">
+          <a class="tip" href="#"><b>81&nbsp;%</b><p>Disco de <strong>vps-2</strong>. Al ritmo actual se llena en unas 9 semanas.</p></a>
+          <a class="tip" href="#"><b>12 días</b><p>Para que caduque el certificado de <strong>citas</strong>, de Clínica Norte.</p></a>
+        </div>
+      </section>
+
+      <section class="night">
+        <h2>Anoche</h2>
+        <div class="row quiet"><time>23:12</time><span class="what">Deploy de <b>ferreteria-api</b> v2.4.1. Vigilado 30 min, sin cambios.</span><span class="fate">recordado</span></div>
+        <div class="row quiet"><time>23:48</time><span class="what"><b>blog-clinica</b> respondió en 2,1 s durante 40 s, como en cada backup.</span><span class="fate">ignorado</span></div>
+        <div class="row quiet"><time>01:05</time><span class="what">Disco al <span class="nb">81&nbsp;%</span> en <b>vps-2</b>. Lleno en unas 9 semanas.</span><span class="fate">resumen</span></div>
+        <div class="row quiet"><time>02:31</time><span class="what">Pagos de <b>checkout</b> por encima del umbral. Investigación abierta.</span><span class="fate" style="color:var(--star)">te escribió</span></div>
+      </section>
+    </main>
+
+    <aside>
+      <div class="client"><h4>Tienda Ruiz</h4>
+        <div class="svc hot"><span>checkout</span><svg viewBox="0 0 90 22"><polyline fill="none" stroke="#f2b45a" stroke-width="1.5" points="0,19 30,19 45,18 52,8 60,5 75,6 90,5"/></svg><span class="v">38 %</span></div>
+        <div class="svc"><span>catálogo</span><svg viewBox="0 0 90 22"><polyline fill="none" stroke="#6f7396" stroke-width="1.2" points="0,15 15,14 30,16 45,13 60,15 75,14 90,15"/></svg><span class="v">0,1 %</span></div>
+      </div>
+      <div class="client"><h4>Ferretería Gómez</h4>
+        <div class="svc"><span>ferreteria-api</span><svg viewBox="0 0 90 22"><polyline fill="none" stroke="#6f7396" stroke-width="1.2" points="0,14 15,15 30,13 45,15 60,14 75,13 90,14"/></svg><span class="v">0,0 %</span></div>
+        <div class="svc"><span>panel-admin</span><svg viewBox="0 0 90 22"><polyline fill="none" stroke="#6f7396" stroke-width="1.2" points="0,16 15,15 30,15 45,16 60,14 75,15 90,15"/></svg><span class="v">0,2 %</span></div>
+      </div>
+      <div class="client"><h4>Clínica Norte</h4>
+        <div class="svc"><span>blog-clinica</span><svg viewBox="0 0 90 22"><polyline fill="none" stroke="#6f7396" stroke-width="1.2" points="0,15 15,15 30,14 38,6 44,15 60,15 75,14 90,15"/></svg><span class="v">0,0 %</span></div>
+        <div class="svc"><span>citas</span><svg viewBox="0 0 90 22"><polyline fill="none" stroke="#6f7396" stroke-width="1.2" points="0,14 15,14 30,15 45,14 60,14 75,15 90,14"/></svg><span class="v">0,0 %</span></div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ===================== Incident ===================== -->
+<div class="frame" id="inc">
+  <div class="bar">
+    <a class="logo" href="#"><svg><use href="#mark" /></svg>midnight</a>
+    <nav><a href="#">Bandeja<span class="n">1</span></a><a class="on" href="#">Incidentes</a><a href="#">Servicios</a><a href="#">Ajustes</a></nav>
+    <div class="me"><kbd>⌘K</kbd><span class="avatar">RA</span></div>
+  </div>
+  <div class="inc">
+    <main>
+      <div class="id"><span>INC-0412</span><span>Tienda Ruiz · checkout</span><span>espera tu decisión</span></div>
+      <h1>Los pagos fallan tras el deploy v1.14</h1>
+      <div class="steps" aria-label="Progreso del incidente"><span class="done">Declarado</span><span class="done">Investigación</span><span class="now">Decisión</span><span>Recuperación</span><span>Postmortem</span><span>Cierre</span></div>
+
+      <p class="hyp">El nuevo timeout de <span class="nb">1&nbsp;s</span><sup>2</sup> es más corto que la latencia nocturna del proveedor,<sup>3</sup> así que los cobros se cortan antes de confirmarse.<sup>4</sup> Ya pasó una vez.<sup>1</sup></p>
+      <div class="conf"><i></i><i></i><i class="off"></i> confianza media</div>
+
+      <ol class="tl" aria-label="Evidencia en orden cronológico">
+        <li><time>12 sep</time><span class="dot"><span>1</span></span><div class="body"><p>Mismo síntoma tras un cambio de timeout. Volviste a la versión anterior en 4 minutos.</p><span class="src"><em class="ctx">contexto</em>incidente INC-0371 · postmortem</span></div></li>
+        <li class="gap" aria-hidden="true"><i></i></li>
+        <li><time>vie 19:12</time><span class="dot"><span>2</span></span><div class="body"><p>La v1.14 cambia <b>PAYMENT_TIMEOUT</b> de <span class="nb">10&nbsp;s</span> a <span class="nb">1&nbsp;s</span>.</p><span class="src"><em>apoya</em>deploy #212 · GitHub Actions</span></div></li>
+        <li><time>sáb 02:00</time><span class="dot"><span>3</span></span><div class="body"><p>El proveedor tarda <span class="nb">1,4&nbsp;s</span> en responder. De día tarda <span class="nb">0,6&nbsp;s</span>.</p><span class="src"><em>apoya</em>Grafana · latencia del proveedor de pagos</span></div></li>
+        <li><time>02:31</time><span class="dot"><span>4</span></span><div class="body"><p>Los cobros fallan con <b>context deadline exceeded</b>.</p><span class="src"><em>apoya</em>logs de checkout · 412 líneas</span></div></li>
+        <li class="now"><time>02:47</time><span class="dot"><span>→</span></span><div class="body"><p>Midnight te escribe y espera tu decisión.</p></div></li>
+      </ol>
+
+      <div class="plan" title="deployment.rollback(service=&quot;checkout&quot;, to_tag=&quot;v1.13&quot;)">
+        <div class="in">
+          <h3>Volver checkout a la v1.13</h3>
+          <ol>
+            <li>Arranca checkout con la v1.13, la versión que funcionaba hasta el viernes.</li>
+            <li>Comprueba que responde sano y solo entonces retira la v1.14.</li>
+            <li>Si la v1.13 no arranca, deja la v1.14 como estaba y te avisa.</li>
+          </ol>
+          <p>No toca la base de datos ni la configuración. Guarda un recibo con tu aprobación.</p>
+        </div>
+        <div class="op"><div class="foot"><a class="btn" href="#">Rechazar</a><a class="btn go" href="#">Aprobar</a></div></div>
+      </div>
+    </main>
+
+    <aside>
+      <h2>Historia</h2>
+      <ol class="story">
+        <li><time>vie 19:12</time><p>Deploy de <b>v1.14</b> desde GitHub Actions. Vigilado 30 min sin cambios.</p></li>
+        <li><time>sáb 02:31</time><p>Grafana: error de pagos por encima del <span class="nb">5&nbsp;%</span>.</p></li>
+        <li><time>02:31</time><p><b>Midnight</b> abre la investigación y recupera INC-0371.</p></li>
+        <li><time>02:46</time><p><b>Midnight</b> concluye con 4 evidencias y propone un rollback.</p></li>
+        <li class="ask"><time>02:47</time><p>Te escribe por Telegram. <b>Primera interrupción de la semana.</b></p></li>
+        <li class="me"><time>02:49</time><p><b>Tú</b> abres el incidente desde el móvil.</p></li>
+      </ol>
+    </aside>
+  </div>
+</div>
+</body>
+</html>

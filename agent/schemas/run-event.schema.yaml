@@ -3,9 +3,15 @@
 # GET /v1/incidents/{incident_id}/runs/{run_id}/events?after={cursor}
 # Events are ordered and cursor-paginated (ADR-008). No prompts, no secrets, no
 # raw tool arguments: this is the safe, UI-facing projection.
+#
+# 1.1.0 (issues #704, #705): additive minor. Each event gains an optional
+# `reason_code` naming why an investigation did not start or did not finish. The server
+# projects only codes from its allow-list (`src/sre_agent/incident/reasons.py`); the schema
+# keeps a pattern, not an enum, so adding a code needs no new contract version.
+# Every 1.0.0 page stays valid.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:run-event:1.0.0
+$id: urn:sre-agent:schema:run-event:1.1.0
 title: RunEventPage
 type: object
 additionalProperties: false
@@ -88,6 +94,13 @@ $defs:
         format: uuid
         default: null
         description: Gateway correlation for the call that produced this event, when any.
+      reason_code:
+        type: [string, "null"]
+        pattern: '^[a-z][a-z0-9_]{2,63}$'
+        default: null
+        description: >-
+          Allow-listed cause when an investigation did not start or did not finish.
+          Never provider output, prompts or raw diagnostics.
       occurred_at:
         type: string
         format: date-time

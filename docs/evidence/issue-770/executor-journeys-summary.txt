@@ -1,0 +1,3 @@
+executor             PASS rc=0 [1 passed] 52s
+executor-changes     PASS rc=0 [1 passed] 35s
+executor-socket-down PASS rc=0 [1 passed] 5s

@@ -14,7 +14,11 @@ from alembic.config import Config
 from sqlalchemy import text
 
 from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
-from sre_agent.gateway.endpoint_catalog import EndpointCatalogSnapshot, EndpointMetadata
+from sre_agent.gateway.endpoint_catalog import (
+    EndpointCatalogSnapshot,
+    EndpointCatalogUnavailable,
+    EndpointMetadata,
+)
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
 
@@ -22,6 +26,7 @@ DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
 )
 NOW = datetime(2026, 9, 15, 12, tzinfo=UTC)
+MODEL = "openai/gpt-4o-mini"
 PERIOD = datetime(2026, 9, 1, tzinfo=UTC)
 
 
@@ -54,7 +59,10 @@ class StaticCatalog:
     def __init__(self, current: EndpointCatalogSnapshot) -> None:
         self._current = current
 
-    async def fetch(self, _model: str) -> EndpointCatalogSnapshot:
+    async def fetch(self, model: str) -> EndpointCatalogSnapshot:
+        # OpenRouter answers 404 for an alias such as `triage-agent`.
+        if model != self._current.model:
+            raise EndpointCatalogUnavailable
         return self._current
 
 
@@ -127,7 +135,7 @@ def _clean_state(admission_database: Database) -> None:
 def test_allow_at_exact_equality_reserves_cap(admission_database: Database) -> None:
     asyncio.run(seed_policy(admission_database, incident=12, monthly="1.00"))
     asyncio.run(seed_incident(admission_database, "incident-eq"))
-    result = admit(admission_database, incident_id="incident-eq", model="m", provider="OpenAI")
+    result = admit(admission_database, incident_id="incident-eq", model=MODEL, provider="OpenAI")
     assert result.allowed and result.max_output_tokens == 2
     assert result.policy_version == 0 and result.reservation_id is not None
 
@@ -162,7 +170,7 @@ def test_deny_cases_create_no_reservation(
         admission_database,
         StaticCatalog(snapshot(priced(**prices))),
         incident_id=incident_id,
-        model="m",
+        model="openai/gpt-4o-mini",
         provider="OpenAI",
     )
     assert not result.allowed and result.denial_reason == reason
@@ -173,7 +181,7 @@ def test_deny_cases_create_no_reservation(
 def test_unset_limits_allow_without_reservation(admission_database: Database) -> None:
     asyncio.run(seed_policy(admission_database, incident=None, monthly=None))
     before = asyncio.run(reservation_count(admission_database))
-    result = admit(admission_database, incident_id=None, model="m", provider="OpenAI")
+    result = admit(admission_database, incident_id=None, model=MODEL, provider="OpenAI")
     assert result.allowed and result.reservation_id is None
     assert asyncio.run(reservation_count(admission_database)) == before
 
@@ -189,7 +197,7 @@ def test_concurrent_admissions_serialize(admission_database: Database) -> None:
             admit(
                 admission_database,
                 incident_id="incident-race",
-                model="m",
+                model="openai/gpt-4o-mini",
                 provider="OpenAI",
             ).allowed
         )
@@ -204,7 +212,7 @@ def test_concurrent_admissions_serialize(admission_database: Database) -> None:
 
 def test_exact_settlement_is_idempotent(admission_database: Database) -> None:
     asyncio.run(seed_policy(admission_database, incident=100, monthly="10.00"))
-    result = admit(admission_database, incident_id=None, model="m", provider="OpenAI")
+    result = admit(admission_database, incident_id=None, model=MODEL, provider="OpenAI")
 
     async def settle() -> object:
         return await ConsumptionAdmissionService(admission_database.sessions).settle(
@@ -218,7 +226,7 @@ def test_exact_settlement_is_idempotent(admission_database: Database) -> None:
 
 def test_uncertain_outcome_retains_reservation(admission_database: Database) -> None:
     asyncio.run(seed_policy(admission_database, incident=100, monthly="10.00"))
-    result = admit(admission_database, incident_id=None, model="m", provider="OpenAI")
+    result = admit(admission_database, incident_id=None, model=MODEL, provider="OpenAI")
 
     async def read() -> object:
         async with admission_database.transaction() as session:
@@ -250,7 +258,7 @@ def test_legacy_audit_usage_counts_toward_monthly(admission_database: Database) 
             "'{}', 'redacted', 'accepted', 'released', 'not_attempted')",
             (datetime(2026, 9, 5, tzinfo=UTC),),
         )
-    result = admit(admission_database, incident_id=None, model="m", provider="OpenAI")
+    result = admit(admission_database, incident_id=None, model=MODEL, provider="OpenAI")
     assert not result.allowed and result.denial_reason == "monthly_limit_exceeded"
 
 
@@ -270,7 +278,7 @@ def test_snapshot_observed_after_the_admission_clock_is_still_current(
     async def run() -> object:
         return await ConsumptionAdmissionService(admission_database.sessions).admit(
             incident_id=None,
-            model="m",
+            model="openai/gpt-4o-mini",
             provider="OpenAI",
             catalog=StaticCatalog(late),
             now=NOW,
@@ -290,7 +298,7 @@ def test_snapshot_observed_after_the_admission_clock_is_still_current(
     async def stale_run() -> object:
         return await ConsumptionAdmissionService(admission_database.sessions).admit(
             incident_id=None,
-            model="m",
+            model="openai/gpt-4o-mini",
             provider="OpenAI",
             catalog=StaticCatalog(stale),
             now=NOW,
