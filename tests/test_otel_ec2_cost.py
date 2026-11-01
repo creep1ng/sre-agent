@@ -111,7 +111,8 @@ class OTelEc2Tests(unittest.TestCase):
         self.assertEqual(config.scheduler_group, "otel-demo")
         self.assertEqual(config.scheduler_role_name, "OTelDemoSchedulerExecutionRole")
         self.assertEqual(config.monthly_budget_usd, 10.0)
-        self.assertEqual(config.maximum_session_estimate_usd, 3.0)
+        self.assertEqual(config.instance_hourly_usd, 0.1504)
+        self.assertEqual(config.hourly_margin_usd, 0.05)
 
     def test_cli_defaults_to_persistent_operator_profile(self) -> None:
         args = _arguments(["up"])
@@ -137,9 +138,29 @@ class OTelEc2Tests(unittest.TestCase):
         self.assertEqual(names, ["find_shared_instance", "month_to_date_cost"])
         self.assertNotIn("run_instance", names)
 
+    def test_up_launches_two_hour_session_that_fits_remaining_budget(self) -> None:
+        aws = FakeAws()
+        aws.month_to_date_cost_value = 7.45
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        controller.up(now=datetime(2026, 10, 31, 12, 0, tzinfo=UTC))
+
+        self.assertIn("run_instance", [name for name, _, _ in aws.calls])
+
+    def test_up_reserve_grows_with_session_ttl(self) -> None:
+        now = datetime(2026, 10, 31, 12, 0, tzinfo=UTC)
+        short, long = FakeAws(), FakeAws()
+        short.month_to_date_cost_value = long.month_to_date_cost_value = 8.9
+
+        DemoController(aws=short, config=DemoConfig()).up(now=now)
+        with self.assertRaisesRegex(DemoError, "monthly budget"):
+            DemoController(aws=long, config=DemoConfig(default_ttl=timedelta(hours=6))).up(now=now)
+
+        self.assertNotIn("run_instance", [name for name, _, _ in long.calls])
+
     def test_up_blocks_when_account_monthly_budget_would_be_exceeded(self) -> None:
         aws = FakeAws()
-        aws.month_to_date_cost_value = 7.01
+        aws.month_to_date_cost_value = 9.7
         controller = DemoController(aws=aws, config=DemoConfig())
 
         with self.assertRaisesRegex(DemoError, "monthly budget"):
@@ -148,6 +169,49 @@ class OTelEc2Tests(unittest.TestCase):
         names = [name for name, _, _ in aws.calls]
         self.assertEqual(names, ["find_shared_instance", "month_to_date_cost"])
         self.assertNotIn("run_instance", names)
+
+    def test_extend_fails_closed_when_cost_explorer_is_unavailable(self) -> None:
+        aws = FakeAws()
+        aws.fail_cost_query = True
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        with self.assertRaisesRegex(DemoError, "Cost Explorer"):
+            controller.extend(
+                extension=timedelta(minutes=30), now=datetime(2026, 9, 28, 13, 0, tzinfo=UTC)
+            )
+
+        names = [name for name, _, _ in aws.calls]
+        self.assertNotIn("send_command", names)
+        self.assertNotIn("schedule_termination", names)
+
+    def test_extend_refuses_a_session_that_would_exceed_the_budget(self) -> None:
+        # Cost Explorer lags up to a day, so the hours already run count again:
+        # created 12:00, extended to 15:00 = 3 h reserved, not only the added hour.
+        aws = FakeAws()
+        aws.month_to_date_cost_value = 9.5
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        with self.assertRaisesRegex(DemoError, "monthly budget"):
+            controller.extend(
+                extension=timedelta(hours=1), now=datetime(2026, 9, 28, 13, 0, tzinfo=UTC)
+            )
+
+        names = [name for name, _, _ in aws.calls]
+        self.assertNotIn("send_command", names)
+        self.assertNotIn("set_expiration_tag", names)
+        self.assertNotIn("schedule_termination", names)
+
+    def test_extend_within_budget_updates_the_deadline(self) -> None:
+        aws = FakeAws()
+        aws.month_to_date_cost_value = 7.45
+        controller = DemoController(aws=aws, config=DemoConfig())
+
+        deadline = controller.extend(
+            extension=timedelta(minutes=30), now=datetime(2026, 9, 28, 13, 0, tzinfo=UTC)
+        )
+
+        self.assertEqual(deadline, datetime(2026, 9, 28, 14, 30, tzinfo=UTC))
+        self.assertIn("schedule_termination", [name for name, _, _ in aws.calls])
 
     def test_aws_cli_reads_account_wide_current_month_cost(self) -> None:
         runner = Mock(

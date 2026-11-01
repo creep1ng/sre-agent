@@ -296,7 +296,6 @@ def test_schema_exposes_required_constraints_and_rejects_invalid_rows() -> None:
         "ck_principals_kind",
         "ck_credentials_lifecycle",
         "ck_resources_llm_assignment",
-        "uq_grants_direct",
         "ck_grants_effect",
     }
     with psycopg.connect(DATABASE_URL) as connection:

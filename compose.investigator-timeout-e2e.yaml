@@ -1,0 +1,31 @@
+# Investigator-timeout E2E: real API, database and investigator; the model answers after
+# SLOW_SECONDS (scripts/investigator_timeout_upstreams.py). Commands: docs/investigator.md.
+services:
+  api:
+    command: ["python", "/e2e/investigator_timeout_upstreams.py"]
+    volumes: ["./scripts/investigator_timeout_upstreams.py:/e2e/investigator_timeout_upstreams.py:ro"]
+    environment:
+      OPENROUTER_TIMEOUT_SECONDS: "60"
+      SLOW_SECONDS: "${SLOW_SECONDS:-50}"
+      AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"
+
+  seed:
+    volumes: ["./scripts:/e2e:ro"]
+    environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
+
+  timeout-e2e:
+    profiles: ["timeout-e2e"]
+    build: {context: ., dockerfile: docker/api.Dockerfile}
+    command: ["python", "/e2e/investigator_timeout_e2e.py"]
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      API_URL: http://api:8000
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      ARTIFACT_DIR: /artifacts
+    volumes:
+      - ./scripts/investigator_timeout_e2e.py:/e2e/investigator_timeout_e2e.py:ro
+      - ${INVESTIGATOR_TIMEOUT_ARTIFACTS:-/tmp/investigator-timeout-e2e}:/artifacts
+    depends_on:
+      api: {condition: service_healthy}
+    networks: [runtime]

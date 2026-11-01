@@ -18,8 +18,18 @@ from fastapi.testclient import TestClient
 from test_control_acceptance import ADMIN_KEY, AUDIT_KEY, DATABASE_URL, SEED_ENV, headers
 from test_control_acceptance import client as _client_fixture  # noqa: F401
 from test_control_acceptance import migrated_acceptance_database as _database_fixture  # noqa: F401
-from test_investigator_bok import CONCLUDE, OPERATIONS, RESPONSE, allowed, request_for, search
-from test_investigator_loop import Provider, ScriptedGateway, hypothesis, ids
+from test_investigator_bok import (
+    CITE_FRAGMENT,
+    CONCLUDE,
+    FAILED,
+    OPERATIONS,
+    RESPONSE,
+    allowed,
+    request_for,
+    search,
+    seen_result,
+)
+from test_investigator_loop import Provider, ScriptedGateway, ids
 
 from sre_agent.application import create_application
 from sre_agent.bok.owner import seed_bok_demo
@@ -113,7 +123,7 @@ def test_a_granted_collection_answers_with_a_citation_that_reads_back(
 ) -> None:
     grant(client, RESPONSE)
     grant(client, RESPONSE, "bok.read")
-    result, _, _ = harness([RESPONSE], search(), hypothesis("ev_00000000"))
+    result, _, _ = harness([RESPONSE], search(), CITE_FRAGMENT)
 
     assert result.status == "completed"
     [item] = result.evidence
@@ -129,12 +139,12 @@ def test_a_collection_without_a_grant_contributes_nothing_and_its_ids_open_nothi
     client: TestClient, reads: Counter[str]
 ) -> None:
     grant(client, RESPONSE)
-    replies = search(), search(OPERATIONS, "rollback")
+    replies = search(), search(OPERATIONS, "rollback"), CONCLUDE
     result, model, provider = harness([RESPONSE, OPERATIONS], *replies)
 
-    assert (result.status, result.detail) == ("denied", f"bok collection unavailable: {OPERATIONS}")
+    assert seen_result(model, 2) == f"the knowledge base is unavailable: {OPERATIONS} (denied)"
     assert [item.datasource_uid for item in result.evidence] == [RESPONSE]
-    assert (provider.calls, len(model.calls)) == ([], 2)
+    assert (result.status, provider.calls, len(model.calls)) == ("completed", [], 3)
     # Asking for a restricted chunk by its IDs is denied without reading it either.
     direct = client.get(LOCKED + "preflight/0", headers=headers(KEY))
     assert direct.status_code == 403
@@ -181,15 +191,13 @@ def test_a_retired_version_a_storage_failure_and_a_down_producer_are_told_apart(
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute(outage)
         try:
-            result, model, provider = harness([RESPONSE], search(), down=code == "network")
+            replies = search(), CONCLUDE
+            result, model, provider = harness([RESPONSE], *replies, down=code == "network")
         finally:
             connection.execute(repair)
 
-    assert (result.status, result.detail) == (
-        "upstream_unavailable",
-        f"bok search failed: {RESPONSE} ({code})",
-    )
-    assert (result.evidence, provider.calls, len(model.calls)) == ([], [], 1)
+    assert (result.status, seen_result(model)) == ("completed", f"{FAILED} ({code})")
+    assert (result.evidence, provider.calls, len(model.calls)) == ([], [], 2)
 
 
 def test_a_revocation_stops_the_next_search_without_a_restart(
@@ -200,15 +208,15 @@ def test_a_revocation_stops_the_next_search_without_a_restart(
 
     class Revoking(ScriptedGateway):
         async def respond(self, **request: str) -> Any:
-            if self.calls:
+            if len(self.calls) == 1:
                 response = client.delete(f"/v1/grants/{grant_id}", headers=headers(ADMIN_KEY))
                 assert response.status_code == 204, response.text
                 revoked_at.append(time.monotonic())
             return await super().respond(**request)
 
-    result, _, _ = harness([RESPONSE], model=Revoking(search(), search()))
+    result, model, _ = harness([RESPONSE], model=Revoking(search(), search(), CONCLUDE))
 
-    assert (result.status, result.detail) == ("denied", f"bok collection unavailable: {RESPONSE}")
+    assert (result.status, seen_result(model, 2)) == ("completed", f"{FAILED} (denied)")
     assert [item.evidence_id for item in result.evidence] == ["ev_00000000"]
     assert reads == Counter({RESPONSE: 1})
     assert time.monotonic() - revoked_at[0] < 60
@@ -221,8 +229,10 @@ def test_the_audit_keeps_decision_and_resource_but_no_query_or_fragment(
     with psycopg.connect(DATABASE_URL) as connection:
         before = [row for (row,) in connection.execute("SELECT event_id FROM audit_events")]
     grant(client, RESPONSE)
-    harness([RESPONSE], search(), hypothesis("ev_00000000"))
-    denied, _, _ = harness([RESPONSE, OPERATIONS], search(OPERATIONS, "rollback readiness"))
+    harness([RESPONSE], search(), CITE_FRAGMENT)
+    denied, _, _ = harness(
+        [RESPONSE, OPERATIONS], search(OPERATIONS, "rollback readiness"), CONCLUDE
+    )
 
     with psycopg.connect(DATABASE_URL) as connection:
         events = connection.execute(
@@ -237,7 +247,7 @@ def test_the_audit_keeps_decision_and_resource_but_no_query_or_fragment(
         (403, "denied", "deny", "absent", True, "bok_collection"),
     ]
     # The denied search keeps the request id its audit event correlates, as since #580.
-    assert str(denied.request_ids[-1]) == events[1][7]
+    assert events[1][7] in {str(item) for item in denied.request_ids}
     stored = " ".join(row[6] for row in events) + caplog.text
     for text in ("severity impact", "rollback readiness", CONTENT, *RESTRICTED):
         assert text not in stored

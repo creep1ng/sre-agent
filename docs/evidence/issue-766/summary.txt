@@ -1,0 +1,25 @@
+PASS linking: the code links the operator chat
+PASS linking: a used code is rejected
+PASS linking: an expired code is rejected
+PASS linking: an unlinked chat is told to link
+PASS linking: an unlinked chat is told only once
+PASS linking: only the operator chat is allowed
+PASS dispatch: the acknowledgment arrives first
+PASS dispatch: the acknowledgment arrives in under 5 s (0.608 s)
+PASS dispatch: the conclusion follows
+PASS dispatch: the conclusion gives a readable reason
+PASS dispatch: unlinked chats receive no incident information
+PASS pending: both messages wait in the outbox while the gateway is down
+PASS pending: nothing about the run reached Telegram
+PASS after_first_restart: each pending message arrives once across the restarts
+PASS after_first_restart: the failed first send was retried
+PASS after_first_restart: every sent outbox row reached Telegram once
+PASS after_second_restart: each pending message arrives once across the restarts
+PASS after_second_restart: the failed first send was retried
+PASS after_second_restart: every sent outbox row reached Telegram once
+PASS unlinked: links lists the operator chat without codes
+PASS unlinked: unlink revokes the operator chat
+PASS unlinked: no chat is linked afterwards
+PASS unlinked: nothing about the new run is queued
+PASS unlinked: nothing about the new run reaches Telegram
+PASS the gateway log never contains the bot token

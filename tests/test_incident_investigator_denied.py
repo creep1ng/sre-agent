@@ -128,7 +128,8 @@ def test_tool_grant_revoked_mid_run_blocks_the_run_for_a_human_without_retry() -
     assert (last["kind"], last["state"], last["summary"]) == (
         "escalation",
         "investigating",
-        "Authorization denied; the investigation waits for a human to escalate.",
+        "Authorization denied; an administrator must grant the capability, "
+        "then a new run may retry.",
     )
 
     async def rebuild() -> tuple[Any, Any]:

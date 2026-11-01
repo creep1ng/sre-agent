@@ -10,6 +10,7 @@ from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
 from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
+from sre_agent.gateway.changes import ChangeEventsService, changes_router
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.identity import router as identity_router
@@ -68,7 +69,7 @@ def create_application(
     provider = llm_provider
     if provider is None and runtime_settings.openrouter_api_key:
         shared_provider_client = provider_client or httpx.AsyncClient(
-            base_url="https://openrouter.ai",
+            base_url=runtime_settings.openrouter_base_url,
             timeout=runtime_settings.openrouter_timeout_seconds,
         )
         provider = OpenRouterProvider(
@@ -76,7 +77,7 @@ def create_application(
         )
     if endpoint_catalog is None and runtime_settings.openrouter_management_key:
         shared_endpoint_catalog_client = httpx.AsyncClient(
-            base_url="https://openrouter.ai",
+            base_url=runtime_settings.openrouter_base_url,
             timeout=runtime_settings.openrouter_timeout_seconds,
         )
         endpoint_catalog = OpenRouterEndpointCatalog(
@@ -135,6 +136,7 @@ def create_application(
         http=shared_investigator_client,
         language=runtime_settings.investigator_output_language,
         executor_url=runtime_settings.deploy_executor_url,
+        tool_timeout_seconds=runtime_settings.investigator_tool_timeout_seconds,
     )
     application.include_router(
         runs_router(
@@ -198,7 +200,7 @@ def create_application(
         )
     if provider is not None and runtime_settings.audit_hmac_key:
         store = audit_store or PostgresAuditStore(database.sessions)
-        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()), endpoint_catalog=endpoint_catalog or application.state.endpoint_catalog)  # noqa: E501  # fmt: skip
+        service = ResponsesService(database.sessions, provider, store, AuditProjector(runtime_settings.audit_hmac_key.encode()), endpoint_catalog=endpoint_catalog or application.state.endpoint_catalog, provider_timeout_seconds=runtime_settings.openrouter_timeout_seconds)  # noqa: E501  # fmt: skip
         application.include_router(responses_router(service))
     configured_mcp_client = mcp_client
     if configured_mcp_client is None and runtime_settings.grafana_mcp_endpoint:
@@ -222,6 +224,7 @@ def create_application(
         )
         application.include_router(mcp_router(mcp_service))
     application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
+    application.include_router(changes_router(ChangeEventsService(database.sessions)))
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:

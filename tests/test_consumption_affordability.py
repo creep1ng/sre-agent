@@ -129,12 +129,21 @@ def test_stale_ambiguous_missing_or_mismatched_endpoint_denies() -> None:
     )
     for candidate, provider in (
         (stale, "OpenAI"),
-        (snapshot(fresh, fresh), "OpenAI"),
         (snapshot(fresh), "Anthropic"),
         (wrong_model, "OpenAI"),
     ):
         with pytest.raises(AffordabilityDenied):
             calculate(candidate, provider=provider)
+    # Duplicate endpoints combine to the worst values: one unknown price stays unknown.
+    priced = endpoint(
+        prompt_price=Decimal("0.1"), completion_price=Decimal("0.1"), request_price=Decimal(0)
+    )
+    calculate(snapshot(priced), monthly_remaining=Decimal("100"))
+    with pytest.raises(AffordabilityDenied):
+        calculate(
+            snapshot(priced, replace(priced, prompt_price=None)),
+            monthly_remaining=Decimal("100"),
+        )
 
 
 def test_naive_calculation_time_denies() -> None:

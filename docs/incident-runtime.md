@@ -37,7 +37,8 @@ The runtime implements only the guards in the current incident workflow:
 
 - linking requires a target incident;
 - declaration requires severity;
-- continued investigation requires remaining step budget;
+- continued investigation requires remaining step budget, except as the first transition
+  of a human retry: a new run on an investigating incident whose runs all ended;
 - mitigation requires a hypothesis with cited evidence;
 - mitigation handling requires an existing strategy;
 - verification requires evidence and a verification check;

@@ -12,15 +12,17 @@ import { expect, request, test } from "@playwright/test";
 // 3. the console offers another action on a service operation;
 // 4. a grant naming an operation outside the catalog, or an action the type does not admit, is
 //    stored instead of refused;
-// 5. a revoked authority comes back: creating it again must answer 409, never reactivate it.
+// 5. a revoked authority comes back by itself, or cannot be granted again (#759): granting it
+//    again is a new active grant (201), a duplicate active grant answers 409 grant_conflict and
+//    reusing the revoked grant's id answers 409 grant_id_conflict.
 const ADMIN_KEY = process.env.ADMIN_HUMAN_API_KEY ?? "";
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://web";
 const ARTIFACTS = process.env.SERVICE_OPERATION_ARTIFACT_DIR ?? "";
 const REAL = process.env.SERVICE_OPERATION_E2E === "1" && Boolean(ADMIN_KEY);
 const ROLLBACK = "sre-checkout:deployment.rollback";
 const RESTART = "sre-checkout:deployment.restart";
-// A principal of its own per run: the spec never revokes the demo's authority, and an authority
-// once revoked can never be granted again.
+// A principal of its own per run: the spec revokes and grants again only its own authority,
+// never the demo's.
 const STAMP = Date.now().toString(36);
 const PROBE = `operation-probe-${STAMP}`;
 const transcript = [];
@@ -104,7 +106,7 @@ test("setup lets the agent roll sre-checkout back, and nothing else", async ({ p
   await capture(page, "agent-grant.png");
 });
 
-test("the console offers only mitigation.execute, and a revoked grant stays revoked", async ({ page }) => {
+test("the console offers only mitigation.execute, and a revoked grant is granted again anew", async ({ page }) => {
   await connect(page);
   await page.click("#create-grant-button");
   await expect(page.locator("#create-dialog")).toBeVisible();
@@ -125,7 +127,18 @@ test("the console offers only mitigation.execute, and a revoked grant stays revo
   await expect(row).toContainText("revoked");
   await capture(page, "probe-revoked.png");
   const again = await call("POST", "/v1/grants", grant(`grant-${PROBE}-again`, "mitigation.execute", RESTART));
-  expect(again.status).toBe(409);
+  expect(again.status).toBe(201);
+  const duplicate = await call("POST", "/v1/grants", grant(`grant-${PROBE}-twice`, "mitigation.execute", RESTART));
+  const reused = await call("POST", "/v1/grants", grant(`grant-${PROBE}`, "mitigation.execute", RESTART));
+  expect([duplicate, reused].map(({ status, body }) => [status, body?.error?.code])).toEqual([
+    [409, "grant_conflict"],
+    [409, "grant_id_conflict"],
+  ]);
+  const probe = await call("GET", `/v1/grants?principal_id=${PROBE}`);
+  expect(probe.body.items.map((item) => [item.grant_id, item.status]).sort()).toEqual([
+    [`grant-${PROBE}`, "revoked"],
+    [`grant-${PROBE}-again`, "active"],
+  ]);
 });
 
 test("an operation outside the catalog, or another action on one, is refused", async () => {

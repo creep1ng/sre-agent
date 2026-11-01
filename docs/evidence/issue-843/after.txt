@@ -1,0 +1,12 @@
+Investigator-timeout E2E, stamp 188b6ee0
+PASS investigator timeout for provider 60 s is 75 s: 75.0
+PASS investigator timeout for provider 60 s with the endpoint catalog is 135 s: 135.0
+PASS investigator timeout for provider 120 s with the endpoint catalog is 180 s: 180.0
+PASS investigation run accepted: 201
+INFO run returned after 52.5 s
+INFO receipt: {"phase": "outcome", "status": "success", "dispatch_id": "run_621428d78f777f57", "request_ids": ["6fe6d410-1f25-4006-9427-81e75b1c8963", "bc012d79-ab34-492d-962c-453647b3aa2a"], "result_status": "completed", "mcp_request_ids": []}
+PASS the run waited for the 50 s answer: 52.5 s
+PASS the receipt ends in success: ('success', None)
+PASS the gateway audited one completed model call: [(200, 'bc012d79-ab34-492d-962c-453647b3aa2a')]
+PASS the receipt names the audited request id: ['6fe6d410-1f25-4006-9427-81e75b1c8963', 'bc012d79-ab34-492d-962c-453647b3aa2a']
+PASS: 10 lines

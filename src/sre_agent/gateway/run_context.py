@@ -31,7 +31,7 @@ HYPOTHESIS_FIELDS = (
 )  # fmt: skip
 EVIDENCE_FIELDS = (
     "evidence_id", "source", "tool", "datasource_uid", "query", "time_window", "summary",
-    "collected_at", "request_id",
+    "collected_at", "request_id", "empty", "verdict", "finding",
 )  # fmt: skip
 MITIGATION_FIELDS = (
     "mitigation_id", "description", "steps", "risk", "expected_effect", "verification_check",
