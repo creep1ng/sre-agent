@@ -156,7 +156,8 @@ class PostgresIncidentRepository:
         rows = (
             (
                 await self._session.execute(
-                    text("""SELECT incident_id, state->>'state' AS state
+                    text("""SELECT incident_id, state->>'state' AS state,
+                    state->'alert'->>'service' AS service, state->'alert'->>'summary' AS summary
                 FROM incident.incidents
                 WHERE state->>'state' = ANY(:states)
                 ORDER BY incident_id ASC
@@ -167,7 +168,16 @@ class PostgresIncidentRepository:
             .mappings()
             .all()
         )
-        return tuple({"incident_id": row["incident_id"], "state": row["state"]} for row in rows)
+        # The service and summary of the alert that opened it, when it recorded one, so a person
+        # recognises the incident without opening it (#703).
+        return tuple(
+            {
+                key: row[key]
+                for key in ("incident_id", "state", "service", "summary")
+                if row[key] is not None
+            }
+            for row in rows
+        )
 
 
 class PostgresRunRepository:

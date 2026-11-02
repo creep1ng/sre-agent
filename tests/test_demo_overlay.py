@@ -40,8 +40,10 @@ def test_the_envoy_admin_interface_is_not_published() -> None:
 
 
 def test_every_other_upstream_publication_stays_reset() -> None:
-    for service in ("grafana", "opensearch", "flagd-ui", "jaeger", "frontend"):
+    for service in ("opensearch", "flagd-ui", "jaeger", "frontend"):
         assert f"{service}: {{ports: !reset []}}" in OVERLAY
+    # Grafana also mounts Midnight's alert rules (#765), so its reset is a block.
+    assert "  grafana:\n    ports: !reset []\n" in OVERLAY
 
 
 def test_verify_accepts_the_declared_publications(monkeypatch: pytest.MonkeyPatch) -> None:

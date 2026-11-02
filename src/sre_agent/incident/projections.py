@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 from sre_agent.incident.persistence import IncidentRecord, RunEvent, RunRecord, SnapshotRecord
-from sre_agent.incident.reasons import DISPATCH_CAUSES, PROJECTED_REASON_CODES
+from sre_agent.incident.reasons import DISPATCH_CAUSES, PROJECTED_REASON_CODES, START_CAUSES
 from sre_agent.incident.workflow import IncidentWorkflow
 
 IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
@@ -145,6 +145,8 @@ def event_summary(payload: Any) -> str:
     if isinstance(transition_id, str):
         return f"Transition {transition_id} applied."
     if isinstance(payload, dict):
+        if payload.get("reason_code") in START_CAUSES:
+            return f"The investigation did not start: {START_CAUSES[payload['reason_code']]}"
         receipt = payload.get("dispatch_receipt")
         if isinstance(receipt, dict):
             status = receipt.get("status")

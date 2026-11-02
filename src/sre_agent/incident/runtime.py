@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -254,18 +255,22 @@ class IncidentRuntime:
                 raise RunNotFoundError(command.run_id)
             return await self._apply(work, command, payload_hash, incident, run)
 
-    async def start_run(self, request: RunStart) -> TransitionResult:
+    async def start_run(
+        self, request: RunStart, work: IncidentUnitOfWork | None = None
+    ) -> TransitionResult:
         """Open a run for the requested objective and execute its first transition.
 
         The run aggregate and that transition commit together, so a run never
-        exists without the snapshot its replay needs.
+        exists without the snapshot its replay needs. A caller that passes its own
+        unit of work owns the transaction: triage declaration and the investigation
+        it starts commit or roll back together.
         """
 
         transition_id = OBJECTIVE_TRANSITIONS.get(request.objective)
         if transition_id is None:
             raise InvalidTransitionError(f"objective '{request.objective}' has no transition")
         payload_hash = request.payload_sha256()
-        async with self._unit_of_work() as work:
+        async with nullcontext(work) if work is not None else self._unit_of_work() as work:
             await work.lock_command(request.incident_id, request.command_id)
             replayed = await work.get_transition(
                 request.incident_id, request.command_id, payload_hash
