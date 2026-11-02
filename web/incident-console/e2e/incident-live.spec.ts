@@ -63,9 +63,8 @@ async function open(page: Page, incident: string, language: "es" | "en" = "es") 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/checkout/);
 }
 
-/** Starts the investigation from the page and waits for the proposal. */
+/** Declaring starts the investigation on the server (#858): the page follows it to the proposal. */
 async function investigate(page: Page) {
-  await page.getByRole("button", { name: "Investigar" }).click();
   await expect(page.getByText("Investigando…")).toBeVisible();
   await expect(page.getByRole("heading", { level: 2, name: PLAN })).toBeVisible({ timeout: 90_000 });
 }
@@ -96,7 +95,6 @@ test.describe("incidente RC-2 contra la API real", () => {
     const incident = await declare("checkout no puede cobrar a payment");
     record.approved = incident;
     await open(page, incident);
-    await expect(page.getByText("sin investigar")).toBeVisible();
     await investigate(page);
 
     const hypothesis = page.locator("#hypothesis");
@@ -196,8 +194,6 @@ test.describe("incidente RC-2 contra la API real", () => {
 
     const incident = await declare("checkout cannot charge payment");
     record.decidedElsewhere = incident;
-    const demo = await client(process.env.DEMO_HUMAN_API_KEY!);
-    await send(demo, `/incidents/${incident}/runs`, { workflow_version: "1.0.0", objective: "investigate" }, 201);
     await open(page, incident, "en");
     await expect(page.getByRole("heading", { level: 2, name: PLAN })).toBeVisible({ timeout: 90_000 });
     await expect(page.getByRole("button", { name: "Approve" })).toBeVisible();
@@ -229,7 +225,6 @@ test.describe("incidente RC-2 contra la API real", () => {
     const incident = await declare("checkout no puede cobrar a payment [e2e:falla]");
     record.retried = incident;
     await open(page, incident);
-    await page.getByRole("button", { name: "Investigar" }).click();
     const timeline = page.getByRole("list", { name: "Línea de tiempo del incidente" });
     await expect(timeline.getByText("La investigación se detuvo: el modelo respondió en un formato no válido.")).toBeVisible({ timeout: 90_000 });
     await expect(page.getByText("detenido", { exact: true })).toBeVisible();
