@@ -1,0 +1,90 @@
+{
+  "run_id": "run_d36d4bccf518f326",
+  "incident_id": "inc-334e5ac0029e69d4e5ea4e29f3c3f82a",
+  "reasoning": {
+    "hypotheses": [
+      {
+        "hypothesis_id": "hyp_696b65299e5a846e",
+        "statement": "La causa probable es que PaymentService/Charge está devolviendo errores a CheckoutService. Checkout invoca Charge como parte de PlaceOrder, y cada fallo de Charge se propaga como span con STATUS_CODE_ERROR en PlaceOrder, lo que eleva la tasa de errores del servicio checkout por encima del umbral del 5%. Esta hipótesis se refutaría si las llamadas a PaymentService/Charge no muestran errores en el mismo intervalo, o si PlaceOrder falla sin que aparezcan errores de Charge.",
+        "confidence": "medium",
+        "status": "open",
+        "supporting_evidence": [
+          "ev_0b1f717e5ddf3d64"
+        ],
+        "created_by": "agent",
+        "created_at": "2026-11-02T14:17:34.905228+00:00"
+      },
+      {
+        "hypothesis_id": "hyp_974b773391ffa8e7",
+        "statement": "La causa probable es que PaymentService/Charge está devolviendo errores a CheckoutService. CheckoutService invoca Charge dentro de PlaceOrder, y cada fallo de Charge se propaga como span con STATUS_CODE_ERROR en PlaceOrder, lo que eleva la tasa de errores de checkout por encima del umbral del 5%. Esta hipótesis se refutaría si las llamadas a PaymentService/Charge no muestran errores en el mismo intervalo de 2 minutos, o si PlaceOrder falla sin que aparezcan errores de Charge.",
+        "confidence": "medium",
+        "status": "open",
+        "supporting_evidence": [
+          "ev_0b1f717e5ddf3d64"
+        ],
+        "created_by": "agent",
+        "created_at": "2026-11-02T14:17:44.511733+00:00"
+      }
+    ],
+    "evidence": [
+      {
+        "evidence_id": "ev_8723092557c892b1",
+        "source": "change-events",
+        "tool": "midnight_recent_changes",
+        "datasource_uid": null,
+        "query": "/v1/changes?service=checkout",
+        "time_window": null,
+        "summary": "No change recorded for checkout.",
+        "collected_at": "2026-11-02T14:17:19.993099Z",
+        "request_id": "b3ae51c7-faf2-440b-a8d4-e214447abfe4",
+        "empty": false,
+        "verdict": "inconclusive",
+        "finding": "No hay cambios registrados para checkout, lo que descarta un despliegue reciente como causa directa, pero no dice nada sobre el fallo de PaymentService."
+      },
+      {
+        "evidence_id": "ev_0b1f717e5ddf3d64",
+        "source": "grafana-mcp",
+        "tool": "query_prometheus",
+        "datasource_uid": "webstore-metrics",
+        "query": "sum by (span_name) (increase(traces_span_metrics_calls_total{service_name=\"checkout\",status_code=\"STATUS_CODE_ERROR\"}[2m]))",
+        "time_window": "now",
+        "summary": "{\"result_type\":\"vector\",\"result\":[{\"metric\":{\"span_name\":\"oteldemo.PaymentService/Charge\"},\"value\":[1793629042.19,\"4.000000000000001\"]},{\"metric\":{\"span_name\":\"oteldemo.CheckoutService/PlaceOrder\"},\"value\":[1793629042.19,\"4.000000000000001\"]}],\"warnings\":[]}",
+        "collected_at": "2026-11-02T14:17:22.255545Z",
+        "request_id": "1ce87dd9-93a5-437e-88da-61249c78b9e8",
+        "empty": false,
+        "verdict": "supports",
+        "finding": "Prometheus muestra 4 errores en PaymentService/Charge y 4 en CheckoutService/PlaceOrder en los últimos 2 minutos, lo que coincide con una propagación desde el pago hacia el checkout."
+      },
+      {
+        "evidence_id": "ev_228320141ec57f48",
+        "source": "grafana-mcp",
+        "tool": "query_elasticsearch",
+        "datasource_uid": "webstore-logs",
+        "query": "resource.service.name:\"checkout\"",
+        "time_window": "now-5m/now",
+        "summary": "{\"total\":20,\"documents\":[{\"_index\":\"otel-logs-2026-11-02\",\"_id\":\"n22fnKEBV1YixbeLNPDs\",\"_source\":{\"@timestamp\":\"2026-11-02T14:17:21.498786073Z\",\"attributes\":{\"data_stream\":{\"dataset\":\"default\",\"namespace\":\"namespace\",\"type\":\"record\"},\"user_currency\":\"USD\",\"user_id\":\"99615f50-704c-4145-9068-b439d985bd3c\"},\"body\":\"[PlaceOrder]\",\"instrumentationScope\":{\"name\":\"checkout\"},\"observedTimestamp\":\"2026-11-02T14:17:21.899Z\",\"resource\":{\"host.arch\":\"amd64\",\"host.cpu.cache.l2.size\":\"512\",\"host.cpu.family\":\"23\",\"host.cpu.model.id\":\"1\",\"host.cpu.model.name\":\"AMD EPYC 7571\",\"host.cpu.stepping\":\"2\",\"host.cpu.vendor.id\":\"AuthenticAMD\",\"host.name\":\"ip-172-31-34-40\",\"os.description\":\"Linux ced357b7347f 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026 x86_64\",\"os.type\":\"linux\",\"service.criticality\":\"critical\",\"service.name\":\"checkout\",\"service.namespace\":\"opentelemetry-demo\",\"service.version\":\"3.0.0\",\"telemetry.sdk.language\":\"go\",\"telemetry.sdk.name\":\"opentelemetry\",\"telemetry.sdk.version\":\"1.44.0\"},\"severity\":{\"number\":9,\"text\":\"INFO\"},\"spanId\":\"4805db459ea860de\",\"traceId\":\"8e750256a496a2aeda0a05ac8a2a6b6b\"},\"timestamp\":\"2026-11-02T14:17:21.899Z\"},{\"_index\":\"otel-logs-2026-11-02\",\"_id\":\"mG2fnKEBV1YixbeLCe94\",\"_source\":{\"@timestamp\":\"2026-11-02T14:17:10.705298577Z\",\"attributes\":{\"data_stream\":{\"dataset\":\"default\",\"namespace\":\"namespace\",\"type\":\"record\"},\"user_currency\":\"USD\",\"user_id\":\"e888c33f-3f36-430a-9366-4e16a6ef1e23\"},\"body\":\"[PlaceOrder]\",\"instrumentationScope\":{\"name\":\"checkout\"},\"observedTimestamp\":\"2026-11-02T14:17:10.775Z\",\"resource\":{\"host.arch\":\"amd64\",\"host.cpu.cache.l2.size\":\"512\",\"host.cpu.family\":\"23\",\"host.cpu.model.id\":\"1\",\"host.cpu.model.name\":\"AMD EPYC 7571\",\"host.cpu.stepping\":\"2\",\"host.cpu.vendor.id\":\"AuthenticAMD\",\"host.name\":\"ip-172-31-34-40\",\"os.description\":\"Linux ced357b7347f 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026 x86_64\",\"os.type\":\"linux\",\"service.criticality\":\"critical\",\"service.name\":\"checkout\",\"service.namespace\":\"opentelemetry-demo\",\"service.version\":\"3.0.0\",\"telemetry.sdk.language\":\"go\",\"telemetry.sdk.name\":\"opentelemetry\",\"telemetry.sdk.version\":\"1.44.0\"},\"severity\":{\"number\":9,\"text\":\"INFO\"},\"spanId\":\"d3fe2a39b4bb65b0\",\"traceId\":\"f463f74b38c99c7bb2e4fbebeaf3ff5a\"},\"timestamp\":\"2026-11-02T14:17:10.775Z\"},{\"_index\":\"otel-logs-2026-11-02\",\"_id\":\"MG2enKEBV1YixbeLgO3H\",\"_source\":{\"@timestamp\":\"2026-11-02T14:16:35.408631121Z\",\"attributes\":{\"data_stream\":{\"dataset\":\"default\",\"namespace\":\"namespace\",\"type\":\"record\"},\"user_currency\":\"USD\",\"user_id\":\"184ceb77-8dd4-454c-b17b-073218205d24\"},\"body\":\"[PlaceOrder]\",\"instrumentationScope\":{\"name\":\"checkout\"},\"observedTimestamp\":\"2026-11-02T14:16:35.781Z\",\"resource\":{\"host.arch\":\"amd64\",\"host.cpu.cache.l2.size\":\"512\",\"host.cpu.family\":\"23\",\"host.cpu.model.id\":\"1\",\"host.cpu.model.name\":\"AMD EPYC 7571\",\"host.cpu.stepping\":\"2\",\"host.cpu.vendor.id\":\"AuthenticAMD\",\"host.name\":\"ip-172-31-34-40\",\"os.description\":\"Linux ced357b7347f 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026 x86_64\",\"os.type\":\"linux\",\"service.criticality\":\"critical\",\"service.name\":\"checkout\",\"service.namespace\":\"opentelemetry-demo\",\"service.version\":\"3.0.0\",\"telemetry.sdk.language\":\"go\",\"telemetry.sdk.name\":\"opentelemetry\",\"telemetry.sdk.version\":\"1.44.0\"},\"severity\":{\"number\":9,\"text\":\"INFO\"},\"spanId\":\"a44ccaaef54d2bca\",\"traceId\":\"5c5e304d699bde4a7e7e5af81b8226c1\"},\"timestamp\":\"2026-11-02T14:16:35.781Z\"},{\"_index\":\"otel-logs-2026-11-02\",\"_id\":\"4m2enKEBV1YixbeLdewI\",\"_source\":{\"@timestamp\":\"2026-11-02T14:16:32.273747316Z\",\"attributes\":{\"data_stream\":{\"dataset\":\"default\",\"namespace\":\"namespace\",\"type\":\"record\"},\"user_currency\":\"USD\",\"user_id\":\"8a5f2831-3795-4dc6-b766-9373c8ab06b4\"},\"body\":\"[PlaceOrder]\",\"instrumentationScope\":{\"name\":\"checkout\"},\"observedTimestamp\":\"2026-11-02T14:16:32.775Z\",\"resource\":{\"host.arch\":\"amd64\",\"host.cpu.cache.l2.size\":\"512\",\"host.cpu.family\":\"23\",\"host.cpu.model.id\":\"1\",\"host.cpu.model.name\":\"AMD EPYC 7571\",\"host.cpu.stepping\":\"2\",\"host.cpu.vendor.id\":\"AuthenticAMD\",\"host.name\":\"ip-172-31-34-40\",\"os.description\":\"Linux ced357b7347f 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026 x86_64\",\"os.type\":\"linux\",\"service.criticality\":\"critical\",\"service.name\":\"checkout\",\"service.namespace\":\"opentelemetry-demo\",\"service.version\":\"3.0.0\",\"telemetry.sdk.language\":\"go\",\"telemetry.sdk.name\":\"opentelemetry\",\"telemetry.sdk.version\":\"1.44.0\"},\"severity\":{\"number\":9,\"text\":\"INFO\"},\"spanId\":\"41e26c7ba58f578b\",\"traceId\":\"78bb06ed70c85cfa2ade9de9da080292\"},\"timestamp\":\"2026-11-02T14:16:32.775Z\"},{\"_index\":\"otel-logs-2026-11-02\",\"_id\":\"ZW2dnKEBV1YixbeL9Op8\",\"_source\":{\"@timestamp\":\"2026-11-02T14:15:59.605570365Z\",\"attributes\":{\"data_stream\":{\"dataset\":\"default\",\"namespace\":\"namespace\",\"type\":\"record\"},\"user_currency\":\"USD\",\"user_id\":\"c1031d95-70bb-4cdf-9d6f-18fb4b9d973c\"},\"body\":\"[PlaceOrder]\",\"instrumentationScope\":{\"name\":\"checkout\"},\"observedTimestamp\":\"2026-11-02T14:15:59.867Z\",\"resource\":{\"host.arch\":\"amd64\",\"host.cpu.cache.l2.size\":\"512\",\"host.cpu.family\":\"23\",\"host.cpu.model.id\":\"1\",\"host.cpu.model.name\":\"AMD EPYC 7571\",\"host.cpu.stepping\":\"2\",\"host.cpu.vendor.id\":\"AuthenticAMD\",\"host.name\":\"ip-172-31-34-40\",\"os.description\":\"Linux ced357b7347f 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026 x86_64\",\"os.type\":\"linux\",\"service.criticality\":\"critical\",\"service.name\":\"checkout\",\"service.namespace\":\"opentelemetry-demo\",\"service.version\":\"3.0.0\",\"telemetry.sdk.language\":\"go\",\"telemetry.sdk.name\":\"opentelemetry\",\"telemetry.sdk.version\":\"1.44.0\"},\"severity\":{\"number\":9,\"text\":\"INFO\"},\"spanId\":\"50e33c04648e70d6\",\"traceId\":\"6e8e29cba12fba3c576957f8413a440f\"},\"timestamp\":\"2026-11-02T14:15:59.867Z\"},{\"_index\":\"otel-logs-2026-11-02\",\"_id\":\"3m2dnKEBV1YixbeL2eko\",\"_source\":{\"@timestamp\":\"2026-11-02T14:15:52.641418657Z\",\"attributes\":{\"data_stream\":{\"dataset\":\"default\",\"namespace\":\"namespace\",\"type\":\"record\"},\"user_currency\":\"USD\",\"user_id\":\"31b38b36-55dd-4d80-95c4-6301574bcf62\"},\"body\":\"[PlaceOrder]\",\"instrumentationScope\":{\"name\":\"checkout\"},\"observedTimestamp\":\"2026-11-02T14:15:52.871Z\",\"resource\":{\"host.arch\":\"amd64\",\"host.cpu.cache.l2.size\":\"512\",\"host.cpu.family\":\"23\",\"host.cpu.model.id\":\"1\",\"host.cpu.model.name\":\"AMD EPYC 7571\",\"host.cpu.stepping\":\"2\",\"host.cpu.vendor.id\":\"AuthenticAMD\",\"host.name\":\"ip-172-31-34-40\",\"os.description\":\"Linux ced357b7347f 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026 x86_64\",\"os.type\":\"linux\",\"service.criticality\":\"critical\",\"service.name\":\"checkout\",\"service.namespace\":\"opentelemetry-demo\",\"service.version\":\"3.0.0\",\"telemetry.sdk.language\":\"go\",\"telemetry.sdk.name\":\"opentelemetry\",\"telemetry.sdk.version\":\"1.44.0\"},\"severity\":{\"number\":9,\"text\":\"INFO\"},\"spanId\":\"83cca373f5dc5610\",\"traceId\":\"3b7146634a191e01ab9357a1ae0dfb92\"},\"timestamp\":\"2026-11-02T14:15:52.871Z\"},{\"_index\":\"otel-logs-2026-11-02\",\"_id\":\"Cm2dnKEBV1YixbeLrene\",\"_source\":{\"@timestamp\":\"2026-11-02T14:15:41.092214592Z\",\"attributes\":{\"data_stream\":{\"dataset\":\"default\",\"namespace\":\"namespace\",\"type\":\"record\"},\"user_currency\":\"USD\",\"user_id\":\"631a945a-c718-44ca-a7d6-ae1d2fc6bcb2\"},\"body\":\"[PlaceOrder]\",\"instrumentationScope\":{\"name\":\"checkout\"},\"observedTimestamp\":\"2026-11-02T14:15:41.789Z\",\"resource\":{\"host.arch\":\"amd64\",\"host.cpu.cache.l2.size\":\"512\",\"host.cpu.family\":\"23\",\"host.cpu.model.id\":\"1\",\"host.cpu.model.name\":\"AMD EPYC 7571\",\"host.cpu.stepping\":\"2\",\"host.cpu.vendor.id\":\"AuthenticAMD\",\"host.name\":\"ip-172-31-34-40\",\"os.description\":\"Linux ced357b7347f 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:24:59 UTC 2026 x86_64\",\"os.type\":\"linux\",\"service.criticality\":\"critical\",\"service.name\":\"checkout\",\"service.namespace\":\"opentelemetry-demo\",\"service.version\":\"3.0.0\",\"telemetry.sdk.language\":\"go\",\"telemetry.sdk.name\":\"opentelemetry\",\"telemetry.sdk.version\":\"1.44.0\"},\"severity\":{\"number\":9,\"text\":\"INFO\"},\"spanId\":\"2314144831ef3479\",\"traceId\":\"40d52d17aa40c5",
+        "collected_at": "2026-11-02T14:17:26.118989Z",
+        "request_id": "c708674c-c224-4031-9e94-8c8944959b66",
+        "empty": false,
+        "verdict": "inconclusive",
+        "finding": "Los logs de checkout visibles son de nivel INFO con PlaceOrder exitosos y no muestran el error de Charge; no confirman ni refutan la hipótesis."
+      }
+    ],
+    "mitigation_strategy": {
+      "mitigation_id": "mit_15b2301567485f1c",
+      "description": "Verificar y mitigar los fallos de PaymentService/Charge que se propagan a PlaceOrder en checkout, dado que la métrica muestra 4 errores en Charge y 4 en PlaceOrder dentro de la misma ventana de 2 minutos.",
+      "steps": [
+        "Confirmar en los logs y trazas de PaymentService que las llamadas a Charge fallan en la ventana de 2 minutos del incidente, y registrar el error devuelto.",
+        "Si los fallos se confirman, escalar al equipo responsable de PaymentService y revertir el último cambio desplegado en ese servicio, o reiniciar sus instancias si no hay despliegue reciente, siguiendo el procedimiento aprobado.",
+        "Mantener la reversión o el reinicio bajo supervisión hasta que la tasa de errores de checkout vuelva a estar por debajo del 5%."
+      ],
+      "risk": "medium",
+      "verification_check": "Tras la mitigación, la consulta sum by (span_name) (increase(traces_span_metrics_calls_total{service_name=\"checkout\",status_code=\"STATUS_CODE_ERROR\"}[2m])) debe mostrar cero errores en PaymentService/Charge y en CheckoutService/PlaceOrder, y el porcentaje de spans fallidos de checkout debe quedar por debajo del umbral del 5%.",
+      "approval_status": "pending",
+      "execution_mode": "simulated",
+      "based_on_hypothesis": "hyp_696b65299e5a846e",
+      "created_by": "agent",
+      "created_at": "2026-11-02T14:17:50.997005+00:00"
+    }
+  }
+}
