@@ -9,7 +9,9 @@ Runs inside the `api` container, the executor's only caller (it signs with the a
         python - flow < scripts/flag_set_e2e.py
 
 With FLAGD_ADDRESS=flagd:8013 (the local stand-in) `flow` also holds flagd's EventStream across the
-approval and requires a reload without a restart.
+approval and requires a reload without a restart. `flow` always checks that no prompt showed a
+flag's current value; EXPECT_REFUSED=<flag> requires that flag's proposal-time refusal, and
+STALE=1 turns the flag off out of band and requires the approval's 409.
 `checks` proves the boundaries with nothing broken; `flow` waits for the incident of SERVICE
 (default checkout), approves its proposal through the fake Bot API (DECIDE=telegram, needs the
 telegram profile) or the API (DECIDE=api), then waits for the receipt, the flag and the alert.
@@ -37,6 +39,10 @@ FLAG = os.environ.get("FLAG", "paymentUnreachable")
 TIMEOUT = float(os.environ.get("FLOW_TIMEOUT_SECONDS", "600"))
 # flagd itself, where the stack runs it (the local stand-in): host:port of its evaluation API.
 FLAGD = os.environ.get("FLAGD_ADDRESS")
+# A flag the investigation is expected to propose first and have refused as already off.
+REFUSED = os.environ.get("EXPECT_REFUSED")
+# STALE=1: the flag goes off out of band after the proposal; the approval must be refused.
+STALE = os.environ.get("STALE") == "1"
 STARTED = time.monotonic()
 record = {"started_at": datetime.now(UTC).isoformat(timespec="seconds"), "steps": []}
 
@@ -208,6 +214,43 @@ def flow():
         description=strategy.get("description"),
         execution_mode=strategy.get("execution_mode"),
     )
+    turns = (api(f"/v1/incidents/{incident_id}/runs/{run_id}/context")[1] or {}).get("turns", [])
+    states = [
+        json.loads(line[len("State: ") :])
+        for turn in turns
+        for line in (turn.get("assembled_input") or "").splitlines()
+        if line.startswith("State: ")
+    ]
+    offers = [
+        offer
+        for state in states
+        for offer in ((state.get("service_operations") or {}).get("flags") or {}).values()
+    ]
+    step(
+        "no prompt showed the agent a flag's current value",
+        offers and all(set(offer) == {"allowed"} for offer in offers),
+        prompts=len(states),
+        offers=offers[:2],
+    )
+    if REFUSED:
+        refusals = [
+            line
+            for turn in turns
+            for line in (turn.get("assembled_input") or "").splitlines()
+            if f"rejected: {REFUSED} is already" in line
+        ]
+        step(
+            f"proposing {REFUSED}, already off, was refused at proposal time with the reason",
+            bool(refusals),
+            refusal=refusals[:1],
+        )
+    if STALE:
+        status, body = signed(
+            "flag.set",
+            {"service": SERVICE, "flag": FLAG, "variant": "off"},
+            f"e2e-stale-{run_id}",
+        )
+        step("the flag went off out of band before the approval", status == 200, outcome=body)
     events, stop = [], threading.Event()
     if FLAGD:
         threading.Thread(target=watch_flagd, args=(events, stop), daemon=True).start()
@@ -246,6 +289,19 @@ def flow():
         status, body = api(
             f"/v1/incidents/{incident_id}/runs/{run_id}/commands", command, f"e2e-approve-{run_id}"
         )
+        if STALE:
+            detail = api(f"/v1/incidents/{incident_id}")[1]
+            step(
+                "the approval is refused against the real state, and nothing moves",
+                status == 409
+                and body["error"]["code"] == "precondition_failed"
+                and "already off" in body["error"]["message"]
+                and detail["state"] == "mitigating",
+                status=status,
+                body=body,
+                state=detail["state"],
+            )
+            finish()
         step("approved through the API", status in (200, 202), status=status, body=body)
 
     def executed():
