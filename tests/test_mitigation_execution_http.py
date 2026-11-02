@@ -1,14 +1,17 @@
-"""An approval checks its deploy-executor operation before anything moves (#722, third cut).
+"""Approving a mitigation runs its deploy-executor operation, checked first (#722, third cut).
 
-Written before the check existed. Ways this can fail:
+Written before the check (cases 1 to 5) and the call (6 and 7) existed. Ways this can fail:
 1. an approval whose operation the executor's catalog no longer offers is still approved;
 2. so is one whose operation the agent holds no `mitigation.execute` grant for;
 3. an executor that is not configured or cannot be read lets the approval through;
-4. a refused approval still changes the incident's state or version;
-5. a stale approval, or one without an operation, stops being answered as before.
+4. a refused approval still changes the incident's state or version, or reaches the executor;
+5. a stale approval, or one without an operation, stops being answered as before;
+6. the approval moves to verifying and nothing runs, or the operation runs unsigned, with a key
+   that does not bind it to the run and the mitigation, or twice when the approval is retried;
+7. an executor that fails, or answers nothing usable, still lets the incident move on.
 Principals and the human grants come from the #330 suite; this module adds the investigator's
 agent and its one grant, on the rollback of sre-checkout. Only the deploy-executor is scripted,
-as an HTTP server that serves its catalog.
+as an HTTP server that serves its catalog and checks that every operation is signed.
 """
 
 import asyncio
@@ -25,12 +28,14 @@ import psycopg
 import pytest
 from test_incident_command_http import (  # noqa: F401  (module fixture)
     DATABASE_URL,
+    RUNS,
     _body,
     _mitigating,
     _send,
     authorized_database,
 )
 
+from sre_agent.executor.signature import verify
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import CredentialRepository
 from sre_agent.settings import Settings
@@ -46,7 +51,18 @@ ROLLBACK = {
 }
 RESTART = {"service": "sre-checkout", "operation": "deployment.restart", "parameters": {}}
 DOWN = "nobody answers"
+SIGNING_KEY = "k" * 64
+RESULT = {
+    "execution_id": "exe_0123456789abcdef",
+    "outcome": "rolled_back",
+    "replayed": False,
+    "before": {"image": "demo/checkout:1.5.0"},
+    "after": {"image": "demo/checkout:1.4.0"},
+    "executed_at": "2026-10-30T12:00:00.000Z",
+    "duration_ms": 5162,
+}
 AGENT: list[str] = []
+CALLS: list[tuple[str, str, dict[str, Any], str | None]] = []
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -82,7 +98,8 @@ def agent_grant(request: pytest.FixtureRequest) -> None:
 
 
 class _Executor(BaseHTTPRequestHandler):
-    """The deploy-executor's catalog for sre-checkout, at the image a case says is running."""
+    """The deploy-executor's catalog for sre-checkout, at the image a case says is running, and
+    the operations it is sent, with the signature checked as the executor checks it."""
 
     def log_message(self, *_: Any) -> None:
         return
@@ -107,15 +124,28 @@ class _Executor(BaseHTTPRequestHandler):
             },
         )
 
+    def do_POST(self) -> None:
+        body = self.rfile.read(int(self.headers["content-length"]))
+        key, timestamp, signature = (
+            self.headers.get(name, "")
+            for name in ("idempotency-key", "x-executor-timestamp", "x-executor-signature")
+        )
+        refused = verify(
+            SIGNING_KEY.encode(), 300, "POST", self.path, key, body, timestamp, signature
+        )
+        CALLS.append((self.path, key, json.loads(body), refused))
+        self._send(*self.server.answer)  # type: ignore[attr-defined]
+
 
 @contextmanager
-def _executor(running: str | None) -> Iterator[str | None]:
+def _executor(running: str | None, answer: tuple = (200, RESULT)) -> Iterator[str | None]:
     """The executor's URL, running that image; None configures none, DOWN one that never answers."""
+    CALLS.clear()
     if running is None or running == DOWN:
         yield None if running is None else "http://127.0.0.1:9"
         return
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Executor)
-    server.running = running  # type: ignore[attr-defined]
+    server.running, server.answer = running, answer  # type: ignore[attr-defined]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}"
@@ -131,6 +161,7 @@ def _settings(executor_url: str | None) -> Settings:
         "INVESTIGATOR_GATEWAY_URL": "http://127.0.0.1:9",
         "INVESTIGATOR_MODEL_ALIAS": "triage-agent",
         "INVESTIGATOR_GATEWAY_API_KEY": AGENT[0],
+        "DEPLOY_EXECUTOR_SIGNING_KEY": SIGNING_KEY,
     }
     return Settings.from_environment(environment | {"DEPLOY_EXECUTOR_URL": executor_url or ""})
 
@@ -143,6 +174,16 @@ def _row(incident_id: str) -> tuple[str, int]:
         ).fetchone()
     assert row is not None
     return str(row[0]), int(row[1])
+
+
+def _strategy(incident_id: str) -> dict[str, Any]:
+    with psycopg.connect(DATABASE_URL) as connection:
+        row = connection.execute(
+            "SELECT state->'mitigation_strategy' FROM incident.incidents WHERE incident_id=%s",
+            (incident_id,),
+        ).fetchone()
+    assert row is not None
+    return dict(row[0])
 
 
 # case: (the mitigation's operation, the image the executor runs, the answer expected)
@@ -168,3 +209,50 @@ def test_an_approval_moves_only_while_its_operation_is_offered_and_granted(case:
     code = response.json()["error"]["code"] if response.status_code != 202 else None
     assert (response.status_code, code) == expected, response.text
     assert _row(incident_id) == (("verifying", 1) if code is None else ("mitigating", 0))
+    assert len(CALLS) == (1 if case == "allowed" else 0)
+
+
+def test_the_approval_runs_the_operation_once_signed_and_records_its_receipt() -> None:
+    _mitigating("inc-execute-once", operation=ROLLBACK)
+    with _executor("demo/checkout:1.5.0") as url:
+        first = _send("inc-execute-once", "key-execute-once", _body(), settings=_settings(url))
+        again = _send("inc-execute-once", "key-execute-once", _body(), settings=_settings(url))
+    assert (first.status_code, again.status_code) == (202, 202), first.text
+    [(path, key, sent, refused)] = CALLS
+    assert (path, sent, refused) == (
+        "/v1/operations/deployment.rollback",
+        {"service": "sre-checkout", "to_tag": "1.4.0"},
+        None,
+    )
+    assert key == f"mitexec-{RUNS['inc-execute-once']}-mit_disable_payment_flag"
+    strategy = _strategy("inc-execute-once")
+    assert (strategy["approval_status"], strategy["execution_mode"]) == ("approved", "executed")
+    assert strategy["execution"] == {
+        "execution_id": "exe_0123456789abcdef",
+        "outcome": "rolled_back",
+        "replayed": False,
+        "before_image": "demo/checkout:1.5.0",
+        "after_image": "demo/checkout:1.4.0",
+        "executed_at": "2026-10-30T12:00:00.000Z",
+        "duration_ms": 5162,
+    }
+
+
+# case: (what the executor answers the operation, the answer the approval gets)
+FAILURES = {
+    "failed": ((502, {"error": {"code": "execution_failed"}}), (409, "execution_failed")),
+    "docker-down": ((503, {"error": {"code": "docker_unavailable"}}), (503, "execution_failed")),
+    "unreadable": ((200, {"outcome": "rolled_back"}), (503, "executor_unavailable")),
+}
+
+
+@pytest.mark.parametrize("case", FAILURES)
+def test_an_executor_that_fails_keeps_the_incident_mitigating(case: str) -> None:
+    answer, expected = FAILURES[case]
+    incident_id = f"inc-execute-{case}"
+    _mitigating(incident_id, operation=ROLLBACK)
+    with _executor("demo/checkout:1.5.0", answer) as url:
+        response = _send(incident_id, f"key-execute-{case}", _body(), settings=_settings(url))
+    assert (response.status_code, response.json()["error"]["code"]) == expected, response.text
+    assert len(CALLS) == 1 and _row(incident_id) == ("mitigating", 0)
+    assert "execution" not in _strategy(incident_id)
