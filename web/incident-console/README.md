@@ -201,6 +201,20 @@ Both files are picked up by `import.meta.glob`; nothing else needs registering.
 - **Account menu.** The avatar opens one popover: language, theme and the session. Sign out drops
   the in-memory credential and returns to the inbox's credential screen.
 
+## Incident page (RC-2, #870)
+
+In live mode `/app/incidentes/:id` reads the real API (`src/lib/live-incident.ts`, ported from
+RC-1): the hypothesis as prose whose underlined claims open their evidence and jump to their
+timeline step, one chronological timeline, the agent's live status and the proposal card, whose
+«Aprobar» and «Rechazar» send the governed `approve_mitigation` / `reject_mitigation` command.
+Copy lives in the `incident` namespace (`src/i18n/{es,en}/incident.ts`).
+
+Journeys against the composed stack (scripted model and Grafana MCP, everything else real):
+
+```sh
+COMPOSE_PROJECT_NAME=incident-e2e-$RANDOM scripts/run_incident_console_e2e.sh
+```
+
 ## Stack
 
 Vite 8, React 19, TypeScript 7, Tailwind CSS 4, shadcn/ui on Radix, lucide icons, sonner,
