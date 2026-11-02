@@ -12,17 +12,15 @@ const EN = {
   "copy": "Copy",
   "copied": "Copied",
   "letter.title": "Your attention is the most expensive thing you have. We treat it <em>that way</em>.",
-  "letter.p1": "If you keep one client’s shop, another’s API and a third one’s WordPress running on two or three VPS that nobody else watches, you do not have an on-call team. You have a phone on the nightstand that buzzes at every blip. And still, the day something really breaks, you find out from the client’s email.",
-  "letter.p2": "You do not need another dashboard, or an agent with the production keys. You need to sleep knowing that, if something needs your judgement, you will get one message with what you need to decide.",
-  "letter.p3": "That is why I am building Midnight. It listens to the signals you already have, remembers your incidents and what you did about them, and acts only through operations you approved beforehand, leaving a receipt for each one.",
-  "letter.p4": "Almost everything that happens at night ends in doing nothing, remembering it and leaving you alone. That is not a flaw. It is the product.",
+  "letter.p1": "I keep a company’s internal services running on an on-premise server, literally the nightmare of many engineers. Sure enough, a service has gone down before, and I found out because someone told me on a Saturday, at 7 in the evening, that they needed to pull an urgent report, and I was in no position to help. When I checked, the service had been down since Thursday.",
+  "letter.p2": "I really do not need another dashboard to visit, and the idea of a coding agent holding the production keys terrifies me. I want to <em>sleep</em> soundly, knowing that, if something needs my judgement, a message will reach me. The rest will be resolved, or reported and ready to act on the next day.",
+  "letter.p3": "Midnight grows out of that idea. It listens to the signals my infrastructure gives, remembers my incidents and how I solved them, and operates through predefined, pre-approved actions, keeping the full trail in case I need it.",
+  "letter.p4": "Most of what happens at night gets resolved without waking me. It is not a no by default. It is our product.",
   "msg.label": "Midnight’s message on Telegram",
   "msg.time": "Sat 02:47",
   "msg.p1": 'Payments at <b>Tienda&nbsp;Ruiz</b> have been failing at <span class="nb">38&nbsp;%</span> since 02:31.',
-  "msg.p2": 'Friday’s 19:12 deploy cut the provider timeout from <span class="nb">10&nbsp;s</span> to <span class="nb">1&nbsp;s</span>,<sup>1</sup> and at this hour the provider answers more slowly.<sup>2</sup> On 12 September you fixed it with a rollback.<sup>3</sup>',
+  "msg.p2": '<span class="cite" tabindex="0">Friday’s 19:12 deploy cut the provider timeout from <span class="nb">10&nbsp;s</span> to <span class="nb">1&nbsp;s</span><span class="tip" role="tooltip"><b>deploy #212</b> · Fri 19:12 · checkout v1.14: <code>PAYMENT_TIMEOUT</code> 10&nbsp;s → 1&nbsp;s</span></span>, and <span class="cite" tabindex="0">at this hour the provider answers more slowly<span class="tip" role="tooltip"><b>Grafana query</b> · payment provider p95: 1.8&nbsp;s between 02:00 and 02:45, 0.4&nbsp;s by day</span></span>. <span class="cite" tabindex="0">On 12 September you fixed it with a rollback<span class="tip" role="tooltip"><b>12 Sep incident</b> · same symptom, checkout rolled back to v1.12, resolved in 4&nbsp;min</span></span>.',
   "msg.p3": "Shall I roll <b>checkout</b> back to v1.13?",
-  "msg.n2": "2 grafana query",
-  "msg.n3": "3 incident 12 Sep",
   "msg.yes": "Roll back to v1.13",
   "msg.evidence": "Evidence",
   "msg.later": "Tomorrow",
@@ -131,6 +129,7 @@ document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-copy]");
   if (!button) return;
   // The clipboard exists only on secure origins; say "copied" only when it really copied.
-  navigator.clipboard?.writeText("git clone https://github.com/creep1ng/sre-agent && cd sre-agent && docker compose up -d")
+  const commands = button.parentElement.querySelector("code").textContent.replace(/^\$ /gm, "");
+  navigator.clipboard?.writeText(commands)
     .then(() => { button.textContent = (lang === "en" ? EN : ES).copied; });
 });
