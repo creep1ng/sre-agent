@@ -674,6 +674,7 @@ class CatalogRepository:
         "skill",
         "bok_collection",
         "incident_workflow",
+        "service_operation",
     )
 
     def __init__(self, session: AsyncSession) -> None:

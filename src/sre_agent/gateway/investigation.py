@@ -13,6 +13,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 
 from sre_agent.gateway.authentication import authorize_governed_access_for_context
+from sre_agent.gateway.execution import service_operations
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.incident.persistence import (
     DecisionDraft,
@@ -79,10 +80,11 @@ class InvestigationRunDispatcher:
         *,
         http: Any = None,
         language: OutputLanguage = "es",
+        executor_url: str | None = None,
         tool_timeout_seconds: float = 30.0,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
-        self.language = language
+        self.language, self.executor_url = language, executor_url
         self.gateway_settings = gateway_settings
         self.limits = Limits(tool_timeout_seconds=tool_timeout_seconds)
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
@@ -327,6 +329,9 @@ class InvestigationRunDispatcher:
             capabilities, discovery_id = await self.evidence.discover()
             request_ids.append(discovery_id)
             capabilities += await self._bok_capabilities(run_id, principal)
+            operations, unavailable = await service_operations(
+                self.executor_url, context.alert.service
+            )
         except EvidenceUnavailable as error:
             if error.request_id is not None:
                 request_ids.append(error.request_id)
@@ -362,6 +367,8 @@ class InvestigationRunDispatcher:
                         objective="investigate",
                         context=context,
                         authorized_capabilities=capabilities,
+                        service_operations=operations,
+                        operations_unavailable=unavailable,
                     ),
                     self.gateway,
                     self.evidence,
@@ -708,6 +715,7 @@ class InvestigationRunDispatcher:
                 "approval_status": "pending",
                 "execution_mode": "simulated",
                 "based_on_hypothesis": outcome.based_on_hypothesis,
+                **({"operation": outcome.operation.model_dump()} if outcome.operation else {}),
                 "created_by": "agent",
                 "created_at": datetime.now(UTC).isoformat(),
             }
