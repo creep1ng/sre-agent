@@ -36,6 +36,13 @@ async function read(path: string) {
   return (await (await client(process.env.DEMO_HUMAN_API_KEY!)).get(`${API}${path}`)).json();
 }
 
+/** The incident's version and its investigation run: a declaration's triage run stays `active` and may list last. */
+async function investigation(incident: string): Promise<{ version: number; run: string }> {
+  const { version, runs } = await read(`/incidents/${incident}`);
+  const run = runs.findLast((item: { current_state: string }) => item.current_state !== "active" && item.current_state !== "triage") ?? runs.at(-1);
+  return { version, run: run.run_id };
+}
+
 /** Declares an incident from a checkout alert as the demo human. */
 async function declare(summary: string): Promise<string> {
   const demo = await client(process.env.DEMO_HUMAN_API_KEY!);
@@ -187,6 +194,9 @@ test.describe("incidente RC-2 contra la API real", () => {
     await noTechnicalIds(page);
     expect(await amberOutsideDecision(page)).toEqual([]);
 
+    // `checkout` has no catalog: the plan says nobody will execute it.
+    await expect(page.getByRole("region", { name: "Propuesta de mitigación" })).toContainText("Texto libre: no es una operación del catálogo y nadie la ejecutará.");
+
     // Each disclosure names what the agent asked: no generic label on measured evidence.
     await expect(page.locator("details > summary", { hasText: /^Ver la consulta$/ })).toHaveCount(0);
     await disclosure(page, "Ver la búsqueda de logs", /query_elasticsearch · .*\nresource\.service\.name:"checkout"/, "evidencia-logs-es");
@@ -229,8 +239,7 @@ test.describe("incidente RC-2 contra la API real", () => {
     await expect(page.getByRole("button", { name: "Aprobar" })).toHaveCount(0);
     expect(await amberOutsideDecision(page)).toEqual([]);
     expect(await page.locator("[data-decision]").count()).toBe(0);
-    const runs = (await read(`/incidents/${incident}`)).runs;
-    const events = (await read(`/incidents/${incident}/runs/${runs.at(-1).run_id}/events?limit=200`)).events;
+    const events = (await read(`/incidents/${incident}/runs/${(await investigation(incident)).run}/events?limit=200`)).events;
     const approved = events.find((event: { summary: string }) => event.summary === "Mitigation approved.");
     expect(approved.actor).toMatchObject({ type: "human", reference: { principal_id: "demo-human" } });
     record.approvedBy = approved.actor.reference.principal_id;
@@ -254,7 +263,7 @@ test.describe("incidente RC-2 contra la API real", () => {
     const decisions = page.getByRole("region", { name: "Decisiones tomadas" });
     await expect(decisions).toContainText(/Rechazada · Tú · \d{2}:\d{2}/);
     await expect(page.getByRole("list", { name: "Línea de tiempo del incidente" }).getByText("Tú · Rechazaste la mitigación")).toBeVisible();
-    const reasoning = await read(`/incidents/${incident}/runs/${(await read(`/incidents/${incident}`)).runs.at(-1).run_id}/context`);
+    const reasoning = await read(`/incidents/${incident}/runs/${(await investigation(incident)).run}/context`);
     record.rejectedStatus = reasoning.reasoning.mitigation_strategy.approval_status;
     expect(record.rejectedStatus).toBe("rejected");
 
@@ -296,8 +305,8 @@ test.describe("incidente RC-2 contra la API real", () => {
       await page.screenshot({ path: `${DIR}/incidente-${scheme === "dark" ? "noche" : "dia"}-en.png`, fullPage: true });
     }
 
-    const { version, runs } = await read(`/incidents/${incident}`);
-    await send(await client(key), `/incidents/${incident}/runs/${runs.at(-1).run_id}/commands`, {
+    const { version, run } = await investigation(incident);
+    await send(await client(key), `/incidents/${incident}/runs/${run}/commands`, {
       command: "approve_mitigation",
       expected_incident_version: version,
       actor: "human",
@@ -349,8 +358,8 @@ test.describe("incidente RC-2 contra la API real", () => {
     record.resolvedText = await step.innerText();
 
     // A person confirms the service is stable through the governed command; the step folds it in.
-    const { version, runs } = await read(`/incidents/${incident}`);
-    await send(await client(process.env.DEMO_HUMAN_API_KEY!), `/incidents/${incident}/runs/${runs.at(-1).run_id}/commands`, {
+    const { version, run } = await investigation(incident);
+    await send(await client(process.env.DEMO_HUMAN_API_KEY!), `/incidents/${incident}/runs/${run}/commands`, {
       command: "verification_passed",
       expected_incident_version: version,
       actor: "human",
@@ -374,6 +383,88 @@ test.describe("incidente RC-2 contra la API real", () => {
     await expect(stepEn).toContainText(/Grafana stopped alerting at \d{2}:\d{2}, \d+ (s|min) after the mitigation was approved\./);
     await stepEn.scrollIntoViewIfNeeded();
     await capture(english, "verificacion-en", stepEn);
+  });
+
+  test("la propuesta nombra su operación del catálogo; una aprobación rechazada no mueve nada y la que corre deja su recibo", async ({ page }) => {
+    // sre-checkout is the one service the journeys' deploy-executor enrols (incident_console_catalog.yaml).
+    const service = "sre-checkout";
+    const incident = (await grafana(service, "firing", new Date(Date.now() - 60_000).toISOString())).incident_id;
+    expect(incident).toBeTruthy();
+    record.executed = incident;
+    await open(page, incident);
+    await expect(page.getByText("Investigando…")).toBeVisible();
+    const plan = "Volver sre-checkout a la 1.4.0";
+    await expect(page.getByRole("heading", { level: 2, name: plan })).toBeVisible({ timeout: 90_000 });
+    const proposal = page.getByRole("region", { name: "Propuesta de mitigación" });
+    await expect(proposal).toContainText('deployment.rollback(service="sre-checkout", to_tag="1.4.0")');
+    await expect(proposal).toContainText("del catálogo");
+    await capture(page, "catalogo-propuesta-es", proposal);
+    const englishProposal = await page.context().newPage();
+    await open(englishProposal, incident, "en");
+    const proposalEn = englishProposal.getByRole("region", { name: "Mitigation proposal" });
+    await expect(proposalEn).toContainText("from the catalog");
+    await expect(englishProposal.getByRole("heading", { level: 2, name: "Roll sre-checkout back to 1.4.0" })).toBeVisible();
+    await capture(englishProposal, "catalogo-propuesta-en", proposalEn);
+    await englishProposal.close();
+
+    // Without the agent's mitigation.execute grant the gateway refuses the approval (#919, #923).
+    const admin = await client(process.env.ADMIN_HUMAN_API_KEY!);
+    const grant = "grant-setup-agent-sre-checkout-deployment-rollback";
+    expect((await admin.delete(`${API}/grants/${grant}`)).status()).toBeLessThan(300);
+    const before = await read(`/incidents/${incident}`);
+    await page.getByRole("button", { name: "Aprobar" }).click();
+    const timeline = page.getByRole("list", { name: "Línea de tiempo del incidente" });
+    const refused = timeline.getByText(/Tú · Tu aprobación no se aplicó: el agente no tiene permiso para ejecutar esa operación\. El incidente sigue esperando tu decisión\./);
+    await expect(refused).toBeVisible({ timeout: 30_000 });
+    // The incident stays where it was: still waiting, the proposal still in amber, no decision taken.
+    const after = await read(`/incidents/${incident}`);
+    expect(after.state).toBe("mitigating");
+    expect(after.state).toBe(before.state);
+    await expect(proposal).toBeVisible();
+    await expect(proposal.getByRole("alert")).toHaveText("No se aplicó; la línea de tiempo dice por qué.");
+    await expect(page.getByRole("region", { name: "Decisiones tomadas" })).toHaveCount(0);
+    await refused.scrollIntoViewIfNeeded();
+    await capture(page, "aprobacion-no-aplicada-es", refused.locator("xpath=ancestor::li[1]"));
+    record.refusedState = after.state;
+
+    // With the grant back, approving runs the rollback through the deploy-executor.
+    const workflow = { resource_type: "service_operation", resource_id: "sre-checkout:deployment.rollback" };
+    await send(admin, "/grants", { grant_id: `${grant}-${STAMP}`, principal_id: "incident-harness", action: "mitigation.execute", resource: workflow, effect: "allow" }, 201);
+    await page.getByRole("button", { name: "Aprobar" }).click();
+    const decisions = page.getByRole("region", { name: "Decisiones tomadas" });
+    const receipt = decisions.locator("[data-receipt]");
+    await expect(receipt).toHaveText(
+      "Se ejecutó deployment.rollback en sre-checkout: revertido (midnight-e2e/checkout:1.5.0 → midnight-e2e/checkout:1.4.0).",
+      { timeout: 60_000 },
+    );
+    await expect(timeline.locator("#step-execution")).toContainText("Se ejecutó deployment.rollback en sre-checkout: revertido");
+    await expect(timeline.locator("#step-execution")).toContainText("por deploy-executor");
+    await decisions.getByText("Detalle de la ejecución").click();
+    await expect(decisions).toContainText(/Ejecución\s*exe_[0-9a-f]{16}/);
+    await expect(decisions).toContainText(/Duración\s*\d+\.\d s/);
+    await decisions.scrollIntoViewIfNeeded();
+    await capture(page, "recibo-decisiones-es", decisions);
+    await timeline.locator("#step-execution").scrollIntoViewIfNeeded();
+    await capture(page, "recibo-linea-de-tiempo-es", timeline.locator("#step-execution"));
+
+    // The receipt is the one the incident keeps, and the service really runs the release it names.
+    const context = await read(`/incidents/${incident}/runs/${(await investigation(incident)).run}/context`);
+    const execution = context.reasoning.mitigation_strategy.execution;
+    expect(execution).toMatchObject({ outcome: "rolled_back", before_image: "midnight-e2e/checkout:1.5.0", after_image: "midnight-e2e/checkout:1.4.0" });
+    await expect(decisions).toContainText(execution.execution_id);
+    const running = await (await request.newContext()).get("http://sre-checkout:8080/");
+    expect((await running.json()).version).toBe("1.4.0");
+    record.execution = { id: execution.execution_id, outcome: execution.outcome, before: execution.before_image, after: execution.after_image, durationMs: execution.duration_ms, running: "1.4.0" };
+
+    const english = await page.context().newPage();
+    await open(english, incident, "en");
+    const decisionsEn = english.getByRole("region", { name: "Decisions taken" });
+    await expect(decisionsEn.locator("[data-receipt]")).toHaveText("Ran deployment.rollback on sre-checkout: rolled back (midnight-e2e/checkout:1.5.0 → midnight-e2e/checkout:1.4.0).");
+    await expect(english.getByRole("list", { name: "Incident timeline" })).toContainText("Your approval was not applied: the agent may not run that operation. The incident still waits for your decision.");
+    await decisionsEn.getByText("Execution detail").click();
+    await decisionsEn.scrollIntoViewIfNeeded();
+    await capture(english, "recibo-decisiones-en", decisionsEn);
+    await capture(english, "recibo-pagina-en");
   });
 
   test("un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {

@@ -4,7 +4,8 @@ model and Grafana MCP scripted. Each model reply waits STEP_SECONDS, so the cons
 work.
 
 The model reads the metrics, the logs and, when it is offered, the service's recent changes,
-then proposes a hypothesis citing all of them with a verdict and a finding each, and a rollback.
+then proposes a hypothesis citing all of them with a verdict and a finding each, and a rollback:
+in words for a service with no catalog, as `deployment.rollback` to 1.4.0 for an enrolled one.
 An alert whose summary carries `[e2e:falla]` gets two replies that are not JSON first, so its
 first investigation ends with `investigation_invalid_output` and a human retry succeeds.
 """
@@ -47,8 +48,16 @@ def arguments(tool: str, service: str) -> dict:
 def decide(state: dict, prompt: str) -> dict:
     incident, collected = state["incident"], state["collected_evidence"]
     if incident["hypotheses"]:
+        # An enrolled service (#722) is mitigated with one of its catalog operations.
+        offered = {item["operation"] for item in (state.get("service_operations") or {}).get("operations", [])}
+        operation = (
+            {"service": incident["alert"]["service"], "operation": "deployment.rollback",
+             "parameters": {"to_tag": "1.4.0"}}
+            if "deployment.rollback" in offered else None
+        )  # fmt: skip
         return {
             "action": "propose_mitigation",
+            **({"operation": operation} if operation else {}),
             "description": "Volver `checkout` a la `1.4.0`",
             "steps": [
                 "Desplegar de nuevo la `1.4.0` de `checkout`.",
