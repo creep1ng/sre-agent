@@ -2,8 +2,9 @@
 
 The operator links a Telegram chat once and then receives, in that chat, an acknowledgment when
 an investigation is dispatched and its conclusion when it ends (issue #766). The gateway uses
-long polling, so it needs no public URL and works behind NAT. Webhook mode, other channels and
-decision buttons (#767) are out of scope.
+long polling, so it needs no public URL and works behind NAT. When a run waits for a human
+decision on a proposed mitigation, the chat also gets one decision message with «Aprobar» and
+«Rechazar» buttons (#767). Webhook mode and other channels are out of scope.
 
 ## Set up
 
@@ -16,18 +17,24 @@ decision buttons (#767) are out of scope.
    docker compose --profile telegram up -d --wait telegram-gateway
    ```
 
-3. Create a one-time link (15 minutes by default, `--ttl-seconds` from 1 to 86400) and open it
-   from the operator's Telegram account:
+3. Create a one-time link (15 minutes by default, `--ttl-seconds` from 1 to 86400) for the
+   operator's human principal and open it, in a private chat with the bot, from the operator's
+   Telegram account:
 
    ```sh
    docker compose --profile telegram run --rm telegram-gateway \
-     python -m sre_agent.chat.telegram link
+     python -m sre_agent.chat.telegram link --principal demo-human
    ```
 
    Telegram sends `/start <code>`. A valid code links the chat and is spent; a used, expired or
    unknown code is rejected. A chat that is not linked gets one "not linked" reply, once.
+   Only a private chat links: in a group the code is refused and stays unused, because every
+   member would act as one human. The link records the principal (only an active human is
+   accepted) and the Telegram user who opened it, for deciding from the chat (#767). Whoever can
+   run this command already holds the database and the bot token, so naming the principal grants
+   nothing they did not have. Chats linked before #767 have neither and must be linked again.
 
-4. List the linked chats (chat id and link time, no codes) or revoke one; a revoked chat gets no
+4. List the linked chats (chat id, link time and principal, no codes) or revoke one; a revoked chat gets no
    further incident messages, including those still queued. These commands are not audited yet.
 
    ```sh
@@ -60,15 +67,56 @@ link only a chat you would trust with that content.
   the current send finish, but a send that times out or a gateway killed before its commit is
   sent again, because Telegram has no idempotency key. The dedup key makes duplicates rare.
 
+## Decision messages
+
+- The deferred constraint trigger `run_events_chat_decision` queues one `mitigation_decision`
+  message per linked chat when a `propose_mitigation` transition commits, after the dispatch
+  conclusion of the same transaction. Its payload binds the incident, the run, the proposal
+  (`mitigation_id`), when it was proposed, the incident version the human reviews, the link the
+  message went to and a random 32-hex token.
+- The message names the incident, the service, the cause (the hypothesis the proposal is based
+  on), the suspect change (the service's last deploy within 24 h before the alert), the proposal
+  in plain language, its risk and, as a detail, the catalog operation when the proposal has one.
+  It is the only message that carries the amber marker 🟠, and only while it waits.
+- The callback data is `a:` or `r:` and the token: no incident or run id. A chat linked before
+  #767 has no principal, so it gets the message without buttons and a hint to link again.
+- Once the proposal is decided, the message says who decided it (the principal's display name),
+  from where and when, without buttons and without the marker.
+
+## Deciding from the chat
+
+- A tap sends `approve_mitigation` or `reject_mitigation` through the same `RunCommandService`
+  as `POST /v1/incidents/{id}/runs/{run}/commands`: the link's principal replaces the bearer
+  key, and the `run.approve` grant, the attribution check and the runtime are unchanged. The
+  decision record names the human and adds `"channel": "telegram"`.
+- A tap counts only from the chat and the Telegram user of the link the message was sent to.
+  Another chat, another user in the chat, or the same chat after unlinking, even if linked again,
+  decides nothing.
+- The idempotency key is `telegram-<choice>-<token>`, so a repeated tap replays its first result;
+  any other tap carries the reviewed incident version, which is stale once anyone decided. The
+  gateway edits the message to say who decided, from where and when, then answers the tap.
+- If the incident changed while the proposal still waits, the tap decides nothing: the old
+  message loses its buttons and the chat gets the proposal again, bound to the current version.
+- Executing an approved operation and the result message belong to #723 and #722.
+
+### What stops a chat from deciding
+
+The link is a standing credential for its human, used without an API key:
+
+- It stops: `unlink CHAT_ID` (immediately, and its buttons never come back), deactivating the
+  principal (`PUT /v1/principals/{id}/status`, the tap answers that the user is not active) and
+  revoking the principal's `run.approve` grant (the tap answers that there is no permission).
+- It does not stop: revoking or expiring the principal's API keys. Unlink the chat as well.
+
 ## Extending
 
 Other producers call `sre_agent.chat.outbox.enqueue(session, chat_id=..., kind=...,
 dedup_key=...)` inside their own transaction. A new message kind is one renderer in `RENDERERS`;
-the text is rendered when the message is sent. Approval buttons (#767) and the interruption
-budget (#771, digest versus interrupt) build on this table.
+the text is rendered when the message is sent, and a renderer may return an inline keyboard with
+it. The interruption budget (#771, digest versus interrupt) builds on this table.
 
 ## Verify
 
 `scripts/run_telegram_e2e.sh` runs the channel against the real API and Postgres with a fake Bot
 API (`tests/fake_telegram.py`, compose profile `telegram-e2e`) and writes `telegram-e2e.json`,
-`summary.txt` and `transcript.png`.
+`summary.txt`, `transcript.png` and `migrate.log`.

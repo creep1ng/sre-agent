@@ -1,9 +1,11 @@
 """CA2/4/6 controlled HTTP/PostgreSQL journey, authored before provisioner.
 
-Failure modes: missing direct agent MCP grants; inherited human authority;
+Failure modes: missing direct agent MCP grants, or an operation grant beyond sre-checkout's
+rollback (#722); inherited human authority;
 operator lacks triage/run grants; restricted identity gains authority; repeat
-rotates credentials/duplicates grants/loses incidents; revoked grants silently
-reactivated; provisioning errors leak credentials. No external or paid calls.
+rotates credentials/duplicates grants/loses incidents; a revoked setup grant is
+not restored, is restored over its own revocation history or is restored twice;
+provisioning errors leak credentials. No external or paid calls.
 """
 
 import asyncio
@@ -148,18 +150,32 @@ def test_demo_permissions_converge_and_http_journey_remains_governed():
                 ("mcp.invoke", "query_prometheus"),
                 ("mcp.invoke", "query_elasticsearch"),
             }
+            assert conn.execute(
+                "SELECT g.action, g.resource_id, r.status FROM grants g JOIN resources r "
+                "USING (resource_type, resource_id) WHERE g.principal_id='incident-harness' "
+                "AND g.resource_type='service_operation'"
+            ).fetchall() == [("mitigation.execute", "sre-checkout:deployment.rollback", "active")]
+            assert conn.execute(
+                "SELECT resource_id FROM resources "
+                "WHERE resource_type='service_operation' ORDER BY 1"
+            ).fetchall() == [
+                ("sre-checkout:deployment.restart",),
+                ("sre-checkout:deployment.rollback",),
+            ]
             conn.execute(
                 "UPDATE grants SET status='revoked' WHERE grant_id='grant-setup-human-alert-read'"
             )
         asyncio.run(prepare())
+        asyncio.run(prepare())
         with psycopg.connect(URL) as conn:
-            status = conn.execute(
-                "SELECT status FROM grants WHERE grant_id='grant-setup-human-alert-read'"
-            ).fetchone()
-            assert status == ("revoked",), "revoked grant must not be restored"
-            conn.execute(
-                "UPDATE grants SET status='active' WHERE grant_id='grant-setup-human-alert-read'"
-            )
+            rows = conn.execute(
+                "SELECT grant_id, status FROM grants WHERE grant_id LIKE "
+                "'grant-setup-human-alert-read%' ORDER BY grant_id"
+            ).fetchall()
+            assert rows == [
+                ("grant-setup-human-alert-read", "revoked"),
+                ("grant-setup-human-alert-read-restored-1", "active"),
+            ], "the setup converges: a revoked grant is restored once, its history kept"
             conn.execute(
                 "UPDATE resources SET status='inactive' WHERE "
                 "resource_type='incident_workflow' AND resource_id='incident-response'"
