@@ -130,7 +130,7 @@ On the stand-in, whose scripted model cannot measure and tries the listed flags 
   it changes nothing; propose the flag the evidence implicates, or request_human». It then
   proposed `paymentUnreachable`, which was approved and executed; flagd reloaded with its
   stream open, and the alert resolved.
-- `flow-stale-approval.json` (`paymentFailure` on `checkout`, `STALE=1`): after the proposal the
+- `flow-stale-approval.json` (`paymentFailure` on `checkout`, `STALE=1`, with flagd): after the proposal the
   flag was turned off out of band. The approval answered 409 `precondition_failed` with the same
   reason, the incident stayed `mitigating`, and nothing ran.
 
