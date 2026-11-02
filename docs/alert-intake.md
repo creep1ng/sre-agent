@@ -24,10 +24,11 @@ investigation, with nobody looking at the console. Issue: #765.
   pending (the dispatch claim is idempotent).
 - The integration acts for one operator principal (`ALERT_INTAKE_PRINCIPAL_ID`, default
   `demo-human`), which needs the triage and run grants the console uses (`scripts/provision_demo.py`
-  gives them). The triage decision records `decision_origin: external_automatic` and
-  `responsible_system: grafana`, never a manual decision, and the investigation run starts with
-  actor `system` and reference `grafana` (#704). The `triage_declare` transition itself still
-  records the operator as its actor: the workflow allows only `human` there. With `ALERT_INTAKE_PRINCIPAL_ID=`
+  gives them). The triage decision records `decision_origin: external_automatic`,
+  `responsible_system: grafana` and actor `grafana`, never a manual decision; the `triage_declare`
+  transition and the investigation run (#704) both run as actor `system` with reference
+  `grafana`, so an incident an alert opened is never attributed to a person (maintainer decision
+  of 2026-11-01). The operator only lends its grants. With `ALERT_INTAKE_PRINCIPAL_ID=`
   (empty), an unknown or inactive operator, or without the grants, the episode is still recorded
   and stays in the inbox as `new` for the console; the journeys that triage a new card by hand
   run that way.
