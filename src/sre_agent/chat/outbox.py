@@ -18,6 +18,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sre_agent.chat.digest import render_digest
 from sre_agent.persistence.database import Database
 
 MAX_ATTEMPTS = 10
@@ -284,10 +285,12 @@ def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitabl
 
 
 RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[str]]] = {
+    "daily_digest": render_digest,
     "investigation_ack": _investigation_ack,
     "investigation_conclusion": _investigation_conclusion,
     "link_confirmed": _fixed(
-        "Chat vinculado. Aquí recibirás el acuse y la conclusión de cada investigación."
+        "Chat vinculado. Te escribo aquí cuando haga falta tu decisión y te mando un "
+        "resumen diario de lo demás."
     ),
     "link_rejected": _fixed("Este enlace no es válido, ya se usó o caducó. Pide uno nuevo."),
     "not_linked": _fixed("Este chat no está vinculado. Ábrelo con un enlace de vinculación."),

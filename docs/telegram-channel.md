@@ -49,7 +49,9 @@ link only a chat you would trust with that content.
 - The `run_events_chat_outbox` trigger queues `investigation_ack` when a dispatch writes its
   intent receipt and `investigation_conclusion` when it writes its outcome receipt, in the same
   transaction. Any dispatch path that writes the dispatch receipts, which #765 (Grafana alerts) is
-  expected to use, therefore notifies without chat-specific code.
+  expected to use, therefore notifies without chat-specific code. Since #771 the
+  [interrupt policy](interrupt-policy.md) decides first: an automatic run sends no acknowledgment
+  and its conclusion only when it interrupts; the rest goes to the daily digest.
 - The gateway sends the oldest due message of each chat, keeping the row locked until the send
   is recorded. A failed send is retried with exponential backoff (up to 60 s, 10 attempts, or the
   wait a 429 asks for); a 400 or 403 is final and logged. `last_error` keeps the method, the HTTP

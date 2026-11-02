@@ -145,6 +145,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_API_URL: ${TELEGRAM_API_URL:-https://api.telegram.org}
       TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+      # The daily digest (#771): hour 0..23 or `off`, in this IANA time zone.
+      TELEGRAM_DIGEST_HOUR: ${TELEGRAM_DIGEST_HOUR:-8}
+      TELEGRAM_DIGEST_TIMEZONE: ${TELEGRAM_DIGEST_TIMEZONE:-UTC}
     depends_on:
       migrate:
         condition: service_completed_successfully
