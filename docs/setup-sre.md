@@ -29,6 +29,11 @@ After the files exist, use `chmod 600 .env .demo-state/grafana-mcp.env`
 (adjust the token path if `DEMO_STATE_DIR` is elsewhere). Both files must belong
 to the setup caller. This is initial secret provisioning, not a recurring
 SRE grant/setup step.
+`up` also creates `.demo-state/alert-intake.env`, the secret the demo's Grafana sends
+to the API's alert intake (#765); when the file exists in `DEMO_STATE_DIR`, setup
+passes it to the API, so firing rules open incidents with nobody at the console
+([alert intake](alert-intake.md)). With `SRE_OTEL_MODE=aws`, `connect-mcp` hands
+the same file off beside the MCP token.
 Run `python scripts/demo_env.py verify` to verify the actual OTel composition.
 Setup consumes that prepared internal network/token; it never starts, resets,
 stops or destroys OTel and never imports files from another branch/worktree.
@@ -107,7 +112,9 @@ audit and the database volume. Conflicting/revoked grants fail; setup does not
 silently reactivate authority, rotate secrets or reconcile changed routes.
 The demo human receives workflow/triage permissions; `incident-harness` has its
 own LLM seed grant and direct discovery plus two read-only MCP invocation grants.
-It receives no run approval. `restricted-harness` receives no setup grants.
+It receives no run approval. Setup catalogs the enrolled operations of `sre-checkout`, the
+demo's own service, as `service_operation` resources and grants it only `mitigation.execute` on
+`sre-checkout:deployment.rollback` (#722). `restricted-harness` receives no setup grants.
 Audit is read using the existing admin human, not broad audit authority for the
 investigator. Provider/MCP secrets stay API-owned; the standalone harness is
 confined to its internal API-consumer network.

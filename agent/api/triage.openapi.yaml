@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: SRE Agent Alert Triage API
-  version: 3.3.0
+  version: 3.4.0
   description: >-
     Alert triage commands and reads (TRIAGE, issue #23) over the stable
     incident_workflow/incident-response resource. Reads need alert.read;
@@ -148,6 +148,9 @@ components:
             properties:
               incident_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
               state: { enum: [active, investigating, mitigating, verifying] }
+              # 3.4.0 (#703): the alert that opened the incident, when it recorded one.
+              service: { type: string, minLength: 1, maxLength: 200 }
+              summary: { type: string, minLength: 1, maxLength: 2000 }
   responses:
     BadRequest:
       description: Malformed identifier or command envelope

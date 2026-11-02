@@ -13,7 +13,7 @@ WORKDIR /e2e
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund --ignore-scripts
 COPY playwright.config.ts ./
-COPY e2e/*.spec.ts ./e2e/
+COPY e2e/*.ts ./e2e/
 CMD ["npx", "playwright", "test"]
 
 FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10 AS serve

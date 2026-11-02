@@ -10,6 +10,8 @@ import { connectConsole } from "./support/console-session.mjs";
 // 3. after the console dismisses it, the alert is not `dismissed` or still carries an incident.
 // One run decides one episode (LIVE_ALERTS_TRIAGE=declare|dismiss): a decided episode stays
 // decided, so the next decision needs `otel_ec2.py reset` and `fail` for a new episode.
+// With Grafana alert intake (#765) run it with `ALERT_INTAKE_PRINCIPAL_ID=` (empty), so intake
+// records the alert and leaves it untriaged.
 const DEMO_KEY = process.env.DEMO_HUMAN_API_KEY ?? "";
 const BASE = process.env.PLAYWRIGHT_BASE_URL ?? "http://web";
 const ARTIFACTS = process.env.LIVE_ALERTS_ARTIFACT_DIR ?? "test-results/issue-701";

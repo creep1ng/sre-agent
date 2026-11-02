@@ -151,13 +151,13 @@ def authorized_database() -> None:
     asyncio.run(database.dispose())
 
 
-async def _seed(database: Database, incident_id: str) -> str:
+async def _seed(database: Database, incident_id: str, **strategy: Any) -> str:
     document = yaml.safe_load(INITIAL_STATE_PATH.read_text())
     document.update(
         state="mitigating",
         incident_id=incident_id,
         severity="sev2",
-        mitigation_strategy=dict(MITIGATION),
+        mitigation_strategy=dict(MITIGATION, **strategy),
     )
     run_id = f"run_{incident_id.replace('-', '')}"
     async with PostgresIncidentUnitOfWork(database) as work:
@@ -176,14 +176,14 @@ async def _seed(database: Database, incident_id: str) -> str:
     return run_id
 
 
-def _mitigating(*incident_ids: str) -> None:
+def _mitigating(*incident_ids: str, **strategy: Any) -> None:
     """Seed fresh incidents awaiting approval, for the case that calls it."""
 
     database = Database(DATABASE_URL)
 
     async def _all() -> None:
         for incident_id in incident_ids:
-            RUNS[incident_id] = await _seed(database, incident_id)
+            RUNS[incident_id] = await _seed(database, incident_id, **strategy)
 
     try:
         asyncio.run(_all())
@@ -214,13 +214,14 @@ def _send(
     bearer: str | None = "demo-human",
     run_id: str | None = None,
     query_log: list[tuple[str, Any]] | None = None,
+    settings: Settings | None = None,
 ) -> Any:
     headers = {}
     if bearer is not None:
         headers["Authorization"] = BEARERS.get(bearer, bearer)
     if key is not None:
         headers["Idempotency-Key"] = key
-    app = create_application(Settings(DATABASE_URL))
+    app = create_application(settings or Settings(DATABASE_URL))
     engine = app.state.database.engine.sync_engine
 
     def capture(_connection, _cursor, statement, parameters, _context, _executemany) -> None:

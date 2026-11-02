@@ -5,7 +5,8 @@ import { expect, test } from "@playwright/test";
  * Opt-in journey against the real stack: OTel demo + setup_sre.py and an injected checkout
  * failure. Run it only with LIVE_INBOX=1 and the demo key while the failure is injected; the
  * test tolerates empty polls until the first alert. The log keeps statuses, counts and alert ids;
- * the key never reaches disk.
+ * the key never reaches disk. With Grafana alert intake (#765) the card may arrive declared, and
+ * the store's generic rules may fire for other services too: the checkout card is the one followed.
  */
 
 const enabled = process.env.LIVE_INBOX === "1" && Boolean(process.env.DEMO_HUMAN_API_KEY);
@@ -49,6 +50,7 @@ test.describe("bandeja contra la pila real", () => {
     const card = page.locator("article").filter({ hasText: "checkout" }).filter({ hasText: "SEV1" }).first();
     await expect(card).toBeVisible({ timeout: 240_000 });
     const elapsedMs = Date.now() - started;
+    const cardId = (await card.getAttribute("data-alert-id"))!;
 
     await expect(card.getByText("checkout", { exact: true })).toBeVisible();
     await expect(card.getByText(/\d{2}:\d{2}/)).toBeVisible();
@@ -60,11 +62,11 @@ test.describe("bandeja contra la pila real", () => {
       .poll(() => polls.filter((poll) => poll.status === 200).length, { timeout: 25_000 })
       .toBeGreaterThanOrEqual(2);
     const successful = polls.filter((poll) => poll.status === 200);
-    const firstAlert = successful.findIndex((poll) => poll.alertIds.length > 0);
+    // The card's episode keeps its id on every poll after it first appears.
+    const firstAlert = successful.findIndex((poll) => poll.alertIds.includes(cardId));
     expect(firstAlert).toBeGreaterThanOrEqual(0);
     const afterAlert = successful.slice(firstAlert);
-    expect(afterAlert.every((poll) => poll.alertIds.length > 0)).toBe(true);
-    expect(new Set(afterAlert.flatMap((poll) => poll.alertIds)).size).toBe(1);
+    expect(afterAlert.every((poll) => poll.alertIds.includes(cardId))).toBe(true);
 
     const filter = page.getByRole("button", { name: /Filtrar por servicio/ });
     await expect(filter).toBeVisible();
