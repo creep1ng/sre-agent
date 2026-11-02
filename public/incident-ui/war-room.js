@@ -54,6 +54,9 @@ const DISPATCH_CAUSES = Object.freeze({
   investigator_failed: "el investigador falló",
   result_persistence_uncertain: "no se pudo confirmar que el resultado se guardó",
   stale_incident_snapshot: "el incidente cambió mientras se investigaba",
+  // No despacho: el evento `run_start_blocked` de una declaración sin el permiso run.start (#704).
+  run_start_not_authorized:
+    "la investigación no empezó: quien declaró no tiene permiso para iniciarla; un administrador debe concederlo",
 });
 
 function dispatchCause(code) {
