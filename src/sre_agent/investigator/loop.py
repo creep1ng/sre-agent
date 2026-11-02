@@ -35,6 +35,7 @@ from sre_agent.investigator.contract import (
     ToolInvocation,
     Turn,
     UseTool,
+    operation_problem,
     parse_action,
     task_id_for,
     unfounded_citations,
@@ -58,6 +59,19 @@ MAX_OUTPUT = 65_536
 T = TypeVar("T")
 BOK_RESULTS = 5
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,99}$")
+# What a person reads when the run cannot propose the mitigation itself (#722).
+NO_OPERATION = {
+    "es": "La mitigación propuesta no nombra una operación válida del deploy-executor",
+    "en": "The proposed mitigation names no valid deploy-executor operation",
+}
+UNREADABLE = {
+    "es": "No se pudo leer el catálogo del deploy-executor: la mitigación la decide una persona.",
+    "en": "The deploy-executor's catalog could not be read: a person decides the mitigation.",
+}
+
+
+class InvalidOperation(InvalidOutput):
+    """A mitigation that does not name an operation its service can run."""
 
 
 def _new_id(prefix: str) -> str:
@@ -118,14 +132,16 @@ def _locator(item: BoKFragment) -> str:
     )
 
 
-def _bok_failure(error: GatewayError, collection: str) -> tuple[Status, str]:
+BOK_UNAVAILABLE = "the knowledge base is unavailable"
+
+
+def _bok_failure(error: GatewayError, collection: str) -> str:
     """Named after the collection version, never after its content."""
-    if error.kind == "denied":
-        return "denied", f"bok collection unavailable: {collection}"
     if error.kind == "transient":
         reason = error.code or error.status or "network"
-        return "upstream_unavailable", f"bok search failed: {collection} ({reason})"
-    return "needs_human", f"bok answer rejected: {collection}"
+    else:
+        reason = "denied" if error.kind == "denied" else "rejected"
+    return f"{BOK_UNAVAILABLE}: {collection} ({reason})"
 
 
 # Findings the harness writes itself, in the run's language (#707).
@@ -311,13 +327,28 @@ async def investigate(
             if isinstance(action, ProposeMitigation) and not request.context.hypotheses:
                 # The runtime proposes a mitigation only for a recorded, cited hypothesis.
                 raise InvalidOutput("propose a cited hypothesis before a mitigation")
+            if isinstance(action, ProposeMitigation) and not request.operations_unavailable:
+                if problem := operation_problem(action, request):
+                    raise InvalidOperation(problem)
         except InvalidOutput as error:
             turns.append(turn)
+            if feedback is not None and isinstance(error, InvalidOperation):
+                # Retried with the validation error and still invalid: a person decides.
+                reason = f"{NO_OPERATION[language]}: {error}"
+                return finish(
+                    "needs_human", outcome=RequestHuman(action="request_human", reason=reason)
+                )
             if feedback is not None:
                 return finish("invalid_output", detail=str(error))
             feedback = str(error)
             continue
         feedback = None
+        if isinstance(action, ProposeMitigation) and request.operations_unavailable:
+            turns.append(turn)
+            return finish(
+                "needs_human",
+                outcome=RequestHuman(action="request_human", reason=UNREADABLE[language]),
+            )
         if isinstance(action, SearchBoK):
             ask = action
             if bok is None or ask.collection not in request.bok_collections():
@@ -326,11 +357,17 @@ async def investigate(
             try:
                 found = await _attempts(partial(_search, bok, ask), limits)
             except GatewayError as error:
-                turns.append(turn)
                 if error.request_id is not None and error.request_id not in request_ids:
                     request_ids.append(error.request_id)
-                status, detail = _bok_failure(error, ask.collection)
-                return finish(status, detail=detail)
+                # The BoK explains mechanisms, it is not evidence: without it the run goes on,
+                # and the model sees the failure as the search's result (#718).
+                invocation = ToolInvocation(
+                    tool="bok.search",
+                    arguments={"collection": ask.collection, "query": ask.query},
+                    result_summary=_bok_failure(error, ask.collection),
+                )
+                turns.append(turn.model_copy(update={"tool_invocation": invocation}))
+                continue
             collected = [
                 CollectedEvidence(
                     evidence_id=new_id("ev"),

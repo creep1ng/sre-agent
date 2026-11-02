@@ -1,0 +1,5 @@
+mcp seed converged
+seed reset: grant grant-admin-human-admin-read-audit was revoked; restored as grant-admin-human-admin-read-audit-restored-1
+seed converged
+seed reset: grant grant-setup-human-change-read was revoked; restored as grant-setup-human-change-read-restored-1
+demo permissions converged; restricted identity unchanged

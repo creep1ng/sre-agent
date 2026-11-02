@@ -33,6 +33,7 @@ from sre_agent.control.consumption_limits import (
 )
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
+from sre_agent.gateway.execution import OperationExecutor
 from sre_agent.gateway.investigation import InvestigationRunDispatcher
 from sre_agent.gateway.run_context import RunContextService, run_context_router
 from sre_agent.gateway.skills import SkillResolutionService, skill_resolution_router
@@ -134,6 +135,7 @@ def create_application(
         runtime_settings.investigator_gateway,
         http=shared_investigator_client,
         language=runtime_settings.investigator_output_language,
+        executor_url=runtime_settings.deploy_executor_url,
         tool_timeout_seconds=runtime_settings.investigator_tool_timeout_seconds,
     )
     application.include_router(
@@ -148,7 +150,19 @@ def create_application(
         )
     )
     application.include_router(
-        commands_router(RunCommandService(database.sessions, workflow, incident_runtime))
+        commands_router(
+            RunCommandService(
+                database.sessions,
+                workflow,
+                incident_runtime,
+                executor=OperationExecutor(
+                    database.sessions,
+                    incident_runtime,
+                    runtime_settings,
+                    audit=audit_store or PostgresAuditStore(database.sessions),
+                ),
+            )
+        )
     )
     application.include_router(
         triage_router(TriageHttpService(database, workflow, investigator=investigation_dispatcher))
