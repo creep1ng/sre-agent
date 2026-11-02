@@ -1,0 +1,32 @@
+# Local full flow (docs/local-flow/README.md): the real API, database,
+# web proxy, RC-2 console and Telegram gateway; Grafana, its MCP and the Bot API are stand-ins
+# (scripts/local_flow_upstreams.py, tests/fake_telegram.py), the model is scripted unless
+# LOCAL_FLOW_MODEL=real. A rule fires while $LOCAL_FLOW_DIR/<rule id> reads `firing`.
+# Use with compose.yaml and the profiles telegram and telegram-e2e.
+services:
+  api:
+    command: ["python", "/e2e/local_flow_upstreams.py"]
+    volumes:
+      - ./scripts/local_flow_upstreams.py:/e2e/local_flow_upstreams.py:ro
+      - ${LOCAL_FLOW_DIR:-/tmp/local-flow}:/flow:ro
+    environment:
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
+      ALERT_INTAKE_PRINCIPAL_ID: demo-human
+      LOCAL_FLOW_MODEL: ${LOCAL_FLOW_MODEL:-scripted}
+      STEP_SECONDS: ${STEP_SECONDS:-2}
+
+  seed:
+    volumes: ["./scripts:/app/scripts:ro"]
+    environment:
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}
+
+  telegram-gateway:
+    environment:
+      TELEGRAM_BOT_TOKEN: "7000001:fake-e2e-token"
+      TELEGRAM_API_URL: http://fake-telegram:8081
+      TELEGRAM_POLL_TIMEOUT_SECONDS: "5"
+
+  # Open http://127.0.0.1:${FAKE_TELEGRAM_PORT}/_test/transcript to read the chat.
+  fake-telegram:
+    ports:
+      - "127.0.0.1:${FAKE_TELEGRAM_PORT:-8081}:8081"
