@@ -26,7 +26,7 @@ ejemplos positivos y de error, registro en la policy).
 | Método | Respuesta |
 | --- | --- |
 | `GET /v1/incidents/{incident_id}` | `incident-detail:1.0.0`: identidad, workflow, estado, severidad/impacto, alerta canónica, approvals acotados, versión, `runs[]` (vacío = ausencia explícita) |
-| `GET /v1/incidents/{incident_id}/timeline?run_id=&after=&limit=` | `run-event:1.1.0` reutilizado (1.1.0 añade `reason_code`, #705): eventos ordenados + `next_cursor` + `has_more` |
+| `GET /v1/incidents/{incident_id}/timeline?run_id=&after=&limit=` | `run-event:1.2.0` reutilizado (1.1.0 añade `reason_code`, #705; 1.2.0 el tipo `run_start_blocked`, #704): eventos ordenados + `next_cursor` + `has_more` |
 | `GET /v1/incidents/{incident_id}/snapshot?run_id=` | `incident-snapshot:1.0.0`: snapshot + versión y `event_sequence` cubiertos |
 
 ## Timeline, paginación y versionado

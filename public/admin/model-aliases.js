@@ -65,6 +65,7 @@ const RESOURCE_TYPE_LABELS = {
   skill: "Skill",
   bok_collection: "BoK collection",
   incident_workflow: "Workflow",
+  service_operation: "Service operation",
 };
 let catalogGeneration = 0;
 
