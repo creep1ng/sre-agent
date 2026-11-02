@@ -7,7 +7,9 @@ POST /v1/alert-intake/grafana every two seconds, but only while the file named a
 FLOW_DIR reads `firing`; writing anything else afterwards sends one `resolved` delivery. The
 Grafana MCP answers every Prometheus query with 42 server errors of the alert's service.
 A rule file reading `flag:<name>` fires instead while that flag is not `off` in the flag stand-in
-of compose.local-flow-flags.yaml (#724), so approving its flag.set resolves the alert.
+of compose.local-flow-flags.yaml (#724), so approving its flag.set resolves the alert. Without
+current flag values in the catalog, the scripted model proposes the listed flags in order, and
+the runtime refuses one that is already off.
 
 LOCAL_FLOW_MODEL=real keeps the configured provider (OPENROUTER_API_KEY in .env); otherwise the
 model is scripted like scripts/interrupt_policy_upstreams.py: one measured query, a hypothesis
@@ -35,15 +37,18 @@ RULES = {
 }
 INTAKE = "http://127.0.0.1:8000/v1/alert-intake/grafana"
 STATE = re.compile(r"^State: (.*)$", re.MULTILINE)
+REFUSED = re.compile(r"rejected: (\w+) is already ")
 
 
-def decide(state: dict) -> dict:
+def decide(state: dict, rejected: set[str] = frozenset()) -> dict:
     incident, collected = state["incident"], state["collected_evidence"]
     service = incident["alert"].get("service") or "sre-checkout"
+    # The catalog lists flags without their current values (#724): the scripted model tries them
+    # in order, and skips one the runtime refused as already off.
     flags = (state.get("service_operations") or {}).get("flags") or {}
-    faulty = [name for name, offer in flags.items() if offer["variant"] not in offer["allowed"]]
-    if incident["hypotheses"] and faulty:  # the executor's catalog offers flag.set (#724)
-        flag, variant = faulty[0], flags[faulty[0]]["allowed"][0]
+    candidates = [name for name in flags if name not in rejected]
+    if incident["hypotheses"] and candidates:  # the executor's catalog offers flag.set
+        flag, variant = candidates[0], flags[candidates[0]]["allowed"][0]
         return {
             "action": "propose_mitigation",
             "description": f"Apagar el flag {flag} que rompe {service}.",
@@ -91,10 +96,11 @@ class ScriptedModel:
     async def create(self, request: ProviderRequest) -> ProviderResult:
         await asyncio.sleep(float(os.environ.get("STEP_SECONDS") or 2))
         state = json.loads(STATE.findall(request.input)[-1])
+        rejected = set(REFUSED.findall(request.input))
         return ProviderResult(
             response_id=f"resp_{secrets.token_hex(8)}",
             model=request.model,
-            text=json.dumps(decide(state)),
+            text=json.dumps(decide(state, rejected)),
             provider=request.provider,
         )
 
