@@ -6,7 +6,8 @@ Telegram gateway pointed at the fake Bot API. Each delivery has the shape Grafan
 webhook contact point sends, timed relative to now. Ways intake can fail, each checked below:
 1. a delivery without the right secret is accepted, reads the body, or leaves more than one audit
    event and no other trace;
-2. a firing alert opens no incident, or its investigation is never dispatched, starts as a person
+2. a firing alert opens no incident, or is declared by a person instead of Grafana (decision of
+   2026-11-01), or its investigation is never dispatched, starts as a person
    instead of the system that declared it, or acknowledges in the chat instead of leaving the
    message to the interrupt policy (#771); no person sends a request before that check;
 3. the same delivery again opens a second incident or a second episode;
@@ -146,6 +147,7 @@ def automatic(episode_id: str, incident: str, run: str, delivered_at: datetime) 
         incident,
     )
     started = [row[1:3] for row in decisions if row[0] == "start_investigation" and row[3] == run]
+    declared = [row[1:3] for row in decisions if row[0] == "triage_declare"]
     [origin] = sql(
         "SELECT decision_origin, responsible_system FROM alert_triage WHERE alert_id = %s",
         episode_id,
@@ -173,8 +175,9 @@ def automatic(episode_id: str, incident: str, run: str, delivered_at: datetime) 
         return None if moment is None else round((moment - delivered_at).total_seconds(), 3)
 
     check(
-        "the automatic investigation starts as grafana and the chat gets no acknowledgment",
-        started == [("system", "grafana")]
+        "grafana declares, the investigation starts as grafana and the chat gets no acknowledgment",
+        declared == [("system", "grafana")]
+        and started == [("system", "grafana")]
         and origin == ("external_automatic", "grafana")
         and intent
         and acks == [(0,)]
