@@ -1,4 +1,4 @@
-import { PlayIcon, RotateCcwIcon } from "lucide-react";
+import { ClockIcon, PlayIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { Decisions, decisionsOf } from "@/features/incident/live/decisions";
 import { HypothesisProse } from "@/features/incident/live/hypothesis";
 import { Proposal, operationCall } from "@/features/incident/live/proposal";
-import { Prose } from "@/features/incident/live/say";
+import { Prose, Stamp } from "@/features/incident/live/say";
 import { PHASES, agentStatus, phaseOf, type AgentStatus } from "@/features/incident/live/status";
 import { buildStory, claimsOf, code } from "@/features/incident/live/story";
 import { Timeline } from "@/features/incident/live/timeline";
@@ -95,12 +95,25 @@ export function LiveIncidentPage() {
   const operation = mitigation ? operationCall(mitigation) : null;
   const decisions = decisionsOf(live, story);
   const waiting = status.kind === "waiting";
+  // The report changes with the incident and its runs, never with the page's own polling.
+  const updated = Math.max(
+    Date.parse(detail.updated_at),
+    ...live.runs.map((run) => Date.parse(run.updated_at)),
+    ...live.events.map((event) => Date.parse(event.occurred_at)),
+  );
   return (
     <article className="mx-auto w-full max-w-4xl min-w-0 px-4 py-8 sm:px-8 lg:px-14 lg:py-12">
       <p className="mb-4 flex flex-wrap gap-3.5 font-mono text-[13px] font-medium text-[var(--mist)]">
         {detail.alert && <Prose text={code(detail.alert.service)} />}
         {detail.severity && <span>{detail.severity.toUpperCase()}</span>}
         <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${status.kind}`)}</span>
+        {Number.isFinite(updated) && (
+          <span className="inline-flex items-center gap-1.5">
+            <ClockIcon className="size-3.5" aria-hidden="true" />
+            <span className="sr-only">{t("updated")}</span>
+            <Stamp at={updated} />
+          </span>
+        )}
         {live.stale && <span className="text-[var(--danger)]">{t("stale")}</span>}
       </p>
       <h1 className="max-w-[18ch] font-display text-4xl leading-none font-light tracking-[-0.03em] sm:text-[54px]">
