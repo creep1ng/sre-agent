@@ -155,7 +155,12 @@ def create_application(
                 database.sessions,
                 workflow,
                 incident_runtime,
-                executor=OperationExecutor(database.sessions, incident_runtime, runtime_settings),
+                executor=OperationExecutor(
+                    database.sessions,
+                    incident_runtime,
+                    runtime_settings,
+                    audit=audit_store or PostgresAuditStore(database.sessions),
+                ),
             )
         )
     )

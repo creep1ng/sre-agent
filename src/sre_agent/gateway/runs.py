@@ -526,7 +526,7 @@ class RunCommandService:
             if command == "approve_mitigation" and self.executor is not None:
                 # Checked, then run, before anything moves: verifying means it ran (#722).
                 execution = await self.executor.run(
-                    incident_id, run_id, request.expected_incident_version
+                    incident_id, run_id, request.expected_incident_version, request_id
                 )
                 transition = replace(transition, execution=execution)
             result = await self.runtime.execute(transition)
