@@ -26,8 +26,9 @@ async function expectTheme(page: Page, theme: "light" | "dark") {
 }
 
 async function chooseTheme(page: Page, label: "Sistema" | "Claro" | "Oscuro") {
-  await page.getByRole("complementary").getByRole("button", { name: /demo-human/ }).click();
-  await page.getByRole("menuitemradio", { name: label }).click();
+  await page.getByRole("complementary").getByRole("button", { name: "Tu cuenta" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: label }).click();
+  await page.keyboard.press("Escape");
 }
 
 /** Every painted colour of the visible page, so a stray amber cannot hide in a border or an icon. */
@@ -62,8 +63,8 @@ test("a forced theme wins over the system and survives a reload", async ({ page 
   await expectTheme(page, "light");
   await page.reload();
   await expectTheme(page, "light");
-  await page.getByRole("complementary").getByRole("button", { name: /demo-human/ }).click();
-  await expect(page.getByRole("menuitemradio", { name: "Claro" })).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("complementary").getByRole("button", { name: "Tu cuenta" }).click();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Claro" })).toHaveAttribute("aria-pressed", "true");
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${SHOTS}/theme-forced-light-after-reload.png` });
   await page.keyboard.press("Escape");

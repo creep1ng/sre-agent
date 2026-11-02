@@ -10,8 +10,10 @@ mitigation with its verification_check). The agent steps use the same command
 shape as the investigator; the evidence is a labelled fixture (source: fixture),
 never an observed query. Every later step is human and goes through the HTTP
 API or the console. Requires DATABASE_URL and SEED_STAMP ([a-z0-9-]{4,32}).
-SEED_UNTIL=<transition> stops after that step (e.g. start_investigation leaves the
-run investigating); a later run without it replays those steps and finishes.
+SEED_AT=<ISO 8601 instant> dates the steps at another fixed past time (the RC-2 inbox
+journey opens incidents last night). SEED_UNTIL=<transition> stops after that step
+(e.g. start_investigation leaves the run investigating); a later run without it replays those
+steps and finishes.
 """
 
 from __future__ import annotations
@@ -35,7 +37,9 @@ from sre_agent.incident.workflow import load_incident_workflow  # noqa: E402
 from sre_agent.persistence.database import Database  # noqa: E402
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork  # noqa: E402
 
-NOW = datetime(2026, 10, 18, 12, 0, tzinfo=UTC)  # fixed and in the past: replays match
+# Fixed and in the past: replays match.
+SEED_AT = os.environ.get("SEED_AT") or "2026-10-18T12:00:00+00:00"
+NOW = datetime.fromisoformat(SEED_AT).astimezone(UTC)
 AT = NOW.isoformat()
 RUN = {"workflow_version": "1.0.0", "current_state": "detected", "status": "running"}
 OPERATOR = ActorReference(principal_id="demo-human")
