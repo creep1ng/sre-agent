@@ -19,7 +19,7 @@ never what is allowed: grants and approvals stay where they are.
 
 ## Where it runs
 
-Migration `20261030_771` adds `incident.event_decisions` (append-only, one row per
+Migration `20261030_08` adds `incident.event_decisions` (append-only, one row per
 `(event_kind, event_id)`) and the triggers that write it in the transaction that records the
 event: on `incident.alert_episodes` (insert, and `status` going from `firing` to `resolved`), on
 `incident.change_events` (insert) and on dispatch receipts, where it replaces the body of the

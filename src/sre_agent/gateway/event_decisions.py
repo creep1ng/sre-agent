@@ -2,7 +2,7 @@
 
 Every alert episode, resolution, change event and investigation result ends in one decision,
 ignore, remember, digest or interrupt, recorded by the policy triggers of migration
-20261030_771. This route lists them by the period in which they were decided, the same axis the
+20261030_08. This route lists them by the period in which they were decided, the same axis the
 daily digest counts, so an inbox section and the digest agree on «N eventos, M mensajes».
 ``alert.read`` over the incident workflow gates it: the decisions describe the alerts. Each row
 carries what an inbox renders (kind, service, time, decision, reason) and the API path of its
