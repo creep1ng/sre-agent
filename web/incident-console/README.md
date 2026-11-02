@@ -216,6 +216,14 @@ an approval, the «Verificación» step tells whether Grafana resolved the incid
 `verification_failed`. `SignalChart` (`live/verification.tsx`) draws the stored series once #723
 records one (#927); nothing is drawn before.
 
+A proposal names its catalog operation (#722) in words, `flag.set` included, with the call and a
+«del catálogo» mark; one without an operation says it is free text nobody runs. Once an approval
+runs it, «Decisiones tomadas» and the timeline tell the deploy-executor's receipt (operation,
+service, outcome, before → after; execution id and duration in its detail), and an approval the
+gateway refused or the executor failed shows its reason while the incident keeps waiting. The
+journeys' stack runs the deploy-executor with `scripts/incident_console_catalog.yaml`, which enrols
+a local `sre-checkout` (1.5.0 running, 1.4.0 in the image store).
+
 Journeys against the composed stack (scripted model and Grafana MCP, everything else real):
 
 ```sh
