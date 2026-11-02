@@ -193,8 +193,12 @@ class ActionCatalogService(IncidentQueryService):
                     )
                     reference = actor_reference(document)
                     if reference is not None:
-                        approver = {"principal_id": reference["principal_id"],
-                                    "display_name": reference.get("display_name")}  # fmt: skip
+                        # The console sends no display name: the principal's own is the fallback.
+                        name = reference.get("display_name") or await session.scalar(
+                            text("SELECT display_name FROM principals WHERE principal_id=:id"),
+                            {"id": reference["principal_id"]},
+                        )
+                        approver = {"principal_id": reference["principal_id"], "display_name": name}
                 executions.setdefault(key, []).append(
                     {
                         "occurred_at": utc_iso(event["occurred_at"]),
