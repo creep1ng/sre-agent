@@ -4,9 +4,9 @@ MCP (scripts/incident_console_upstreams.py), whose proposal names the rollback t
 offers for the incident's service, so approving it runs on the real deploy-executor.
 """
 
+import incident_console_upstreams as upstreams
 import uvicorn
 
-import incident_console_upstreams as upstreams
 from sre_agent.application import create_application
 
 scripted = upstreams.decide
