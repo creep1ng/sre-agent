@@ -151,6 +151,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_API_URL: ${TELEGRAM_API_URL:-https://api.telegram.org}
       TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+      # The daily digest (#771): hour 0..23 or `off`, in this IANA time zone.
+      TELEGRAM_DIGEST_HOUR: ${TELEGRAM_DIGEST_HOUR:-8}
+      TELEGRAM_DIGEST_TIMEZONE: ${TELEGRAM_DIGEST_TIMEZONE:-UTC}
       # A tap that approves runs the mitigation's operation as the API does (#722): the executor,
       # its signing key, the agent whose grant it checks and the audit it writes.
       DEPLOY_EXECUTOR_URL: ${DEPLOY_EXECUTOR_URL:-}
