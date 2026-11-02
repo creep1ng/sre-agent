@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from sre_agent.gateway.execution import ExecutionRefused, OperationExecutor
 from sre_agent.gateway.incidents import (
     RETRY_AFTER_SECONDS,
     WORKFLOW_RESOURCE_TYPE,
@@ -360,9 +361,11 @@ class RunCommandService:
         runtime: IncidentRuntime,
         authorizer: Callable[[Any, Principal, str], Awaitable[AuthorizationEvaluation]]
         | None = None,
+        executor: OperationExecutor | None = None,
     ) -> None:
         self.sessions, self.workflow, self.runtime = sessions, workflow, runtime
         self._authorizer = authorizer or self._default_authorizer
+        self.executor = executor
 
     async def _default_authorizer(
         self, session: Any, principal: Principal, action: str
@@ -518,7 +521,12 @@ class RunCommandService:
             turn_id=body.get("turn_id"),
         )
         try:
+            if command == "approve_mitigation" and self.executor is not None:
+                # What the approved operation needs is checked before anything moves (#722).
+                await self.executor.admit(incident_id, run_id, request.expected_incident_version)
             result = await self.runtime.execute(resolve(request))
+        except ExecutionRefused as refused:
+            return error_envelope(request_id, refused.status, (refused.code, refused.message))
         except IncidentNotFoundError:
             return error_envelope(request_id, 404)
         except RunNotFoundError:
