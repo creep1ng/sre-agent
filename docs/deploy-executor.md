@@ -177,8 +177,15 @@ api ──signed──▶ deploy-executor ──Bearer flag token──▶ otel-
 - **Catalog.** Each service lists the flags it may set and the only variants allowed:
   `checkout` → `paymentUnreachable`, `paymentFailure`; `payment` → `paymentFailure`; every
   variant is `off`, the manifest's baseline. `GET /v1/services/{service}` shows each flag's
-  current variant next to what it may be set to, so the agent proposes the flag that is on, and
-  approval refuses (409 `precondition_failed`) a flag that is already off.
+  current variant next to what it may be set to. That serves the gateway's checks; the agent
+  never sees the current variant (below).
+- **The agent reaches the flag from evidence** (maintainer decision of 2026-11-02). Its prompt
+  lists only the operation, the flags and their allowed values. A proposal is still checked
+  against the real state twice. At proposal time, the investigator refuses a flag that is
+  already off ("paymentUnreachable is already off on the demo, so setting it changes nothing")
+  and gives the model one retry, after which it asks a person. At approval, the gateway re-reads
+  the catalog (#919) and answers 409 `precondition_failed` with the same reason when the flag
+  went off in the meantime.
 - **Instance side.** `prepare-mcp` installs `mcp_guest.py serve-flags` as a systemd unit on the
   instance's loopback, port 17802, with its own 48-hex token (`flag-write.env`, mode 0600). It
   answers `GET /flags` (the fault flags' current variants) and `PUT /flags/<name>`
@@ -203,6 +210,9 @@ Failure modes, written before the code:
 | Listener or tunnel down | 503 `flags_unavailable`, retryable; readiness 503 `dependency: flags` | readiness gates `setup_sre.py` |
 | The flag file lacks the variant | listener 409 → 502 `execution_failed` | code path |
 | The flag is already at the variant | 200 `already_at_target`; no write | code path |
+| The agent proposes a flag that is already off | refused at proposal with the reason; one retry, then `request_human` | E2E `flow` with `paymentFailure` on `checkout` |
+| The flag goes off between proposal and approval | 409 `precondition_failed`, the reason, incident stays `mitigating`, nothing runs | E2E `flow` with `STALE=1` |
+| The prompt shows a flag's current variant | never: the agent's state has only `allowed` | E2E `flow` reads every turn's input |
 | A write restarts flagd, and every client's flag stream breaks | never: flagd reloads the file in place, and clients get `configuration_change` | flagd 0.16.0 probe and E2E stream check |
 | The api resolving `otel-flags` | fails: only the executor's network has it | E2E `checks`, local and EC2 |
 
@@ -222,6 +232,11 @@ Failure modes, written before the code:
   restarted flagd, and the burst of `payment` `EventStream` / `tcp.connect` errors after a
   `fail` opened a spurious `payment` incident. They now only replace the file. An approved
   `flag.set` therefore takes effect up to ~1 s after the receipt.
+- **Demo honesty: the agent does not read the answer from the catalog.** It names the flag from
+  traces, metrics and logs; the current values are only checked server-side. One bit still
+  leaks by design: a refused proposal tells the model that the flag it named is already off.
+  With two flags on `checkout`, the retry can then guess the other. Each step is recorded in the
+  run's turns, so a reviewer can see when a proposal needed a refusal.
 - **The catalog trusts the alert's service name.** `checkout` and `payment` are the store's names
   only in this catalog; locally they stay unenrolled (`catalog.v1.yaml`), as decided in #751.
 - **The contract file stays 1.0.0.** `schemas/executor/1.0.0` does not describe `flag.set` yet:

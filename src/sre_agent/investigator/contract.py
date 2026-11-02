@@ -150,7 +150,8 @@ class OperationOffer(_Projection):
 
 
 class FlagOffer(_Projection):
-    """A flag flag.set may write (#724): its current variant and the variants it may be set to."""
+    """A flag flag.set may write (#724): its current variant and the variants it may be set to.
+    The prompt never shows the agent `variant`; only these checks read it."""
 
     variant: Annotated[str, Field(max_length=32)] | None = None
     allowed: list[Annotated[str, Field(max_length=32)]] = Field(default_factory=list)
@@ -192,7 +193,10 @@ class ServiceOperations(_Strict):
             if variant not in flag_offer.allowed:
                 return f"{flag} may only be set to: {', '.join(flag_offer.allowed)}"
             if variant == flag_offer.variant:
-                return f"{flag} is already {flag_offer.variant}: set a flag that is not"
+                return (
+                    f"{flag} is already {flag_offer.variant} on the demo, so setting it changes "
+                    "nothing; propose the flag the evidence implicates, or request_human"
+                )
         return None
 
 

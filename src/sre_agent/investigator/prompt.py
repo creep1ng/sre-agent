@@ -64,9 +64,9 @@ those operations, with only the parameters it lists, in an operation field:
 Choose the operation that removes the cause in the hypothesis you cite. A rollback returns to
 an earlier release: its to_tag is an available tag other than the running one, the release the
 evidence shows healthy. A restart keeps the running release. A flag.set turns a fault flag of
-the demo back to normal: its flag is one listed in flags whose variant is not yet an allowed
-one, and its variant is one of that flag's allowed values. If no listed operation can remove
-the cause, use request_human instead of a mitigation."""
+the demo back to normal: flags lists the flags it may set and their allowed values, not their
+current values. Name the flag your measured evidence implicates, with one of its allowed values.
+If no listed operation can remove the cause, use request_human instead of a mitigation."""
 UNAVAILABLE = """\
 The deploy-executor's catalog for this service could not be read: do not propose a mitigation.
 Gather evidence and a hypothesis, then use request_human."""
@@ -141,7 +141,11 @@ def assemble(
     bok = [BOK] if collections else []
     operations = []
     if request.service_operations is not None:
-        state["service_operations"] = request.service_operations.model_dump(mode="json")
+        # The agent sees what it may set, never a flag's current value: it must reach the fault
+        # from measured evidence. The runtime still checks the real value (#724).
+        state["service_operations"] = request.service_operations.model_dump(
+            mode="json", exclude={"flags": {"__all__": {"variant"}}}
+        )
         operations = [OPERATIONS]
     elif request.operations_unavailable:
         operations = [UNAVAILABLE]
