@@ -4,126 +4,129 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * midnight.agent brand tokens (palette.css + styles/tokens.css of the console),
- * exposed with the shadcn/ui variable names so every primitive inherits the brand.
+ * Nocturno tokens (docs/design/brand-round-1/06-consola-dia-noche.html). Every colour of the
+ * console is one of these. Night is the base; the light theme only reassigns them. Amber lives in
+ * --star (fills) and --star-ink (text): use them only where a human decision is pending.
  */
+:root {
+  --night: #0a0e1d;
+  --night-2: #11162c;
+  --night-3: #1e2749;
+  --panel: #141a33;
+  --card: #171d3a;
+  --code: #1c2343;
+  --moon: #e4d9ff;
+  --text-2: #cfc6ee;
+  --mist: #a797d7;
+  --dim: #6f7396;
+  --rule: rgba(228, 217, 255, 0.12);
+  --mist-line: rgba(167, 151, 215, 0.45);
+  --mist-wash: rgba(167, 151, 215, 0.1);
+  --star: #f2b45a;
+  --star-ink: #f2b45a;
+  --on-star: #0a0e1d;
+  --ok: #7fc8a9;
+  --danger: #ff9eb2;
+  --mark: #e4d9ff;
+  --avatar: #2a3466;
+  --on-avatar: #e4d9ff;
+  --shadow: rgba(0, 0, 0, 0.8);
+  /* Ordinal ramp for phases in order, darkest first on night. */
+  --step-1: #46507e;
+  --step-2: #817bb9;
+  --step-3: #c8b8f0;
+}
+
+:root:not(.dark) {
+  --night: #f7f5fb;
+  --night-2: #efecf6;
+  --night-3: #dcd6ec;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --code: #ebe7f4;
+  --moon: #141a33;
+  --text-2: #3a3f5e;
+  --mist: #6650b0;
+  --dim: #686c88;
+  --rule: rgba(20, 26, 51, 0.12);
+  --mist-line: rgba(102, 80, 176, 0.35);
+  --mist-wash: rgba(102, 80, 176, 0.08);
+  --star: #f2b45a;
+  --star-ink: #a65a00;
+  --on-star: #141a33;
+  --ok: #237553;
+  --danger: #a82f4a;
+  --mark: #141a33;
+  --avatar: #141a33;
+  --on-avatar: #e4d9ff;
+  --shadow: rgba(40, 30, 80, 0.25);
+  --step-1: #a797d7;
+  --step-2: #6650b0;
+  --step-3: #141a33;
+}
+
+/* The shadcn/ui names every primitive reads, derived once from the tokens above. */
 :root {
   --radius: 0.75rem;
 
-  --background: #fafaff; /* ghost white */
-  --foreground: #1e2749; /* space indigo */
-  --card: #ffffff;
-  --card-foreground: #1e2749;
-  --popover: #ffffff;
-  --popover-foreground: #1e2749;
-  --primary: #273469; /* twilight indigo */
-  --primary-foreground: #fafaff;
-  --secondary: #f6f3ff; /* indigo 50 */
-  --secondary-foreground: #1e2749;
-  --muted: #efeff4; /* slate 100 */
-  --muted-foreground: #565a68; /* slate 600 */
-  --accent: #f6f3ff;
-  --accent-foreground: #1e2749;
-  --destructive: #a82f4a; /* red 700 */
-  --border: #dedee7; /* slate 200 */
-  --input: #c6c6d2; /* slate 300 */
-  --ring: #6655c7; /* brand focus */
-  --brand-soft: #e4d9ff; /* periwinkle */
-  --brand-line: #a797d7; /* indigo 300 */
-  /* The agent's identity color: the brand focus violet, so "who did what" reads at a glance. */
-  --agent: #6655c7;
-  --agent-solid: #6655c7;
-  --agent-solid-foreground: #ffffff;
-  --agent-soft: #f1f0fa;
+  --background: var(--night);
+  --foreground: var(--moon);
+  --card-foreground: var(--moon);
+  --popover: var(--card);
+  --popover-foreground: var(--moon);
+  /* Entry points and primary actions use moonlight, never amber. */
+  --primary: var(--moon);
+  --primary-foreground: var(--night);
+  --secondary: var(--night-2);
+  --secondary-foreground: var(--moon);
+  --muted: var(--night-2);
+  --muted-foreground: var(--dim);
+  --accent: var(--mist-wash);
+  --accent-foreground: var(--moon);
+  --destructive: var(--danger);
+  --border: var(--rule);
+  --input: var(--mist-line);
+  --ring: var(--mist);
+  --brand-soft: var(--mist-wash);
+  --brand-line: var(--mist-line);
+  --agent: var(--mist);
+  --agent-solid: var(--avatar);
+  --agent-solid-foreground: var(--on-avatar);
+  --agent-soft: var(--mist-wash);
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #1e2749;
-  --sidebar-accent: #f6f3ff;
-  --sidebar-border: #dedee7;
+  --sidebar: var(--night-2);
+  --sidebar-foreground: var(--moon);
+  --sidebar-accent: var(--mist-wash);
+  --sidebar-border: var(--rule);
 
-  --info: #24588e;
-  --info-soft: #edf6ff;
-  --info-line: #d9ebff;
-  --success: #176247;
-  --success-soft: #ecf8f2;
-  --success-line: #d4efe3;
-  --warning: #805000;
-  --warning-soft: #fff7e8;
-  --warning-line: #ffe8bd;
-  --critical: #a82f4a;
-  --critical-soft: #fff0f3;
-  --critical-line: #ffdce4;
+  --info: var(--mist);
+  --info-soft: var(--mist-wash);
+  --info-line: var(--mist-line);
+  --success: var(--ok);
+  --success-soft: color-mix(in oklab, var(--ok) 12%, transparent);
+  --success-line: color-mix(in oklab, var(--ok) 40%, transparent);
+  /* Not amber: a warning is not a decision. Decisions use --star explicitly. */
+  --warning: var(--text-2);
+  --warning-soft: var(--night-3);
+  --warning-line: var(--mist-line);
+  --critical: var(--danger);
+  --critical-soft: color-mix(in oklab, var(--danger) 12%, transparent);
+  --critical-line: color-mix(in oklab, var(--danger) 40%, transparent);
 
-  --chart-line: #273469;
-  --chart-fill: #616398;
-  --chart-grid: #dedee7;
-  --chart-threshold: #c94c65;
-  /* Ordinal ramp for phases in order (validated: monotone, ΔL >= 0.06, light end 2.6:1). */
-  --chart-step-1: #a797d7;
-  --chart-step-2: #616398;
-  --chart-step-3: #273469;
-  /* Context marks behind the one that matters (4.5:1 on the card). */
-  --chart-context: #747785;
-}
-
-.dark {
-  --background: #0a0e1d; /* indigo 950 */
-  --foreground: #fafaff;
-  --card: #171d36;
-  --card-foreground: #fafaff;
-  --popover: #171d36;
-  --popover-foreground: #fafaff;
-  --primary: #e4d9ff; /* periwinkle */
-  --primary-foreground: #1e2749;
-  --secondary: #283354;
-  --secondary-foreground: #fafaff;
-  --muted: #11162c;
-  --muted-foreground: #c6c6d2;
-  --accent: #202a49;
-  --accent-foreground: #fafaff;
-  --destructive: #ff9eb2;
-  --border: #2b3455;
-  --input: #3b466a;
-  --ring: #b4a2f2;
-  --brand-soft: #283354;
-  --brand-line: #817bb9;
-  --agent: #b4a2f2;
-  --agent-solid: #6655c7;
-  --agent-solid-foreground: #ffffff;
-  --agent-soft: #282956;
-
-  --sidebar: #11162c;
-  --sidebar-foreground: #fafaff;
-  --sidebar-accent: #202a49;
-  --sidebar-border: #2b3455;
-
-  --info: #91c9ff;
-  --info-soft: #122b46;
-  --info-line: #23547f;
-  --success: #88dcb9;
-  --success-soft: #102d25;
-  --success-line: #236149;
-  --warning: #ffd083;
-  --warning-soft: #32250f;
-  --warning-line: #71511b;
-  --critical: #ff9eb2;
-  --critical-soft: #361621;
-  --critical-line: #782c42;
-
-  --chart-line: #e4d9ff;
-  --chart-fill: #a797d7;
-  --chart-grid: #2b3455;
-  --chart-threshold: #ff9eb2;
-  --chart-step-1: #46507e;
-  --chart-step-2: #817bb9;
-  --chart-step-3: #c8b8f0;
-  --chart-context: #999ba9;
+  --chart-line: var(--moon);
+  --chart-fill: var(--mist);
+  --chart-grid: var(--rule);
+  --chart-threshold: var(--danger);
+  --chart-step-1: var(--step-1);
+  --chart-step-2: var(--step-2);
+  --chart-step-3: var(--step-3);
+  --chart-context: var(--dim);
 }
 
 @theme inline {
-  --font-sans: "Spline Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Offside", "Trebuchet MS", sans-serif;
-  --font-mono: "Monaspace Neon", "SFMono-Regular", Consolas, monospace;
+  --font-sans: "Newsreader Variable", Georgia, serif;
+  --font-display: "Fraunces Variable", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -159,6 +162,11 @@
   --color-chart-step-2: var(--chart-step-2);
   --color-chart-step-3: var(--chart-step-3);
   --color-chart-context: var(--chart-context);
+  --color-star: var(--star);
+  --color-star-ink: var(--star-ink);
+  --color-on-star: var(--on-star);
+  --color-code: var(--code);
+  --color-panel: var(--panel);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -210,11 +218,17 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
-    /* Spline Sans sets tight spaces at semibold; a touch more keeps labels readable. */
-    word-spacing: 0.04em;
+  }
+  /* Code references look like code: mono on a slightly different background. */
+  code {
+    font: 500 0.8em/1 var(--font-mono);
+    padding: 0.2em 0.45em;
+    border-radius: 6px;
+    background: var(--code);
+    border: 1px solid var(--rule);
   }
   ::selection {
-    background: var(--brand-soft);
+    background: var(--mist-line);
     color: var(--foreground);
   }
 }

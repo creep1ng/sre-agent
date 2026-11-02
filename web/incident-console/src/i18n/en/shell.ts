@@ -1,0 +1,30 @@
+import type { Messages } from "@/i18n";
+import type shell from "../es/shell";
+
+export default {
+  "nav.main": "Main",
+  "nav.inbox": "Inbox",
+  "nav.incidents": "Incidents",
+  "nav.admin": "Administration",
+  "nav.governance": "AI governance",
+  "nav.sections": "Console sections",
+  "nav.title": "Navigation",
+  "nav.open": "Open menu",
+  "search.open": "Search or go to…",
+  "search.label": "Search",
+  "agent.name": "Incident agent",
+  "agent.idle": "Available",
+  "agent.stopped": "Stopped · {id}",
+  "account.apiSession": "API session",
+  "account.connected": "Connected",
+  "account.disconnected": "Not connected",
+  "account.active": "Active session",
+  "account.theme": "Theme",
+  "account.language": "Language",
+  "theme.system": "System",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
+  "account.connect": "Connect API",
+  "account.disconnect": "Disconnect",
+  "account.disconnected.toast": "Credential disconnected",
+} satisfies Messages<typeof shell>;

@@ -67,7 +67,7 @@ Chosen by the maintainer on 2026-10-19 among live alternatives:
 | Story (incident) | An integrated column beside the incident, one hairline apart, no card. |
 | Findings and decisions | Inside the story: findings, the hypothesis and proposals unfold in place. |
 | Closure summary | Hero time to resolve plus a phase bar (ordinal ramp) with its table twin; no stat cards or lists. |
-| Agent identity | Midnight violet (`#6655c7`, `#b4a2f2` in dark; 5.7:1 and 7.4:1 on the card): "Agente" in that color, "Tú" in ink, "Sistema" in gray, and the agent avatar in the same violet everywhere. |
+| Agent identity | Nocturno mist (`--mist`): "Agente" in that color, "Tú" in ink, "Sistema" in gray. |
 
 ## The journey in 7 clicks
 
@@ -155,6 +155,40 @@ Backend gaps:
   dispatch failure reason (#692).
 - "Ya la apliqué" is new: today the workflow goes from approval straight to `verifying`. It can
   be a timeline note, or an agent stability watch on the alert's signal.
+
+## Theme (RC-2, #870)
+
+- **Tokens.** Every colour is a Nocturno token in `src/index.css` (`--night`, `--moon`, `--mist`,
+  `--rule`, …), copied from `docs/design/brand-round-1/06-consola-dia-noche.html`. Night is the
+  base; without `html.dark` the light theme only reassigns tokens. The shadcn/ui names (`--background`, `--primary`, …)
+  are derived from them once, so primitives follow both themes.
+- **Amber** lives in `--star` (fills, Tailwind `bg-star`, with `text-on-star`) and `--star-ink`
+  (text, `text-star-ink`). Use them only where a human decision is pending; `--warning` is not
+  amber.
+- **Type.** Fraunces (`font-display`), Newsreader (`font-sans`, the body) and JetBrains Mono
+  (`font-mono`), self-hosted through `@fontsource-variable`. `<code>` is mono on `--code`.
+- **Hook.** `src/hooks/use-theme.ts`: `useTheme()` holds the preference (`system`, `light`,
+  `dark`; stored in `localStorage` as `midnight-theme`) and `setTheme`; `useResolvedTheme()`
+  gives the theme on screen and re-renders on OS changes; `useApplyTheme()` is mounted once in
+  `App`.
+
+## Languages (RC-2, #870)
+
+Spanish and English. `src/i18n/index.ts` holds `useLanguage()` (`language`, `setLanguage`; stored
+as `midnight-language`, else English when `navigator.language` starts with `en`, else Spanish),
+`useT(namespace)` and `LOCALES` for `Intl` formatters. The account menu switches the language.
+
+To translate a feature, add one namespace instead of editing shared files:
+
+1. `src/i18n/es/<namespace>.ts` exports the Spanish messages as `default` and registers them with
+   `declare module "@/i18n" { interface Namespaces { <namespace>: typeof messages } }`
+   (see `es/shell.ts`).
+2. `src/i18n/en/<namespace>.ts` exports the English ones with
+   `satisfies Messages<typeof messages>`, so a missing or extra key fails the build.
+3. In components: `const t = useT("<namespace>")`, then `t("key")` or `t("key", { id })` for
+   `{id}` placeholders. Unknown keys fail the build; plural forms are separate keys.
+
+Both files are picked up by `import.meta.glob`; nothing else needs registering.
 
 ## Stack
 
