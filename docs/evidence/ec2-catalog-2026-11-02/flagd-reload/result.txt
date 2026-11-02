@@ -1,0 +1,28 @@
+--- writes
+replace  paymentUnreachable=on: flagd serves it after 0.24 s
+replace  paymentUnreachable=off: flagd serves it after 1.03 s
+replace  paymentFailure=100%: flagd serves it after 1.02 s
+in place paymentFailure=off: flagd serves it after 1.02 s
+in place paymentUnreachable=on: flagd serves it after 0.92 s
+replace  paymentUnreachable=off: flagd serves it after 1.02 s
+flagd: started 2026-11-02T20:04:08.063630644Z, restarts 0
+--- an atomic replace while a stream is open
+   0.0s status 200
+   0.0s provider_ready
+   4.2s configuration_change
+  10.0s window over; the stream is still open
+--- docker restart flagd while a stream is open
+   0.0s status 200
+   0.0s provider_ready
+   7.8s provider_shutdown
+   7.8s stream broken: IncompleteRead
+--- flagd log
+2026-11-02T20:04:08.319Z	info	file/filepath_sync.go:60	Starting filepath sync notifier	{"component": "sync", "sync": "fi
+2026-11-02T20:04:11.319Z	info	file/filepath_sync.go:110	filepath event: ./etc/flagd/demo.flagd.json WRITE	{"component": 
+2026-11-02T20:04:12.319Z	info	file/filepath_sync.go:110	filepath event: ./etc/flagd/demo.flagd.json WRITE	{"component": 
+2026-11-02T20:04:13.319Z	info	file/filepath_sync.go:110	filepath event: ./etc/flagd/demo.flagd.json WRITE	{"component": 
+2026-11-02T20:04:14.320Z	info	file/filepath_sync.go:110	filepath event: ./etc/flagd/demo.flagd.json WRITE	{"component": 
+2026-11-02T20:04:15.319Z	info	file/filepath_sync.go:110	filepath event: ./etc/flagd/demo.flagd.json WRITE	{"component": 
+2026-11-02T20:04:16.320Z	info	file/filepath_sync.go:110	filepath event: ./etc/flagd/demo.flagd.json WRITE	{"component": 
+2026-11-02T20:04:22.319Z	info	file/filepath_sync.go:110	filepath event: ./etc/flagd/demo.flagd.json WRITE	{"component": 
+2026-11-02T20:04:38.302Z	info	file/filepath_sync.go:60	Starting filepath sync notifier	{"component": "sync", "sync": "fi
