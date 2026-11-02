@@ -6,6 +6,8 @@ Like scripts/live_triage_upstreams.py, the stand-in delivers each rule below to 
 POST /v1/alert-intake/grafana every two seconds, but only while the file named after the rule in
 FLOW_DIR reads `firing`; writing anything else afterwards sends one `resolved` delivery. The
 Grafana MCP answers every Prometheus query with 42 server errors of the alert's service.
+A rule file reading `flag:<name>` fires instead while that flag is not `off` in the flag stand-in
+of compose.local-flow-flags.yaml (#724), so approving its flag.set resolves the alert.
 
 LOCAL_FLOW_MODEL=real keeps the configured provider (OPENROUTER_API_KEY in .env); otherwise the
 model is scripted like scripts/interrupt_policy_upstreams.py: one measured query, a hypothesis
@@ -38,6 +40,23 @@ STATE = re.compile(r"^State: (.*)$", re.MULTILINE)
 def decide(state: dict) -> dict:
     incident, collected = state["incident"], state["collected_evidence"]
     service = incident["alert"].get("service") or "sre-checkout"
+    flags = (state.get("service_operations") or {}).get("flags") or {}
+    faulty = [name for name, offer in flags.items() if offer["variant"] not in offer["allowed"]]
+    if incident["hypotheses"] and faulty:  # the executor's catalog offers flag.set (#724)
+        flag, variant = faulty[0], flags[faulty[0]]["allowed"][0]
+        return {
+            "action": "propose_mitigation",
+            "description": f"Apagar el flag {flag} que rompe {service}.",
+            "steps": [f"Poner {flag} en {variant} con flag.set."],
+            "risk": "low",
+            "verification_check": f"Los errores de {service} vuelven a cero.",
+            "based_on_hypothesis": incident["hypotheses"][-1]["hypothesis_id"],
+            "operation": {
+                "service": service,
+                "operation": "flag.set",
+                "parameters": {"flag": flag, "variant": variant},
+            },
+        }
     if incident["hypotheses"]:
         return {
             "action": "propose_mitigation",
@@ -94,7 +113,14 @@ class GrafanaMCP:
 
 def _firing(rule: str) -> bool:
     path = FLOW_DIR / rule
-    return path.is_file() and path.read_text().strip() == "firing"
+    content = path.read_text().strip() if path.is_file() else ""
+    if content.startswith("flag:"):
+        try:
+            flags = json.loads((FLOW_DIR / "otel-state/flagd/demo.flagd.json").read_text())
+        except (OSError, ValueError):
+            return False
+        return flags["flags"][content[5:]]["defaultVariant"] != "off"
+    return content == "firing"
 
 
 def _now() -> str:

@@ -1,0 +1,51 @@
+# The local full flow (compose.local-flow.yaml) with the EC2 path of #724: the deploy-executor with
+# the EC2 catalog (agent/executor/catalog.otel-aws.v1.yaml) and a local stand-in of the instance's
+# flag listener, the instance's own `mcp_guest.py serve-flags` on state that
+# scripts/local_flow_flags.py seeds in $LOCAL_FLOW_DIR/otel-state. On EC2, connect-mcp links the
+# real listener as `otel-flags` instead. Use after compose.yaml and compose.local-flow.yaml.
+services:
+  api:
+    environment:
+      DEPLOY_EXECUTOR_URL: http://deploy-executor:8000
+
+  deploy-executor:
+    environment:
+      DEPLOY_EXECUTOR_CATALOG: /app/agent/executor/catalog.otel-aws.v1.yaml
+      DEPLOY_EXECUTOR_FLAGS_URL: http://otel-flags:17802
+    env_file: ["${LOCAL_FLOW_DIR:-/tmp/local-flow}/otel-state/flag-write.env"]
+    networks: [executor-call, flags-standin]
+
+  # The instance's listener. Inject a fault as `otel_ec2.py fail` does on the instance:
+  #   docker compose ... exec otel-flags python /guest/mcp_guest.py fail --flag paymentUnreachable
+  otel-flags:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["python", "/guest/mcp_guest.py", "serve-flags"]
+    environment:
+      OTEL_FLAGS_LISTEN: 0.0.0.0
+    volumes:
+      - ./scripts/otel_demo/mcp_guest.py:/guest/mcp_guest.py:ro
+      - ${LOCAL_FLOW_DIR:-/tmp/local-flow}/otel-state:/var/lib/otel-demo-sre
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    networks: [flags-standin]
+
+  # The instance's flagd: the image demo/digests.lock pins and upstream's command, on the same
+  # directory the listener writes. On `runtime` so flag_set_e2e.py can hold an EventStream,
+  # as the store's services do, and prove that a write reloads flagd without breaking it.
+  flagd:
+    image: ghcr.io/open-feature/flagd:v0.16.0@sha256:32234e63c1d0634883aabd31cbd46802934aaaef0153dfd653b5d1017940bb4e
+    command: ["start", "--uri", "file:./etc/flagd/demo.flagd.json"]
+    volumes:
+      - ${LOCAL_FLOW_DIR:-/tmp/local-flow}/otel-state/flagd:/etc/flagd:ro
+    restart: unless-stopped
+    networks: [runtime]
+
+networks:
+  # The executor and the stand-in only, as `<network>-flags` is on EC2.
+  flags-standin:
+    internal: true
