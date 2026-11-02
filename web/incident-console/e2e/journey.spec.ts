@@ -145,8 +145,8 @@ test("descartar pide un motivo y se puede deshacer", async ({ page }) => {
 
 test("si el agente no puede investigar, dice por qué y se reintenta en el mismo incidente", async ({ page }) => {
   await freshStart(page);
-  await page.getByRole("button", { name: /demo-human/ }).click();
-  await page.getByRole("menuitem", { name: /Escenario de demostración/ }).click();
+  await page.getByRole("button", { name: "Tu cuenta" }).click();
+  await page.getByRole("button", { name: "Escenario de demostración" }).click();
   await page.getByRole("menuitemcheckbox", { name: "El agente falla al investigar" }).click();
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");

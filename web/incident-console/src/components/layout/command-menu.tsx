@@ -1,4 +1,4 @@
-import { InboxIcon, LayersIcon, MonitorIcon, MoonIcon, SirenIcon, SunIcon } from "lucide-react";
+import { InboxIcon, SirenIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import {
   CommandDialog,
@@ -7,9 +7,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
 } from "@/components/ui/command";
-import { useTheme } from "@/hooks/use-theme";
+import { useT } from "@/i18n";
 import { appMode } from "@/lib/mode";
 import { incidentStatus } from "@/lib/status";
 import { useStore } from "@/lib/store";
@@ -17,11 +16,13 @@ import { SEVERITY } from "@/lib/vocabulary";
 
 export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
-  const incidents = useStore((s) => s.incidents);
+  const t = useT("shell");
+  const storeIncidents = useStore((s) => s.incidents);
   const alerts = useStore((s) => s.alerts);
-  const setTheme = useTheme((s) => s.setTheme);
-  // The seeded alert commands belong to the simulator, not to the live inbox.
-  const newAlerts = appMode === "mock" ? alerts.filter((alert) => alert.status === "new") : [];
+  // Seeded alerts and incidents belong to the simulator, not to the live console.
+  const mock = appMode === "mock";
+  const newAlerts = mock ? alerts.filter((alert) => alert.status === "new") : [];
+  const incidents = mock ? storeIncidents : [];
 
   const go = (to: string) => {
     onOpenChange(false);
@@ -29,17 +30,19 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
   };
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title="Buscar" description="Busca incidentes, alertas o acciones">
-      <CommandInput placeholder="Busca un incidente, una alerta o una acción…" />
+    <CommandDialog open={open} onOpenChange={onOpenChange} title={t("search.label")} description={t("command.description")}>
+      <CommandInput placeholder={t("command.placeholder")} />
       <CommandList>
-        <CommandEmpty>No encontramos nada con ese texto.</CommandEmpty>
-        <CommandGroup heading="Ir a">
+        <CommandEmpty>{t("command.empty")}</CommandEmpty>
+        <CommandGroup heading={t("command.goTo")}>
           <CommandItem onSelect={() => go("/")}>
-            <InboxIcon /> Bandeja
+            <InboxIcon /> {t("nav.inbox")}
           </CommandItem>
-          <CommandItem onSelect={() => go("/incidentes")}>
-            <LayersIcon /> Incidentes
-          </CommandItem>
+          {mock && (
+            <CommandItem onSelect={() => go("/incidentes")}>
+              <SirenIcon /> {t("nav.incidents")}
+            </CommandItem>
+          )}
         </CommandGroup>
         {newAlerts.length > 0 && (
           <CommandGroup heading="Alertas nuevas">
@@ -52,31 +55,21 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
             ))}
           </CommandGroup>
         )}
-        <CommandGroup heading="Incidentes">
-          {incidents.map((incident) => (
-            <CommandItem
-              key={incident.id}
-              value={`${incident.id} ${incident.title} ${incident.service}`}
-              onSelect={() => go(`/incidentes/${incident.id}`)}
-            >
-              <span className="font-mono text-xs text-muted-foreground">{incident.id}</span>
-              <span className="flex-1 truncate">{incident.title}</span>
-              <span className="text-xs text-muted-foreground">{incidentStatus(incident).label}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading="Apariencia">
-          <CommandItem onSelect={() => (setTheme("light"), onOpenChange(false))}>
-            <SunIcon /> Tema claro
-          </CommandItem>
-          <CommandItem onSelect={() => (setTheme("dark"), onOpenChange(false))}>
-            <MoonIcon /> Tema oscuro
-          </CommandItem>
-          <CommandItem onSelect={() => (setTheme("system"), onOpenChange(false))}>
-            <MonitorIcon /> Tema del sistema
-          </CommandItem>
-        </CommandGroup>
+        {incidents.length > 0 && (
+          <CommandGroup heading={t("nav.incidents")}>
+            {incidents.map((incident) => (
+              <CommandItem
+                key={incident.id}
+                value={`${incident.id} ${incident.title} ${incident.service}`}
+                onSelect={() => go(`/incidentes/${incident.id}`)}
+              >
+                <span className="font-mono text-xs text-muted-foreground">{incident.id}</span>
+                <span className="flex-1 truncate">{incident.title}</span>
+                <span className="text-xs text-muted-foreground">{incidentStatus(incident).label}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
       </CommandList>
     </CommandDialog>
   );
