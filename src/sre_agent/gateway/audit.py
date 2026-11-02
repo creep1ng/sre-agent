@@ -41,6 +41,7 @@ class AuditProjector:
         resource_ref: tuple[str, str] | None = None,
         decision: PolicyDecision | None = None,
         authorization_denial_cause: AuthorizationDenialCause | None = None,
+        identifiers: dict[str, str] | None = None,
     ) -> AuditEvent:
         """Project a metadata-only administrative control-plane event.
 
@@ -98,8 +99,11 @@ class AuditProjector:
             action=action, stage=stage, outcome=outcome, reason_code=audit_reason,
             authorization_denial_cause=cause,
             response_status=status, retryable=retryable, latency_ms=latency_ms,
-            correlation={"request_id": request_id}, identity=identity,
-            resource=resource, policy_decision=audit_decision,
+            correlation={"request_id": request_id} | {
+                f"{name.removesuffix('_id')}_ref": ref(name, value)
+                for name, value in (identifiers or {}).items()
+            },
+            identity=identity, resource=resource, policy_decision=audit_decision,
             redaction={"policy_version": "redaction-1.0.0", "result": "success",
                        "source_class": "none", "categories": [], "match_count": 0,
                        "sink_eligible": False},

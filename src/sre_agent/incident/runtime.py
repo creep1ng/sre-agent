@@ -77,6 +77,8 @@ class IncidentCommand:
     inputs: Mapping[str, Any] | None = None
     extra_events: tuple[EventDraft, ...] = ()
     contexts: tuple[TextContextRecord, ...] = ()
+    # The deploy-executor's receipt for the operation an approval ran (#722).
+    execution: Mapping[str, Any] | None = None
 
     def payload_sha256(self) -> str:
         payload = asdict(self)
@@ -93,6 +95,8 @@ class IncidentCommand:
             payload.pop("extra_events")
         # The turns travel with the dispatch's result events, which the hash already covers.
         payload.pop("contexts")
+        # The receipt is what the approval did, not what was asked: a retry hashes the same.
+        payload.pop("execution")
         if self.expected_incident_version is None:
             # Additive fields must not invalidate idempotent retries from older clients.
             payload.pop("expected_incident_version")
@@ -234,6 +238,41 @@ class IncidentRuntime:
                 incident_version=incident.version,
                 run_version=run.version,
             )
+
+    async def record_refusal(
+        self,
+        incident_id: str,
+        run_id: str,
+        actor_reference: ActorReference,
+        *,
+        reason_code: str,
+        request_id: str,
+        denial: bool,
+    ) -> None:
+        """An approval refused before any transition, told in the run's timeline (#722): the
+        incident, the run and their versions stay as they were."""
+        now = self._clock()
+        decision = DecisionDraft(
+            decision_id=self._id_factory("dec"),
+            document={
+                "actor": "human",
+                "actor_reference": asdict(actor_reference),
+                "decision_point": "mitigation_approval",
+                "reason": f"approval not applied: {reason_code}",
+                "decided_at": now.isoformat(),
+            },
+            decided_at=now,
+            run_id=run_id,
+        )
+        payload = {"refused_command": "approve_mitigation", "reason_code": reason_code}
+        event = EventDraft(
+            event_id=self._id_factory("evt"),
+            kind="denial" if denial else "human_command",
+            payload={**payload, "request_id": request_id, "state": "mitigating"},
+            occurred_at=now,
+        )
+        async with self._unit_of_work() as work:
+            await work.record_run_events(incident_id, run_id, decision=decision, events=(event,))
 
     async def execute(self, command: IncidentCommand) -> TransitionResult:
         payload_hash = command.payload_sha256()
@@ -691,6 +730,9 @@ class IncidentRuntime:
                 "reject": "rejected",
                 "request_changes": "changes_requested",
             }[outcome]
+            if outcome == "approve" and command.execution is not None:
+                # It ran through the deploy-executor (#722): no longer simulated.
+                strategy.update(execution_mode="executed", execution=dict(command.execution))
             incident["mitigation_strategy"] = strategy
             if outcome in {"approve", "reject"}:
                 # The human gate's answer, listed where the incident shows its approvals.

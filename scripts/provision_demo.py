@@ -1,9 +1,9 @@
 """Prepare only explicit demo grants using the existing governed ControlService.
 
 Run in the seed container, after the ordinary and MCP seeds. No provider/MCP
-secret is needed. A revoked setup grant is reported as drift and left revoked;
-conflicting grants fail closed. This is not a second seed nor an authority repair
-tool. Partial progress is safe to rerun.
+secret is needed. A revoked setup grant is restored under a new id, as the seed
+restores its own (a reset to zero); conflicting grants fail closed. Partial
+progress is safe to rerun.
 """
 
 import asyncio
@@ -20,6 +20,33 @@ from provision_incident_workflow import (
     build_service,
     provision,
 )
+
+OTEL_DEMO_STORE = "otel-demo-store@1.0.0"
+
+# The enrolled operations mitigation.execute grants are over (#722). The agent may roll
+# sre-checkout back, what the demo's failure needs; the restart stays an operation it may not
+# run. Not `checkout`: that is the store's service, which has no catalog.
+SERVICE_OPERATIONS = {
+    "sre-checkout:deployment.rollback": "Roll sre-checkout back to an earlier release.",
+    "sre-checkout:deployment.restart": "Restart sre-checkout on its current release.",
+}
+
+
+def service_operation(resource_id, description):
+    return {
+        "resource_type": "service_operation",
+        "resource_id": resource_id,
+        "owner_id": "executor-platform",
+        "source": "deploy_executor",
+        "source_ref": "deploy-executor@1.0.0",
+        "status": "active",
+        "discoverability": {
+            "display_name": resource_id,
+            "visibility": "private",
+            "description": description,
+            "tags": ["executor", resource_id.split(":")[0]],
+        },
+    }
 
 
 def demo_grants():
@@ -62,14 +89,26 @@ def demo_grants():
         ("mcp.invoke", "mcp_tool", "query_prometheus"),
         ("mcp.invoke", "mcp_tool", "query_elasticsearch"),
         ("change.read", "incident_workflow", "incident-response"),
+        # The store's topology for the investigator's hypotheses (#718); BoK is not evidence.
+        ("bok.search", "bok_collection", OTEL_DEMO_STORE),
     ):
         yield {
-            "grant_id": "grant-setup-agent-" + resource,
+            "grant_id": "grant-setup-agent-" + resource.replace("@", "-").replace(".", "-"),
             "principal_id": "incident-harness",
             "action": action,
             "resource": {"resource_type": kind, "resource_id": resource},
             "effect": "allow",
         }
+    yield {
+        "grant_id": "grant-setup-agent-sre-checkout-deployment-rollback",
+        "principal_id": "incident-harness",
+        "action": "mitigation.execute",
+        "resource": {
+            "resource_type": "service_operation",
+            "resource_id": "sre-checkout:deployment.rollback",
+        },
+        "effect": "allow",
+    }
 
 
 def executor_changes_grant():
@@ -131,6 +170,16 @@ async def _already_active(service, body):
     return found is not None
 
 
+async def _cataloged(service, body):
+    """The catalog holds this operation as given, whether this run or an earlier one added it."""
+    from sre_agent.persistence.repositories import CatalogRepository
+
+    async with service.sessions() as session:
+        entry = await CatalogRepository(session).get(body["resource_type"], body["resource_id"])
+    names = ("status", "owner_id", "source", "source_ref")
+    return entry is not None and all(getattr(entry, name) == body[name] for name in names)
+
+
 async def provision_demo(service, bearer, executor_changes_key=None):
     from sre_agent.persistence.repositories import CatalogRepository
 
@@ -150,31 +199,41 @@ async def provision_demo(service, bearer, executor_changes_key=None):
         (existing.command_grant_status, existing.run_command_active, COMMAND_GRANT_BODY),
         (existing.approve_grant_status, existing.run_approve_active, APPROVE_GRANT_BODY),
     ):
-        if not (status == 201 and active) and not await _drifted(service, body):
+        if not (status == 201 and active) and not await _restored(service, body):
             raise RuntimeError("workflow grant conflict: " + body["grant_id"])
+    # The demo BoK collections a grant names must exist; the BoK seed converges them.
+    from sre_agent.bok.owner import seed_bok_demo
+
+    async with service.sessions() as session, session.begin():
+        await seed_bok_demo(session)
+    for resource_id, description in SERVICE_OPERATIONS.items():
+        body = service_operation(resource_id, description)
+        response = await service.create_catalog_resource(body, bearer, "setup-v1-" + resource_id)
+        # 409: an earlier run cataloged it. As given is convergence; anything else fails closed.
+        if response.status_code not in (201, 409) or not await _cataloged(service, body):
+            raise RuntimeError("operation catalog conflict: " + resource_id)
     for body in demo_grants():
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
         if response.status_code == 201 and await _granted(service, body):
             continue
         # The authority is active already, maybe under another id: convergence.
-        if await _already_active(service, body) or await _drifted(service, body):
+        if await _already_active(service, body) or await _restored(service, body):
             continue
         raise RuntimeError("demo grant conflict: " + body["grant_id"])
     if executor_changes_key:
         await provision_executor_changes(service, bearer, executor_changes_key)
 
 
-async def _drifted(service, body):
-    """An operator revoked this setup grant: report the drift and leave it revoked (#759)."""
+async def _restored(service, body):
+    """An operator revoked this setup grant: the setup grants it again (#759)."""
     from sre_agent.persistence.repositories import GrantRepository
+    from sre_agent.persistence.seeds import restore_grant
 
-    async with service.sessions() as session:
+    async with service.sessions() as session, session.begin():
         persisted = await GrantRepository(session).get(body["grant_id"])
-    if persisted is None or persisted.status != "revoked":
-        return False
-    if await _already_active(service, body):
-        return True
-    print(f"seed drift: grant {body['grant_id']} is revoked; left revoked")
+        if persisted is None or persisted.status != "revoked":
+            return False
+        await restore_grant(session, body["grant_id"])
     return True
 
 
