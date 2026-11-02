@@ -1,0 +1,9 @@
+{"t": "2026-11-02T14:17:18+00:00", "what": "alert:alt-checkout-7cbd18f57ce22f93", "value": {"status": "firing", "service": "checkout", "triage": "declared"}}
+{"t": "2026-11-02T14:17:18+00:00", "what": "incident:inc-334e5ac0029e69d4e5ea4e29f3c3f82a", "value": {"service": "checkout", "state": "investigating", "run": "running", "run_state": "investigating", "pending": null}}
+{"t": "2026-11-02T14:17:54+00:00", "what": "incident:inc-334e5ac0029e69d4e5ea4e29f3c3f82a", "value": {"service": "checkout", "state": "mitigating", "run": "awaiting_human", "run_state": "mitigating", "pending": "approve_mitigation"}}
+{"t": "2026-11-02T14:17:55+00:00", "what": "outbox:1", "value": {"kind": "mitigation_decision", "sent_at": "14:17:52", "error": ""}}
+{"t": "2026-11-02T14:31:38+00:00", "what": "incident:inc-334e5ac0029e69d4e5ea4e29f3c3f82a", "value": {"service": "checkout", "state": "verifying", "run": "running", "run_state": "verifying", "pending": null}}
+{"t": "2026-11-02T14:33:16+00:00", "what": "alert:alt-checkout-7cbd18f57ce22f93", "value": {"status": "resolved"}}
+{"t": "2026-11-02T14:33:27+00:00", "what": "incident:inc-334e5ac0029e69d4e5ea4e29f3c3f82a", "value": {"service": "checkout", "state": "resolved", "run": "running", "run_state": "resolved", "pending": null}}
+{"t": "2026-11-02T14:34:34+00:00", "what": "incident:inc-334e5ac0029e69d4e5ea4e29f3c3f82a", "value": {"service": "checkout", "state": "postmortem", "run": "running", "run_state": "postmortem", "pending": null}}
+{"t": "2026-11-02T14:35:11+00:00", "what": "incident:inc-334e5ac0029e69d4e5ea4e29f3c3f82a", "value": {"service": "checkout", "state": "closed", "run": "completed", "run_state": "closed", "pending": null}}
