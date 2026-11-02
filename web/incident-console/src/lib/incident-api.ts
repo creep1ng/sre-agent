@@ -9,10 +9,10 @@ import type { Severity } from "./types";
 export type ApiResult<T> =
   | { kind: "ok"; body: T }
   | { kind: "auth" }
-  | { kind: "forbidden" }
+  | { kind: "forbidden"; code?: string }
   | { kind: "missing" }
-  | { kind: "conflict" }
-  | { kind: "transient" };
+  | { kind: "conflict"; code?: string }
+  | { kind: "transient"; code?: string };
 
 export type RunStatus = "running" | "awaiting_human" | "completed" | "terminated";
 
@@ -96,7 +96,20 @@ export interface Mitigation {
   approval_status?: string;
   /** #722: the catalog operation the executor runs once a person approves. */
   operation?: { service: string; operation: string; parameters?: Record<string, string> } | null;
+  /** #920: the deploy-executor's receipt once an approval ran the operation. */
+  execution?: Execution | null;
   created_at?: string;
+}
+
+export interface Execution {
+  execution_id: string;
+  outcome: string;
+  replayed: boolean;
+  /** Image references for a rollback or restart; a flag.set (#724) touches no image. */
+  before_image?: string;
+  after_image?: string;
+  executed_at: string;
+  duration_ms?: number;
 }
 
 export interface Reasoning {
@@ -160,10 +173,17 @@ async function call<T>(
     return { kind: "transient" };
   }
   if (response.status === 401) return { kind: "auth" };
-  if (response.status === 403) return { kind: "forbidden" };
   if (response.status === 404) return { kind: "missing" };
-  if (response.status === 409) return { kind: "conflict" };
-  if (![200, 201, 202].includes(response.status)) return { kind: "transient" };
+  if (![200, 201, 202].includes(response.status)) {
+    // The error's code tells a refused approval (#923) from a credential or a stale version.
+    const code = await response.json().then(
+      (body: unknown) => (isObject(body) && isObject(body.error) && typeof body.error.code === "string" ? body.error.code : undefined),
+      () => undefined,
+    );
+    if (response.status === 403) return { kind: "forbidden", code };
+    if (response.status === 409) return { kind: "conflict", code };
+    return { kind: "transient", code };
+  }
   try {
     const body: unknown = await response.json();
     return accept(body) ? { kind: "ok", body } : { kind: "transient" };

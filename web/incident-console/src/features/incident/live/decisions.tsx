@@ -2,8 +2,8 @@ import { useT } from "@/i18n";
 import type { Mitigation } from "@/lib/incident-api";
 import type { LiveIncident } from "@/lib/live-incident";
 import { usePlan } from "./proposal";
-import { Prose, Stamp, useActorName } from "./say";
-import type { StoryEntry } from "./story";
+import { Prose, Stamp, useActorName, useSay } from "./say";
+import { executionLine, type StoryEntry } from "./story";
 
 export type Outcome = "approved" | "rejected" | "changes_requested";
 
@@ -39,6 +39,33 @@ function Title({ mitigation }: { mitigation: Mitigation }) {
   return <Prose text={usePlan(mitigation).title} />;
 }
 
+/** What the approval ran, in words, with the receipt's id and duration in its technical detail. */
+function Receipt({ mitigation }: { mitigation: Mitigation }) {
+  const t = useT("incident");
+  const say = useSay();
+  const line = executionLine(mitigation);
+  const ran = mitigation.execution;
+  if (!line || !ran) return null;
+  return (
+    <>
+      <p data-receipt="" className="mt-2 text-[var(--text-2)]">
+        <Prose text={say(line)} />
+      </p>
+      <details className="mt-1 font-mono text-xs text-[var(--dim)]">
+        <summary className="cursor-pointer text-[var(--mist)]">{t("receipt.technical")}</summary>
+        <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1">
+          <dt>{t("receipt.id")}</dt>
+          <dd>{ran.execution_id}</dd>
+          {ran.duration_ms !== undefined && <dt>{t("receipt.duration")}</dt>}
+          {ran.duration_ms !== undefined && <dd>{`${(ran.duration_ms / 1000).toFixed(1)} s`}</dd>}
+          {ran.replayed && <dt>{t("receipt.replayed")}</dt>}
+          {ran.replayed && <dd>✓</dd>}
+        </dl>
+      </details>
+    </>
+  );
+}
+
 /** What was decided, by whom and when. Nothing here waits for anyone, so nothing is amber. */
 export function Decisions({ decisions, mitigation }: { decisions: Decided[]; mitigation: Mitigation | null | undefined }) {
   const t = useT("incident");
@@ -56,6 +83,7 @@ export function Decisions({ decisions, mitigation }: { decisions: Decided[]; mit
               <span className={TONE[outcome]}>{t(`decision.${outcome}`)}</span> · {name(entry.actor)} ·{" "}
               <Stamp at={entry.at} />
             </p>
+            {current && outcome === "approved" && mitigation && <Receipt mitigation={mitigation} />}
           </li>
         ))}
       </ol>

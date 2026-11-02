@@ -5,7 +5,7 @@ import { Prose } from "./say";
 import { code, type Key } from "./story";
 import type { Choice, DecisionError } from "./use-decision";
 
-/** The catalog operation in a developer's words, for the technical detail only. */
+/** The catalog operation in a developer's words. */
 export function operationCall(mitigation: Mitigation): string | null {
   const operation = mitigation.operation;
   if (!operation) return null;
@@ -21,14 +21,39 @@ export function operationCall(mitigation: Mitigation): string | null {
 export function usePlan(mitigation: Mitigation): { title: string; steps: string[] } {
   const t = useT("incident");
   const operation = mitigation.operation;
-  const params = { service: code(operation?.service ?? ""), tag: code(operation?.parameters?.to_tag ?? "") };
-  const told = (name: "rollback" | "restart", count: number) => ({
+  const parameters = operation?.parameters ?? {};
+  const params = {
+    service: code(operation?.service ?? ""),
+    tag: code(parameters.to_tag ?? ""),
+    flag: code(parameters.flag ?? ""),
+    variant: code(parameters.variant ?? ""),
+  };
+  const told = (name: "rollback" | "restart" | "flagOff" | "flagSet", count: number) => ({
     title: t(`plan.${name}`, params),
     steps: Array.from({ length: count }, (_, index) => t(`plan.${name}.${index + 1}` as Key, params)),
   });
   if (operation?.operation === "deployment.rollback" && operation.parameters?.to_tag) return told("rollback", 3);
   if (operation?.operation === "deployment.restart") return told("restart", 2);
+  if (operation?.operation === "flag.set" && parameters.flag) return told(parameters.variant === "off" ? "flagOff" : "flagSet", 2);
   return { title: mitigation.description, steps: mitigation.steps ?? [] };
+}
+
+/** The call the deploy-executor runs, marked as the catalog's; a plan without one is free text nobody runs. */
+export function CatalogCall({ mitigation }: { mitigation: Mitigation }) {
+  const t = useT("incident");
+  const call = operationCall(mitigation);
+  return (
+    <p className="mb-5 flex flex-wrap items-center gap-2 font-mono text-[13px] text-[var(--dim)]">
+      {call ? (
+        <>
+          <code className="break-all">{call}</code>
+          <span className="rounded-full border px-2 py-px text-[11px] text-[var(--mist)]">{t("plan.catalog")}</span>
+        </>
+      ) : (
+        t("plan.freeText")
+      )}
+    </p>
+  );
 }
 
 interface ProposalProps {
@@ -47,7 +72,6 @@ export function Proposal({ mitigation, sending, error, canDecide, onDecide }: Pr
     <section
       aria-label={t("plan.label")}
       data-decision=""
-      title={operationCall(mitigation) ?? undefined}
       className="overflow-hidden rounded-2xl border border-star bg-[color-mix(in_oklab,var(--star)_8%,transparent)]"
     >
       <div className="px-[30px] pt-7 pb-2">
@@ -63,6 +87,7 @@ export function Proposal({ mitigation, sending, error, canDecide, onDecide }: Pr
             ))}
           </ol>
         )}
+        <CatalogCall mitigation={mitigation} />
         {mitigation.risk && <p className="mb-5 font-mono text-[13px] text-[var(--mist)]">{t(`plan.risk.${mitigation.risk}`)}</p>}
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-star px-[18px] py-4">
