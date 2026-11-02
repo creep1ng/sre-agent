@@ -41,7 +41,9 @@ export function verificationOf(live: LiveIncident, story: StoryEntry[]): Verific
   const resolvedAt = !firing && resolutions.length ? Math.max(...resolutions) : undefined;
   const outcome = check ? (check.line.key === "event.verified" ? "passed" : "failed") : resolvedAt ? "passed" : "waiting";
   const at = Math.max(approval.at + 1, check?.at ?? 0, resolvedAt ?? 0);
-  return { at, outcome, approvedAt: approval.at, resolvedAt, firing, check };
+  // Intake records the resolution to the second: a resolution in the approval's own second is not before it.
+  const approvedAt = Math.floor(approval.at / 1000) * 1000;
+  return { at, outcome, approvedAt, resolvedAt, firing, check };
 }
 
 /** "95 s", "4 min", "2 h": how long the signal took to recover. */
