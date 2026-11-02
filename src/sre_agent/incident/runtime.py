@@ -540,6 +540,12 @@ class IncidentRuntime:
             )
         if command.actor == "human" and command.actor_reference is None:
             raise PreconditionFailedError("human commands require an actor reference")
+        if (
+            transition.transition_id == "triage_declare"
+            and command.actor == "system"
+            and command.actor_reference is None
+        ):
+            raise PreconditionFailedError("a system declaration names its responsible system")
         if command.actor_reference is not None and (
             command.actor_reference.reference_version != "1.0.0"
             or re.fullmatch(r"[a-z][a-z0-9_-]{2,63}", command.actor_reference.principal_id) is None
