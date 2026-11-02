@@ -224,12 +224,14 @@ transitions:
   - id: triage_declare
     from: triage
     to: active
-    actor: [human]
+    actor: [human, system]
     decision_point: triage_outcome
     on_outcome: declare
     requires_approval: false
     records_decision: true
-    guard: Severity must be set. Session starts and incident_id becomes canonical.
+    guard: >-
+      Severity must be set. Session starts and incident_id becomes canonical. A system declares
+      only for an external_automatic decision, under the responsible system's reference.
 
   - id: start_investigation
     from: active

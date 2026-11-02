@@ -9,7 +9,7 @@ version or image, the commit, the author, the ref, a link to the run and the tim
 | Route | Grant over `incident_workflow/incident-response` | Answer |
 | --- | --- | --- |
 | `POST /v1/changes` | `change.write` | `201` with the new event; `200` with the stored one when `(source, external_id, service)` was already recorded with the same payload (`created: false`); `409 change_conflict` when that key was recorded with another payload |
-| `GET /v1/changes?service=&since=&limit=` | `change.read` | Newest first, at most `limit` (1-100, default 20); `since` is an ISO 8601 time with its offset, written `Z` or URL-encoded as `%2B00:00` (a bare `+` in a query string reads as a space) |
+| `GET /v1/changes?service=&since=&until=&limit=` | `change.read` | Newest first, at most `limit` (1-100, default 20), occurred between `since` and `until` inclusive (#771); each is an ISO 8601 time with its offset, written `Z` or URL-encoded as `%2B00:00` (a bare `+` in a query string reads as a space) |
 
 Body of the `POST`: `source` (for example `github-actions`), `external_id` (the source's run id),
 `service`, `kind` (`deploy`, `rollback` or `ci`), `status` (`succeeded` or `failed`), and the
