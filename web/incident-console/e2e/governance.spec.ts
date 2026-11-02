@@ -11,7 +11,8 @@ const SHOTS = "e2e/artifacts/governance";
 const settle = (page: Page) => page.waitForTimeout(600);
 
 async function freshStart(page: Page) {
-  await page.goto("./");
+  // The RC-2 inbox asks for the API key in live mode; the simulated inbox shows the sidebar.
+  await page.goto("./?mock");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 cosas necesitan tu atención");
