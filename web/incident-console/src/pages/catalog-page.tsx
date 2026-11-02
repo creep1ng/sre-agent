@@ -70,7 +70,7 @@ function useCatalog() {
 /** `to_tag ∈ {1.4.0}`, `variant = off`: the only values a parameter may take. */
 function Parameters({ operation }: { operation: CatalogOperation }) {
   const t = useT("catalog");
-  if (operation.parameters === null) return <span className="text-[var(--dim)]">{t("parameters.unknown")}</span>;
+  if (operation.parameters === null) return <span className="text-[var(--dim)]">{` · ${t("parameters.unknown")}`}</span>;
   return operation.parameters.map(({ name, allowed }) => (
     <span key={name}>
       {" · "}
