@@ -18,7 +18,7 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
-from sre_agent.chat.outbox import Keyboard, enqueue, mitigation_decision
+from sre_agent.chat.outbox import Keyboard, asks_decision, enqueue, mitigation_decision
 from sre_agent.gateway.runs import RunCommandService
 from sre_agent.persistence.database import Database
 
@@ -90,9 +90,9 @@ class ChatDecisions:
         )
         async with self.database.transaction() as session:
             message, keyboard = await mitigation_decision(session, payload)
-            if keyboard is None:
+            if not asks_decision(keyboard):
                 # Decided, by this tap or before it: the answer is the current state.
-                return message.splitlines()[-1], (message, None)
+                return message.splitlines()[-1], (message, keyboard)
             version = await session.scalar(
                 text("SELECT version FROM incident.incidents WHERE incident_id = :incident_id"),
                 {"incident_id": payload["incident_id"]},
@@ -112,7 +112,8 @@ class ChatDecisions:
                 )
                 lines = message.splitlines()
                 lines[0] = f"Propuesta desactualizada: {payload['incident_id']}"
-                return CHANGED, ("\n".join([*lines, CHANGED]), None)
+                link = [row for row in keyboard or [] if not asks_decision([row])] or None
+                return CHANGED, ("\n".join([*lines, CHANGED]), link)
         code = json.loads(reply.body).get("error", {}).get("code")
         if code in NOT_EXECUTED:
             return NOT_EXECUTED[code], None

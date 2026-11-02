@@ -6,7 +6,8 @@
     python -m sre_agent.chat.telegram digest [--until ISO]     # queue the digest now (#771)
 
 The gateway also queues the daily digest at TELEGRAM_DIGEST_HOUR (default 8, `off` disables)
-in TELEGRAM_DIGEST_TIMEZONE (default UTC).
+in TELEGRAM_DIGEST_TIMEZONE, else TELEGRAM_TIMEZONE (default UTC). Decision messages tell time in
+TELEGRAM_TIMEZONE, else the digest's zone, and link to the console when CONSOLE_PUBLIC_URL is set.
 
 The bot token travels only in request paths. httpx logs those paths at INFO, so its logger is
 held at WARNING, and errors name the method and status, never the URL.
@@ -71,15 +72,37 @@ class BotApi:
             )
         return body["result"]
 
-    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> int:
+    async def _with_keyboard(
+        self, method: str, keyboard: Keyboard | None, text: str, **fields: Any
+    ) -> Any:
         markup = {"reply_markup": {"inline_keyboard": keyboard}} if keyboard else {}
-        sent = await self.call("sendMessage", chat_id=chat_id, text=message, **markup)
+        try:
+            return await self.call(method, text=text, **fields, **markup)
+        except DeliveryError as error:
+            links = [button["url"] for row in keyboard or [] for button in row if "url" in button]
+            # Telegram refuses some URL buttons (localhost, bare or private hosts): the link
+            # then travels as text, which the chat shows without a button.
+            if not links or "url" not in str(error).lower():
+                raise
+            logger.info("link button refused (%s); sending the link as text", method)
+            rows = [[b for b in row if "url" not in b] for row in keyboard or []]
+            rest = [row for row in rows if row]
+            text = "\n".join([text, *(f"Ver incidente: {link}" for link in links)])
+            markup = {"reply_markup": {"inline_keyboard": rest}} if rest else {}
+            return await self.call(method, text=text, **fields, **markup)
+
+    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> int:
+        sent = await self._with_keyboard("sendMessage", keyboard, message, chat_id=chat_id)
         return sent["message_id"]
 
-    async def edit(self, chat_id: int, message_id: int, message: str) -> None:
-        """Replace a message's text; without reply_markup its buttons go away."""
+    async def edit(
+        self, chat_id: int, message_id: int, message: str, keyboard: Keyboard | None = None
+    ) -> None:
+        """Replace a message's text and buttons; without a keyboard its buttons go away."""
         try:
-            await self.call("editMessageText", chat_id=chat_id, message_id=message_id, text=message)
+            await self._with_keyboard(
+                "editMessageText", keyboard, message, chat_id=chat_id, message_id=message_id
+            )
         except DeliveryError as error:
             # The tap that decided, or an earlier edit, already shows this text.
             if "message is not modified" not in str(error):
@@ -93,7 +116,7 @@ async def _tap(bot: BotApi, decisions: ChatDecisions, query: dict[str, Any]) -> 
     answer, decided = await decisions.tap(chat_id, user_id, str(query.get("data", "")))
     if decided is not None:
         try:
-            await bot.edit(chat_id, message.get("message_id"), decided[0])
+            await bot.edit(chat_id, message.get("message_id"), *decided)
         except DeliveryError as error:
             logger.info("decided message not edited: %s", error)
     try:
@@ -154,6 +177,12 @@ async def _deliver(bot: BotApi, store: ChatStore, stopping: asyncio.Event) -> No
                 pass
 
 
+def _digest_timezone() -> str:
+    return (
+        os.environ.get("TELEGRAM_DIGEST_TIMEZONE") or os.environ.get("TELEGRAM_TIMEZONE") or "UTC"
+    )
+
+
 async def _daily_digest(database: Database, hour: int, timezone: str) -> None:
     """Queue each day's digest once its hour has passed; a restart neither skips nor repeats it."""
     zone = ZoneInfo(timezone)
@@ -205,7 +234,7 @@ async def gateway(
             logger.info("telegram gateway started as @%s", me.get("username"))
             tasks = [asyncio.create_task(_poll(bot, store, decisions, poll_seconds))]
             if digest_hour is not None:
-                zone = os.environ.get("TELEGRAM_DIGEST_TIMEZONE") or "UTC"
+                zone = _digest_timezone()
                 tasks.append(asyncio.create_task(_daily_digest(database, digest_hour, zone)))
             # A stop finishes the message being sent; only a kill mid-send repeats it.
             await _deliver(bot, store, stopping)
@@ -265,7 +294,7 @@ def main() -> None:
         return
     if database_url and arguments.command == "digest":
         until = arguments.until or datetime.now(UTC)
-        zone = os.environ.get("TELEGRAM_DIGEST_TIMEZONE") or "UTC"
+        zone = _digest_timezone()
         print(asyncio.run(digest(database_url, until, zone)))
         return
     if not database_url or not token:

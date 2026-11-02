@@ -17,6 +17,17 @@ decision on a proposed mitigation, the chat also gets one decision message with 
    docker compose --profile telegram up -d --wait telegram-gateway
    ```
 
+   `scripts/setup_sre.py` starts it for you when `TELEGRAM_BOT_TOKEN` is set, with
+   `CONSOLE_PUBLIC_URL` derived as `http://<SRE_PUBLIC_HOST, default 127.0.0.1>:<WEB_PORT>/app/`
+   ([setup](setup-sre.md#configuration-contract)). Two optional settings shape the messages:
+   - `TELEGRAM_TIMEZONE` (IANA zone, for example `America/Bogota`; default UTC, and the digest's
+     zone when `TELEGRAM_DIGEST_TIMEZONE` is empty). Every time in a decision message and its
+     edits is in this zone, labelled with its offset («13:46 UTC-5»).
+   - `CONSOLE_PUBLIC_URL`, the RC-2 console's base URL. Decision messages and their edits then
+     carry a «Ver incidente» button to `<CONSOLE_PUBLIC_URL>/incidentes/<id>`. If Telegram
+     refuses the button (it rejects some hosts, such as `localhost`), the gateway sends the
+     message again with the link as text, «Ver incidente: <url>».
+
 3. Create a one-time link (15 minutes by default, `--ttl-seconds` from 1 to 86400) for the
    operator's human principal and open it, in a private chat with the bot, from the operator's
    Telegram account:
@@ -95,9 +106,11 @@ link only a chat you would trust with that content.
   sends it as `editMessageText` on the original message, without buttons. A message that was
   never sent is skipped; an edit that changes nothing (the tap already showed it) counts as done.
 - After an approval, the stability check adds one line:
-  «Resuelto a las 09:33 UTC · 95 s tras la mitigación que aprobaste · ver la consola.» (or
-  «aprobada» when another human approved it), or «La verificación falló a las 09:33 UTC: el
-  incidente vuelve a investigarse.». The time is from the approval to the check.
+  «Resuelto a las 09:33 UTC-5 · 95 s tras la mitigación que aprobaste · ver incidente.» (or
+  «aprobada» when another human approved it; «ver la consola» without `CONSOLE_PUBLIC_URL`), or
+  «La verificación falló a las 09:33 UTC-5: el incidente vuelve a investigarse.». The elapsed
+  time runs from the approval to the check.
+- The edit keeps the «Ver incidente» link and drops only the decision buttons.
 - The chat writes this recovery text; #723's verifier only moves the incident through
   `verifying` to `resolved` or back to `investigating` (maintainer decision of 2026-11-02).
 

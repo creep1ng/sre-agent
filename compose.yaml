@@ -153,7 +153,10 @@ services:
       TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
       # The daily digest (#771): hour 0..23 or `off`, in this IANA time zone.
       TELEGRAM_DIGEST_HOUR: ${TELEGRAM_DIGEST_HOUR:-8}
-      TELEGRAM_DIGEST_TIMEZONE: ${TELEGRAM_DIGEST_TIMEZONE:-UTC}
+      TELEGRAM_DIGEST_TIMEZONE: ${TELEGRAM_DIGEST_TIMEZONE:-}
+      # The zone chat messages tell time in, and the console the «Ver incidente» button opens.
+      TELEGRAM_TIMEZONE: ${TELEGRAM_TIMEZONE:-}
+      CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-}
       # A tap that approves runs the mitigation's operation as the API does (#722): the executor,
       # its signing key, the agent whose grant it checks and the audit it writes.
       DEPLOY_EXECUTOR_URL: ${DEPLOY_EXECUTOR_URL:-}
