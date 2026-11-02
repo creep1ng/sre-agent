@@ -156,8 +156,72 @@ Stated so that the exposition does not overclaim; a green E2E hides none of them
 `image_repository` the tag is appended to, and the `operations` offered. `probe` (the E2E target)
 offers both; `web` offers restart only, its image being built locally without release tags.
 `sre-checkout` (#721) offers both: the demo's second service, in the `otel-demo` project,
-between `demo/checkout:1.4.0` and `1.5.0` ([demo-env](demo-env.md)). #724 adds a `flag.set`
-adapter for the OTel store; a generic manifest is later.
+between `demo/checkout:1.4.0` and `1.5.0` ([demo-env](demo-env.md)). On the OTel demo on EC2,
+`scripts/setup_sre.py` mounts `agent/executor/catalog.otel-aws.v1.yaml` instead: the store's
+`checkout` and `payment` with `flag.set` only (below). A generic manifest is later.
+
+## flag.set on the OTel demo (#724)
+
+On EC2 the store runs on the instance, out of the executor's Docker reach, and its fault is a
+flagd flag (`otel_ec2.py fail` turns `paymentUnreachable` on). `flag.set(service, flag, variant)`
+turns it back off through the deploy-executor, so approving the agent's proposal recovers the
+store with no operator shell.
+
+```
+api ──signed──▶ deploy-executor ──Bearer flag token──▶ otel-flags (link) ═SSM═▶ instance 127.0.0.1:17802
+               (no Docker proxy)                   network <mcp>-flags        mcp_guest.py serve-flags
+                                                   (executor only)            writes demo.flagd.json,
+                                                                              restarts flagd
+```
+
+- **Catalog.** Each service lists the flags it may set and the only variants allowed:
+  `checkout` → `paymentUnreachable`, `paymentFailure`; `payment` → `paymentFailure`; every
+  variant is `off`, the manifest's baseline. `GET /v1/services/{service}` shows each flag's
+  current variant next to what it may be set to, so the agent proposes the flag that is on, and
+  approval refuses (409 `precondition_failed`) a flag that is already off.
+- **Instance side.** `prepare-mcp` installs `mcp_guest.py serve-flags` as a systemd unit on the
+  instance's loopback, port 17802, with its own 48-hex token (`flag-write.env`, mode 0600). It
+  answers `GET /flags` (the fault flags' current variants) and `PUT /flags/<name>`
+  `{"variant"}`, and writes only a flag in the manifest's `fault_flags`, only to its
+  `flag_baseline` variant (403 otherwise, 409 if the flag file does not offer it).
+- **Path.** `connect-mcp` hands the token off with the MCP token, forwards 17802 over SSM to
+  local port `--local-port + 3`, and links it as `otel-flags` on its own internal network
+  `<network>-flags`. Only the deploy-executor joins that network and reads the token
+  (`env_file`); the api, the harness and the MCP link do not.
+- **Outcomes.** `flag_set`, or `already_at_target` when the flag already holds the variant
+  (nothing is written). The receipt carries no image; the timeline says
+  `ran flag.set on checkout: flag_set (paymentUnreachable → off)`.
+
+Failure modes, written before the code:
+
+| Scenario | Expected | Proof |
+| --- | --- | --- |
+| A flag or variant outside the service's catalog (`paymentUnreachable=on`, `loadGeneratorTraffic=off`) | 422 `flag_not_allowed`; nothing written | E2E `checks`, local and EC2 |
+| Unsigned `flag.set` | 401 `signature_missing`; nothing written | E2E `checks` |
+| The listener asked to turn a fault on, or to write a non-fault flag, with its token | 403; nothing written | listener probe from the executor (local) |
+| Wrong listener token | 401 | listener probe (local) |
+| Listener or tunnel down | 503 `flags_unavailable`, retryable; readiness 503 `dependency: flags` | readiness gates `setup_sre.py` |
+| The flag file lacks the variant | listener 409 → 502 `execution_failed` | code path |
+| flagd fails to restart after the write | listener 502 → 502 `execution_failed`; the file keeps the new variant | code path |
+| The flag is already at the variant | 200 `already_at_target`; no write | code path |
+| The api resolving `otel-flags` | fails: only the executor's network has it | E2E `checks`, local and EC2 |
+
+### Security limits of the demo
+
+- **The token is the listener's only control.** Whoever holds `flag-write.env` (the host user
+  running `connect-mcp`, the executor container) can turn the two payment faults off, and
+  nothing else: the listener cannot turn a fault on or touch other flags. It holds no AWS
+  credential, and the executor runs no command on the instance.
+- **Anyone with `connect`'s store tunnel can still change any flag** through upstream's flagd UI
+  at `/feature`, unauthenticated, as before #724. The listener adds no new way to break the demo.
+- **Each write restarts flagd.** Services that stream from flagd, such as `payment`, log a short
+  burst of `EventStream` / `tcp.connect` errors. On 2026-11-02 the burst after `fail` opened a
+  `payment` incident whose investigation rightly asked for a human. The listener writes the same
+  way, so an approved `flag.set` can do it too.
+- **The catalog trusts the alert's service name.** `checkout` and `payment` are the store's names
+  only in this catalog; locally they stay unenrolled (`catalog.v1.yaml`), as decided in #751.
+- **The contract file stays 1.0.0.** `schemas/executor/1.0.0` does not describe `flag.set` yet:
+  publishing it as 1.1.0 is pending (decision for the maintainer).
 
 ## Levels of autonomy
 
@@ -188,7 +252,7 @@ demonstrable agentic remediation for the demo, not a simulated one.
   operation with its parameters. A proposal without one is invalid investigator output, not a
   `simulated` mitigation: the investigator retries with the validation error and otherwise
   escalates through `RequestHuman`, visible in the timeline. `simulated` is kept only for services
-  with no catalog (the OTel store until #724). The demo scenario must therefore be one an enrolled
+  with no catalog (the OTel store until #724, and still locally). The demo scenario must therefore be one an enrolled
   operation can fix.
 - **Service names.** The proposal looks up operations by the alert's `service`, so an enrolled
   service needs a name no other source emits. Our second service (#721) is `sre-checkout`

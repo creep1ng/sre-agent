@@ -149,13 +149,22 @@ class OperationOffer(_Projection):
     risk: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+class FlagOffer(_Projection):
+    """A flag flag.set may write (#724): its current variant and the variants it may be set to."""
+
+    variant: Annotated[str, Field(max_length=32)] | None = None
+    allowed: list[Annotated[str, Field(max_length=32)]] = Field(default_factory=list)
+
+
 class ServiceOperations(_Strict):
     """What the deploy-executor serves for the incident's service, GET /v1/services/{service}:
-    its one catalog (#722), with the release running and the tags it can roll back to."""
+    its one catalog (#722), with the release running and the tags it can roll back to, or, for a
+    service it reaches through the demo's flags (#724), each flag's current variant."""
 
     service: Name
     running_image: Annotated[str, Field(max_length=300)] | None = None
     available_tags: list[Annotated[str, Field(max_length=128)]] = Field(default_factory=list)
+    flags: dict[ParameterName, FlagOffer] = Field(default_factory=dict)
     operations: Annotated[list[OperationOffer], Field(min_length=1)]
 
     def problem(self, proposed: ProposedOperation | None) -> str | None:
@@ -175,6 +184,13 @@ class ServiceOperations(_Strict):
             return f"to_tag must be one of the available tags: {', '.join(self.available_tags)}"
         if tag is not None and tag == (self.running_image or "").rpartition(":")[2]:
             return f"{self.service} already runs {tag}: roll back to another available tag"
+        flag = proposed.parameters.get("flag")
+        if flag is not None and (offer_flag := self.flags.get(flag)) is None:
+            return f"flag must be one of: {', '.join(sorted(self.flags))}"
+        if flag is not None and proposed.parameters["variant"] not in offer_flag.allowed:
+            return f"{flag} may only be set to: {', '.join(offer_flag.allowed)}"
+        if flag is not None and proposed.parameters["variant"] == offer_flag.variant:
+            return f"{flag} is already {offer_flag.variant}: set a flag that is not"
         return None
 
 

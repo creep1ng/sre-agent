@@ -63,7 +63,9 @@ those operations, with only the parameters it lists, in an operation field:
 "operation": {"service": "...", "operation": "...", "parameters": {"name": "value"}}
 Choose the operation that removes the cause in the hypothesis you cite. A rollback returns to
 an earlier release: its to_tag is an available tag other than the running one, the release the
-evidence shows healthy. A restart keeps the running release. If no listed operation can remove
+evidence shows healthy. A restart keeps the running release. A flag.set turns a fault flag of
+the demo back to normal: its flag is one listed in flags whose variant is not yet an allowed
+one, and its variant is one of that flag's allowed values. If no listed operation can remove
 the cause, use request_human instead of a mitigation."""
 UNAVAILABLE = """\
 The deploy-executor's catalog for this service could not be read: do not propose a mitigation.

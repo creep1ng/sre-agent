@@ -1,0 +1,22 @@
+# Services the deploy-executor may act on when the stack runs against the OTel demo on EC2
+# (#724, `SRE_OTEL_MODE=aws` in scripts/setup_sre.py, which selects this file).
+#
+# The store's services run on the instance, out of the executor's Docker reach, so the only
+# operation is flag.set, through the instance's flag listener. Each service lists the fault flags
+# that break it and the one variant the executor may set: `off`, the manifest's baseline
+# (demo/manifest.yaml). Nothing here can turn a fault on. Same contract as catalog.v1.yaml.
+schema_version: "v1"
+
+services:
+  # Alerted by `service-error-rate` (#765) for both faults: paymentUnreachable breaks its call to
+  # payment, and a payment that fails its charges fails checkout's PlaceOrder too.
+  - service: checkout
+    operations: [flag.set]
+    flags:
+      paymentUnreachable: ["off"]
+      paymentFailure: ["off"]
+  # paymentFailure fails payment's own Charge spans; paymentUnreachable never reaches payment.
+  - service: payment
+    operations: [flag.set]
+    flags:
+      paymentFailure: ["off"]

@@ -153,7 +153,10 @@ def executed_summary(incident_state: Any) -> str | None:
     if not isinstance(ran, dict) or not isinstance(operation, dict):
         return None
     images = (ran.get("before_image"), ran.get("after_image"))
+    parameters = operation.get("parameters") or {}
     change = f" ({images[0]} → {images[1]})" if all(images) else ""
+    if not change and parameters.get("flag"):  # flag.set (#724)
+        change = f" ({parameters['flag']} → {parameters.get('variant')})"
     return (
         f"Mitigation approved; the deploy-executor ran {operation.get('operation')} on "
         f"{operation.get('service')}: {ran.get('outcome')}{change}."

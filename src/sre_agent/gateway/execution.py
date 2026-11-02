@@ -69,8 +69,9 @@ async def service_operations(
         response.raise_for_status()
         view = ServiceOperations(
             service=service,
-            running_image=body["container"]["image"],
+            running_image=(body["container"] or {}).get("image"),
             available_tags=body["available_tags"],
+            flags=body.get("flags") or {},
             operations=body["operations"],
         )
     except Exception:
@@ -235,15 +236,17 @@ class OperationExecutor:
                 response = await client.post(self.url + path, content=body, headers=headers)
             result = response.json()
             if response.status_code == 200:
-                return {
+                receipt = {
                     "execution_id": result["execution_id"],
                     "outcome": result["outcome"],
                     "replayed": result["replayed"],
-                    "before_image": result["before"]["image"],
-                    "after_image": result["after"]["image"],
+                    "before_image": result["before"].get("image"),
+                    "after_image": result["after"].get("image"),
                     "executed_at": result["executed_at"],
                     "duration_ms": result["duration_ms"],
                 }
+                # A flag.set (#724) touches no image: its change is in the operation's parameters.
+                return {name: value for name, value in receipt.items() if value is not None}
             code = str(result["error"]["code"])
         except Exception:
             # Nothing to read: retrying sends the same key, which replays and never runs twice.
