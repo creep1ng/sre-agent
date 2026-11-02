@@ -134,7 +134,9 @@ Seed configuration comes only from the ignored `.env` file. Required names are
 plus `REMEDIATION_AGENT_MODEL` and `REMEDIATION_AGENT_PROVIDER`; documentation must never carry
 functional API-key values. These values persist the `triage-agent` and `remediation-agent`
 assignments; both aliases use the same `/v1/responses` contract and each authorized invocation
-makes one provider attempt with fallback disabled. Seed validation happens before SQL. Exact state
+makes one provider attempt with fallback disabled (OpenRouter's retries inside the pinned provider
+count only when every attempt names it, see [provider evidence](investigator.md#provider-evidence)).
+Seed validation happens before SQL. Exact state
 is a no-op, while partial or differing seed-owned state rolls back and reports only entity/field
 names. Routing drift is read safely with `--check-routing` and changed only through the explicit
 `--reconcile-routing` seed action under the seed transaction lock.
