@@ -9,6 +9,7 @@ import { AlertCard } from "@/features/inbox/alert-card";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { DeclareDialog } from "@/features/inbox/declare-dialog";
 import { IncidentCard } from "@/features/inbox/incident-card";
+import { LiveInbox } from "@/features/inbox/live-inbox";
 import { MenuServiceFilter, type ServiceStatus } from "@/features/inbox/service-filter";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime, formatDuration, formatTime, plural } from "@/lib/format";
@@ -127,7 +128,12 @@ const LIVE_STATE: Partial<Record<LivePhase, { title: string; body: string; actio
   },
 };
 
+/** Live mode reads the real API in the RC-2 inbox; `?mock` keeps the simulator's inbox. */
 export function InboxPage() {
+  return appMode === "live" ? <LiveInbox /> : <MockInboxPage />;
+}
+
+function MockInboxPage() {
   const now = useNow();
   const live = appMode === "live";
   const mockInbox = useInbox(now);
@@ -171,13 +177,17 @@ export function InboxPage() {
     ? newAlerts.filter((alert) => alert.triageStatus === "new" || alert.triageStatus === "triaging")
     : newAlerts;
   const attention = attentionAlerts.length + needsYou.length;
+  // A live alert intake already declared or linked (#765) is the agent's work, not calm.
+  const handled = live
+    ? newAlerts.filter((alert) => alert.triageStatus === "declared" || alert.triageStatus === "linked").length
+    : 0;
   const state = live ? LIVE_STATE[phase] : undefined;
 
   const headline =
     state?.title ??
     (attention > 0
       ? `${plural(attention, "cosa necesita", "cosas necesitan")} tu atención`
-      : working.length > 0
+      : working.length > 0 || handled > 0
         ? "El agente se está encargando"
         : "Todo en orden");
   const subline = live
