@@ -38,4 +38,15 @@ START_CAUSES = {
     "an administrator must grant it, then a person may start the investigation.",
 }
 
-PROJECTED_REASON_CODES = frozenset(DISPATCH_CAUSES) | frozenset(START_CAUSES)
+# Why an approval with an operation was not applied (#722), as the timeline tells it.
+EXECUTION_CAUSES = {
+    "precondition_failed": "the deploy-executor's catalog no longer offers the operation as "
+    "proposed.",
+    "operation_not_authorized": "the agent holds no mitigation.execute grant for the operation.",
+    "executor_unavailable": "the deploy-executor is not configured or did not answer.",
+    "execution_failed": "the deploy-executor answered with a failure.",
+}
+
+PROJECTED_REASON_CODES = (
+    frozenset(DISPATCH_CAUSES) | frozenset(START_CAUSES) | frozenset(EXECUTION_CAUSES)
+)

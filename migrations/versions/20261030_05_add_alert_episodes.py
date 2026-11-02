@@ -9,7 +9,7 @@ drop the schema clear it too.
 from alembic import op
 
 revision = "20261030_05"
-down_revision = "20261030_04"
+down_revision = "20261031_01"
 branch_labels = None
 depends_on = None
 

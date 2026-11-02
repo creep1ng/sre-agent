@@ -5,6 +5,8 @@
 #   ... run --rm -T seed sh -c '{ python -m sre_agent.persistence.seeds --seed-mcp &&
 #         python -m sre_agent.persistence.seeds && python /e2e/provision_demo.py; } > /artifacts/seed-rerun.txt 2>&1'
 #   ... --profile grants-e2e run --rm grants-e2e after-seed
+#   ... run --rm -T seed sh -c '{ ...the same three commands...; } > /artifacts/seed-rerun-2.txt 2>&1'
+#   ... --profile grants-e2e run --rm grants-e2e second-seed
 # The summary lands in docs/evidence/issue-759/ (GRANTS_E2E_ARTIFACTS overrides it).
 services:
   seed:
@@ -24,6 +26,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
       RESTRICTED_HARNESS_API_KEY: ${RESTRICTED_HARNESS_API_KEY:?RESTRICTED_HARNESS_API_KEY is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       ARTIFACT_DIR: /artifacts
     volumes:
       - ./scripts/grant_regrant_e2e.py:/e2e/grant_regrant_e2e.py:ro

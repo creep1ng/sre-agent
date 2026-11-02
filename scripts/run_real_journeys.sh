@@ -201,7 +201,7 @@ alert_intake() {
   mkdir -p "$ARTIFACTS/alert-intake"
   "${telegram[@]}" up --build --wait fake-telegram telegram-gateway
   code="$("${telegram[@]}" run --rm --no-deps -T telegram-gateway python -m sre_agent.chat.telegram \
-    link | grep -o 'start=[A-Za-z0-9_-]*' | cut -d= -f2)"
+    link --principal demo-human | grep -o 'start=[A-Za-z0-9_-]*' | cut -d= -f2)"
   run_check alert-intake "${SEED[@]}" --user "$(id -u):$(id -g)" -e ALERT_INTAKE_GRAFANA_SECRET \
     -e TELEGRAM_LINK_CODE="$code" -v "$ARTIFACTS/alert-intake:/artifacts" seed \
     python scripts/alert_intake_journey.py

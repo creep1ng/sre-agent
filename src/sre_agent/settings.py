@@ -22,6 +22,10 @@ class Settings:
     investigator_gateway: GatewaySettings | None = field(default=None, repr=False)
     investigator_tool_timeout_seconds: float = 30.0
     investigator_output_language: OutputLanguage = "es"
+    # The deploy-executor's base URL: its catalog tells the agent what it may propose (#722).
+    deploy_executor_url: str | None = None
+    # What signs the operation an approval runs; the executor checks it (#743, #722).
+    deploy_executor_signing_key: str | None = field(default=None, repr=False)
     openrouter_base_url: str = "https://openrouter.ai"
     # Grafana alert intake (#765): the contact point's secret, and the operator the integration
     # declares incidents for; None records episodes and leaves them to the console.
@@ -99,6 +103,8 @@ class Settings:
             investigator_gateway=investigator_gateway,
             investigator_tool_timeout_seconds=tool_timeout,
             investigator_output_language=language,
+            deploy_executor_url=environment.get("DEPLOY_EXECUTOR_URL") or None,
+            deploy_executor_signing_key=environment.get("DEPLOY_EXECUTOR_SIGNING_KEY") or None,
             openrouter_base_url=base_url,
             alert_intake_secret=environment.get("ALERT_INTAKE_GRAFANA_SECRET") or None,
             alert_intake_principal_id=environment.get("ALERT_INTAKE_PRINCIPAL_ID", "demo-human")
