@@ -29,7 +29,7 @@ The investigator's internal result status describes the bounded loop:
 | Status | When |
 |---|---|
 | `completed` | The model proposed a cited hypothesis, a mitigation or a conclusion |
-| `needs_human` | The model explicitly requested human review, or the gateway rejected the response contract |
+| `needs_human` | The model explicitly requested human review, the gateway rejected the response contract, or the mitigation named no valid executor operation twice |
 | `invalid_output` | Two consecutive answers were not one valid action or cited unknown evidence |
 | `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool or BoK collection |
 | `pre_dispatch_rejected` | The MCP gateway rejected the tool request with HTTP 422 before upstream dispatch |
@@ -66,8 +66,13 @@ tool call the investigator makes. The cap is the gateway's own MCP transport tim
 The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
 before a governed call, followed by one terminal `success`, `confirmed_failure`, or
 `unknown` outcome. Pending is not terminal; a concurrent idempotent start leaves an
-active dispatch alone. On a subsequent exact idempotent start replay after a process
-interruption, a still-pending receipt becomes `unknown`. Terminal outcomes are immutable
+active dispatch alone. A process interruption (an API restart mid-dispatch) leaves a
+still-pending receipt; when the API starts again, it claims every `running` run with a pending
+intent and no outcome that no live process holds, records `unknown` with `producer_interrupted`
+and ends the run `needs_human` (#704). So does an exact idempotent start replay. Nothing
+redispatches such a run: a person retries with a new run. A hand-off that fails before its claim
+(for example the agent identity cannot be read) still claims the run and ends it with
+`investigator_failed`, so no run stays `running` with no dispatcher. Terminal outcomes are immutable
 on replay, so the service never repeats an ambiguous external call. Receipt metadata contains only correlation IDs and bounded
 status/reason codes, not prompts, model output, credentials, or raw tool arguments.
 An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs before the
@@ -117,6 +122,17 @@ pending, identified artifact. Those preconditions need a recorded hypothesis wit
 evidence, so a mitigation proposed before one exists is rejected as invalid output and the
 model is asked again. `request_human` and `conclude` have no transition in this workflow;
 their validated result is recorded without inventing a domain-state transition.
+
+Where the stack runs the deploy-executor and sets `DEPLOY_EXECUTOR_URL`
+(`http://deploy-executor:8000` in Compose), the dispatch also reads its
+`GET /v1/services/{service}` for the alert's service, the one source of its catalog (#722). For
+an enrolled service the agent gets the operations, the release running and the tags available,
+and its mitigation must name one operation with exactly its parameters, a rollback to a tag
+other than the running one. Otherwise the model is asked again with the error, and a second
+miss becomes `request_human`, visible in the timeline. A service the executor does not enrol
+keeps a simulated mitigation without an operation; a configured executor that cannot be read
+sends any mitigation to a person. Without `DEPLOY_EXECUTOR_URL`, as in the stack
+`scripts/setup_sre.py` starts, every mitigation stays simulated.
 
 Governed MCP discovery includes the JSON Schema generated from each tool's strict runtime
 input model, but only for tools with a direct invocation grant. The investigator passes
@@ -178,9 +194,38 @@ action `bok.search`, each an exact `collection_id@version` (issue #34). The mode
 key, to `POST /v1/bok/collections/{collection_id}/versions/{version}/search` for five fragments at
 most and with no cache, so a revoked grant stops the next search. Each fragment is evidence with
 `source: bok`, its collection version as `datasource_uid` and, as `query`, the producer's read of
-exactly that chunk. An empty search is an answer; 401 and 403 end the run as `denied`, and a 5xx,
-network error or timeout, retried once, as `upstream_unavailable` with the producer's code; another
-body as `needs_human`. A failed search keeps the gateway's request id. None falls back to fixtures.
+exactly that chunk. An empty search is an answer. A 401, 403, 5xx, timeout (retried once) or other
+body is shown to the model as `the knowledge base is unavailable` and the run goes on (#718), its
+outcome receipt noting `bok_unavailable`. A failed search keeps the gateway's request id. None falls
+back to fixtures.
+
+An incident run offers every active collection version on which its identity passes the same
+`bok.search` evaluation the search route repeats, as MCP discovery offers tools (issue #718). Without
+a grant the collection is not offered and the investigation goes on; a direct search by that identity
+is answered 403 and audited as denied. The outcome receipt lists the offered versions in
+`bok_collections`; if building the offer fails, none is offered and it notes `bok_unavailable`.
+
+The demo collection `otel-demo-store@1.0.0` (`src/sre_agent/bok/otel_demo_store.json`) describes the
+pinned OpenTelemetry Demo 3.0.0: which service calls which, the flagd flags each one reads and each
+flag's symptom, every fragment citing its upstream file at commit `1755859a`. `scripts/provision_demo.py`
+converges the demo collections and grants this one to `incident-harness`. It tells the model a
+mechanism to look for, for example that checkout depends on payment and that `paymentFailure` lives
+in flagd, so a restart does not end it. A fragment is not a measurement: the hypothesis still cites
+what the tools measured.
+
+The E2E runs the real API, database and investigator with a scripted model and Grafana MCP
+(`scripts/bok_topology_upstreams.py`): a checkout investigation searches the collection, its
+fragments carry the collection version and chunk locator, with the collection's index down the run
+goes on and its receipt notes `bok_unavailable`, and after the grant is revoked the next
+investigation runs without it. From a worktree with `.env` and `.env.worktree`:
+
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml up --build --wait db api
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml run --rm --no-deps -T seed python /e2e/provision_demo.py
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml --profile bok-topology-e2e run --rm --build bok-topology-e2e
+    scripts/worktree-compose -f compose.e2e.yaml -f compose.bok-topology-e2e.yaml down -v --remove-orphans
+
+The report goes to `$BOK_TOPOLOGY_ARTIFACTS` (default `/tmp/bok-topology-e2e`).
 
 ## Recalled incidents
 
@@ -244,3 +289,44 @@ the request id the gateway audited. From a worktree with `.env` and `.env.worktr
     scripts/worktree-compose -f compose.e2e.yaml -f compose.investigator-timeout-e2e.yaml down -v --remove-orphans
 
 The report goes to `$INVESTIGATOR_TIMEOUT_ARTIFACTS` (default `/tmp/investigator-timeout-e2e`).
+
+## Provider evidence
+
+The gateway checks that the pinned provider answered. OpenRouter may answer from a second endpoint
+of that provider when the first fails (#880): on 2026-10-31 `anthropic/claude-haiku-5.5` reported
+a 400 and then a 200, both from "Anthropic". The gateway accepts such an answer as the pinned
+provider's only in the first case below; the others are rejected with 502 `upstream_invalid`:
+
+| Evidence in `openrouter_metadata` | Result |
+| --- | --- |
+| Every attempt and every selected endpoint names the pinned provider and the same model; only the last attempt answered 200; `attempt` equals the attempts listed | Accepted, credited to the pinned provider |
+| Any attempt or selected endpoint names another provider | Rejected: an implicit fallback |
+| `attempt` differs from the number of attempts listed | Rejected |
+| The last attempt did not answer 200, or an earlier one did | Rejected |
+| The attempts or the selected endpoints disagree on the model | Rejected |
+| No attempts listed | Accepted only as attempt 1 with one selected endpoint, as before |
+
+## Demo model
+
+Issue #880 measured the demo's model on 2026-10-31 with the real investigator and governed gateway
+([measurements](evidence/issue-880/README.md)). The demo uses `anthropic/claude-haiku-5.5` on
+provider `anthropic` (`TRIAGE_AGENT_MODEL`, `TRIAGE_AGENT_PROVIDER`) with the default
+`OPENROUTER_TIMEOUT_SECONDS=30`: the investigator then waits 45 s per model call, 75 s with
+`OPENROUTER_MANAGEMENT_API_KEY`. Its calls took 1.6 to 8.1 s and a whole investigation 24 to 27 s,
+for about USD 0.0035. The previous `z-ai/glm-5.3-flash` on `relace` ran with 60 s and still had
+calls of up to 80.6 s (#718).
+
+Candidates that do not fit the [provider evidence](#provider-evidence) check: `z-ai/glm-5.3-flash`
+on `z-ai` (OpenRouter names that provider "Z.AI") and `openai/gpt-6-luna` on `openai` (its dated model has three OpenAI endpoints
+in the catalog, and a dated model is confirmed only against one). Repeat a measurement, one paid
+investigation per command, with the provider key in `.env`:
+
+    scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml up --build --wait db api web
+    scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml run --rm -T seed python -m sre_agent.persistence.seeds --seed-mcp
+    scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml run --rm -T seed python /e2e/provision_demo.py
+    E2E_REAL_MODEL=1 scripts/worktree-compose -f compose.evidence-verdict-e2e.yaml --profile verdict-e2e run --rm \
+      -v ./scripts/model_candidate_e2e.py:/e2e/m.py:ro -e ADMIN_HUMAN_API_KEY -e MODEL -e PROVIDER verdict-e2e python /e2e/m.py
+
+`E2E_REAL_MODEL=1` must also be set for the `up`, so the API keeps the real provider. `MODEL`,
+`PROVIDER` and `ADMIN_HUMAN_API_KEY` come from the shell; the record is appended to
+`$EVIDENCE_VERDICT_ARTIFACTS/measurements.jsonl`.

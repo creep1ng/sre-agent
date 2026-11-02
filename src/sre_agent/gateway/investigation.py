@@ -10,6 +10,10 @@ from secrets import token_hex
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select, text
+
+from sre_agent.gateway.authentication import authorize_governed_access_for_context
+from sre_agent.gateway.execution import service_operations
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.incident.persistence import (
     DecisionDraft,
@@ -30,6 +34,7 @@ from sre_agent.incident.runtime import (
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
     UNMEASURED,
+    Capability,
     CollectedEvidence,
     Conclude,
     IncidentContext,
@@ -41,14 +46,26 @@ from sre_agent.investigator.contract import (
     ProposeMitigation,
     RequestHuman,
 )
-from sre_agent.investigator.loop import investigate
+from sre_agent.investigator.loop import BOK_UNAVAILABLE, investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
 from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemoryRepository
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
+from sre_agent.persistence.models import ResourceRow
 from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
 logger = logging.getLogger(__name__)
+
+# Runs whose dispatch wrote its intent and no outcome: at startup none has a dispatcher here.
+_INTERRUPTED_RUNS = text("""SELECT r.incident_id, r.run_id FROM incident.runs r
+    WHERE r.state->>'status' = 'running'
+      AND EXISTS (SELECT 1 FROM incident.run_events e WHERE e.run_id = r.run_id
+                  AND e.kind = 'dispatch_receipt'
+                  AND e.payload->'dispatch_receipt'->>'phase' = 'intent')
+      AND NOT EXISTS (SELECT 1 FROM incident.run_events e WHERE e.run_id = r.run_id
+                      AND e.kind = 'dispatch_receipt'
+                      AND e.payload->'dispatch_receipt'->>'phase' = 'outcome')
+    ORDER BY r.run_id""")
 
 
 class InvestigationRunDispatcher:
@@ -63,16 +80,19 @@ class InvestigationRunDispatcher:
         *,
         http: Any = None,
         language: OutputLanguage = "es",
+        executor_url: str | None = None,
         tool_timeout_seconds: float = 30.0,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
-        self.language = language
+        self.language, self.executor_url = language, executor_url
         self.gateway_settings = gateway_settings
         self.limits = Limits(tool_timeout_seconds=tool_timeout_seconds)
         self.gateway = GatewayClient(gateway_settings, http) if gateway_settings else None
         self.evidence = MCPGatewayClient(gateway_settings, http) if gateway_settings else None
-        # Run notes for its outcome receipt, such as memory_recall_unavailable (#773).
+        # What a run's outcome receipt adds: its notes, such as memory_recall_unavailable (#773)
+        # and bok_unavailable, and the BoK collections it offered (#718).
         self._notes: dict[str, list[str]] = {}
+        self._bok_offered: dict[str, list[str]] = {}
 
     async def after_start(self, started: TransitionResult) -> None:
         # A run opens with start_investigation, or with continue_investigation when a human
@@ -84,14 +104,64 @@ class InvestigationRunDispatcher:
             for event in started.events
         ):
             return
+        await self.dispatch(started.incident.incident_id, started.run.run_id)
 
-        principal = await self._configured_agent()
+    async def dispatch(self, incident_id: str, run_id: str) -> None:
+        """Claim and run one already-committed investigation run.
+
+        Callers may hand off after the declaration/start response is committed.
+        The claim and receipts make a duplicate hand-off converge instead of
+        starting a second investigation. A failure before the claim (the agent identity
+        cannot be read, the claim itself fails) still ends the run with
+        `investigator_failed`, so it never stays `running` with no dispatcher (#704).
+        """
+        try:
+            await self._dispatch(incident_id, run_id)
+        except Exception as error:
+            logger.error(
+                "investigation_handoff_failed incident_id=%s run_id=%s error=%s",
+                incident_id,
+                run_id,
+                type(error).__name__,
+            )
+            await self._dispatch(incident_id, run_id, end_reason="investigator_failed")
+
+    async def end_interrupted(self) -> None:
+        """At startup, end every run whose dispatch lost its process (an API restart).
+
+        Its pending intent becomes `producer_interrupted` and the run ends `needs_human`;
+        nothing redispatches it, a person retries with a new run. A run another live
+        process still dispatches keeps its claim and is left alone.
+        """
+        try:
+            async with self.sessions() as session:
+                rows = (await session.execute(_INTERRUPTED_RUNS)).all()
+        except Exception as error:
+            logger.error("investigation_sweep_failed error=%s", type(error).__name__)
+            return
+        for incident_id, run_id in rows:
+            try:
+                await self._dispatch(incident_id, run_id, end_reason="producer_interrupted")
+            except Exception as error:
+                logger.error(
+                    "investigation_sweep_failed incident_id=%s run_id=%s error=%s",
+                    incident_id,
+                    run_id,
+                    type(error).__name__,
+                )
+
+    async def _dispatch(
+        self, incident_id: str, run_id: str, *, end_reason: str | None = None
+    ) -> None:
+        """Claim the run and investigate it; with `end_reason`, a run nothing dispatches any
+        more: a pending intent becomes `producer_interrupted`, a run never claimed ends at once
+        with `end_reason`, and a live claim elsewhere or a finished dispatch is kept."""
+        principal = await self._configured_agent() if end_reason is None else None
         actor_reference = (
             ActorReference(principal_id=principal.principal.principal_id)
             if principal is not None
             else None
         )
-        incident_id, run_id = started.incident.incident_id, started.run.run_id
         now = datetime.now(UTC)
         async with self.units() as work:
             claim = await work.claim_run_dispatch(
@@ -129,6 +199,11 @@ class InvestigationRunDispatcher:
                 return
             try:
                 if claim != "claimed":
+                    return
+                if end_reason is not None:
+                    await self._finish(
+                        work, incident_id, run_id, None, status="unknown", reason_code=end_reason
+                    )
                     return
                 if self.gateway_settings is None or self.gateway is None or self.evidence is None:
                     await self._finish(
@@ -172,7 +247,14 @@ class InvestigationRunDispatcher:
                 )
             finally:
                 self._notes.pop(run_id, None)
+                self._bok_offered.pop(run_id, None)
                 await work.release_run_dispatch(incident_id, run_id)
+
+    def _note(self, run_id: str, note: str) -> None:
+        """Add a note to the run's outcome receipt, keeping the ones already there."""
+        notes = self._notes.setdefault(run_id, [])
+        if note not in notes:
+            notes.append(note)
 
     async def _configured_agent(self) -> PrincipalContext | None:
         if self.gateway_settings is None:
@@ -188,6 +270,38 @@ class InvestigationRunDispatcher:
         ):
             return None
         return context
+
+    async def _bok_capabilities(self, run_id: str, principal: PrincipalContext) -> list[Capability]:
+        """The active BoK collection versions this identity may search, as MCP discovery offers
+        tools: each passes the same evaluation the search route repeats on every call. The BoK
+        is not evidence, so when this fails the run goes on without it."""
+        allowed: list[str] = []
+        try:
+            async with self.sessions() as session:
+                candidates = sorted(
+                    await session.scalars(
+                        select(ResourceRow.resource_id).where(
+                            ResourceRow.resource_type == "bok_collection",
+                            ResourceRow.status == "active",
+                        )
+                    )
+                )
+            for collection in candidates:
+                evaluation = await authorize_governed_access_for_context(
+                    self.sessions, principal, "bok.search", "bok_collection", collection
+                )
+                if evaluation.decision.decision == "allow":
+                    allowed.append(collection)
+        except Exception as error:
+            # Only the exception type is logged: its message may carry database content.
+            logger.warning("bok_offer_failed run_id=%s error=%s", run_id, type(error).__name__)
+            self._note(run_id, "bok_unavailable")
+            allowed = []
+        self._bok_offered[run_id] = allowed
+        return [
+            Capability(resource_type="bok_collection", resource_id=item, action="bok.search")
+            for item in allowed
+        ]
 
     async def _configured_agent_id(self) -> str | None:
         """The configured agent identity even when it cannot run, so the cause can name it."""
@@ -214,6 +328,10 @@ class InvestigationRunDispatcher:
             assert self.gateway_settings is not None
             capabilities, discovery_id = await self.evidence.discover()
             request_ids.append(discovery_id)
+            capabilities += await self._bok_capabilities(run_id, principal)
+            operations, unavailable = await service_operations(
+                self.executor_url, context.alert.service
+            )
         except EvidenceUnavailable as error:
             if error.request_id is not None:
                 request_ids.append(error.request_id)
@@ -249,10 +367,13 @@ class InvestigationRunDispatcher:
                         objective="investigate",
                         context=context,
                         authorized_capabilities=capabilities,
+                        service_operations=operations,
+                        operations_unavailable=unavailable,
                     ),
                     self.gateway,
                     self.evidence,
                     limits,
+                    bok=self.gateway,
                     language=self.language,
                     recalled=[item for item in recalled if item.evidence_id not in known],
                 )
@@ -271,6 +392,13 @@ class InvestigationRunDispatcher:
                 return
             request_ids.extend(result.request_ids)
             run_mcp_ids.extend(result.mcp_request_ids)
+            if any(
+                turn.tool_invocation.tool == "bok.search"
+                and (turn.tool_invocation.result_summary or "").startswith(BOK_UNAVAILABLE)
+                for turn in result.turns
+                if turn.tool_invocation is not None
+            ):
+                self._note(run_id, "bok_unavailable")
             contexts = self._contexts(incident_id, run_id, result, offset)
             if not (
                 result.status == "completed"
@@ -419,7 +547,7 @@ class InvestigationRunDispatcher:
             logger.warning(
                 "incident memory recall unavailable for run %s: %s", run_id, type(error).__name__
             )
-            self._notes[run_id] = ["memory_recall_unavailable"]
+            self._note(run_id, "memory_recall_unavailable")
             return []
         return [
             CollectedEvidence(
@@ -587,6 +715,7 @@ class InvestigationRunDispatcher:
                 "approval_status": "pending",
                 "execution_mode": "simulated",
                 "based_on_hypothesis": outcome.based_on_hypothesis,
+                **({"operation": outcome.operation.model_dump()} if outcome.operation else {}),
                 "created_by": "agent",
                 "created_at": datetime.now(UTC).isoformat(),
             }
@@ -807,6 +936,8 @@ class InvestigationRunDispatcher:
             receipt["diagnostic"] = dict(diagnostic)
         if agent_principal_id is not None:
             receipt["agent_principal_id"] = agent_principal_id
+        if phase == "outcome" and run_id in self._bok_offered:
+            receipt["bok_collections"] = self._bok_offered[run_id]
         if phase == "outcome" and self._notes.get(run_id):
             receipt["notes"] = self._notes[run_id]
         return EventDraft(

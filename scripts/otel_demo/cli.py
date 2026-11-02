@@ -44,6 +44,7 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     mcp.add_argument("--network", default="sre-aws-mcp-boundary")
     mcp.add_argument("--subnet")
     mcp.add_argument("--local-port", type=int, default=18092)
+    mcp.add_argument("--intake-url", default="http://127.0.0.1:8000/v1/alert-intake/grafana")
     extend = sub.add_parser("extend")
     extend.add_argument("--hours", type=_duration, default=timedelta(hours=1))
     connect = sub.add_parser("connect")
@@ -76,7 +77,14 @@ def main(argv: list[str] | None = None) -> int:
             result = flags(controller, args.action)
         elif args.action == "connect-mcp":
             try:
-                connect_mcp(controller, args.state_dir, args.network, args.subnet, args.local_port)
+                connect_mcp(
+                    controller,
+                    args.state_dir,
+                    args.network,
+                    args.subnet,
+                    args.local_port,
+                    args.intake_url,
+                )
             except KeyboardInterrupt:
                 print(
                     "owned MCP connection stopped; Demo, token and data preserved", file=sys.stderr

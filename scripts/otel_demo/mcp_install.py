@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .common import DEMO_ENV, DIGESTS, MANIFEST, DemoError, _parse_datetime
+from .common import DEMO_ENV, DIGESTS, MANIFEST, ROOT, DemoError, _parse_datetime
 from .guest import _digest_lock, _manifest_pin
 
 REMOTE = "/var/lib/otel-demo-sre"
@@ -42,6 +42,7 @@ def install_command():
     source = base64.b64encode(Path(__file__).with_name("mcp_guest.py").read_bytes()).decode()
     config = base64.b64encode(json.dumps(manifest_settings(), sort_keys=True).encode()).decode()
     environment = base64.b64encode(DEMO_ENV.read_bytes()).decode()
+    rules = base64.b64encode((ROOT / "demo/grafana/alerting/midnight.yaml").read_bytes()).decode()
     return f"""set -eu
 test \"$(git -C /opt/otel-demo rev-parse HEAD)\" = '{pin}'
 test ! -L {REMOTE}
@@ -58,6 +59,9 @@ fi
 install -m 0600 {REMOTE}/demo.candidate {REMOTE}/demo.env
 printf '%s' '{source}' | base64 -d >{REMOTE}/guest.candidate
 install -m 0600 {REMOTE}/guest.candidate {REMOTE}/mcp_guest.py
+install -d -m 0755 {REMOTE}/alerting
+printf '%s' '{rules}' | base64 -d >{REMOTE}/rules.candidate
+install -m 0644 {REMOTE}/rules.candidate {REMOTE}/alerting/midnight.yaml
 python3 {REMOTE}/mcp_guest.py prepare
 """
 

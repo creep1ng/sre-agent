@@ -1,0 +1,167 @@
+{
+  "collection_id": "otel-demo-store",
+  "version": "1.0.0",
+  "owner_id": "bok-platform",
+  "display_name": "OpenTelemetry Demo store topology",
+  "description": "Which store service calls which, the flagd feature flags each one reads and each flag's symptom, from the pinned OpenTelemetry Demo 3.0.0 (commit 1755859a).",
+  "visibility": "private",
+  "documents": [
+    {
+      "document_id": "call-graph",
+      "title": "Store call graph",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/compose.yaml",
+      "chunks": [
+        {
+          "section_id": "entry",
+          "chunk_index": 0,
+          "content": "Requests enter the store through frontend-proxy (Envoy), which routes to frontend. The load-generator sends synthetic traffic to frontend-proxy. Source: compose.yaml services frontend-proxy (line 314) and load-generator (line 409), src/frontend-proxy/envoy.tmpl.yaml (lines 80-81)."
+        },
+        {
+          "section_id": "frontend",
+          "chunk_index": 0,
+          "content": "frontend calls ad, cart, checkout, currency, product-catalog, recommendation and shipping (its AD_ADDR, CART_ADDR, CHECKOUT_ADDR, CURRENCY_ADDR, PRODUCT_CATALOG_ADDR, RECOMMENDATION_ADDR, SHIPPING_ADDR). A failure in any of them can surface as a frontend or frontend-proxy error. Source: compose.yaml service frontend (line 247)."
+        },
+        {
+          "section_id": "checkout",
+          "chunk_index": 0,
+          "content": "checkout calls cart, currency, email, payment, product-catalog and shipping (CART_ADDR, CURRENCY_ADDR, EMAIL_ADDR, PAYMENT_ADDR, PRODUCT_CATALOG_ADDR, SHIPPING_ADDR). checkout depends on payment: every order charges the card through payment, so the flagd feature flags paymentFailure (read by payment) and paymentUnreachable (read by checkout) both fail checkout orders. Source: compose.yaml service checkout (line 114)."
+        },
+        {
+          "section_id": "other-callers",
+          "chunk_index": 0,
+          "content": "recommendation calls product-catalog (PRODUCT_CATALOG_ADDR). shipping calls quote (QUOTE_ADDR). cart stores carts in valkey-cart (VALKEY_ADDR). product-catalog reads the catalog from the PostgreSQL database astronomy-db (DB_CONNECTION_STRING), so an astronomy-db outage fails product-catalog. ad, currency, email, payment and product-catalog call no other store service. Source: compose.yaml services recommendation (line 587), shipping (line 629), cart (line 79), product-catalog (lines 503, 529, 541), astronomy-db (line 770)."
+        }
+      ]
+    },
+    {
+      "document_id": "checkout-place-order",
+      "title": "How checkout places an order",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/checkout/main.go",
+      "chunks": [
+        {
+          "section_id": "order",
+          "chunk_index": 0,
+          "content": "checkout PlaceOrder reads the cart, converts currency and quotes shipping, then charges the card through payment (PaymentService/Charge), ships the order, empties the cart and sends the confirmation through email. A failed charge returns gRPC Internal 'failed to charge card: could not charge the card: ...', so a payment failure shows as a checkout PlaceOrder error. Source: src/checkout/main.go PlaceOrder (line 306) and chargeCard (line 565)."
+        },
+        {
+          "section_id": "payment-unreachable",
+          "chunk_index": 0,
+          "content": "The flagd feature flag paymentUnreachable is read by checkout, not by payment. When on, checkout sends the charge to badAddress:50051 instead of payment, so PaymentService/Charge fails inside checkout and payment receives no request and records no error. Symptom: checkout PlaceOrder and PaymentService/Charge errors in equal numbers, payment quiet. Source: src/checkout/main.go chargeCard (lines 565-578)."
+        }
+      ]
+    },
+    {
+      "document_id": "payment-flags",
+      "title": "Flags read by payment",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/payment/charge.js",
+      "chunks": [
+        {
+          "section_id": "payment-failure",
+          "chunk_index": 0,
+          "content": "The flagd feature flag paymentFailure is read by payment on every charge. Its value is a fraction (variants 10%, 25%, 50%, 75%, 90% and 100%; the variant named 90% is 0.95); payment fails that share of charges with 'Payment request failed. Invalid token. demo.user_context.loyalty_level=gold', logs it as a warning and sets its span to error. The error propagates to checkout, whose PlaceOrder fails with 'failed to charge card'. Symptom: errors in payment and in checkout together, unlike paymentUnreachable. Source: src/payment/charge.js (lines 39-47), src/payment/index.js (lines 24-28), src/flagd/demo.flagd.json."
+        }
+      ]
+    },
+    {
+      "document_id": "flag-values",
+      "title": "Where flag values live and how they revert",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/flagd/demo.flagd.json",
+      "chunks": [
+        {
+          "section_id": "flagd",
+          "chunk_index": 0,
+          "content": "The store's failures are flagd feature flags: services read each flag from flagd at request time, and every failure flag defaults to off in src/flagd/demo.flagd.json. Restarting the failing service reads the same flag value again, so it does not end the failure; setting the flag back to off does. Local to this repository, not upstream: its local demo serves .demo-state/flagd/demo.flagd.json, and scripts/demo_env.py reset restores the baseline and restarts flagd."
+        }
+      ]
+    },
+    {
+      "document_id": "cart-flags",
+      "title": "Flags read by cart",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/cart/src/services/CartService.cs",
+      "chunks": [
+        {
+          "section_id": "cart-failure",
+          "chunk_index": 0,
+          "content": "The flagd feature flag cartFailure is read by cart when it empties a cart. Its value is a fraction (10% to 100%); that share of EmptyCart calls goes to a Valkey store at badhost:1234 and fails. checkout empties the cart after placing an order but ignores the EmptyCart error, so cartFailure does not fail orders; frontend's empty-cart request (DELETE /api/cart) does fail. Source: src/cart/src/services/CartService.cs (lines 82-90), src/cart/src/Program.cs (line 60), src/checkout/main.go (line 373), src/frontend/pages/api/cart.ts (lines 43-45)."
+        },
+        {
+          "section_id": "failed-readiness-probe",
+          "chunk_index": 0,
+          "content": "The flagd feature flag failedReadinessProbe is read by cart's health check. When on, the check reports Unhealthy 'connection failed'. Source: src/cart/src/services/HealthCheckService.cs (lines 36-41)."
+        }
+      ]
+    },
+    {
+      "document_id": "ad-flags",
+      "title": "Flags read by ad",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/ad/src/main/java/oteldemo/AdService.java",
+      "chunks": [
+        {
+          "section_id": "ad-flags",
+          "chunk_index": 0,
+          "content": "The flagd feature flags adFailure, adHighCpu and adManualGc are read by ad on every GetAds request. adFailure fails about one request in ten with gRPC UNAVAILABLE. adHighCpu starts CPU load in ad. adManualGc runs a full manual garbage collection per request, logged as 'Feature Flag adManualGc enabled, performing a manual gc now'. frontend calls ad. Source: AdService.java (lines 205, 238-246)."
+        }
+      ]
+    },
+    {
+      "document_id": "product-catalog-flags",
+      "title": "Flags read by product-catalog",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/product-catalog/main.go",
+      "chunks": [
+        {
+          "section_id": "product-catalog-failure",
+          "chunk_index": 0,
+          "content": "The flagd feature flag productCatalogFailure is read by product-catalog in GetProduct with the product id as context; the flag's targeting in demo.flagd.json names product OLJCESPC7Z. A failing GetProduct returns gRPC Internal 'Error: Product Catalog Fail Feature Flag Enabled'. frontend, checkout and recommendation call product-catalog. Source: src/product-catalog/main.go (lines 373-378, 419-421)."
+        }
+      ]
+    },
+    {
+      "document_id": "recommendation-flags",
+      "title": "Flags read by recommendation",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/recommendation/recommendation_server.py",
+      "chunks": [
+        {
+          "section_id": "recommendation-cache-failure",
+          "chunk_index": 0,
+          "content": "The flagd feature flag recommendationCacheFailure is read by recommendation when it lists products. When on, about half the calls are logged 'get_product_list: cache miss', call product-catalog and append to an in-memory cache that only grows, so recommendation's memory and response size grow. Spans carry demo.feature_flag.recommendation_cache and demo.recommendation.cache_hit. Source: recommendation_server.py (lines 78-91)."
+        }
+      ]
+    },
+    {
+      "document_id": "email-flags",
+      "title": "Flags read by email",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/email/email_server.rb",
+      "chunks": [
+        {
+          "section_id": "email-memory-leak",
+          "chunk_index": 0,
+          "content": "The flagd feature flag emailMemoryLeak is read by email for every order confirmation. Its value is a multiplier (1x to 10000x); at 1 or more email pads the body by that factor and keeps every sent message, so its memory grows with each order. checkout calls email after placing an order. Source: src/email/email_server.rb (lines 67-84)."
+        }
+      ]
+    },
+    {
+      "document_id": "shipping-flags",
+      "title": "Flags read by shipping",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/shipping/src/shipping_service.rs",
+      "chunks": [
+        {
+          "section_id": "intl-shipping-slowdown",
+          "chunk_index": 0,
+          "content": "The flagd feature flag intlShippingSlowdown is read by shipping only in ShipOrder (/ship-order), for addresses outside the United States, never in GetQuote (/get-quote). Its value is seconds (5 or 10); shipping sleeps that long and logs 'Delaying international shipment due to intlShippingSlowdown feature flag'. Only checkout calls ShipOrder, while frontend calls only GetQuote. Symptom: latency, not errors, in checkout PlaceOrder and through it in frontend's place-order request (/api/checkout), not in shipping quotes. Source: shipping_service.rs ship_order (lines 49-93, flag at 67, sleep at 92), src/checkout/main.go (lines 366, 619), src/frontend/gateways/http/Shipping.gateway.ts (line 31)."
+        }
+      ]
+    },
+    {
+      "document_id": "frontend-flags",
+      "title": "Flags read by frontend",
+      "source_ref": "https://github.com/open-telemetry/opentelemetry-demo/blob/1755859a9de82c2e5e225be68abc401a5ebf2b4f/src/frontend/components/ProductCard/ProductCard.tsx",
+      "chunks": [
+        {
+          "section_id": "image-slow-load",
+          "chunk_index": 0,
+          "content": "The flagd feature flag imageSlowLoad is read by the frontend in the browser. Its value is milliseconds (5000 or 10000), sent as the x-envoy-fault-delay-request header on product image requests, so frontend-proxy delays images. Symptom: slow image loads, not errors. Source: ProductCard.tsx (lines 32-44)."
+        }
+      ]
+    }
+  ]
+}

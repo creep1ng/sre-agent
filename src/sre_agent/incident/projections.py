@@ -12,7 +12,12 @@ from typing import Any
 from uuid import UUID
 
 from sre_agent.incident.persistence import IncidentRecord, RunEvent, RunRecord, SnapshotRecord
-from sre_agent.incident.reasons import DISPATCH_CAUSES, PROJECTED_REASON_CODES
+from sre_agent.incident.reasons import (
+    DISPATCH_CAUSES,
+    EXECUTION_CAUSES,
+    PROJECTED_REASON_CODES,
+    START_CAUSES,
+)
 from sre_agent.incident.workflow import IncidentWorkflow
 
 IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
@@ -138,13 +143,36 @@ def dispatch_cause(receipt: dict[str, Any]) -> str | None:
     return DISPATCH_CAUSES[code]
 
 
+def executed_summary(incident_state: Any) -> str | None:
+    """What the deploy-executor ran on approval (#722), from the receipt the incident keeps."""
+    strategy = (
+        incident_state.get("mitigation_strategy") if isinstance(incident_state, dict) else None
+    )
+    ran = strategy.get("execution") if isinstance(strategy, dict) else None
+    operation = strategy.get("operation") if isinstance(strategy, dict) else None
+    if not isinstance(ran, dict) or not isinstance(operation, dict):
+        return None
+    images = (ran.get("before_image"), ran.get("after_image"))
+    change = f" ({images[0]} → {images[1]})" if all(images) else ""
+    return (
+        f"Mitigation approved; the deploy-executor ran {operation.get('operation')} on "
+        f"{operation.get('service')}: {ran.get('outcome')}{change}."
+    )
+
+
 def event_summary(payload: Any) -> str:
     transition_id = payload.get("transition_id") if isinstance(payload, dict) else None
+    if transition_id == "apply_mitigation":
+        executed = executed_summary(payload.get("incident_state"))
+        if executed:
+            return executed
     if isinstance(transition_id, str) and transition_id in TRANSITION_SUMMARIES:
         return TRANSITION_SUMMARIES[transition_id]
     if isinstance(transition_id, str):
         return f"Transition {transition_id} applied."
     if isinstance(payload, dict):
+        if payload.get("reason_code") in START_CAUSES:
+            return f"The investigation did not start: {START_CAUSES[payload['reason_code']]}"
         receipt = payload.get("dispatch_receipt")
         if isinstance(receipt, dict):
             status = receipt.get("status")
@@ -174,6 +202,9 @@ def event_summary(payload: Any) -> str:
         }
         if isinstance(action, str) and action in summaries:
             return summaries[action]
+        cause = EXECUTION_CAUSES.get(str(payload.get("reason_code")))
+        if payload.get("refused_command") == "approve_mitigation" and cause:
+            return f"Approval not applied: {cause} The incident stays mitigating."
     return "Incident event recorded."
 
 

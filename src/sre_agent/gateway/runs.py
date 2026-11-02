@@ -10,14 +10,17 @@ The actor comes from the authenticated credential. A body cannot name a
 different actor, so a browser can never assert authority it was not granted.
 """
 
+import logging
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from sre_agent.gateway.execution import ExecutionRefused, OperationExecutor
 from sre_agent.gateway.incidents import (
     RETRY_AFTER_SECONDS,
     WORKFLOW_RESOURCE_TYPE,
@@ -57,6 +60,7 @@ from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
 
+logger = logging.getLogger(__name__)
 START_ACTION = "run.start"
 # The range the contract admits. The store follows it: migration 20260928_14
 # widens transition_commits.command_id to varchar(200), so the boundary no
@@ -360,9 +364,11 @@ class RunCommandService:
         runtime: IncidentRuntime,
         authorizer: Callable[[Any, Principal, str], Awaitable[AuthorizationEvaluation]]
         | None = None,
+        executor: OperationExecutor | None = None,
     ) -> None:
         self.sessions, self.workflow, self.runtime = sessions, workflow, runtime
         self._authorizer = authorizer or self._default_authorizer
+        self.executor = executor
 
     async def _default_authorizer(
         self, session: Any, principal: Principal, action: str
@@ -518,7 +524,29 @@ class RunCommandService:
             turn_id=body.get("turn_id"),
         )
         try:
-            result = await self.runtime.execute(resolve(request))
+            transition = resolve(request)
+            if command == "approve_mitigation" and self.executor is not None:
+                # Checked, then run, before anything moves: verifying means it ran (#722).
+                execution = await self.executor.run(
+                    incident_id, run_id, request.expected_incident_version, request_id
+                )
+                transition = replace(transition, execution=execution)
+            result = await self.runtime.execute(transition)
+        except ExecutionRefused as refused:
+            # Nothing moved; the run's timeline still says why (#722), and the answer stands.
+            try:
+                await self.runtime.record_refusal(
+                    incident_id,
+                    run_id,
+                    request.actor_reference,
+                    reason_code=refused.code,
+                    request_id=str(request_id),
+                    denial=refused.status == 403,
+                )
+            except Exception as error:
+                # Only the type is logged, never the content.
+                logger.error("approval_refusal_record_failed error=%s", type(error).__name__)
+            return error_envelope(request_id, refused.status, (refused.code, refused.message))
         except IncidentNotFoundError:
             return error_envelope(request_id, 404)
         except RunNotFoundError:
