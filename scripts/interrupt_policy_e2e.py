@@ -15,7 +15,9 @@ the decisions from GET /v1/event-decisions. Ways the policy can fail, each check
    its event;
 5. the decisions answer a caller without alert.read;
 6. a decision taken in the console, and the recovery after it, send a new message or count as
-   an event instead of editing the decision message the operator already has.
+   an event instead of editing the decision message the operator already has;
+7. a console link Telegram refuses as a button (a loopback host here) loses the message instead
+   of travelling as text, or a time is not in the configured zone (Bogotá).
 Appends every observation to /artifacts/interrupt-policy-e2e.json; any failed check exits 1.
 """
 
@@ -40,6 +42,8 @@ OPERATOR = 222
 READER = os.environ["DEMO_HUMAN_API_KEY"]
 INTEGRATION = os.environ["DEPLOY_EXECUTOR_CHANGES_API_KEY"]
 INTAKE_SECRET = os.environ["ALERT_INTAKE_GRAFANA_SECRET"]
+# Set by scripts/run_interrupt_policy_e2e.sh: a loopback console the fake refuses as a button.
+CONSOLE = os.environ["CONSOLE_PUBLIC_URL"].rstrip("/")
 
 
 def http(method: str, path: str, body: Any = None, key: str | None = None) -> tuple[int, Any]:
@@ -202,6 +206,12 @@ def three_events() -> None:
             "a single immediate message": len(immediate) == 1,
             "it is about the broken deploy": "sre-checkout" in immediate[0]["text"],
             "it is the decision message, with its buttons": bool(immediate[0]["buttons"]),
+            "the refused link button travels as a text link": immediate[0]["text"].endswith(
+                f"Ver incidente: {CONSOLE}/incidentes/{immediate[0]['text'].split()[3]}"
+            )
+            and all(
+                not data.startswith("http") for row in immediate[0]["buttons"] for _, data in row
+            ),
             "the digest counts 1 message": ", 1 mensaje." in sent_digest["text"],
             "the spike appears in the digest": "cart" in sent_digest["text"]
             and "Se recuperó sola" in sent_digest["text"],
@@ -254,9 +264,11 @@ def decided_in_console() -> None:
             "the console approval edits the decision message": after_approval["buttons"] == []
             and "Aprobada por Demo" in after_approval["text"]
             and "desde la consola" in after_approval["text"],
-            "the recovery edits it again": message["text"]
-            .splitlines()[-1]
-            .startswith("Resuelto a las"),
+            "the recovery edits it again, in Bogotá time, keeping the text link": message["text"]
+            .splitlines()[-2]
+            .startswith("Resuelto a las")
+            and " UTC-5 · " in message["text"]
+            and message["text"].splitlines()[-1].startswith("Ver incidente: "),
             "neither sends a new message": len(sent()) == messages,
             "neither is an event the policy decides": sql(
                 "SELECT count(*) FROM incident.event_decisions"

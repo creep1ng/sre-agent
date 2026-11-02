@@ -28,6 +28,20 @@ LEGACY = 777  # linked before #767: no principal
 SECOND, VIEWER = 555, 666  # linked as demo-human, and as a human without run.approve
 VIEWER_ID, VIEWER_NAME = "e2e-viewer", {"display_name": "E2E viewer"}
 GROUP = -100767  # a group the operator is in: Telegram reports the operator as the sender
+# Set by scripts/run_telegram_e2e.sh for the gateway: a host the fake accepts link buttons for.
+CONSOLE = os.environ["CONSOLE_PUBLIC_URL"].rstrip("/")
+
+
+def link_of(message: dict[str, Any]) -> list[list[str]]:
+    """The message's «Ver incidente» row, as the fake recorded it."""
+    incident_id = message["text"].splitlines()[0].rsplit(" ", 1)[-1]
+    expected = [["Ver incidente", f"{CONSOLE}/incidentes/{incident_id}"]]
+    return [row for row in message["buttons"] if [list(b) for b in row] == expected]
+
+
+def decides(message: dict[str, Any]) -> bool:
+    """Whether the message still offers decision buttons; its link decides nothing."""
+    return any(not data.startswith("http") for row in message["buttons"] for _, data in row)
 
 
 def http(method: str, url: str, body: Any = None, headers: dict[str, str] | None = None) -> Any:
@@ -372,11 +386,17 @@ def proposals(stamp: str, legacy_code: str) -> None:
             == ["reject"],
             "each offers Aprobar and Rechazar": buttons
             == [["Aprobar", "Rechazar"]] * len(JOURNEYS),
+            "each links to its incident in the console": all(
+                m["buttons"][1:] == link_of(m) != [] for m in messages
+            ),
+            "times are in the configured zone (Bogotá)": all(
+                "(2026-10-31 05:00 UTC-5)" in m["text"] for m in messages
+            ),
             "the callback data is opaque": all(
                 TOKEN.fullmatch(d) and "inc-" not in d and "run_" not in d for d in data
             ),
             "a chat linked before #767 gets no buttons but how to decide from it": all(
-                m["buttons"] == [] and m["text"].endswith("vincular este chat a tu usuario.")
+                not decides(m) and m["text"].endswith("vincular este chat a tu usuario.")
                 for m in legacy
             ),
             "only decision messages carry the decision marker": all(
@@ -451,8 +471,10 @@ def approve() -> None:
             "the mitigation is approved": approval_status("approve") == "approved",
             "the answer says who decided": answer.startswith("Aprobada por Demo")
             and "desde Telegram" in answer,
-            "the message shows who decided and loses its buttons": edited["buttons"] == []
+            "the message shows who decided and loses its buttons": not decides(edited)
             and edited["text"].endswith(answer),
+            "it keeps the link to the incident": edited["buttons"] == link_of(edited) != [],
+            "the decision time is in the configured zone": answer.endswith(" UTC-5."),
         },
     )
 
@@ -609,7 +631,7 @@ def stale() -> None:
             "a tap on a version the incident left behind decides nothing": before == [],
             "the operator is told the incident changed": answer == retry
             and answer.startswith("El incidente cambió"),
-            "the old message loses its buttons": old["buttons"] == []
+            "the old message loses its buttons": not decides(old)
             and "desactualizada" in old["text"],
             "one fresh decision message with a new token arrives": len(renewed) == 1
             and renewed[0]["buttons"] != first["buttons"],
@@ -666,7 +688,8 @@ def console() -> None:
         | {"edited": edited, "decisions": rows},
         {
             "a console decision edits the message with no tap": len(edits) == 1
-            and untapped["buttons"] == [],
+            and not decides(untapped)
+            and untapped["buttons"] == link_of(untapped) != [],
             "the edit says what was decided, by whom and where": untapped["text"]
             .splitlines()[-1]
             .startswith("Rechazada por Demo")
@@ -678,7 +701,7 @@ def console() -> None:
             "the mitigation stays rejected": approval_status("console") == "rejected",
             "the answer gives the current state": answer.startswith("Rechazada por")
             and "desde la consola" in answer,
-            "the message shows it and loses its buttons": edited["buttons"] == [],
+            "the message shows it and loses its buttons": not decides(edited),
         },
     )
 
@@ -703,8 +726,8 @@ def recovery() -> None:
         *(json.loads(PROPOSALS.read_text())[j]["incident_id"] for j in ("approve", "stale")),
     )
     recovered = re.fullmatch(
-        r"Resuelto a las \d\d:\d\d UTC · \d+ (s|min) tras la mitigación que aprobaste · "
-        r"ver la consola\.",
+        r"Resuelto a las \d\d:\d\d UTC-5 · \d+ (s|min) tras la mitigación que aprobaste · "
+        r"ver incidente\.",
         resolved["text"].splitlines()[-1],
     )
     record(
@@ -749,7 +772,7 @@ def reject() -> None:
             "the mitigation is rejected": approval_status("reject") == "rejected",
             "the answer and the message say who rejected": answer.startswith("Rechazada por")
             and edited["text"].endswith(answer)
-            and edited["buttons"] == [],
+            and not decides(edited),
         },
     )
 

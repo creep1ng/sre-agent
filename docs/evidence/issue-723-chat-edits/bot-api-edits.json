@@ -1,11 +1,43 @@
 {
+ "telegram_e2e.proposal_operator": {
+  "message_id": 13,
+  "text": "🟠 Decisión pendiente: inc-767-approve-43dc7f6f\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback",
+  "buttons": [
+   [
+    [
+     "Aprobar",
+     "a:b116a255429945f4af5b96a5d7baf3d9"
+    ],
+    [
+     "Rechazar",
+     "r:b116a255429945f4af5b96a5d7baf3d9"
+    ]
+   ],
+   [
+    [
+     "Ver incidente",
+     "http://midnight.example:8080/app/incidentes/inc-767-approve-43dc7f6f"
+    ]
+   ]
+  ]
+ },
  "telegram_e2e.console": {
   "edits": [
    {
     "chat_id": 222,
     "message_id": 21,
-    "text": "Decisión tomada: inc-767-console-1a2a9e5a\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 10:00 UTC)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nRechazada por Demo human desde la consola, 2026-11-02 18:45 UTC.",
-    "edited_at": "2026-11-02T18:45:58.407763+00:00"
+    "text": "Decisión tomada: inc-767-console-43dc7f6f\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nRechazada por Demo human desde la consola, 2026-11-02 14:38 UTC-5.",
+    "edited_at": "2026-11-02T19:38:51.703368+00:00",
+    "reply_markup": {
+     "inline_keyboard": [
+      [
+       {
+        "text": "Ver incidente",
+        "url": "http://midnight.example:8080/app/incidentes/inc-767-console-43dc7f6f"
+       }
+      ]
+     ]
+    }
    }
   ],
   "checks": {
@@ -24,34 +56,84 @@
     {
      "chat_id": 222,
      "message_id": 13,
-     "text": "Decisión tomada: inc-767-approve-1a2a9e5a\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 10:00 UTC)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 18:45 UTC.",
-     "edited_at": "2026-11-02T18:45:43.198499+00:00"
+     "text": "Decisión tomada: inc-767-approve-43dc7f6f\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 14:38 UTC-5.",
+     "edited_at": "2026-11-02T19:38:33.999395+00:00",
+     "reply_markup": {
+      "inline_keyboard": [
+       [
+        {
+         "text": "Ver incidente",
+         "url": "http://midnight.example:8080/app/incidentes/inc-767-approve-43dc7f6f"
+        }
+       ]
+      ]
+     }
     },
     {
      "chat_id": 222,
      "message_id": 13,
-     "text": "Decisión tomada: inc-767-approve-1a2a9e5a\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 10:00 UTC)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 18:45 UTC.\nResuelto a las 18:46 UTC · 28 s tras la mitigación que aprobaste · ver la consola.",
-     "edited_at": "2026-11-02T18:46:10.899172+00:00"
+     "text": "Decisión tomada: inc-767-approve-43dc7f6f\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 14:38 UTC-5.\nResuelto a las 14:39 UTC-5 · 30 s tras la mitigación que aprobaste · ver incidente.",
+     "edited_at": "2026-11-02T19:39:03.744069+00:00",
+     "reply_markup": {
+      "inline_keyboard": [
+       [
+        {
+         "text": "Ver incidente",
+         "url": "http://midnight.example:8080/app/incidentes/inc-767-approve-43dc7f6f"
+        }
+       ]
+      ]
+     }
     }
    ],
    "failed": [
     {
      "chat_id": 222,
      "message_id": 29,
-     "text": "Propuesta desactualizada: inc-767-stale-1a2a9e5a\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 10:00 UTC)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nEl incidente cambió desde este mensaje: te envío la propuesta actualizada.",
-     "edited_at": "2026-11-02T18:46:05.369299+00:00"
+     "text": "Propuesta desactualizada: inc-767-stale-43dc7f6f\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nEl incidente cambió desde este mensaje: te envío la propuesta actualizada.",
+     "edited_at": "2026-11-02T19:38:58.006740+00:00",
+     "reply_markup": {
+      "inline_keyboard": [
+       [
+        {
+         "text": "Ver incidente",
+         "url": "http://midnight.example:8080/app/incidentes/inc-767-stale-43dc7f6f"
+        }
+       ]
+      ]
+     }
     },
     {
      "chat_id": 222,
      "message_id": 29,
-     "text": "Decisión tomada: inc-767-stale-1a2a9e5a\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 10:00 UTC)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 18:46 UTC.",
-     "edited_at": "2026-11-02T18:46:08.251750+00:00"
+     "text": "Decisión tomada: inc-767-stale-43dc7f6f\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 14:39 UTC-5.",
+     "edited_at": "2026-11-02T19:39:01.060977+00:00",
+     "reply_markup": {
+      "inline_keyboard": [
+       [
+        {
+         "text": "Ver incidente",
+         "url": "http://midnight.example:8080/app/incidentes/inc-767-stale-43dc7f6f"
+        }
+       ]
+      ]
+     }
     },
     {
      "chat_id": 222,
      "message_id": 29,
-     "text": "Decisión tomada: inc-767-stale-1a2a9e5a\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 10:00 UTC)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 18:46 UTC.\nLa verificación falló a las 18:46 UTC: el incidente vuelve a investigarse.",
-     "edited_at": "2026-11-02T18:46:10.971793+00:00"
+     "text": "Decisión tomada: inc-767-stale-43dc7f6f\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 14:39 UTC-5.\nLa verificación falló a las 14:39 UTC-5: el incidente vuelve a investigarse.",
+     "edited_at": "2026-11-02T19:39:03.872898+00:00",
+     "reply_markup": {
+      "inline_keyboard": [
+       [
+        {
+         "text": "Ver incidente",
+         "url": "http://midnight.example:8080/app/incidentes/inc-767-stale-43dc7f6f"
+        }
+       ]
+      ]
+     }
     }
    ]
   },
@@ -63,24 +145,40 @@
    "no new message is sent for either": true
   }
  },
+ "interrupt_policy_e2e.decision_message": {
+  "message_id": 3,
+  "text": "🟠 Decisión pendiente: inc-171e3897638e3c3af20a0db1345f953c\nServicio: sre-checkout\nCausa: El último despliegue de sre-checkout devuelve errores 5xx.\nCambio sospechoso: despliegue v3 (2026-11-02 14:39 UTC-5)\nPropuesta: Revertir el último despliegue de sre-checkout.\nRiesgo: bajo\nVer incidente: http://127.0.0.1:8080/app/incidentes/inc-171e3897638e3c3af20a0db1345f953c",
+  "buttons": [
+   [
+    [
+     "Aprobar",
+     "a:985f8bdd589c442daac2e32e444498f3"
+    ],
+    [
+     "Rechazar",
+     "r:985f8bdd589c442daac2e32e444498f3"
+    ]
+   ]
+  ]
+ },
  "interrupt_policy_e2e.decided_in_console": {
   "edits": [
    {
     "chat_id": 222,
     "message_id": 3,
-    "text": "Decisión tomada: inc-18bd710883a34da44daba00e3f2bb01b\nServicio: sre-checkout\nCausa: El último despliegue de sre-checkout devuelve errores 5xx.\nCambio sospechoso: despliegue v3 (2026-11-02 18:48 UTC)\nPropuesta: Revertir el último despliegue de sre-checkout.\nRiesgo: bajo\nAprobada por Demo human desde la consola, 2026-11-02 18:50 UTC.",
-    "edited_at": "2026-11-02T18:50:11.431970+00:00"
+    "text": "Decisión tomada: inc-171e3897638e3c3af20a0db1345f953c\nServicio: sre-checkout\nCausa: El último despliegue de sre-checkout devuelve errores 5xx.\nCambio sospechoso: despliegue v3 (2026-11-02 14:39 UTC-5)\nPropuesta: Revertir el último despliegue de sre-checkout.\nRiesgo: bajo\nAprobada por Demo human desde la consola, 2026-11-02 14:41 UTC-5.\nVer incidente: http://127.0.0.1:8080/app/incidentes/inc-171e3897638e3c3af20a0db1345f953c",
+    "edited_at": "2026-11-02T19:41:43.929916+00:00"
    },
    {
     "chat_id": 222,
     "message_id": 3,
-    "text": "Decisión tomada: inc-18bd710883a34da44daba00e3f2bb01b\nServicio: sre-checkout\nCausa: El último despliegue de sre-checkout devuelve errores 5xx.\nCambio sospechoso: despliegue v3 (2026-11-02 18:48 UTC)\nPropuesta: Revertir el último despliegue de sre-checkout.\nRiesgo: bajo\nAprobada por Demo human desde la consola, 2026-11-02 18:50 UTC.\nResuelto a las 18:50 UTC · 0 s tras la mitigación que aprobaste · ver la consola.",
-    "edited_at": "2026-11-02T18:50:11.979888+00:00"
+    "text": "Decisión tomada: inc-171e3897638e3c3af20a0db1345f953c\nServicio: sre-checkout\nCausa: El último despliegue de sre-checkout devuelve errores 5xx.\nCambio sospechoso: despliegue v3 (2026-11-02 14:39 UTC-5)\nPropuesta: Revertir el último despliegue de sre-checkout.\nRiesgo: bajo\nAprobada por Demo human desde la consola, 2026-11-02 14:41 UTC-5.\nResuelto a las 14:41 UTC-5 · 1 s tras la mitigación que aprobaste · ver incidente.\nVer incidente: http://127.0.0.1:8080/app/incidentes/inc-171e3897638e3c3af20a0db1345f953c",
+    "edited_at": "2026-11-02T19:41:44.460158+00:00"
    }
   ],
   "checks": {
    "the console approval edits the decision message": true,
-   "the recovery edits it again": true,
+   "the recovery edits it again, in Bogotá time, keeping the text link": true,
    "neither sends a new message": true,
    "neither is an event the policy decides": true
   }

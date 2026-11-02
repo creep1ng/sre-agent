@@ -7,7 +7,7 @@ PASS linking: only the operator chat is allowed, as its human and Telegram user
 PASS linking: a group chat cannot link
 PASS linking: and its code stays unused
 PASS dispatch: the acknowledgment arrives first
-PASS dispatch: the acknowledgment arrives in under 5 s (0.248 s)
+PASS dispatch: the acknowledgment arrives in under 5 s (0.424 s)
 PASS dispatch: the conclusion follows
 PASS dispatch: the conclusion gives a readable reason
 PASS dispatch: unlinked chats receive no incident information
@@ -23,6 +23,8 @@ PASS enlist: both chats are linked
 PASS proposals: one decision message per proposal reaches the operator chat
 PASS proposals: it names service, cause, suspect change, proposal and risk
 PASS proposals: each offers Aprobar and Rechazar
+PASS proposals: each links to its incident in the console
+PASS proposals: times are in the configured zone (Bogotá)
 PASS proposals: the callback data is opaque
 PASS proposals: a chat linked before #767 gets no buttons but how to decide from it
 PASS proposals: only decision messages carry the decision marker
@@ -31,6 +33,8 @@ PASS approve: as the linked human, through Telegram
 PASS approve: the mitigation is approved
 PASS approve: the answer says who decided
 PASS approve: the message shows who decided and loses its buttons
+PASS approve: it keeps the link to the incident
+PASS approve: the decision time is in the configured zone
 PASS double_tap: a second tap decides nothing more
 PASS double_tap: both taps answer the decision already taken
 PASS double_tap: the mitigation stays approved

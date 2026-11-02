@@ -7,12 +7,13 @@ PASS three_events: the broken deploy interrupts: sustained impact, decision pend
 PASS three_events: a single immediate message
 PASS three_events: it is about the broken deploy
 PASS three_events: it is the decision message, with its buttons
+PASS three_events: the refused link button travels as a text link
 PASS three_events: the digest counts 1 message
 PASS three_events: the spike appears in the digest
 PASS three_events: the healthy deploy appears in the digest
 PASS three_events: yesterday is not repeated
 PASS decided_in_console: the console approval edits the decision message
-PASS decided_in_console: the recovery edits it again
+PASS decided_in_console: the recovery edits it again, in Bogotá time, keeping the text link
 PASS decided_in_console: neither sends a new message
 PASS decided_in_console: neither is an event the policy decides
 PASS api: every event recorded has exactly one decision

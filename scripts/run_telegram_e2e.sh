@@ -23,6 +23,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export COMPOSE_PROJECT_NAME OPENROUTER_API_KEY="" OPENROUTER_MANAGEMENT_API_KEY=""
 export TELEGRAM_BOT_TOKEN="7000001:fake-e2e-token" TELEGRAM_API_URL="http://fake-telegram:8081"
 export TELEGRAM_POLL_TIMEOUT_SECONDS=5
+# Chat times in Bogotá and a console link on a host the fake accepts link buttons for.
+export TELEGRAM_TIMEZONE="America/Bogota" CONSOLE_PUBLIC_URL="http://midnight.example:8080/app/"
 ARTIFACTS="${TELEGRAM_E2E_ARTIFACTS:-$(mktemp -d "${TMPDIR:-/tmp}/telegram-e2e.XXXXXX")}"
 mkdir -p "$ARTIFACTS"
 ARTIFACTS="$(cd "$ARTIFACTS" && pwd)"
@@ -47,7 +49,7 @@ trap '"${COMPOSE[@]}" logs --no-color migrate > "$ARTIFACTS/migrate.log" 2>&1
   "${COMPOSE[@]}" --profile e2e down -v --remove-orphans; [[ $ENV_FILE == "$ROOT/.env" ]] || rm -f "$ENV_FILE"' EXIT
 STAMP="$(od -An -N4 -tx4 /dev/urandom | tr -d ' \n')"
 SEED=("${COMPOSE[@]}" -f "$ROOT/compose.telegram-e2e.yaml" run --rm --no-deps -T
-  --user "$(id -u):$(id -g)")
+  --user "$(id -u):$(id -g)" -e CONSOLE_PUBLIC_URL)
 phase() { "${SEED[@]}" seed python scripts/telegram_e2e.py "$@" | tee -a "$ARTIFACTS/summary.txt"; }
 chat() { "${COMPOSE[@]}" run --rm --no-deps -T telegram-gateway python -m sre_agent.chat.telegram "$@"; }
 link() { chat link "$@" | grep -o 'start=[A-Za-z0-9_-]*' | cut -d= -f2; }
