@@ -47,9 +47,11 @@ URN_REFERENCE = re.compile(r"^urn:sre-agent:schema:[a-z][a-z0-9-]*:[0-9]+\.[0-9]
 SCHEMAS = {
     "incident-detail": AGENT / "schemas" / "incident-detail.schema.yaml",
     "incident-snapshot": AGENT / "schemas" / "incident-snapshot.schema.yaml",
+    "incident-list": AGENT / "schemas" / "incident-list.schema.yaml",
 }
 
 REQUIRED_PATHS = {
+    "/v1/incidents",
     "/v1/incidents/{incident_id}",
     "/v1/incidents/{incident_id}/timeline",
     "/v1/incidents/{incident_id}/snapshot",
@@ -59,6 +61,7 @@ POSITIVE = {
     "detail.json": "incident-detail",
     "timeline-page.json": "run-event",
     "snapshot.json": "incident-snapshot",
+    "list.json": "incident-list",
 }
 
 ERROR_EXAMPLES = {
@@ -201,7 +204,8 @@ def check_examples(registry: dict[str, dict]) -> list[str]:
             schema, registry=_registry(registry), format_checker=FormatChecker()
         )  # noqa: E501
         for name, schema in registry.items()
-        if name in ("incident-detail", "incident-snapshot", "run-event", "error-envelope")
+        if name
+        in ("incident-detail", "incident-snapshot", "incident-list", "run-event", "error-envelope")
     }
     for filename, schema_name in POSITIVE.items():
         path = EXAMPLES / filename
@@ -244,6 +248,7 @@ def check_projection_registration() -> list[str]:
     missing = {
         "agent/schemas/incident-detail.schema.yaml",
         "agent/schemas/incident-snapshot.schema.yaml",
+        "agent/schemas/incident-list.schema.yaml",
     } - listed
     if missing:
         return [f"projection policy does not register safe schemas: {sorted(missing)}"]
@@ -270,7 +275,7 @@ def main() -> int:
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
-    print("incident queries: OK (2 schemas, 3 paths, 3 positive and 5 error examples)")
+    print("incident queries: OK (3 schemas, 4 paths, 4 positive and 5 error examples)")
     return 0
 
 
