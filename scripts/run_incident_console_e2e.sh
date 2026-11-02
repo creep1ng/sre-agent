@@ -26,6 +26,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   done
   env="${env//<set-long-random-audit-hmac-key>/$(hex)}"
   env="${env//<set-long-random-executor-signing-key>/$(hex)}"
+  env="${env//<set-long-random-grafana-intake-secret>/$(hex)}"
   env="${env//<lab\/model>/openai/gpt-4o-mini}"
   env="${env//<provider>/openai}"
   ENV_FILE="$(mktemp)"
