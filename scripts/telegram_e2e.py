@@ -243,6 +243,7 @@ TOKEN = re.compile(r"^[ar]:[0-9a-f]{32}$")
 async def _propose(stamp: str) -> dict[str, dict[str, str]]:
     sys.path.insert(0, "/app/src")
     from sre_agent.application import INCIDENT_WORKFLOW_PATH
+    from sre_agent.incident.persistence import EventDraft
     from sre_agent.incident.runtime import ActorReference, IncidentCommand, IncidentRuntime
     from sre_agent.incident.workflow import load_incident_workflow
     from sre_agent.persistence.database import Database
@@ -285,12 +286,23 @@ async def _propose(stamp: str) -> dict[str, dict[str, str]]:
                 ("propose_mitigation", "agent", "propose_mitigation",
                  {"incident_patch": {"mitigation_strategy": mitigation, "evidence": evidence}}),
             )  # fmt: skip
+            # The investigator writes its result and the outcome receipt with the proposal, in
+            # one transaction: the interrupt policy (#771) decides the run from them.
+            result = {"state": "investigating", "outcome": {"action": "propose_mitigation"}}
+            receipt = {"dispatch_id": run_id, "phase": "outcome", "status": "success"}
+            receipt |= {"request_ids": [], "mcp_request_ids": []}
+            written = (
+                EventDraft(f"evt_767r{journey[:4]}{stamp}", "investigation_result", result, now),
+                EventDraft(f"evt_767d{journey[:4]}{stamp}", "dispatch_receipt",
+                           {"state": "investigating", "dispatch_receipt": receipt}, now),
+            )  # fmt: skip
             for step, actor, outcome, inputs in steps:
                 await runtime.execute(
                     IncidentCommand(
                         f"e2e-767-{step}-{run_id}", incident_id, run_id, step, actor,
                         actor_reference=agent if outcome else None, outcome=outcome,
                         inputs=inputs or None,
+                        extra_events=written if step == "propose_mitigation" else (),
                     )
                 )  # fmt: skip
             proposals[journey] = {"incident_id": incident_id, "run_id": run_id}
