@@ -185,12 +185,14 @@ class ServiceOperations(_Strict):
         if tag is not None and tag == (self.running_image or "").rpartition(":")[2]:
             return f"{self.service} already runs {tag}: roll back to another available tag"
         flag = proposed.parameters.get("flag")
-        if flag is not None and (offer_flag := self.flags.get(flag)) is None:
-            return f"flag must be one of: {', '.join(sorted(self.flags))}"
-        if flag is not None and proposed.parameters["variant"] not in offer_flag.allowed:
-            return f"{flag} may only be set to: {', '.join(offer_flag.allowed)}"
-        if flag is not None and proposed.parameters["variant"] == offer_flag.variant:
-            return f"{flag} is already {offer_flag.variant}: set a flag that is not"
+        if flag is not None:
+            if (flag_offer := self.flags.get(flag)) is None:
+                return f"flag must be one of: {', '.join(sorted(self.flags))}"
+            variant = proposed.parameters.get("variant")
+            if variant not in flag_offer.allowed:
+                return f"{flag} may only be set to: {', '.join(flag_offer.allowed)}"
+            if variant == flag_offer.variant:
+                return f"{flag} is already {flag_offer.variant}: set a flag that is not"
         return None
 
 
