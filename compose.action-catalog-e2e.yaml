@@ -1,0 +1,44 @@
+# Journey of the RC-2 action catalog (#870, #722), on top of compose.incident-console-e2e.yaml:
+# the real deploy-executor acting on an sre-checkout of this project (1.5.0 runs, 1.4.0 is only
+# put in the image store as the rollback target), and a scripted model that proposes that
+# rollback. Commands: scripts/run_action_catalog_e2e.sh.
+services:
+  api:
+    command: ["python", "/e2e/action_catalog_upstreams.py"]
+    volumes:
+      - ./scripts/incident_console_upstreams.py:/e2e/incident_console_upstreams.py:ro
+      - ./scripts/action_catalog_upstreams.py:/e2e/action_catalog_upstreams.py:ro
+    environment:
+      DEPLOY_EXECUTOR_URL: http://deploy-executor:8000
+
+  deploy-executor:
+    environment:
+      DEPLOY_EXECUTOR_CATALOG: /e2e/catalog.yaml
+    volumes:
+      - ./scripts/action_catalog_e2e_catalog.yaml:/e2e/catalog.yaml:ro
+
+  sre-checkout:
+    image: demo/checkout:1.5.0
+    build:
+      context: docker
+      dockerfile: checkout.Dockerfile
+      args:
+        CHECKOUT_VERSION: "1.5.0"
+    restart: unless-stopped
+    networks: [runtime]
+
+  sre-checkout-previous:
+    profiles: ["action-catalog-e2e"]
+    image: demo/checkout:1.4.0
+    build:
+      context: docker
+      dockerfile: checkout.Dockerfile
+      args:
+        CHECKOUT_VERSION: "1.4.0"
+    command: ["true"]
+    restart: "no"
+    networks: [runtime]
+
+  incident-console-e2e:
+    environment:
+      ACTION_CATALOG_E2E: "1"
