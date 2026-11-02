@@ -1,0 +1,18 @@
+Issue #759 E2E, phase cycle
+PASS grant, revoke, grant again: 201 200 204 403 201 200: [201, 200, 204, 403, 201, 200]
+PASS a duplicate active grant answers grant_conflict, a reused id grant_id_conflict: [{'code': 'grant_conflict', 'message': 'An active grant with this principal, action and resource already exists.'}, {'code': 'grant_id_conflict', 'message': 'A grant with this grant_id already exists, active or r...
+PASS the audit holds grant, revoke, grant again and both refusals: [('grants.create', 201, 'grant_matched'), ('grants.revoke', 204, 'grant_matched'), ('grants.create', 201, 'grant_matched'), ('grants.create', 409, 'status_conflict'), ('grants.create', 409, 'status_conflict')]
+PASS both rows remain: the revoked one and the active one: [('grant-e2e759-333343fe-a', 'revoked'), ('grant-e2e759-333343fe-b', 'active')]
+PASS two seed-owned grants revoked before the seed reruns: access 200 -> 403: [[200, 200], [204, 204], [403, 403]]
+Issue #759 E2E, phase after-seed
+PASS the seed rerun converged and names each restored grant: ['mcp seed converged', 'seed reset: grant grant-admin-human-admin-read-audit was revoked; restored as grant-admin-human-admin-read-audit-restored-1', 'seed converged', 'seed reset: grant grant-setup-human-change-read was revoked; restor...
+PASS the access answers 200 again: [200, 200]
+PASS the revoked rows stay as history next to the restored ones: [('grant-admin-human-admin-read-audit', 'revoked'), ('grant-admin-human-admin-read-audit-restored-1', 'active'), ('grant-setup-human-change-read', 'revoked'), ('grant-setup-human-change-read-restored-1', 'active')]
+PASS the audit holds each human revoke, then the seed's restore without identity: [('grants.revoke', 204, 'authorization', 'human', '7fac178f5dc4', '2026-10-31T06:26:05+00:00'), ('grants.revoke', 204, 'authorization', 'human', '7fac178f5dc4', '2026-10-31T06:26:06+00:00'), ('grants.create', 201, '...
+PASS /health/ready answers 200 on the new revision: (200, {'status': 'ok', 'dependency': 'postgresql'}, '20261030_03')
+PASS uniqueness holds only among active grants: ("CREATE UNIQUE INDEX uq_grants_active_direct ON public.grants USING btree (principal_id, action, resource_type, resource_id) WHERE ((status)::text = 'active'::text)",)
+Issue #759 E2E, phase second-seed
+PASS a second seed run restores nothing: ['mcp seed converged', 'seed converged', 'demo permissions converged; restricted identity unchanged']
+PASS still one restored row per grant: [('grant-admin-human-admin-read-audit-restored-1',), ('grant-setup-human-change-read-restored-1',)]
+PASS still two restore audit events: 2
+PASS the access still answers 200: [200, 200]

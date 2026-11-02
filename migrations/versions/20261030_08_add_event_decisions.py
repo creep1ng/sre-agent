@@ -11,13 +11,14 @@ never what is allowed:
 - a run a person started is answered in the chat, as before: they asked for it.
 Only an interrupt queues an immediate chat message; the acknowledgment is sent only to a person
 who started the run. A pending mitigation's message is #767's decision message when that
-revision is present, so the operator gets one message, not a conclusion and then a decision.
+revision is present, so the operator gets one message, not a conclusion and then a decision;
+that message is sent only when this policy interrupts (integration 2026-11-01).
 """
 
 from alembic import op
 
-revision = "20261030_771"
-down_revision = "20261030_05"
+revision = "20261030_08"
+down_revision = "20261030_07"
 branch_labels = None
 depends_on = None
 
@@ -37,6 +38,35 @@ _ENQUEUE_766 = """
         END IF;
         RETURN NULL;
       END"""
+
+
+# #767's decision message (revision 20261030_07); `{gate}` is where the policy's condition goes.
+_ENQUEUE_DECISION_767 = """
+      DECLARE
+        mitigation text := NEW.payload -> 'incident_state' -> 'mitigation_strategy'
+                           ->> 'mitigation_id';
+      BEGIN{gate}
+        INSERT INTO incident.chat_outbox (chat_id, kind, dedup_key, payload)
+        SELECT chat_id, 'mitigation_decision',
+               'mitigation_decision:' || NEW.run_id || ':' || mitigation,
+               jsonb_build_object('incident_id', NEW.incident_id, 'run_id', NEW.run_id,
+                 'mitigation_id', mitigation, 'proposed_at', NEW.occurred_at,
+                 'link', code_sha256, 'principal_id', principal_id,
+                 'token', replace(gen_random_uuid()::text, '-', ''),
+                 'incident_version', (SELECT version FROM incident.incidents
+                                      WHERE incident_id = NEW.incident_id))
+        FROM incident.chat_links
+        ON CONFLICT (chat_id, dedup_key) DO NOTHING;
+        RETURN NULL;
+      END"""
+# The decision trigger is deferred, so it sees the run's decision written by the outcome receipt
+# of the same transaction: a spike that recovered before its proposal (digest) asks nobody.
+_INTERRUPT_GATE = """
+        IF NOT EXISTS (SELECT 1 FROM incident.event_decisions
+                       WHERE event_kind = 'investigation' AND event_id = NEW.run_id
+                         AND decision = 'interrupt') THEN
+          RETURN NULL;
+        END IF;"""
 
 
 def upgrade() -> None:
@@ -213,6 +243,11 @@ def upgrade() -> None:
         RETURN NULL;
       END $$""")
 
+    op.execute(
+        "CREATE OR REPLACE FUNCTION incident.enqueue_mitigation_decision() RETURNS trigger "
+        f"LANGUAGE plpgsql AS $${_ENQUEUE_DECISION_767.format(gate=_INTERRUPT_GATE)} $$"
+    )
+
     for function in ("lasted(interval)", "decide_alert_episode()", "decide_change_event()"):
         op.execute(f"ALTER FUNCTION incident.{function} OWNER TO sre_incident_owner")
     op.execute("ALTER TABLE incident.event_decisions OWNER TO sre_incident_owner")
@@ -221,6 +256,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute(
+        "CREATE OR REPLACE FUNCTION incident.enqueue_mitigation_decision() RETURNS trigger "
+        f"LANGUAGE plpgsql AS $${_ENQUEUE_DECISION_767.format(gate='')} $$"
+    )
     op.execute(
         "CREATE OR REPLACE FUNCTION incident.enqueue_dispatch_chat_messages() RETURNS trigger "
         f"LANGUAGE plpgsql AS $${_ENQUEUE_766} $$"

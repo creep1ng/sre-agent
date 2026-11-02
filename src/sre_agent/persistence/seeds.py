@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
 from os import environ
+from uuid import uuid4
 
 from sqlalchemy import insert, select, text, update
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_object_session
 from sqlalchemy.orm import defer
 
 from sre_agent.bok.owner import seed_bok_demo
-from sre_agent.governance.dto import MCPServer, MCPTool, ModelAlias
+from sre_agent.governance.dto import AuditEvent, MCPServer, MCPTool, ModelAlias
 from sre_agent.mcp.owner import MCP_CONTRACT_VERSION, MCP_SERVER_ID, MCP_TOOL_IDS, MCPRegistry
 from sre_agent.persistence.api_keys import hash_api_key, is_api_key, verify_api_key
 from sre_agent.persistence.database import Database
@@ -24,7 +25,11 @@ from sre_agent.persistence.models import (
     PrincipalRow,
     ResourceRow,
 )
-from sre_agent.persistence.repositories import CatalogRepository, MCPOwnerRepository
+from sre_agent.persistence.repositories import (
+    AuditRepository,
+    CatalogRepository,
+    MCPOwnerRepository,
+)
 
 SEED_TIME = datetime(2026, 8, 22, tzinfo=UTC)
 PRINCIPALS = (
@@ -192,16 +197,57 @@ def _require(
 async def _require_grant(
     row: GrantRow, fields: tuple[str, ...] | list[str], values: tuple[object, ...], entity: str
 ) -> None:
-    """A revoked seed grant is an operator decision: report it as drift, never fail on it."""
+    """The seed is a reset to zero: a revoked seed grant is restored, never a failure."""
     kept = [
         (field, value) for field, value in zip(fields, values, strict=True) if field != "status"
     ]
     _require(row, [field for field, _ in kept], tuple(value for _, value in kept), entity)
-    # Granted again under another grant_id, the authority is back: no drift to report.
+    if row.status == "revoked":
+        await restore_grant(async_object_session(row), row.grant_id)
+
+
+async def restore_grant(session: AsyncSession, grant_id: str) -> str | None:
+    """Grant a revoked seed grant again under a new id; the revoked row stays as history.
+
+    Idempotent: nothing happens while the same authority is active under any grant id.
+    The restore is audited as a `grants.create` without identity: the seed is no principal.
+    """
+    revoked = await session.get(GrantRow, grant_id)
     key = ("principal_id", "action", "resource_type", "resource_id")
-    active = select(GrantRow).filter_by(status="active", **{k: getattr(row, k) for k in key})
-    if row.status == "revoked" and await async_object_session(row).scalar(active) is None:
-        print(f"seed drift: grant {row.grant_id} is revoked; left revoked")
+    authority = {name: getattr(revoked, name) for name in key}
+    active = select(GrantRow).filter_by(status="active", **authority)
+    if await session.scalar(active) is not None:
+        return None
+    attempt = 1
+    while await session.get(GrantRow, restored := restored_grant_id(grant_id, attempt)):
+        attempt += 1
+    now = datetime.now(UTC)
+    session.add(
+        GrantRow(
+            grant_id=restored, effect=revoked.effect, status="active", created_at=now, **authority
+        )
+    )
+    # fmt: off
+    event = AuditEvent.model_validate(dict(
+        event_id=uuid4(), occurred_at=now, operation="grants.create", action="admin.write",
+        stage="audit", outcome="success", reason_code=None, response_status=201,
+        retryable=False, latency_ms=0, correlation={"request_id": uuid4()},
+        redaction={"policy_version": "redaction-1.0.0", "result": "success",
+                   "source_class": "none", "categories": [], "match_count": 0,
+                   "sink_eligible": False},
+        content_state="absent", authoritative_acceptance="accepted",
+        ordinary_result="released", exporter_result="not_attempted"))
+    # fmt: on
+    await AuditRepository(session).append(event)
+    await session.flush()
+    print(f"seed reset: grant {grant_id} was revoked; restored as {restored}")
+    return restored
+
+
+def restored_grant_id(grant_id: str, attempt: int) -> str:
+    """Derive the restored id from the seed id, within the 64-character grant id limit."""
+    suffix = f"-restored-{attempt}"
+    return grant_id[: 64 - len(suffix)] + suffix
 
 
 def _grant_id(alias: str) -> str:
