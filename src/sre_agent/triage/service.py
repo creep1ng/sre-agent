@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from sqlalchemy import text
@@ -624,10 +624,13 @@ class TriageService:
         if not may_start:
             return _TransitionOutcome(incident_id)
 
+        # The investigation run starts after the declaration's own run, so it is the incident's
+        # latest run when runs are ordered by creation (GET /v1/incidents, the run list).
+        started_at = now + timedelta(microseconds=1)
         investigation = IncidentRuntime(
             self._workflow,
             lambda: units,
-            clock=lambda: now,
+            clock=lambda: started_at,
         )
         try:
             started = await investigation.start_run(
