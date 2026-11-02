@@ -12,6 +12,7 @@ the proposal again with a fresh token bound to the current version.
 
 from __future__ import annotations
 
+import json
 import re
 from uuid import uuid4
 
@@ -26,6 +27,15 @@ COMMANDS = {"a": "approve_mitigation", "r": "reject_mitigation"}
 NOT_DECIDED = {
     401: "Tu usuario ya no está activo: no se decidió nada.",
     403: "No tienes permiso para decidir esta mitigación: no se decidió nada.",
+}
+# An approval whose operation the deploy-executor did not run (#722): nothing moved. Its
+# `precondition_failed` is also the workflow guard's code, so it keeps the default answer.
+NOT_EXECUTED = {
+    "operation_not_authorized": "El agente no tiene permiso para ejecutar esta operación: "
+    "no se aplicó nada.",
+    "executor_unavailable": "El ejecutor no está disponible: no se aplicó nada; "
+    "inténtalo de nuevo.",
+    "execution_failed": "El ejecutor falló al aplicarla: el incidente sigue en mitigación.",
 }
 CHANGED = "El incidente cambió desde este mensaje: te envío la propuesta actualizada."
 
@@ -103,5 +113,8 @@ class ChatDecisions:
                 lines = message.splitlines()
                 lines[0] = f"Propuesta desactualizada: {payload['incident_id']}"
                 return CHANGED, ("\n".join([*lines, CHANGED]), None)
+        code = json.loads(reply.body).get("error", {}).get("code")
+        if code in NOT_EXECUTED:
+            return NOT_EXECUTED[code], None
         default = "No se pudo decidir; inténtalo de nuevo o decide en la consola."
         return NOT_DECIDED.get(reply.status_code, default), None

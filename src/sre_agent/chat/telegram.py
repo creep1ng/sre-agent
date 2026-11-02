@@ -23,11 +23,14 @@ import httpx
 
 from sre_agent.chat.decisions import ChatDecisions
 from sre_agent.chat.outbox import ChatStore, DeliveryError, Keyboard
+from sre_agent.gateway.execution import OperationExecutor
+from sre_agent.gateway.responses import PostgresAuditStore
 from sre_agent.gateway.runs import RunCommandService
 from sre_agent.incident.runtime import IncidentRuntime
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
+from sre_agent.settings import Settings
 
 logger = logging.getLogger("sre_agent.chat.telegram")
 # An update that fails this many times in a row is skipped, so it cannot hold back later ones.
@@ -151,7 +154,15 @@ async def gateway(database_url: str, api_url: str, token: str, poll_seconds: int
             bot, store = BotApi(http, token), ChatStore(database)
             workflow = load_incident_workflow(WORKFLOW)
             runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
-            commands = RunCommandService(database.sessions, workflow, runtime)
+            # An approval from the chat runs its operation exactly as the console's does (#722):
+            # the same checks, the signed executor call and the audit, or a refusal.
+            executor = OperationExecutor(
+                database.sessions,
+                runtime,
+                Settings.from_environment(),
+                audit=PostgresAuditStore(database.sessions),
+            )
+            commands = RunCommandService(database.sessions, workflow, runtime, executor=executor)
             decisions = ChatDecisions(database, commands)
             me = await bot.call("getMe")
             logger.info("telegram gateway started as @%s", me.get("username"))

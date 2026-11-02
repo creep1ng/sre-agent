@@ -151,6 +151,14 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_API_URL: ${TELEGRAM_API_URL:-https://api.telegram.org}
       TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+      # A tap that approves runs the mitigation's operation as the API does (#722): the executor,
+      # its signing key, the agent whose grant it checks and the audit it writes.
+      DEPLOY_EXECUTOR_URL: ${DEPLOY_EXECUTOR_URL:-}
+      DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:-}
+      INVESTIGATOR_GATEWAY_URL: http://api:8000
+      INVESTIGATOR_GATEWAY_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
+      INVESTIGATOR_MODEL_ALIAS: triage-agent
     depends_on:
       migrate:
         condition: service_completed_successfully
