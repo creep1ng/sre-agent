@@ -1,0 +1,31 @@
+# Midnight
+
+> Midnight is an open-source background SRE agent for freelancers who keep several clients' services running on a few VPS, with no on-call team. It watches the signals they already have (Grafana, Alertmanager, Uptime Kuma, GitHub Actions), remembers every incident and deploy with its source, acts only through catalog operations approved in advance, and interrupts a human only when their decision changes the outcome.
+
+Status: an academic project under active development, not a hosted service. The numbers on the landing page are labelled as targets, measurements with their date, or illustrations; the week of signals on its cover is simulated. Open bugs that the promises do not meet yet are tracked as GitHub issues (for example #758 and #760).
+
+## Run it
+
+Midnight runs on your own machine with Docker Compose. The stack needs a private `.env` with unique API keys and model settings before it starts; `.env.example` lists every placeholder.
+
+```sh
+git clone https://github.com/creep1ng/sre-agent
+cd sre-agent
+cp .env.example .env    # replace every placeholder; never commit it
+python scripts/setup_sre.py
+```
+
+The web proxy then serves this landing at `/`, the incident console at `/app/` and the API at `/api/`.
+
+## API
+
+- [OpenAPI document](/api/openapi.json): the governed HTTP API (`POST /v1/responses`, incidents, alerts, governance). Every mutating `POST` takes an `Idempotency-Key` header.
+- [Interactive API docs](http://127.0.0.1:8000/docs): served by the API container on its own port in a local stack.
+
+## Docs
+
+- [README](https://github.com/creep1ng/sre-agent#readme): local stack and quick path
+- [Vision and values](https://github.com/creep1ng/sre-agent/blob/main/docs/vision.md): what Midnight does and refuses to do
+- [Operator setup](https://github.com/creep1ng/sre-agent/blob/main/docs/setup-sre.md): host prerequisites and secrets
+- [Architecture](https://github.com/creep1ng/sre-agent/blob/main/docs/architecture.md): components, routes and audit
+- [Repository](https://github.com/creep1ng/sre-agent): source, issues and pull requests
