@@ -1,0 +1,166 @@
+# Alert rules and contact point Grafana provisions for the demo (#765). Midnight builds no
+# detection: these are the user's rules, and Grafana sends what they fire to Midnight's intake
+# by webhook. Generic per service, so they cover the flagd scenarios of the pinned store
+# (docs/product-direction-2026-10-28.md) and the broken sre-checkout release (#721):
+#   errors:  paymentFailure, paymentUnreachable, cartFailure, productCatalogFailure, adFailure,
+#            recommendationCacheFailure, failedReadinessProbe, sre-checkout 1.5.0
+#   latency: imageSlowLoad, intlShippingSlowdown, adHighCpu, adManualGc, emailMemoryLeak
+# Span metrics reach Prometheus once a minute, hence the 2 min windows; sre-checkout pushes its
+# own counter every 5 s. Each rule names where its evidence lives, because the alert text is
+# all an investigation starts from. Grafana expands ${...} from its own environment:
+# ALERT_INTAKE_URL and ALERT_INTAKE_GRAFANA_SECRET.
+# Each rule must hold for 1 min before it fires, so a flapping signal does not open a new paid
+# investigation on every flap; notifications group per rule and service, so one service's alert
+# never travels with another's. severity uses Grafana's usual values, which intake maps to
+# critical -> sev1, warning -> sev2, info -> sev3.
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: midnight-intake
+    receivers:
+      - uid: midnight-intake-webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: ${ALERT_INTAKE_URL}
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: ${ALERT_INTAKE_GRAFANA_SECRET}
+
+groups:
+  - orgId: 1
+    name: midnight-per-service
+    folder: Midnight
+    interval: 10s
+    rules:
+      - uid: midnight-service-error-rate
+        title: service-error-rate
+        condition: threshold
+        data:
+          - refId: ratio
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: webstore-metrics
+            model:
+              refId: ratio
+              instant: true
+              range: false
+              expr: >-
+                sum by (service_name) (increase(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"}[2m]))
+                / sum by (service_name) (increase(traces_span_metrics_calls_total[2m]))
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              refId: threshold
+              type: threshold
+              expression: ratio
+              conditions:
+                - evaluator: {type: gt, params: [0.05]}
+        for: 1m
+        noDataState: OK
+        execErrState: KeepLast
+        labels:
+          severity: critical
+        annotations:
+          summary: >-
+            {{ $labels.service_name }}: {{ with $values.ratio }}{{ humanizePercentage .Value }}{{ end }} of spans
+            failed over the last 2 min (threshold 5%).
+          description: >-
+            Evidence: Prometheus datasource webstore-metrics, metric traces_span_metrics_calls_total
+            with service_name="{{ $labels.service_name }}" and status_code="STATUS_CODE_ERROR" for
+            the errors, span_name for the failing operation; logs in datasource webstore-logs,
+            index otel-logs-*, field resource.service.name:"{{ $labels.service_name }}".
+        notification_settings:
+          receiver: midnight-intake
+          group_by: [alertname, service_name]
+          group_wait: 5s
+          group_interval: 30s
+          repeat_interval: 4h
+
+      - uid: midnight-service-latency-p95
+        title: service-latency-p95
+        condition: threshold
+        data:
+          - refId: p95
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: webstore-metrics
+            model:
+              refId: p95
+              instant: true
+              range: false
+              expr: >-
+                histogram_quantile(0.95, sum by (service_name, le)
+                (rate(traces_span_metrics_duration_milliseconds_bucket{span_kind="SPAN_KIND_SERVER"}[2m])))
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              refId: threshold
+              type: threshold
+              expression: p95
+              conditions:
+                - evaluator: {type: gt, params: [2000]}
+        for: 1m
+        noDataState: OK
+        execErrState: KeepLast
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            {{ $labels.service_name }}: p95 of server spans is {{ with $values.p95 }}{{ printf "%.0f" .Value }}{{ end }} ms
+            over the last 2 min (threshold 2000 ms).
+          description: >-
+            Evidence: Prometheus datasource webstore-metrics, histogram
+            traces_span_metrics_duration_milliseconds_bucket with service_name="{{ $labels.service_name }}"
+            and span_kind="SPAN_KIND_SERVER", span_name for the slow operation; logs in datasource
+            webstore-logs, index otel-logs-*, field resource.service.name:"{{ $labels.service_name }}".
+        notification_settings:
+          receiver: midnight-intake
+          group_by: [alertname, service_name]
+          group_wait: 5s
+          group_interval: 30s
+          repeat_interval: 4h
+
+      # sre-checkout sends no traces, only its orders counter. A healthy release has no 5xx
+      # series, so the ratio is empty, which noDataState reads as OK.
+      - uid: midnight-sre-checkout-error-rate
+        title: sre-checkout-orders-error-rate
+        condition: threshold
+        data:
+          - refId: ratio
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: webstore-metrics
+            model:
+              refId: ratio
+              instant: true
+              range: false
+              expr: >-
+                sum by (service_name) (increase(checkout_requests_total{service_namespace="sre-agent",service_name="sre-checkout",http_response_status_code=~"5.."}[30s]))
+                / sum by (service_name) (increase(checkout_requests_total{service_namespace="sre-agent",service_name="sre-checkout"}[30s]))
+          - refId: threshold
+            datasourceUid: __expr__
+            model:
+              refId: threshold
+              type: threshold
+              expression: ratio
+              conditions:
+                - evaluator: {type: gt, params: [0.1]}
+        for: 1m
+        noDataState: OK
+        execErrState: KeepLast
+        labels:
+          severity: warning
+        annotations:
+          summary: >-
+            sre-checkout orders failing: {{ with $values.ratio }}{{ humanizePercentage .Value }}{{ end }} answered 5xx
+            over the last 30 s (threshold 10%).
+          description: >-
+            Evidence: Prometheus datasource webstore-metrics, metric checkout_requests_total with
+            service_namespace="sre-agent" and service_name="sre-checkout": http_response_status_code
+            counts the answers and service_version names the release that served them. The
+            service sends no logs and no traces.
+        notification_settings:
+          receiver: midnight-intake
+          group_by: [alertname, service_name]
+          group_wait: 5s
+          group_interval: 30s
+          repeat_interval: 4h

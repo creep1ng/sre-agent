@@ -21,7 +21,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from test_investigator_loop import STATE, Provider, ScriptedGateway, hypothesis, ids
 
 from sre_agent.investigator.contract import InvestigationRequest, InvestigationResult, Limits
-from sre_agent.investigator.loop import investigate
+from sre_agent.investigator.loop import BOK_UNAVAILABLE, investigate
 from sre_agent.investigator.ports import BoKFragment, GatewayError
 
 EVIDENCE_SCHEMA = Path(__file__).parents[1] / "agent/schemas/incident-state.schema.yaml"
@@ -35,8 +35,7 @@ CONCLUDE = '{"action": "conclude", "summary": "No guidance applies.", "supportin
 CITE_FRAGMENT = json.dumps(
     {"action": "conclude", "summary": "Found.", "supporting_evidence": ["ev_00000000"]}
 )
-UNAVAILABLE, FAILED = f"bok collection unavailable: {RESPONSE}", f"bok search failed: {RESPONSE}"
-REJECTED = f"bok answer rejected: {RESPONSE}"
+FAILED = f"{BOK_UNAVAILABLE}: {RESPONSE}"
 NOT_READY = GatewayError("transient", 503, code="index_unavailable", request_id=UUID(int=2))
 DOWN = GatewayError("transient", 503, code="storage_unavailable")
 
@@ -160,34 +159,39 @@ def test_an_empty_search_is_an_answer_and_the_run_goes_on() -> None:
     assert (call["tool"], call["result"]) == ("bok.search", "no results")
 
 
+def seen_result(gateway: ScriptedGateway, call: int = 1) -> str:
+    """What the model was shown as the last search's result."""
+    return state_of(gateway.calls[call])["tool_calls"][-1]["result"]
+
+
 @pytest.mark.parametrize(
-    ("failure", "status", "detail", "calls"),
+    ("failure", "reason", "calls"),
     [
-        (GatewayError("denied", 403, request_id=UUID(int=1)), "denied", UNAVAILABLE, 1),
-        (NOT_READY, "upstream_unavailable", f"{FAILED} (index_unavailable)", 2),
-        (DOWN, "upstream_unavailable", f"{FAILED} (storage_unavailable)", 2),
-        (GatewayError("rejected", 422), "needs_human", REJECTED, 1),
+        (GatewayError("denied", 403, request_id=UUID(int=1)), "denied", 1),
+        (NOT_READY, "index_unavailable", 2),
+        (DOWN, "storage_unavailable", 2),
+        (GatewayError("rejected", 422), "rejected", 1),
     ],
     ids=["denied", "collection-not-ready", "storage-down", "unexpected-answer"],
 )
-def test_each_failure_is_told_apart_and_never_answered_from_fixtures(
-    failure: GatewayError, status: str, detail: str, calls: int
+def test_each_failure_is_told_apart_and_the_investigation_goes_on_without_fixtures(
+    failure: GatewayError, reason: str, calls: int
 ) -> None:
-    gateway, bok, provider = ScriptedGateway(search()), BoK(failure), Provider()
+    gateway, bok, provider = ScriptedGateway(search(), CONCLUDE), BoK(failure), Provider()
     result = run(gateway, bok, allowed(), provider=provider)
 
-    assert (result.status, result.detail, len(bok.calls)) == (status, detail, calls)
-    assert (result.evidence, provider.calls, gateway.replies) == ([], [], [])
+    assert (result.status, len(bok.calls), result.evidence) == ("completed", calls, [])
+    assert (seen_result(gateway), provider.calls) == (f"{FAILED} ({reason})", [])
     # The failed search keeps its request id for the audit trail, as other gateway calls (#580).
     assert failure.request_id is None or failure.request_id in result.request_ids
 
 
 def test_a_search_that_does_not_answer_in_time_is_a_bounded_failure() -> None:
-    gateway, bok = ScriptedGateway(search()), BoK(1.0)
+    gateway, bok = ScriptedGateway(search(), CONCLUDE), BoK(1.0)
     result = run(gateway, bok, allowed(), limits=Limits(gateway_timeout_seconds=0.05))
 
-    assert (result.status, len(bok.calls), result.evidence) == ("upstream_unavailable", 2, [])
-    assert result.detail == f"{FAILED} (timeout)"
+    assert (result.status, len(bok.calls), result.evidence) == ("completed", 2, [])
+    assert seen_result(gateway) == f"{FAILED} (timeout)"
 
 
 @pytest.mark.parametrize(
@@ -206,19 +210,22 @@ def test_a_search_that_does_not_answer_in_time_is_a_bounded_failure() -> None:
     ).split(),
 )
 def test_an_answer_outside_the_search_is_never_cited(answer: list[BoKFragment]) -> None:
-    gateway, bok = ScriptedGateway(search(), hypothesis("ev_00000000")), BoK(answer)
+    cite = hypothesis("ev_00000000")
+    gateway, bok = ScriptedGateway(search(), cite, cite), BoK(answer)
     result = run(gateway, bok, allowed())
 
-    assert (result.status, result.detail) == ("needs_human", REJECTED)
-    assert result.evidence == [] and len(gateway.replies) == 1
+    assert (result.status, result.detail) == ("invalid_output", "unknown references: ev_00000000")
+    assert (result.evidence, seen_result(gateway)) == ([], f"{FAILED} (rejected)")
 
 
 def test_a_revocation_stops_the_next_search_without_serving_a_stored_answer() -> None:
-    gateway = ScriptedGateway(search(), search())
+    gateway = ScriptedGateway(search(), search(), CONCLUDE)
     bok = BoK([fragment()], GatewayError("denied", 403))
     result = run(gateway, bok, allowed())
 
-    assert (result.status, result.detail, len(bok.calls)) == ("denied", UNAVAILABLE, 2)
+    assert (result.status, len(bok.calls), seen_result(gateway, 2)) == (
+        "completed", 2, f"{FAILED} (denied)",
+    )  # fmt: skip
     assert [item.evidence_id for item in result.evidence] == ["ev_00000000"]
 
 
@@ -239,7 +246,7 @@ def test_a_query_outside_the_producer_bounds_never_leaves_the_harness(query: str
 
 
 def test_the_model_is_offered_only_the_authorized_collections() -> None:
-    offered, plain = ScriptedGateway(search()), ScriptedGateway(search(), search())
+    offered, plain = ScriptedGateway(search(), CONCLUDE), ScriptedGateway(search(), search())
     others = allowed("demo-unversioned"), allowed("demo-other@1.0.0", "bok.read")
     run(offered, BoK(GatewayError("denied", 403)), allowed(), allowed(OPERATIONS, None), *others)
     result = run(plain, None)

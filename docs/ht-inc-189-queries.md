@@ -26,8 +26,21 @@ ejemplos positivos y de error, registro en la policy).
 | Método | Respuesta |
 | --- | --- |
 | `GET /v1/incidents/{incident_id}` | `incident-detail:1.0.0`: identidad, workflow, estado, severidad/impacto, alerta canónica, approvals acotados, versión, `runs[]` (vacío = ausencia explícita) |
-| `GET /v1/incidents/{incident_id}/timeline?run_id=&after=&limit=` | `run-event:1.1.0` reutilizado (1.1.0 añade `reason_code`, #705): eventos ordenados + `next_cursor` + `has_more` |
+| `GET /v1/incidents/{incident_id}/timeline?run_id=&after=&limit=` | `run-event:1.2.0` reutilizado (1.1.0 añade `reason_code`, #705; 1.2.0 el tipo `run_start_blocked`, #704): eventos ordenados + `next_cursor` + `has_more` |
 | `GET /v1/incidents/{incident_id}/snapshot?run_id=` | `incident-snapshot:1.0.0`: snapshot + versión y `event_sequence` cubiertos |
+| `GET /v1/incidents?status=open\|recent&since=&limit=` | `incident-list:1.0.0` (#870): incidentes por `updated_at` descendente, cada uno con su último run y la decisión que espera (`pending_decision`), o `null` |
+
+## Lista de incidentes (#870)
+
+Lo que lee la bandeja antes de abrir un incidente. `status=open` excluye los
+estados terminales del workflow; `recent` (defecto) los incluye. `since` es un
+instante ISO 8601 con zona; `limit` 1..100 (defecto 50) con `has_more`. Misma
+autorización que el detalle (`run.read`). Hay decisión pendiente cuando el
+último run está en `awaiting_human` con `approve_mitigation` o `escalate`; la
+fila trae el run, la versión del incidente que debe enviar el comando, desde
+cuándo espera y el `mitigation_id`, nunca el texto de la mitigación: ese texto
+es razonamiento y se lee de `.../runs/{run_id}/context` con `run.read_context`.
+Un incidente de otra versión del workflow no aparece en la lista.
 
 ## Timeline, paginación y versionado
 

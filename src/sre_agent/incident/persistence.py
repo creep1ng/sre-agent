@@ -18,6 +18,8 @@ RUN_PATCH_FIELDS = frozenset({"status", "pending_command", "terminated_reason", 
 # The events through which a dispatch outcome blocks (escalation) or ends (run_terminated) its
 # run without a workflow transition. Replay applies their `run_patch`.
 RUN_PATCH_EVENTS = frozenset({"escalation", "run_terminated"})
+# What a run records without moving: a human command refused before any transition (#722).
+RECORDED_EVENTS = frozenset({"human_command", "denial"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,6 +136,10 @@ class IncidentRepository(Protocol):
         self, incident_id: str, state: JsonDocument, *, now: datetime
     ) -> IncidentRecord: ...
 
+    async def list_recent(
+        self, *, exclude_states: Sequence[str], since: datetime | None, limit: int
+    ) -> tuple[IncidentRecord, ...]: ...
+
 
 class RunRepository(Protocol):
     async def get(self, run_id: str) -> RunRecord | None: ...
@@ -145,6 +151,8 @@ class RunRepository(Protocol):
     ) -> RunRecord: ...
 
     async def list_ids(self, incident_id: str) -> tuple[str, ...]: ...
+
+    async def latest_for(self, incident_ids: Sequence[str]) -> dict[str, RunRecord]: ...
 
 
 class EventRepository(Protocol):
@@ -233,6 +241,15 @@ class IncidentUnitOfWork(Protocol):
     ) -> bool: ...
 
     async def release_run_dispatch(self, incident_id: str, run_id: str) -> None: ...
+
+    async def record_run_events(
+        self,
+        incident_id: str,
+        run_id: str,
+        *,
+        decision: DecisionDraft,
+        events: Sequence[EventDraft],
+    ) -> None: ...
 
     async def commit(self) -> None: ...
 
