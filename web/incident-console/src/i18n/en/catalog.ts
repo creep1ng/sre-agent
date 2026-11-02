@@ -1,0 +1,32 @@
+import type { Messages } from "@/i18n";
+import type catalog from "../es/catalog";
+
+export default {
+  title: "What Midnight may do",
+  promise: "Nothing outside this list can run, and nothing on it runs without a person's approval.",
+  "blocked.unauthenticated": "Connect a credential",
+  "blocked.loading": "Loading the catalog…",
+  "blocked.auth": "The API rejected the credential",
+  "blocked.forbidden": "Not allowed to see the catalog",
+  "blocked.error": "We could not read the catalog",
+  "blocked.connect": "Connect API",
+  stale: "No connection to the API",
+  "executor.unavailable": "The executor is not answering: nothing can run until it is back. These are the registered operations.",
+  "executor.not_configured": "This install has no executor: nothing can run.",
+  empty: "No operations are registered.",
+  "operation.deployment.rollback": "Roll back to an earlier release",
+  "operation.deployment.restart": "Restart on the current release",
+  "operation.flag.set": "Turn a fault flag off",
+  "runner.agent": "Midnight's agent runs it, after your approval.",
+  "runner.none": "No one can run it: no grant covers it.",
+  "parameters.unknown": "parameters unknown",
+  "parameters.unlisted": "values unavailable",
+  executions: "Recent runs",
+  "executions.none": "It has never run.",
+  "outcome.succeeded": "Ran",
+  "outcome.refused": "Refused: no grant",
+  "outcome.failed": "Did not run",
+  "approved.by": "approved by {name}",
+  "approved.someone": "someone",
+  "incident.open": "Open the incident",
+} satisfies Messages<typeof catalog>;

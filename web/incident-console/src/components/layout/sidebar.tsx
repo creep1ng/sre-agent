@@ -1,4 +1,4 @@
-import { ExternalLinkIcon, InboxIcon, LandmarkIcon, SearchIcon, SirenIcon } from "lucide-react";
+import { ExternalLinkIcon, InboxIcon, LandmarkIcon, SearchIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { NavLink } from "react-router";
 import { AgentAvatar, BrandMark, Logo } from "@/components/brand";
@@ -170,6 +170,7 @@ export function Sidebar({
         {appMode === "mock" && (
           <NavItem to="/incidentes" icon={SirenIcon} label={t("nav.incidents")} count={inbox.active.length} folded={folded} />
         )}
+        <NavItem to="/acciones" icon={ShieldCheckIcon} label={t("nav.actions")} folded={folded} />
       </nav>
 
       {/* The administration console still lives outside the new console: one link, a new tab. */}

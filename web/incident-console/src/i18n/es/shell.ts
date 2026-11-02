@@ -3,6 +3,7 @@ const shell = {
   "nav.main": "Principal",
   "nav.inbox": "Bandeja",
   "nav.incidents": "Incidentes",
+  "nav.actions": "Acciones",
   "nav.admin": "Administración",
   "nav.governance": "Gobierno de IA",
   "nav.sections": "Secciones de la consola",

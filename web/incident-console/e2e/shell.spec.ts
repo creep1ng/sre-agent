@@ -22,7 +22,7 @@ const mainNav = (page: Page) => sidebar(page).getByRole("navigation", { name: "P
 test("each section is a word in the text face with its own icon", async ({ page }) => {
   await freshStart(page);
   const links = mainNav(page).getByRole("link");
-  await expect(links).toHaveText([/Bandeja/, /Incidentes/]);
+  await expect(links).toHaveText([/Bandeja/, /Incidentes/, /Acciones/]);
   for (const link of await links.all()) {
     await expect(link.locator("svg.lucide")).toHaveCount(1);
     await expect(link.locator("span").first()).toHaveCSS("font-family", /Newsreader/);
@@ -32,10 +32,10 @@ test("each section is a word in the text face with its own icon", async ({ page 
 
 test("live mode lists only sections backed by the API", async ({ page }) => {
   await freshStart(page, "./");
-  await expect(mainNav(page).getByRole("link")).toHaveText([/Bandeja/]);
+  await expect(mainNav(page).getByRole("link")).toHaveText([/Bandeja/, /Acciones/]);
   await page.keyboard.press("Control+k");
   const search = page.getByRole("dialog", { name: "Buscar" });
-  await expect(search.getByRole("option")).toHaveText([/Bandeja/]);
+  await expect(search.getByRole("option")).toHaveText([/Bandeja/, /Acciones/]);
 });
 
 test("the sidebar folds from the keyboard and a reload remembers it", async ({ page }) => {
