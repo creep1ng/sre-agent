@@ -370,6 +370,73 @@ def project_detail(
     }
 
 
+def _text(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def project_list_item(
+    record: IncidentRecord, run: RunRecord | None, workflow: IncidentWorkflow
+) -> dict[str, Any] | None:
+    """One row of the incident list: what an inbox shows before opening the incident.
+
+    ``None`` for an incident of another workflow version, which this API cannot read. A
+    decision is pending when the latest run waits for a human (``approve_mitigation`` or
+    ``escalate``). Like the detail, the row names the pending mitigation but carries none
+    of its content: its words are reasoning, read from the run context under
+    ``run.read_context``.
+    """
+
+    state = record.state if isinstance(record.state, dict) else {}
+    if (state.get("workflow_id"), state.get("workflow_version")) != (
+        workflow.workflow_id,
+        workflow.version,
+    ):
+        return None
+    if state.get("state") not in workflow.states:
+        raise UnsupportedWorkflowDataError("stored incident names an unknown state")
+    alert = state.get("alert") if isinstance(state.get("alert"), dict) else {}
+    strategy = state.get("mitigation_strategy")
+    severity = state.get("severity")
+    latest = pending = None
+    if run is not None:
+        run_state = run.state if isinstance(run.state, dict) else {}
+        latest = {
+            "run_id": run.run_id,
+            "status": _text(run_state.get("status")),
+            "current_state": _text(run_state.get("current_state")),
+            "pending_command": _text(run_state.get("pending_command")),
+            "terminated_reason": _text(run_state.get("terminated_reason")),
+            "updated_at": utc_iso(run.updated_at),
+        }
+        command = latest["pending_command"]
+        if latest["status"] == "awaiting_human" and command in {"approve_mitigation", "escalate"}:
+            proposed = (
+                command == "approve_mitigation"
+                and isinstance(strategy, dict)
+                and strategy.get("approval_status") == "pending"
+            )
+            pending = {
+                "command": command,
+                "run_id": run.run_id,
+                "incident_version": record.version,
+                "waiting_since": utc_iso(run.updated_at),
+                "mitigation_id": _text(strategy.get("mitigation_id")) if proposed else None,
+            }
+    return {
+        "incident_id": record.incident_id,
+        "state": state.get("state"),
+        "severity": severity if severity in SEVERITIES else None,
+        "service": _text(alert.get("service")),
+        "summary": _text(alert.get("summary")),
+        "impact": _text(state.get("impact")),
+        "opened_at": utc_iso(record.created_at),
+        "updated_at": utc_iso(record.updated_at),
+        "version": record.version,
+        "latest_run": latest,
+        "pending_decision": pending,
+    }
+
+
 def project_snapshot(snapshot: SnapshotRecord, workflow: IncidentWorkflow) -> dict[str, Any]:
     """Project the persisted historical snapshot, never the current aggregate.
 
