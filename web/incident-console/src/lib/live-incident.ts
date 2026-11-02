@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { incidentApi, type ApiResult, type ChangeEvent, type IncidentDetail, type Reasoning, type RunEvent, type RunState } from "./incident-api";
+import { incidentApi, type Alert, type ApiResult, type ChangeEvent, type IncidentDetail, type Reasoning, type RunEvent, type RunState } from "./incident-api";
 import { useLive } from "./live";
 
 /** While the agent works the page asks every few seconds; otherwise it only keeps fresh. */
@@ -18,6 +18,8 @@ export interface LiveIncident {
   events: (RunEvent & { run_id: string })[];
   reasoning: Reasoning | "forbidden" | null;
   changes: ChangeEvent[] | "forbidden" | null;
+  /** The incident's alert episodes once a mitigation is approved: whether Grafana still alerts. */
+  alerts: { firing: Alert[]; resolved: Alert[] } | null;
   /** An investigation request is in flight. */
   starting: boolean;
   /** When the last request was sent and the run it follows. */
@@ -36,6 +38,7 @@ const EMPTY: LiveIncident = {
   events: [],
   reasoning: null,
   changes: null,
+  alerts: null,
   starting: false,
   requested: null,
   startError: null,
@@ -126,10 +129,17 @@ export function useLiveIncident(incidentId: string | undefined) {
           const read = await incidentApi.changes(token!, detail.alert.service, signal);
           changes = read.kind === "forbidden" ? "forbidden" : read.kind === "ok" ? read.body.changes : stateRef.current.changes;
         }
+        // Only an approved mitigation has a signal to recover; until then the alerts are not asked.
+        let alerts: LiveIncident["alerts"] = null;
+        if ([...known.values()].some((run) => run.events.some((event) => event.summary === "Mitigation approved."))) {
+          const read = await incidentApi.alerts(token!, signal);
+          const mine = (list: Alert[] | undefined) => (list ?? []).filter((alert) => alert.incident_id === incidentId);
+          alerts = read.kind === "ok" ? { firing: mine(read.body.alerts), resolved: mine(read.body.resolved) } : stateRef.current.alerts;
+        }
         if (!alive || signal.aborted) return null;
         const events = detail.runs.flatMap((summary) => known.get(summary.run_id)?.events.map((event) => ({ ...event, run_id: summary.run_id })) ?? []);
         busy = investigating(current);
-        setState((s) => ({ ...s, phase: "ready", stale: false, detail, runs: current, events, reasoning, changes }));
+        setState((s) => ({ ...s, phase: "ready", stale: false, detail, runs: current, events, reasoning, changes, alerts }));
       } catch (error) {
         // An aborted poll was replaced by another one, which keeps the only loop.
         if (!alive || signal.aborted || (error as { name?: string }).name === "AbortError") return null;

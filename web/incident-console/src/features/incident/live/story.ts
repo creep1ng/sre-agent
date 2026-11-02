@@ -34,7 +34,8 @@ export interface StoryEntry {
   /** The evidence number the hypothesis claims point to. */
   number?: number;
   tone?: "critical";
-  query?: { tool: string; text: string; window: string };
+  /** What the agent asked its source, under a label that names it: a metrics query, a log search… */
+  query?: { label: Key; tool: string; text: string; window: string };
   link?: { to: string; external?: boolean };
 }
 
@@ -108,6 +109,11 @@ function eventEntry(event: Event, live: LiveIncident, me: string | null | undefi
   return key ? { ...base, line: { key } } : null;
 }
 
+/** The stored query, when there is one: a recalled memory's postmortem, a knowledge fragment's address. */
+function queryOf(item: Evidence, label: Key): StoryEntry["query"] {
+  return item.query ? { label, tool: item.tool ?? item.source, text: item.query, window: item.time_window ?? "" } : undefined;
+}
+
 /** A recalled memory (#773) names the closed incident whose postmortem it came from. */
 const MEMORY = /^\/v1\/incidents\/([^/]+)\/postmortem$/;
 
@@ -117,10 +123,12 @@ function evidenceEntry(item: Evidence, cited: Set<string>, service: string): Sto
   if (item.source === "incident_memory") {
     const memory = MEMORY.exec(item.query ?? "");
     const link = memory ? { to: `/incidentes/${memory[1]}` } : undefined;
-    return { ...base, line: { key: "evidence.memory", params }, verdict: "memory", quote: item.finding ?? item.summary, link };
+    const query = queryOf(item, "evidence.query.memory");
+    return { ...base, line: { key: "evidence.memory", params }, verdict: "memory", quote: item.finding ?? item.summary, link, query };
   }
   if (item.source === "bok" || item.tool === "bok.search") {
-    return { ...base, line: { key: "evidence.knowledge" }, verdict: "knowledge", quote: item.finding ?? item.summary };
+    const query = queryOf(item, "evidence.query.knowledge");
+    return { ...base, line: { key: "evidence.knowledge" }, verdict: "knowledge", quote: item.finding ?? item.summary, query };
   }
   const key: Key =
     item.tool === "query_prometheus"
@@ -138,7 +146,7 @@ function evidenceEntry(item: Evidence, cited: Set<string>, service: string): Sto
     line: { key, params },
     verdict,
     quote: (verdict && item.finding) || undefined,
-    query: item.query ? { tool: item.tool ?? item.source, text: item.query, window: item.time_window ?? "" } : undefined,
+    query: queryOf(item, key.replace("evidence.", "evidence.query.") as Key),
   };
 }
 
