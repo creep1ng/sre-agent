@@ -17,6 +17,9 @@ ResourceType = Literal[
     # is the stable grantable resource for run-scoped incident actions. Grants over
     # this type are contracted but not seeded; evaluation denies by default.
     "incident_workflow",
+    # What mitigation.execute grants are over (#722): `{service}:{operation}` of an operation
+    # the deploy-executor enrols (schemas/executor/1.0.0/deploy-executor.yaml, `governance`).
+    "service_operation",
 ]
 ControlAction = Literal["admin.read", "admin.write"]
 AuditRefValue = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -106,9 +109,17 @@ class Grant(StrictDTO):
 
 
 CatalogResourceType = Literal[
-    "llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection", "incident_workflow"
+    "llm_model",
+    "mcp_server",
+    "mcp_tool",
+    "skill",
+    "bok_collection",
+    "incident_workflow",
+    "service_operation",
 ]
-CatalogSource = Literal["model_alias", "mcp", "skill", "bok", "incident_workflow"]
+CatalogSource = Literal[
+    "model_alias", "mcp", "skill", "bok", "incident_workflow", "deploy_executor"
+]
 CatalogStatus = Literal[
     "registered", "draft", "published", "indexing", "active", "inactive", "revoked"
 ]
@@ -200,6 +211,7 @@ class ResourceCatalogEntry(StrictDTO):
             "skill": "skill",
             "bok_collection": "bok",
             "incident_workflow": "incident_workflow",
+            "service_operation": "deploy_executor",
         }
         if self.source != expected_source[self.resource_type]:
             raise ValueError("catalog source does not match resource type")
@@ -210,6 +222,7 @@ class ResourceCatalogEntry(StrictDTO):
             "skill": {"draft", "published", "active", "inactive", "revoked"},
             "bok_collection": {"draft", "indexing", "active", "inactive", "revoked"},
             "incident_workflow": {"active", "inactive"},
+            "service_operation": {"active", "inactive"},
         }
         if self.status not in allowed[self.resource_type]:
             raise ValueError("catalog status is not permitted for this resource type")
