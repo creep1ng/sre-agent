@@ -131,7 +131,7 @@ export function useLiveIncident(incidentId: string | undefined) {
         }
         // Only an approved mitigation has a signal to recover; until then the alerts are not asked.
         let alerts: LiveIncident["alerts"] = null;
-        if ([...known.values()].some((run) => run.events.some((event) => event.summary === "Mitigation approved."))) {
+        if ([...known.values()].some((run) => run.events.some((event) => event.summary.startsWith("Mitigation approved")))) {
           const read = await incidentApi.alerts(token!, signal);
           const mine = (list: Alert[] | undefined) => (list ?? []).filter((alert) => alert.incident_id === incidentId);
           alerts = read.kind === "ok" ? { firing: mine(read.body.alerts), resolved: mine(read.body.resolved) } : stateRef.current.alerts;
