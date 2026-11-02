@@ -1,6 +1,7 @@
 # ruff: noqa: E501, I001
 """Authoritative incident query endpoints: detail, timeline and public snapshot (HT-INC-RUNTIME-B, issue #189),
-and the run state and run events of the runs contract (HT-INC-COMMANDS, issue #330).
+the run state and run events of the runs contract (HT-INC-COMMANDS, issue #330), and the
+incident list an inbox reads first (issue #870).
 
 Delivery lives in the gateway: bearer authentication, workflow-scoped
 authorization (run.read on incident_workflow, pinned workflow as the stable
@@ -10,6 +11,7 @@ sre_agent.incident.projections; reads never mutate aggregates.
 """
 
 import re
+from datetime import datetime
 from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID, uuid4
@@ -33,6 +35,7 @@ from sre_agent.incident.projections import (
     encode_cursor,
     project_detail,
     project_event,
+    project_list_item,
     project_run_state,
     project_snapshot,
 )
@@ -45,6 +48,9 @@ READ_ACTION = "run.read"
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
 RETRY_AFTER_SECONDS = "5"
+LIST_STATUSES = ("open", "recent")
+LIST_DEFAULT_LIMIT = 50
+LIST_MAX_LIMIT = 100
 # Attempts at reading a run and its last event without a transition landing between
 # the two reads. A miss means writes are racing the read; the caller may retry.
 STATE_READ_ATTEMPTS = 3
@@ -383,9 +389,76 @@ class IncidentQueryService:
             return self._error(request_id, 503)
         return JSONResponse(payload, status_code=200)
 
+    async def list_incidents(
+        self,
+        status: str | None,
+        since: str | None,
+        limit: Any,
+        authorization: str | None,
+    ) -> JSONResponse:
+        """GET /v1/incidents: incidents most recently updated first, each with its latest run
+        and the decision it waits for, if any.
+
+        ``open`` leaves out the terminal states; ``recent`` lists every state, so a closed
+        incident appears while it is among the latest. ``since`` keeps incidents updated at or
+        after an ISO 8601 instant with its offset.
+        """
+
+        request_id = uuid4()
+        status = status or "recent"
+        try:
+            parsed_limit = int(limit) if limit is not None else LIST_DEFAULT_LIMIT
+            parsed_since = datetime.fromisoformat(since) if since is not None else None
+        except (TypeError, ValueError):
+            return self._error(request_id, 422)
+        if (
+            status not in LIST_STATUSES
+            or not 1 <= parsed_limit <= LIST_MAX_LIMIT
+            or (parsed_since is not None and parsed_since.tzinfo is None)
+        ):
+            return self._error(request_id, 422)
+        _, error = await self._authorized_principal(request_id, authorization)
+        if error is not None:
+            return error
+        excluded = tuple(self.workflow.terminal_states) if status == "open" else ()
+        try:
+            async with self.units() as work:
+                records = await work.incidents.list_recent(
+                    exclude_states=excluded, since=parsed_since, limit=parsed_limit + 1
+                )
+                runs = await work.runs.latest_for(
+                    [record.incident_id for record in records[:parsed_limit]]
+                )
+            items = [
+                project_list_item(record, runs.get(record.incident_id), self.workflow)
+                for record in records[:parsed_limit]
+            ]
+        except UnsupportedWorkflowDataError:
+            return self._error(request_id, 422, "validation_error")
+        except Exception:
+            return self._error(request_id, 503)
+        return JSONResponse(
+            {
+                "incidents": [item for item in items if item is not None],
+                "has_more": len(records) > parsed_limit,
+            },
+            status_code=200,
+            headers={"Cache-Control": "no-store"},
+        )
+
 
 def incident_router(service: IncidentQueryService) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/v1/incidents")
+    async def incidents(request: Request) -> JSONResponse:
+        params = request.query_params
+        return await service.list_incidents(
+            params.get("status"),
+            params.get("since"),
+            params.get("limit"),
+            request.headers.get("authorization"),
+        )
 
     @router.get("/v1/incidents/{incident_id}")
     async def detail(incident_id: str, request: Request) -> JSONResponse:
