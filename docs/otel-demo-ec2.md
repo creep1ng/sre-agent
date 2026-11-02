@@ -171,7 +171,9 @@ lifetime and is stopped after transfer. Neither port opens public ingress.
 The local relay holds no MCP/provider/AWS keys and publishes no host port.
 
 The producer's `fail`/`reset` operations apply the manifest's declared flag/baseline
-and retain synthetic traffic. Read both metrics and logs through the governed SRE
+and retain synthetic traffic. They replace the flag file and do not restart flagd: flagd
+reloads it within ~1 s and keeps its clients' streams open (#724). A restart broke
+`payment`'s flag stream and opened a spurious `payment` incident. Read both metrics and logs through the governed SRE
 API after150s, as explained in [demo-signals](demo-signals.md); health alone is not
 signal recovery. `connect-mcp` only proves transport and denies anonymous callers;
 SRE readiness, user workflow acceptance and real signal recovery are separate.

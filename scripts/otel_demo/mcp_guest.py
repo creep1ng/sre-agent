@@ -64,6 +64,13 @@ def variants(failure=False, flag=None):
         if variant not in data["flags"][name]["variants"]:
             raise RuntimeError("declared flag/variant unavailable; preserve Demo state")
         data["flags"][name]["defaultVariant"] = variant
+    replace_flags(data)
+
+
+def replace_flags(data):
+    """Atomically replace the flag file. flagd (v0.16.0) polls it and reloads within ~1 s, and
+    sends `configuration_change` to its streams. A restart would break every client's stream,
+    and payment's broken stream fired its own alert (#724)."""
     temporary = FLAGS.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, indent=2) + "\n")
     temporary.replace(FLAGS)
@@ -285,13 +292,7 @@ class FlagWrite(http.server.BaseHTTPRequestHandler):
             before = data["flags"][name]["defaultVariant"]
             if before != variant:
                 data["flags"][name]["defaultVariant"] = variant
-                temporary = FLAGS.with_suffix(".tmp")
-                temporary.write_text(json.dumps(data, indent=2) + "\n")
-                temporary.replace(FLAGS)
-                try:
-                    compose("restart", "flagd")
-                except RuntimeError:
-                    return self.answer(502)  # written, but flagd did not restart
+                replace_flags(data)
         return self.answer(200, {"flag": name, "before": before, "variant": variant})
 
 
@@ -328,8 +329,7 @@ def main():
         http.server.HTTPServer(("127.0.0.1", 17900), TokenTransfer).serve_forever()
     else:
         variants(failure=action == "fail", flag=arguments.flag)
-        compose("restart", "flagd")
-        print("owned AWS flag " + action + " applied; synthetic traffic retained")
+        print("owned AWS flag " + action + " applied; flagd reloads it; synthetic traffic retained")
 
 
 if __name__ == "__main__":
