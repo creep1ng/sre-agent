@@ -3,6 +3,7 @@ import { NavLink } from "react-router";
 import { AgentAvatar, Logo } from "@/components/brand";
 import { StatusDot } from "@/components/badges";
 import { Kbd } from "@/components/ui/kbd";
+import { useT } from "@/i18n";
 import type { InboxModel } from "@/lib/selectors";
 import { incidentStatus } from "@/lib/status";
 import { cn } from "@/lib/utils";
@@ -49,19 +50,20 @@ function NavItem({
 }
 
 function AgentPresence({ inbox }: { inbox: InboxModel }) {
+  const t = useT("shell");
   const stopped = inbox.active.find((incident) => incident.job?.failure);
   const busy = inbox.active.find((incident) => incidentStatus(incident).working);
   const label = stopped
-    ? `Detenido · ${stopped.id}`
+    ? t("agent.stopped", { id: stopped.id })
     : busy
       ? `${incidentStatus(busy).agentLabel ?? incidentStatus(busy).label} · ${busy.id}`
-      : "Disponible";
+      : t("agent.idle");
   return (
     <div className="rounded-xl border border-sidebar-border bg-background/60 p-3">
       <div className="flex items-center gap-2.5">
         <AgentAvatar className="size-8" />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold">Agente de incidentes</div>
+          <div className="text-sm font-semibold">{t("agent.name")}</div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <StatusDot tone={stopped ? "critical" : busy ? "info" : "success"} working={Boolean(busy) && !stopped} />
             <span className="truncate">{label}</span>
@@ -81,6 +83,7 @@ export function Sidebar({
   onSearch: () => void;
   onConnect: () => void;
 }) {
+  const t = useT("shell");
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <div className="px-2 pt-1">
@@ -93,18 +96,18 @@ export function Sidebar({
         className="flex h-9 items-center gap-2 rounded-lg border border-sidebar-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-brand-line hover:text-foreground"
       >
         <SearchIcon className="size-4" aria-hidden="true" />
-        <span className="flex-1 text-left">Buscar o ir a…</span>
+        <span className="flex-1 text-left">{t("search.open")}</span>
         <Kbd>Ctrl K</Kbd>
       </button>
 
-      <nav className="flex flex-col gap-1" aria-label="Principal">
-        <NavItem to="/" icon={InboxIcon} label="Bandeja" count={inbox.attention} highlight />
-        <NavItem to="/incidentes" icon={LayersIcon} label="Incidentes" count={inbox.active.length} />
+      <nav className="flex flex-col gap-1" aria-label={t("nav.main")}>
+        <NavItem to="/" icon={InboxIcon} label={t("nav.inbox")} count={inbox.attention} highlight />
+        <NavItem to="/incidentes" icon={LayersIcon} label={t("nav.incidents")} count={inbox.active.length} />
       </nav>
 
       {/* The administration console still lives outside the new console: one link, a new tab. */}
       <div className="mt-2 border-t border-sidebar-border pt-3">
-        <nav aria-label="Administración">
+        <nav aria-label={t("nav.admin")}>
           <a
             href="/public/admin/principals.html"
             target="_blank"
@@ -112,7 +115,7 @@ export function Sidebar({
             className="flex h-10 items-center gap-3 rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground"
           >
             <LandmarkIcon className="size-4" aria-hidden="true" />
-            <span className="flex-1">Gobierno de IA</span>
+            <span className="flex-1">{t("nav.governance")}</span>
             <ExternalLinkIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />
           </a>
         </nav>
