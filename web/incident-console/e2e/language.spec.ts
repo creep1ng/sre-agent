@@ -19,8 +19,9 @@ async function freshStart(page: Page) {
 const sidebar = (page: Page) => page.getByRole("complementary");
 
 async function chooseLanguage(page: Page, label: "Español" | "English") {
-  await sidebar(page).getByRole("button", { name: /demo-human/ }).click();
-  await page.getByRole("menuitemradio", { name: label }).click();
+  await sidebar(page).getByRole("button", { name: /Tu cuenta|Your account/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: label }).click();
+  await page.keyboard.press("Escape");
 }
 
 async function expectSpanish(page: Page) {
@@ -46,9 +47,9 @@ test("a Spanish browser starts in Spanish and switches to English and back", asy
   await page.reload();
   await expectEnglish(page);
 
-  await sidebar(page).getByRole("button", { name: /demo-human/ }).click();
-  await expect(page.getByRole("menuitemradio", { name: "English" })).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByRole("menuitemradio", { name: "Dark" })).toBeVisible();
+  await sidebar(page).getByRole("button", { name: "Your account" }).click();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Dark" })).toBeVisible();
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${SHOTS}/account-menu-en.png` });
   await page.keyboard.press("Escape");
