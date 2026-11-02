@@ -1,0 +1,17 @@
+       transition       | actor  |    principal     | channel  
+------------------------+--------+------------------+----------
+ triage_declare         | system | grafana          | 
+ start_investigation    | system | grafana          | 
+                        | agent  | incident-harness | 
+ continue_investigation | agent  | incident-harness | 
+ propose_mitigation     | agent  | incident-harness | 
+ apply_mitigation       | human  | demo-human       | telegram
+(6 rows)
+
+  event_kind   | decision  |            rule            
+---------------+-----------+----------------------------
+ alert         | remember  | investigating
+ investigation | interrupt | sustained_pending_decision
+ resolution    | remember  | recovered
+(3 rows)
+
