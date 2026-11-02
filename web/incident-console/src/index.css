@@ -18,7 +18,8 @@
   --moon: #e4d9ff;
   --text-2: #cfc6ee;
   --mist: #a797d7;
-  --dim: #6f7396;
+  /* Lighter than the mockup's #6f7396: at least 4.5:1 on every night surface (WCAG AA). */
+  --dim: #8c90ac;
   --rule: rgba(228, 217, 255, 0.12);
   --mist-line: rgba(167, 151, 215, 0.45);
   --mist-wash: rgba(167, 151, 215, 0.1);
@@ -47,7 +48,8 @@
   --moon: #141a33;
   --text-2: #3a3f5e;
   --mist: #6650b0;
-  --dim: #686c88;
+  /* Darker than the mockup's #686c88: at least 4.5:1 on every day surface. */
+  --dim: #595c74;
   --rule: rgba(20, 26, 51, 0.12);
   --mist-line: rgba(102, 80, 176, 0.35);
   --mist-wash: rgba(102, 80, 176, 0.08);
