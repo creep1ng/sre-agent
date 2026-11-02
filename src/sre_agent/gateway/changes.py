@@ -45,6 +45,7 @@ _LIST = text(
     f"SELECT {_COLUMNS} FROM incident.change_events"
     " WHERE (CAST(:service AS text) IS NULL OR service = :service)"
     " AND (CAST(:since AS timestamptz) IS NULL OR occurred_at >= :since)"
+    " AND (CAST(:until AS timestamptz) IS NULL OR occurred_at <= :until)"
     " ORDER BY occurred_at DESC, change_id LIMIT :limit"
 )
 
@@ -68,6 +69,7 @@ class ChangeQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
     service: Service | None = None
     since: AwareDatetime | None = None
+    until: AwareDatetime | None = None
     limit: Annotated[int, Field(ge=1, le=100)] = 20
 
 

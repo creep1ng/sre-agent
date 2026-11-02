@@ -49,10 +49,10 @@ request, so `/` and `/api/` keep working when the console container is absent.
   Screenshots (`screens/`, `design/`, `proxy/`, `live/`), videos and the HTML report land in
   `web/incident-console/e2e/artifacts/`. The journeys also check that no screen shows protocol
   details (`open_triage`, `run_`, `evt_`, «Versión esperada», …).
-- The suite has two modes. The design and journey specs opt into the simulator with `?mock`; the
-  live specs answer `GET /api/v1/alerts` with Playwright routes or, when `LIVE_INBOX=1` and
-  `DEMO_HUMAN_API_KEY` are set, connect the real key to the stack started by `setup_sre.py` and
-  wait for the injected OTel failure. Authentication specs disable video and traces.
+- The suite has two modes. The design and journey specs opt into the simulator with `?mock`.
+  The live inbox (RC-2) runs against the real API with `e2e/run-inbox-real.sh`, which seeds a
+  decision, a recovery and last night's changes, then runs `e2e/inbox-real.spec.ts`.
+  Authentication specs disable video and traces.
 - Demo controls live in the account menu (bottom of the sidebar) → **Escenario de demostración**,
   only in mock mode: simulate a new alert, make the agent fail, or reset the scenario. State
   persists in `localStorage`, so reloads keep the incident where it was.
@@ -67,7 +67,7 @@ Chosen by the maintainer on 2026-10-19 among live alternatives:
 | Story (incident) | An integrated column beside the incident, one hairline apart, no card. |
 | Findings and decisions | Inside the story: findings, the hypothesis and proposals unfold in place. |
 | Closure summary | Hero time to resolve plus a phase bar (ordinal ramp) with its table twin; no stat cards or lists. |
-| Agent identity | Midnight violet (`#6655c7`, `#b4a2f2` in dark; 5.7:1 and 7.4:1 on the card): "Agente" in that color, "Tú" in ink, "Sistema" in gray, and the agent avatar in the same violet everywhere. |
+| Agent identity | Nocturno mist (`--mist`): "Agente" in that color, "Tú" in ink, "Sistema" in gray. |
 
 ## The journey in 7 clicks
 
@@ -155,6 +155,65 @@ Backend gaps:
   dispatch failure reason (#692).
 - "Ya la apliqué" is new: today the workflow goes from approval straight to `verifying`. It can
   be a timeline note, or an agent stability watch on the alert's signal.
+
+## Theme (RC-2, #870)
+
+- **Tokens.** Every colour is a Nocturno token in `src/index.css` (`--night`, `--moon`, `--mist`,
+  `--rule`, …), copied from `docs/design/brand-round-1/06-consola-dia-noche.html`. Night is the
+  base; without `html.dark` the light theme only reassigns tokens. The shadcn/ui names (`--background`, `--primary`, …)
+  are derived from them once, so primitives follow both themes.
+- **Amber** lives in `--star` (fills, Tailwind `bg-star`, with `text-on-star`) and `--star-ink`
+  (text, `text-star-ink`). Use them only where a human decision is pending; `--warning` is not
+  amber.
+- **Type.** Fraunces (`font-display`), Newsreader (`font-sans`, the body) and JetBrains Mono
+  (`font-mono`), self-hosted through `@fontsource-variable`. `<code>` is mono on `--code`.
+- **Hook.** `src/hooks/use-theme.ts`: `useTheme()` holds the preference (`system`, `light`,
+  `dark`; stored in `localStorage` as `midnight-theme`) and `setTheme`; `useResolvedTheme()`
+  gives the theme on screen and re-renders on OS changes; `useApplyTheme()` is mounted once in
+  `App`.
+
+## Languages (RC-2, #870)
+
+Spanish and English. `src/i18n/index.ts` holds `useLanguage()` (`language`, `setLanguage`; stored
+as `midnight-language`, else English when `navigator.language` starts with `en`, else Spanish),
+`useT(namespace)` and `LOCALES` for `Intl` formatters. The account menu switches the language.
+
+To translate a feature, add one namespace instead of editing shared files:
+
+1. `src/i18n/es/<namespace>.ts` exports the Spanish messages as `default` and registers them with
+   `declare module "@/i18n" { interface Namespaces { <namespace>: typeof messages } }`
+   (see `es/shell.ts`).
+2. `src/i18n/en/<namespace>.ts` exports the English ones with
+   `satisfies Messages<typeof messages>`, so a missing or extra key fails the build.
+3. In components: `const t = useT("<namespace>")`, then `t("key")` or `t("key", { id })` for
+   `{id}` placeholders. Unknown keys fail the build; plural forms are separate keys.
+
+Both files are picked up by `import.meta.glob`; nothing else needs registering.
+
+## Navigation and account menu (RC-2, #870)
+
+- **Sections** read in the text face with one lucide icon each. Live mode lists only screens
+  backed by the API; the incident list and its search entries stay in `?mock` until they read it.
+- **Side panels fold.** `useFolded(panel)` in `src/hooks/use-folded.ts` keeps the state in
+  `localStorage` as `midnight.fold.<panel>`; `FoldButton` in `src/components/layout/fold-button.tsx`
+  sets `aria-expanded` and `aria-controls`. The sidebar uses the panel `nav` and folds to a 64 px
+  icon rail. A page's own side panel picks another panel name.
+- **Account menu.** The avatar opens one popover: language, theme and the session. Sign out drops
+  the in-memory credential and returns to the inbox's credential screen.
+
+## Incident page (RC-2, #870)
+
+In live mode `/app/incidentes/:id` reads the real API (`src/lib/live-incident.ts`, ported from
+RC-1): the hypothesis as prose whose underlined claims open their evidence and jump to their
+timeline step, one chronological timeline, the agent's live status and the proposal card, whose
+«Aprobar» and «Rechazar» send the governed `approve_mitigation` / `reject_mitigation` command.
+Copy lives in the `incident` namespace (`src/i18n/{es,en}/incident.ts`).
+
+Journeys against the composed stack (scripted model and Grafana MCP, everything else real):
+
+```sh
+COMPOSE_PROJECT_NAME=incident-e2e-$RANDOM scripts/run_incident_console_e2e.sh
+```
 
 ## Stack
 

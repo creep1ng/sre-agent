@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -76,6 +77,8 @@ class IncidentCommand:
     inputs: Mapping[str, Any] | None = None
     extra_events: tuple[EventDraft, ...] = ()
     contexts: tuple[TextContextRecord, ...] = ()
+    # The deploy-executor's receipt for the operation an approval ran (#722).
+    execution: Mapping[str, Any] | None = None
 
     def payload_sha256(self) -> str:
         payload = asdict(self)
@@ -92,6 +95,8 @@ class IncidentCommand:
             payload.pop("extra_events")
         # The turns travel with the dispatch's result events, which the hash already covers.
         payload.pop("contexts")
+        # The receipt is what the approval did, not what was asked: a retry hashes the same.
+        payload.pop("execution")
         if self.expected_incident_version is None:
             # Additive fields must not invalidate idempotent retries from older clients.
             payload.pop("expected_incident_version")
@@ -234,6 +239,41 @@ class IncidentRuntime:
                 run_version=run.version,
             )
 
+    async def record_refusal(
+        self,
+        incident_id: str,
+        run_id: str,
+        actor_reference: ActorReference,
+        *,
+        reason_code: str,
+        request_id: str,
+        denial: bool,
+    ) -> None:
+        """An approval refused before any transition, told in the run's timeline (#722): the
+        incident, the run and their versions stay as they were."""
+        now = self._clock()
+        decision = DecisionDraft(
+            decision_id=self._id_factory("dec"),
+            document={
+                "actor": "human",
+                "actor_reference": asdict(actor_reference),
+                "decision_point": "mitigation_approval",
+                "reason": f"approval not applied: {reason_code}",
+                "decided_at": now.isoformat(),
+            },
+            decided_at=now,
+            run_id=run_id,
+        )
+        payload = {"refused_command": "approve_mitigation", "reason_code": reason_code}
+        event = EventDraft(
+            event_id=self._id_factory("evt"),
+            kind="denial" if denial else "human_command",
+            payload={**payload, "request_id": request_id, "state": "mitigating"},
+            occurred_at=now,
+        )
+        async with self._unit_of_work() as work:
+            await work.record_run_events(incident_id, run_id, decision=decision, events=(event,))
+
     async def execute(self, command: IncidentCommand) -> TransitionResult:
         payload_hash = command.payload_sha256()
         async with self._unit_of_work() as work:
@@ -254,18 +294,22 @@ class IncidentRuntime:
                 raise RunNotFoundError(command.run_id)
             return await self._apply(work, command, payload_hash, incident, run)
 
-    async def start_run(self, request: RunStart) -> TransitionResult:
+    async def start_run(
+        self, request: RunStart, work: IncidentUnitOfWork | None = None
+    ) -> TransitionResult:
         """Open a run for the requested objective and execute its first transition.
 
         The run aggregate and that transition commit together, so a run never
-        exists without the snapshot its replay needs.
+        exists without the snapshot its replay needs. A caller that passes its own
+        unit of work owns the transaction: triage declaration and the investigation
+        it starts commit or roll back together.
         """
 
         transition_id = OBJECTIVE_TRANSITIONS.get(request.objective)
         if transition_id is None:
             raise InvalidTransitionError(f"objective '{request.objective}' has no transition")
         payload_hash = request.payload_sha256()
-        async with self._unit_of_work() as work:
+        async with nullcontext(work) if work is not None else self._unit_of_work() as work:
             await work.lock_command(request.incident_id, request.command_id)
             replayed = await work.get_transition(
                 request.incident_id, request.command_id, payload_hash
@@ -496,6 +540,12 @@ class IncidentRuntime:
             )
         if command.actor == "human" and command.actor_reference is None:
             raise PreconditionFailedError("human commands require an actor reference")
+        if (
+            transition.transition_id == "triage_declare"
+            and command.actor == "system"
+            and command.actor_reference is None
+        ):
+            raise PreconditionFailedError("a system declaration names its responsible system")
         if command.actor_reference is not None and (
             command.actor_reference.reference_version != "1.0.0"
             or re.fullmatch(r"[a-z][a-z0-9_-]{2,63}", command.actor_reference.principal_id) is None
@@ -686,6 +736,9 @@ class IncidentRuntime:
                 "reject": "rejected",
                 "request_changes": "changes_requested",
             }[outcome]
+            if outcome == "approve" and command.execution is not None:
+                # It ran through the deploy-executor (#722): no longer simulated.
+                strategy.update(execution_mode="executed", execution=dict(command.execution))
             incident["mitigation_strategy"] = strategy
             if outcome in {"approve", "reject"}:
                 # The human gate's answer, listed where the incident shows its approvals.
@@ -759,7 +812,10 @@ class IncidentRuntime:
                 postmortem = incident_state["postmortem"]
                 approval["postmortem_id"] = postmortem["postmortem_id"]
                 approval["postmortem_version"] = postmortem_version
+        # Where a human decided, when not the console or the API (`telegram`, #767).
+        channel = (command.inputs or {}).get("channel")
         return {
+            **({"channel": channel} if channel else {}),
             "workflow_id": self._workflow.workflow_id,
             "workflow_version": self._workflow.version,
             "transition_id": transition.transition_id,
