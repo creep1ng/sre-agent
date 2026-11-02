@@ -1,0 +1,25 @@
+# Interrupt-policy E2E (#771), run by scripts/run_interrupt_policy_e2e.sh: the real API with the
+# scripted model and Grafana MCP of scripts/interrupt_policy_upstreams.py, the Telegram gateway
+# against fake-telegram with the daily schedule off (the E2E queues digests with the CLI), and
+# the phases of scripts/interrupt_policy_e2e.py in the seed container.
+services:
+  api:
+    command: ["python", "/e2e/interrupt_policy_upstreams.py"]
+    volumes: ["./scripts/interrupt_policy_upstreams.py:/e2e/interrupt_policy_upstreams.py:ro"]
+    environment:
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
+      ALERT_INTAKE_PRINCIPAL_ID: demo-human
+      SPIKE_DELAY_SECONDS: "8"
+
+  telegram-gateway:
+    environment:
+      TELEGRAM_DIGEST_HOUR: "off"
+
+  seed:
+    volumes:
+      - ./scripts:/app/scripts:ro
+      - ${INTERRUPT_POLICY_ARTIFACTS:?set by scripts/run_interrupt_policy_e2e.sh}:/artifacts
+    environment:
+      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
+      DEPLOY_EXECUTOR_CHANGES_API_KEY: ${DEPLOY_EXECUTOR_CHANGES_API_KEY:?DEPLOY_EXECUTOR_CHANGES_API_KEY is required}
