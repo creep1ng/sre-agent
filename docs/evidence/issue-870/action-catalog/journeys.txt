@@ -1,0 +1,5 @@
+  ✓  1 e2e/catalog-live.spec.ts:69:3 › catálogo de acciones RC-2 contra la API real › lo que Midnight puede hacer, una aprobación real y su ejecución en el catálogo (28.4s)
+  1 passed (29.6s)
+  ✓  1 e2e/catalog-live.spec.ts:142:3 › catálogo de acciones RC-2 contra la API real › con el ejecutor detenido, el catálogo dice que nada puede ejecutarse (9.9s)
+  1 passed (10.8s)
+action catalog journeys PASS [1 passed 1 passed]

@@ -1,0 +1,80 @@
+{
+  "sanitized": true,
+  "stamp": "f8011728",
+  "before": {
+    "executor_status": "available",
+    "services": [
+      {
+        "service": "sre-checkout",
+        "operations": [
+          {
+            "operation": "deployment.restart",
+            "parameters": [],
+            "runner": null,
+            "executions": []
+          },
+          {
+            "operation": "deployment.rollback",
+            "parameters": [
+              {
+                "name": "to_tag",
+                "allowed": [
+                  "1.4.0"
+                ]
+              }
+            ],
+            "runner": {
+              "principal_id": "incident-harness",
+              "display_name": "Incident harness"
+            },
+            "executions": []
+          }
+        ]
+      }
+    ]
+  },
+  "incident": "inc-3e2f9be9ab3f30cd7efd8cdb7cf1fb9a",
+  "after": {
+    "executor_status": "available",
+    "services": [
+      {
+        "service": "sre-checkout",
+        "operations": [
+          {
+            "operation": "deployment.restart",
+            "parameters": [],
+            "runner": null,
+            "executions": []
+          },
+          {
+            "operation": "deployment.rollback",
+            "parameters": [
+              {
+                "name": "to_tag",
+                "allowed": [
+                  "1.5.0"
+                ]
+              }
+            ],
+            "runner": {
+              "principal_id": "incident-harness",
+              "display_name": "Incident harness"
+            },
+            "executions": [
+              {
+                "occurred_at": "2026-11-02T20:58:58.069911Z",
+                "outcome": "succeeded",
+                "reason_code": null,
+                "incident_id": "inc-3e2f9be9ab3f30cd7efd8cdb7cf1fb9a",
+                "approved_by": {
+                  "principal_id": "demo-human",
+                  "display_name": "Demo human"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
