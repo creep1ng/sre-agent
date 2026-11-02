@@ -249,7 +249,13 @@ def unlinked(incident_id: str) -> None:
 
 
 # #767: mitigation proposals for the broken sre-checkout deploy, one per journey.
-JOURNEYS = ("approve", "reject", "console", "unlinked", "stale")
+JOURNEYS = ("approve", "reject", "console", "unlinked", "stale", "refused")
+# Approving these runs a catalog operation on the deploy-executor (#722): `approve` rolls this
+# project's sre-checkout back from 1.5.0 to 1.4.0; `refused`, approved after it, asks for the tag
+# already running, which the executor's catalog no longer offers. The rest stay simulated.
+ROLLBACK = {"service": "sre-checkout", "operation": "deployment.rollback"}
+ROLLBACK |= {"parameters": {"to_tag": "1.4.0"}}
+OPERATIONS = {"approve": ROLLBACK, "refused": ROLLBACK}
 PROPOSALS = Path("/artifacts/proposals.json")
 TOKEN = re.compile(r"^[ar]:[0-9a-f]{32}$")
 
@@ -285,14 +291,7 @@ async def _propose(stamp: str) -> dict[str, dict[str, str]]:
             mitigation = {"mitigation_id": f"mit_767{journey}", "approval_status": "pending"}
             mitigation |= {"description": "Volver sre-checkout a la versión anterior, v2.4.0."}
             mitigation |= {"risk": "low"}
-            if journey == "reject":
-                # #722's operation: an approval would run it through the deploy-executor, which
-                # this stack does not configure, so approving it is refused and moves nothing.
-                mitigation["operation"] = {
-                    "service": "sre-checkout",
-                    "operation": "deployment.rollback",
-                    "parameters": {"to_tag": "v2.4.0"},
-                }
+            mitigation |= {"operation": OPERATIONS[journey]} if journey in OPERATIONS else {}
             mitigation |= {"based_on_hypothesis": "hyp_767"}
             mitigation |= {"verification_check": "5xx de sre-checkout bajo 1 % durante 5 min."}
             async with PostgresIncidentUnitOfWork(database) as work:
@@ -378,12 +377,11 @@ def proposals(stamp: str, legacy_code: str) -> None:
                 )
                 for m in messages
             ),
-            "the one with an executor operation names it": [
-                m["text"].splitlines()[0].split("-")[2]
+            "a proposal with a catalog operation names it": all(
+                ("Detalle: el ejecutor aplica deployment.rollback en sre-checkout" in m["text"])
+                == any(m["text"].splitlines()[0].endswith(f"-{j}-{stamp}") for j in OPERATIONS)
                 for m in messages
-                if "Detalle: el ejecutor aplica deployment.rollback en sre-checkout" in m["text"]
-            ]
-            == ["reject"],
+            ),
             "each offers Aprobar and Rechazar": buttons
             == [["Aprobar", "Rechazar"]] * len(JOURNEYS),
             "each links to its incident in the console": all(
@@ -455,15 +453,54 @@ def approval_status(journey: str) -> str:
     )[0][0]
 
 
+def settled(journey: str) -> dict[str, Any]:
+    """The decision message once the outbox edited the decision in (it follows the API)."""
+    return wait_for(lambda: (m := prompt(journey)) and not decides(m) and m)
+
+
+def execution(journey: str) -> dict[str, Any]:
+    """What the API recorded of the operation an approval ran: receipt, timeline, audit."""
+    created = json.loads(PROPOSALS.read_text())[journey]
+    state = sql(
+        "SELECT state->>'state', state->'mitigation_strategy'->'execution', version "
+        "FROM incident.incidents WHERE incident_id=%s",
+        created["incident_id"],
+    )[0]
+    events = http(
+        "GET",
+        f"{API}/v1/incidents/{created['incident_id']}/runs/{created['run_id']}/events",
+        headers={"Authorization": "Bearer " + os.environ["DEMO_HUMAN_API_KEY"]},
+    )
+    timeline = [e.get("summary") for e in events.get("events", events.get("items", []))]
+    # Every mitigation.execute attempt of the stack, oldest first: each phase adds one.
+    audit = sql(
+        "SELECT outcome, reason_code, response_status FROM audit_events "
+        "WHERE operation = 'mitigation.execute' ORDER BY occurred_at"
+    )
+    return {"state": state[0], "receipt": state[1], "version": state[2]} | {
+        "timeline": timeline,
+        "audit": audit,
+    }
+
+
 def approve() -> None:
     message = prompt("approve")
     Path("/artifacts/approve-message.json").write_text(json.dumps(message))
-    answer, edited = press(OPERATOR, message, "Aprobar"), prompt("approve")
-    rows = decisions("approve")
+    answer, edited = press(OPERATOR, message, "Aprobar"), settled("approve")
+    rows, ran = decisions("approve"), execution("approve")
     record(
         "approve",
-        {"answer": answer, "edited": edited, "decisions": rows},
+        {"answer": answer, "edited": edited, "decisions": rows, "execution": ran},
         {
+            "the tap runs the rollback on the deploy-executor (receipt)": ran["state"]
+            == "verifying"
+            and (ran["receipt"] or {}).get("outcome") == "rolled_back",
+            "the timeline tells what ran": any(
+                "ran deployment.rollback on sre-checkout: rolled_back" in (t or "")
+                for t in ran["timeline"]
+            ),
+            "the attempt is audited as mitigation.execute": ran["audit"]
+            == [("success", None, 200)],
             "the tap records one approval": [r[:2] for r in rows]
             == [("apply_mitigation", "approve")],
             "as the linked human, through Telegram": rows[0][2:5]
@@ -607,6 +644,8 @@ def stale() -> None:
     answer = press(OPERATOR, first, "Aprobar")
     retry = press(OPERATOR, first, "Aprobar")
     before = decisions("stale")
+    # The API queues the old message's edit before the fresh proposal.
+    wait_for(lambda: "desactualizada" in prompt("stale")["text"])
 
     def fresh() -> list[dict[str, Any]]:
         return [
@@ -751,20 +790,46 @@ def recovery() -> None:
     )
 
 
+def refused() -> None:
+    """Approving a rollback to the tag already running: the executor's catalog refuses it."""
+    message = prompt("refused")
+    before = execution("refused")
+    answer = press(OPERATOR, message, "Aprobar")
+    edited = wait_for(lambda: (m := prompt("refused")) and "no se aplicó" in m["text"] and m)
+    after, rows = execution("refused"), decisions("refused")
+    record(
+        "refused",
+        {"answer": answer, "edited": edited, "before": before, "after": after}
+        | {"decisions": rows},
+        {
+            "nothing moves: still mitigating, same version, nothing ran": after["state"]
+            == "mitigating"
+            and after["version"] == before["version"]
+            and after["receipt"] is None
+            and rows == [],
+            "the answer says why": answer
+            == "No se aplicó: el ejecutor ya no ofrece la operación como se propuso "
+            "(precondition_failed).",
+            "the message says why and keeps its buttons to retry": decides(edited)
+            and edited["text"].splitlines()[-1].startswith("Tu aprobación no se aplicó a las ")
+            and edited["text"].endswith("(precondition_failed)."),
+            "the timeline tells the refusal": any(
+                (t or "").startswith("Approval not applied: the deploy-executor's catalog")
+                for t in after["timeline"]
+            ),
+            "the attempt is audited with its reason": after["audit"][len(before["audit"]) :]
+            == [(after["audit"][-1][0], "status_conflict", 409)],
+        },
+    )
+
+
 def reject() -> None:
-    # Its mitigation names an executor operation (#722) and this stack runs no executor.
-    refused = press(OPERATOR, prompt("reject"), "Aprobar")
-    after_refusal = decisions("reject"), approval_status("reject")
-    answer, edited = press(OPERATOR, prompt("reject"), "Rechazar"), prompt("reject")
+    answer, edited = press(OPERATOR, prompt("reject"), "Rechazar"), settled("reject")
     rows = decisions("reject")
     record(
         "reject",
-        {"refused": refused, "answer": answer, "edited": edited, "decisions": rows},
+        {"answer": answer, "edited": edited, "decisions": rows},
         {
-            "approving an operation without an executor is refused": refused.startswith(
-                "El ejecutor no está disponible"
-            ),
-            "the refusal moves nothing": after_refusal == ([], "pending"),
             "the tap records one rejection": [r[:2] for r in rows]
             == [("reject_mitigation", "reject")],
             "as the linked human, through Telegram": rows[0][2:5]
@@ -804,10 +869,10 @@ def unlinked_tap(relink_code: str) -> None:
             == [
                 ("apply_mitigation", "demo-human", "telegram"),
                 ("reject_mitigation", "demo-human", None),
-                # The refused approval (#722) is audited too; its record names no channel.
-                (None, "demo-human", None),
                 ("reject_mitigation", "demo-human", "telegram"),
                 ("apply_mitigation", "demo-human", "telegram"),
+                # The refused approval: a timeline decision with no transition (#722).
+                (None, "demo-human", None),
                 ("verification_passed", "demo-human", None),
                 ("verification_failed", "demo-human", None),
             ],
@@ -822,5 +887,5 @@ if __name__ == "__main__":
     phases |= {"enlist": enlist, "approve": approve, "double_tap": double_tap}
     phases |= {"stranger": stranger, "second": second, "viewer": viewer, "stale": stale}
     phases |= {"console": console, "reject": reject, "unlinked_tap": unlinked_tap}
-    phases |= {"recovery": recovery}
+    phases |= {"recovery": recovery, "refused": refused}
     phases[phase](*arguments)
