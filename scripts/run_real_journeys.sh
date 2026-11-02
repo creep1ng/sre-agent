@@ -312,6 +312,9 @@ print(f"reloaded: problem={journal.problem} records={len(journal.records)}")' \
   "${compose[@]}" up -d --wait deploy-executor
 }
 
+# Sourced (web/incident-console/e2e/run-inbox-real.sh), it only defines the helpers above.
+[[ ${BASH_SOURCE[0]} == "$0" ]] || return 0
+
 case "${1:-}" in
   incidents) incidents ;;
   executor) executor ;;
