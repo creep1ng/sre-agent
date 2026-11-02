@@ -116,19 +116,34 @@ link only a chat you would trust with that content.
 
 ## Deciding from the chat
 
-- A tap sends `approve_mitigation` or `reject_mitigation` through the same `RunCommandService`
-  as `POST /v1/incidents/{id}/runs/{run}/commands`: the link's principal replaces the bearer
-  key, and the `run.approve` grant, the attribution check and the runtime are unchanged. The
+- The gateway faces the internet, so it holds no executor key, agent key or credential to act as
+  anyone (#722). It verifies the tap (the chat and Telegram user of the link the message was
+  sent to, and the token) and queues the run command in `incident.chat_taps` (migration
+  `20261102_02`). It never runs a command itself.
+- The API carries it out (`sre_agent.chat.taps.TapWorker`, on when `TELEGRAM_BOT_TOKEN` is set:
+  compose passes `CHAT_TAPS_WORKER=on`, never the token). It sends the command through the same
+  `RunCommandService` as `POST /v1/incidents/{id}/runs/{run}/commands`. The link's principal
+  replaces the bearer key, and everything after it is the console's: the `run.approve` grant,
+  attribution, and for an approval with a catalog operation the executor's checks, the signed
+  `POST /v1/operations/...`, its `mitigation.execute` audit (#922) and the timeline (#923). The
   decision record names the human and adds `"channel": "telegram"`.
+- The gateway answers the tap with the outcome: who decided, «No se aplicó: <motivo>
+  (<código>).» for an approval the executor refused (`precondition_failed`,
+  `operation_not_authorized`, `executor_unavailable`, `execution_failed`), or the reason nothing
+  was decided. Telegram waits only a few seconds for an answer: after 8 s it answers that the
+  decision is being applied, and the message carries the result.
+- The message is edited from the outbox. A decision that was taken comes from
+  `decisions_chat_update`. A refused approval keeps its buttons, to retry once the cause is
+  fixed, and adds «Tu aprobación no se aplicó a las HH:MM: <motivo> (<código>).».
 - A tap counts only from the chat and the Telegram user of the link the message was sent to.
   Another chat, another user in the chat, or the same chat after unlinking, even if linked again,
   decides nothing.
-- The idempotency key is `telegram-<choice>-<token>`, so a repeated tap replays its first result;
-  any other tap carries the reviewed incident version, which is stale once anyone decided. The
-  gateway edits the message to say who decided, from where and when, then answers the tap.
+- The idempotency key is `telegram-<choice>-<token>`, so a repeated tap waits for, and replays,
+  its first result. Any other tap carries the reviewed incident version, which is stale once
+  anyone decided. A tap the API lost (a restart mid-command) is claimed again after two minutes,
+  and the key keeps it from deciding or running twice.
 - If the incident changed while the proposal still waits, the tap decides nothing: the old
   message loses its buttons and the chat gets the proposal again, bound to the current version.
-- Executing an approved operation belongs to #722 and #723; the result is the edit above.
 
 ### What stops a chat from deciding
 

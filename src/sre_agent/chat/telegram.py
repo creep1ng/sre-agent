@@ -21,7 +21,6 @@ import logging
 import os
 import signal
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -30,20 +29,11 @@ import httpx
 from sre_agent.chat.decisions import ChatDecisions
 from sre_agent.chat.digest import queue_digest
 from sre_agent.chat.outbox import ChatStore, DeliveryError, Keyboard
-from sre_agent.gateway.execution import OperationExecutor
-from sre_agent.gateway.responses import PostgresAuditStore
-from sre_agent.gateway.runs import RunCommandService
-from sre_agent.incident.runtime import IncidentRuntime
-from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
-from sre_agent.settings import Settings
 
 logger = logging.getLogger("sre_agent.chat.telegram")
 # An update that fails this many times in a row is skipped, so it cannot hold back later ones.
 MAX_UPDATE_ATTEMPTS = 5
-# The workflow the API loads (sre_agent.application), without importing the whole API.
-WORKFLOW = Path(__file__).resolve().parents[3] / "agent" / "workflows" / "incident-response.yaml"
 # Telegram shows at most 200 characters of a callback answer.
 MAX_ANSWER = 200
 
@@ -113,12 +103,8 @@ async def _tap(bot: BotApi, decisions: ChatDecisions, query: dict[str, Any]) -> 
     message = query.get("message") or {}
     chat_id = (message.get("chat") or {}).get("id")
     user_id = (query.get("from") or {}).get("id")
-    answer, decided = await decisions.tap(chat_id, user_id, str(query.get("data", "")))
-    if decided is not None:
-        try:
-            await bot.edit(chat_id, message.get("message_id"), *decided)
-        except DeliveryError as error:
-            logger.info("decided message not edited: %s", error)
+    # The API carries the decision out; the outbox edits the message with what happened.
+    answer = await decisions.tap(chat_id, user_id, str(query.get("data", "")))
     try:
         await bot.call(
             "answerCallbackQuery", callback_query_id=query["id"], text=answer[:MAX_ANSWER]
@@ -218,18 +204,8 @@ async def gateway(
     try:
         async with httpx.AsyncClient(base_url=api_url) as http:
             bot, store = BotApi(http, token), ChatStore(database)
-            workflow = load_incident_workflow(WORKFLOW)
-            runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
-            # An approval from the chat runs its operation exactly as the console's does (#722):
-            # the same checks, the signed executor call and the audit, or a refusal.
-            executor = OperationExecutor(
-                database.sessions,
-                runtime,
-                Settings.from_environment(),
-                audit=PostgresAuditStore(database.sessions),
-            )
-            commands = RunCommandService(database.sessions, workflow, runtime, executor=executor)
-            decisions = ChatDecisions(database, commands)
+            # No runtime, executor or key here: the API carries out the taps (#722).
+            decisions = ChatDecisions(database)
             me = await bot.call("getMe")
             logger.info("telegram gateway started as @%s", me.get("username"))
             tasks = [asyncio.create_task(_poll(bot, store, decisions, poll_seconds))]

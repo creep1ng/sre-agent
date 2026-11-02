@@ -160,14 +160,6 @@ services:
       # The zone chat messages tell time in, and the console the «Ver incidente» button opens.
       TELEGRAM_TIMEZONE: ${TELEGRAM_TIMEZONE:-}
       CONSOLE_PUBLIC_URL: ${CONSOLE_PUBLIC_URL:-}
-      # A tap that approves runs the mitigation's operation as the API does (#722): the executor,
-      # its signing key, the agent whose grant it checks and the audit it writes.
-      DEPLOY_EXECUTOR_URL: ${DEPLOY_EXECUTOR_URL:-}
-      DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
-      AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:-}
-      INVESTIGATOR_GATEWAY_URL: http://api:8000
-      INVESTIGATOR_GATEWAY_API_KEY: ${INCIDENT_HARNESS_API_KEY:?INCIDENT_HARNESS_API_KEY is required}
-      INVESTIGATOR_MODEL_ALIAS: triage-agent
     depends_on:
       migrate:
         condition: service_completed_successfully
