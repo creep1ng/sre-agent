@@ -83,6 +83,24 @@ link only a chat you would trust with that content.
 - Once the proposal is decided, the message says who decided it (the principal's display name),
   from where and when, without buttons and without the marker.
 
+## Editing the decision message
+
+- The gateway keeps the Telegram id of every message it sends (`chat_outbox.telegram_message_id`,
+  migration `20261102_01`).
+- The trigger `decisions_chat_update` on `incident.decisions` queues one `decision_update` per
+  decision message of the incident whenever `apply_mitigation`, `reject_mitigation`,
+  `verification_passed` or `verification_failed` is recorded, from any channel: a tap, the
+  console or the API. A chat unlinked since gets no edit.
+- The gateway renders it when it sends it, as the decision message reads at that moment, and
+  sends it as `editMessageText` on the original message, without buttons. A message that was
+  never sent is skipped; an edit that changes nothing (the tap already showed it) counts as done.
+- After an approval, the stability check adds one line:
+  «Resuelto a las 09:33 UTC · 95 s tras la mitigación que aprobaste · ver la consola.» (or
+  «aprobada» when another human approved it), or «La verificación falló a las 09:33 UTC: el
+  incidente vuelve a investigarse.». The time is from the approval to the check.
+- The chat writes this recovery text; #723's verifier only moves the incident through
+  `verifying` to `resolved` or back to `investigating` (maintainer decision of 2026-11-02).
+
 ## Deciding from the chat
 
 - A tap sends `approve_mitigation` or `reject_mitigation` through the same `RunCommandService`
@@ -97,7 +115,7 @@ link only a chat you would trust with that content.
   gateway edits the message to say who decided, from where and when, then answers the tap.
 - If the incident changed while the proposal still waits, the tap decides nothing: the old
   message loses its buttons and the chat gets the proposal again, bound to the current version.
-- Executing an approved operation and the result message belong to #723 and #722.
+- Executing an approved operation belongs to #722 and #723; the result is the edit above.
 
 ### What stops a chat from deciding
 

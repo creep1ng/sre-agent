@@ -71,9 +71,19 @@ class BotApi:
             )
         return body["result"]
 
-    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> None:
+    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> int:
         markup = {"reply_markup": {"inline_keyboard": keyboard}} if keyboard else {}
-        await self.call("sendMessage", chat_id=chat_id, text=message, **markup)
+        sent = await self.call("sendMessage", chat_id=chat_id, text=message, **markup)
+        return sent["message_id"]
+
+    async def edit(self, chat_id: int, message_id: int, message: str) -> None:
+        """Replace a message's text; without reply_markup its buttons go away."""
+        try:
+            await self.call("editMessageText", chat_id=chat_id, message_id=message_id, text=message)
+        except DeliveryError as error:
+            # The tap that decided, or an earlier edit, already shows this text.
+            if "message is not modified" not in str(error):
+                raise
 
 
 async def _tap(bot: BotApi, decisions: ChatDecisions, query: dict[str, Any]) -> None:
@@ -83,13 +93,7 @@ async def _tap(bot: BotApi, decisions: ChatDecisions, query: dict[str, Any]) -> 
     answer, decided = await decisions.tap(chat_id, user_id, str(query.get("data", "")))
     if decided is not None:
         try:
-            # Without reply_markup the buttons go away; an unchanged repeat answers 400.
-            await bot.call(
-                "editMessageText",
-                chat_id=chat_id,
-                message_id=message.get("message_id"),
-                text=decided[0],
-            )
+            await bot.edit(chat_id, message.get("message_id"), decided[0])
         except DeliveryError as error:
             logger.info("decided message not edited: %s", error)
     try:
@@ -143,7 +147,7 @@ async def _poll(bot: BotApi, store: ChatStore, decisions: ChatDecisions, poll_se
 
 async def _deliver(bot: BotApi, store: ChatStore, stopping: asyncio.Event) -> None:
     while not stopping.is_set():
-        if not await store.deliver_next(bot.send):
+        if not await store.deliver_next(bot.send, bot.edit):
             try:
                 await asyncio.wait_for(stopping.wait(), 0.5)
             except TimeoutError:

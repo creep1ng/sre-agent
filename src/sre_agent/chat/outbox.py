@@ -2,7 +2,8 @@
 
 Producers call `enqueue` inside their own transaction; dispatch receipts are enqueued by the
 `run_events_chat_outbox` trigger. The gateway renders each message when it sends it, so a new
-message kind is one entry in `RENDERERS`.
+message kind is one entry in `RENDERERS`. A kind in `EDITS` rewrites a message already sent
+instead of sending a new one: `decisions_chat_update` queues one on every decision (20261102_01).
 """
 
 from __future__ import annotations
@@ -162,12 +163,15 @@ class ChatStore:
         return removed is not None
 
     async def deliver_next(
-        self, send: Callable[[int, str, Keyboard | None], Awaitable[None]]
+        self,
+        send: Callable[[int, str, Keyboard | None], Awaitable[int | None]],
+        edit: Callable[[int, int, str], Awaitable[None]],
     ) -> bool:
         """Send the oldest due message of one chat; False when nothing is due.
 
-        The row stays locked until the send is recorded, so two gateways never send it twice.
-        A gateway killed between the send and the commit sends it again (at least once).
+        `send` returns the chat's id for the new message, which a later edit needs. The row stays
+        locked until the send is recorded, so two gateways never send it twice. A gateway killed
+        between the send and the commit sends it again (at least once).
         """
         async with self.database.transaction() as session:
             row = (
@@ -199,15 +203,25 @@ class ChatStore:
                 return True
             if len(body) > MAX_TEXT:
                 body = body[:MAX_TEXT] + "… (texto completo en la consola)"
+            sent_as, skipped = None, None
             try:
-                await send(row["chat_id"], body, keyboard)
+                if row["kind"] not in EDITS:
+                    sent_as = await send(row["chat_id"], body, keyboard)
+                elif keyboard is not None:
+                    skipped = "still pending"
+                elif (target := await _edit_target(session, row["payload"])) is None:
+                    # Its message was never sent (dropped or unlinked): there is nothing to edit.
+                    skipped = "nothing to edit"
+                else:
+                    await edit(row["chat_id"], target, body)
             except DeliveryError as error:
                 await self._failed(session, row, error)
                 return True
             await session.execute(
                 text("""UPDATE incident.chat_outbox SET sent_at = clock_timestamp(),
-                    attempts = attempts + 1, last_error = NULL WHERE message_id = :message_id"""),
-                {"message_id": row["message_id"]},
+                    attempts = attempts + 1, last_error = :skipped,
+                    telegram_message_id = :sent_as WHERE message_id = :message_id"""),
+                {"message_id": row["message_id"], "sent_as": sent_as, "skipped": skipped},
             )
             return True
 
@@ -228,6 +242,13 @@ class ChatStore:
                 "message_id": row["message_id"],
             },
         )
+
+
+async def _edit_target(session: AsyncSession, payload: Mapping[str, Any]) -> int | None:
+    return await session.scalar(
+        text("SELECT telegram_message_id FROM incident.chat_outbox WHERE message_id = :target"),
+        {"target": payload["target"]},
+    )
 
 
 async def _incident_label(session: AsyncSession, payload: Mapping[str, Any]) -> str:
@@ -381,7 +402,46 @@ async def mitigation_decision(
     when = datetime.fromisoformat(decision["decided_at"]).astimezone(UTC)
     outcome = OUTCOMES.get(decision.get("outcome"), "Decidida")
     lines.append(f"{outcome} por {who} desde {where}, {when:%Y-%m-%d %H:%M UTC}.")
+    if decision.get("outcome") == "approve":
+        mine = actor.get("principal_id") == payload.get("principal_id")
+        lines += await _verification(session, payload["incident_id"], when, mine)
     return "\n".join(lines), None
+
+
+async def _verification(
+    session: AsyncSession, incident_id: str, approved_at: datetime, mine: bool
+) -> list[str]:
+    """How the approved mitigation ended: the first stability check after it (#723)."""
+    checked = (
+        await session.execute(
+            text("""SELECT document ->> 'transition_id' AS transition_id, decided_at
+                FROM incident.decisions
+                WHERE incident_id = :incident_id AND decided_at >= :approved_at
+                  AND document ->> 'transition_id' IN ('verification_passed', 'verification_failed')
+                ORDER BY decided_at LIMIT 1"""),
+            {"incident_id": incident_id, "approved_at": approved_at},
+        )
+    ).one_or_none()
+    if checked is None:
+        return []
+    at = checked.decided_at.astimezone(UTC)
+    if checked.transition_id == "verification_failed":
+        return [f"La verificación falló a las {at:%H:%M} UTC: el incidente vuelve a investigarse."]
+    seconds = round((at - approved_at).total_seconds())
+    after = f"{seconds} s" if seconds < 120 else f"{round(seconds / 60)} min"
+    which = "que aprobaste" if mine else "aprobada"
+    return [f"Resuelto a las {at:%H:%M} UTC · {after} tras la mitigación {which} · ver la consola."]
+
+
+async def _decision_update(
+    session: AsyncSession, payload: Mapping[str, Any]
+) -> tuple[str, Keyboard | None]:
+    """The decision message as it reads now, to replace the one the chat has."""
+    target = await session.scalar(
+        text("SELECT payload FROM incident.chat_outbox WHERE message_id = :target"),
+        {"target": payload["target"]},
+    )
+    return await mitigation_decision(session, target)
 
 
 def _split(rendered: Rendered) -> tuple[str, Keyboard | None]:
@@ -397,6 +457,7 @@ def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitabl
 
 RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[Rendered]]] = {
     "daily_digest": render_digest,
+    "decision_update": _decision_update,
     "mitigation_decision": mitigation_decision,
     "investigation_ack": _investigation_ack,
     "investigation_conclusion": _investigation_conclusion,
@@ -408,3 +469,4 @@ RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[Rende
     "link_private_only": _fixed("Solo se vincula un chat privado con el bot. Abre el enlace ahí."),
     "not_linked": _fixed("Este chat no está vinculado. Ábrelo con un enlace de vinculación."),
 }
+EDITS = frozenset({"decision_update"})
