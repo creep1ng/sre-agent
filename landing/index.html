@@ -14,6 +14,9 @@
 <body>
 <svg class="defs" width="0" height="0" aria-hidden="true">
   <symbol id="mark" viewBox="0 0 32 32"><path d="M19 3.5A12.5 12.5 0 1 0 28.5 21 10.5 10.5 0 0 1 19 3.5z" fill="#e4d9ff"/><rect x="21" y="8" width="5" height="5" fill="#f2b45a"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 16 16"><path d="M5.5 3.5 2.5 6.5l3 3M2.5 6.5H10a3.5 3.5 0 0 1 0 7H7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-proof" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+  <symbol id="i-later" viewBox="0 0 16 16"><path d="M13 9.5A5.5 5.5 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
   <symbol id="github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
 </svg>
 
@@ -40,7 +43,9 @@
     <div class="wrap">
       <p data-i18n="hero.lead">Midnight vigila lo que ya tienes, recuerda lo que pasó y te despierta solo cuando tu decisión cambia el desenlace.</p>
       <div class="cmd"><code><b>$</b> git clone https://github.com/creep1ng/sre-agent
-<b>$</b> docker compose up -d</code><button type="button" data-copy data-i18n="copy">Copiar</button></div>
+<b>$</b> cd sre-agent
+<b>$</b> cp .env.example .env
+<b>$</b> python scripts/setup_sre.py</code><button type="button" data-copy data-i18n="copy">Copiar</button></div>
     </div>
   </div>
 </header>
@@ -49,15 +54,11 @@
   <div class="wrap">
     <h2 data-i18n="letter.title">Tu atención es lo más caro que tienes. La tratamos <em>así</em>.</h2>
     <div class="body">
-      <div>
-        <p data-i18n="letter.p1">Si mantienes la tienda de un cliente, la API de otro y el WordPress de un tercero, en dos o tres VPS que nadie más mira, no tienes un equipo de guardia. Tienes un móvil en la mesilla que vibra por cada parpadeo. Y aun así, el día que algo se rompe de verdad, te enteras por un correo del cliente.</p>
-        <p data-i18n="letter.p2">No necesitas otro panel, ni un agente con las llaves de producción. Necesitas dormir sabiendo que, si algo requiere tu criterio, te llegará un solo mensaje con lo necesario para decidir.</p>
-      </div>
-      <div>
-        <p data-i18n="letter.p3">Por eso construyo Midnight. Escucha las señales que ya tienes, recuerda tus incidentes y lo que hiciste con ellos, y actúa solo a través de operaciones que aprobaste antes, dejando un recibo de cada una.</p>
-        <p data-i18n="letter.p4">Casi todo lo que pasa de noche termina en no hacer nada, recordarlo y no molestarte. Eso no es un defecto. Es el producto.</p>
+        <p data-i18n="letter.p1">Mantengo los servicios internos de una empresa en un servidor on-premise, literalmente la pesadilla de muchos ingenieros. Efectivamente, alguna vez se ha caído un servicio, y me he enterado porque alguien me dice un sábado, a las 7 de la noche, que necesitaba sacar un reporte de urgencia, y definitivamente no tengo capacidad de atenderle. Después de revisar, el servicio llevaba caído desde el jueves.</p>
+        <p data-i18n="letter.p2">Realmente no necesito otro dashboard que visitar, y la idea de un agente de programación con llaves de producción me aterra. Quiero <em>dormir</em> tranquilo, sabiendo que, si algo requiere de mi criterio, llegará un mensaje que me notifique. El resto será resuelto o lo tendré reportado y listo para accionar al día siguiente.</p>
+        <p data-i18n="letter.p3">De esa idea nace Midnight. Escucha las señales que da mi infraestructura, recuerda mis incidentes y cómo los resolví, y opera con acciones predefinidas y preaprobadas, generando toda la trazabilidad en caso de que la necesite.</p>
+        <p data-i18n="letter.p4">Por lo general, todo lo que pasa de noche se resuelve sin que me despierte. No es un no por defecto. Es nuestro producto.</p>
         <div class="sign">— Ricardo</div>
-      </div>
     </div>
   </div>
 </section>
@@ -69,11 +70,10 @@
       <header><span class="av"><svg aria-hidden="true"><use href="#mark" /></svg></span><b>midnight</b><time data-i18n="msg.time">sáb 02:47</time></header>
       <div class="text">
         <p data-i18n="msg.p1">Los pagos de <b>Tienda&nbsp;Ruiz</b> fallan al <span class="nb">38&nbsp;%</span> desde las 02:31.</p>
-        <p data-i18n="msg.p2">El deploy del viernes a las 19:12 bajó el timeout del proveedor de <span class="nb">10&nbsp;s</span> a <span class="nb">1&nbsp;s</span>,<sup>1</sup> y a esta hora el proveedor responde más lento.<sup>2</sup> El 12 de septiembre lo resolviste con un rollback.<sup>3</sup></p>
+        <p data-i18n="msg.p2"><span class="cite" tabindex="0">El deploy del viernes a las 19:12 bajó el timeout del proveedor de <span class="nb">10&nbsp;s</span> a <span class="nb">1&nbsp;s</span><span class="tip" role="tooltip"><b>deploy #212</b> · vie 19:12 · checkout v1.14: <code>PAYMENT_TIMEOUT</code> 10&nbsp;s → 1&nbsp;s</span></span>, y <span class="cite" tabindex="0">a esta hora el proveedor responde más lento<span class="tip" role="tooltip"><b>consulta a Grafana</b> · p95 del proveedor de pagos: 1,8&nbsp;s entre 02:00 y 02:45, 0,4&nbsp;s de día</span></span>. <span class="cite" tabindex="0">El 12 de septiembre lo resolviste con un rollback<span class="tip" role="tooltip"><b>incidente del 12 sep</b> · mismo síntoma, rollback de checkout a v1.12, resuelto en 4&nbsp;min</span></span>.</p>
         <p data-i18n="msg.p3">¿Revierto <b>checkout</b> a v1.13?</p>
       </div>
-      <div class="notes"><a>1 deploy #212</a><a data-i18n="msg.n2">2 consulta grafana</a><a data-i18n="msg.n3">3 incidente 12 sep</a></div>
-      <div class="keys"><span class="yes" data-i18n="msg.yes">Revertir a v1.13</span><span data-i18n="msg.evidence">Evidencia</span><span data-i18n="msg.later">Mañana</span></div>
+      <div class="keys"><span class="yes"><svg aria-hidden="true"><use href="#i-undo" /></svg><span data-i18n="msg.yes">Revertir a v1.13</span></span><span><svg aria-hidden="true"><use href="#i-proof" /></svg><span data-i18n="msg.evidence">Evidencia</span></span><span><svg aria-hidden="true"><use href="#i-later" /></svg><span data-i18n="msg.later">Mañana</span></span></div>
     </article>
   </div>
 </section>
@@ -150,7 +150,7 @@
   <div class="wrap">
     <h2 data-i18n="closing.title">Abre el código.<br /><em>Cierra</em> el portátil.</h2>
     <div class="row">
-      <div class="cmd"><code><b>$</b> docker compose up -d</code><button type="button" data-copy data-i18n="copy">Copiar</button></div>
+      <div class="cmd"><code><b>$</b> python scripts/setup_sre.py</code><button type="button" data-copy data-i18n="copy">Copiar</button></div>
       <a class="gh" href="https://github.com/creep1ng/sre-agent"><svg aria-hidden="true"><use href="#github" /></svg><span data-i18n="closing.github">Ver en GitHub</span></a>
       <a class="console" href="/app/" data-i18n="closing.console">Abrir la consola&nbsp;→</a>
     </div>
