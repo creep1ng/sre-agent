@@ -107,7 +107,9 @@ def watch_flagd(events, stop):
     """Hold flagd's EventStream open, as the store's providers do, and record every event: a
     write must arrive as `configuration_change`, never as `provider_shutdown` or a broken stream."""
     host, port = FLAGD.split(":")
-    connection = http.client.HTTPConnection(host, int(port), timeout=5)
+    # No socket timeout: a read after a timeout fails, so an idle stream would look broken. The
+    # thread is a daemon and stops with the driver.
+    connection = http.client.HTTPConnection(host, int(port))
     body = b"{}"
     connection.request(
         "POST",
@@ -119,9 +121,7 @@ def watch_flagd(events, stop):
     while not stop.is_set():
         try:
             head = response.read(5)
-        except TimeoutError:
-            continue
-        except OSError as error:
+        except (OSError, http.client.HTTPException) as error:
             events.append(f"broken: {type(error).__name__}")
             return
         if len(head) < 5:
@@ -244,13 +244,6 @@ def flow():
             bool(refusals),
             refusal=refusals[:1],
         )
-    if STALE:
-        status, body = signed(
-            "flag.set",
-            {"service": SERVICE, "flag": FLAG, "variant": "off"},
-            f"e2e-stale-{run_id}",
-        )
-        step("the flag went off out of band before the approval", status == 200, outcome=body)
     events, stop = [], threading.Event()
     if FLAGD:
         threading.Thread(target=watch_flagd, args=(events, stop), daemon=True).start()
@@ -258,11 +251,23 @@ def flow():
         step(
             "flagd serves the fault before the approval", served(FLAG) != "off", flagd=served(FLAG)
         )
+    if STALE:
+        status, body = signed(
+            "flag.set",
+            {"service": SERVICE, "flag": FLAG, "variant": "off"},
+            f"e2e-stale-{run_id}",
+        )
+        step("the flag went off out of band before the approval", status == 200, outcome=body)
     if os.environ.get("DECIDE", "api") == "telegram":
         message = until(
             "the decision message reaches the chat",
             lambda: next(
-                (m for m in reversed(call(TELEGRAM + "sent")[1]) if m.get("buttons")), None
+                (
+                    m
+                    for m in reversed(call(TELEGRAM + "sent")[1])
+                    if m.get("buttons") and incident_id in (m.get("text") or "")
+                ),
+                None,
             ),
         )
         data = next(d for row in message["buttons"] for label, d in row if label == "Aprobar")
@@ -335,7 +340,9 @@ def flow():
 
     def resolved():
         # Only an episode that started with this fault: an earlier one may have resolved already.
-        since = datetime.fromisoformat(record["started_at"]) - timedelta(minutes=1)
+        # Anchored on the incident, which the alert opened, not on when this driver started.
+        opened = datetime.fromisoformat(incident["opened_at"].replace("Z", "+00:00"))
+        since = opened - timedelta(minutes=5)
         alerts = api("/v1/alerts")[1] or {}
         return next(
             (
