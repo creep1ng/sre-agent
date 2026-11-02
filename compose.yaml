@@ -36,6 +36,10 @@ services:
       INVESTIGATOR_MODEL_ALIAS: triage-agent
       INVESTIGATOR_OUTPUT_LANGUAGE: ${INVESTIGATOR_OUTPUT_LANGUAGE:-es}
       INVESTIGATOR_TOOL_TIMEOUT_SECONDS: ${INVESTIGATOR_TOOL_TIMEOUT_SECONDS:-30}
+      # Grafana alert intake (#765): unset keeps POST /v1/alert-intake/grafana unmounted; an
+      # empty operator records episodes without declaring them.
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:-}
+      ALERT_INTAKE_PRINCIPAL_ID: ${ALERT_INTAKE_PRINCIPAL_ID-demo-human}
       SRE_AGENT_APPLICATION_VERSION: ${SRE_AGENT_APPLICATION_VERSION:-}
       SRE_AGENT_CONTRACT_VERSION: ${SRE_AGENT_CONTRACT_VERSION:-}
       SRE_AGENT_BUILD_REVISION: ${SRE_AGENT_BUILD_REVISION:-}
@@ -141,6 +145,9 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_API_URL: ${TELEGRAM_API_URL:-https://api.telegram.org}
       TELEGRAM_POLL_TIMEOUT_SECONDS: ${TELEGRAM_POLL_TIMEOUT_SECONDS:-25}
+      # The daily digest (#771): hour 0..23 or `off`, in this IANA time zone.
+      TELEGRAM_DIGEST_HOUR: ${TELEGRAM_DIGEST_HOUR:-8}
+      TELEGRAM_DIGEST_TIMEZONE: ${TELEGRAM_DIGEST_TIMEZONE:-UTC}
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -300,7 +307,7 @@ services:
       BASE_URL: http://web
       # Opt-in real-API journey: the key is injected only into this runner and never logged.
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
-      LIVE_INBOX: ${LIVE_INBOX:-0}
+      INBOX_REAL: ${INBOX_REAL:-0}
     command:
       - sh
       - -c

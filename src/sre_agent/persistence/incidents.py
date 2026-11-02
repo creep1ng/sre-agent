@@ -156,7 +156,8 @@ class PostgresIncidentRepository:
         rows = (
             (
                 await self._session.execute(
-                    text("""SELECT incident_id, state->>'state' AS state
+                    text("""SELECT incident_id, state->>'state' AS state,
+                    state->'alert'->>'service' AS service, state->'alert'->>'summary' AS summary
                 FROM incident.incidents
                 WHERE state->>'state' = ANY(:states)
                 ORDER BY incident_id ASC
@@ -167,7 +168,36 @@ class PostgresIncidentRepository:
             .mappings()
             .all()
         )
-        return tuple({"incident_id": row["incident_id"], "state": row["state"]} for row in rows)
+        # The service and summary of the alert that opened it, when it recorded one, so a person
+        # recognises the incident without opening it (#703).
+        return tuple(
+            {
+                key: row[key]
+                for key in ("incident_id", "state", "service", "summary")
+                if row[key] is not None
+            }
+            for row in rows
+        )
+
+    async def list_recent(
+        self, *, exclude_states: Sequence[str], since: datetime | None, limit: int
+    ) -> tuple[IncidentRecord, ...]:
+        """Incidents most recently updated first, outside ``exclude_states``."""
+        rows = (
+            (
+                await self._session.execute(
+                    text("""SELECT * FROM incident.incidents
+                WHERE NOT (state->>'state' = ANY(:excluded))
+                AND (CAST(:since AS timestamptz) IS NULL OR updated_at >= :since)
+                ORDER BY updated_at DESC, incident_id ASC
+                LIMIT :limit""").bindparams(bindparam("excluded", type_=ARRAY(String()))),
+                    {"excluded": list(exclude_states), "since": since, "limit": limit},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return tuple(_incident(row) for row in rows)
 
 
 class PostgresRunRepository:
@@ -239,6 +269,24 @@ class PostgresRunRepository:
             .all()
         )
         return tuple(row["run_id"] for row in rows)
+
+    async def latest_for(self, incident_ids: Sequence[str]) -> dict[str, RunRecord]:
+        """Each incident's latest run, in the order ``list_ids`` gives its last one."""
+        rows = (
+            (
+                await self._session.execute(
+                    text("""SELECT DISTINCT ON (incident_id) * FROM incident.runs
+                    WHERE incident_id = ANY(:incident_ids)
+                    ORDER BY incident_id, created_at DESC, run_id DESC""").bindparams(
+                        bindparam("incident_ids", type_=ARRAY(String()))
+                    ),
+                    {"incident_ids": list(incident_ids)},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return {row["incident_id"]: _run(row) for row in rows}
 
 
 class PostgresEventRepository:

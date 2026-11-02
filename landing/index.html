@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Midnight · Cierra el portátil</title>
+<meta name="description" content="Midnight vigila las señales que ya tienes, recuerda cada incidente y cada deploy, y te despierta solo cuando tu decisión cambia el desenlace. Código abierto, en tu VPS." />
+<link rel="alternate" type="text/markdown" href="/llms.txt" title="Midnight para agentes" />
+<script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"SoftwareApplication","name":"Midnight","applicationCategory":"DeveloperApplication","operatingSystem":"Linux (Docker Compose)","isAccessibleForFree":true,"codeRepository":"https://github.com/creep1ng/sre-agent","description":"Agente de guardia en segundo plano para freelancers que mantienen servicios de varios clientes."}
+</script>
+<link rel="stylesheet" href="/landing/landing.css" />
+</head>
+<body>
+<svg class="defs" width="0" height="0" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 32 32"><path d="M19 3.5A12.5 12.5 0 1 0 28.5 21 10.5 10.5 0 0 1 19 3.5z" fill="#e4d9ff"/><rect x="21" y="8" width="5" height="5" fill="#f2b45a"/></symbol>
+  <symbol id="github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></symbol>
+</svg>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="/"><svg aria-hidden="true"><use href="#mark" /></svg>midnight<span class="cur" aria-hidden="true"></span></a>
+    <div class="links">
+      <a href="#promesas" data-i18n="nav.promises">Promesas</a>
+      <a href="#encaje" data-i18n="nav.integrations">Integraciones</a>
+      <a href="https://github.com/creep1ng/sre-agent#readme">Docs</a>
+      <span class="lang" role="group" aria-label="Idioma" data-i18n-aria="nav.language"><button type="button" data-lang="es" lang="es" aria-pressed="true">ES</button><button type="button" data-lang="en" lang="en" aria-pressed="false">EN</button></span>
+      <a class="gh" href="https://github.com/creep1ng/sre-agent"><svg aria-hidden="true"><use href="#github" /></svg>GitHub</a>
+      <a class="console" href="/app/" data-i18n="nav.console"><span class="lg">Abrir la&nbsp;</span>consola&nbsp;→</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <svg id="sky" role="img" aria-label="Siete noches de señales; solo una, el viernes a las 02:47, te despertó" data-i18n-aria="hero.sky"></svg>
+  <div class="wrap">
+    <h1 data-i18n="hero.title">Mil señales en una semana. <em>Una</em> era para ti.</h1>
+  </div>
+  <div class="hero-foot">
+    <div class="wrap">
+      <p data-i18n="hero.lead">Midnight vigila lo que ya tienes, recuerda lo que pasó y te despierta solo cuando tu decisión cambia el desenlace.</p>
+      <div class="cmd"><code><b>$</b> git clone https://github.com/creep1ng/sre-agent
+<b>$</b> docker compose up -d</code><button type="button" data-copy data-i18n="copy">Copiar</button></div>
+    </div>
+  </div>
+</header>
+
+<section class="letter">
+  <div class="wrap">
+    <h2 data-i18n="letter.title">Tu atención es lo más caro que tienes. La tratamos <em>así</em>.</h2>
+    <div class="body">
+      <div>
+        <p data-i18n="letter.p1">Si mantienes la tienda de un cliente, la API de otro y el WordPress de un tercero, en dos o tres VPS que nadie más mira, no tienes un equipo de guardia. Tienes un móvil en la mesilla que vibra por cada parpadeo. Y aun así, el día que algo se rompe de verdad, te enteras por un correo del cliente.</p>
+        <p data-i18n="letter.p2">No necesitas otro panel, ni un agente con las llaves de producción. Necesitas dormir sabiendo que, si algo requiere tu criterio, te llegará un solo mensaje con lo necesario para decidir.</p>
+      </div>
+      <div>
+        <p data-i18n="letter.p3">Por eso construyo Midnight. Escucha las señales que ya tienes, recuerda tus incidentes y lo que hiciste con ellos, y actúa solo a través de operaciones que aprobaste antes, dejando un recibo de cada una.</p>
+        <p data-i18n="letter.p4">Casi todo lo que pasa de noche termina en no hacer nada, recordarlo y no molestarte. Eso no es un defecto. Es el producto.</p>
+        <div class="sign">— Ricardo</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="moment">
+  <div class="wrap">
+    <div class="clock">02:47</div>
+    <article class="msg" aria-label="Mensaje de Midnight en Telegram" data-i18n-aria="msg.label">
+      <header><span class="av"><svg aria-hidden="true"><use href="#mark" /></svg></span><b>midnight</b><time data-i18n="msg.time">sáb 02:47</time></header>
+      <div class="text">
+        <p data-i18n="msg.p1">Los pagos de <b>Tienda&nbsp;Ruiz</b> fallan al <span class="nb">38&nbsp;%</span> desde las 02:31.</p>
+        <p data-i18n="msg.p2">El deploy del viernes a las 19:12 bajó el timeout del proveedor de <span class="nb">10&nbsp;s</span> a <span class="nb">1&nbsp;s</span>,<sup>1</sup> y a esta hora el proveedor responde más lento.<sup>2</sup> El 12 de septiembre lo resolviste con un rollback.<sup>3</sup></p>
+        <p data-i18n="msg.p3">¿Revierto <b>checkout</b> a v1.13?</p>
+      </div>
+      <div class="notes"><a>1 deploy #212</a><a data-i18n="msg.n2">2 consulta grafana</a><a data-i18n="msg.n3">3 incidente 12 sep</a></div>
+      <div class="keys"><span class="yes" data-i18n="msg.yes">Revertir a v1.13</span><span data-i18n="msg.evidence">Evidencia</span><span data-i18n="msg.later">Mañana</span></div>
+    </article>
+  </div>
+</section>
+
+<section id="promesas">
+  <div class="wrap">
+    <h2 data-i18n="pr.title">Siete promesas que puedes <em>comprobar</em>.</h2>
+
+    <article class="ch lit"><div class="num">I</div><div><h3 data-i18n="pr.1.h">El silencio es <em>lo normal</em>.</h3><p data-i18n="pr.1.p">Cada evento termina ignorado, recordado, en el resumen de la mañana o como interrupción. Solo te interrumpe si tu decisión cambia el desenlace.</p></div>
+      <ul><li class="no" data-i18n="pr.1.no">Avisos por parpadeos que se recuperan solos.</li><li class="ok" data-i18n="pr.1.ok">Un mensaje por incidente real. Cero en una semana sin fallos.</li></ul></article>
+
+    <article class="ch"><div class="num">II</div><div><h3 data-i18n="pr.2.h">Lo que no está en el catálogo <em>no puede ocurrir</em>.</h3><p data-i18n="pr.2.p">El agente invoca operaciones con nombre y datos tipados. Las credenciales viven en un ejecutor aparte que verifica la firma de cada llamada.</p></div>
+      <ul><li class="no" data-i18n="pr.2.no">Una shell. Credenciales dentro del agente.</li><li class="ok" data-i18n="pr.2.ok">Una alerta hostil no produce nada fuera del catálogo.</li></ul></article>
+
+    <article class="ch"><div class="num">III</div><div><h3 data-i18n="pr.3.h">Cada acción <em>rinde cuentas</em>.</h3><p data-i18n="pr.3.p">Cada acción deja un recibo. Un resultado ambiguo nunca se reintenta solo. Cada ejecución termina con un motivo que puedes leer.</p></div>
+      <ul><li class="no" data-i18n="pr.3.no">Ejecuciones colgadas. Bucles de reinicio.</li><li class="ok" data-i18n="pr.3.ok">Matamos el gateway y el ejecutor en cada paso: nada se repite.</li></ul></article>
+
+    <article class="ch"><div class="num">IV</div><div><h3 data-i18n="pr.4.h">La memoria <em>tiene fuente</em>.</h3><p data-i18n="pr.4.p">Recuerda tus incidentes, mitigaciones y deploys, cada uno enlazado a su origen. Propone cambios; nunca reescribe sus propias reglas.</p></div>
+      <ul><li class="no" data-i18n="pr.4.no">Hechos sin fuente. Prompts que se modifican solos.</li><li class="ok" data-i18n="pr.4.ok">Cada recuerdo enlaza al registro del que viene.</li></ul></article>
+
+    <article class="ch"><div class="num">V</div><div><h3 data-i18n="pr.5.h">El motor es el producto.</h3><p data-i18n="pr.5.p">Todo existe primero en la API. El chat, la consola y otros agentes por MCP usan el mismo motor.</p></div>
+      <ul><li class="no" data-i18n="pr.5.no">Funciones que solo existen en nuestra interfaz.</li><li class="ok" data-i18n="pr.5.ok">La demo corre entera con la consola cerrada.</li></ul></article>
+
+    <article class="ch"><div class="num">VI</div><div><h3 data-i18n="pr.6.h">Solo afirmamos <em>lo que medimos</em>.</h3><p data-i18n="pr.6.p">Evaluaciones ciegas con rúbrica fijada antes, junto a Claude Code, con las ejecuciones fallidas incluidas.</p></div>
+      <ul><li class="no" data-i18n="pr.6.no">Alertas con pistas de quien conoce el fallo.</li><li class="ok" data-i18n="pr.6.ok">El informe lista cada ejecución. La primera aún no ha corrido.</li></ul></article>
+
+    <article class="ch"><div class="num">VII</div><div><h3 data-i18n="pr.7.h">Economía <em>de bolsillo</em>.</h3><p data-i18n="pr.7.p">Menos de 1&nbsp;USD por usuario y mes como objetivo. Reglas y memoria deciden antes de llamar a un modelo.</p></div>
+      <ul><li class="no" data-i18n="pr.7.no">Una llamada al modelo por evento.</li><li class="ok" data-i18n="pr.7.ok">Coste por investigación y por mes en reposo, registrados.</li></ul></article>
+  </div>
+</section>
+
+<section class="wiring" id="encaje">
+  <div class="wrap">
+    <h2 data-i18n="wiring.title">Se sienta <em>entre</em> tus señales y tú.</h2>
+    <svg viewBox="0 0 1040 420" role="img" aria-label="Grafana, Alertmanager, Uptime Kuma y GitHub Actions entran en Midnight; Midnight sale por Telegram, la API, MCP y la consola. Solo Telegram lleva interrupciones." data-i18n-aria="wiring.label">
+      <defs>
+        <linearGradient id="inl" x1="0" x2="1"><stop offset="0" stop-color="#a797d7" stop-opacity=".15" /><stop offset="1" stop-color="#a797d7" stop-opacity=".6" /></linearGradient>
+      </defs>
+      <g font-family="JetBrains Mono, monospace" font-size="16" fill="#d7d0f2">
+        <!-- inputs -->
+        <g id="in">
+          <rect x="0" y="38" width="210" height="56" rx="12" fill="#11162c" stroke="rgba(228,217,255,.18)" /><text x="22" y="72">Grafana</text>
+          <rect x="0" y="134" width="210" height="56" rx="12" fill="#11162c" stroke="rgba(228,217,255,.18)" /><text x="22" y="168">Alertmanager</text>
+          <rect x="0" y="230" width="210" height="56" rx="12" fill="#11162c" stroke="rgba(228,217,255,.18)" /><text x="22" y="264">Uptime Kuma</text>
+          <rect x="0" y="326" width="210" height="56" rx="12" fill="#11162c" stroke="rgba(228,217,255,.18)" /><text x="22" y="360">GitHub Actions</text>
+        </g>
+        <g fill="none" stroke="url(#inl)" stroke-width="1.5">
+          <path d="M210 66 C 320 66, 330 210, 420 210" /><path d="M210 162 C 320 162, 330 210, 420 210" />
+          <path d="M210 258 C 320 258, 330 210, 420 210" /><path d="M210 354 C 320 354, 330 210, 420 210" />
+        </g>
+        <!-- core -->
+        <rect x="420" y="130" width="200" height="160" rx="24" fill="#1e2749" stroke="rgba(228,217,255,.35)" />
+        <use href="#mark" x="496" y="160" width="48" height="48" />
+        <text x="520" y="250" text-anchor="middle" font-size="20" font-weight="500" fill="#e4d9ff">midnight</text>
+        <!-- outputs -->
+        <g fill="none" stroke-width="1.5">
+          <path d="M620 210 C 710 210, 720 66, 830 66" stroke="#f2b45a" stroke-width="2.5" />
+          <path d="M620 210 C 710 210, 720 162, 830 162" stroke="rgba(167,151,215,.45)" />
+          <path d="M620 210 C 710 210, 720 258, 830 258" stroke="rgba(167,151,215,.45)" />
+          <path d="M620 210 C 710 210, 720 354, 830 354" stroke="rgba(167,151,215,.45)" />
+        </g>
+        <circle cx="830" cy="66" r="4" fill="#f2b45a" />
+        <rect x="830" y="38" width="210" height="56" rx="12" fill="#11162c" stroke="#f2b45a" /><text x="852" y="72" fill="#f2b45a">Telegram</text>
+        <rect x="830" y="134" width="210" height="56" rx="12" fill="#11162c" stroke="rgba(228,217,255,.18)" /><text x="852" y="168">API</text>
+        <rect x="830" y="230" width="210" height="56" rx="12" fill="#11162c" stroke="rgba(228,217,255,.18)" /><text x="852" y="264">MCP</text>
+        <rect x="830" y="326" width="210" height="56" rx="12" fill="#11162c" stroke="rgba(228,217,255,.18)" /><text x="852" y="360" data-i18n="wiring.console">Consola</text>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<section class="closing">
+  <svg id="sky2" aria-hidden="true"></svg>
+  <div class="wrap">
+    <h2 data-i18n="closing.title">Abre el código.<br /><em>Cierra</em> el portátil.</h2>
+    <div class="row">
+      <div class="cmd"><code><b>$</b> docker compose up -d</code><button type="button" data-copy data-i18n="copy">Copiar</button></div>
+      <a class="gh" href="https://github.com/creep1ng/sre-agent"><svg aria-hidden="true"><use href="#github" /></svg><span data-i18n="closing.github">Ver en GitHub</span></a>
+      <a class="console" href="/app/" data-i18n="closing.console">Abrir la consola&nbsp;→</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="logo" href="/"><svg aria-hidden="true"><use href="#mark" /></svg>midnight</a>
+    <span data-i18n="footer">Código abierto. La semana de la portada es simulada. Lo que aún no se cumple: <a href="https://github.com/creep1ng/sre-agent/issues/758">#758</a>, <a href="https://github.com/creep1ng/sre-agent/issues/760">#760</a>.</span>
+  </div>
+</footer>
+
+<script src="/landing/landing.js"></script>
+</body>
+</html>

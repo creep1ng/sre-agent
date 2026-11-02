@@ -13,6 +13,43 @@ servers: [{ url: / }]
 security: [{ bearerAuth: [] }]
 
 paths:
+  /v1/incidents:
+    get:
+      summary: List incidents, most recently updated first
+      operationId: listIncidents
+      description: >-
+        The rows an inbox reads before opening an incident (issue #870): each
+        incident with its latest run and the decision that run waits for, if
+        any. `open` leaves out the terminal states; `recent` lists every state.
+        `since` keeps incidents updated at or after an instant with its offset.
+        Same authorization as the detail (run.read); a pending mitigation is
+        named, never described.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [open, recent], default: recent }
+        - name: since
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Incident list
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:incident-list:1.0.0' }
+              examples:
+                pending: { $ref: './examples/queries/list.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
   /v1/incidents/{incident_id}:
     get:
       summary: Get the public incident detail
@@ -67,7 +104,7 @@ paths:
           description: Ordered event page
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:run-event:1.1.0' }
+              schema: { $ref: 'urn:sre-agent:schema:run-event:1.2.0' }
               examples:
                 page: { $ref: './examples/queries/timeline-page.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }

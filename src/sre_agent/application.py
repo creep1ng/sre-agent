@@ -9,8 +9,10 @@ from typing import Any
 from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.gateway import health
+from sre_agent.gateway.alert_intake import AlertIntakeService, alert_intake_router
 from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
 from sre_agent.gateway.changes import ChangeEventsService, changes_router
+from sre_agent.gateway.event_decisions import EventDecisionsService, event_decisions_router
 from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.identity import router as identity_router
@@ -150,7 +152,9 @@ def create_application(
     application.include_router(
         commands_router(RunCommandService(database.sessions, workflow, incident_runtime))
     )
-    application.include_router(triage_router(TriageHttpService(database, workflow)))
+    application.include_router(
+        triage_router(TriageHttpService(database, workflow, investigator=investigation_dispatcher))
+    )
     application.include_router(
         postmortems_router(
             PostmortemService(
@@ -214,9 +218,29 @@ def create_application(
             projector=mcp_projector,
         )
         application.include_router(mcp_router(mcp_service))
-    application.include_router(alerts_router(LiveAlertsService(database.sessions, mcp_service)))
+    application.include_router(alerts_router(LiveAlertsService(database.sessions)))
     application.include_router(changes_router(ChangeEventsService(database.sessions)))
+    application.include_router(event_decisions_router(EventDecisionsService(database.sessions)))
+    # Intake answers only when its secret is set and a 401 can be audited.
+    if runtime_settings.alert_intake_secret and runtime_settings.audit_hmac_key:
+        application.include_router(
+            alert_intake_router(
+                AlertIntakeService(
+                    database,
+                    workflow,
+                    investigation_dispatcher,
+                    secret=runtime_settings.alert_intake_secret,
+                    principal_id=runtime_settings.alert_intake_principal_id,
+                    audit=audit_store or PostgresAuditStore(database.sessions),
+                    projector=AuditProjector(runtime_settings.audit_hmac_key.encode()),
+                )
+            )
+        )
     application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
+    # A dispatch that a restart cut short has no process left to end it (#704). Without a
+    # gateway a dispatch ends its run in the same call, so only an investigating API sweeps.
+    if runtime_settings.investigator_gateway is not None:
+        application.add_event_handler("startup", investigation_dispatcher.end_interrupted)
     application.add_event_handler("shutdown", database.dispose)
     if shared_provider_client is not None:
         application.add_event_handler("shutdown", shared_provider_client.aclose)

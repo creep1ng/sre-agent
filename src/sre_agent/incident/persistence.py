@@ -134,6 +134,10 @@ class IncidentRepository(Protocol):
         self, incident_id: str, state: JsonDocument, *, now: datetime
     ) -> IncidentRecord: ...
 
+    async def list_recent(
+        self, *, exclude_states: Sequence[str], since: datetime | None, limit: int
+    ) -> tuple[IncidentRecord, ...]: ...
+
 
 class RunRepository(Protocol):
     async def get(self, run_id: str) -> RunRecord | None: ...
@@ -145,6 +149,8 @@ class RunRepository(Protocol):
     ) -> RunRecord: ...
 
     async def list_ids(self, incident_id: str) -> tuple[str, ...]: ...
+
+    async def latest_for(self, incident_ids: Sequence[str]) -> dict[str, RunRecord]: ...
 
 
 class EventRepository(Protocol):

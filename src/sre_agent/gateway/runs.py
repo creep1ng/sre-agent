@@ -55,7 +55,11 @@ from sre_agent.incident.runtime import (
 )
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
+from sre_agent.persistence.repositories import (
+    CredentialRepository,
+    GrantRepository,
+    PrincipalRepository,
+)
 
 START_ACTION = "run.start"
 # The range the contract admits. The store follows it: migration 20260928_14
@@ -375,22 +379,30 @@ class RunCommandService:
         )
 
     async def _authorized_principal(
-        self, request_id: UUID, authorization: str | None, action: str
+        self, request_id: UUID, authorization: str | None, action: str, linked: str | None = None
     ) -> tuple[Principal | None, JSONResponse | None]:
         scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
+        if linked is None and (
+            not separator or scheme.casefold() != "bearer" or not is_api_key(key)
+        ):
             return None, error_envelope(request_id, 401)
         try:
             async with self.sessions() as session:
-                context = await CredentialRepository(session).authenticate(key)
-                if context is None:
+                if linked is None:
+                    context = await CredentialRepository(session).authenticate(key)
+                    principal = context.principal if context is not None else None
+                else:
+                    principal = await PrincipalRepository(session).get(linked)
+                    if principal is not None and principal.status != "active":
+                        principal = None
+                if principal is None:
                     return None, error_envelope(request_id, 401)
-                evaluation = await self._authorizer(session, context.principal, action)
+                evaluation = await self._authorizer(session, principal, action)
         except Exception:
             return None, error_envelope(request_id, 503)
         if evaluation.decision.decision != "allow":
             return None, error_envelope(request_id, 403, COMMAND_DENIED)
-        return context.principal, None
+        return principal, None
 
     def _invalid_reference(self, reference: Any) -> bool:
         if not isinstance(reference, dict) or set(reference) - {
@@ -476,6 +488,24 @@ class RunCommandService:
             or resource.get("id") != self.workflow.workflow_id
         )
 
+    async def send_from_chat(
+        self,
+        principal_id: str,
+        channel: str,
+        incident_id: str,
+        run_id: str,
+        body: Any,
+        idempotency_key: str,
+    ) -> JSONResponse:
+        """Deliver a command from a linked chat, as the human principal the link names (#767).
+
+        The chat gateway has no bearer key to forward: the link record stands in for the
+        authentication, and everything after it (grant, attribution, runtime) is `send`'s.
+        """
+        return await self.send(
+            incident_id, run_id, body, None, idempotency_key, linked=(principal_id, channel)
+        )
+
     async def send(
         self,
         incident_id: str,
@@ -483,13 +513,15 @@ class RunCommandService:
         body: Any,
         authorization: str | None,
         idempotency_key: str | None,
+        *,
+        linked: tuple[str, str] | None = None,
     ) -> JSONResponse:
         request_id = uuid4()
         if self._invalid_request(incident_id, run_id, idempotency_key, body):
             return error_envelope(request_id, 422)
         command = str(body["command"])
         principal, error = await self._authorized_principal(
-            request_id, authorization, COMMAND_ACTIONS[command]
+            request_id, authorization, COMMAND_ACTIONS[command], linked and linked[0]
         )
         if error is not None:
             return error
@@ -516,6 +548,7 @@ class RunCommandService:
             comment=body.get("comment"),
             expected_incident_version=body.get("expected_incident_version"),
             turn_id=body.get("turn_id"),
+            inputs={"channel": linked[1]} if linked else None,
         )
         try:
             result = await self.runtime.execute(resolve(request))

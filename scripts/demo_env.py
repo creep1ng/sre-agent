@@ -31,6 +31,7 @@ CHECKOUT = ROOT / "otel-demo"
 STATE_DIR = ROOT / ".demo-state"
 FLAGS_DIR = STATE_DIR / "flagd"
 MCP_ENV = STATE_DIR / "grafana-mcp.env"
+INTAKE_ENV = STATE_DIR / "alert-intake.env"
 
 
 def abort(message: str) -> None:
@@ -125,6 +126,17 @@ def ensure_mcp_token() -> None:
     token = f"MCP_GRAFANA_SERVER_TOKEN={secrets.token_hex(24)}\n"
     MCP_ENV.write_text(token, encoding="utf-8", newline="\n")
     print(f"Grafana MCP caller token created at {MCP_ENV.relative_to(ROOT)}")
+
+
+def ensure_intake_secret() -> None:
+    """Create once the secret Grafana's contact point sends to the API's alert intake (#765)."""
+    if INTAKE_ENV.exists():
+        return
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(INTAKE_ENV, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
+        stream.write(f"ALERT_INTAKE_GRAFANA_SECRET={secrets.token_hex(24)}\n")
+    print(f"Alert intake secret created at {INTAKE_ENV.relative_to(ROOT)}")
 
 
 def flags_file() -> Path:
@@ -347,6 +359,7 @@ def main() -> None:
         parser.error("--service applies to fail and reset only")
     require_docker()
     ensure_mcp_token()
+    ensure_intake_secret()
     if arguments.service:
         release = "broken_release" if arguments.operation == "fail" else "healthy_release"
         deploy_second_service(manifest(), release)

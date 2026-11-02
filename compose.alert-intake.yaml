@@ -1,0 +1,66 @@
+# Grafana alert intake E2E (#765): Grafana with the demo's provisioned rules
+# (demo/grafana/alerting/midnight.yaml), a Prometheus with the store's OTLP labels and
+# sre-checkout (#721) pushing to it. Grafana's contact point posts to the runner, which records
+# each delivery and relays it to the API; scripts/alert_intake_e2e.py says what it checks.
+# Use with compose.yaml and the profile `alert-intake`. DEMO_CHECKOUT_VERSION=1.5.0 deploys the
+# broken release, 1.4.0 the healthy one. No port is published.
+services:
+  api:
+    environment:
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
+
+  prometheus:
+    profiles: ["alert-intake"]
+    image: quay.io/prometheus/prometheus:v3.13.1@sha256:3c42b892cf723fa54d2f262c37a0e1f80aa8c8ddb1da7b9b0df9455a35a7f893
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-otlp-receiver
+    volumes:
+      - ./demo/grafana/local/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+    networks: [runtime]
+
+  sre-checkout:
+    profiles: ["alert-intake"]
+    build:
+      context: docker
+      dockerfile: checkout.Dockerfile
+      args:
+        CHECKOUT_VERSION: ${DEMO_CHECKOUT_VERSION:-1.4.0}
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://prometheus:9090/api/v1/otlp
+    depends_on: [prometheus]
+    networks: [runtime]
+
+  grafana:
+    profiles: ["alert-intake"]
+    image: grafana/grafana:13.1.0@sha256:121a7a9ece6dc10b969f1f96eed64b4f07dfac0d0b8abc070f7cb83bbde86f63
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090
+      ALERT_INTAKE_URL: ${ALERT_INTAKE_URL:-http://alert-intake-e2e:8099/v1/alert-intake/grafana}
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./demo/grafana/alerting/midnight.yaml:/etc/grafana/provisioning/alerting/midnight.yaml:ro
+      - ./demo/grafana/local/datasource.yaml:/etc/grafana/provisioning/datasources/local.yaml:ro
+    networks: [runtime]
+
+  alert-intake-e2e:
+    profiles: ["alert-intake"]
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    command: ["python", "/e2e/alert_intake_e2e.py"]
+    # Writes the artifact as the host user: ALERT_INTAKE_E2E_USER="$(id -u):$(id -g)".
+    user: ${ALERT_INTAKE_E2E_USER:-1000:1000}
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
+      ARTIFACT_DIR: /artifacts
+    volumes:
+      - ./scripts/alert_intake_e2e.py:/e2e/alert_intake_e2e.py:ro
+      - ${ALERT_INTAKE_ARTIFACTS:-/tmp/alert-intake-artifacts}:/artifacts
+    restart: "no"
+    networks: [runtime]
