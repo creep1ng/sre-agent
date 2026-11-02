@@ -49,7 +49,8 @@ def decide(state: dict, prompt: str) -> dict:
     incident, collected = state["incident"], state["collected_evidence"]
     if incident["hypotheses"]:
         # An enrolled service (#722) is mitigated with one of its catalog operations.
-        offered = {item["operation"] for item in (state.get("service_operations") or {}).get("operations", [])}
+        offers = (state.get("service_operations") or {}).get("operations", [])
+        offered = {item["operation"] for item in offers}
         operation = (
             {"service": incident["alert"]["service"], "operation": "deployment.rollback",
              "parameters": {"to_tag": "1.4.0"}}
