@@ -5,7 +5,7 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
 
 from sre_agent.governance.dto import PrincipalContext
@@ -13,7 +13,12 @@ from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import CredentialRepository
-from sre_agent.triage.service import ID_PATTERN, TriageError, TriageService
+from sre_agent.triage.service import (
+    ID_PATTERN,
+    InvestigationDispatcher,
+    TriageError,
+    TriageService,
+)
 
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 RETRY_AFTER_SECONDS = "5"
@@ -45,9 +50,15 @@ MESSAGES = {
 class TriageHttpService:
     """HTTP boundary for triage commands; the service decides everything else."""
 
-    def __init__(self, database: Database, workflow: IncidentWorkflow) -> None:
+    def __init__(
+        self,
+        database: Database,
+        workflow: IncidentWorkflow,
+        investigator: InvestigationDispatcher | None = None,
+    ) -> None:
         self._database = database
         self._sessions = database.sessions
+        self._investigator = investigator
         self._service = TriageService(database, workflow)
 
     async def _authenticate(self, authorization: str | None) -> PrincipalContext | None:
@@ -80,7 +91,12 @@ class TriageHttpService:
         return response
 
     async def post_command(
-        self, alert_id: str, raw: Any, authorization: str | None, idempotency_key: str | None
+        self,
+        alert_id: str,
+        raw: Any,
+        authorization: str | None,
+        idempotency_key: str | None,
+        background: BackgroundTasks | None = None,
     ) -> JSONResponse:
         request_id = uuid4()
         if idempotency_key is None or re.fullmatch(KEY_PATTERN, idempotency_key) is None:
@@ -123,6 +139,17 @@ class TriageHttpService:
             return self._error(request_id, error.http_status, error.code)
         except Exception:
             return self._error(request_id, 503, "storage_unavailable")
+        if (
+            result.investigation_run_id is not None
+            and result.incident_id is not None
+            and self._investigator is not None
+            and background is not None
+        ):
+            background.add_task(
+                self._investigator.dispatch,
+                result.incident_id,
+                result.investigation_run_id,
+            )
         return JSONResponse(
             {
                 "alert_id": alert_id,
@@ -220,7 +247,9 @@ def triage_router(service: TriageHttpService) -> APIRouter:
         return await service.get_eligible_incidents(alert_id, request.headers.get("authorization"))
 
     @router.post("/v1/alerts/{alert_id}/triage/commands")
-    async def post_command(alert_id: str, request: Request) -> JSONResponse:
+    async def post_command(
+        alert_id: str, request: Request, background: BackgroundTasks
+    ) -> JSONResponse:
         try:
             raw = await request.json()
         except Exception:
@@ -230,6 +259,7 @@ def triage_router(service: TriageHttpService) -> APIRouter:
             raw,
             request.headers.get("authorization"),
             request.headers.get("idempotency-key"),
+            background,
         )
 
     return router
