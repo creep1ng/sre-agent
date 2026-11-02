@@ -1,0 +1,17 @@
+{
+  "sanitized": true,
+  "declare_status": 201,
+  "incident_id": "inc-87f727a3a84e3c1b9096eb046e5b5e84",
+  "event_ids": [
+    {
+      "value": "evt-87f727a3a84e3c1b9096eb04",
+      "pattern": "^evt_[a-z0-9]{8,32}$",
+      "matches": false
+    }
+  ],
+  "snapshot_id": {
+    "value": "snap-87f727a3a84e3c1b9096eb04",
+    "pattern": "^snap_[a-z0-9]{8,32}$",
+    "matches": false
+  }
+}

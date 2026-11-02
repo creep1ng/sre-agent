@@ -1,0 +1,12 @@
+{
+  "sanitized": true,
+  "scenario": "conflict",
+  "alertId": "alt-checkout-420db47b1e17",
+  "destination": null,
+  "posts": [
+    {
+      "status": 409,
+      "code": "terminal_decision"
+    }
+  ]
+}

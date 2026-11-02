@@ -1,0 +1,76 @@
+{
+  "sanitized": true,
+  "granted": {
+    "alert_id": "al-v704-1a18535db11",
+    "incident_id": "inc-3262564f3a0c01ed21516d4553f9b6fe",
+    "accepted_ms": 132,
+    "run_not_pending_after_ms": 220,
+    "investigation": {
+      "run_id": "run_121a9a4f7670d2dd",
+      "status": "running",
+      "current_state": "investigating"
+    },
+    "start_event_id": "evt_d592fd8663c32328",
+    "runs_before_replay": [
+      {
+        "run_id": "run_121a9a4f7670d2dd",
+        "status": "running",
+        "current_state": "investigating"
+      },
+      {
+        "run_id": "run_3262564f3a0c01ed21516d4553f9b6fe",
+        "status": "running",
+        "current_state": "active"
+      }
+    ],
+    "runs_after_replay": [
+      {
+        "run_id": "run_121a9a4f7670d2dd",
+        "status": "running",
+        "current_state": "investigating"
+      },
+      {
+        "run_id": "run_3262564f3a0c01ed21516d4553f9b6fe",
+        "status": "running",
+        "current_state": "active"
+      }
+    ],
+    "replay_status": 201,
+    "replay_same_body": true
+  },
+  "no_grant": {
+    "incident_id": "inc-266728de772dc727f50c86d48b215c6a",
+    "runs": [
+      {
+        "run_id": "run_266728de772dc727f50c86d48b215c6a",
+        "status": "running",
+        "current_state": "active"
+      }
+    ],
+    "timeline": [
+      {
+        "event_id": "evt-266728de772dc727f50c86d4",
+        "kind": "state_change",
+        "summary": "Incident declared.",
+        "reason_code": null
+      },
+      {
+        "event_id": "evt_f4071c5bb8c2beecf0e72a74",
+        "kind": "dispatch_receipt",
+        "summary": "Investigation did not start: the declarant lacks the run.start grant.",
+        "reason_code": "run_start_not_authorized"
+      }
+    ]
+  },
+  "checks": {
+    "declare_201": true,
+    "run_not_pending_within_5s": true,
+    "one_start_as_declarant": true,
+    "replay_same_body": true,
+    "replay_no_new_run": true,
+    "replay_no_second_start": true,
+    "no_grant_declare_201": true,
+    "no_grant_no_investigation_run": true,
+    "no_grant_timeline_reason": true
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "sanitized": true,
+  "alertId": "alt-checkout-7b8a31ffec9f",
+  "incidentId": "inc-cd5e7b98d003c0061971f012bc1e9788",
+  "actor": "demo-human",
+  "versionReadByDialog": 1,
+  "incidentPage": "No encontramos ese incidente",
+  "exchanges": [
+    {
+      "at": "2026-10-31T22:49:19.093Z",
+      "method": "GET",
+      "path": "/v1/alerts/alt-checkout-7b8a31ffec9f/triage/context",
+      "status": 200
+    },
+    {
+      "at": "2026-10-31T22:49:20.791Z",
+      "method": "POST",
+      "path": "/v1/alerts/alt-checkout-7b8a31ffec9f/triage/commands",
+      "status": 409,
+      "expectedVersion": 1,
+      "code": "stale_version"
+    },
+    {
+      "at": "2026-10-31T22:49:20.885Z",
+      "method": "GET",
+      "path": "/v1/alerts/alt-checkout-7b8a31ffec9f/triage/context",
+      "status": 200
+    },
+    {
+      "at": "2026-10-31T22:49:21.165Z",
+      "method": "POST",
+      "path": "/v1/alerts/alt-checkout-7b8a31ffec9f/triage/commands",
+      "status": 201,
+      "expectedVersion": 2
+    }
+  ]
+}
