@@ -1,0 +1,91 @@
+{
+  "quiet_day": {
+    "observed": {
+      "digest": {
+        "cli": "digest up to 2026-10-31T22:57:37.849629+00:00 queued",
+        "text": "Resumen: 4 eventos, 0 mensajes.\nDel 30/10 22:57 al 31/10 22:57 (UTC).\nSin escribirte:\n• Despliegue v41 de catalog — Registrado; se vigila en silencio y solo te escribo si algo se rompe.\n• Despliegue v17 de cart — Registrado; se vigila en silencio y solo te escribo si algo se rompe.\n• Despliegue v42 de catalog — Registrado; se vigila en silencio y solo te escribo si algo se rompe."
+      },
+      "counts": {
+        "events": 4,
+        "messages": 0,
+        "ignore": 0,
+        "remember": 1,
+        "digest": 3,
+        "interrupt": 0
+      },
+      "messages": 1
+    },
+    "checks": {
+      "every event has a decision": true,
+      "zero interruptions": true,
+      "one message, the digest": true,
+      "the digest counts 4 events and 0 messages": true
+    }
+  },
+  "three_events": {
+    "observed": {
+      "spike": [
+        "digest",
+        "recovered_before_result"
+      ],
+      "broken": [
+        "interrupt",
+        "sustained_pending_decision"
+      ],
+      "immediate": [
+        {
+          "message_id": 3,
+          "chat_id": 222,
+          "text": "Investigación terminada: inc-0c6930055788499fb16129731beed942: [e2e:broken] sre-checkout: checkout-5xx-rate is firing.\nEjecución run_aec0585e937134d6.\nMitigación propuesta, pendiente de tu aprobación en la consola.",
+          "received_at": "2026-10-31T22:58:34.851737+00:00"
+        }
+      ],
+      "digest": {
+        "cli": "digest up to 2026-10-31T22:58:42.268324+00:00 queued",
+        "text": "Resumen: 7 eventos, 1 mensaje.\nDel 31/10 22:57 al 31/10 22:58 (UTC).\nTe escribí:\n• Investigación de [e2e:broken] sre-checkout: checkout-5xx-rate is firing. — La alerta sigue activa y hay una mitigación esperando tu decisión.\nSin escribirte:\n• Despliegue v43 de catalog — Registrado; se vigila en silencio y solo te escribo si algo se rompe.\n• Investigación de [e2e:spike] cart: cart-latency-p95 is firing. — Se recuperó sola en menos de un minuto, antes de terminar la investigación.\n• Despliegue v3 de sre-checkout — Registrado; se vigila en silencio y solo te escribo si algo se rompe."
+      }
+    },
+    "checks": {
+      "the spike recovered before its result and goes to the digest": true,
+      "the broken deploy interrupts: sustained impact, decision pending": true,
+      "a single immediate message": true,
+      "it is about the broken deploy": true,
+      "the digest counts 1 message": true,
+      "the spike appears in the digest": true,
+      "the healthy deploy appears in the digest": true,
+      "yesterday is not repeated": true
+    }
+  },
+  "api": {
+    "observed": {
+      "status": 200,
+      "counts": {
+        "events": 11,
+        "messages": 1,
+        "ignore": 0,
+        "remember": 4,
+        "digest": 6,
+        "interrupt": 1
+      },
+      "link_status": {
+        "/v1/incidents/inc-0c6930055788499fb16129731beed942/runs/run_aec0585e937134d6": true,
+        "/v1/alerts/alt-sre-checkout-b54599aa06f81053/triage": true,
+        "/v1/changes?service=sre-checkout&since=2026-10-31T22%3A56%3A30%2B00%3A00&until=2026-10-31T22%3A56%3A30%2B00%3A00": true,
+        "/v1/incidents/inc-a5bebb7cae87a584b40646edf7db5460/runs/run_8a52439be9a9ef7f": true,
+        "/v1/alerts/alt-cart-82c873c0485a1220/triage": true,
+        "/v1/changes?service=catalog&since=2026-10-31T22%3A27%3A59%2B00%3A00&until=2026-10-31T22%3A27%3A59%2B00%3A00": true,
+        "/v1/changes?service=frontend&since=2026-10-30T18%3A57%3A33%2B00%3A00&until=2026-10-30T18%3A57%3A33%2B00%3A00": true,
+        "/v1/changes?service=catalog&since=2026-10-30T16%3A57%3A33%2B00%3A00&until=2026-10-30T16%3A57%3A33%2B00%3A00": true,
+        "/v1/changes?service=cart&since=2026-10-30T13%3A57%3A33%2B00%3A00&until=2026-10-30T13%3A57%3A33%2B00%3A00": true,
+        "/v1/changes?service=catalog&since=2026-10-30T09%3A57%3A33%2B00%3A00&until=2026-10-30T09%3A57%3A33%2B00%3A00": true
+      },
+      "denied": 403
+    },
+    "checks": {
+      "every event recorded has exactly one decision": true,
+      "every decision has a readable reason": true,
+      "every decision links to its event, and the link opens it": true,
+      "a caller without alert.read is refused": true
+    }
+  }
+}

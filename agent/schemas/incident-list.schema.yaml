@@ -1,0 +1,76 @@
+# Incident list returned to authorized readers (issue #870).
+#
+# GET /v1/incidents. The rows an inbox reads before opening an incident: identity,
+# workflow position, the service and summary of the alert that opened it, its latest
+# run and the decision that run waits for. Like the detail, it names a pending
+# mitigation but carries none of its content; that is reasoning, read from the run
+# context under run.read_context. Every property declared here must be registered in
+# agent/api/projection-policy.v1.yaml (allow-list, fail closed).
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:incident-list:1.0.0
+title: IncidentList
+type: object
+additionalProperties: false
+required: [incidents, has_more]
+properties:
+  incidents:
+    type: array
+    maxItems: 100
+    items: { $ref: '#/$defs/item' }
+  has_more:
+    type: boolean
+$defs:
+  text:
+    type: [string, "null"]
+    maxLength: 2000
+  time:
+    type: string
+    format: date-time
+  item:
+    type: object
+    additionalProperties: false
+    required: [incident_id, state, severity, service, summary, impact, opened_at,
+               updated_at, version, latest_run, pending_decision]
+    properties:
+      incident_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
+      state:
+        enum: [detected, triage, dismissed, linked, active, investigating,
+               mitigating, verifying, resolved, postmortem, closed]
+      severity: { enum: [sev1, sev2, sev3, sev4, null] }
+      service: { $ref: '#/$defs/text' }
+      summary: { $ref: '#/$defs/text' }
+      impact: { $ref: '#/$defs/text' }
+      opened_at: { $ref: '#/$defs/time' }
+      updated_at: { $ref: '#/$defs/time' }
+      version: { type: integer, minimum: 0 }
+      latest_run:
+        anyOf:
+          - type: "null"
+          - type: object
+            additionalProperties: false
+            required: [run_id, status, current_state, pending_command, terminated_reason,
+                       updated_at]
+            properties:
+              run_id: { type: string, pattern: '^run_[a-z0-9]{8,32}$' }
+              status: { enum: [running, awaiting_human, completed, terminated, null] }
+              current_state: { $ref: '#/$defs/text' }
+              pending_command: { $ref: '#/$defs/text' }
+              terminated_reason: { $ref: '#/$defs/text' }
+              updated_at: { $ref: '#/$defs/time' }
+      pending_decision:
+        description: The decision the latest run waits for, or null when none is pending.
+        anyOf:
+          - type: "null"
+          - type: object
+            additionalProperties: false
+            required: [command, run_id, incident_version, waiting_since, mitigation_id]
+            properties:
+              command: { enum: [approve_mitigation, escalate] }
+              run_id: { type: string, pattern: '^run_[a-z0-9]{8,32}$' }
+              incident_version:
+                description: The expected_incident_version a command on this decision sends.
+                type: integer
+                minimum: 0
+              waiting_since: { $ref: '#/$defs/time' }
+              mitigation_id: { type: [string, "null"] }

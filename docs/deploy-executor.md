@@ -1,6 +1,6 @@
 # Deploy executor: governed remediation over docker-socket-proxy
 
-Issue #720 (epic #733, umbrella #697). Approving a mitigation today only moves the workflow
+Issue #720 (epic #733, umbrella #697). Without it, approving a mitigation only moves the workflow
 (`execution_mode: simulated`); the operator applies it by hand. The deploy-executor makes the
 product apply it: a container that executes **named operations with a strict schema** against the
 Docker Engine, through `docker-socket-proxy` with only the `containers` and `images` families
@@ -192,9 +192,9 @@ demonstrable agentic remediation for the demo, not a simulated one.
   operation can fix.
 - **Service names.** The proposal looks up operations by the alert's `service`, so an enrolled
   service needs a name no other source emits. Our second service (#721) is `sre-checkout`
-  everywhere: catalog, the `checkout-orders-error-rate` rule, its `service.name`,
-  `demo_env.py --service` and the grants. The store's `checkout`, alerted by
-  `checkout-payment-error-rate`, keeps its name and stays without a catalog; sharing `checkout`
+  everywhere: catalog, the Grafana rule `sre-checkout-orders-error-rate` (#765), its
+  `service.name`, `demo_env.py --service` and the grants. The store's `checkout`, alerted by the
+  generic `service-error-rate` rule, keeps its name and stays without a catalog; sharing `checkout`
   would hand a store payment incident the rollback of an unrelated service (decided on 2026-10-28
   in #751).
 - **Order on approval.** Check the incident is still `mitigating` at `expected_incident_version`,
@@ -211,6 +211,29 @@ demonstrable agentic remediation for the demo, not a simulated one.
   integration branch `feature/722-mitigation-execute`; one final PR from that branch to `main`
   closes #722. #723 owns the agent's verification, the return to `investigating` and the full
   scenario up to `resolved`.
+
+The gateway follows that order on `approve_mitigation` (`src/sre_agent/gateway/execution.py`).
+The api needs `DEPLOY_EXECUTOR_URL` and the executor's own `DEPLOY_EXECUTOR_SIGNING_KEY`, and the
+key it sends is `mitexec-{run_id}-{mitigation_id}`. A refusal answers 409 `precondition_failed`
+(the catalog no longer offers it), 403 `operation_not_authorized` (no grant) or 503
+`executor_unavailable`; a failure the executor answers is 409 `execution_failed`, 503 when the
+executor marks it retryable. None of them moves the incident. Otherwise the incident moves to
+`verifying` with `execution_mode: executed` and the receipt in `mitigation_strategy.execution`.
+
+Every approval that reaches the agent's identity is audited as `mitigation.execute`, however it
+ends: the agent and its grant decision, the operation as an HMAC resource reference, the status,
+the reason code and the latency, correlated with the request, the incident and the run
+(`GET /v1/audit-events?incident_id=`). Like every audit event it keeps no content: what ran and
+how it ended stays in the receipt. Nothing runs without `AUDIT_HMAC_KEY` (503
+`executor_unavailable`), and an operation that ran is not answered before its audit is written:
+if the write fails the approval answers 503 and moves nothing, and the retry sends the same key,
+so the executor replays its result.
+
+The timeline's `apply_mitigation` event tells what ran, on which service and how it ended, from
+the receipt. A refused or failed approval moves nothing but still enters the run's timeline: a
+`denial` event for 403 `operation_not_authorized` and a `human_command` event otherwise, each
+with the approver, the request id and the reason code, saying that the incident stays
+`mitigating`.
 
 ## What the vendors do
 
