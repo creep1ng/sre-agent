@@ -25,10 +25,13 @@ OTEL_DEMO_STORE = "otel-demo-store@1.0.0"
 
 # The enrolled operations mitigation.execute grants are over (#722). The agent may roll
 # sre-checkout back, what the demo's failure needs; the restart stays an operation it may not
-# run. Not `checkout`: that is the store's service, which has no catalog.
+# run. The store's `checkout` and `payment` are enrolled only on EC2, and only for flag.set
+# (#724, agent/executor/catalog.otel-aws.v1.yaml): turning the demo's payment faults off.
 SERVICE_OPERATIONS = {
     "sre-checkout:deployment.rollback": "Roll sre-checkout back to an earlier release.",
     "sre-checkout:deployment.restart": "Restart sre-checkout on its current release.",
+    "checkout:flag.set": "Turn a payment fault flag of the OTel demo back off for checkout.",
+    "payment:flag.set": "Turn the paymentFailure fault flag of the OTel demo back off.",
 }
 
 
@@ -109,6 +112,22 @@ def demo_grants():
         },
         "effect": "allow",
     }
+
+
+def store_flag_grants():
+    """The agent may turn the store's payment faults off on EC2 (#724); inert where no catalog
+    enrols checkout or payment, since the executor refuses a service it does not enrol."""
+    for service in ("checkout", "payment"):
+        yield {
+            "grant_id": f"grant-setup-agent-{service}-flag-set",
+            "principal_id": "incident-harness",
+            "action": "mitigation.execute",
+            "resource": {
+                "resource_type": "service_operation",
+                "resource_id": service + ":flag.set",
+            },
+            "effect": "allow",
+        }
 
 
 def executor_changes_grant():
@@ -212,7 +231,7 @@ async def provision_demo(service, bearer, executor_changes_key=None):
         # 409: an earlier run cataloged it. As given is convergence; anything else fails closed.
         if response.status_code not in (201, 409) or not await _cataloged(service, body):
             raise RuntimeError("operation catalog conflict: " + resource_id)
-    for body in demo_grants():
+    for body in (*demo_grants(), *store_flag_grants()):
         response = await service.create_grant(body, bearer, "setup-v1-" + body["grant_id"])
         if response.status_code == 201 and await _granted(service, body):
             continue

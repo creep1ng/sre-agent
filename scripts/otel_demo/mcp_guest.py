@@ -3,6 +3,7 @@
 import argparse
 import base64
 import collections
+import hmac
 import http.server
 import json
 import os
@@ -23,6 +24,11 @@ OVERLAY = STATE / "compose.json"
 INTAKE = STATE / "alert-intake.env"
 RULES = STATE / "alerting"
 OUTBOX = 17801
+# The deploy-executor's flag.set (#724): a loopback listener connect-mcp forwards over SSM, with
+# its own token, that writes only the manifest's fault flags and only back to their baseline.
+FLAG_TOKEN = STATE / "flag-write.env"
+FLAG_PORT = 17802
+FLAG_WRITE = threading.Lock()
 
 
 def compose(*args):
@@ -40,11 +46,12 @@ def settings():
     return json.loads((STATE / "settings.json").read_text())
 
 
-def variants(failure=False):
+def variants(failure=False, flag=None):
     config = settings()
     data = json.loads(FLAGS.read_text())
     if failure:
-        updates = {config["failure_flag"]: "on"}
+        name = flag or config["failure_flag"]
+        updates = {name: config["fault_flags"][name]}
     else:
         baseline = dict(config["baseline"])
         fallback = baseline.pop("all_other_flags")
@@ -78,6 +85,7 @@ def prepare():
         raise RuntimeError("owned remote state directory must be private")
     private_secret(TOKEN, "MCP_GRAFANA_SERVER_TOKEN")
     private_secret(INTAKE, "ALERT_INTAKE_GRAFANA_SECRET")
+    private_secret(FLAG_TOKEN, "DEPLOY_EXECUTOR_FLAGS_TOKEN")
     if not FLAGS.exists():
         shutil.copytree(ROOT / "src" / "flagd", FLAGS.parent)
         variants()
@@ -127,15 +135,18 @@ def prepare():
         raise RuntimeError("owned overlay conflict; review before changing existing state")
     OVERLAY.write_text(serialized)
     OVERLAY.chmod(0o600)
-    unit = "otel-demo-alert-outbox"
-    if subprocess.run(["systemctl", "is-active", "--quiet", unit], check=False).returncode:
-        subprocess.run(
-            ["systemd-run", "--unit=" + unit, "--property=Restart=on-failure"]
-            + ["python3", str(Path(__file__).resolve()), "serve-outbox"],
-            capture_output=True,
-            timeout=30,
-            check=True,
-        )
+    for unit, action in (
+        ("otel-demo-alert-outbox", "serve-outbox"),
+        ("otel-demo-flag-write", "serve-flags"),
+    ):
+        if subprocess.run(["systemctl", "is-active", "--quiet", unit], check=False).returncode:
+            subprocess.run(
+                ["systemd-run", "--unit=" + unit, "--property=Restart=on-failure"]
+                + ["python3", str(Path(__file__).resolve()), action],
+                capture_output=True,
+                timeout=30,
+                check=True,
+            )
     compose("pull", "--policy", "missing", "grafana-mcp")
     compose(
         "up",
@@ -162,7 +173,7 @@ class TokenTransfer(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
-        files = {"/token": TOKEN, "/intake": INTAKE}
+        files = {"/token": TOKEN, "/intake": INTAKE, "/flags": FLAG_TOKEN}
         if self.path not in files:
             self.send_error(404)
             return
@@ -219,6 +230,71 @@ class OutboxDrain(http.server.BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+def writable_flags():
+    """Fault flag -> the only variant it may be written to: its baseline."""
+    config = settings()
+    baseline = dict(config["baseline"])
+    fallback = baseline.pop("all_other_flags")
+    return {name: baseline.get(name, fallback) for name in config["fault_flags"]}
+
+
+class FlagWrite(http.server.BaseHTTPRequestHandler):
+    """GET /flags reads the fault flags; PUT /flags/<name> {"variant"} turns one back off."""
+
+    def log_message(self, *_args):
+        pass
+
+    def answer(self, status, body=None):
+        data = json.dumps(body or {}).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def authorized(self):
+        expected = "Bearer " + FLAG_TOKEN.read_text().strip().partition("=")[2]
+        return hmac.compare_digest(self.headers.get("Authorization", ""), expected)
+
+    def do_GET(self):
+        if self.path != "/flags":
+            return self.answer(404)
+        if not self.authorized():
+            return self.answer(401)
+        data = json.loads(FLAGS.read_text())["flags"]
+        flags = {name: data[name]["defaultVariant"] for name in writable_flags() if name in data}
+        return self.answer(200, {"flags": flags})
+
+    def do_PUT(self):
+        name = self.path.removeprefix("/flags/")
+        if not self.path.startswith("/flags/"):
+            return self.answer(404)
+        if not self.authorized():
+            return self.answer(401)
+        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            variant = json.loads(self.rfile.read(min(length, 1024)))["variant"]
+        except (ValueError, KeyError, TypeError):
+            return self.answer(422)
+        if writable_flags().get(name) != variant:
+            return self.answer(403)  # not a fault flag, or not back to its baseline
+        with FLAG_WRITE:
+            data = json.loads(FLAGS.read_text())
+            if variant not in data["flags"].get(name, {}).get("variants", {}):
+                return self.answer(409)  # the demo's flag file does not offer it
+            before = data["flags"][name]["defaultVariant"]
+            if before != variant:
+                data["flags"][name]["defaultVariant"] = variant
+                temporary = FLAGS.with_suffix(".tmp")
+                temporary.write_text(json.dumps(data, indent=2) + "\n")
+                temporary.replace(FLAGS)
+                try:
+                    compose("restart", "flagd")
+                except RuntimeError:
+                    return self.answer(502)  # written, but flagd did not restart
+        return self.answer(200, {"flag": name, "before": before, "variant": variant})
+
+
 def serve_outbox():
     gateway = subprocess.run(
         ["docker", "network", "inspect", "bridge"]
@@ -235,17 +311,23 @@ def serve_outbox():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    actions = ("prepare", "fail", "reset", "serve-token", "serve-outbox")
+    actions = ("prepare", "fail", "reset", "serve-token", "serve-outbox", "serve-flags")
     parser.add_argument("action", choices=actions)
-    action = parser.parse_args().action
+    parser.add_argument("--flag", help="fail: one of the manifest's fault_flags")
+    arguments = parser.parse_args()
+    action = arguments.action
     if action == "prepare":
         prepare()
     elif action == "serve-outbox":
         serve_outbox()
+    elif action == "serve-flags":
+        # Loopback on the instance; the local stand-in of the E2E listens on its own network.
+        listen = os.environ.get("OTEL_FLAGS_LISTEN", "127.0.0.1")
+        http.server.ThreadingHTTPServer((listen, FLAG_PORT), FlagWrite).serve_forever()
     elif action == "serve-token":
         http.server.HTTPServer(("127.0.0.1", 17900), TokenTransfer).serve_forever()
     else:
-        variants(failure=action == "fail")
+        variants(failure=action == "fail", flag=arguments.flag)
         compose("restart", "flagd")
         print("owned AWS flag " + action + " applied; synthetic traffic retained")
 

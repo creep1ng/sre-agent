@@ -37,7 +37,8 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     sub.add_parser("up")
     sub.add_parser("status")
     sub.add_parser("prepare-mcp")
-    sub.add_parser("fail")
+    fail = sub.add_parser("fail")
+    fail.add_argument("--flag", help="a fault of demo/manifest.yaml fault_flags (#724)")
     sub.add_parser("reset")
     mcp = sub.add_parser("connect-mcp")
     mcp.add_argument("--state-dir", type=Path, default=ROOT / ".demo-state" / "aws")
@@ -74,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.action == "prepare-mcp":
             result = prepare(controller)
         elif args.action in {"fail", "reset"}:
-            result = flags(controller, args.action)
+            result = flags(controller, args.action, getattr(args, "flag", None))
         elif args.action == "connect-mcp":
             try:
                 connect_mcp(

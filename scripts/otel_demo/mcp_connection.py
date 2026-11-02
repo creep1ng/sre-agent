@@ -26,6 +26,8 @@ def private(path):
 HANDOFF = {
     "/token": ("grafana-mcp.env", rb"MCP_GRAFANA_SERVER_TOKEN=[0-9a-f]{48}\n"),
     "/intake": ("alert-intake.env", rb"ALERT_INTAKE_GRAFANA_SECRET=[0-9a-f]{48}\n"),
+    # The deploy-executor's token for the instance's flag listener (#724); only it reads it.
+    "/flags": ("flag-write.env", rb"DEPLOY_EXECUTOR_FLAGS_TOKEN=[0-9a-f]{48}\n"),
 }
 
 
@@ -144,8 +146,8 @@ def relay_alerts(port, intake_url, stop):
 
 
 def connect(controller, state, network, subnet, port, intake_url):
-    if not 1024 <= port <= 65533:
-        raise DemoError("MCP local port and its token-handoff companion must be unprivileged")
+    if not 1024 <= port <= 65532:
+        raise DemoError("MCP local port and its three companions must be unprivileged")
     if state.is_symlink():
         raise DemoError("AWS connection directory must not be a symlink")
     state = state.resolve()
@@ -159,12 +161,20 @@ def connect(controller, state, network, subnet, port, intake_url):
     with (
         tunnel(controller.aws, status["instance_id"], 17800, port) as process,
         tunnel(controller.aws, status["instance_id"], 17801, port + 2),
+        tunnel(controller.aws, status["instance_id"], 17802, port + 3),
     ):
         relay = threading.Thread(
             target=relay_alerts, args=(port + 2, intake_url, stop), daemon=True
         )
         relay.start()
-        with local_link(state, network, subnet, port, status["instance_id"]):
+        # The flag listener gets its own internal network, `<network>-flags`, which only the
+        # deploy-executor joins (scripts/setup_sre.py): the api and the MCP link never reach it.
+        with (
+            local_link(state, network, subnet, port, status["instance_id"]),
+            local_link(
+                state, network + "-flags", None, port + 3, status["instance_id"], "otel-flags"
+            ),
+        ):
             image = re.search(
                 r"(?m)^FROM (python:[^ ]+)", (ROOT / "docker/api.Dockerfile").read_text()
             ).group(1)
@@ -176,6 +186,7 @@ def connect(controller, state, network, subnet, port, intake_url):
             print("private contract: " + str(state / "connection.json"), flush=True)
             print("token API-only; SRE readiness and signal recovery NOT accepted", flush=True)
             print("Grafana alerts relayed to " + intake_url, flush=True)
+            print("flag listener linked as otel-flags on " + network + "-flags", flush=True)
             try:
                 process.wait()
             finally:

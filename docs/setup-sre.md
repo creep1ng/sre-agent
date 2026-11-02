@@ -114,7 +114,13 @@ The demo human receives workflow/triage permissions; `incident-harness` has its
 own LLM seed grant and direct discovery plus two read-only MCP invocation grants.
 It receives no run approval. Setup catalogs the enrolled operations of `sre-checkout`, the
 demo's own service, as `service_operation` resources and grants it only `mitigation.execute` on
-`sre-checkout:deployment.rollback` (#722). `restricted-harness` receives no setup grants.
+`sre-checkout:deployment.rollback` (#722), plus `checkout:flag.set` and `payment:flag.set` for
+the store on EC2 (#724), which only the EC2 catalog enrols.
+Setup also starts the RC-2 console (`incident-console`), so `/app/` answers. With
+`SRE_OTEL_MODE=aws` it starts the deploy-executor with `agent/executor/catalog.otel-aws.v1.yaml`
+on the `<SRE_MCP_NETWORK>-flags` network `connect-mcp` created, gives it `flag-write.env`, and
+points the api at it. The executor has no Docker proxy there. aws mode then also requires
+`DEPLOY_EXECUTOR_SIGNING_KEY` (32+ characters) and `flag-write.env` in `DEMO_STATE_DIR`. `restricted-harness` receives no setup grants.
 Audit is read using the existing admin human, not broad audit authority for the
 investigator. Provider/MCP secrets stay API-owned; the standalone harness is
 confined to its internal API-consumer network.

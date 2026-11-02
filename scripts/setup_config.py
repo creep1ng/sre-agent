@@ -142,6 +142,14 @@ def load_config(path, *, stopping=False):
             raise SetupError("AWS MCP network conflicts with private producer contract")
         # The producer validated the private handoff; only API env_file consumes it.
         private_file(state / "grafana-mcp.env")
+        # The flag listener's token (#724): only the deploy-executor's env_file consumes it.
+        private_file(state / "flag-write.env")
+        signing = values.get("DEPLOY_EXECUTOR_SIGNING_KEY", "")
+        if len(signing) < 32 or any(c in signing for c in "<>"):
+            raise SetupError(
+                "DEPLOY_EXECUTOR_SIGNING_KEY requires a non-placeholder secret of at least 32 "
+                "characters in aws mode"
+            )
     else:
         token = literal_env(state / "grafana-mcp.env")
         if (

@@ -24,7 +24,9 @@ def manifest_settings():
             re.findall(r'^  ([A-Za-z0-9_]+):\s*["\']?([A-Za-z0-9_]+)', block, re.MULTILINE)
         )
         digest = dict(line.split("\t") for line in _digest_lock(DIGESTS).splitlines())[image]
-        if "all_other_flags" not in baseline:
+        faults = text.split("fault_flags:\n", 1)[1].split("\n\n", 1)[0]
+        fault_flags = dict(re.findall(r'^  ([A-Za-z0-9_]+):\s*"([A-Za-z0-9%]+)"', faults, re.M))
+        if "all_other_flags" not in baseline or failure not in fault_flags:
             raise ValueError
     except (IndexError, AttributeError, KeyError, ValueError):
         raise DemoError(
@@ -33,6 +35,7 @@ def manifest_settings():
     return {
         "mcp_image": image.rsplit(":", 1)[0] + "@" + digest,
         "failure_flag": failure,
+        "fault_flags": fault_flags,
         "baseline": baseline,
     }
 
@@ -118,8 +121,12 @@ def prepare(controller):
     return {"mcp": "prepared", "token": "private; not exported", "signals": "not accepted"}
 
 
-def flags(controller, action):
+def flags(controller, action, flag=None):
     if action not in {"fail", "reset"}:
         raise DemoError("only the declared owner fail/reset operations are admitted")
-    execute(controller, f"python3 {REMOTE}/mcp_guest.py {action}")
-    return {"flags": action, "signals": "verification still required"}
+    faults = manifest_settings()["fault_flags"]
+    if flag is not None and (action != "fail" or flag not in faults):
+        raise DemoError("--flag names one of the manifest's fault_flags, for fail only")
+    suffix = f" --flag {flag}" if flag else ""
+    execute(controller, f"python3 {REMOTE}/mcp_guest.py {action}{suffix}")
+    return {"flags": action + suffix, "signals": "verification still required"}
