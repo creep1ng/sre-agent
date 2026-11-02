@@ -239,7 +239,7 @@ class ChatStore:
             try:
                 if row["kind"] not in EDITS:
                     sent_as = await send(row["chat_id"], body, keyboard)
-                elif asks_decision(keyboard):
+                elif asks_decision(keyboard) and not row["payload"].get("refused"):
                     skipped = "still pending"
                 elif (target := await _edit_target(session, row["payload"])) is None:
                     # Its message was never sent (dropped or unlinked): there is nothing to edit.
@@ -361,6 +361,14 @@ DECISION_MARKER = "🟠"
 RISKS = {"low": "bajo", "medium": "medio", "high": "alto"}
 OUTCOMES = {"approve": "Aprobada", "reject": "Rechazada", "request_changes": "Devuelta"}
 RELINK = "Para decidir desde aquí, vuelve a vincular este chat a tu usuario."
+CHANGED = "El incidente cambió desde este mensaje: te envío la propuesta actualizada."
+# Why an approval sent from the chat was not applied (gateway/execution.py, #722): nothing moved.
+REFUSALS = {
+    "precondition_failed": "el ejecutor ya no ofrece la operación como se propuso",
+    "operation_not_authorized": "el agente no tiene permiso para ejecutar esta operación",
+    "executor_unavailable": "el ejecutor no está configurado o no respondió",
+    "execution_failed": "el ejecutor respondió con un fallo",
+}
 
 
 async def mitigation_decision(
@@ -470,12 +478,25 @@ async def _verification(
 async def _decision_update(
     session: AsyncSession, payload: Mapping[str, Any]
 ) -> tuple[str, Keyboard | None]:
-    """The decision message as it reads now, to replace the one the chat has."""
+    """The decision message as it reads now, to replace the one the chat has; after a tap that
+    decided nothing, why (`refused`, keeping the buttons) or that a fresh proposal follows."""
     target = await session.scalar(
         text("SELECT payload FROM incident.chat_outbox WHERE message_id = :target"),
         {"target": payload["target"]},
     )
-    return await mitigation_decision(session, target)
+    message, keyboard = await mitigation_decision(session, target)
+    if not asks_decision(keyboard):
+        return message, keyboard
+    lines = message.splitlines()
+    if payload.get("stale"):
+        lines[0] = f"Propuesta desactualizada: {target['incident_id']}"
+        link = [row for row in keyboard or [] if not asks_decision([row])] or None
+        return "\n".join([*lines, CHANGED]), link
+    if code := payload.get("refused"):
+        at = clock(datetime.fromisoformat(payload["at"]), "%H:%M")
+        reason = REFUSALS.get(code, "no se pudo aplicar")
+        lines.append(f"Tu aprobación no se aplicó a las {at}: {reason} ({code}).")
+    return "\n".join(lines), keyboard
 
 
 def _split(rendered: Rendered) -> tuple[str, Keyboard | None]:

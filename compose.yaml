@@ -46,6 +46,9 @@ services:
       DEPLOY_EXECUTOR_URL: ${DEPLOY_EXECUTOR_URL:-}
       # Signs the operation an approval runs; the same key the executor checks (#743).
       DEPLOY_EXECUTOR_SIGNING_KEY: ${DEPLOY_EXECUTOR_SIGNING_KEY:-}
+      # Carries out Telegram taps where a gateway runs (#722): `on` when a bot token is set,
+      # without passing the token to the API.
+      CHAT_TAPS_WORKER: ${TELEGRAM_BOT_TOKEN:+on}
       SRE_AGENT_APPLICATION_VERSION: ${SRE_AGENT_APPLICATION_VERSION:-}
       SRE_AGENT_CONTRACT_VERSION: ${SRE_AGENT_CONTRACT_VERSION:-}
       SRE_AGENT_BUILD_REVISION: ${SRE_AGENT_BUILD_REVISION:-}
