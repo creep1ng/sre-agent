@@ -341,8 +341,12 @@ async def mitigation_decision(
     lines.append(f"Propuesta: {strategy.get('description') or 'detalle en la consola'}")
     if strategy.get("risk") in RISKS:
         lines.append(f"Riesgo: {RISKS[strategy['risk']]}")
-    if isinstance(strategy.get("operation"), str):
-        lines.append(f"Detalle: operación del catálogo {strategy['operation']}")
+    operation = strategy.get("operation")
+    if isinstance(operation, dict):
+        # The deploy-executor operation an approval runs (#722, incident-state 1.3.0).
+        lines.append(
+            f"Detalle: el ejecutor aplica {operation['operation']} en {operation['service']}"
+        )
     if (
         strategy.get("mitigation_id") == payload["mitigation_id"]
         and strategy.get("approval_status") == "pending"

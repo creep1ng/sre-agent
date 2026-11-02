@@ -269,7 +269,15 @@ async def _propose(stamp: str) -> dict[str, dict[str, str]]:
             state |= {"mitigation_strategy": None, "postmortem": None}
             mitigation = {"mitigation_id": f"mit_767{journey}", "approval_status": "pending"}
             mitigation |= {"description": "Volver sre-checkout a la versión anterior, v2.4.0."}
-            mitigation |= {"risk": "low", "operation": "deployment.rollback"}
+            mitigation |= {"risk": "low"}
+            if journey == "reject":
+                # #722's operation: an approval would run it through the deploy-executor, which
+                # this stack does not configure, so approving it is refused and moves nothing.
+                mitigation["operation"] = {
+                    "service": "sre-checkout",
+                    "operation": "deployment.rollback",
+                    "parameters": {"to_tag": "v2.4.0"},
+                }
             mitigation |= {"based_on_hypothesis": "hyp_767"}
             async with PostgresIncidentUnitOfWork(database) as work:
                 state["updated_at"] = now.isoformat()
@@ -339,11 +347,16 @@ def proposals(stamp: str, legacy_code: str) -> None:
                         "Cambio sospechoso: despliegue v2.4.1",
                         "Propuesta: Volver sre-checkout a la versión anterior",
                         "Riesgo: bajo",
-                        "Detalle: operación del catálogo deployment.rollback",
                     )
                 )
                 for m in messages
             ),
+            "the one with an executor operation names it": [
+                m["text"].splitlines()[0].split("-")[2]
+                for m in messages
+                if "Detalle: el ejecutor aplica deployment.rollback en sre-checkout" in m["text"]
+            ]
+            == ["reject"],
             "each offers Aprobar and Rechazar": buttons
             == [["Aprobar", "Rechazar"]] * len(JOURNEYS),
             "the callback data is opaque": all(
@@ -631,12 +644,19 @@ def console() -> None:
 
 
 def reject() -> None:
+    # Its mitigation names an executor operation (#722) and this stack runs no executor.
+    refused = press(OPERATOR, prompt("reject"), "Aprobar")
+    after_refusal = decisions("reject"), approval_status("reject")
     answer, edited = press(OPERATOR, prompt("reject"), "Rechazar"), prompt("reject")
     rows = decisions("reject")
     record(
         "reject",
-        {"answer": answer, "edited": edited, "decisions": rows},
+        {"refused": refused, "answer": answer, "edited": edited, "decisions": rows},
         {
+            "approving an operation without an executor is refused": refused.startswith(
+                "El ejecutor no está disponible"
+            ),
+            "the refusal moves nothing": after_refusal == ([], "pending"),
             "the tap records one rejection": [r[:2] for r in rows]
             == [("reject_mitigation", "reject")],
             "as the linked human, through Telegram": rows[0][2:5]
@@ -676,6 +696,8 @@ def unlinked_tap(relink_code: str) -> None:
             == [
                 ("apply_mitigation", "demo-human", "telegram"),
                 ("reject_mitigation", "demo-human", None),
+                # The refused approval (#722) is audited too; its record names no channel.
+                (None, "demo-human", None),
                 ("reject_mitigation", "demo-human", "telegram"),
                 ("apply_mitigation", "demo-human", "telegram"),
             ],
