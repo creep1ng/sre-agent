@@ -78,9 +78,9 @@ function Step({ entry }: { entry: StoryEntry }) {
         )}
         {entry.query && (
           <details className="mt-1.5 font-mono text-xs text-[var(--dim)]">
-            <summary className="cursor-pointer text-[var(--mist)]">{t("evidence.query")}</summary>
+            <summary className="cursor-pointer text-[var(--mist)]">{t(entry.query.label)}</summary>
             <pre className="mt-1 rounded-md bg-code p-2 whitespace-pre-wrap">
-              {entry.query.tool} · {entry.query.window}
+              {[entry.query.tool, entry.query.window].filter(Boolean).join(" · ")}
               {"\n"}
               {entry.query.text}
             </pre>
