@@ -10,14 +10,17 @@ The actor comes from the authenticated credential. A body cannot name a
 different actor, so a browser can never assert authority it was not granted.
 """
 
+import logging
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from sre_agent.gateway.execution import ExecutionRefused, OperationExecutor
 from sre_agent.gateway.incidents import (
     RETRY_AFTER_SECONDS,
     WORKFLOW_RESOURCE_TYPE,
@@ -55,8 +58,13 @@ from sre_agent.incident.runtime import (
 )
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
+from sre_agent.persistence.repositories import (
+    CredentialRepository,
+    GrantRepository,
+    PrincipalRepository,
+)
 
+logger = logging.getLogger(__name__)
 START_ACTION = "run.start"
 # The range the contract admits. The store follows it: migration 20260928_14
 # widens transition_commits.command_id to varchar(200), so the boundary no
@@ -360,9 +368,11 @@ class RunCommandService:
         runtime: IncidentRuntime,
         authorizer: Callable[[Any, Principal, str], Awaitable[AuthorizationEvaluation]]
         | None = None,
+        executor: OperationExecutor | None = None,
     ) -> None:
         self.sessions, self.workflow, self.runtime = sessions, workflow, runtime
         self._authorizer = authorizer or self._default_authorizer
+        self.executor = executor
 
     async def _default_authorizer(
         self, session: Any, principal: Principal, action: str
@@ -375,22 +385,30 @@ class RunCommandService:
         )
 
     async def _authorized_principal(
-        self, request_id: UUID, authorization: str | None, action: str
+        self, request_id: UUID, authorization: str | None, action: str, linked: str | None = None
     ) -> tuple[Principal | None, JSONResponse | None]:
         scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
+        if linked is None and (
+            not separator or scheme.casefold() != "bearer" or not is_api_key(key)
+        ):
             return None, error_envelope(request_id, 401)
         try:
             async with self.sessions() as session:
-                context = await CredentialRepository(session).authenticate(key)
-                if context is None:
+                if linked is None:
+                    context = await CredentialRepository(session).authenticate(key)
+                    principal = context.principal if context is not None else None
+                else:
+                    principal = await PrincipalRepository(session).get(linked)
+                    if principal is not None and principal.status != "active":
+                        principal = None
+                if principal is None:
                     return None, error_envelope(request_id, 401)
-                evaluation = await self._authorizer(session, context.principal, action)
+                evaluation = await self._authorizer(session, principal, action)
         except Exception:
             return None, error_envelope(request_id, 503)
         if evaluation.decision.decision != "allow":
             return None, error_envelope(request_id, 403, COMMAND_DENIED)
-        return context.principal, None
+        return principal, None
 
     def _invalid_reference(self, reference: Any) -> bool:
         if not isinstance(reference, dict) or set(reference) - {
@@ -476,6 +494,24 @@ class RunCommandService:
             or resource.get("id") != self.workflow.workflow_id
         )
 
+    async def send_from_chat(
+        self,
+        principal_id: str,
+        channel: str,
+        incident_id: str,
+        run_id: str,
+        body: Any,
+        idempotency_key: str,
+    ) -> JSONResponse:
+        """Deliver a command from a linked chat, as the human principal the link names (#767).
+
+        The chat gateway has no bearer key to forward: the link record stands in for the
+        authentication, and everything after it (grant, attribution, runtime) is `send`'s.
+        """
+        return await self.send(
+            incident_id, run_id, body, None, idempotency_key, linked=(principal_id, channel)
+        )
+
     async def send(
         self,
         incident_id: str,
@@ -483,13 +519,15 @@ class RunCommandService:
         body: Any,
         authorization: str | None,
         idempotency_key: str | None,
+        *,
+        linked: tuple[str, str] | None = None,
     ) -> JSONResponse:
         request_id = uuid4()
         if self._invalid_request(incident_id, run_id, idempotency_key, body):
             return error_envelope(request_id, 422)
         command = str(body["command"])
         principal, error = await self._authorized_principal(
-            request_id, authorization, COMMAND_ACTIONS[command]
+            request_id, authorization, COMMAND_ACTIONS[command], linked and linked[0]
         )
         if error is not None:
             return error
@@ -516,9 +554,32 @@ class RunCommandService:
             comment=body.get("comment"),
             expected_incident_version=body.get("expected_incident_version"),
             turn_id=body.get("turn_id"),
+            inputs={"channel": linked[1]} if linked else None,
         )
         try:
-            result = await self.runtime.execute(resolve(request))
+            transition = resolve(request)
+            if command == "approve_mitigation" and self.executor is not None:
+                # Checked, then run, before anything moves: verifying means it ran (#722).
+                execution = await self.executor.run(
+                    incident_id, run_id, request.expected_incident_version, request_id
+                )
+                transition = replace(transition, execution=execution)
+            result = await self.runtime.execute(transition)
+        except ExecutionRefused as refused:
+            # Nothing moved; the run's timeline still says why (#722), and the answer stands.
+            try:
+                await self.runtime.record_refusal(
+                    incident_id,
+                    run_id,
+                    request.actor_reference,
+                    reason_code=refused.code,
+                    request_id=str(request_id),
+                    denial=refused.status == 403,
+                )
+            except Exception as error:
+                # Only the type is logged, never the content.
+                logger.error("approval_refusal_record_failed error=%s", type(error).__name__)
+            return error_envelope(request_id, refused.status, (refused.code, refused.message))
         except IncidentNotFoundError:
             return error_envelope(request_id, 404)
         except RunNotFoundError:
