@@ -27,6 +27,10 @@ class Settings:
     # What signs the operation an approval runs; the executor checks it (#743, #722).
     deploy_executor_signing_key: str | None = field(default=None, repr=False)
     openrouter_base_url: str = "https://openrouter.ai"
+    # Grafana alert intake (#765): the contact point's secret, and the operator the integration
+    # declares incidents for; None records episodes and leaves them to the console.
+    alert_intake_secret: str | None = field(default=None, repr=False)
+    alert_intake_principal_id: str | None = "demo-human"
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -102,4 +106,7 @@ class Settings:
             deploy_executor_url=environment.get("DEPLOY_EXECUTOR_URL") or None,
             deploy_executor_signing_key=environment.get("DEPLOY_EXECUTOR_SIGNING_KEY") or None,
             openrouter_base_url=base_url,
+            alert_intake_secret=environment.get("ALERT_INTAKE_GRAFANA_SECRET") or None,
+            alert_intake_principal_id=environment.get("ALERT_INTAKE_PRINCIPAL_ID", "demo-human")
+            or None,
         )

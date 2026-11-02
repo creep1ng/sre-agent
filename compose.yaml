@@ -36,6 +36,10 @@ services:
       INVESTIGATOR_MODEL_ALIAS: triage-agent
       INVESTIGATOR_OUTPUT_LANGUAGE: ${INVESTIGATOR_OUTPUT_LANGUAGE:-es}
       INVESTIGATOR_TOOL_TIMEOUT_SECONDS: ${INVESTIGATOR_TOOL_TIMEOUT_SECONDS:-30}
+      # Grafana alert intake (#765): unset keeps POST /v1/alert-intake/grafana unmounted; an
+      # empty operator records episodes without declaring them.
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:-}
+      ALERT_INTAKE_PRINCIPAL_ID: ${ALERT_INTAKE_PRINCIPAL_ID-demo-human}
       # http://deploy-executor:8000 where the stack runs the executor (#722): its catalog tells
       # the agent what it may propose, and if it cannot be read a mitigation goes to a person.
       # Empty, as in the stack scripts/setup_sre.py starts, every mitigation stays simulated.

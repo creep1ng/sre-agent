@@ -66,8 +66,13 @@ tool call the investigator makes. The cap is the gateway's own MCP transport tim
 The run timeline records a durable `dispatch_receipt`: a committed `intent/pending`
 before a governed call, followed by one terminal `success`, `confirmed_failure`, or
 `unknown` outcome. Pending is not terminal; a concurrent idempotent start leaves an
-active dispatch alone. On a subsequent exact idempotent start replay after a process
-interruption, a still-pending receipt becomes `unknown`. Terminal outcomes are immutable
+active dispatch alone. A process interruption (an API restart mid-dispatch) leaves a
+still-pending receipt; when the API starts again, it claims every `running` run with a pending
+intent and no outcome that no live process holds, records `unknown` with `producer_interrupted`
+and ends the run `needs_human` (#704). So does an exact idempotent start replay. Nothing
+redispatches such a run: a person retries with a new run. A hand-off that fails before its claim
+(for example the agent identity cannot be read) still claims the run and ends it with
+`investigator_failed`, so no run stays `running` with no dispatcher. Terminal outcomes are immutable
 on replay, so the service never repeats an ambiguous external call. Receipt metadata contains only correlation IDs and bounded
 status/reason codes, not prompts, model output, credentials, or raw tool arguments.
 An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs before the
