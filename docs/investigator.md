@@ -164,6 +164,13 @@ before and after, and when it ran).
   nothing. Otherwise it is invalid output, retried once with the reason.
 - The prompt states what ran and the check, and offers no BoK, operations or past incidents.
 
+The API dispatches it `VERIFICATION_DELAY_SECONDS` (60 by default) after an approval that ran
+its operation, as the run's second dispatch, `{run_id}-verify`, with its own receipts. The wait
+lives in the API process: after a restart, the manual commands decide. A passed verdict applies
+`verification_passed` (to `resolved`) and a failed one `verification_failed` (to
+`investigating`, ending the run), each with what was measured. Without a verdict nothing moves
+and the manual commands remain; if a person verified first, the agent measures nothing.
+
 ## Evidence verdicts
 
 Each piece of evidence recorded with a hypothesis carries a verdict on it (issue #707):
