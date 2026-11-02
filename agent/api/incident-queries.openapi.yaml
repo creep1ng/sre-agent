@@ -141,6 +141,31 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
+  /v1/action-catalog:
+    get:
+      summary: Read what the deploy-executor may run and what it ran
+      operationId: getActionCatalog
+      description: >-
+        The registered action catalog (issues #870, #722): per service, each
+        operation the deploy-executor offers with its allowed parameter values,
+        who runs it once a person approves, and its latest mitigation.execute
+        attempts. The gateway reads the executor; the browser never does, and
+        no executor address or signing detail is returned. An executor that
+        does not answer is an executor_status, not an error. Same authorization
+        as the incident list (run.read); reads are not audited, like every
+        incident query.
+      responses:
+        '200':
+          description: Action catalog
+          content:
+            application/json:
+              schema: { $ref: 'urn:sre-agent:schema:action-catalog:1.0.0' }
+              examples:
+                rollback: { $ref: './examples/queries/action-catalog.json' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }

@@ -235,6 +235,26 @@ the receipt. A refused or failed approval moves nothing but still enters the run
 with the approver, the request id and the reason code, saying that the incident stays
 `mitigating`.
 
+## The action catalog in the console (#870)
+
+`GET /v1/action-catalog` is what the console shows as the list of what Midnight may do. The
+gateway joins three sources; the browser never reaches the executor:
+
+- **What exists:** the executor's `GET /v1/catalog`, and for a rollback the tags
+  `GET /v1/services/{service}` lists, minus the one running. A `flag.set` service lists its flags
+  and their allowed variants, never the current one.
+- **Who runs it:** the same `mitigation.execute` evaluation an approval passes, for the agent the
+  gateway runs approvals as. No grant, an inactive agent or an inactive `service_operation`
+  resource means no one runs it.
+- **What it ran:** the latest `mitigation.execute` audit events, matched to the operation by its
+  HMAC resource reference and to a recent run by the run reference; the approver is the run's
+  `mitigation_approval` decision recorded right after. Without `AUDIT_HMAC_KEY` nothing ran.
+
+It is a `run.read` incident query, not audited, and it returns no executor address, signing
+detail or proposal parameters. An executor that does not answer gives `executor_status:
+unavailable` with the registered `service_operation` resources and unknown parameters; without
+`DEPLOY_EXECUTOR_URL` it is `not_configured`. Contract: `agent/schemas/action-catalog.schema.yaml`.
+
 ## What the vendors do
 
 Official documentation, read on 2026-10-22; marketing claims are left out.

@@ -29,6 +29,7 @@ ejemplos positivos y de error, registro en la policy).
 | `GET /v1/incidents/{incident_id}/timeline?run_id=&after=&limit=` | `run-event:1.2.0` reutilizado (1.1.0 añade `reason_code`, #705; 1.2.0 el tipo `run_start_blocked`, #704): eventos ordenados + `next_cursor` + `has_more` |
 | `GET /v1/incidents/{incident_id}/snapshot?run_id=` | `incident-snapshot:1.0.0`: snapshot + versión y `event_sequence` cubiertos |
 | `GET /v1/incidents?status=open\|recent&since=&limit=` | `incident-list:1.0.0` (#870): incidentes por `updated_at` descendente, cada uno con su último run y la decisión que espera (`pending_decision`), o `null` |
+| `GET /v1/action-catalog` | `action-catalog:1.0.0` (#870, #722): lo que el deploy-executor puede ejecutar por servicio, quién lo ejecuta tras una aprobación y sus últimos intentos auditados; ver `docs/deploy-executor.md` |
 
 ## Lista de incidentes (#870)
 
