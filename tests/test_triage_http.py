@@ -1494,9 +1494,9 @@ def test_declare_starts_investigation_as_declarant_and_replays_idempotently() ->
     runs = detail.json()["runs"]
     assert len(runs) == 2
     investigation = next(run for run in runs if run["current_state"] == "investigating")
-    # No harness is configured here, so the server's dispatch ends the run (#761); it is
-    # never left pending.
-    assert investigation["status"] != "pending"
+    # No harness is configured here, so the server's dispatch ends the run (#761): it is never
+    # left running. ("pending" is not a run status, so asserting its absence proved nothing.)
+    assert investigation["status"] == "terminated"
 
     events = client.get(
         f"/v1/incidents/{incident_id}/runs/{investigation['run_id']}/events",
