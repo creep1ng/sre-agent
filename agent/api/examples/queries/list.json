@@ -1,0 +1,31 @@
+{
+  "incidents": [
+    {
+      "incident_id": "inc-vc-demo",
+      "state": "mitigating",
+      "severity": "sev2",
+      "service": "paymentservice",
+      "summary": "Elevated error rate on paymentservice.",
+      "impact": "Checkout failing at payment.",
+      "opened_at": "2026-10-31T02:31:00Z",
+      "updated_at": "2026-10-31T02:47:00Z",
+      "version": 5,
+      "latest_run": {
+        "run_id": "run_vcdemo0001",
+        "status": "awaiting_human",
+        "current_state": "mitigating",
+        "pending_command": "approve_mitigation",
+        "terminated_reason": null,
+        "updated_at": "2026-10-31T02:47:00Z"
+      },
+      "pending_decision": {
+        "command": "approve_mitigation",
+        "run_id": "run_vcdemo0001",
+        "incident_version": 5,
+        "waiting_since": "2026-10-31T02:47:00Z",
+        "mitigation_id": "mit_disable_payment_flag"
+      }
+    }
+  ],
+  "has_more": false
+}
