@@ -1,11 +1,14 @@
 """Publish a private AWS connection contract. Only SRE API consumes the caller token."""
 
+import base64
 import json
 import os
 import re
 import stat
 import tempfile
+import threading
 import time
+import urllib.error
 import urllib.request
 
 from .common import ROOT, DemoError
@@ -19,6 +22,13 @@ def private(path):
         raise DemoError("AWS connection metadata/token must be owned private regular files")
 
 
+# Private files handed off once, by path on the remote listener, with the shape each must have.
+HANDOFF = {
+    "/token": ("grafana-mcp.env", rb"MCP_GRAFANA_SERVER_TOKEN=[0-9a-f]{48}\n"),
+    "/intake": ("alert-intake.env", rb"ALERT_INTAKE_GRAFANA_SECRET=[0-9a-f]{48}\n"),
+}
+
+
 def handoff(controller, state, status, port):
     token = state / "grafana-mcp.env"
     contract = state / "connection.json"
@@ -27,6 +37,8 @@ def handoff(controller, state, status, port):
         private(contract)
         if json.loads(contract.read_text())["instance_id"] != status["instance_id"]:
             raise DemoError("existing token belongs to another Demo; choose new private state")
+    missing = {path: item for path, item in HANDOFF.items() if not (state / item[0]).exists()}
+    if not missing:
         return  # Producer never reads a retained local token; only the API does.
     command = (
         "systemctl is-active --quiet otel-demo-token-handoff.service || "
@@ -38,13 +50,14 @@ def handoff(controller, state, status, port):
     try:
         with tunnel(controller.aws, status["instance_id"], 17900, port):
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-            with opener.open(f"http://127.0.0.1:{port}/token", timeout=20) as response:
-                payload = response.read(513)
-            if not re.fullmatch(rb"MCP_GRAFANA_SERVER_TOKEN=[0-9a-f]{48}\n", payload):
-                raise DemoError("private token handoff returned invalid data; nothing printed")
-            descriptor = os.open(token, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(payload)
+            for path, (name, shape) in missing.items():
+                with opener.open(f"http://127.0.0.1:{port}{path}", timeout=20) as response:
+                    payload = response.read(513)
+                if not re.fullmatch(shape, payload):
+                    raise DemoError("private token handoff returned invalid data; nothing printed")
+                descriptor = os.open(state / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(payload)
     finally:
         execute(controller, "systemctl stop otel-demo-token-handoff.service")
 
@@ -101,8 +114,37 @@ except urllib.error.HTTPError as e:
             time.sleep(1)
 
 
-def connect(controller, state, network, subnet, port):
-    if not 1024 <= port <= 65534:
+def relay_alerts(port, intake_url, stop):
+    """Drain Grafana's deliveries from the instance's outbox into the local API, unchanged."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    pending = None
+    while not stop.is_set():
+        try:
+            if pending is None:
+                with opener.open(f"http://127.0.0.1:{port}/next", timeout=20) as response:
+                    if response.status == 204:
+                        stop.wait(2)
+                        continue
+                    pending = json.loads(response.read(1024 * 1024))
+            request = urllib.request.Request(
+                intake_url,
+                base64.b64decode(pending["body"]),
+                {"Authorization": pending["authorization"], "Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with opener.open(request, timeout=30) as answer:
+                    code = answer.status
+            except urllib.error.HTTPError as error:
+                code = error.code
+            pending = None
+            print(f"Grafana alert delivery relayed to the API: HTTP {code}", flush=True)
+        except (OSError, ValueError, KeyError):
+            stop.wait(5)  # The API or the tunnel is not there yet; the delivery is kept.
+
+
+def connect(controller, state, network, subnet, port, intake_url):
+    if not 1024 <= port <= 65533:
         raise DemoError("MCP local port and its token-handoff companion must be unprivileged")
     if state.is_symlink():
         raise DemoError("AWS connection directory must not be a symlink")
@@ -113,7 +155,15 @@ def connect(controller, state, network, subnet, port):
     status = current(controller)
     publish(state, status, network)
     handoff(controller, state, status, port + 1)
-    with tunnel(controller.aws, status["instance_id"], 17800, port) as process:
+    stop = threading.Event()
+    with (
+        tunnel(controller.aws, status["instance_id"], 17800, port) as process,
+        tunnel(controller.aws, status["instance_id"], 17801, port + 2),
+    ):
+        relay = threading.Thread(
+            target=relay_alerts, args=(port + 2, intake_url, stop), daemon=True
+        )
+        relay.start()
         with local_link(state, network, subnet, port, status["instance_id"]):
             image = re.search(
                 r"(?m)^FROM (python:[^ ]+)", (ROOT / "docker/api.Dockerfile").read_text()
@@ -125,9 +175,11 @@ def connect(controller, state, network, subnet, port):
             )
             print("private contract: " + str(state / "connection.json"), flush=True)
             print("token API-only; SRE readiness and signal recovery NOT accepted", flush=True)
+            print("Grafana alerts relayed to " + intake_url, flush=True)
             try:
                 process.wait()
             finally:
+                stop.set()
                 publish(state, status, network)
             raise DemoError(
                 "owned MCP tunnel ended; contract retained, reconnect through owner CLI"

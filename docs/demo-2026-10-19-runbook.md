@@ -19,13 +19,14 @@ fixture-based drafts of this runbook (T1/T2/T3 slices, `pm_demo0001`, unpublishe
 - A private env file (mode 0600) as in [setup-sre.md](setup-sre.md), with four distinct `sre_`
   keys, `SRE_OTEL_MODE=aws`, a unique `SRE_SETUP_PROJECT`, free ports, explicit
   `SRE_RUNTIME_SUBNET`/`SRE_CONSUMER_SUBNET` if Docker pools are exhausted, and for the paid
-  investigation: `SRE_ENABLE_PAID_LLM=1`, `OPENROUTER_API_KEY`, `OPENROUTER_TIMEOUT_SECONDS=120`
-  (the investigator then waits 135 s per model call, 255 s with `OPENROUTER_MANAGEMENT_API_KEY`;
-  see [investigator.md](investigator.md)). With 60 s, a real run with the store topology BoK (#718)
-  ended `upstream_unavailable` on an 80 s model call; a faster model instead of 120 s is a decision
-  pending with the maintainer. The BoK search uses one of the investigator's 6 steps. Also
-  `TRIAGE_AGENT_MODEL=deepseek/deepseek-v4.1-flash`, `TRIAGE_AGENT_PROVIDER=decart` (same for
-  `REMEDIATION_AGENT_*`). `DEMO_STATE_DIR` points at a **new** state directory per AWS instance.
+  investigation: `SRE_ENABLE_PAID_LLM=1`, `OPENROUTER_API_KEY`, `OPENROUTER_TIMEOUT_SECONDS=30`
+  (the investigator then waits 45 s per model call, 75 s with `OPENROUTER_MANAGEMENT_API_KEY`;
+  see [investigator.md](investigator.md#demo-model)),
+  `TRIAGE_AGENT_MODEL=anthropic/claude-haiku-5.5`, `TRIAGE_AGENT_PROVIDER=anthropic` (same for
+  `REMEDIATION_AGENT_*`; measured in #880, calls of 1.6-8.1 s). The previous
+  `z-ai/glm-5.3-flash` on `relace` had calls of up to 80 s, past the 60 s it ran with (#718). The
+  BoK search uses one of the investigator's 6 steps. `DEMO_STATE_DIR` points at a **new** state
+  directory per AWS instance.
 - `export OTEL_DEMO_EXPECTED_ACCOUNT_ID=…` in the operator shell (private; never shown).
 
 ## Bring-up (T-60 min; the instance self-terminates 2 h after launch)
@@ -84,11 +85,11 @@ Measured on 2026-10-19: see the table in [Rehearsal record](#rehearsal-record).
 | 1:00 | Store: a product → Add To Cart → Place Order works. `otel_ec2.py fail` (~12 s). Place Order again. | Order never completes (stays on the cart; `POST /api/checkout` 500, no banner). |
 | 2:00 | Console → Alertas. | SEV1 · Crítica card "checkout payment calls failing: …% errors … Evidence: …" ~55 s after `fail` once the warm-up ran (up to ~2 min 15 s for the very first failure on a fresh instance). |
 | 3:00 | Card → Iniciar triage. Reason, severity sev1, impact; tick "Confirmo…"; Enviar comando. | `declared` + `inc-…` link; the alert context (service, summary, time, source, severity) is prefilled. |
-| 4:00 | War room → Iniciar investigación. Talk about identity, grants, alias, audit while it runs. | 1.5-3 min (91-118 s in the rehearsal). "Hipótesis actual" with confidence, "Evidencia recolectada (3-5)" with the real queries, "Ir a Decisiones". |
+| 4:00 | War room → Iniciar investigación. Talk about identity, grants, alias, audit while it runs. | 24-27 s measured with Haiku 5.5 in #880 against scripted Grafana; real Grafana adds its query time (the 2026-10-19 rehearsal, on another model, took 91-118 s). "Hipótesis actual" with confidence, "Evidencia recolectada (3-5)" with the real queries, "Ir a Decisiones". |
 | 7:00 | Ir a Decisiones: read "Mitigación propuesta" (steps, risk, verification) → Aprobar mitigación (+ comment). | Receipt `approve_mitigation … verifying`; war room approvals show "Aprobado". |
 | 8:00 | Operator applies it: `otel_ec2.py reset`; store Place Order. | "Your order is complete!" after ~11-15 s; the card leaves the inbox after 58-122 s (no need to wait for it). |
 | 9:30 | Decisiones → Verificación estable. | Run `resolved`. |
-| 10:00 | Postmortem → Abrir postmortem → Generar borrador con el agente. | Draft in 43-68 s, "Borrador del agente (triage-agent → deepseek/…, USD 0.001…)". |
+| 10:00 | Postmortem → Abrir postmortem → Generar borrador con el agente. | Draft in 43-68 s, "Borrador del agente (triage-agent → anthropic/claude-haiku-5.5, USD 0.00…)". |
 | 11:00 | Edit one field → Guardar versión → Aprobar versión 1 → Decisiones link. | Version 1, review "Aprobada", close hint. |
 | 12:00 | Decisiones (postmortem run) → Cerrar incidente → tick the explicit approval → submit. | Receipt `close_incident … closed`; Postmortem shows "Cerrado". |
 | 13:00 | Governance segment. | See below. |
@@ -115,7 +116,7 @@ whole workspace). Revoke `shop-bok-incident` → next BoK search 403.
 | No card 2 min after `fail` | Place an order yourself; confirm `fail` printed `{"flags": "fail", …}`; rerun `fail`. |
 | Inbox "Fuente de alertas no disponible" for more than a minute | MCP relay died: restart `connect-mcp` (remove a leftover `sre-demo-mcp-boundary-link` container and `$STATE/transport/ssm.sock` first). |
 | Timeline "Investigation dispatch ended: unknown" (or `needs_human`), no mitigation; the war room keeps saying "en curso" | A run that ended cannot be restarted on that incident. Declare a new one: Triage with a new alert id (e.g. `alt-checkout-retry-1`) and the same alert context, or the same two triage commands through the API (`open_triage`, then `triage_declare`, both `expected_version: 1`; this path was rehearsed), then Iniciar investigación. Seen once in three rehearsal runs: OpenRouter answered 503 `upstream_unavailable` on the first call; transient LLM failures are not replayed by design. |
-| Repeated 429/503 from the provider | Wait a minute and use the fallback above; last resort, repoint `triage-agent` to provider `novita` (31-49 s per call). |
+| Repeated 429/503 from the provider | Wait a minute and use the fallback above; last resort, repoint `triage-agent` to `z-ai/glm-5.3-flash` on `relace` with `OPENROUTER_TIMEOUT_SECONDS=60` (up to 80 s per call, #718). |
 | Agent postmortem draft fails | Retry once; the form is already prefilled from the incident events: edit, save, approve. |
 | Store stops loading | The SSM forward dropped: rerun `otel_ec2.py connect …`. |
 

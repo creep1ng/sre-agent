@@ -171,13 +171,17 @@ export function InboxPage() {
     ? newAlerts.filter((alert) => alert.triageStatus === "new" || alert.triageStatus === "triaging")
     : newAlerts;
   const attention = attentionAlerts.length + needsYou.length;
+  // A live alert intake already declared or linked (#765) is the agent's work, not calm.
+  const handled = live
+    ? newAlerts.filter((alert) => alert.triageStatus === "declared" || alert.triageStatus === "linked").length
+    : 0;
   const state = live ? LIVE_STATE[phase] : undefined;
 
   const headline =
     state?.title ??
     (attention > 0
       ? `${plural(attention, "cosa necesita", "cosas necesitan")} tu atención`
-      : working.length > 0
+      : working.length > 0 || handled > 0
         ? "El agente se está encargando"
         : "Todo en orden");
   const subline = live
