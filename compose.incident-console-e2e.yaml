@@ -15,4 +15,6 @@ services:
   incident-console-e2e:
     environment:
       ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:?ADMIN_HUMAN_API_KEY is required}
+      # The verification journey delivers Grafana's firing and resolved alerts to intake (#765).
+      ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
       LIVE_INCIDENT: "1"
