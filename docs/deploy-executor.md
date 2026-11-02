@@ -170,8 +170,8 @@ store with no operator shell.
 ```
 api ──signed──▶ deploy-executor ──Bearer flag token──▶ otel-flags (link) ═SSM═▶ instance 127.0.0.1:17802
                (no Docker proxy)                   network <mcp>-flags        mcp_guest.py serve-flags
-                                                   (executor only)            writes demo.flagd.json,
-                                                                              restarts flagd
+                                                   (executor only)            writes demo.flagd.json;
+                                                                              flagd reloads it
 ```
 
 - **Catalog.** Each service lists the flags it may set and the only variants allowed:
@@ -202,8 +202,8 @@ Failure modes, written before the code:
 | Wrong listener token | 401 | listener probe (local) |
 | Listener or tunnel down | 503 `flags_unavailable`, retryable; readiness 503 `dependency: flags` | readiness gates `setup_sre.py` |
 | The flag file lacks the variant | listener 409 → 502 `execution_failed` | code path |
-| flagd fails to restart after the write | listener 502 → 502 `execution_failed`; the file keeps the new variant | code path |
 | The flag is already at the variant | 200 `already_at_target`; no write | code path |
+| A write restarts flagd, and every client's flag stream breaks | never: flagd reloads the file in place, and clients get `configuration_change` | flagd 0.16.0 probe and E2E stream check |
 | The api resolving `otel-flags` | fails: only the executor's network has it | E2E `checks`, local and EC2 |
 
 ### Security limits of the demo
@@ -214,10 +214,14 @@ Failure modes, written before the code:
   credential, and the executor runs no command on the instance.
 - **Anyone with `connect`'s store tunnel can still change any flag** through upstream's flagd UI
   at `/feature`, unauthenticated, as before #724. The listener adds no new way to break the demo.
-- **Each write restarts flagd.** Services that stream from flagd, such as `payment`, log a short
-  burst of `EventStream` / `tcp.connect` errors. On 2026-11-02 the burst after `fail` opened a
-  `payment` incident whose investigation rightly asked for a human. The listener writes the same
-  way, so an approved `flag.set` can do it too.
+- **flagd reloads; nothing restarts it.** The instance's flagd (`v0.16.0`, upstream's
+  `--uri file:./etc/flagd/demo.flagd.json` on a directory mount) polls the file's metadata
+  about once a second (`fileinfo` sync). It picks up an atomic replace and an in-place write
+  within ~1 s, and open `EventStream`s get `configuration_change`. A restart sends
+  `provider_shutdown` and breaks every stream. Until 2026-11-02, `fail`, `reset` and the listener
+  restarted flagd, and the burst of `payment` `EventStream` / `tcp.connect` errors after a
+  `fail` opened a spurious `payment` incident. They now only replace the file. An approved
+  `flag.set` therefore takes effect up to ~1 s after the receipt.
 - **The catalog trusts the alert's service name.** `checkout` and `payment` are the store's names
   only in this catalog; locally they stay unenrolled (`catalog.v1.yaml`), as decided in #751.
 - **The contract file stays 1.0.0.** `schemas/executor/1.0.0` does not describe `flag.set` yet:
