@@ -78,6 +78,22 @@ async def service_operations(
     return view, False
 
 
+async def executor_catalog(executor_url: str) -> list[dict[str, Any]] | None:
+    """Every service the executor enrols with its operations (#870), or None when unreadable.
+    Unlike a service's view it does not touch Docker."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.get(f"{executor_url}/v1/catalog")
+        response.raise_for_status()
+        services = response.json()["services"]
+        for entry in services:
+            assert isinstance(entry["service"], str)
+            assert all(isinstance(item["parameters"], list) for item in entry["operations"])
+    except Exception:
+        return None
+    return list(services)
+
+
 class OperationExecutor:
     """Every check an approval's operation must pass, then the deploy-executor call that runs it."""
 
