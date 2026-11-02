@@ -393,7 +393,7 @@ class TriageService:
                 incident_id=outcome.incident_id,
                 reason=reason,
                 severity=severity,
-                actor=principal.principal_id,
+                actor=principal.principal_id if responsible_system is None else responsible_system,
                 decided_at=datetime.now(UTC),
                 decision_origin=decision_origin,
                 responsible_system=responsible_system,
@@ -604,10 +604,15 @@ class TriageService:
             incident_id=incident_id,
             run_id=run_id,
             transition_id="triage_declare",
-            actor="human",
-            actor_reference=ActorReference(
-                principal_id=principal.principal_id,
-                display_name=principal.display_name,
+            # An automatic declaration (#765) is the system's, never the operator's.
+            actor="human" if responsible_system is None else "system",
+            actor_reference=(
+                ActorReference(
+                    principal_id=principal.principal_id,
+                    display_name=principal.display_name,
+                )
+                if responsible_system is None
+                else ActorReference(principal_id=responsible_system)
             ),
             inputs={"severity": severity, "impact": impact},
             extra_events=extra_events,
