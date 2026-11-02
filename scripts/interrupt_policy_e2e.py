@@ -13,7 +13,9 @@ the decisions from GET /v1/event-decisions. Ways the policy can fail, each check
 3. the spike is missing from the digest, or the digest repeats the previous day;
 4. an event ends without a decision, or a decision has no reason or a link that does not open
    its event;
-5. the decisions answer a caller without alert.read.
+5. the decisions answer a caller without alert.read;
+6. a decision taken in the console, and the recovery after it, send a new message or count as
+   an event instead of editing the decision message the operator already has.
 Appends every observation to /artifacts/interrupt-policy-e2e.json; any failed check exits 1.
 """
 
@@ -210,6 +212,60 @@ def three_events() -> None:
     )
 
 
+def edits() -> list[dict[str, Any]]:
+    return [e for e in http("GET", f"{FAKE}/_test/answers")[1]["edits"] if e["chat_id"] == OPERATOR]
+
+
+def run_command(incident_id: str, run_id: str, command: str) -> int:
+    """A run command as the console sends it, as demo-human."""
+    version = sql("SELECT version FROM incident.incidents WHERE incident_id = %s", incident_id)
+    body = {"command": command, "actor": "human", "expected_incident_version": version[0][0]}
+    body["actor_reference"] = {"reference_version": "1.0.0", "principal_id": "demo-human"}
+    url = f"{API}/v1/incidents/{incident_id}/runs/{run_id}/commands"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {READER}"}
+    headers["Idempotency-Key"] = f"policy-{command}-{run_id}"
+    request = urllib.request.Request(url, json.dumps(body).encode(), headers)
+    with urllib.request.urlopen(request, timeout=60) as reply:
+        return reply.status
+
+
+def decided_in_console() -> None:
+    """The broken deploy is approved in the console and recovers: its message is edited twice."""
+    incident_id, run_id = sql(
+        "SELECT incident_id, investigation_run_id FROM incident.alert_episodes"
+        " WHERE service = 'sre-checkout'"
+    )[0]
+    messages, decisions_before = len(sent()), sql("SELECT count(*) FROM incident.event_decisions")
+
+    def decision_message() -> dict[str, Any]:
+        return next(m for m in sent() if m["text"].splitlines()[0].endswith(incident_id))
+
+    approved = run_command(incident_id, run_id, "approve_mitigation")
+    after_approval = wait_for(lambda: len(edits()) == 1 and decision_message())
+    verified = run_command(incident_id, run_id, "verification_passed")
+    wait_for(lambda: len(edits()) == 2)
+    time.sleep(3)  # a new message would arrive by now
+    message = decision_message()
+    record(
+        "decided_in_console",
+        {"statuses": [approved, verified], "after_approval": after_approval}
+        | {"message": message, "edits": edits()},
+        {
+            "the console approval edits the decision message": after_approval["buttons"] == []
+            and "Aprobada por Demo" in after_approval["text"]
+            and "desde la consola" in after_approval["text"],
+            "the recovery edits it again": message["text"]
+            .splitlines()[-1]
+            .startswith("Resuelto a las"),
+            "neither sends a new message": len(sent()) == messages,
+            "neither is an event the policy decides": sql(
+                "SELECT count(*) FROM incident.event_decisions"
+            )
+            == decisions_before,
+        },
+    )
+
+
 def api() -> None:
     since = datetime.now(UTC) - timedelta(hours=1)  # both phases
     status, listed = decisions(since)
@@ -255,4 +311,5 @@ if __name__ == "__main__":
         quiet_day()
     elif phase == "three_events":
         three_events()
+        decided_in_console()
         api()

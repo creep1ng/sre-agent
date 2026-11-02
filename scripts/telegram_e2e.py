@@ -280,6 +280,7 @@ async def _propose(stamp: str) -> dict[str, dict[str, str]]:
                     "parameters": {"to_tag": "v2.4.0"},
                 }
             mitigation |= {"based_on_hypothesis": "hyp_767"}
+            mitigation |= {"verification_check": "5xx de sre-checkout bajo 1 % durante 5 min."}
             async with PostgresIncidentUnitOfWork(database) as work:
                 state["updated_at"] = now.isoformat()
                 await work.incidents.add(incident_id, state, now=now)
@@ -618,32 +619,59 @@ def stale() -> None:
     )
 
 
-def console() -> None:
-    created = json.loads(PROPOSALS.read_text())["console"]
+def command(journey: str, name: str) -> None:
+    """Send a run command as the console does, as demo-human over the HTTP API."""
+    created = json.loads(PROPOSALS.read_text())[journey]
     version = sql(
         "SELECT version FROM incident.incidents WHERE incident_id=%s", created["incident_id"]
     )[0][0]
-    # What the console's Decisions view sends for «Rechazar».
     http(
         "POST",
         f"{API}/v1/incidents/{created['incident_id']}/runs/{created['run_id']}/commands",
         {
-            "command": "reject_mitigation",
+            "command": name,
             "actor": "human",
             "actor_reference": {"reference_version": "1.0.0", "principal_id": "demo-human"},
             "expected_incident_version": version,
         },
         {
             "Authorization": "Bearer " + os.environ["DEMO_HUMAN_API_KEY"],
-            "Idempotency-Key": f"console-{created['run_id']}",
+            "Idempotency-Key": f"{name}-{created['run_id']}",
         },
     )
-    answer, edited = press(OPERATOR, prompt("console"), "Aprobar"), prompt("console")
+
+
+def edits_of(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """The editMessageText calls the bot made on this message, in order."""
+    return [
+        e
+        for e in http("GET", f"{FAKE}/_test/answers")["edits"]
+        if (e["chat_id"], e["message_id"]) == (message["chat_id"], message["message_id"])
+    ]
+
+
+def console() -> None:
+    before = prompt("console")
+    # What the console's Decisions view sends for «Rechazar».
+    command("console", "reject_mitigation")
+    # Nobody taps: the console decision alone edits the Telegram message.
+    edits = wait_for(lambda: edits_of(before))
+    untapped = prompt("console")
+    # A client that has not refreshed the message can still tap the buttons it was sent with.
+    answer, edited = press(OPERATOR, before, "Aprobar"), prompt("console")
     rows = decisions("console")
     record(
         "console",
-        {"answer": answer, "edited": edited, "decisions": rows},
+        {"before": before, "edits": edits, "untapped": untapped, "answer": answer}
+        | {"edited": edited, "decisions": rows},
         {
+            "a console decision edits the message with no tap": len(edits) == 1
+            and untapped["buttons"] == [],
+            "the edit says what was decided, by whom and where": untapped["text"]
+            .splitlines()[-1]
+            .startswith("Rechazada por Demo")
+            and "desde la consola" in untapped["text"]
+            and untapped["text"].startswith("Decisión tomada: "),
             "Aprobar after a console rejection approves nothing": [r[:2] for r in rows]
             == [("reject_mitigation", "reject")],
             "the console decision has no chat channel": rows[0][4] is None,
@@ -651,6 +679,51 @@ def console() -> None:
             "the answer gives the current state": answer.startswith("Rechazada por")
             and "desde la consola" in answer,
             "the message shows it and loses its buttons": edited["buttons"] == [],
+        },
+    )
+
+
+def recovery() -> None:
+    # #723 is not merged: the stability checks go through the manual verification commands.
+    # Approved from Telegram in `approve`, the mitigation holds; the one approved in `stale`
+    # does not, and the incident goes back to investigating.
+    # The fresh approval in `stale` also edits its first message; let that edit land first.
+    wait_for(lambda: prompt("stale")["text"].startswith("Decisión tomada"))
+    resolved, failed, count = prompt("approve"), prompt("stale"), len(sent(OPERATOR))
+    seen = {"resolved": len(edits_of(resolved)), "failed": len(edits_of(failed))}
+    command("approve", "verification_passed")
+    command("stale", "verification_failed")
+    wait_for(lambda: len(edits_of(resolved)) > seen["resolved"])
+    wait_for(lambda: len(edits_of(failed)) > seen["failed"])
+    time.sleep(2)  # a duplicate edit or a new message would arrive by now
+    resolved, failed = prompt("approve"), prompt("stale")
+    states = sql(
+        "SELECT incident_id, state->>'state' FROM incident.incidents WHERE incident_id IN "
+        "(%s, %s) ORDER BY incident_id",
+        *(json.loads(PROPOSALS.read_text())[j]["incident_id"] for j in ("approve", "stale")),
+    )
+    recovered = re.fullmatch(
+        r"Resuelto a las \d\d:\d\d UTC · \d+ (s|min) tras la mitigación que aprobaste · "
+        r"ver la consola\.",
+        resolved["text"].splitlines()[-1],
+    )
+    record(
+        "recovery",
+        {"resolved": resolved, "failed": failed, "states": states}
+        | {"edits": {"resolved": edits_of(resolved), "failed": edits_of(failed)}},
+        {
+            "the incidents are resolved and back to investigating": sorted(s for _, s in states)
+            == ["investigating", "resolved"],
+            "the resolution edits the decision message once more": len(edits_of(resolved))
+            == seen["resolved"] + 1,
+            "it keeps who approved, from where, and says when it recovered": recovered is not None
+            and "Aprobada por Demo" in resolved["text"]
+            and "desde Telegram" in resolved["text"],
+            "a failed verification says the incident is investigated again": failed["text"]
+            .splitlines()[-1]
+            .startswith("La verificación falló a las")
+            and len(edits_of(failed)) == seen["failed"] + 1,
+            "no new message is sent for either": len(sent(OPERATOR)) == count,
         },
     )
 
@@ -712,6 +785,8 @@ def unlinked_tap(relink_code: str) -> None:
                 (None, "demo-human", None),
                 ("reject_mitigation", "demo-human", "telegram"),
                 ("apply_mitigation", "demo-human", "telegram"),
+                ("verification_passed", "demo-human", None),
+                ("verification_failed", "demo-human", None),
             ],
         },
     )
@@ -724,4 +799,5 @@ if __name__ == "__main__":
     phases |= {"enlist": enlist, "approve": approve, "double_tap": double_tap}
     phases |= {"stranger": stranger, "second": second, "viewer": viewer, "stale": stale}
     phases |= {"console": console, "reject": reject, "unlinked_tap": unlinked_tap}
+    phases |= {"recovery": recovery}
     phases[phase](*arguments)

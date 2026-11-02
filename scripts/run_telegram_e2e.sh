@@ -8,8 +8,9 @@
 # fails the first send and restarts the gateway twice: each pending message must arrive once.
 # Then it proposes five mitigations: each must reach the chat as one decision message with
 # buttons, and the taps decide them: approve, a double tap, taps from a stranger, a second linked
-# chat and another user, a human without run.approve and then deactivated, a console rejection,
-# a reject and a tap after the incident changed. Finally it unlinks the chat, dispatches a third
+# chat and another user, a human without run.approve and then deactivated, a console rejection
+# (which edits the message with no tap), a reject and a tap after the incident changed. Then a
+# passed and a failed verification edit their decision messages again. Finally it unlinks the chat, dispatches a third
 # time and taps, before and after linking again: nothing may reach the chat or be decided. Writes
 # telegram-e2e.json, transcript.png, summary.txt and migrate.log, and always removes the project
 # (`down -v --remove-orphans`) on exit. Uses the repository's .env or, when there is none,
@@ -73,7 +74,9 @@ phase delivered after_first_restart
 phase delivered after_second_restart
 phase enlist
 phase proposals "$STAMP" "$(link --principal demo-human)"
-for step in approve double_tap stranger second viewer console reject stale; do phase "$step"; done
+for step in approve double_tap stranger second viewer console reject stale recovery; do
+  phase "$step"
+done
 chat links > "$ARTIFACTS/links-before.txt"
 for extra in 777 555 666; do chat unlink "$extra" > /dev/null; done
 chat unlink 222 > "$ARTIFACTS/unlink.txt"
