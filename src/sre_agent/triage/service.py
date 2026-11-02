@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol
 
 from sqlalchemy import text
@@ -393,7 +393,7 @@ class TriageService:
                 incident_id=outcome.incident_id,
                 reason=reason,
                 severity=severity,
-                actor=principal.principal_id,
+                actor=principal.principal_id if responsible_system is None else responsible_system,
                 decided_at=datetime.now(UTC),
                 decision_origin=decision_origin,
                 responsible_system=responsible_system,
@@ -604,10 +604,15 @@ class TriageService:
             incident_id=incident_id,
             run_id=run_id,
             transition_id="triage_declare",
-            actor="human",
-            actor_reference=ActorReference(
-                principal_id=principal.principal_id,
-                display_name=principal.display_name,
+            # An automatic declaration (#765) is the system's, never the operator's.
+            actor="human" if responsible_system is None else "system",
+            actor_reference=(
+                ActorReference(
+                    principal_id=principal.principal_id,
+                    display_name=principal.display_name,
+                )
+                if responsible_system is None
+                else ActorReference(principal_id=responsible_system)
             ),
             inputs={"severity": severity, "impact": impact},
             extra_events=extra_events,
@@ -624,10 +629,13 @@ class TriageService:
         if not may_start:
             return _TransitionOutcome(incident_id)
 
+        # The investigation run starts after the declaration's own run, so it is the incident's
+        # latest run when runs are ordered by creation (GET /v1/incidents, the run list).
+        started_at = now + timedelta(microseconds=1)
         investigation = IncidentRuntime(
             self._workflow,
             lambda: units,
-            clock=lambda: now,
+            clock=lambda: started_at,
         )
         try:
             started = await investigation.start_run(
