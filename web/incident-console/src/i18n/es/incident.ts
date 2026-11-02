@@ -52,6 +52,8 @@ const incident = {
   "decision.forbidden": "Tu credencial no puede decidir esta mitigación.",
   "decision.stale": "El incidente cambió. Revisa la propuesta antes de decidir.",
   "decision.failed": "No pudimos enviar tu decisión. Inténtalo de nuevo.",
+  "decisions.label": "Decisiones tomadas",
+  "decisions.earlier": "Una propuesta anterior",
   "technical.operation": "Operación",
 
   technical: "Detalles técnicos",

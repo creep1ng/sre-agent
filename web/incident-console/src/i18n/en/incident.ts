@@ -54,6 +54,8 @@ export default {
   "decision.forbidden": "Your credential cannot decide this mitigation.",
   "decision.stale": "The incident changed. Review the proposal before deciding.",
   "decision.failed": "We could not send your decision. Try again.",
+  "decisions.label": "Decisions taken",
+  "decisions.earlier": "An earlier proposal",
   "technical.operation": "Operation",
 
   technical: "Technical details",
