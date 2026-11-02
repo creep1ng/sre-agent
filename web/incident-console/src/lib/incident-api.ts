@@ -116,6 +116,20 @@ export interface ChangeEvent {
   occurred_at: string;
 }
 
+/** A canonical alert as GET /v1/alerts lists it; intake (#765) lists resolved episodes apart. */
+export interface Alert {
+  alert_id: string;
+  service: string;
+  incident_id?: string | null;
+  origin?: { observed_at?: string } | null;
+}
+
+export interface Alerts {
+  alerts: Alert[];
+  /** Episodes Grafana resolved in the last day; `origin.observed_at` is when the resolution came in. */
+  resolved?: Alert[];
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -166,6 +180,7 @@ const isPage = (body: unknown): body is EventPage =>
   isObject(body) && Array.isArray(body.events) && typeof body.next_cursor === "string";
 const isContext = (body: unknown): body is { reasoning: Reasoning } =>
   isObject(body) && isObject(body.reasoning) && Array.isArray(body.reasoning.hypotheses) && Array.isArray(body.reasoning.evidence);
+const isAlerts = (body: unknown): body is Alerts => isObject(body) && Array.isArray(body.alerts);
 const isChanges = (body: unknown): body is { changes: ChangeEvent[] } => isObject(body) && Array.isArray(body.changes);
 
 const at = (id: string) => `/incidents/${encodeURIComponent(id)}`;
@@ -183,6 +198,7 @@ export const incidentApi = {
     call(token, `${at(id)}/runs/${encodeURIComponent(run)}/context`, signal, isContext),
   changes: (token: string, service: string, signal: AbortSignal) =>
     call(token, `/changes?service=${encodeURIComponent(service)}&limit=5`, signal, isChanges),
+  alerts: (token: string, signal: AbortSignal) => call(token, "/alerts", signal, isAlerts),
   whoami: (token: string, signal: AbortSignal) =>
     call(token, "/whoami", signal, (body): body is { principal_id: string } => isObject(body) && typeof body.principal_id === "string"),
   /** A governed human command on a run (approve_mitigation, reject_mitigation); the key replays one submission. */

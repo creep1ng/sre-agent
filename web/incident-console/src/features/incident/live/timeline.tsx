@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Prose, useActorName, useSay, useWhen } from "./say";
 import type { AgentStatus } from "./status";
 import type { StoryEntry, Verdict } from "./story";
+import { VerificationStep, type Verification } from "./verification";
 
 /** Measured verdicts in their tone; context (memories, knowledge) in mist, never as a measure. */
 export const VERDICT_TONE: Record<Verdict, string> = {
@@ -109,11 +110,18 @@ function Now({ status }: { status: AgentStatus }) {
   );
 }
 
-export function Timeline({ story, status }: { story: StoryEntry[]; status: AgentStatus }) {
+export function Timeline({ story, status, verification }: { story: StoryEntry[]; status: AgentStatus; verification: Verification | null }) {
   const t = useT("incident");
+  // The verification step folds in the check it reports and sits where its outcome became known.
+  const steps = story.filter((entry) => entry.id !== verification?.check?.id);
+  const split = verification ? steps.filter((entry) => entry.at <= verification.at).length : steps.length;
   return (
     <ol aria-label={t("timeline")} className="mb-14 list-none p-0">
-      {story.map((entry) => (
+      {steps.slice(0, split).map((entry) => (
+        <Step key={entry.id} entry={entry} />
+      ))}
+      {verification && <VerificationStep verification={verification} row={ROW} time={TIME} />}
+      {steps.slice(split).map((entry) => (
         <Step key={entry.id} entry={entry} />
       ))}
       <Now status={status} />

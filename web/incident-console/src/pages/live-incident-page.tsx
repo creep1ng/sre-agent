@@ -11,6 +11,7 @@ import { PHASES, agentStatus, phaseOf, type AgentStatus } from "@/features/incid
 import { buildStory, claimsOf, code } from "@/features/incident/live/story";
 import { Timeline } from "@/features/incident/live/timeline";
 import { useDecision } from "@/features/incident/live/use-decision";
+import { verificationOf } from "@/features/incident/live/verification";
 import { useT } from "@/i18n";
 import { useLiveIncident, type IncidentPhase, type LiveIncident } from "@/lib/live-incident";
 import { cn } from "@/lib/utils";
@@ -123,7 +124,7 @@ export function LiveIncidentPage() {
       <Start live={live} status={status} />
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
       {hypothesis && <HypothesisProse hypothesis={hypothesis} claims={claimsOf(live, story)} />}
-      <Timeline story={story} status={status} />
+      <Timeline story={story} status={status} verification={verificationOf(live, story)} />
       {mitigation && status.kind === "waiting" && detail.state === "mitigating" && (
         <div className="mb-14">
           <Proposal
