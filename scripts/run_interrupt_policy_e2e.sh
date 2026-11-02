@@ -32,7 +32,7 @@ rm -f "$INTERRUPT_POLICY_ARTIFACTS"/{interrupt-policy-e2e.json,event-decisions.j
 "${SEED[@]}" python -m sre_agent.persistence.seeds --seed-mcp > /dev/null
 "${SEED[@]}" python scripts/provision_demo.py > /dev/null
 code="$("${COMPOSE[@]}" run --rm --no-deps -T telegram-gateway python -m sre_agent.chat.telegram \
-  link | grep -o 'start=[A-Za-z0-9_-]*' | cut -d= -f2)"
+  link --principal demo-human | grep -o 'start=[A-Za-z0-9_-]*' | cut -d= -f2)"
 phase link "$code"
 phase quiet_day
 phase three_events

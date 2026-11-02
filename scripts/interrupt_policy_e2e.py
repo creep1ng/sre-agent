@@ -7,7 +7,9 @@ the decisions from GET /v1/event-decisions. Ways the policy can fail, each check
 1. a day without failures interrupts anyone, sends no digest or more than one message, or its
    digest miscounts «N eventos, M mensajes»;
 2. a healthy deploy, a spike that recovers before its investigation ends and a broken deploy
-   send more than one immediate message, or a message for anything but the broken deploy;
+   send more than one immediate message, or a message for anything but the broken deploy; the
+   spike also proposes a rollback, so #767's decision message must follow the policy too, and
+   the broken deploy's one message must be that decision, with its buttons;
 3. the spike is missing from the digest, or the digest repeats the previous day;
 4. an event ends without a decision, or a decision has no reason or a link that does not open
    its event;
@@ -167,7 +169,9 @@ def three_events() -> None:
     deploy("catalog", "v43", started - timedelta(minutes=30))
 
     spike_at = datetime.now(UTC).replace(microsecond=0)
-    grafana("cart", "cart-latency-p95", "firing", spike_at, "[e2e:spike]")
+    # The spike also proposes a rollback: only the policy keeps its decision message quiet.
+    spike_tag = "[e2e:spike] [e2e:broken]"
+    grafana("cart", "cart-latency-p95", "firing", spike_at, spike_tag)
     wait_for(
         lambda: sql(
             "SELECT 1 FROM incident.alert_episodes e JOIN incident.run_events r"
@@ -175,7 +179,7 @@ def three_events() -> None:
             " AND r.kind = 'dispatch_receipt'"
         )
     )
-    grafana("cart", "cart-latency-p95", "resolved", spike_at, "[e2e:spike]")
+    grafana("cart", "cart-latency-p95", "resolved", spike_at, spike_tag)
     spike = wait_for(lambda: investigation("cart"))
 
     deploy("sre-checkout", "v3", datetime.now(UTC) - timedelta(minutes=2))
@@ -195,6 +199,7 @@ def three_events() -> None:
             == ("interrupt", "sustained_pending_decision"),
             "a single immediate message": len(immediate) == 1,
             "it is about the broken deploy": "sre-checkout" in immediate[0]["text"],
+            "it is the decision message, with its buttons": bool(immediate[0]["buttons"]),
             "the digest counts 1 message": ", 1 mensaje." in sent_digest["text"],
             "the spike appears in the digest": "cart" in sent_digest["text"]
             and "Se recuperó sola" in sent_digest["text"],
