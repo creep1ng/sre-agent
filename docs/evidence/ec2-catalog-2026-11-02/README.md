@@ -117,6 +117,25 @@ parent's EC2 rehearsal on `main` checks it on the instance.
 Not changed: `scripts/demo_env.py fail`/`reset` (the local OTel demo, not the evaluated one)
 still restart flagd.
 
+## The agent no longer sees current flag values (`local-hidden/`)
+
+Maintainer decision of 2026-11-02 on decision 3: the investigator's catalog lists only the
+operation, the flags and their allowed values, so the agent must reach the flag from measured
+evidence. The real state is still checked server-side, at proposal time and again at approval.
+On the stand-in, whose scripted model cannot measure and tries the listed flags in key order:
+
+- `flow-refused-then-fixed.json` (`paymentUnreachable` on `checkout`): no prompt of the run
+  showed a current value (every flag offer is `{"allowed": ["off"]}`). The model first proposed
+  `paymentFailure` and was refused with «paymentFailure is already off on the demo, so setting
+  it changes nothing; propose the flag the evidence implicates, or request_human». It then
+  proposed `paymentUnreachable`, which was approved and executed; flagd reloaded with its
+  stream open, and the alert resolved.
+- `flow-stale-approval.json` (`paymentFailure` on `checkout`, `STALE=1`): after the proposal the
+  flag was turned off out of band. The approval answered 409 `precondition_failed` with the same
+  reason, the incident stayed `mitigating`, and nothing ran.
+
+The EC2 runs above predate this change: their prompts still listed each flag's current value.
+
 ## Repeat
 
 Local (no AWS), from this branch, after `scripts/bootstrap-worktree.py` and filling `.env` as
@@ -136,6 +155,10 @@ dc exec -T -e DEMO_HUMAN_API_KEY=$K api python - checks < scripts/flag_set_e2e.p
 dc exec -T otel-flags python /guest/mcp_guest.py fail --flag paymentUnreachable
 echo flag:paymentUnreachable > "$LOCAL_FLOW_DIR/checkout-payment-error-rate"
 dc exec -T -e DEMO_HUMAN_API_KEY=$K -e DECIDE=api -e FLAGD_ADDRESS=flagd:8013 api python - flow < scripts/flag_set_e2e.py > flow.json
+# The two refusals, each on a fresh stack (down, seed and up again first):
+#   fail --flag paymentUnreachable, rule flag:paymentUnreachable, then
+#     ... -e FLAG=paymentUnreachable -e EXPECT_REFUSED=paymentFailure ... flow
+#   fail --flag paymentFailure, rule flag:paymentFailure, then ... -e FLAG=paymentFailure -e STALE=1 ... flow
 dc --profile e2e down -v --remove-orphans
 sh docs/evidence/ec2-catalog-2026-11-02/flagd-reload/run.sh   # flagd 0.16.0 alone
 ```
