@@ -664,6 +664,26 @@ test.describe("incidente RC-2 contra la API real", () => {
     await capture(page, "verificacion-estable-es", step);
     await capture(page, "verificacion-estable-pagina-es");
     record.stableText = await step.innerText();
+
+    // Resolved, the agent opens the postmortem with its draft (#711): under 90 s, as the server stamps both.
+    const demo = await client(process.env.DEMO_HUMAN_API_KEY!);
+    let draft: { version: number; created_at: string; updated_by: string; content: { timeline: unknown[]; cause: { statement: string } } } | null = null;
+    await expect
+      .poll(async () => {
+        const response = await demo.get(`${API}/incidents/${incident}/postmortem`);
+        draft = response.status() === 200 ? await response.json() : null;
+        return draft?.version;
+      }, { timeout: 90_000, intervals: [1_000] })
+      .toBe(1);
+    const runs: { run_id: string }[] = (await read(`/incidents/${incident}`)).runs;
+    const events = (await Promise.all(runs.map(async (run) => (await read(`/incidents/${incident}/runs/${run.run_id}/events?limit=200`)).events))).flat();
+    const stable = events.find((event: { summary: string }) => event.summary === "Service verified stable.");
+    const seconds = (Date.parse(draft!.created_at) - Date.parse(stable.occurred_at)) / 1000;
+    expect(seconds).toBeLessThan(90);
+    expect(draft!.updated_by).toBe("incident-harness");
+    expect(draft!.content.cause.statement).toContain("1.5.0");
+    expect((await read(`/incidents/${incident}`)).state).toBe("postmortem");
+    record.draft = { seconds, timeline: draft!.content.timeline.length, by: draft!.updated_by };
   });
 
   test("un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {
