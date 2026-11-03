@@ -3,7 +3,7 @@ import { incidentApi } from "@/lib/incident-api";
 import { useLive } from "@/lib/live";
 import type { LiveIncident } from "@/lib/live-incident";
 
-export type Choice = "approve" | "reject" | "stable" | "failing";
+export type Choice = "approve" | "reject" | "stable" | "failing" | "close";
 export type DecisionError = "forbidden" | "stale" | "failed" | "notApplied";
 
 // Why the gateway did not apply an approval (#923); the timeline words it, and the next try is a new one.
@@ -17,9 +17,16 @@ const COMMAND: Record<Choice, string> = {
   reject: "reject_mitigation",
   stable: "verification_passed",
   failing: "verification_failed",
+  close: "close_incident",
 };
 // The action each command asserts, as agent/api/authorization.v1.yaml maps it.
-const ACTION: Record<Choice, string> = { approve: "run.approve", reject: "run.approve", stable: "run.command", failing: "run.command" };
+const ACTION: Record<Choice, string> = {
+  approve: "run.approve",
+  reject: "run.approve",
+  stable: "run.command",
+  failing: "run.command",
+  close: "run.approve",
+};
 
 /**
  * Who you are (to tell your decisions from other people's) and the governed decisions on the
@@ -82,5 +89,35 @@ export function useDecision(live: LiveIncident & { refresh: () => void }) {
     [live, token, me, sending],
   );
 
-  return { me, sending, error, decide };
+  /**
+   * «Aprobar y cerrar» (#711): approve the postmortem version on screen, then close_incident on
+   * the postmortem's run, which the API accepts only with that approval. A retry after a failed
+   * close skips the review that already counts.
+   */
+  const close = useCallback(
+    async (run: string, version: number, approved: boolean) => {
+      const detail = live.detail;
+      if (!token || !detail || !me || sending) return;
+      if (!approved) {
+        setSending("close");
+        setError(null);
+        let review;
+        try {
+          review = await incidentApi.review(token, detail.incident_id, version, `console-review-${nonce()}`, new AbortController().signal);
+        } catch {
+          review = { kind: "transient" as const };
+        }
+        setSending(null);
+        if (review.kind !== "ok") {
+          setError(review.kind === "forbidden" ? "forbidden" : review.kind === "conflict" ? "stale" : "failed");
+          live.refresh();
+          return;
+        }
+      }
+      await decide("close", run);
+    },
+    [live, token, me, sending, decide],
+  );
+
+  return { me, sending, error, decide, close };
 }

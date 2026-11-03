@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { incidentApi, type Alert, type ApiResult, type ChangeEvent, type IncidentDetail, type Reasoning, type RunEvent, type RunState } from "./incident-api";
+import { incidentApi, type Alert, type ApiResult, type ChangeEvent, type IncidentDetail, type Postmortem, type Reasoning, type RunEvent, type RunState } from "./incident-api";
 import { useLive } from "./live";
 
 /** While the agent works the page asks every few seconds; otherwise it only keeps fresh. */
@@ -20,6 +20,8 @@ export interface LiveIncident {
   changes: ChangeEvent[] | "forbidden" | null;
   /** The incident's alert episodes once a mitigation is approved: whether Grafana still alerts. */
   alerts: { firing: Alert[]; resolved: Alert[] } | null;
+  /** The postmortem once the incident resolved (#711): null until the agent writes its draft. */
+  postmortem: Postmortem | "forbidden" | null;
   /** An investigation request is in flight. */
   starting: boolean;
   /** When the last request was sent and the run it follows. */
@@ -39,6 +41,7 @@ const EMPTY: LiveIncident = {
   reasoning: null,
   changes: null,
   alerts: null,
+  postmortem: null,
   starting: false,
   requested: null,
   startError: null,
@@ -58,6 +61,9 @@ function body<T>(result: ApiResult<T>): T {
   if (result.kind === "missing") throw new Stop("missing");
   throw new Stop("error");
 }
+
+/** The states in which an incident has, or is about to have, its postmortem. */
+const DRAFTED = new Set(["resolved", "postmortem", "closed"]);
 
 function investigating(runs: RunState[]): boolean {
   const run = runs.at(-1);
@@ -136,10 +142,17 @@ export function useLiveIncident(incidentId: string | undefined) {
           const mine = (list: Alert[] | undefined) => (list ?? []).filter((alert) => alert.incident_id === incidentId);
           alerts = read.kind === "ok" ? { firing: mine(read.body.alerts), resolved: mine(read.body.resolved) } : stateRef.current.alerts;
         }
+        // Resolved, the agent opens the postmortem with its draft; it is read from then on.
+        let postmortem: LiveIncident["postmortem"] = null;
+        if (DRAFTED.has(detail.state)) {
+          const read = await incidentApi.postmortem(token!, incidentId!, signal);
+          postmortem = read.kind === "ok" ? read.body : read.kind === "forbidden" ? "forbidden" : read.kind === "missing" ? null : stateRef.current.postmortem;
+        }
         if (!alive || signal.aborted) return null;
         const events = detail.runs.flatMap((summary) => known.get(summary.run_id)?.events.map((event) => ({ ...event, run_id: summary.run_id })) ?? []);
-        busy = investigating(current);
-        setState((s) => ({ ...s, phase: "ready", stale: false, detail, runs: current, events, reasoning, changes, alerts }));
+        // Until the draft is there, the page asks as often as while the agent investigates.
+        busy = investigating(current) || (DRAFTED.has(detail.state) && detail.state !== "closed" && !postmortem);
+        setState((s) => ({ ...s, phase: "ready", stale: false, detail, runs: current, events, reasoning, changes, alerts, postmortem }));
       } catch (error) {
         // An aborted poll was replaced by another one, which keeps the only loop.
         if (!alive || signal.aborted || (error as { name?: string }).name === "AbortError") return null;
