@@ -212,8 +212,8 @@ class ServiceOperations(_Strict):
                 return f"{flag} may only be set to: {', '.join(flag_offer.allowed)}"
             if variant == flag_offer.variant:
                 return (
-                    f"{flag} is already {flag_offer.variant} on the demo, so setting it changes "
-                    "nothing; propose the flag the evidence implicates, or request_human"
+                    f"{flag} is already {flag_offer.variant} on the demo, so it is not the cause "
+                    "and setting it changes nothing"
                 )
         return None
 
@@ -529,6 +529,9 @@ class Limits(_Strict):
     """Bounds set by the issue assignee (Definition of Ready); see the change design."""
 
     max_steps: Annotated[int, Field(ge=1, le=20)] = 6
+    # A refused mitigation leaves the run at least this many steps, once per run, to measure
+    # again and propose another cause instead of running out (#724).
+    steps_after_refusal: Annotated[int, Field(ge=0, le=6)] = 4
     transient_retries: Annotated[int, Field(ge=0, le=3)] = 1
     gateway_timeout_seconds: Annotated[float, Field(gt=0, le=180)] = 45.0
     tool_timeout_seconds: Annotated[float, Field(gt=0, le=60)] = 10.0

@@ -178,6 +178,7 @@ def test_result_rejects_inconsistent_or_malformed_results(change: dict[str, Any]
 def test_limits_are_the_values_set_for_the_definition_of_ready() -> None:
     assert Limits().model_dump() == {
         "max_steps": 6,
+        "steps_after_refusal": 4,
         "transient_retries": 1,
         "gateway_timeout_seconds": 45.0,
         "tool_timeout_seconds": 10.0,

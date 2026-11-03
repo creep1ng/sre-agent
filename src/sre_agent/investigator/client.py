@@ -384,7 +384,7 @@ class MCPGatewayClient:
                 empty = prometheus_result.result == []
             elif tool == "query_elasticsearch":
                 elasticsearch_result = _ElasticsearchResult.model_validate(payload)
-                summary = elasticsearch_result.model_dump_json()
+                summary = _log_summary(elasticsearch_result)
                 empty = elasticsearch_result.total == 0 and not elasticsearch_result.documents
             else:
                 raise ValueError("unsupported tool")
@@ -463,6 +463,46 @@ class MCPGatewayClient:
             request_id=_response_request_id(response),
             code=_response_error_code(response),
         )
+
+
+_LOG_BODY = 1000
+
+
+def _log_record(document: dict[str, Any]) -> dict[str, Any]:
+    """What a log record says, without the host and SDK metadata every record of a service
+    repeats: 20 raw OpenTelemetry documents outgrow the 8000 characters a summary keeps (#724)."""
+    source = document.get("_source")
+    record = source if isinstance(source, dict) else document
+    resource = record.get("resource")
+    severity = record.get("severity")
+    attributes = record.get("attributes")
+    body = record.get("body")
+    if body is not None and not isinstance(body, str):
+        body = json.dumps(body, sort_keys=True)
+    fields = {
+        "timestamp": record.get("@timestamp", record.get("timestamp")),
+        "service": resource.get("service.name") if isinstance(resource, dict) else None,
+        "severity": severity.get("text") if isinstance(severity, dict) else severity,
+        "body": body[:_LOG_BODY] if body is not None else None,
+        "attributes": {key: value for key, value in attributes.items() if key != "data_stream"}
+        if isinstance(attributes, dict)
+        else None,
+        "trace_id": record.get("traceId"),
+    }
+    return {key: value for key, value in fields.items() if value not in (None, {})}
+
+
+def _log_summary(result: _ElasticsearchResult) -> str:
+    """The records in the order the MCP returned them, each once: one event logged through two
+    instrumentation scopes reads the same."""
+    records: list[dict[str, Any]] = []
+    for document in result.documents:
+        if (record := _log_record(document)) not in records:
+            records.append(record)
+    return json.dumps(
+        {"total": result.total, "documents": records, "warnings": result.warnings},
+        separators=(",", ":"),
+    )
 
 
 def _service_term(match: re.Match[str]) -> str:
