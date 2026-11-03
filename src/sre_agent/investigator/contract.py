@@ -33,7 +33,7 @@ Level = Literal["low", "medium", "high"]
 # What one piece of evidence says about the hypothesis it is recorded with (#707).
 Verdict = Literal["supports", "contradicts", "inconclusive"]
 Finding = Annotated[str, Field(min_length=1, max_length=300)]
-Objective = Literal["triage", "investigate", "mitigate", "postmortem"]
+Objective = Literal["triage", "investigate", "mitigate", "verify", "postmortem"]
 OutputLanguage = Literal["es", "en"]
 Status = Literal[
     "completed",
@@ -143,6 +143,24 @@ class ProposedOperation(_Strict):
     )
 
 
+class ExecutionReceipt(_Projection):
+    """What the deploy-executor answered when the approval ran the operation (#722)."""
+
+    outcome: Name
+    before_image: Annotated[str, Field(max_length=300)] | None = None
+    after_image: Annotated[str, Field(max_length=300)] | None = None
+    executed_at: Annotated[str, Field(max_length=64)] | None = None
+
+
+class AppliedMitigation(_Projection):
+    """The approved mitigation as the incident keeps it, which a verification measures (#723)."""
+
+    description: Text
+    verification_check: Annotated[str, Field(min_length=1, max_length=2000)]
+    operation: ProposedOperation | None = None
+    execution: ExecutionReceipt | None = None
+
+
 class OperationOffer(_Projection):
     operation: OperationName
     parameters: list[ParameterName] = Field(default_factory=list)
@@ -210,11 +228,19 @@ class InvestigationRequest(_Strict):
     service_operations: ServiceOperations | None = None
     # The executor could not be read: a mitigation then goes to a human (fail closed).
     operations_unavailable: bool = False
+    # What the approval ran and what must hold now: a verification measures it (#723).
+    mitigation: AppliedMitigation | None = None
 
     @model_validator(mode="after")
     def _context_incident_matches_request(self) -> InvestigationRequest:
         if self.context.incident_id != self.incident_id:
             raise ValueError("context incident_id must match request incident_id")
+        return self
+
+    @model_validator(mode="after")
+    def _verification_measures_its_mitigation(self) -> InvestigationRequest:
+        if (self.objective == "verify") != (self.mitigation is not None):
+            raise ValueError("only a verification carries the mitigation it measures, and it must")
         return self
 
     @model_validator(mode="after")
@@ -308,7 +334,17 @@ class Conclude(_Strict):
     supporting_evidence: list[EvidenceId] = Field(default_factory=list)
 
 
-Outcome = ProposeHypothesis | ProposeMitigation | RequestHuman | Conclude
+class VerifyMitigation(_Strict):
+    """Whether the service recovered once the approved mitigation ran (#723), from evidence
+    measured in this verification."""
+
+    action: Literal["verify_mitigation"]
+    passed: bool
+    summary: Text
+    supporting_evidence: Annotated[list[EvidenceId], Field(min_length=1)]
+
+
+Outcome = ProposeHypothesis | ProposeMitigation | RequestHuman | Conclude | VerifyMitigation
 Action = UseTool | SearchBoK | Outcome
 
 
@@ -366,6 +402,19 @@ def unfounded_citations(
     return list(cited) if all(ref in unmeasured for ref in cited) else []
 
 
+def unmeasured_verdict(action: Action, measured: Collection[CollectedEvidence]) -> bool:
+    """A verdict that cites nothing this verification measured with data (#723): what the
+    investigation measured shows the service before the mitigation ran, an empty query nothing."""
+    if not isinstance(action, VerifyMitigation):
+        return False
+    now = {
+        item.evidence_id
+        for item in measured
+        if not item.empty and item.source not in UNMEASURED_SOURCES
+    }
+    return not now.intersection(action.supporting_evidence)
+
+
 def unknown_references(
     action: Action, request: InvestigationRequest, collected: Collection[str] = ()
 ) -> list[str]:
@@ -373,7 +422,7 @@ def unknown_references(
     evidence = {item.evidence_id for item in request.context.evidence} | set(collected)
     hypotheses = {item.hypothesis_id for item in request.context.hypotheses}
     unknown: list[str] = []
-    if isinstance(action, ProposeHypothesis | Conclude):
+    if isinstance(action, ProposeHypothesis | Conclude | VerifyMitigation):
         unknown += [ref for ref in action.supporting_evidence if ref not in evidence]
     if isinstance(action, ProposeMitigation) and action.based_on_hypothesis is not None:
         if action.based_on_hypothesis not in hypotheses:
