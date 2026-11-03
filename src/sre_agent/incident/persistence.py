@@ -22,6 +22,11 @@ RUN_PATCH_EVENTS = frozenset({"escalation", "run_terminated"})
 RECORDED_EVENTS = frozenset({"human_command", "denial"})
 
 
+def verification_dispatch(run_id: str) -> str:
+    """The run's second dispatch: the agent verifying what its approval ran (#723)."""
+    return f"{run_id}-verify"
+
+
 @dataclass(frozen=True, slots=True)
 class IncidentRecord:
     incident_id: str
@@ -225,6 +230,7 @@ class IncidentUnitOfWork(Protocol):
         interrupted_decision: DecisionDraft,
         interrupted_event: EventDraft,
         interrupted_termination: EventDraft | None = None,
+        dispatch_id: str | None = None,
     ) -> Literal["claimed", "active", "complete", "interrupted"]: ...
 
     async def complete_run_dispatch(
@@ -238,6 +244,7 @@ class IncidentUnitOfWork(Protocol):
         incident_patch: JsonDocument | None = None,
         run_patch: JsonDocument | None = None,
         contexts: Sequence[TextContextRecord] = (),
+        dispatch_id: str | None = None,
     ) -> bool: ...
 
     async def release_run_dispatch(self, incident_id: str, run_id: str) -> None: ...
