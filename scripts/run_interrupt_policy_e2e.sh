@@ -17,6 +17,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export OPENROUTER_API_KEY="" OPENROUTER_MANAGEMENT_API_KEY=""
 export TELEGRAM_BOT_TOKEN="7000001:fake-e2e-token" TELEGRAM_API_URL="http://fake-telegram:8081"
 export TELEGRAM_POLL_TIMEOUT_SECONDS=5
+# Chat times in Bogotá, and a loopback console link the fake refuses as a button: it becomes text.
+export TELEGRAM_TIMEZONE="America/Bogota" CONSOLE_PUBLIC_URL="http://127.0.0.1:8080/app/"
 ARTIFACTS="${INTERRUPT_POLICY_ARTIFACTS:-$(mktemp -d "${TMPDIR:-/tmp}/interrupt-policy.XXXXXX")}"
 mkdir -p "$ARTIFACTS"
 export INTERRUPT_POLICY_ARTIFACTS="$(cd "$ARTIFACTS" && pwd)"
@@ -24,7 +26,7 @@ COMPOSE=(docker compose --project-directory "$ROOT" --env-file "$ROOT/.env"
   --env-file "$ROOT/.env.worktree" -f "$ROOT/compose.yaml" -f "$ROOT/compose.e2e.yaml"
   -f "$ROOT/compose.interrupt-policy-e2e.yaml" --profile telegram --profile telegram-e2e)
 trap '"${COMPOSE[@]}" --profile e2e down -v --remove-orphans' EXIT
-SEED=("${COMPOSE[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" seed)
+SEED=("${COMPOSE[@]}" run --rm --no-deps -T --user "$(id -u):$(id -g)" -e CONSOLE_PUBLIC_URL seed)
 phase() { "${SEED[@]}" python scripts/interrupt_policy_e2e.py "$@" | tee -a "$INTERRUPT_POLICY_ARTIFACTS/summary.txt"; }
 
 rm -f "$INTERRUPT_POLICY_ARTIFACTS"/{interrupt-policy-e2e.json,event-decisions.json,summary.txt}

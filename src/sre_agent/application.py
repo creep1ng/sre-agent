@@ -1,6 +1,8 @@
 # ruff: noqa: I001
 """Single composition root for all runtime planes."""
 
+import asyncio
+
 import httpx
 from fastapi import FastAPI
 from pathlib import Path
@@ -8,6 +10,7 @@ from typing import Any
 
 from sre_agent import control, harness, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
+from sre_agent.chat.taps import TapWorker
 from sre_agent.gateway import health
 from sre_agent.gateway.alert_intake import AlertIntakeService, alert_intake_router
 from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
@@ -152,22 +155,33 @@ def create_application(
             )
         )
     )
-    application.include_router(
-        commands_router(
-            RunCommandService(
-                database.sessions,
-                workflow,
-                incident_runtime,
-                executor=OperationExecutor(
-                    database.sessions,
-                    incident_runtime,
-                    runtime_settings,
-                    audit=audit_store or PostgresAuditStore(database.sessions),
-                ),
-                verifier=investigation_dispatcher,
-            )
-        )
+    commands = RunCommandService(
+        database.sessions,
+        workflow,
+        incident_runtime,
+        executor=OperationExecutor(
+            database.sessions,
+            incident_runtime,
+            runtime_settings,
+            audit=audit_store or PostgresAuditStore(database.sessions),
+        ),
+        verifier=investigation_dispatcher,
     )
+    application.include_router(commands_router(commands))
+    if runtime_settings.chat_taps_worker:
+        # A Telegram tap runs here, on the console's path with the executor (#722, #767).
+        worker: list[asyncio.Task[None]] = []
+
+        async def start_taps() -> None:
+            worker.append(asyncio.create_task(TapWorker(database, commands).run()))
+
+        async def stop_taps() -> None:
+            for task in worker:
+                task.cancel()
+            await asyncio.gather(*worker, return_exceptions=True)
+
+        application.add_event_handler("startup", start_taps)
+        application.add_event_handler("shutdown", stop_taps)
     application.include_router(
         triage_router(TriageHttpService(database, workflow, investigator=investigation_dispatcher))
     )
