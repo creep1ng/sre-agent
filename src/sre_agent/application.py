@@ -142,6 +142,7 @@ def create_application(
         language=runtime_settings.investigator_output_language,
         executor_url=runtime_settings.deploy_executor_url,
         tool_timeout_seconds=runtime_settings.investigator_tool_timeout_seconds,
+        verification_delay_seconds=runtime_settings.verification_delay_seconds,
     )
     application.include_router(
         runs_router(
@@ -164,6 +165,7 @@ def create_application(
             runtime_settings,
             audit=audit_store or PostgresAuditStore(database.sessions),
         ),
+        verifier=investigation_dispatcher,
     )
     application.include_router(commands_router(commands))
     if runtime_settings.chat_taps_worker:
