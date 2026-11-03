@@ -18,13 +18,17 @@ await page.waitForTimeout(1500);
 await page.locator("#reasoning-section").screenshot({ path: `${OUT}/${prefix}-reasoning.png` });
 await page.screenshot({ path: `${OUT}/${prefix}-full.png`, fullPage: true });
 if (admin) {
-  await page.goto(`${BASE_URL}/public/admin/audit-events.html`);
+  await page.addInitScript(() =>
+    localStorage.setItem("midnight-language", JSON.stringify({ state: { language: "es" }, version: 0 })),
+  );
+  await page.goto(`${BASE_URL}/app/admin/auditoria`);
+  await page.getByRole("button", { name: "Conectar con la API" }).click();
   await page.locator("#api-key").fill(admin);
-  await page.locator("#connect-button").click();
-  await page.locator("#filter-principal-id").fill("incident-harness");
-  await page.locator("#filter-decision").fill("deny");
-  await page.locator("#apply-button").click();
-  await page.locator("#event-rows tr").first().waitFor({ timeout: 30000 });
+  await page.locator("#api-key").press("Enter");
+  await page.locator("#audit-principal_id").fill("incident-harness");
+  await page.locator("#audit-decision").selectOption("deny");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await page.locator("[data-event-row]").first().waitFor({ timeout: 30000 });
   await page.screenshot({ path: `${OUT}/revoked-audit-denied.png`, fullPage: true });
 }
 await browser.close();

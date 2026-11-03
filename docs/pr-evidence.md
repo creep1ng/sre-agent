@@ -67,7 +67,7 @@ Container pitfalls that silently invalidate evidence:
   comparing hashes between host and container, compare the digest only, not whole `sha256sum`
   lines, whose paths differ.
 - Playwright deletes its `outputDir` at startup, so pointing it at a bind-mount root fails with
-  `EACCES`. Use a child of the mount (as `compose.triage23.yaml` does with
+  `EACCES`. Use a child of the mount (for example
   `PLAYWRIGHT_OUTPUT_DIR: /artifacts/test-results`) or a path under `/tmp`.
 - The static browser suites (`playwright.config.js`, `playwright.api.config.js`) expect the
   loopback origin `http://127.0.0.1:4173`: run Playwright in the server container's network

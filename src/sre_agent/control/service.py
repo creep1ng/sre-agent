@@ -20,6 +20,8 @@ from pydantic.json_schema import WithJsonSchema
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sre_agent.bok.owner import BoKVersionCollision
+from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, BoKVersionRecord, BoKVersionSummary, publish_bok_version, read_bok_version  # fmt: skip
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
@@ -206,6 +208,18 @@ CONTROL_OPERATIONS: dict[tuple[str, str], tuple[str, str, str, str]] = {
     ("GET", "/v1/skills/{skill_id}/{version}/status"): (
         "catalog.read",
         "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
+    ("POST", "/v1/bok/collections/versions"): (
+        "catalog.create",
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
+    ("GET", "/v1/bok/collections/{collection_id}/versions/{version}"): (
+        "catalog.read",
+        "admin.read",
         "administrative_control",
         "catalog",
     ),
@@ -3039,6 +3053,127 @@ class ControlService:  # noqa: E305
             decision=evaluation.decision,
         )
 
+    async def publish_bok_version(
+        self, raw: Any, authorization: str | None, idempotency_key: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "catalog.create", "admin.write"
+        canonical_path = "/v1/bok/collections/versions"
+
+        def finish(status: int, stage: Any = "authorization", **evidence: Any) -> Any:
+            return self._finish(request_id, started, status, stage, operation, action, **evidence)
+
+        if self._invalid_key(idempotency_key):
+            return await finish(400, "validation", error_code="invalid_idempotency_key")
+        try:
+            body = BoKPublishRequest.model_validate(raw)
+        except ValidationError:
+            return await finish(422, "validation", error_code="validation_error")
+        try:
+            context, evaluation = await authorize_governed_access(
+                self.sessions, authorization, *CONTROL_SCOPES[("POST", canonical_path)]
+            )
+        except AuthenticationFailed:
+            return await finish(401, "authentication", error_code="authentication_failed")
+        granted = {
+            "context": context,
+            "resource_ref": ("administrative_control", "catalog"),
+            "decision": evaluation.decision,
+        }
+        if evaluation.decision.decision == "deny":
+            return await finish(
+                403,
+                error_code="resource_unavailable",
+                authorization_denial_cause=evaluation.denial_cause,
+                **granted,
+            )
+
+        binding_scope = f"{context.principal.principal_id}|POST|{canonical_path}"
+        resource_id = f"{body.collection_id}@{body.version}"
+        try:
+            async with self.sessions() as session, session.begin():
+                binding = await IdempotencyRepository(session).claim_or_replay(
+                    scope=binding_scope,
+                    key_digest=_key_digest(idempotency_key or ""),
+                    payload_sha256=_payload_sha256(body.model_dump(mode="json")),
+                    principal_id=context.principal.principal_id,
+                    method="POST",
+                    canonical_path=canonical_path,
+                    binding="at_least_24h",
+                    outcome=IdempotencyOutcome(
+                        response_status=201, resource_id=resource_id, replayed=False
+                    ),
+                )
+                if binding.replayed:
+                    status, payload = 200, binding.outcome.response_payload
+                else:
+                    summary, created = await publish_bok_version(
+                        session, body, author=context.principal, origin="console"
+                    )
+                    status, payload = (201 if created else 200), summary.model_dump(mode="json")
+                    await IdempotencyRepository(session).set_response_payload(
+                        scope=binding_scope,
+                        key_digest=_key_digest(idempotency_key or ""),
+                        response_payload=payload,
+                    )
+                result = await finish(
+                    status,
+                    payload=payload,
+                    error_code="grant_matched",
+                    audit_session=session,
+                    **granted,
+                )
+                if result.status_code == 503:
+                    await session.rollback()
+                return result
+        except IdempotencyConflictError:
+            return await finish(409, error_code="idempotency_conflict", **granted)
+        except BoKAuthorRefused:
+            return await finish(403, error_code="resource_unavailable", **granted)
+        except (BoKVersionCollision, IntegrityError):
+            return await finish(409, error_code="status_conflict", **granted)
+
+    async def get_bok_version(
+        self, collection_id: str, version: str, authorization: str | None
+    ) -> Response:
+        request_id, started = uuid4(), monotonic()
+        operation, action = "catalog.read", "admin.read"
+
+        def finish(status: int, stage: Any = "authorization", **evidence: Any) -> Any:
+            return self._finish(request_id, started, status, stage, operation, action, **evidence)
+
+        context = await self._authenticate(authorization)
+        if context is None:
+            return await finish(401, "authentication", error_code="authentication_failed")
+        if (
+            re.fullmatch(BOK_SLUG_PATTERN, collection_id) is None
+            or re.fullmatch(SEMVER_PATTERN, version) is None
+            or len(version) > 32
+        ):
+            return await finish(422, "validation", error_code="validation_error")
+        scope = CONTROL_SCOPES[("GET", "/v1/bok/collections/{collection_id}/versions/{version}")]
+        async with self.sessions() as session:
+            evaluation = await self._authorize(session, context.principal, scope)
+        granted = {
+            "context": context,
+            "resource_ref": ("administrative_control", "catalog"),
+            "decision": evaluation.decision,
+        }
+        if evaluation.decision.decision == "deny":
+            return await finish(
+                403,
+                error_code="resource_unavailable",
+                authorization_denial_cause=evaluation.denial_cause,
+                **granted,
+            )
+        async with self.sessions() as session:
+            record = await read_bok_version(session, collection_id, version)
+        if record is None:
+            return await finish(404, error_code="resource_not_found", **granted)
+        return await finish(
+            200, payload=record.model_dump(mode="json"), error_code="grant_matched", **granted
+        )
+
     async def get_skill_status(
         self, skill_id: str, version: str, authorization: str | None
     ) -> Response:
@@ -4264,6 +4399,93 @@ def control_router(service: ControlService) -> APIRouter:
             version,
             await raw_json(request),
             authorization_from(credentials, request),
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.post(
+        "/v1/bok/collections/versions",
+        status_code=201,
+        response_model=BoKVersionSummary,
+        responses={
+            200: {"model": BoKVersionSummary},
+            400: {"model": ErrorEnvelope},
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            409: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "parameters": [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {
+                        "type": "string",
+                        "minLength": 16,
+                        "maxLength": 128,
+                        "pattern": IDEMPOTENCY_KEY_PATTERN,
+                    },
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {"application/json": {"schema": BoKPublishRequest.model_json_schema()}},
+            },
+            "x-governed-scope": {
+                "action": "admin.write",
+                "resource_type": "administrative_control",
+                "resource_id": "catalog",
+            },
+        },
+    )
+    async def publish_bok_version(
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.publish_bok_version(
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
+        )
+        response.status_code = result.status_code
+        return result
+
+    @router.get(
+        "/v1/bok/collections/{collection_id}/versions/{version}",
+        response_model=BoKVersionRecord,
+        responses={
+            401: {"model": ErrorEnvelope},
+            403: {"model": ErrorEnvelope},
+            404: {"model": ErrorEnvelope},
+            422: {"model": ErrorEnvelope},
+            503: {"model": ErrorEnvelope},
+        },
+        openapi_extra={
+            "x-governed-scope": {
+                "action": "admin.read",
+                "resource_type": "administrative_control",
+                "resource_id": "catalog",
+            }
+        },
+    )
+    async def get_bok_version(
+        collection_id: Annotated[
+            str, WithJsonSchema({"type": "string", "pattern": BOK_SLUG_PATTERN})
+        ],
+        version: Annotated[
+            str,
+            WithJsonSchema({"type": "string", "maxLength": 32, "pattern": SEMVER_PATTERN}),
+        ],
+        request: Request,
+        response: Response,
+        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
+    ) -> Response:
+        result = await service.get_bok_version(
+            collection_id, version, authorization_from(credentials, request)
         )
         response.status_code = result.status_code
         return result

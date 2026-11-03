@@ -154,8 +154,14 @@ async def _persisted_children_match(session: AsyncSession, bundle: dict[str, Any
     ) == sorted(persisted_chunks)
 
 
-async def ingest_bundle(session: AsyncSession, bundle: dict[str, Any]) -> bool:
-    """Insert a complete immutable version, or return False for an exact replay."""
+async def ingest_bundle(
+    session: AsyncSession, bundle: dict[str, Any], provenance: dict[str, str] | None = None
+) -> bool:
+    """Insert a complete immutable version, or return False for an exact replay.
+
+    ``provenance`` (``published_by``, ``origin``) is written with the version; a replay keeps the
+    first publication's values.
+    """
     digest = _digest(bundle)
     collection_id = bundle["collection_id"]
     version = bundle["version"]
@@ -182,6 +188,7 @@ async def ingest_bundle(session: AsyncSession, bundle: dict[str, Any]) -> bool:
             visibility=bundle["visibility"],
             created_at=now,
             updated_at=now,
+            **(provenance or {}),
         )
     )
     for document in documents:
@@ -239,31 +246,42 @@ async def activate_version(
     await session.flush()
 
 
+async def publish_bundle(
+    session: AsyncSession,
+    bundle: dict[str, Any],
+    tags: list[str],
+    provenance: dict[str, str] | None = None,
+) -> bool:
+    """Ingest, activate and project one version into the catalog; False when nothing changed."""
+    collection_id, version = bundle["collection_id"], bundle["version"]
+    created = await ingest_bundle(session, bundle, provenance)
+    await activate_version(session, collection_id, version, expected_bundle=bundle)
+    resource_id = f"{collection_id}@{version}"
+    resource = await session.get(ResourceRow, ("bok_collection", resource_id))
+    expected = {
+        "resource_type": "bok_collection",
+        "resource_id": resource_id,
+        "status": "active",
+        "owner_id": bundle["owner_id"],
+        "source": "bok",
+        "source_ref": resource_id,
+        "display_name": bundle["display_name"],
+        "visibility": bundle["visibility"],
+        "description": bundle["description"],
+        "tags": tags,
+    }
+    if resource is None:
+        session.add(ResourceRow(**expected))
+        created = True
+    elif any(getattr(resource, key) != value for key, value in expected.items()):
+        raise BoKVersionCollision("bok_catalog_projection_conflict")
+    await session.flush()
+    return created
+
+
 async def seed_bok_demo(session: AsyncSession) -> bool:
     """Converge the deterministic demo BoK owner versions and their catalog projections."""
     created = False
     for bundle in (*DEMO_BUNDLES, OTEL_DEMO_STORE):
-        collection_id, version = bundle["collection_id"], bundle["version"]
-        created = await ingest_bundle(session, bundle) or created
-        await activate_version(session, collection_id, version, expected_bundle=bundle)
-        resource_id = f"{collection_id}@{version}"
-        resource = await session.get(ResourceRow, ("bok_collection", resource_id))
-        expected = {
-            "resource_type": "bok_collection",
-            "resource_id": resource_id,
-            "status": "active",
-            "owner_id": bundle["owner_id"],
-            "source": "bok",
-            "source_ref": f"{collection_id}@{version}",
-            "display_name": bundle["display_name"],
-            "visibility": bundle["visibility"],
-            "description": bundle["description"],
-            "tags": ["demo", "bok"],
-        }
-        if resource is None:
-            session.add(ResourceRow(**expected))
-            created = True
-        elif any(getattr(resource, key) != value for key, value in expected.items()):
-            raise BoKVersionCollision("bok_catalog_projection_conflict")
-    await session.flush()
+        created = await publish_bundle(session, bundle, ["demo", "bok"]) or created
     return created

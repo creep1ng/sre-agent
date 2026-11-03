@@ -5,7 +5,6 @@ const shell = {
   "nav.incidents": "Incidentes",
   "nav.actions": "Acciones",
   "nav.admin": "Administración",
-  "nav.governance": "Gobierno de IA",
   "nav.sections": "Secciones de la consola",
   "nav.title": "Navegación",
   "nav.fold": "Plegar navegación",

@@ -634,7 +634,7 @@ function advance(state: State, incident: Incident, now: number): Incident {
           failure: {
             title: "El agente no pudo empezar a investigar",
             reason: "Su identidad («incident-harness») está desactivada, así que el gateway rechazó la investigación.",
-            fix: "Actívala en Gobierno de IA → Principals y vuelve a intentarlo.",
+            fix: "Actívala en Administración → Identidades y vuelve a intentarlo.",
             at,
           },
         },

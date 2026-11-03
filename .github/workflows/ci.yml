@@ -322,16 +322,6 @@ jobs:
         if: always()
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-journeys-${{ github.run_id }} --profile e2e down -v --remove-orphans
 
-  triage-review:
-    needs: compose-smoke
-    if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Run the 55 seeded T23 triage journeys on their isolated stack
-        run: scripts/run_triage23_review.sh
-
   deploy-executor:
     needs: compose-smoke
     if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
@@ -376,7 +366,6 @@ jobs:
       - compose-smoke
       - production-browser
       - real-journeys
-      - triage-review
       - deploy-executor
     if: ${{ always() }}
     runs-on: ubuntu-latest
@@ -393,7 +382,6 @@ jobs:
       COMPOSE_SMOKE_RESULT: ${{ needs.compose-smoke.result }}
       PRODUCTION_BROWSER_RESULT: ${{ needs.production-browser.result }}
       REAL_JOURNEYS_RESULT: ${{ needs.real-journeys.result }}
-      TRIAGE_REVIEW_RESULT: ${{ needs.triage-review.result }}
       DEPLOY_EXECUTOR_RESULT: ${{ needs.deploy-executor.result }}
       PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
@@ -417,7 +405,6 @@ jobs:
           compose-smoke=${COMPOSE_SMOKE_RESULT}
           production-browser=${PRODUCTION_BROWSER_RESULT}
           real-journeys=${REAL_JOURNEYS_RESULT}
-          triage-review=${TRIAGE_REVIEW_RESULT}
           deploy-executor=${DEPLOY_EXECUTOR_RESULT}
           EOF
       - name: Retain sanitised CI summary
@@ -447,7 +434,6 @@ jobs:
             "compose-smoke:${COMPOSE_SMOKE_RESULT}" \
             "production-browser:${PRODUCTION_BROWSER_RESULT}" \
             "real-journeys:${REAL_JOURNEYS_RESULT}" \
-            "triage-review:${TRIAGE_REVIEW_RESULT}" \
             "deploy-executor:${DEPLOY_EXECUTOR_RESULT}"; do
             job="${result%%:*}"
             status="${result#*:}"

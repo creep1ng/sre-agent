@@ -137,6 +137,16 @@ EXPECTED_SCOPES = {
         "resource_type": "bok_collection",
         "resource_id": "path.collection_id@version",
     },
+    ("POST", "/v1/bok/collections/versions"): {
+        "action": "admin.write",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
+    ("GET", "/v1/bok/collections/{collection_id}/versions/{version}"): {
+        "action": "admin.read",
+        "resource_type": "administrative_control",
+        "resource_id": "catalog",
+    },
     ("POST", "/v1/responses"): {
         "action": "invoke",
         "resource_type": "llm_model",

@@ -10,6 +10,13 @@ import { resumePolling, stopPolling } from "@/lib/live";
 import { appMode } from "@/lib/mode";
 import { subscribeNotices, useStore } from "@/lib/store";
 import { CatalogPage } from "@/pages/catalog-page";
+import { AuditPage } from "@/features/admin/audit-page";
+import { ConsumptionPage } from "@/features/admin/consumption-page";
+import { IdentitiesPage } from "@/features/admin/identities-page";
+import { KnowledgePage } from "@/features/admin/knowledge-page";
+import { PermissionsPage } from "@/features/admin/permissions-page";
+import { ResourcesPage } from "@/features/admin/resources-page";
+import { SkillsPage } from "@/features/admin/skills-page";
 import { InboxPage } from "@/pages/inbox-page";
 import { IncidentPage } from "@/pages/incident-page";
 import { IncidentsPage } from "@/pages/incidents-page";
@@ -94,6 +101,16 @@ export function App() {
             <Route path="incidentes" element={<IncidentsPage />} />
             <Route path="incidentes/:incidentId" element={<IncidentPage />} />
             <Route path="acciones" element={<CatalogPage />} />
+            <Route path="admin">
+              <Route index element={<Navigate to="identidades" replace />} />
+              <Route path="identidades" element={<IdentitiesPage />} />
+              <Route path="permisos" element={<PermissionsPage />} />
+              <Route path="recursos" element={<ResourcesPage />} />
+              <Route path="skills" element={<SkillsPage />} />
+              <Route path="conocimiento" element={<KnowledgePage />} />
+              <Route path="consumo" element={<ConsumptionPage />} />
+              <Route path="auditoria" element={<AuditPage />} />
+            </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

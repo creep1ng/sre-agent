@@ -27,14 +27,14 @@ async function chooseLanguage(page: Page, label: "Español" | "English") {
 async function expectSpanish(page: Page) {
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
   await expect(sidebar(page).getByRole("navigation", { name: "Principal" }).getByRole("link")).toHaveText([/Bandeja/, /Incidentes/, /Acciones/]);
-  await expect(sidebar(page).getByRole("link", { name: /Gobierno de IA/ })).toBeVisible();
+  await expect(sidebar(page).getByRole("link", { name: /Identidades/ })).toBeVisible();
   await expect(sidebar(page).getByText("Agente de incidentes")).toBeVisible();
 }
 
 async function expectEnglish(page: Page) {
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(sidebar(page).getByRole("navigation", { name: "Main" }).getByRole("link")).toHaveText([/Inbox/, /Incidents/, /Actions/]);
-  await expect(sidebar(page).getByRole("link", { name: /AI governance/ })).toBeVisible();
+  await expect(sidebar(page).getByRole("link", { name: /Identities/ })).toBeVisible();
   await expect(sidebar(page).getByText("Incident agent")).toBeVisible();
 }
 

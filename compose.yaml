@@ -325,6 +325,9 @@ services:
       # Opt-in real-API journey: the key is injected only into this runner and never logged.
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       INBOX_REAL: ${INBOX_REAL:-0}
+      # Opt-in administration journey (e2e/admin.spec.ts) with the administrative key.
+      ADMIN_HUMAN_API_KEY: ${ADMIN_HUMAN_API_KEY:-}
+      ADMIN_REAL: ${ADMIN_REAL:-0}
     command:
       - sh
       - -c

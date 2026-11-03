@@ -233,3 +233,19 @@ for a person.
 | The verifier is given the current time and the seconds since the mitigation ran. Pending: the fix merges before the cutoff only if it is green, and is then checked again with the real model on EC2. | In the rehearsal the verifier lacked the current time and stopped for a person. | 6 | #723 |
 | If that fix misses the cutoff, the tag `rc-2026-11-04` is cut anyway, with «El servicio está estable» as the documented plan B ([demo script](demo-2026-11-04-script.md#the-walk), step 6). | The manual verdict resolved the incident in the rehearsal at 16:04 UTC. | 3 | #710, #723 |
 | This record and the demo script (#1008) merge before the cutoff. | The demo is run from `main`. | 6 | #870 |
+
+## Administration plane decisions (2026-11-02 and 2026-11-03)
+
+The maintainer reviewed the administration plane rewritten inside `/app/admin` in the RC-2 style.
+The cutoff and the milestone moves of #31, #33, #28 and the integrations are in the sixth round above.
+
+| Decision | Reason | Issue |
+| --- | --- | --- |
+| The previous administration pages under `public/admin` are removed now, Triage included, with the browser suites and the CI job that only exercised them. Their old addresses redirect to `/app/admin` and to the inbox. | Identities, permissions, models and resources, consumption and audit live in `/app/admin`; the RC-2 inbox carries triage. Two consoles for the same task split the evidence. | #487, #847, #715 |
+| Publishing BoK collections leaves the limbo it had been in since sprint 5 and is built now: a governed publish route and a «Conocimiento» page in `/app/admin`. | The BoK has been readable by the agent since #332, but content entered only through the seed command, so no one could add or check a collection without the CLI. #779 also needs a write path for the BoK entries a human accepts. | #33, #779 |
+| Which part of administration the individual tier sees is decided later. | It needs its own design and tests; the solo tier's scope of the fifth round still holds. | #847 |
+| Publishing Skills gets its page in Administration, stacked on the administration plane: publish a version, activate or deactivate it, read its manifest. Skills and BoK come first; both are in M1. | The publish API already exists (`POST /v1/skills/versions`); without a page only the API can publish. Stacking avoids a third set of changes to the console's sidebar and routes. | #31, #33 |
+| The previous console's postmortem and decisions views (`/?view=postmortem`, `/?view=decisions`) stay until #711 brings postmortem and closure to `/app`. | They are the only UI for the postmortem and for closing an incident, which the demo reaches. | #711 |
+| A published BoK version keeps who published it and from where (the console, or later a #779 proposal) in its own table, through a migration, not in the audit contract. | The audit correlation is a closed, published contract; provenance belongs to the version it describes. | #33, #779 |
+| Knowledge collections can be published from `.md` files or a `.zip` of them, and Skills from their `.zip` archive (a `SKILL.md` with `name` and `description`). A Skill keeps only its instructions; other files in the archive are listed as left out. | Runbooks and Skills usually already exist as files; retyping them is the friction. | #33, #31 |
+| Identities can rotate and revoke an API key, and mark the key the console holds. The control plane already had both routes; the console had no screen for them. Added on 2026-11-03 (#1010). | Without it, cutting off a leaked or retired key meant calling the API by hand. | #847 |

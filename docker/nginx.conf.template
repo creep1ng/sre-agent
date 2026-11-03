@@ -11,6 +11,17 @@ map "${LEGACY_CONSOLE}:$arg_view:$arg_incident_id" $console_redirect {
     "~^redirect:war-room:" /app/;
 }
 
+# The previous administration pages moved into /app/admin; their old addresses redirect there.
+map $uri $admin_redirect {
+    default "";
+    /public/admin/principals.html /app/admin/identidades;
+    /public/admin/grants.html /app/admin/permisos;
+    /public/admin/model-aliases.html /app/admin/recursos;
+    /public/admin/consumption.html /app/admin/consumo;
+    /public/admin/audit-events.html /app/admin/auditoria;
+    /public/admin/triage.html /app/;
+}
+
 map "${LEGACY_CONSOLE}:$arg_view" $front_page {
     default /index.html;
     "redirect:" /landing/index.html;
@@ -78,6 +89,14 @@ server {
         proxy_set_header Host $host;
         proxy_set_header Cookie "";
         add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'" always;
+    }
+
+    location ^~ /public/admin/ {
+        absolute_redirect off;
+        if ($admin_redirect) {
+            return 301 $admin_redirect;
+        }
+        return 404;
     }
 
     location ~ ^/(index\.html)?$ {

@@ -234,6 +234,11 @@ class BoKCollectionVersionRow(Base):
         ),
         CK("visibility IN ('public','private','hidden')", name="ck_bok_versions_visibility"),
         CK("updated_at >= created_at", name="ck_bok_versions_lifecycle"),
+        CK(
+            "origin ~ '^[a-z][a-z0-9-]{1,31}(:[A-Za-z0-9._-]{1,64})?$'",
+            name="ck_bok_versions_origin",
+        ),
+        CK("(published_by IS NULL) = (origin IS NULL)", name="ck_bok_versions_provenance"),
     )
     collection_id = mapped_column(String(100), primary_key=True)
     version = mapped_column(String(64), primary_key=True)
@@ -245,6 +250,9 @@ class BoKCollectionVersionRow(Base):
     visibility = required(String(16))
     created_at = required(DateTime(timezone=True))
     updated_at = required(DateTime(timezone=True))
+    # The human who published it and the caller it came through; empty for seeded versions.
+    published_by = mapped_column(String(64), nullable=True)
+    origin = mapped_column(String(97), nullable=True)
 
 
 class BoKDocumentRow(Base):
