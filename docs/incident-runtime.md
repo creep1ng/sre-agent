@@ -38,7 +38,11 @@ The runtime implements only the guards in the current incident workflow:
 - linking requires a target incident;
 - declaration requires severity;
 - continued investigation requires remaining step budget, except as the first transition
-  of a human retry: a new run on an investigating incident whose runs all ended;
+  of a retry: a new run on an investigating incident whose runs all ended. A person retries, and
+  since 2026-11-03 (maintainer decision, #710) so does the system after a failed verification:
+  the dispatcher starts at most two such runs per incident, each told what ran and failed, and
+  then stops and writes to the linked chats that a person is needed. Before, only a person could
+  retry, so a failed verification waited for someone to press «Reintentar la investigación»;
 - mitigation requires a hypothesis with cited evidence;
 - mitigation handling requires an existing strategy;
 - verification requires evidence and a verification check;

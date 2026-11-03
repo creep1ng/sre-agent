@@ -5,7 +5,7 @@ import { useT } from "@/i18n";
 import type { LiveIncident } from "@/lib/live-incident";
 import { cn } from "@/lib/utils";
 import { Prose, useActorName, useSay, useWhen } from "./say";
-import type { StoryEntry } from "./story";
+import { REINVESTIGATIONS, type StoryEntry } from "./story";
 import type { Choice, DecisionError } from "./use-decision";
 
 /**
@@ -32,6 +32,8 @@ export interface Verification {
   check?: StoryEntry;
   /** What the mitigation was expected to bring back: the plan's own verification check. */
   expected?: string;
+  /** Failed verifications of the incident so far: past REINVESTIGATIONS the agent stops retrying (#710). */
+  failed: number;
   series?: SignalSeries;
 }
 
@@ -48,7 +50,8 @@ export function verificationOf(live: LiveIncident, story: StoryEntry[]): Verific
   // Intake records the resolution to the second: a resolution in the approval's own second is not before it.
   const approvedAt = Math.floor(approval.at / 1000) * 1000;
   const expected = typeof live.reasoning === "object" ? live.reasoning?.mitigation_strategy?.verification_check : undefined;
-  return { at, outcome, approvedAt, resolvedAt, firing, check, expected };
+  const failed = story.filter((entry) => entry.line.key === "event.verifyFailed").length;
+  return { at, outcome, approvedAt, resolvedAt, firing, check, expected, failed };
 }
 
 /** "95 s", "4 min", "2 h": how long the signal took to recover. */
@@ -122,7 +125,11 @@ export function VerificationStep({ verification, row, time }: { verification: Ve
                 {t("verification.failed.expected")} <Prose text={expected} />{" "}
               </>
             )}
-            {t("verification.failed.next")}
+            {verification.failed > REINVESTIGATIONS ? (
+              <span className="text-[var(--danger)]">{t("event.gaveUp", { failed: verification.failed })}</span>
+            ) : (
+              t("verification.failed.next")
+            )}
           </p>
         )}
         {series && <SignalChart series={series} approvedAt={approvedAt} />}
