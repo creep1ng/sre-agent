@@ -89,6 +89,16 @@ UNAVAILABLE = """\
 The deploy-executor's catalog for this service could not be read: do not propose a mitigation.
 Gather evidence and a hypothesis, then use request_human."""
 LANGUAGES = {"es": "Spanish", "en": "English"}
+# The labels of a statement's three parts, as a person reads them in the console (#870).
+PARTS = {
+    "es": ("Causa", "Mecanismo", "La refutaría"),
+    "en": ("Cause", "Mechanism", "Would refute it"),
+}
+STATEMENT = """\
+Write a hypothesis statement as three lines separated by a newline, each starting with its bold
+label: **{0}:** the cause, **{1}:** how it reaches the alerting service, **{2}:** the
+observation that would refute it. One or two short sentences per line; identifiers such as
+services, flags, operations and versions go in backticks."""
 LANGUAGE = """\
 Write every free-text value (statement, finding, description, steps, verification_check,
 reason, summary) in {language}. Keep JSON keys, action names, tool names, ids, and the
@@ -179,6 +189,7 @@ def assemble(
     parts = [
         INSTRUCTIONS,
         LANGUAGE.format(language=LANGUAGES[language]),
+        STATEMENT.format(*PARTS[language]),
         *_skills(skills),
         *bok,
         *operations,
