@@ -21,7 +21,7 @@ function Claim({ entry }: { entry: StoryEntry }) {
   const card = `card-${entry.id}`;
   const source = say(entry.line);
   return (
-    <span className="group relative">
+    <span className="group">
       <a
         href={`#${entry.id}`}
         aria-describedby={card}
@@ -37,7 +37,7 @@ function Claim({ entry }: { entry: StoryEntry }) {
         id={card}
         role="tooltip"
         className={cn(
-          "invisible absolute top-full left-0 z-10 mt-2.5 w-[min(400px,80vw)] rounded-2xl border border-[var(--mist-line)] bg-card px-[18px] py-4 tracking-normal opacity-0 shadow-[0_24px_60px_-24px_var(--shadow)]",
+          "invisible absolute top-full left-0 z-10 -mt-1 w-[min(400px,calc(100vw-2rem))] rounded-2xl border border-[var(--mist-line)] bg-card px-[18px] py-4 tracking-normal opacity-0 shadow-[0_24px_60px_-24px_var(--shadow)]",
           "group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100",
           "before:absolute before:inset-x-0 before:-top-3 before:h-3",
         )}
@@ -93,7 +93,7 @@ export function HypothesisProse({ hypothesis, claims }: { hypothesis: Hypothesis
           <h3 className="mt-7 mb-2 font-mono text-[13px] font-medium text-[var(--mist)]">{t("hypothesis.evidence")}</h3>
           <ol className="max-w-[68ch] list-none p-0 text-[15px] leading-normal">
             {claims.map((claim) => (
-              <li key={claim.id} className="grid grid-cols-[2rem_minmax(0,1fr)] border-t py-2.5 first:border-t-0">
+              <li key={claim.id} className="relative grid grid-cols-[2rem_minmax(0,1fr)] border-t py-2.5 first:border-t-0">
                 <span className="pt-0.5 font-mono text-[12px] font-medium text-[var(--mist)]">{claim.number}</span>
                 <span className="min-w-0">
                   {claim.verdict && <em className={cn("mr-2 font-mono text-[12px] not-italic", VERDICT_TONE[claim.verdict])}>{t(`verdict.${claim.verdict}`)}</em>}

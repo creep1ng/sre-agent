@@ -1,4 +1,4 @@
-import { ClockIcon, PlayIcon, RotateCcwIcon } from "lucide-react";
+import { PlayIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Decisions, decisionsOf } from "@/features/incident/live/decisions";
 import { HypothesisProse } from "@/features/incident/live/hypothesis";
 import { Proposal, operationCall } from "@/features/incident/live/proposal";
 import { Prose, Stamp } from "@/features/incident/live/say";
-import { PHASES, agentStatus, phaseOf, type AgentStatus } from "@/features/incident/live/status";
+import { PHASES, agentStatus, phaseOf, phaseTimes, type AgentStatus } from "@/features/incident/live/status";
 import { buildStory, claimsOf, code } from "@/features/incident/live/story";
 import { Timeline } from "@/features/incident/live/timeline";
 import { useDecision } from "@/features/incident/live/use-decision";
@@ -39,28 +39,40 @@ function Blocked({ phase }: { phase: Exclude<IncidentPhase, "ready"> }) {
   );
 }
 
-function Phases({ state, waiting }: { state: string; waiting: boolean }) {
+function Phases({ state, waiting, times }: { state: string; waiting: boolean; times: (number | null)[] }) {
   const t = useT("incident");
   const current = phaseOf(state);
   return (
-    <ol aria-label={t("phases")} className="mt-8 mb-12 flex border-t font-mono text-[13px] text-[var(--dim)]">
-      {PHASES.map((phase, index) => (
-        <li
-          key={phase}
-          aria-current={index === current ? "step" : undefined}
-          data-decision={waiting && index === current ? "" : undefined}
-          className={cn(
-            "relative flex-1 pt-3.5 before:absolute before:inset-x-0 before:-top-px before:h-0.5",
-            index < current && "text-[var(--mist)] before:bg-[var(--mist)]",
-            index === current && (waiting ? "text-star-ink before:bg-star" : "text-foreground before:bg-[var(--mist)]"),
-          )}
-        >
-          {t(`phase.${phase}`)}
-        </li>
-      ))}
+    <ol aria-label={t("phases")} className="mt-8 mb-12 grid grid-cols-3 gap-x-3 gap-y-5 font-mono text-[13px] text-[var(--dim)] sm:grid-cols-6">
+      {PHASES.map((phase, index) => {
+        const at = index <= current ? times[index] : null;
+        return (
+          <li
+            key={phase}
+            aria-current={index === current ? "step" : undefined}
+            data-decision={waiting && index === current ? "" : undefined}
+            className={cn(
+              "relative min-w-0 border-t pt-3 before:absolute before:inset-x-0 before:-top-px before:h-0.5",
+              index < current && "text-[var(--mist)] before:bg-[var(--mist)]",
+              index === current && (waiting ? "text-star-ink before:bg-star" : "text-foreground before:bg-[var(--mist)]"),
+            )}
+          >
+            <span className="block truncate">{t(`phase.${phase}`)}</span>
+            {at !== null && <Stamp at={at} className="mt-0.5 block w-fit text-xs text-[var(--dim)] tabular-nums" />}
+          </li>
+        );
+      })}
     </ol>
   );
 }
+
+/** Severity in a colour scale, never amber: amber is a decision waiting. */
+const SEVERITY_TONE: Record<string, string> = {
+  sev1: "border-transparent bg-[var(--danger)] text-background",
+  sev2: "border-[var(--danger)] text-[var(--danger)]",
+  sev3: "border-[var(--mist)] text-[var(--mist)]",
+  sev4: "border-[var(--dim)] text-[var(--dim)]",
+};
 
 /** Investigate when nothing ran yet, retry after a run stopped; never amber, it is not a decision. */
 function Start({ live, status }: { live: LiveIncident & { investigate: () => Promise<void> }; status: AgentStatus }) {
@@ -98,6 +110,7 @@ export function LiveIncidentPage() {
   const operation = mitigation ? operationCall(mitigation) : null;
   const decisions = decisionsOf(live, story);
   const waiting = status.kind === "waiting";
+  const times = phaseTimes(live.events, phaseOf(detail.state));
   // The report changes with the incident and its runs, never with the page's own polling.
   const updated = Math.max(
     Date.parse(detail.updated_at),
@@ -106,20 +119,27 @@ export function LiveIncidentPage() {
   );
   return (
     <article className="mx-auto w-full max-w-4xl min-w-0 px-4 py-8 sm:px-8 lg:px-14 lg:py-12">
-      <p className="mb-4 flex flex-wrap gap-3.5 font-mono text-[13px] font-medium text-[var(--mist)]">
+      <p className="mb-4 flex flex-wrap items-center gap-x-3.5 gap-y-2 font-mono text-[13px] font-medium text-[var(--mist)]">
         {detail.alert && <Prose text={code(detail.alert.service)} />}
-        {detail.severity && <span>{detail.severity.toUpperCase()}</span>}
+        {detail.severity && (
+          <span data-severity={detail.severity} className={cn("rounded-full border px-2 py-px text-[12px] leading-[18px] font-semibold", SEVERITY_TONE[detail.severity])}>
+            {detail.severity.toUpperCase()}
+          </span>
+        )}
         <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${status.kind}`)}</span>
+        {times[0] !== null && (
+          <span data-meta="declared" className="font-normal text-[var(--dim)]">
+            {t("phase.declared")} <Stamp at={times[0]} className="text-[var(--mist)]" />
+          </span>
+        )}
         {Number.isFinite(updated) && (
-          <span className="inline-flex items-center gap-1.5">
-            <ClockIcon className="size-3.5" aria-hidden="true" />
-            <span className="sr-only">{t("updated")}</span>
-            <Stamp at={updated} />
+          <span data-meta="updated" className="font-normal text-[var(--dim)]">
+            {t("updated")} <Stamp at={updated} className="text-[var(--mist)]" />
           </span>
         )}
         {live.stale && <span className="text-[var(--danger)]">{t("stale")}</span>}
       </p>
-      <h1 className="max-w-[26ch] font-display text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance break-words sm:text-[44px]">
+      <h1 className="max-w-[30ch] font-display text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance break-words sm:text-[44px]">
         {title(detail.alert?.summary) ?? detail.impact ?? t("status.untitled")}
       </h1>
       {detail.alert && (
@@ -128,7 +148,7 @@ export function LiveIncidentPage() {
           <p className="mt-1.5 leading-relaxed break-words">{detail.alert.summary}</p>
         </details>
       )}
-      <Phases state={detail.state} waiting={waiting} />
+      <Phases state={detail.state} waiting={waiting} times={times} />
       <Start live={live} status={status} />
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
       {hypothesis && <HypothesisProse hypothesis={hypothesis} claims={claimsOf(live, story)} />}
@@ -155,7 +175,7 @@ export function LiveIncidentPage() {
       )}
       <details className="border-t pt-4 text-sm text-[var(--dim)]">
         <summary className="cursor-pointer">{t("technical")}</summary>
-        <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-6 gap-y-2 font-mono text-xs">
+        <dl className="mt-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-6 gap-y-2 font-mono text-xs [&_dd]:break-all">
           <dt>{t("technical.incident")}</dt>
           <dd>{detail.incident_id}</dd>
           <dt>{t("technical.workflow")}</dt>

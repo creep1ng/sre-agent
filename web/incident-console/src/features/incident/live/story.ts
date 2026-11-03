@@ -1,6 +1,7 @@
 import incident from "@/i18n/es/incident";
 import type { ChangeEvent, Evidence, Mitigation } from "@/lib/incident-api";
 import type { LiveIncident } from "@/lib/live-incident";
+import type { Result } from "./result";
 
 /*
  * The incident's story from what the API recorded: run events, the reasoning (hypothesis,
@@ -36,6 +37,8 @@ export interface StoryEntry {
   tone?: "critical";
   /** What the agent asked its source, under a label that names it: a metrics query, a log search… */
   query?: { label: Key; tool: string; text: string; window: string };
+  /** What a measured query returned, as the evidence stored it. */
+  result?: Result;
   link?: { to: string; external?: boolean };
 }
 
@@ -172,6 +175,7 @@ function evidenceEntry(item: Evidence, cited: Set<string>, service: string): Sto
     verdict,
     quote: (verdict && item.finding) || undefined,
     query: queryOf(item, key.replace("evidence.", "evidence.query.") as Key),
+    result: item.summary && !item.empty ? { tool: item.tool ?? item.source, summary: item.summary } : undefined,
   };
 }
 
