@@ -369,10 +369,11 @@ class RunCommandService:
         authorizer: Callable[[Any, Principal, str], Awaitable[AuthorizationEvaluation]]
         | None = None,
         executor: OperationExecutor | None = None,
+        verifier: Any = None,
     ) -> None:
         self.sessions, self.workflow, self.runtime = sessions, workflow, runtime
         self._authorizer = authorizer or self._default_authorizer
-        self.executor = executor
+        self.executor, self.verifier = executor, verifier
 
     async def _default_authorizer(
         self, session: Any, principal: Principal, action: str
@@ -598,6 +599,9 @@ class RunCommandService:
             return error_envelope(request_id, 409, COMMAND_CONFLICT)
         except Exception:
             return error_envelope(request_id, 503)
+        if transition.execution is not None and self.verifier is not None:
+            # It ran: the agent measures the service once the delay passes (#723).
+            self.verifier.after_approval(incident_id, run_id)
         sequence = max((event.sequence for event in result.events), default=-1)
         try:
             payload = project_run_state(result.run, self.workflow, event_sequence=sequence)
