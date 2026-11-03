@@ -1,0 +1,15 @@
+{
+  "decide": "console",
+  "fired_at": "2026-11-02T03:17:04.175Z",
+  "decision_in_inbox_at": "2026-11-02T03:17:49.601Z",
+  "telegram_messages": [
+    {
+      "text": "🟠 Decisión pendiente: inc-2959702191644485748c227595fc72cd\nServicio: sre-checkout\nCausa: La causa es el flag de flagd paymentUnreachable activado, que hace que checkout (función chargeCard, src/checkout/main.go) envíe el cargo a badAddress:50051 en lugar de payment; el error de PaymentService/Charge ocurre dentro de checkout, por lo que payment no recibe la petición y los 5xx de sre-checkout aparecen sin cambio de despliegue. Se refutaría si payment registra peticiones Charge con errores comparables a los de checkout, o si los 5xx de sre-checkout dejan de aparecer al desactivar el flag.\nPropuesta: Desactivar el flag de flagd paymentUnreachable para que checkout vuelva a enviar los cargos a payment en lugar de badAddress:50051, y verificar que los 5xx de sre-checkout desaparecen.\nRiesgo: bajo",
+      "buttons": [
+        "Aprobar",
+        "Rechazar"
+      ]
+    }
+  ],
+  "cleared_at": "2026-11-02T03:17:51.971Z"
+}

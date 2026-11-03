@@ -1,0 +1,15 @@
+{
+  "decide": "telegram",
+  "fired_at": "2026-11-02T23:49:48.425Z",
+  "decision_in_inbox_at": "2026-11-02T23:50:03.966Z",
+  "telegram_messages": [
+    {
+      "text": "🟠 Decisión pendiente: inc-21d6c2b7a47cbc59c565a1c3dbc44608\nServicio: sre-checkout\nCausa: El último despliegue de sre-checkout devuelve errores 5xx.\nPropuesta: Revertir el último despliegue de sre-checkout.\nRiesgo: bajo",
+      "buttons": [
+        "Aprobar",
+        "Rechazar"
+      ]
+    }
+  ],
+  "cleared_at": "2026-11-02T23:50:20.322Z"
+}
