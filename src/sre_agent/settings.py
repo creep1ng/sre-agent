@@ -33,6 +33,8 @@ class Settings:
     # declares incidents for; None records episodes and leaves them to the console.
     alert_intake_secret: str | None = field(default=None, repr=False)
     alert_intake_principal_id: str | None = "demo-human"
+    # Carry out the decisions a Telegram chat records (#722, #767): on where a gateway runs.
+    chat_taps_worker: bool = False
 
     @classmethod
     def from_environment(cls, environment: Mapping[str, str] = environ) -> "Settings":
@@ -113,6 +115,7 @@ class Settings:
             investigator_output_language=language,
             verification_delay_seconds=delay,
             deploy_executor_url=environment.get("DEPLOY_EXECUTOR_URL") or None,
+            chat_taps_worker=environment.get("CHAT_TAPS_WORKER") == "on",
             deploy_executor_signing_key=environment.get("DEPLOY_EXECUTOR_SIGNING_KEY") or None,
             openrouter_base_url=base_url,
             alert_intake_secret=environment.get("ALERT_INTAKE_GRAFANA_SECRET") or None,

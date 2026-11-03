@@ -3,7 +3,9 @@ sendMessage with inline keyboards, answerCallbackQuery and editMessageText.
 
 Like Telegram, it keeps an update until a getUpdates offset above its id confirms it, answers
 401 to any other token, 400 to a text over 4096 characters, to a callback answer over 200 and
-to an edit that changes nothing.
+to an edit that changes nothing. It refuses URL buttons on `localhost` or on an IP address that
+is not public (loopback, private, tailnet) with BUTTON_URL_INVALID; that is this fake's stand-in
+for the hosts real Telegram refuses, not a verified copy of its rules.
 `/_test/*` lets the E2E play the user: inject messages and button taps, read what the bot sent
 (with the time each send arrived), the callback answers and the edits, and fail sends.
 
@@ -11,9 +13,11 @@ to an edit that changes nothing.
 """
 
 import asyncio
+import ipaddress
 from datetime import UTC, datetime
 from html import escape
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -27,6 +31,20 @@ answers: list[dict[str, Any]] = []
 edits: list[dict[str, Any]] = []
 state = {"next_update": 1, "fail_sends": 0}
 arrived = asyncio.Condition()
+
+
+def _buttons(fields: dict[str, Any]) -> list[list[tuple[str, str]]] | None:
+    """(label, callback data or URL) per button; None when a URL button would be refused."""
+    rows = (fields.get("reply_markup") or {}).get("inline_keyboard", [])
+    for button in (b for row in rows for b in row if "url" in b):
+        host = urlsplit(button["url"]).hostname or ""
+        try:
+            refused = not ipaddress.ip_address(host).is_global
+        except ValueError:
+            refused = host == "localhost" or "." not in host
+        if refused:
+            return None
+    return [[(b["text"], b.get("callback_data") or b["url"]) for b in row] for row in rows]
 
 
 def _reply(result: Any = None, status: int = 200, description: str = "") -> JSONResponse:
@@ -59,15 +77,14 @@ async def bot(token: str, method: str, request: Request) -> JSONResponse:
             return _reply(status=502, description="Bad Gateway (fake failure)")
         if not 1 <= len(fields["text"]) <= 4096:
             return _reply(status=400, description="Bad Request: message is too long")
+        if (buttons := _buttons(fields)) is None:
+            return _reply(status=400, description="Bad Request: BUTTON_URL_INVALID")
         record = {
             "message_id": len(sent) + 1,
             "chat_id": fields["chat_id"],
             "text": fields["text"],
             "received_at": datetime.now(UTC).isoformat(),
-            "buttons": [
-                [(b["text"], b["callback_data"]) for b in row]
-                for row in (fields.get("reply_markup") or {}).get("inline_keyboard", [])
-            ],
+            "buttons": buttons,
         }
         sent.append(record)
         return _reply(record)
@@ -87,9 +104,11 @@ async def bot(token: str, method: str, request: Request) -> JSONResponse:
         )
         if message is None:
             return _reply(status=400, description="Bad Request: message to edit not found")
-        if message["text"] == fields["text"] and not message["buttons"]:
+        if (buttons := _buttons(fields)) is None:
+            return _reply(status=400, description="Bad Request: BUTTON_URL_INVALID")
+        if message["text"] == fields["text"] and message["buttons"] == buttons:
             return _reply(status=400, description="Bad Request: message is not modified")
-        message.update(text=fields["text"], buttons=[])
+        message.update(text=fields["text"], buttons=buttons)
         edits.append({**fields, "edited_at": datetime.now(UTC).isoformat()})
         return _reply(message)
     return _reply(status=404, description="Not Found")

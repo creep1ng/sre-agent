@@ -6,7 +6,8 @@
     python -m sre_agent.chat.telegram digest [--until ISO]     # queue the digest now (#771)
 
 The gateway also queues the daily digest at TELEGRAM_DIGEST_HOUR (default 8, `off` disables)
-in TELEGRAM_DIGEST_TIMEZONE (default UTC).
+in TELEGRAM_DIGEST_TIMEZONE, else TELEGRAM_TIMEZONE (default UTC). Decision messages tell time in
+TELEGRAM_TIMEZONE, else the digest's zone, and link to the console when CONSOLE_PUBLIC_URL is set.
 
 The bot token travels only in request paths. httpx logs those paths at INFO, so its logger is
 held at WARNING, and errors name the method and status, never the URL.
@@ -20,7 +21,6 @@ import logging
 import os
 import signal
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -29,20 +29,11 @@ import httpx
 from sre_agent.chat.decisions import ChatDecisions
 from sre_agent.chat.digest import queue_digest
 from sre_agent.chat.outbox import ChatStore, DeliveryError, Keyboard
-from sre_agent.gateway.execution import OperationExecutor
-from sre_agent.gateway.responses import PostgresAuditStore
-from sre_agent.gateway.runs import RunCommandService
-from sre_agent.incident.runtime import IncidentRuntime
-from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
-from sre_agent.settings import Settings
 
 logger = logging.getLogger("sre_agent.chat.telegram")
 # An update that fails this many times in a row is skipped, so it cannot hold back later ones.
 MAX_UPDATE_ATTEMPTS = 5
-# The workflow the API loads (sre_agent.application), without importing the whole API.
-WORKFLOW = Path(__file__).resolve().parents[3] / "agent" / "workflows" / "incident-response.yaml"
 # Telegram shows at most 200 characters of a callback answer.
 MAX_ANSWER = 200
 
@@ -71,27 +62,49 @@ class BotApi:
             )
         return body["result"]
 
-    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> None:
+    async def _with_keyboard(
+        self, method: str, keyboard: Keyboard | None, text: str, **fields: Any
+    ) -> Any:
         markup = {"reply_markup": {"inline_keyboard": keyboard}} if keyboard else {}
-        await self.call("sendMessage", chat_id=chat_id, text=message, **markup)
+        try:
+            return await self.call(method, text=text, **fields, **markup)
+        except DeliveryError as error:
+            links = [button["url"] for row in keyboard or [] for button in row if "url" in button]
+            # Telegram refuses some URL buttons (localhost, bare or private hosts): the link
+            # then travels as text, which the chat shows without a button.
+            if not links or "url" not in str(error).lower():
+                raise
+            logger.info("link button refused (%s); sending the link as text", method)
+            rows = [[b for b in row if "url" not in b] for row in keyboard or []]
+            rest = [row for row in rows if row]
+            text = "\n".join([text, *(f"Ver incidente: {link}" for link in links)])
+            markup = {"reply_markup": {"inline_keyboard": rest}} if rest else {}
+            return await self.call(method, text=text, **fields, **markup)
+
+    async def send(self, chat_id: int, message: str, keyboard: Keyboard | None = None) -> int:
+        sent = await self._with_keyboard("sendMessage", keyboard, message, chat_id=chat_id)
+        return sent["message_id"]
+
+    async def edit(
+        self, chat_id: int, message_id: int, message: str, keyboard: Keyboard | None = None
+    ) -> None:
+        """Replace a message's text and buttons; without a keyboard its buttons go away."""
+        try:
+            await self._with_keyboard(
+                "editMessageText", keyboard, message, chat_id=chat_id, message_id=message_id
+            )
+        except DeliveryError as error:
+            # The tap that decided, or an earlier edit, already shows this text.
+            if "message is not modified" not in str(error):
+                raise
 
 
 async def _tap(bot: BotApi, decisions: ChatDecisions, query: dict[str, Any]) -> None:
     message = query.get("message") or {}
     chat_id = (message.get("chat") or {}).get("id")
     user_id = (query.get("from") or {}).get("id")
-    answer, decided = await decisions.tap(chat_id, user_id, str(query.get("data", "")))
-    if decided is not None:
-        try:
-            # Without reply_markup the buttons go away; an unchanged repeat answers 400.
-            await bot.call(
-                "editMessageText",
-                chat_id=chat_id,
-                message_id=message.get("message_id"),
-                text=decided[0],
-            )
-        except DeliveryError as error:
-            logger.info("decided message not edited: %s", error)
+    # The API carries the decision out; the outbox edits the message with what happened.
+    answer = await decisions.tap(chat_id, user_id, str(query.get("data", "")))
     try:
         await bot.call(
             "answerCallbackQuery", callback_query_id=query["id"], text=answer[:MAX_ANSWER]
@@ -143,11 +156,17 @@ async def _poll(bot: BotApi, store: ChatStore, decisions: ChatDecisions, poll_se
 
 async def _deliver(bot: BotApi, store: ChatStore, stopping: asyncio.Event) -> None:
     while not stopping.is_set():
-        if not await store.deliver_next(bot.send):
+        if not await store.deliver_next(bot.send, bot.edit):
             try:
                 await asyncio.wait_for(stopping.wait(), 0.5)
             except TimeoutError:
                 pass
+
+
+def _digest_timezone() -> str:
+    return (
+        os.environ.get("TELEGRAM_DIGEST_TIMEZONE") or os.environ.get("TELEGRAM_TIMEZONE") or "UTC"
+    )
 
 
 async def _daily_digest(database: Database, hour: int, timezone: str) -> None:
@@ -185,23 +204,13 @@ async def gateway(
     try:
         async with httpx.AsyncClient(base_url=api_url) as http:
             bot, store = BotApi(http, token), ChatStore(database)
-            workflow = load_incident_workflow(WORKFLOW)
-            runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
-            # An approval from the chat runs its operation exactly as the console's does (#722):
-            # the same checks, the signed executor call and the audit, or a refusal.
-            executor = OperationExecutor(
-                database.sessions,
-                runtime,
-                Settings.from_environment(),
-                audit=PostgresAuditStore(database.sessions),
-            )
-            commands = RunCommandService(database.sessions, workflow, runtime, executor=executor)
-            decisions = ChatDecisions(database, commands)
+            # No runtime, executor or key here: the API carries out the taps (#722).
+            decisions = ChatDecisions(database)
             me = await bot.call("getMe")
             logger.info("telegram gateway started as @%s", me.get("username"))
             tasks = [asyncio.create_task(_poll(bot, store, decisions, poll_seconds))]
             if digest_hour is not None:
-                zone = os.environ.get("TELEGRAM_DIGEST_TIMEZONE") or "UTC"
+                zone = _digest_timezone()
                 tasks.append(asyncio.create_task(_daily_digest(database, digest_hour, zone)))
             # A stop finishes the message being sent; only a kill mid-send repeats it.
             await _deliver(bot, store, stopping)
@@ -261,7 +270,7 @@ def main() -> None:
         return
     if database_url and arguments.command == "digest":
         until = arguments.until or datetime.now(UTC)
-        zone = os.environ.get("TELEGRAM_DIGEST_TIMEZONE") or "UTC"
+        zone = _digest_timezone()
         print(asyncio.run(digest(database_url, until, zone)))
         return
     if not database_url or not token:

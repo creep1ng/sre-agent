@@ -28,6 +28,20 @@ LEGACY = 777  # linked before #767: no principal
 SECOND, VIEWER = 555, 666  # linked as demo-human, and as a human without run.approve
 VIEWER_ID, VIEWER_NAME = "e2e-viewer", {"display_name": "E2E viewer"}
 GROUP = -100767  # a group the operator is in: Telegram reports the operator as the sender
+# Set by scripts/run_telegram_e2e.sh for the gateway: a host the fake accepts link buttons for.
+CONSOLE = os.environ["CONSOLE_PUBLIC_URL"].rstrip("/")
+
+
+def link_of(message: dict[str, Any]) -> list[list[str]]:
+    """The message's «Ver incidente» row, as the fake recorded it."""
+    incident_id = message["text"].splitlines()[0].rsplit(" ", 1)[-1]
+    expected = [["Ver incidente", f"{CONSOLE}/incidentes/{incident_id}"]]
+    return [row for row in message["buttons"] if [list(b) for b in row] == expected]
+
+
+def decides(message: dict[str, Any]) -> bool:
+    """Whether the message still offers decision buttons; its link decides nothing."""
+    return any(not data.startswith("http") for row in message["buttons"] for _, data in row)
 
 
 def http(method: str, url: str, body: Any = None, headers: dict[str, str] | None = None) -> Any:
@@ -235,7 +249,13 @@ def unlinked(incident_id: str) -> None:
 
 
 # #767: mitigation proposals for the broken sre-checkout deploy, one per journey.
-JOURNEYS = ("approve", "reject", "console", "unlinked", "stale")
+JOURNEYS = ("approve", "reject", "console", "unlinked", "stale", "refused")
+# Approving these runs a catalog operation on the deploy-executor (#722): `approve` rolls this
+# project's sre-checkout back from 1.5.0 to 1.4.0; `refused`, approved after it, asks for the tag
+# already running, which the executor's catalog no longer offers. The rest stay simulated.
+ROLLBACK = {"service": "sre-checkout", "operation": "deployment.rollback"}
+ROLLBACK |= {"parameters": {"to_tag": "1.4.0"}}
+OPERATIONS = {"approve": ROLLBACK, "refused": ROLLBACK}
 PROPOSALS = Path("/artifacts/proposals.json")
 TOKEN = re.compile(r"^[ar]:[0-9a-f]{32}$")
 
@@ -271,15 +291,9 @@ async def _propose(stamp: str) -> dict[str, dict[str, str]]:
             mitigation = {"mitigation_id": f"mit_767{journey}", "approval_status": "pending"}
             mitigation |= {"description": "Volver sre-checkout a la versión anterior, v2.4.0."}
             mitigation |= {"risk": "low"}
-            if journey == "reject":
-                # #722's operation: an approval would run it through the deploy-executor, which
-                # this stack does not configure, so approving it is refused and moves nothing.
-                mitigation["operation"] = {
-                    "service": "sre-checkout",
-                    "operation": "deployment.rollback",
-                    "parameters": {"to_tag": "v2.4.0"},
-                }
+            mitigation |= {"operation": OPERATIONS[journey]} if journey in OPERATIONS else {}
             mitigation |= {"based_on_hypothesis": "hyp_767"}
+            mitigation |= {"verification_check": "5xx de sre-checkout bajo 1 % durante 5 min."}
             async with PostgresIncidentUnitOfWork(database) as work:
                 state["updated_at"] = now.isoformat()
                 await work.incidents.add(incident_id, state, now=now)
@@ -363,19 +377,24 @@ def proposals(stamp: str, legacy_code: str) -> None:
                 )
                 for m in messages
             ),
-            "the one with an executor operation names it": [
-                m["text"].splitlines()[0].split("-")[2]
+            "a proposal with a catalog operation names it": all(
+                ("Detalle: el ejecutor aplica deployment.rollback en sre-checkout" in m["text"])
+                == any(m["text"].splitlines()[0].endswith(f"-{j}-{stamp}") for j in OPERATIONS)
                 for m in messages
-                if "Detalle: el ejecutor aplica deployment.rollback en sre-checkout" in m["text"]
-            ]
-            == ["reject"],
+            ),
             "each offers Aprobar and Rechazar": buttons
             == [["Aprobar", "Rechazar"]] * len(JOURNEYS),
+            "each links to its incident in the console": all(
+                m["buttons"][1:] == link_of(m) != [] for m in messages
+            ),
+            "times are in the configured zone (Bogotá)": all(
+                "(2026-10-31 05:00 UTC-5)" in m["text"] for m in messages
+            ),
             "the callback data is opaque": all(
                 TOKEN.fullmatch(d) and "inc-" not in d and "run_" not in d for d in data
             ),
             "a chat linked before #767 gets no buttons but how to decide from it": all(
-                m["buttons"] == [] and m["text"].endswith("vincular este chat a tu usuario.")
+                not decides(m) and m["text"].endswith("vincular este chat a tu usuario.")
                 for m in legacy
             ),
             "only decision messages carry the decision marker": all(
@@ -434,15 +453,54 @@ def approval_status(journey: str) -> str:
     )[0][0]
 
 
+def settled(journey: str) -> dict[str, Any]:
+    """The decision message once the outbox edited the decision in (it follows the API)."""
+    return wait_for(lambda: (m := prompt(journey)) and not decides(m) and m)
+
+
+def execution(journey: str) -> dict[str, Any]:
+    """What the API recorded of the operation an approval ran: receipt, timeline, audit."""
+    created = json.loads(PROPOSALS.read_text())[journey]
+    state = sql(
+        "SELECT state->>'state', state->'mitigation_strategy'->'execution', version "
+        "FROM incident.incidents WHERE incident_id=%s",
+        created["incident_id"],
+    )[0]
+    events = http(
+        "GET",
+        f"{API}/v1/incidents/{created['incident_id']}/runs/{created['run_id']}/events",
+        headers={"Authorization": "Bearer " + os.environ["DEMO_HUMAN_API_KEY"]},
+    )
+    timeline = [e.get("summary") for e in events.get("events", events.get("items", []))]
+    # Every mitigation.execute attempt of the stack, oldest first: each phase adds one.
+    audit = sql(
+        "SELECT outcome, reason_code, response_status FROM audit_events "
+        "WHERE operation = 'mitigation.execute' ORDER BY occurred_at"
+    )
+    return {"state": state[0], "receipt": state[1], "version": state[2]} | {
+        "timeline": timeline,
+        "audit": audit,
+    }
+
+
 def approve() -> None:
     message = prompt("approve")
     Path("/artifacts/approve-message.json").write_text(json.dumps(message))
-    answer, edited = press(OPERATOR, message, "Aprobar"), prompt("approve")
-    rows = decisions("approve")
+    answer, edited = press(OPERATOR, message, "Aprobar"), settled("approve")
+    rows, ran = decisions("approve"), execution("approve")
     record(
         "approve",
-        {"answer": answer, "edited": edited, "decisions": rows},
+        {"answer": answer, "edited": edited, "decisions": rows, "execution": ran},
         {
+            "the tap runs the rollback on the deploy-executor (receipt)": ran["state"]
+            == "verifying"
+            and (ran["receipt"] or {}).get("outcome") == "rolled_back",
+            "the timeline tells what ran": any(
+                "ran deployment.rollback on sre-checkout: rolled_back" in (t or "")
+                for t in ran["timeline"]
+            ),
+            "the attempt is audited as mitigation.execute": ran["audit"]
+            == [("success", None, 200)],
             "the tap records one approval": [r[:2] for r in rows]
             == [("apply_mitigation", "approve")],
             "as the linked human, through Telegram": rows[0][2:5]
@@ -450,8 +508,10 @@ def approve() -> None:
             "the mitigation is approved": approval_status("approve") == "approved",
             "the answer says who decided": answer.startswith("Aprobada por Demo")
             and "desde Telegram" in answer,
-            "the message shows who decided and loses its buttons": edited["buttons"] == []
+            "the message shows who decided and loses its buttons": not decides(edited)
             and edited["text"].endswith(answer),
+            "it keeps the link to the incident": edited["buttons"] == link_of(edited) != [],
+            "the decision time is in the configured zone": answer.endswith(" UTC-5."),
         },
     )
 
@@ -584,6 +644,8 @@ def stale() -> None:
     answer = press(OPERATOR, first, "Aprobar")
     retry = press(OPERATOR, first, "Aprobar")
     before = decisions("stale")
+    # The API queues the old message's edit before the fresh proposal.
+    wait_for(lambda: "desactualizada" in prompt("stale")["text"])
 
     def fresh() -> list[dict[str, Any]]:
         return [
@@ -608,7 +670,7 @@ def stale() -> None:
             "a tap on a version the incident left behind decides nothing": before == [],
             "the operator is told the incident changed": answer == retry
             and answer.startswith("El incidente cambió"),
-            "the old message loses its buttons": old["buttons"] == []
+            "the old message loses its buttons": not decides(old)
             and "desactualizada" in old["text"],
             "one fresh decision message with a new token arrives": len(renewed) == 1
             and renewed[0]["buttons"] != first["buttons"],
@@ -618,57 +680,156 @@ def stale() -> None:
     )
 
 
-def console() -> None:
-    created = json.loads(PROPOSALS.read_text())["console"]
+def command(journey: str, name: str) -> None:
+    """Send a run command as the console does, as demo-human over the HTTP API."""
+    created = json.loads(PROPOSALS.read_text())[journey]
     version = sql(
         "SELECT version FROM incident.incidents WHERE incident_id=%s", created["incident_id"]
     )[0][0]
-    # What the console's Decisions view sends for «Rechazar».
     http(
         "POST",
         f"{API}/v1/incidents/{created['incident_id']}/runs/{created['run_id']}/commands",
         {
-            "command": "reject_mitigation",
+            "command": name,
             "actor": "human",
             "actor_reference": {"reference_version": "1.0.0", "principal_id": "demo-human"},
             "expected_incident_version": version,
         },
         {
             "Authorization": "Bearer " + os.environ["DEMO_HUMAN_API_KEY"],
-            "Idempotency-Key": f"console-{created['run_id']}",
+            "Idempotency-Key": f"{name}-{created['run_id']}",
         },
     )
-    answer, edited = press(OPERATOR, prompt("console"), "Aprobar"), prompt("console")
+
+
+def edits_of(message: dict[str, Any]) -> list[dict[str, Any]]:
+    """The editMessageText calls the bot made on this message, in order."""
+    return [
+        e
+        for e in http("GET", f"{FAKE}/_test/answers")["edits"]
+        if (e["chat_id"], e["message_id"]) == (message["chat_id"], message["message_id"])
+    ]
+
+
+def console() -> None:
+    before = prompt("console")
+    # What the console's Decisions view sends for «Rechazar».
+    command("console", "reject_mitigation")
+    # Nobody taps: the console decision alone edits the Telegram message.
+    edits = wait_for(lambda: edits_of(before))
+    untapped = prompt("console")
+    # A client that has not refreshed the message can still tap the buttons it was sent with.
+    answer, edited = press(OPERATOR, before, "Aprobar"), prompt("console")
     rows = decisions("console")
     record(
         "console",
-        {"answer": answer, "edited": edited, "decisions": rows},
+        {"before": before, "edits": edits, "untapped": untapped, "answer": answer}
+        | {"edited": edited, "decisions": rows},
         {
+            "a console decision edits the message with no tap": len(edits) == 1
+            and not decides(untapped)
+            and untapped["buttons"] == link_of(untapped) != [],
+            "the edit says what was decided, by whom and where": untapped["text"]
+            .splitlines()[-1]
+            .startswith("Rechazada por Demo")
+            and "desde la consola" in untapped["text"]
+            and untapped["text"].startswith("Decisión tomada: "),
             "Aprobar after a console rejection approves nothing": [r[:2] for r in rows]
             == [("reject_mitigation", "reject")],
             "the console decision has no chat channel": rows[0][4] is None,
             "the mitigation stays rejected": approval_status("console") == "rejected",
             "the answer gives the current state": answer.startswith("Rechazada por")
             and "desde la consola" in answer,
-            "the message shows it and loses its buttons": edited["buttons"] == [],
+            "the message shows it and loses its buttons": not decides(edited),
+        },
+    )
+
+
+def recovery() -> None:
+    # #723 is not merged: the stability checks go through the manual verification commands.
+    # Approved from Telegram in `approve`, the mitigation holds; the one approved in `stale`
+    # does not, and the incident goes back to investigating.
+    # The fresh approval in `stale` also edits its first message; let that edit land first.
+    wait_for(lambda: prompt("stale")["text"].startswith("Decisión tomada"))
+    resolved, failed, count = prompt("approve"), prompt("stale"), len(sent(OPERATOR))
+    seen = {"resolved": len(edits_of(resolved)), "failed": len(edits_of(failed))}
+    command("approve", "verification_passed")
+    command("stale", "verification_failed")
+    wait_for(lambda: len(edits_of(resolved)) > seen["resolved"])
+    wait_for(lambda: len(edits_of(failed)) > seen["failed"])
+    time.sleep(2)  # a duplicate edit or a new message would arrive by now
+    resolved, failed = prompt("approve"), prompt("stale")
+    states = sql(
+        "SELECT incident_id, state->>'state' FROM incident.incidents WHERE incident_id IN "
+        "(%s, %s) ORDER BY incident_id",
+        *(json.loads(PROPOSALS.read_text())[j]["incident_id"] for j in ("approve", "stale")),
+    )
+    recovered = re.fullmatch(
+        r"Resuelto a las \d\d:\d\d UTC-5 · \d+ (s|min) tras la mitigación que aprobaste · "
+        r"ver incidente\.",
+        resolved["text"].splitlines()[-1],
+    )
+    record(
+        "recovery",
+        {"resolved": resolved, "failed": failed, "states": states}
+        | {"edits": {"resolved": edits_of(resolved), "failed": edits_of(failed)}},
+        {
+            "the incidents are resolved and back to investigating": sorted(s for _, s in states)
+            == ["investigating", "resolved"],
+            "the resolution edits the decision message once more": len(edits_of(resolved))
+            == seen["resolved"] + 1,
+            "it keeps who approved, from where, and says when it recovered": recovered is not None
+            and "Aprobada por Demo" in resolved["text"]
+            and "desde Telegram" in resolved["text"],
+            "a failed verification says the incident is investigated again": failed["text"]
+            .splitlines()[-1]
+            .startswith("La verificación falló a las")
+            and len(edits_of(failed)) == seen["failed"] + 1,
+            "no new message is sent for either": len(sent(OPERATOR)) == count,
+        },
+    )
+
+
+def refused() -> None:
+    """Approving a rollback to the tag already running: the executor's catalog refuses it."""
+    message = prompt("refused")
+    before = execution("refused")
+    answer = press(OPERATOR, message, "Aprobar")
+    edited = wait_for(lambda: (m := prompt("refused")) and "no se aplicó" in m["text"] and m)
+    after, rows = execution("refused"), decisions("refused")
+    record(
+        "refused",
+        {"answer": answer, "edited": edited, "before": before, "after": after}
+        | {"decisions": rows},
+        {
+            "nothing moves: still mitigating, same version, nothing ran": after["state"]
+            == "mitigating"
+            and after["version"] == before["version"]
+            and after["receipt"] is None
+            and rows == [],
+            "the answer says why": answer
+            == "No se aplicó: el ejecutor ya no ofrece la operación como se propuso "
+            "(precondition_failed).",
+            "the message says why and keeps its buttons to retry": decides(edited)
+            and edited["text"].splitlines()[-1].startswith("Tu aprobación no se aplicó a las ")
+            and edited["text"].endswith("(precondition_failed)."),
+            "the timeline tells the refusal": any(
+                (t or "").startswith("Approval not applied: the deploy-executor's catalog")
+                for t in after["timeline"]
+            ),
+            "the attempt is audited with its reason": after["audit"][len(before["audit"]) :]
+            == [(after["audit"][-1][0], "status_conflict", 409)],
         },
     )
 
 
 def reject() -> None:
-    # Its mitigation names an executor operation (#722) and this stack runs no executor.
-    refused = press(OPERATOR, prompt("reject"), "Aprobar")
-    after_refusal = decisions("reject"), approval_status("reject")
-    answer, edited = press(OPERATOR, prompt("reject"), "Rechazar"), prompt("reject")
+    answer, edited = press(OPERATOR, prompt("reject"), "Rechazar"), settled("reject")
     rows = decisions("reject")
     record(
         "reject",
-        {"refused": refused, "answer": answer, "edited": edited, "decisions": rows},
+        {"answer": answer, "edited": edited, "decisions": rows},
         {
-            "approving an operation without an executor is refused": refused.startswith(
-                "El ejecutor no está disponible"
-            ),
-            "the refusal moves nothing": after_refusal == ([], "pending"),
             "the tap records one rejection": [r[:2] for r in rows]
             == [("reject_mitigation", "reject")],
             "as the linked human, through Telegram": rows[0][2:5]
@@ -676,7 +837,7 @@ def reject() -> None:
             "the mitigation is rejected": approval_status("reject") == "rejected",
             "the answer and the message say who rejected": answer.startswith("Rechazada por")
             and edited["text"].endswith(answer)
-            and edited["buttons"] == [],
+            and not decides(edited),
         },
     )
 
@@ -708,10 +869,12 @@ def unlinked_tap(relink_code: str) -> None:
             == [
                 ("apply_mitigation", "demo-human", "telegram"),
                 ("reject_mitigation", "demo-human", None),
-                # The refused approval (#722) is audited too; its record names no channel.
-                (None, "demo-human", None),
                 ("reject_mitigation", "demo-human", "telegram"),
                 ("apply_mitigation", "demo-human", "telegram"),
+                # The refused approval: a timeline decision with no transition (#722).
+                (None, "demo-human", None),
+                ("verification_passed", "demo-human", None),
+                ("verification_failed", "demo-human", None),
             ],
         },
     )
@@ -724,4 +887,5 @@ if __name__ == "__main__":
     phases |= {"enlist": enlist, "approve": approve, "double_tap": double_tap}
     phases |= {"stranger": stranger, "second": second, "viewer": viewer, "stale": stale}
     phases |= {"console": console, "reject": reject, "unlinked_tap": unlinked_tap}
+    phases |= {"recovery": recovery, "refused": refused}
     phases[phase](*arguments)
