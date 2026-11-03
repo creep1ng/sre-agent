@@ -57,7 +57,8 @@ notes, captures or this doc.
 
 ### A partial boot
 
-On a fresh instance the bootstrap's `docker compose up` can abort while `opensearch` is still
+The bootstrap retries `docker compose up` up to three times (#1011); if all three fail, or on an
+instance started before that change, it stops while `opensearch` is still
 unhealthy ("dependency failed to start: container opensearch is unhealthy" in
 `/var/log/cloud-init-output.log`). Only part of the store runs: `frontend`, `frontend-proxy`,
 `payment`, `cart` and others never start, and the store tunnel answers "Connection to destination
@@ -128,11 +129,11 @@ reset` first.
 | # | Do | Expect | Plan B |
 | --- | --- | --- | --- |
 | 1 | Open `http://127.0.0.1:$WEB_PORT/app/acciones`. | `checkout · flag.set` with `flag ∈ {paymentFailure, paymentUnreachable}` and `variant = off`: nothing else may run, and nothing runs without approval. | |
-| 2 | `python3 scripts/otel_ec2.py fail` (`paymentUnreachable`). Close the console. | On the store, Place Order leaves you on the cart. Grafana's rule fires and the incident opens with nobody at the console; on 2026-10-31 that took 103.5 s and 164.9 s after `paymentFailure` ([record](evidence/issue-765/ec2-paymentfailure.json)). | No incident: check that both loops run (the alert relay is `$MCP_PORT + 2`), then Grafana's Alerting → Alert rules. |
+| 2 | `python3 scripts/otel_ec2.py fail` (`paymentUnreachable`). Close the console. | On the store, Place Order leaves you on the cart; the Demo Dashboard, `/grafana/d/W2gX2zHVk?var-service=checkout`, shows checkout's errors. Grafana's rule fires and the incident opens with nobody at the console; on 2026-10-31 that took 103.5 s and 164.9 s after `paymentFailure` ([record](evidence/issue-765/ec2-paymentfailure.json)). | No incident: check that both loops run (the alert relay is `$MCP_PORT + 2`), then Grafana's Alerting → Alert rules. |
 | 3 | Open the inbox, `/app/`, then the incident. | The agent's title (for example «Fallan los cobros en checkout») and its hypothesis with the evidence it measured. | Run stopped without a proposal: «Reintentar la investigación» on the incident page. |
 | 4 | Telegram. | One decision message: proposal `flag.set paymentUnreachable=off` on `checkout`, with «Aprobar»; the same proposal in the inbox, in amber. | A wrong flag is refused and the run measures again (#996). No message: approve from the inbox. |
 | 5 | Tap «Aprobar». | The message is edited: «Aprobada por … desde Telegram, HH:MM UTC.», buttons gone. The incident page shows the receipt, `paymentUnreachable` → `off`; the incident is verifying. | |
-| 6 | Wait 150 s. | The agent verifies over the window after the mitigation ran: «Servicio verificado estable», «Resuelto», and the Telegram message is edited again: «Resuelto a las … · … tras la mitigación que aprobaste · ver la consola.» | No verdict, or the verifier asks for a person (in the 2026-11-03 rehearsal it lacked the current time; a fix is in progress): «El servicio está estable» on the incident page moves it to «Resuelto». It did at 16:04 UTC that day, and the model's draft appeared 9 s later. Verification failed: the system investigates again (twice at most), then Telegram says a person is needed. |
+| 6 | Wait 150 s. | The agent verifies over the window after the mitigation ran: «Servicio verificado estable», «Resuelto», and the Telegram message is edited again: «Resuelto a las … · … tras la mitigación que aprobaste · ver la consola.» | No verdict, or the verifier asks for a person: «El servicio está estable» on the incident page moves it to «Resuelto». It did at 16:04 UTC that day, and the model's draft appeared 9 s later. Verification failed: the system investigates again (twice at most), then Telegram says a person is needed. |
 | 7 | Read the postmortem on the incident page. | The draft labelled «Borrador del agente», with the agent's title. | «Borrador desde el registro» means the model call failed and the record's draft stands in; it is labelled, continue. |
 | 8 | «Aprobar y cerrar». | The closing timeline and «Cerrado». | The previous console's postmortem: `http://127.0.0.1:$WEB_PORT/?view=postmortem&incident_id=<id>`. |
 
