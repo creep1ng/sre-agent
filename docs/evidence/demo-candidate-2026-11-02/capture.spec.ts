@@ -54,9 +54,14 @@ test("demo path: receipt on the incident page, the run in the catalog, the chat 
   await shot(page, "incident");
 
   await page.getByRole("complementary").getByRole("link", { name: "Acciones" }).click();
+  // The service is its card's header and the runs stay folded until asked for (#964).
+  await expect(page.locator('[data-service="checkout"] header')).toContainText("checkout");
   const flagSet = page.locator('[data-operation="checkout:flag.set"]');
-  await expect(flagSet).toContainText("checkout · flag.set");
-  await expect(flagSet.getByRole("listitem")).toHaveCount(1, { timeout: 20_000 });
+  await expect(flagSet).toContainText("flag.set");
+  const runs = flagSet.locator("details");
+  await expect(runs.locator("summary")).toHaveText("Ejecuciones recientes (1)", { timeout: 20_000 });
+  await runs.locator("summary").click();
+  await expect(flagSet.getByRole("listitem")).toHaveCount(1);
   await expect(flagSet.getByRole("link", { name: "Ver el incidente" })).toHaveAttribute("href", `/app/incidentes/${INCIDENT}`);
   await shot(page, "acciones");
 
