@@ -48,10 +48,10 @@ mkdir -p "$(dirname "$LOG")"
 "${COMPOSE[@]}" run --rm --no-deps -T seed python scripts/provision_demo.py
 "${COMPOSE[@]}" --profile e2e build incident-console-e2e
 rc=0
-# The runner expands HOST_UID and HOST_GID, which it receives with -e.
+# The runner expands HOST_UID, HOST_GID and SPEC (the spec filter), which it receives with -e.
 # shellcheck disable=SC2016
-"${COMPOSE[@]}" --profile e2e run --rm --no-deps -T -e HOST_UID -e HOST_GID incident-console-e2e sh -c \
-  'npx playwright test incident-live; rc=$?; chown -R "$HOST_UID:$HOST_GID" e2e/artifacts; exit $rc' \
+"${COMPOSE[@]}" --profile e2e run --rm --no-deps -T -e HOST_UID -e HOST_GID -e SPEC incident-console-e2e sh -c \
+  'npx playwright test ${SPEC:-incident-live}; rc=$?; chown -R "$HOST_UID:$HOST_GID" e2e/artifacts; exit $rc' \
   > "$LOG" 2>&1 || rc=$?
 cat "$LOG"
 counts="$(grep -Eo '^ +[0-9]+ (passed|failed|flaky|skipped|interrupted|did not run)' "$LOG" | xargs || true)"
