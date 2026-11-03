@@ -140,6 +140,14 @@ test.describe("against the real control plane", () => {
     await expect(page.getByRole("dialog").getByText("Correlación")).toBeVisible();
     await settle(page);
     await page.screenshot({ path: `${SHOTS}/07-auditoria.png` });
+    await page.keyboard.press("Escape");
+
+    // The journey leaves its identity inactive, so runs do not pile up active test identities.
+    await go(page, "Identidades", "Identidades");
+    await page.locator(`[data-principal-row="${id}"]`).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Desactivar" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Desactivar" }).click();
+    await expect(page.getByText(`${id} quedó inactiva.`)).toBeVisible();
   });
 
   test("an operator publishes a Skill version, reads it and activates it", async ({ page }) => {
@@ -154,6 +162,8 @@ test.describe("against the real control plane", () => {
     await page.locator("#skill-description").fill("Revisa que el runbook del servicio cubra el síntoma antes de proponer.");
     await page.locator("#skill-instructions").fill("Lee el runbook del servicio afectado.\n\n## Pasos\n1. Busca el síntoma.\n2. Cita la sección que aplica.");
     // A dependency that is not id@version is refused before anything is sent.
+    // The version is published in the name of the connected identity; there is no list to pick from.
+    await expect(page.locator("[data-skill-owner]")).toContainText("admin-human");
     await page.locator("#skill-dependencies").fill("incident-triage");
     await page.getByRole("button", { name: "Publicar", exact: true }).click();
     await expect(page.getByText("Revisa los campos marcados. No se envió nada.")).toBeVisible();

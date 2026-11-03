@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/i18n";
 import { adminApi, SEMVER, SKILL_ID, type AdminError, type SkillDependency, type SkillVersion } from "@/lib/admin-api";
 import { useAdminQuery, useRetryKey } from "./use-admin-query";
-import { AdminPage, Empty, ErrorNote, Facts, Field, Mono, Panel, ROW, Select, StatusBadge, TD, TH, Table, Timestamp } from "./ui";
+import { AdminPage, Empty, ErrorNote, Facts, Field, Mono, Panel, ROW, StatusBadge, TD, TH, Table, Timestamp } from "./ui";
 
 /** `incident-triage@1.0.0` → its id and version; the catalog names a Skill version that way. */
 const split = (resourceId: string) => {
@@ -236,11 +236,10 @@ function PublishDialog({
   onPublished: (skill: SkillVersion) => void;
 }) {
   const t = useT("admin");
-  const principals = useAdminQuery(open ? adminApi.listPrincipals : null, `skill-owners:${open}`);
-  const owners = (principals.data?.items ?? []).filter((principal) => principal.status === "active");
+  // The version is published in the name of the identity this session is connected as.
+  const me = useAdminQuery(open ? adminApi.whoami : null, `skill-owner:${open}`);
   const [skillId, setSkillId] = useState("");
   const [version, setVersion] = useState("1.0.0");
-  const [owner, setOwner] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -250,7 +249,7 @@ function PublishDialog({
   const [busy, setBusy] = useState(false);
   const retry = useRetryKey("skill-publish");
 
-  const ownerId = owner || owners[0]?.principal_id || "";
+  const ownerId = me.data?.principal_id ?? "";
   const deps = parseDependencies(dependencies);
   const ok = {
     id: SKILL_ID.test(skillId.trim()),
@@ -267,7 +266,6 @@ function PublishDialog({
     if (!next) {
       setSkillId("");
       setVersion("1.0.0");
-      setOwner("");
       setName("");
       setDescription("");
       setInstructions("");
@@ -390,41 +388,30 @@ function PublishDialog({
               onChange={(event) => setInstructions(event.target.value)}
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field id="skill-owner" label={t("skills.field.owner")}>
-              <Select
-                id="skill-owner"
-                aria-invalid={checked && !ok.owner}
-                value={ownerId}
-                onChange={(event) => setOwner(event.target.value)}
-              >
-                {owners.map((principal) => (
-                  <option key={principal.principal_id} value={principal.principal_id}>
-                    {principal.display_name} ({principal.principal_id})
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field id="skill-dependencies" label={t("skills.field.dependencies")} hint={t("skills.field.dependenciesHint")}>
-              <Input
-                id="skill-dependencies"
-                className="font-mono"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="incident-triage@1.0.0"
-                aria-describedby="skill-dependencies-hint"
-                aria-invalid={checked && !ok.dependencies}
-                value={dependencies}
-                onChange={(event) => setDependencies(event.target.value)}
-              />
-            </Field>
-          </div>
+          <Field id="skill-dependencies" label={t("skills.field.dependencies")} hint={t("skills.field.dependenciesHint")}>
+            <Input
+              id="skill-dependencies"
+              className="font-mono"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="incident-triage@1.0.0"
+              aria-describedby="skill-dependencies-hint"
+              aria-invalid={checked && !ok.dependencies}
+              value={dependencies}
+              onChange={(event) => setDependencies(event.target.value)}
+            />
+          </Field>
+          {ownerId && (
+            <p className="text-sm text-muted-foreground" data-skill-owner>
+              {t("skills.ownerNote", { id: ownerId })}
+            </p>
+          )}
           <DialogFooter className="mt-2">
             <Button type="button" variant="ghost" onClick={() => close(false)} disabled={busy}>
               {t("common.cancel")}
             </Button>
-            {/* The owner is chosen among the identities, so nothing is checked before they arrive. */}
-            <Button type="submit" disabled={busy || !principals.data}>
+            {/* Nothing is checked before the session's identity, the owner, is known. */}
+            <Button type="submit" disabled={busy || !me.data}>
               {t("skills.publishSubmit")}
             </Button>
           </DialogFooter>

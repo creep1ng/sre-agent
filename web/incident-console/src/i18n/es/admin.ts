@@ -193,7 +193,7 @@ const admin = {
   "skills.field.description": "Descripción",
   "skills.field.instructions": "Instrucciones",
   "skills.field.instructionsHint": "Texto para el agente, hasta 16 KB. No pongas claves ni datos personales.",
-  "skills.field.owner": "Responsable",
+  "skills.ownerNote": "Responsable: {id}, la identidad con la que estás conectado.",
   "skills.field.dependencies": "Dependencias",
   "skills.field.dependenciesHint": "Opcional: id@versión separadas por comas.",
   "skills.invalid": "Revisa los campos marcados. No se envió nada.",

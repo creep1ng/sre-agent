@@ -317,6 +317,7 @@ export const adminApi = {
 
   listCatalogResources: (status?: string) =>
     request<Page<CatalogResource>>(`/catalog/resources?${query({ status, limit: "100" })}`),
+  whoami: () => request<{ principal_id: string }>("/whoami"),
   listSkills: () => request<Page<CatalogResource>>("/catalog/resources?resource_type=skill&limit=100"),
   getSkill: (skillId: string, version: string) => request<SkillVersion>(`/skills/${id(skillId)}/${id(version)}`),
   getSkillStatus: (skillId: string, version: string) =>

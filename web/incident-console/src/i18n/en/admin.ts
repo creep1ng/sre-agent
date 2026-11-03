@@ -195,7 +195,7 @@ export default {
   "skills.field.description": "Description",
   "skills.field.instructions": "Instructions",
   "skills.field.instructionsHint": "Text for the agent, up to 16 KB. Leave out keys and personal data.",
-  "skills.field.owner": "Owner",
+  "skills.ownerNote": "Owner: {id}, the identity you are connected as.",
   "skills.field.dependencies": "Dependencies",
   "skills.field.dependenciesHint": "Optional: id@version, separated by commas.",
   "skills.invalid": "Check the marked fields. Nothing was sent.",
