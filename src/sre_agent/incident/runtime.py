@@ -324,13 +324,14 @@ class IncidentRuntime:
             retry = incident.state.get("state") == "investigating"
             if request.objective == "investigate" and retry:
                 # A retry: the incident is still under investigation but its runs ended. The
-                # new run reopens it through the human's evidence_sufficiency decision, never
-                # beside a run that is still working or waiting for a human.
-                if request.actor != "human":
-                    raise InvalidTransitionError("only a human retries an investigation")
+                # new run reopens it through the evidence_sufficiency decision of a person, or of
+                # the system after a failed verification (#710), never beside a run that is
+                # still working or waiting for a human.
+                if request.actor not in {"human", "system"}:
+                    raise InvalidTransitionError("only a person or the system retries")
                 await self._refuse_beside_live_run(work, incident)
                 transition_id = "continue_investigation"
-                inputs = {"human_retry": True}
+                inputs = {"human_retry": True} if request.actor == "human" else {"retry": True}
             now = self._clock()
             run = await work.runs.add(
                 self._id_factory("run"),
@@ -600,10 +601,11 @@ class IncidentRuntime:
                 raise PreconditionFailedError(
                     "triage_declare requires nonblank operator impact of at most 2000 characters"
                 )
-        # A human retry opens a new run: the step budget it checks belongs to the agent's run.
+        # A retry opens a new run: the step budget it checks belongs to the agent's run.
         if (
             transition_id == "continue_investigation"
             and not inputs.get("human_retry")
+            and not inputs.get("retry")
             and inputs.get("remaining_step_budget", 0) < 1
         ):
             raise PreconditionFailedError("continue_investigation requires remaining step budget")

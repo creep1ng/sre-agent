@@ -96,6 +96,10 @@ function cause(code: string | null | undefined): Line {
   return { key: code && `cause.${code}` in incident ? (`cause.${code}` as Key) : "cause.unknown" };
 }
 
+/** After a failed verification the system starts a new run, at most this many times (#710). */
+export const REINVESTIGATIONS = 2;
+const reinvestigation = (event: Event) => event.summary === "Investigation continued." && event.actor.type === "system";
+
 const failedDispatch = (event: Event) =>
   event.summary.startsWith("Investigation dispatch ended:") && !event.summary.endsWith("success.");
 
@@ -129,7 +133,11 @@ function eventEntry(event: Event, live: LiveIncident, me: string | null | undefi
   }
   // An approval that ran an operation says so in its summary (#923); the receipt tells the rest.
   const human = HUMAN[event.summary] ?? (event.summary.startsWith("Mitigation approved;") ? "event.approved" : undefined);
-  // Only a person retries; the agent continuing within a run is not a story entry.
+  if (reinvestigation(event)) {
+    const attempt = live.events.slice(0, live.events.indexOf(event) + 1).filter(reinvestigation).length;
+    return { ...base, line: { key: "event.reinvestigating", params: { n: String(attempt), max: String(REINVESTIGATIONS) } } };
+  }
+  // A person retries, or the system after a failed verification; the agent continuing within a run is not a story entry.
   if (human && event.actor.type === "human") {
     return { ...base, line: { key: (base.actor.kind === "you" ? `${human}.you` : human) as Key } };
   }

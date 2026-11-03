@@ -175,7 +175,10 @@ def test_a_measured_verdict_moves_the_incident_and_keeps_what_was_measured(
     llm = VerifyingLLM(verdict)
     state, events, timeline, run_id, status = _approved(f"inc-verify-{reached}", llm, 1, not_yet)
 
-    assert (state["state"], status) == (reached, run_status)
+    # This run's own last transition: after a failure the system's next run (#710) may already
+    # have moved the incident on.
+    moved_to = [event["to"] for event in events if "transition_id" in event][-1]
+    assert (moved_to, status) == (reached, run_status)
     assert _verifications(events, run_id) == [("intent", "pending"), ("outcome", "success")]
     investigation = [r["phase"] for r in suite._receipts(events) if r["dispatch_id"] == run_id]
     assert investigation == ["intent", "outcome"]

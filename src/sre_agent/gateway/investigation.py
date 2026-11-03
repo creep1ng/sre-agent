@@ -15,6 +15,11 @@ from sqlalchemy import select, text
 
 from sre_agent.gateway.authentication import authorize_governed_access_for_context
 from sre_agent.gateway.execution import service_operations
+from sre_agent.gateway.reinvestigation import (
+    MAX_REINVESTIGATIONS,
+    failed_mitigations,
+    notify_gave_up,
+)
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.incident.persistence import (
     DecisionDraft,
@@ -246,6 +251,41 @@ class InvestigationRunDispatcher:
             # Only the type is logged, never the content.
             name = type(error).__name__
             logger.error("postmortem_draft_failed incident_id=%s error=%s", incident_id, name)
+
+    def after_verification_failed(self, incident_id: str) -> None:
+        """Investigate again on the agent's own after a failed verification (#710), at most
+        MAX_REINVESTIGATIONS times per incident; then a person is woken. Without an agent
+        identity, or on a failure, the manual retry remains."""
+        if self.gateway_settings is None:
+            return
+        task = asyncio.create_task(self._reinvestigate(incident_id))
+        self._waiting.add(task)
+        task.add_done_callback(self._waiting.discard)
+
+    async def _reinvestigate(self, incident_id: str) -> None:
+        try:
+            async with self.units() as work:
+                failed = len(await failed_mitigations(work, incident_id))
+            if failed > MAX_REINVESTIGATIONS:
+                await notify_gave_up(self.sessions, incident_id, failed)
+                return
+            agent = await self._configured_agent_id()
+            if not failed or agent is None:
+                return
+            # One key per failure: a replayed hook converges on the same run.
+            started = await self.runtime.start_run(
+                RunStart(
+                    command_id=f"reinvestigate-{incident_id}-{failed}",
+                    incident_id=incident_id,
+                    objective="investigate",
+                    actor="system",
+                    actor_reference=ActorReference(agent),
+                )
+            )
+            await self.after_start(started)
+        except Exception as error:
+            name = type(error).__name__
+            logger.error("reinvestigation_failed incident_id=%s error=%s", incident_id, name)
 
     def _state(self, run_id: str) -> str:
         """The state a dispatch's own events carry: a verification's incident stays verifying."""
@@ -493,6 +533,7 @@ class InvestigationRunDispatcher:
         offset = max((item.sequence for item in stored), default=-1) + 1
         run_mcp_ids: list[UUID] = []
         recalled = [] if verifying else await self._recall(run_id, context, view.incident_state)
+        failed = [] if verifying else await failed_mitigations(work, incident_id)
         while True:
             known = {item.evidence_id for item in context.evidence}
             try:
@@ -508,6 +549,7 @@ class InvestigationRunDispatcher:
                         mitigation=AppliedMitigation.model_validate(mitigation)
                         if mitigation
                         else None,
+                        failed_mitigations=failed,
                     ),
                     self.gateway,
                     self.evidence,
@@ -807,6 +849,8 @@ class InvestigationRunDispatcher:
             await self.runtime.execute(command)
             if reached == "resolved":
                 self.after_resolved(incident_id)
+            elif isinstance(result.outcome, VerifyMitigation):
+                self.after_verification_failed(incident_id)
             return
         # No transition follows this outcome, so the run ends here and a human decides the next.
         run_patch = termination(

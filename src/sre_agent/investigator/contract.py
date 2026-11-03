@@ -161,6 +161,15 @@ class AppliedMitigation(_Projection):
     execution: ExecutionReceipt | None = None
 
 
+class FailedMitigation(_Projection):
+    """An approved mitigation of this incident that ran and whose verification failed (#710):
+    what ran, and what the verification said, so a new run looks for another cause."""
+
+    description: Text
+    operation: ProposedOperation | None = None
+    verification: Annotated[str, Field(min_length=1, max_length=2000)]
+
+
 class OperationOffer(_Projection):
     operation: OperationName
     parameters: list[ParameterName] = Field(default_factory=list)
@@ -230,6 +239,10 @@ class InvestigationRequest(_Strict):
     operations_unavailable: bool = False
     # What the approval ran and what must hold now: a verification measures it (#723).
     mitigation: AppliedMitigation | None = None
+    # A run the system started after failed verifications carries them (#710).
+    failed_mitigations: Annotated[list[FailedMitigation], Field(max_length=8)] = Field(
+        default_factory=list
+    )
 
     @model_validator(mode="after")
     def _context_incident_matches_request(self) -> InvestigationRequest:

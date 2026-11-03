@@ -340,6 +340,17 @@ async def _investigation_ack(session: AsyncSession, payload: Mapping[str, Any]) 
     return f"Investigando {label}\nEjecución {payload['run_id']}. Te escribo aquí cuando termine."
 
 
+async def _reinvestigation_exhausted(session: AsyncSession, payload: Mapping[str, Any]) -> str:
+    """The agent stopped retrying after failed verifications (#710): a person decides now."""
+    label = await _incident_label(session, payload)
+    return (
+        f"Necesita a una persona: {label}\n"
+        f"La verificación falló {payload['failed']} veces tras mitigaciones aprobadas y el agente "
+        "ya investigó de nuevo dos veces sin resolverlo, así que dejó de reintentar.\n"
+        "Reintenta la investigación o decide qué hacer desde la consola."
+    )
+
+
 async def _investigation_conclusion(session: AsyncSession, payload: Mapping[str, Any]) -> str:
     label = await _incident_label(session, payload)
     receipt = await session.scalar(
@@ -559,6 +570,7 @@ RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[Rende
     "mitigation_decision": mitigation_decision,
     "investigation_ack": _investigation_ack,
     "investigation_conclusion": _investigation_conclusion,
+    "reinvestigation_exhausted": _reinvestigation_exhausted,
     "link_confirmed": _fixed(
         "Chat vinculado. Te escribo aquí cuando haga falta tu decisión y te mando un "
         "resumen diario de lo demás."

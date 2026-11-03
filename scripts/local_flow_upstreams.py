@@ -175,12 +175,16 @@ def decide(state: dict, rejected: set[str] = frozenset(), windowed: bool = False
     if state["objective"] == "verify":
         ran = (state.get("mitigation") or {}).get("execution") or {}
         return verify(service, collected, ran.get("executed_at") if windowed else None)
+    # A flag that ran and still failed its verification (#710) is no candidate either.
+    failed = state.get("failed_mitigations") or []
+    ran = {((item.get("operation") or {}).get("parameters") or {}).get("flag") for item in failed}
     if (state.get("service_operations") or {}).get("flags"):  # the executor offers flag.set
-        return flag_step(state, rejected)
+        return flag_step(state, rejected | (ran - {None}))
     if incident["hypotheses"]:
+        again = f" (intento {len(failed) + 1})" if failed else ""
         return {
             "action": "propose_mitigation",
-            "description": f"Revertir el último despliegue de {service}.",
+            "description": f"Revertir el último despliegue de {service}{again}.",
             "steps": [f"Hacer rollback de {service} a la versión anterior."],
             "risk": "low",
             "verification_check": f"Los errores 5xx de {service} vuelven a cero.",

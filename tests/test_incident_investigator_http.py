@@ -2293,7 +2293,8 @@ class GatedLLM(ScriptedLLM):
 
 
 def test_a_retry_is_refused_beside_a_live_run_for_an_agent_and_for_a_concurrent_retry() -> None:
-    """Issue #761: one live run per incident, and only a human retries."""
+    """Issue #761: one live run per incident, and the agent never retries (#710: a person or the
+    system does)."""
     incident_id = "inc-investigator-retry-conflict"
     _add_incident(incident_id)
     _grant_run_access()
@@ -2325,7 +2326,7 @@ def test_a_retry_is_refused_beside_a_live_run_for_an_agent_and_for_a_concurrent_
         workflow = load_incident_workflow(ROOT / "agent/workflows/incident-response.yaml")
         runtime = IncidentRuntime(workflow, lambda: PostgresIncidentUnitOfWork(database))
         try:
-            with pytest.raises(InvalidTransitionError, match="only a human"):
+            with pytest.raises(InvalidTransitionError, match="only a person or the system"):
                 await runtime.start_run(
                     RunStart("retry-conflict-agent", incident_id, "investigate", actor="agent")
                 )
