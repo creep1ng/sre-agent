@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 from sre_agent.investigator.contract import (
     CollectedEvidence,
@@ -168,7 +169,7 @@ def assemble(
     now: datetime | None = None,
 ) -> str:
     retry = [f"Your previous reply was rejected: {feedback}. Reply again."] if feedback else []
-    state = {
+    state: dict[str, Any] = {
         "objective": request.objective,
         "steps_left": steps_left,
         "incident": request.context.model_dump(mode="json"),
