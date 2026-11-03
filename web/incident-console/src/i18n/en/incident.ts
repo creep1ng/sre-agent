@@ -26,7 +26,7 @@ export default {
   "status.other": "in progress",
   "status.untitled": "Declared incident",
   "title.errors": "Errors in {service} ({value}% of spans, threshold {threshold}%)",
-  "title.latency": "Slow {service} (p95 {value} ms, threshold {threshold} ms)",
+  "title.latency": "Slow {service} (p95 {value}\u00a0ms, threshold {threshold}\u00a0ms)",
   "title.alert": "Grafana alert",
   "action.investigate": "Investigate",
   "action.retry": "Retry the investigation",
@@ -153,6 +153,9 @@ export default {
   "evidence.query.knowledge": "See the cited fragment",
   "evidence.query.memory": "See the source postmortem",
   "evidence.query.other": "See the query",
+  "result.hits": "{count} hits",
+  "result.none": "No data",
+  "result.raw": "See the raw result",
 
   "change.deploy": "{service} {version} deployed",
   "change.rollback": "{service} rolled back to {version}",

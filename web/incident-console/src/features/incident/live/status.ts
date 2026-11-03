@@ -30,3 +30,16 @@ export function agentStatus(live: LiveIncident): AgentStatus {
 export const PHASES = ["declared", "investigation", "decision", "recovery", "postmortem", "closed"] as const;
 const PHASE_OF: Record<string, number> = { active: 0, triage: 0, investigating: 1, mitigating: 2, verifying: 3, resolved: 4, postmortem: 4, closed: 5 };
 export const phaseOf = (state: string) => PHASE_OF[state] ?? 0;
+
+/** When each phase up to `current` was first reached, from the incident's events; null otherwise. */
+export function phaseTimes(events: { state: string | null; occurred_at: string }[], current: number): (number | null)[] {
+  const times: (number | null)[] = PHASES.map(() => null);
+  const sorted = events
+    .map((event) => ({ at: Date.parse(event.occurred_at), phase: event.state ? phaseOf(event.state) : 0 }))
+    .filter((event) => Number.isFinite(event.at))
+    .sort((a, b) => a.at - b.at);
+  // The first event declares the incident; a later phase is reached by the first event in it or past it.
+  times[0] = sorted[0]?.at ?? null;
+  for (const event of sorted) for (let phase = 1; phase <= Math.min(event.phase, current); phase++) times[phase] ??= event.at;
+  return times;
+}

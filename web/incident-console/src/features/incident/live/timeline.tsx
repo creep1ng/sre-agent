@@ -6,6 +6,7 @@ import { useT } from "@/i18n";
 import { formatClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Prose, useActorName, useSay, useWhen } from "./say";
+import { QueryResult } from "./result";
 import { Statement } from "./statement";
 import type { AgentStatus } from "./status";
 import type { StoryEntry, Verdict } from "./story";
@@ -51,7 +52,7 @@ function Step({ entry }: { entry: StoryEntry }) {
     <li id={entry.id} className={cn("group", ROW)}>
       <time className={TIME}>{when(entry.at, now)}</time>
       <Dot>{entry.number}</Dot>
-      <div className="pt-0.5 pb-[30px] pl-1.5">
+      <div className="min-w-0 pt-0.5 pb-[30px] pl-1.5">
         <p className={cn("m-0 rounded-md group-target:bg-[var(--mist-wash)]", entry.tone === "critical" && "text-[var(--danger)]")}>
           {entry.actor.kind !== "system" && <b className="font-medium text-foreground">{name(entry.actor)} · </b>}
           <Prose text={say(entry.line)} />
@@ -82,10 +83,11 @@ function Step({ entry }: { entry: StoryEntry }) {
             )}
           </span>
         )}
+        {entry.result && <QueryResult result={entry.result} />}
         {entry.query && (
-          <details className="mt-1.5 font-mono text-xs text-[var(--dim)]">
+          <details className="mt-1.5 min-w-0 font-mono text-xs text-[var(--dim)]">
             <summary className="cursor-pointer text-[var(--mist)]">{t(entry.query.label)}</summary>
-            <pre className="mt-1 rounded-md bg-code p-2 whitespace-pre-wrap">
+            <pre className="mt-1 max-w-full overflow-x-auto rounded-md bg-code p-2 break-all whitespace-pre-wrap">
               {[entry.query.tool, entry.query.window].filter(Boolean).join(" · ")}
               {"\n"}
               {entry.query.text}
