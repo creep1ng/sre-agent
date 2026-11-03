@@ -28,7 +28,7 @@ The investigator's internal result status describes the bounded loop:
 
 | Status | When |
 |---|---|
-| `completed` | The model proposed a cited hypothesis, a mitigation or a conclusion |
+| `completed` | The model proposed a cited hypothesis, a mitigation or a conclusion, or a verification reached a measured verdict |
 | `needs_human` | The model explicitly requested human review, the gateway rejected the response contract, or the mitigation named no valid executor operation twice |
 | `invalid_output` | Two consecutive answers were not one valid action or cited unknown evidence |
 | `denied` | The gateway answered 401 or 403, or the model asked for an unauthorized tool or BoK collection |
@@ -146,6 +146,23 @@ fabricate another turn or change incident state. Runtime transitions and dispatc
 share a run-scoped PostgreSQL transaction lock. A transition emitted by an investigator
 must still see that dispatch's pending intent before it can update incident state, so a
 late provider response cannot replace a terminal `unknown` receipt.
+
+## Verification
+
+Issue #723. Once an approval runs its operation (#722), the incident waits in `verifying` with
+the executor's receipt in `mitigation_strategy.execution`. A verification is the same bounded
+loop with the objective `verify`, and only a verification carries `mitigation`: the
+description, the `verification_check`, the operation and the receipt (the outcome, the image
+before and after, and when it ran).
+
+- The model measures the service again with its authorized tools and ends with
+  `verify_mitigation` (`passed`, `summary`, `supporting_evidence`) or `request_human`. A
+  hypothesis, a mitigation or a conclusion is invalid output there, and `verify_mitigation` is
+  invalid in any other objective.
+- A verdict cites at least one item this verification measured with data. The incident's
+  earlier evidence shows the service before the mitigation ran, and a query with no data shows
+  nothing. Otherwise it is invalid output, retried once with the reason.
+- The prompt states what ran and the check, and offers no BoK, operations or past incidents.
 
 ## Evidence verdicts
 
