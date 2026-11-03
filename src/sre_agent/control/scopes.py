@@ -126,4 +126,14 @@ CONTROL_SCOPES: dict[tuple[str, str], tuple[str, str, str]] = {
         "administrative_control",
         "catalog",
     ),
+    ("POST", "/v1/bok/collections/versions"): (
+        "admin.write",
+        "administrative_control",
+        "catalog",
+    ),
+    ("GET", "/v1/bok/collections/{collection_id}/versions/{version}"): (
+        "admin.read",
+        "administrative_control",
+        "catalog",
+    ),
 }

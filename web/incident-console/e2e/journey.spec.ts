@@ -156,7 +156,7 @@ test("si el agente no puede investigar, dice por qué y se reintenta en el mismo
     timeout: 20_000,
   });
   await expect(page.getByText("Su identidad («incident-harness») está desactivada")).toBeVisible();
-  await expect(page.getByText("Actívala en Gobierno de IA → Principals")).toBeVisible();
+  await expect(page.getByText("Actívala en Administración → Identidades")).toBeVisible();
   await expectNoLeaks(page);
   await page.screenshot({ path: `${SCREENS}/11-falla-agente.png`, fullPage: true });
 

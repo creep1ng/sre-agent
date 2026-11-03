@@ -32,6 +32,48 @@ Direct IDs never bypass authorization. Tags and visibility never grant access.
 | 503 `storage_unavailable` | Authorization or content storage failure, not an empty match |
 | 503 `audit_unavailable` | Required audit persistence failed; intended content response suppressed |
 
+## Publish a collection version
+
+An administrator publishes and inspects versions through the catalog grant, not the
+content grants. Both reuse the skill-publication precedent: operation `catalog.create`
+or `catalog.read` over `administrative_control/catalog`, with no new audit operation or
+admin resource.
+
+| Action | Endpoint | Result |
+| --- | --- | --- |
+| `admin.write` | `POST /v1/bok/collections/versions` (`Idempotency-Key` required) | Version summary, no content |
+| `admin.read` | `GET /v1/bok/collections/{collection_id}/versions/{version}` | Metadata, owner status, documents and chunks |
+
+The body is `{collection_id, version, display_name, description, documents: [{document_id,
+title, source_ref, chunks: [{section_id, chunk_index, content}]}]}`. Collection, document and
+section IDs are lowercase slugs; the version is `MAJOR.MINOR.PATCH`. At most 20 documents,
+50 chunks per document, chunk index 0–49 and 4000 characters per non-blank chunk; IDs are
+unique and unknown fields are rejected. The server fixes owner `bok-platform` and visibility
+`private`. One transaction ingests the immutable version, activates it and projects
+`bok_collection/<collection_id>@<version>` (source `bok`, tag `bok`) into the catalog, so
+`bok.search`/`bok.read` grants can then target it.
+
+The route is one client of `sre_agent.bok.publication.publish_bok_version(session, body,
+author=..., origin=...)`; a later caller (a person accepting a proposed entry) uses the same
+path. The caller owns the transaction, authorization and audit. The author must be an active
+human principal: an agent holding `admin.write` gets `403`, because the agent proposes and the
+human approves. The origin is `console` for the route or `<kind>:<id>` for another caller.
+
+| HTTP status | Meaning |
+| --- | --- |
+| 201 | Version created, activated and projected |
+| 200 | Exact replay (same key, or same content under another key); nothing written |
+| 400 | Missing or invalid `Idempotency-Key` |
+| 409 `status_conflict` | The version already holds different content or its catalog entry differs |
+| 409 `idempotency_conflict` | The key was used with another body |
+| 404 `resource_not_found` | Read of an absent version |
+| 401 / 403 / 422 / 503 | As the other control routes; a refused publish stores nothing |
+
+The audit event records the author as its HMAC principal reference; it and the idempotency
+record never carry the content. The version itself stores the author's principal id and the
+origin (migration `20261103_01`); the owner read returns them as `published_by` and `origin`,
+`null` for seeded versions and those published earlier. A replay keeps the first values.
+
 ## Isolation and evidence
 
 Authorization facts and owner readiness are rechecked under shared row locks before
@@ -50,7 +92,7 @@ unavailable, the producer fails closed.
 From a configured checkout with synthetic local values in ignored `.env`:
 
 ```sh
-docker compose --env-file .env --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_bok_persistence.py tests/test_bok_http.py tests/test_migrations.py tests/test_governed_authorization.py tests/test_usage_read_acceptance.py'
+docker compose --env-file .env --profile checks run --build --rm python-checks sh -c 'python scripts/assert_test_database_isolated.py && pytest -q tests/test_bok_persistence.py tests/test_bok_http.py tests/test_bok_publication.py tests/test_migrations.py tests/test_governed_authorization.py tests/test_usage_read_acceptance.py'
 ```
 
 This is real PostgreSQL plus in-process HTTP acceptance, not hosted CI or a network

@@ -117,8 +117,11 @@ test("la consola anterior sigue donde /app aún no llega, y lo que /app reemplaz
   expect(decisions?.status()).toBe(200);
   await expect(page.getByRole("navigation", { name: "Superficies" })).toBeVisible();
 
-  const governance = await page.goto("/public/admin/principals.html");
-  expect(governance?.status()).toBe(200);
+  // The previous administration pages moved into /app/admin.
+  await page.goto("/public/admin/principals.html");
+  await expect(page).toHaveURL(/\/app\/admin\/identidades$/);
+  await page.goto("/public/admin/triage.html");
+  await expect(page).toHaveURL(/\/app\/$/);
 
   await page.goto("/?view=alerts");
   await expect(page).toHaveURL(/\/app\/$/);

@@ -16,11 +16,12 @@ export const VIEWS = Object.freeze({
     module: "/public/incident-ui/alerts.js",
     session: false,
   },
+  // Triage lives in the new console's inbox (#870).
   triage: {
     domain: "incidents",
     label: "Triage",
-    path: "/public/admin/triage.html",
-    module: "/public/admin/triage.js",
+    path: "/app/",
+    legacy: true,
   },
   "war-room": {
     domain: "incidents",
@@ -43,35 +44,35 @@ export const VIEWS = Object.freeze({
     module: "/public/incident-ui/postmortem.js",
     incident: true,
   },
+  // Administration lives in the new console (/app/admin).
   principals: {
     domain: "governance",
-    label: "Principals",
-    path: "/public/admin/principals.html",
-    legacy: true,
-  },
-  resources: {
-    domain: "governance",
-    label: "Recursos y aliases",
-    path: "/public/admin/model-aliases.html",
+    label: "Identidades",
+    path: "/app/admin/identidades",
     legacy: true,
   },
   grants: {
     domain: "governance",
-    label: "Grants",
-    path: "/public/admin/grants.html",
+    label: "Permisos",
+    path: "/app/admin/permisos",
     legacy: true,
   },
-  audit: {
+  resources: {
     domain: "governance",
-    label: "Auditoría y consumo",
-    path: "/public/admin/audit-events.html",
+    label: "Modelos y recursos",
+    path: "/app/admin/recursos",
     legacy: true,
   },
   consumption: {
     domain: "governance",
-    label: "Auditoría y consumo",
-    nav: "audit",
-    path: "/public/admin/consumption.html",
+    label: "Consumo",
+    path: "/app/admin/consumo",
+    legacy: true,
+  },
+  audit: {
+    domain: "governance",
+    label: "Auditoría",
+    path: "/app/admin/auditoria",
     legacy: true,
   },
 });

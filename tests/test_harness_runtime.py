@@ -97,9 +97,6 @@ def test_browser_configs_keep_static_and_production_suites_separate() -> None:
     for suite in (
         "api-seam.spec.js",
         "production-proxy.spec.js",
-        "triage-origin.spec.js",
-        "triage-context.spec.js",
-        "triage-eligible.spec.js",
     ):
         assert f'"{suite}"' in ignored_suites
         assert f'"{suite}"' in production_config
