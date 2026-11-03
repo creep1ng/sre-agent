@@ -4,7 +4,10 @@ import { useLive } from "@/lib/live";
 import type { LiveIncident } from "@/lib/live-incident";
 
 export type Choice = "approve" | "reject";
-export type DecisionError = "forbidden" | "stale" | "failed";
+export type DecisionError = "forbidden" | "stale" | "failed" | "notApplied";
+
+// Why the gateway did not apply an approval (#923); the timeline words it, and the next try is a new one.
+const NOT_APPLIED = new Set(["precondition_failed", "operation_not_authorized", "executor_unavailable", "execution_failed"]);
 
 // randomUUID needs a secure context; a console served over plain http on a LAN has none.
 const nonce = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -59,9 +62,12 @@ export function useDecision(live: LiveIncident & { refresh: () => void }) {
       } catch {
         result = { kind: "transient" as const };
       }
+      const refused = result.kind !== "ok" && "code" in result && NOT_APPLIED.has(result.code ?? "");
       // A failed send keeps its key, so trying again replays it instead of deciding twice.
-      if (result.kind === "ok" || result.kind === "conflict") submission.current = null;
-      setError(result.kind === "ok" ? null : result.kind === "forbidden" ? "forbidden" : result.kind === "conflict" ? "stale" : "failed");
+      if (result.kind === "ok" || result.kind === "conflict" || refused) submission.current = null;
+      setError(
+        result.kind === "ok" ? null : refused ? "notApplied" : result.kind === "forbidden" ? "forbidden" : result.kind === "conflict" ? "stale" : "failed",
+      );
       setSending(null);
       live.refresh();
     },
