@@ -45,6 +45,7 @@ test("the administration plane lives in the console's own navigation", async ({ 
     /Identidades/,
     /Permisos/,
     /Modelos y recursos/,
+    /Skills/,
     /Consumo/,
     /Auditoría/,
   ]);
@@ -140,6 +141,47 @@ test.describe("against the real control plane", () => {
     await page.screenshot({ path: `${SHOTS}/07-auditoria.png` });
   });
 
+  test("an operator publishes a Skill version, reads it and activates it", async ({ page }) => {
+    await open(page, { theme: "dark", language: "es" });
+    await connect(page, "es");
+    await go(page, "Skills", "Skills");
+    const skill = `runbook-check-${STAMP}`;
+    await page.getByRole("button", { name: "Publicar versión" }).click();
+    await page.locator("#skill-id").fill(skill);
+    await page.locator("#skill-version").fill("1.0.0");
+    await page.locator("#skill-name").fill("Revisión de runbook");
+    await page.locator("#skill-description").fill("Revisa que el runbook del servicio cubra el síntoma antes de proponer.");
+    await page.locator("#skill-instructions").fill("Lee el runbook del servicio afectado.\n\n## Pasos\n1. Busca el síntoma.\n2. Cita la sección que aplica.");
+    // A dependency that is not id@version is refused before anything is sent.
+    await page.locator("#skill-dependencies").fill("incident-triage");
+    await page.getByRole("button", { name: "Publicar", exact: true }).click();
+    await expect(page.getByText("Revisa los campos marcados. No se envió nada.")).toBeVisible();
+    await page.locator("#skill-dependencies").fill("");
+    await page.getByRole("button", { name: "Publicar", exact: true }).click();
+
+    // The new version opens with its manifest, published and not yet active.
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByRole("heading", { name: "Revisión de runbook" })).toBeVisible();
+    await expect(sheet.getByText("Publicado")).toBeVisible();
+    await expect(sheet.locator("[data-skill-instructions]")).toContainText("Cita la sección que aplica.");
+    await sheet.getByRole("button", { name: "Activar" }).click();
+    await expect(page.getByText(`${skill}@1.0.0 activada.`)).toBeVisible();
+    await expect(sheet.getByRole("button", { name: "Desactivar" })).toBeVisible();
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/08-skill.png` });
+    await page.keyboard.press("Escape");
+    await expect(page.locator(`[data-skill-row="${skill}@1.0.0"]`)).toContainText("Activo");
+
+    // The same version with other content is refused, and the published one stays as it was.
+    await page.getByRole("button", { name: "Publicar versión" }).click();
+    await page.locator("#skill-id").fill(skill);
+    await page.locator("#skill-name").fill("Otra cosa");
+    await page.locator("#skill-description").fill("Otro contenido.");
+    await page.locator("#skill-instructions").fill("Otro texto.");
+    await page.getByRole("button", { name: "Publicar", exact: true }).click();
+    await expect(page.getByText("Esa versión ya existe con otro contenido. Publica una versión nueva.")).toBeVisible();
+  });
+
   test("the same plane reads in English on the light theme", async ({ page }) => {
     await open(page, { theme: "light", language: "en" });
     await connect(page, "en");
@@ -151,6 +193,10 @@ test.describe("against the real control plane", () => {
     await settle(page);
     await page.screenshot({ path: `${SHOTS}/12-permissions-light.png` });
     await go(page, "Models and resources", "Models and resources");
+    await go(page, "Skills", "Skills");
+    await expect(page.locator("[data-skill-row]").first()).toBeVisible();
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/14-skills-light.png` });
     await go(page, "Consumption", "Consumption");
     await page.getByRole("button", { name: "Change limits" }).click();
     await settle(page);

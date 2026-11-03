@@ -66,6 +66,35 @@ export interface CatalogResource extends ResourceRef {
   discoverability?: { display_name?: string } | null;
 }
 
+export interface SkillDependency {
+  skill_id: string;
+  version: string;
+}
+
+export interface SkillManifest {
+  display_name: string;
+  description: string;
+  instructions: string;
+  dependencies: SkillDependency[];
+}
+
+/** One immutable Skill version, as the owner published it. */
+export interface SkillVersion {
+  skill_id: string;
+  version: string;
+  owner_id: string;
+  resource_id: string;
+  manifest: SkillManifest;
+  content_sha256: string;
+  created_at: string;
+}
+
+export interface SkillStatus {
+  resource_id: string;
+  status: "active" | "inactive";
+  updated_at: string;
+}
+
 export interface ModelAlias {
   model_alias_id: string;
   alias: string;
@@ -252,6 +281,17 @@ export const adminApi = {
 
   listCatalogResources: (status?: string) =>
     request<Page<CatalogResource>>(`/catalog/resources?${query({ status, limit: "100" })}`),
+  listSkills: () => request<Page<CatalogResource>>("/catalog/resources?resource_type=skill&limit=100"),
+  getSkill: (skillId: string, version: string) => request<SkillVersion>(`/skills/${id(skillId)}/${id(version)}`),
+  getSkillStatus: (skillId: string, version: string) =>
+    request<SkillStatus>(`/skills/${id(skillId)}/${id(version)}/status`),
+  publishSkill: (body: { skill_id: string; version: string; owner_id: string; manifest: SkillManifest }, key: string) =>
+    request<SkillVersion>("/skills/versions", { method: "POST", body, idempotencyKey: key }),
+  setSkillStatus: (skillId: string, version: string, status: "active" | "inactive", expectedUpdatedAt: string) =>
+    request<SkillStatus>(`/skills/${id(skillId)}/${id(version)}/status`, {
+      method: "PUT",
+      body: { status, expected_updated_at: expectedUpdatedAt },
+    }),
   listModelAliases: () => request<Page<ModelAlias>>("/model-aliases?limit=100"),
   getModelAlias: (aliasId: string) => request<ModelAlias>(`/model-aliases/${id(aliasId)}`),
   replaceAssignment: (
@@ -314,6 +354,10 @@ export const ADMIN_RESOURCES: readonly ResourceRef[] = [
   "catalog",
   "grants",
 ].map((resource_id) => ({ resource_type: "administrative_control", resource_id }));
+
+/** A Skill id and its semantic version, as `POST /v1/skills/versions` validates them. */
+export const SKILL_ID = /^[a-z][a-z0-9-]{2,62}[a-z0-9]$/;
+export const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 
 export const SLUG = /^[a-z][a-z0-9_-]{2,63}$/;
 export const CONCRETE_MODEL = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/;

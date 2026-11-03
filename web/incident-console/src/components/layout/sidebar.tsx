@@ -1,4 +1,4 @@
-import { BoxesIcon, CoinsIcon, InboxIcon, KeyRoundIcon, LockKeyholeIcon, ScrollTextIcon, SearchIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
+import { BoxesIcon, CoinsIcon, InboxIcon, KeyRoundIcon, LockKeyholeIcon, PuzzleIcon, ScrollTextIcon, SearchIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { NavLink } from "react-router";
 import { AgentAvatar, BrandMark, Logo } from "@/components/brand";
@@ -20,6 +20,7 @@ export const ADMIN_NAV = [
   { to: "/admin/identidades", icon: KeyRoundIcon, label: "nav.identities" },
   { to: "/admin/permisos", icon: LockKeyholeIcon, label: "nav.permissions" },
   { to: "/admin/recursos", icon: BoxesIcon, label: "nav.resources" },
+  { to: "/admin/skills", icon: PuzzleIcon, label: "nav.skills" },
   { to: "/admin/consumo", icon: CoinsIcon, label: "nav.consumption" },
   { to: "/admin/auditoria", icon: ScrollTextIcon, label: "nav.audit" },
 ] as const;

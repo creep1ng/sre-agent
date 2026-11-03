@@ -63,3 +63,10 @@ Whole suite before the last spec update: 104 passed, 33 skipped, 1 failed (the o
 ## Screenshots
 
 01–07: Spanish, dark. 11–13: English, light. The one-time key and the issued credential's prefix are masked.
+
+## Skills (#31, layer 11)
+
+`e2e/admin.spec.ts` and `e2e/shell.spec.ts` on the Skills layer, real API: 8 passed. The journey publishes
+a version from the console, is refused a dependency that is not `id@version` before sending, reads the
+manifest (published, not active), activates it, and is refused the same version with other content (409).
+Screenshots: `08-skill.png` (es, dark) and `14-skills-light.png` (en, light).

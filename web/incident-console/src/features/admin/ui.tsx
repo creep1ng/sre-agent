@@ -106,6 +106,7 @@ export function Mono({ children, className }: { children: ReactNode; className?:
 
 const STATUS_TONE: Record<string, Tone> = {
   active: "success",
+  published: "info",
   inactive: "neutral",
   revoked: "neutral",
   expired: "neutral",

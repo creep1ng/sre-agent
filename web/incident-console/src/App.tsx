@@ -15,6 +15,7 @@ import { ConsumptionPage } from "@/features/admin/consumption-page";
 import { IdentitiesPage } from "@/features/admin/identities-page";
 import { PermissionsPage } from "@/features/admin/permissions-page";
 import { ResourcesPage } from "@/features/admin/resources-page";
+import { SkillsPage } from "@/features/admin/skills-page";
 import { InboxPage } from "@/pages/inbox-page";
 import { IncidentPage } from "@/pages/incident-page";
 import { IncidentsPage } from "@/pages/incidents-page";
@@ -104,6 +105,7 @@ export function App() {
               <Route path="identidades" element={<IdentitiesPage />} />
               <Route path="permisos" element={<PermissionsPage />} />
               <Route path="recursos" element={<ResourcesPage />} />
+              <Route path="skills" element={<SkillsPage />} />
               <Route path="consumo" element={<ConsumptionPage />} />
               <Route path="auditoria" element={<AuditPage />} />
             </Route>
