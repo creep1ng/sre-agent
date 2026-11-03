@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
@@ -22,6 +23,7 @@ from sre_agent.incident.persistence import (
     IncidentUnitOfWork,
     TextContextRecord,
     TransitionResult,
+    verification_dispatch,
 )
 from sre_agent.incident.runtime import (
     ActorReference,
@@ -34,6 +36,7 @@ from sre_agent.incident.runtime import (
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
     UNMEASURED,
+    AppliedMitigation,
     Capability,
     CollectedEvidence,
     Conclude,
@@ -45,6 +48,7 @@ from sre_agent.investigator.contract import (
     ProposeHypothesis,
     ProposeMitigation,
     RequestHuman,
+    VerifyMitigation,
 )
 from sre_agent.investigator.loop import BOK_UNAVAILABLE, investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
@@ -82,6 +86,7 @@ class InvestigationRunDispatcher:
         language: OutputLanguage = "es",
         executor_url: str | None = None,
         tool_timeout_seconds: float = 30.0,
+        verification_delay_seconds: float = 60.0,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language, self.executor_url = language, executor_url
@@ -93,6 +98,10 @@ class InvestigationRunDispatcher:
         # and bok_unavailable, and the BoK collections it offered (#718).
         self._notes: dict[str, list[str]] = {}
         self._bok_offered: dict[str, list[str]] = {}
+        # Runs this process verifies now (#723), each with its dispatch id, and the waits.
+        self.verification_delay = verification_delay_seconds
+        self._verifying: dict[str, str] = {}
+        self._waiting: set[asyncio.Task[None]] = set()
 
     async def after_start(self, started: TransitionResult) -> None:
         # A run opens with start_investigation, or with continue_investigation when a human
@@ -125,6 +134,35 @@ class InvestigationRunDispatcher:
                 type(error).__name__,
             )
             await self._dispatch(incident_id, run_id, end_reason="investigator_failed")
+
+    def after_approval(self, incident_id: str, run_id: str) -> None:
+        """Verify what an approval ran once VERIFICATION_DELAY_SECONDS pass (#723). The wait
+        lives in this process: a restart before it leaves the manual verification commands."""
+        task = asyncio.create_task(self._verify_later(incident_id, run_id))
+        self._waiting.add(task)
+        task.add_done_callback(self._waiting.discard)
+
+    async def _verify_later(self, incident_id: str, run_id: str) -> None:
+        """The run's second dispatch, with its own receipts, while the approval still stands."""
+        await asyncio.sleep(self.verification_delay)
+        try:
+            view = await self.runtime.current(incident_id, run_id)
+        except Exception as error:
+            name = type(error).__name__
+            logger.error("verification_handoff_failed run_id=%s error=%s", run_id, name)
+            return
+        strategy = view.incident_state.get("mitigation_strategy") or {}
+        if view.incident_state.get("state") != "verifying" or "execution" not in strategy:
+            return  # A person verified it first, or nothing ran: there is nothing to measure.
+        self._verifying[run_id] = verification_dispatch(run_id)
+        try:
+            await self.dispatch(incident_id, run_id)
+        finally:
+            self._verifying.pop(run_id, None)
+
+    def _state(self, run_id: str) -> str:
+        """The state a dispatch's own events carry: a verification's incident stays verifying."""
+        return "verifying" if run_id in self._verifying else "investigating"
 
     async def end_interrupted(self) -> None:
         """At startup, end every run whose dispatch lost its process (an API restart).
@@ -192,8 +230,9 @@ class InvestigationRunDispatcher:
                 ),
                 # Nothing resumes an interrupted dispatch: its run ends and a human retries.
                 interrupted_termination=self._termination_event(
-                    termination("needs_human", now), (), now
+                    termination("needs_human", now), (), now, self._state(run_id)
                 ),
+                dispatch_id=self._verifying.get(run_id),
             )
             if claim == "active":
                 return
@@ -324,13 +363,19 @@ class InvestigationRunDispatcher:
         try:
             view = await self.runtime.current(incident_id, run_id)
             context = IncidentContext.model_validate(view.incident_state)
+            # A verification measures what ran (#723): no BoK, operations or memory to propose.
+            verifying = run_id in self._verifying
+            mitigation = view.incident_state["mitigation_strategy"] if verifying else None
             assert self.evidence is not None and self.gateway is not None
             assert self.gateway_settings is not None
             capabilities, discovery_id = await self.evidence.discover()
             request_ids.append(discovery_id)
-            capabilities += await self._bok_capabilities(run_id, principal)
-            operations, unavailable = await service_operations(
-                self.executor_url, context.alert.service
+            if not verifying:
+                capabilities += await self._bok_capabilities(run_id, principal)
+            operations, unavailable = (
+                (None, False)
+                if verifying
+                else await service_operations(self.executor_url, context.alert.service)
             )
         except EvidenceUnavailable as error:
             if error.request_id is not None:
@@ -354,9 +399,11 @@ class InvestigationRunDispatcher:
         tool_timeout = self.limits.tool_timeout_seconds
         model_timeout = self.gateway_settings.timeout_seconds
         limits = Limits(gateway_timeout_seconds=model_timeout, tool_timeout_seconds=tool_timeout)
-        offset = 0
+        # A verification's turns follow the ones its run already keeps (#723).
+        stored = await work.text_context.list(run_id) if verifying else ()
+        offset = max((item.sequence for item in stored), default=-1) + 1
         run_mcp_ids: list[UUID] = []
-        recalled = await self._recall(run_id, context, view.incident_state)
+        recalled = [] if verifying else await self._recall(run_id, context, view.incident_state)
         while True:
             known = {item.evidence_id for item in context.evidence}
             try:
@@ -364,11 +411,14 @@ class InvestigationRunDispatcher:
                     InvestigationRequest(
                         incident_id=incident_id,
                         run_id=run_id,
-                        objective="investigate",
+                        objective="verify" if verifying else "investigate",
                         context=context,
                         authorized_capabilities=capabilities,
                         service_operations=operations,
                         operations_unavailable=unavailable,
+                        mitigation=AppliedMitigation.model_validate(mitigation)
+                        if mitigation
+                        else None,
                     ),
                     self.gateway,
                     self.evidence,
@@ -611,7 +661,13 @@ class InvestigationRunDispatcher:
         now = datetime.now(UTC)
         turn_id = result.turns[-1].turn_id if result.turns else None
         # Events written with a transition carry the state it reaches, as the timeline reads them.
-        reached = "mitigating" if isinstance(result.outcome, ProposeMitigation) else "investigating"
+        reached = (
+            ("resolved" if result.outcome.passed else "investigating")
+            if isinstance(result.outcome, VerifyMitigation)
+            else "mitigating"
+            if isinstance(result.outcome, ProposeMitigation)
+            else self._state(run_id)
+        )
         incident_patch = (
             self._hypothesis_patch(
                 result.outcome,
@@ -680,6 +736,7 @@ class InvestigationRunDispatcher:
             incident_patch=incident_patch,
             run_patch=run_patch,
             contexts=contexts,
+            dispatch_id=self._verifying.get(run_id),
         )
 
     def _runtime_command(
@@ -722,10 +779,19 @@ class InvestigationRunDispatcher:
             patch = {"mitigation_strategy": mitigation, "evidence": evidence}
             transition_id, transition_outcome = "propose_mitigation", "propose_mitigation"
             inputs = {"incident_patch": patch}
+        elif isinstance(outcome, VerifyMitigation):
+            # What the verification measured joins the incident's evidence (#723).
+            transition_id, transition_outcome = (
+                ("verification_passed", "stable")
+                if outcome.passed
+                else ("verification_failed", "not_stable")
+            )
+            inputs = {"incident_patch": {"evidence": evidence}}
         else:
             return None
+        dispatch_id = self._verifying.get(run_id, run_id)
         return IncidentCommand(
-            command_id=f"investigation-{run_id}",
+            command_id=f"investigation-{dispatch_id}",
             incident_id=incident_id,
             run_id=run_id,
             transition_id=transition_id,
@@ -733,7 +799,7 @@ class InvestigationRunDispatcher:
             actor_reference=ActorReference(principal.principal.principal_id),
             outcome=transition_outcome,
             expected_incident_version=expected_incident_version,
-            dispatch_id=run_id,
+            dispatch_id=dispatch_id,
             turn_id=result.turns[-1].turn_id if result.turns else None,
             inputs=inputs,
             extra_events=tuple(events),
@@ -833,7 +899,9 @@ class InvestigationRunDispatcher:
             # with a new run. An `unknown` outcome is never redispatched inside this run.
             run_patch = termination(_terminated_reason(reason_code, result_status), now)
             events.append(
-                self._termination_event(run_patch, request_ids, now, reason_code=reason_code)
+                self._termination_event(
+                    run_patch, request_ids, now, self._state(run_id), reason_code=reason_code
+                )
             )
         else:
             # The incident keeps its state; the run waits for a human and is never retried.
@@ -843,7 +911,7 @@ class InvestigationRunDispatcher:
                     event_id=f"evt_{token_hex(8)}",
                     kind="escalation",
                     payload={
-                        "state": "investigating",
+                        "state": self._state(run_id),
                         "reason_code": reason_code,
                         "run_patch": run_patch,
                         "request_id": str(request_ids[-1]) if request_ids else None,
@@ -858,6 +926,7 @@ class InvestigationRunDispatcher:
             events=events,
             run_patch=run_patch,
             contexts=contexts,
+            dispatch_id=self._verifying.get(run_id),
         )
 
     @staticmethod
@@ -918,11 +987,11 @@ class InvestigationRunDispatcher:
         turn_id: str | None = None,
         result_status: str | None = None,
         diagnostic: Mapping[str, Any] | None = None,
-        state: str = "investigating",
+        state: str | None = None,
         agent_principal_id: str | None = None,
     ) -> EventDraft:
         receipt: dict[str, Any] = {
-            "dispatch_id": run_id,
+            "dispatch_id": self._verifying.get(run_id, run_id),
             "phase": phase,
             "status": status,
             "request_ids": [str(item) for item in _unique_ids(request_ids)],
@@ -944,7 +1013,7 @@ class InvestigationRunDispatcher:
             event_id=f"evt_{token_hex(8)}",
             kind="dispatch_receipt",
             payload={
-                "state": state,
+                "state": state or self._state(run_id),
                 "dispatch_receipt": receipt,
                 "request_id": str(request_ids[-1]) if request_ids else None,
             },
@@ -1017,6 +1086,10 @@ class InvestigationRunDispatcher:
             outcome["supporting_evidence"] = result.outcome.supporting_evidence
         elif isinstance(result.outcome, RequestHuman):
             outcome["reason"] = result.outcome.reason
+        elif isinstance(result.outcome, VerifyMitigation):
+            outcome["passed"] = result.outcome.passed
+            outcome["summary"] = result.outcome.summary
+            outcome["supporting_evidence"] = result.outcome.supporting_evidence
         return EventDraft(
             event_id=f"evt_{token_hex(8)}",
             kind="investigation_result",
