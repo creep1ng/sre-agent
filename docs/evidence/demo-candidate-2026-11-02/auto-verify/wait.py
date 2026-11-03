@@ -39,8 +39,29 @@ verification = [
     for event in events
     if "erif" in (event.get("summary") or "")
 ]
+try:
+    reasoning = get(f"/incidents/{INCIDENT}/runs/{run_id}/context")["reasoning"]
+except OSError:
+    reasoning = {}
+ran = (reasoning.get("mitigation_strategy") or {}).get("execution") or {}
+# What the agent measured after the approval ran: the query and its window (#723).
+after = [
+    {"query": item.get("query"), "collected_at": item.get("collected_at")}
+    for item in reasoning.get("evidence", [])
+    if ran.get("executed_at") and (item.get("collected_at") or "") > ran["executed_at"]
+]
 waited = round(time.monotonic() - started, 1)
-print(json.dumps({"state": state, "waited_seconds": waited, "verification_events": verification}))
+print(
+    json.dumps(
+        {
+            "state": state,
+            "waited_seconds": waited,
+            "executed_at": ran.get("executed_at"),
+            "measured_after": after,
+            "verification_events": verification,
+        }
+    )
+)
 by_agent = [
     event
     for event in verification

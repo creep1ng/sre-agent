@@ -47,11 +47,25 @@ sent no other message about the incident: two Bot API edits on the one decision 
 The scripted model's hypothesis blames a deploy while proposing the flag; that is the stand-in's
 fixed script, not the real model's reasoning.
 
-## Gap the run shows
+## Gap the run showed, closed by the agent's verification (2026-11-03)
 
-Grafana's resolution alone records no `verification_passed`, so the recovery edit only follows a
-verification command. Here `verify.py` sends it as `demo-human`. On 2026-11-04 someone has to
-record it (API, or the agent's verification once #723 lands), or the message stops at «Aprobada».
+Grafana's resolution records no `verification_passed`, so above `verify.py` sent it as
+`demo-human`. Since Camilo's #957 and #958 (#723) the agent verifies an executed approval itself.
+`auto-verify/` is the same path with nobody verifying (`VERIFY_STEP=…/auto-verify/wait.py`, which
+fails unless the agent recorded «Service verified stable.»), on `main` at `b9826a87` with A–E
+merged and the verification-window fix (#723, after EC2 showed a 60 s delay measuring a window
+that still held the fault). The stand-in counts errors while a query's window reaches back to the
+fault, as Prometheus does.
+
+| Run (03:24–03:33 UTC) | Verification | Result | File |
+| --- | --- | --- | --- |
+| Without the fix: 60 s delay, the model's `[5m]` window | 03:27:27 | «Verification found the service had not recovered.», back to `investigating` | `auto-verify/without-window-fix.json` |
+| With the fix: compose's 150 s delay, the window after `executed_at` (`increase(…[152s])`) | 03:33:11, 150 s after `exe` at 03:30:41 | «Verification found the service recovered.», «Service verified stable.» by the agent, `resolved` | `auto-verify/verification.json` |
+
+With the fix the decision message got its two edits, «Aprobada por Demo human desde Telegram,
+2026-11-03 03:30 UTC.» and «Resuelto a las 03:33 UTC · 3 min tras la mitigación que aprobaste ·
+ver la consola.» (`auto-verify/telegram.json`); `auto-verify/incident.png` shows the agent's
+second metrics query and the verification step «Midnight · Servicio verificado estable».
 
 ## Repeat
 
@@ -61,6 +75,8 @@ From a checkout of the candidate (fetch the stack heads, then `git checkout orig
 
 ```sh
 OUT=/tmp/demo-candidate docs/evidence/demo-candidate-2026-11-02/run.sh
+OUT=/tmp/demo-auto-verify VERIFY_STEP=docs/evidence/demo-candidate-2026-11-02/auto-verify/wait.py \
+  docs/evidence/demo-candidate-2026-11-02/run.sh
 ```
 
 It writes the same files under `$OUT` (`shots/` holds the screenshots and `telegram.json`) and
