@@ -90,6 +90,7 @@ class InvestigationRunDispatcher:
         executor_url: str | None = None,
         tool_timeout_seconds: float = 30.0,
         verification_delay_seconds: float = 60.0,
+        postmortem_draft: bool = False,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language, self.executor_url = language, executor_url
@@ -105,6 +106,7 @@ class InvestigationRunDispatcher:
         self.verification_delay = verification_delay_seconds
         self._verifying: dict[str, str] = {}
         self._waiting: set[asyncio.Task[None]] = set()
+        self.postmortem_draft = postmortem_draft
 
     async def after_start(self, started: TransitionResult) -> None:
         # A run opens with start_investigation, or with continue_investigation when a human
@@ -174,22 +176,27 @@ class InvestigationRunDispatcher:
 
     def after_resolved(self, incident_id: str) -> None:
         """Open the postmortem of a resolved incident and write the agent's draft (#711), so a
-        person only reads, approves and closes it. A failure leaves the manual path."""
+        person only reads, approves and closes it. Off, or without an agent identity, or on a
+        failure, the manual path remains."""
+        if not self.postmortem_draft or self.gateway_settings is None:
+            return
         task = asyncio.create_task(self._draft_postmortem(incident_id))
         self._waiting.add(task)
         task.add_done_callback(self._waiting.discard)
 
     async def _draft_postmortem(self, incident_id: str) -> None:
         try:
-            agent = await self._configured_agent_id() if self.gateway_settings else None
+            agent = await self._configured_agent_id()
+            if agent is None:
+                return
             # One key per incident: a second resolution replays the same start.
             await self.runtime.start_run(
                 RunStart(
                     command_id=f"postmortem-{incident_id}",
                     incident_id=incident_id,
                     objective="postmortem",
-                    actor="agent" if agent else "system",
-                    actor_reference=ActorReference(agent) if agent else None,
+                    actor="agent",
+                    actor_reference=ActorReference(agent),
                 )
             )
             async with self.units() as work:
@@ -210,7 +217,7 @@ class InvestigationRunDispatcher:
                     expected_version=0,
                     content=content,
                     run_ids=run_ids,
-                    actor_id=agent or "system",
+                    actor_id=agent,
                     now=datetime.now(UTC),
                 )
         except Exception as error:

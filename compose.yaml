@@ -38,6 +38,8 @@ services:
       INVESTIGATOR_TOOL_TIMEOUT_SECONDS: ${INVESTIGATOR_TOOL_TIMEOUT_SECONDS:-30}
       # The alert rule's 2 min window plus margin: measured sooner, the window still holds the fault.
       VERIFICATION_DELAY_SECONDS: ${VERIFICATION_DELAY_SECONDS:-150}
+      # Once an incident resolves, the agent opens its postmortem with a draft (#711); off: by hand.
+      POSTMORTEM_DRAFT: ${POSTMORTEM_DRAFT:-agent}
       # Grafana alert intake (#765): unset keeps POST /v1/alert-intake/grafana unmounted; an
       # empty operator records episodes without declaring them.
       ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:-}

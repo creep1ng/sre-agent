@@ -175,12 +175,13 @@ lives in the API process: after a restart, the manual commands decide. A passed 
 `investigating`, ending the run), each with what was measured. Without a verdict nothing moves
 and the manual commands remain; if a person verified first, the agent measures nothing.
 
-Once an incident is `resolved`, by that verdict or by a person's `verification_passed`, the API
-opens its postmortem (`start_postmortem`, one per incident) and writes version 1 as the agent's
-draft (#711). No model is asked: `incident/postmortem_draft.py` quotes what the incident recorded
-(the alert, the declared impact, the last hypothesis as the probable cause, the approved plan, the
+With `POSTMORTEM_DRAFT=agent` (the `compose.yaml` default) and an agent identity, once an
+incident is `resolved`, by that verdict or by a person's `verification_passed`, the API opens its
+postmortem (`start_postmortem`, one per incident) and writes version 1 as the agent's draft
+(#711). No model is asked: `incident/postmortem_draft.py` quotes what the incident recorded (the
+alert, the declared impact, the last hypothesis as the probable cause, the approved plan, the
 verification check) and cites its stored state changes. A person reviews it and closes. Like the
-verification wait, it runs in the API process; if it fails, the postmortem routes remain.
+verification wait, it runs in the API process; off, or if it fails, the postmortem routes remain.
 
 ## Evidence verdicts
 

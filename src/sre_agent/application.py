@@ -144,6 +144,7 @@ def create_application(
         executor_url=runtime_settings.deploy_executor_url,
         tool_timeout_seconds=runtime_settings.investigator_tool_timeout_seconds,
         verification_delay_seconds=runtime_settings.verification_delay_seconds,
+        postmortem_draft=runtime_settings.postmortem_draft,
     )
     application.include_router(
         runs_router(

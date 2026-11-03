@@ -43,7 +43,8 @@ def _text(value: Any, fallback: str) -> str:
 def compose(state: Mapping[str, Any], events: Sequence[RunEvent], language: str) -> dict[str, Any]:
     """The draft's content, valid for `validate_content`, citing only the given events."""
     words = WORDS.get(language, WORDS["es"])
-    alert = state.get("alert") if isinstance(state.get("alert"), Mapping) else {}
+    alert = state.get("alert")
+    alert = alert if isinstance(alert, Mapping) else {}
     hypotheses = [item for item in state.get("hypotheses") or () if isinstance(item, Mapping)]
     strategy = state.get("mitigation_strategy")
     strategy = strategy if isinstance(strategy, Mapping) else {}
