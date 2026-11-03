@@ -602,6 +602,9 @@ class RunCommandService:
         if transition.execution is not None and self.verifier is not None:
             # It ran: the agent measures the service once the delay passes (#723).
             self.verifier.after_approval(incident_id, run_id)
+        if command == "verification_passed" and self.verifier is not None:
+            # Resolved: the agent opens the postmortem with its draft (#711).
+            self.verifier.after_resolved(incident_id)
         sequence = max((event.sequence for event in result.events), default=-1)
         try:
             payload = project_run_state(result.run, self.workflow, event_sequence=sequence)

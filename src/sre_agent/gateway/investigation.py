@@ -25,11 +25,14 @@ from sre_agent.incident.persistence import (
     TransitionResult,
     verification_dispatch,
 )
+from sre_agent.incident.postmortem import validate_content
+from sre_agent.incident.postmortem_draft import compose
 from sre_agent.incident.runtime import (
     ActorReference,
     IncidentCommand,
     IncidentRuntime,
     IncidentView,
+    RunStart,
     escalation,
     termination,
 )
@@ -87,6 +90,7 @@ class InvestigationRunDispatcher:
         executor_url: str | None = None,
         tool_timeout_seconds: float = 30.0,
         verification_delay_seconds: float = 60.0,
+        postmortem_draft: bool = False,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language, self.executor_url = language, executor_url
@@ -102,6 +106,7 @@ class InvestigationRunDispatcher:
         self.verification_delay = verification_delay_seconds
         self._verifying: dict[str, str] = {}
         self._waiting: set[asyncio.Task[None]] = set()
+        self.postmortem_draft = postmortem_draft
 
     async def after_start(self, started: TransitionResult) -> None:
         # A run opens with start_investigation, or with continue_investigation when a human
@@ -168,6 +173,57 @@ class InvestigationRunDispatcher:
             await self.dispatch(incident_id, run_id)
         finally:
             self._verifying.pop(run_id, None)
+
+    def after_resolved(self, incident_id: str) -> None:
+        """Open the postmortem of a resolved incident and write the agent's draft (#711), so a
+        person only reads, approves and closes it. Off, or without an agent identity, or on a
+        failure, the manual path remains."""
+        if not self.postmortem_draft or self.gateway_settings is None:
+            return
+        task = asyncio.create_task(self._draft_postmortem(incident_id))
+        self._waiting.add(task)
+        task.add_done_callback(self._waiting.discard)
+
+    async def _draft_postmortem(self, incident_id: str) -> None:
+        try:
+            agent = await self._configured_agent_id()
+            if agent is None:
+                return
+            # One key per incident: a second resolution replays the same start.
+            await self.runtime.start_run(
+                RunStart(
+                    command_id=f"postmortem-{incident_id}",
+                    incident_id=incident_id,
+                    objective="postmortem",
+                    actor="agent",
+                    actor_reference=ActorReference(agent),
+                )
+            )
+            async with self.units() as work:
+                await work.postmortems.get(incident_id, lock=True)
+                incident = await work.incidents.get(incident_id)
+                reserved = (incident.state.get("postmortem") or {}) if incident else {}
+                if not incident or incident.state.get("state") != "postmortem" or not reserved:
+                    return
+                if await work.postmortems.get(incident_id) is not None:
+                    return  # Someone wrote it first.
+                run_ids = await work.runs.list_ids(incident_id)
+                events = [event for run in run_ids for event in await work.events.list_after(run)]
+                content = compose(incident.state, events, self.language)
+                validate_content(content)
+                await work.postmortems.save(
+                    reserved["postmortem_id"],
+                    incident_id,
+                    expected_version=0,
+                    content=content,
+                    run_ids=run_ids,
+                    actor_id=agent,
+                    now=datetime.now(UTC),
+                )
+        except Exception as error:
+            # Only the type is logged, never the content.
+            name = type(error).__name__
+            logger.error("postmortem_draft_failed incident_id=%s error=%s", incident_id, name)
 
     def _state(self, run_id: str) -> str:
         """The state a dispatch's own events carry: a verification's incident stays verifying."""
@@ -724,6 +780,8 @@ class InvestigationRunDispatcher:
         )
         if command is not None:
             await self.runtime.execute(command)
+            if reached == "resolved":
+                self.after_resolved(incident_id)
             return
         # No transition follows this outcome, so the run ends here and a human decides the next.
         run_patch = termination(

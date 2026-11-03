@@ -9,6 +9,8 @@ services:
     volumes: ["./scripts/incident_console_upstreams.py:/e2e/incident_console_upstreams.py:ro"]
     environment:
       STEP_SECONDS: "${STEP_SECONDS:-2}"
+      # The RC-2 journeys read the agent's draft once an incident resolves (#711).
+      POSTMORTEM_DRAFT: agent
       DEPLOY_EXECUTOR_URL: http://deploy-executor:8000
 
   deploy-executor:
