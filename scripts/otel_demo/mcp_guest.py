@@ -102,6 +102,9 @@ def prepare():
             "checkout": {"environment": {"FLAGD_CACHE": "disabled"}},
             # Provisioning outside upstream's bind mount, so nothing is created in its checkout.
             "grafana": {
+                # Upstream caps Grafana at 175M; loading the Demo Dashboard peaks near 275M, the
+                # kernel kills it, and the proxy answers 503 while alert rules restart their wait.
+                "deploy": {"resources": {"limits": {"memory": "1G"}}},
                 "environment": {
                     "GF_PATHS_PROVISIONING": "/etc/midnight-provisioning",
                     "ALERT_INTAKE_URL": f"http://host.docker.internal:{OUTBOX}"

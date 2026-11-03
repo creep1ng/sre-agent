@@ -123,7 +123,13 @@ while IFS=$'\\t' read -r image digest; do
   docker pull "$repository@$digest"
   docker image tag "$repository@$digest" "$image"
 done <digests.lock
-"${{compose[@]}}" up -d --pull never --no-build
+# A cold start can leave opensearch unhealthy past its healthcheck, which aborts the whole
+# `up` and leaves the store down; once it settles, a second `up` starts the rest.
+for attempt in 1 2 3; do
+  "${{compose[@]}}" up -d --pull never --no-build && break
+  [[ $attempt == 3 ]] && exit 1
+  sleep 30
+done
 '''
     if len(script.encode()) > MAX_USER_DATA_BYTES:
         raise DemoError("bootstrap exceeds EC2's 16 KiB user-data limit")
