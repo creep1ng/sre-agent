@@ -18,6 +18,7 @@ const record: Record<string, unknown> = { sanitized: true, stamp: STAMP };
 const TECHNICAL = /\brun_|\bevt_|\bev_|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 const AMBER = ["rgb(242, 180, 90)", "rgb(166, 90, 0)"];
 const PLAN = "Volver checkout a la 1.4.0";
+const AGENT_TITLE = "Fallan los cobros en checkout";
 
 test.use({ video: "off", trace: "off" });
 test.describe.configure({ mode: "serial" });
@@ -82,14 +83,19 @@ async function grafana(service: string, status: "firing" | "resolved", startsAt:
   return (await response.json()).episodes[0];
 }
 
-/** Opens the incident in a language; the key lives only in this tab's memory, so it is connected each time. */
-async function open(page: Page, incident: string, language: "es" | "en" = "es") {
+/** Opens a console path in a language and connects the key, which lives only in this tab's memory. */
+async function connect(page: Page, path: string, language: "es" | "en") {
   await page.addInitScript((value) => localStorage.setItem("midnight-language", JSON.stringify({ state: { language: value }, version: 0 })), language);
-  await page.goto(`incidentes/${incident}`);
+  await page.goto(path);
   await page.getByRole("button", { name: language === "es" ? "Conectar API" : "Connect API" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Clave de API").fill(process.env.DEMO_HUMAN_API_KEY!);
   await dialog.getByRole("button", { name: "Conectar", exact: true }).click();
+}
+
+/** Opens the incident in a language. */
+async function open(page: Page, incident: string, language: "es" | "en" = "es") {
+  await connect(page, `incidentes/${incident}`, language);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(/checkout/i);
 }
 
@@ -173,8 +179,10 @@ test.describe("incidente RC-2 contra la API real", () => {
         await expect(page.getByRole("region", { name: es ? "Propuesta de mitigación" : "Mitigation proposal" })).toBeVisible({ timeout: 120_000 });
 
         // The title: the rule's own text in the page's language; the alert's hint behind its disclosure.
+        // The title the investigator wrote with its hypothesis (#870), as plain text.
         const title = page.getByRole("heading", { level: 1 });
-        await expect(title).toHaveText(es ? "Errores en checkout (19\u00a0% de spans, umbral 5\u00a0%)" : "Errors in checkout (19% of spans, threshold 5%)");
+        await expect(title).toHaveText(AGENT_TITLE);
+        await expect(title).toHaveAttribute("data-title", "agent");
         expect(parseFloat(await title.evaluate((element) => getComputedStyle(element).fontSize))).toBeLessThanOrEqual(44);
         const alert = page.locator("article details", { hasText: es ? "Alerta de Grafana" : "Grafana alert" }).first();
         await alert.locator("summary").click();
@@ -257,6 +265,39 @@ test.describe("incidente RC-2 contra la API real", () => {
         await page.close();
       }
     }
+
+    // The list and the inbox name it the same way.
+    const listed = (await read("/incidents?status=open")).incidents.find((item: { incident_id: string }) => item.incident_id === incident);
+    expect(listed.title).toBe(AGENT_TITLE);
+    expect((await read(`/incidents/${incident}`)).title).toBe(AGENT_TITLE);
+    for (const language of ["es", "en"] as const) {
+      const inbox = await browser.newPage();
+      await connect(inbox, "", language);
+      const card = inbox.locator("article[data-decision]", { hasText: AGENT_TITLE });
+      await expect(card.getByRole("heading", { level: 3 })).toHaveText(AGENT_TITLE);
+      await capture(inbox, `titulo-bandeja-${language}`, card);
+      await inbox.close();
+    }
+    (record.page as Record<string, unknown>).listed = listed.title;
+  });
+
+  test("un título inválido del agente no se muestra: la página y la lista usan el de la alerta", async ({ page }) => {
+    // The scripted model titles `[e2e:titulo]` on two lines and over 60 characters.
+    const incident = await declare("checkout no puede cobrar a payment [e2e:titulo]");
+    record.invalidTitle = incident;
+    await open(page, incident);
+    await investigate(page);
+    const title = page.getByRole("heading", { level: 1 });
+    await expect(title).toHaveText("Checkout no puede cobrar a payment [e2e:titulo]");
+    await expect(title).toHaveAttribute("data-title", "alert");
+    expect((await read(`/incidents/${incident}`)).title).toBeNull();
+    const listed = (await read("/incidents?status=open")).incidents.find((item: { incident_id: string }) => item.incident_id === incident);
+    expect(listed.title).toBeNull();
+    await capture(page, "titulo-invalido-es", page.locator("article > h1"));
+    const english = await page.context().newPage();
+    await open(english, incident, "en");
+    await expect(english.getByRole("heading", { level: 1 })).toHaveAttribute("data-title", "alert");
+    await capture(english, "titulo-invalido-en", english.locator("article > h1"));
   });
 
   test("las afirmaciones de la hipótesis muestran su evidencia y llevan a su paso; aprobar envía el comando gobernado", async ({ page }) => {
@@ -763,8 +804,16 @@ test.describe("incidente RC-2 contra la API real", () => {
     const timeline = page.getByRole("list", { name: "Línea de tiempo del incidente" });
     await expect(timeline.getByText("La investigación se detuvo: el modelo respondió en un formato no válido.")).toBeVisible({ timeout: 90_000 });
     await expect(page.getByText("detenido", { exact: true })).toBeVisible();
+    // No hypothesis yet: the title is the alert's own words, never empty (#870).
+    const title = page.getByRole("heading", { level: 1 });
+    await expect(title).toHaveText("Checkout no puede cobrar a payment [e2e:falla]");
+    await expect(title).toHaveAttribute("data-title", "alert");
+    await capture(page, "titulo-respaldo-es", page.locator("article > h1"));
     await page.getByRole("button", { name: "Reintentar la investigación" }).click();
     await expect(page.getByRole("heading", { level: 2, name: PLAN })).toBeVisible({ timeout: 90_000 });
+    // The retry's hypothesis names it.
+    await expect(title).toHaveText(AGENT_TITLE);
+    await capture(page, "titulo-agente-es", page.locator("article > h1"));
     await expect(timeline.getByText("Tú · Reintentaste la investigación")).toBeVisible();
     await noTechnicalIds(page);
     await page.screenshot({ path: `${DIR}/reintento-es.png`, fullPage: true });
