@@ -1,0 +1,91 @@
+{
+  "sanitized": true,
+  "stamp": "fa676db0",
+  "page": {
+    "incident": "inc-15aba1d7c6fcf17528d5174f7cb8b336",
+    "widths": {
+      "es-1280": {
+        "overflow": {
+          "page": 0,
+          "outside": [],
+          "wide": []
+        },
+        "severityContrast": {
+          "dark": 9.863722872313144,
+          "light": 6.121772152767252
+        },
+        "title": "Errores en checkout (19 % de spans, umbral 5 %)"
+      },
+      "es-390": {
+        "overflow": {
+          "page": 0,
+          "outside": [],
+          "wide": []
+        },
+        "severityContrast": {
+          "dark": 9.863722872313144,
+          "light": 6.121772152767252
+        },
+        "title": "Errores en checkout (19 % de spans, umbral 5 %)"
+      },
+      "en-1280": {
+        "overflow": {
+          "page": 0,
+          "outside": [],
+          "wide": []
+        },
+        "severityContrast": {
+          "dark": 9.863722872313144,
+          "light": 6.121772152767252
+        },
+        "title": "Errors in checkout (19% of spans, threshold 5%)"
+      },
+      "en-390": {
+        "overflow": {
+          "page": 0,
+          "outside": [],
+          "wide": []
+        },
+        "severityContrast": {
+          "dark": 9.863722872313144,
+          "light": 6.121772152767252
+        },
+        "title": "Errors in checkout (19% of spans, threshold 5%)"
+      }
+    }
+  },
+  "approved": "inc-e1e116444e82a520854ab129a5c6ba9e",
+  "claims": 3,
+  "disclosures": [
+    "Alerta de Grafana",
+    "Ver el resultado sin procesar",
+    "Ver la consulta de métricas",
+    "Ver el resultado sin procesar",
+    "Ver la búsqueda de logs",
+    "Ver el filtro de cambios",
+    "Ver el mecanismo y qué la refutaría",
+    "Detalles técnicos"
+  ],
+  "approvedBy": "demo-human",
+  "rejected": "inc-11f339a056d0e1a4959ab3f572f4ddbb",
+  "rejectedStatus": "rejected",
+  "decisionsAfterRetry": [
+    "Una propuesta anterior\n\nRechazada · Tú · 23:26",
+    "Volver checkout a la 1.4.0\n\nCausa\nel despliegue de checkout 1.5.0 rompió los cobros contra payment.\nVer el mecanismo y qué la refutaría\n\nAprobada · Tú · 23:26"
+  ],
+  "decidedElsewhere": "inc-ec32c513ef4b1e3f58fcae22f34f5b44",
+  "verified": "inc-64d81d8785f73161d58d262173f6dc19",
+  "resolvedText": "23:27\n\nVerificación · la señal se recuperó\n\nGrafana dejó de alertar a las 23:27, 1 s después de aprobar la mitigación.",
+  "verifiedText": "23:27\n\nVerificación · la señal se recuperó\n\nGrafana dejó de alertar a las 23:27, 1 s después de aprobar la mitigación.\n\nTú · Servicio verificado estable",
+  "executed": "inc-8cf7dc3dba8054617d91ca4ffb799ab2",
+  "refusedState": "mitigating",
+  "execution": {
+    "id": "exe_6c056a95a0a9d556",
+    "outcome": "rolled_back",
+    "before": "midnight-e2e/checkout:1.5.0",
+    "after": "midnight-e2e/checkout:1.4.0",
+    "durationMs": 6715,
+    "running": "1.4.0"
+  },
+  "retried": "inc-1194ee9837f5c81ded59624e4fb774f4"
+}

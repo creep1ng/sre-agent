@@ -25,19 +25,42 @@ from sre_agent.gateway.providers import ProviderRequest, ProviderResult
 STEP_SECONDS = float(os.environ.get("STEP_SECONDS", "2"))
 STATE = re.compile(r"^State: (.*)$", re.MULTILINE)
 CHANGES = "midnight_recent_changes"
-ERRORS = 'increase(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"}[2m])'
+ERRORS = (
+    'increase(traces_span_metrics_calls_total{{service_name="{}",'
+    'status_code="STATUS_CODE_ERROR"}}[5m])'
+)
 FINDINGS = {
-    "query_prometheus": "`checkout` registra 12 llamadas con error y `payment` ninguna",
+    "query_prometheus": "Unos 9,8 errores en 5 min tanto en `Charge` como en `PlaceOrder`",
     "query_elasticsearch": "Los cobros fallan con `context deadline exceeded`",
     CHANGES: "`checkout` desplegó la `1.5.0` minutos antes de la alerta",
 }
+# As long as the walkthrough's real hypothesis (2026-11-02): in labelled lines when the prompt
+# asks for them (#870), else in one paragraph as before.
+PARTS = (
+    "el despliegue de `checkout` `1.5.0` rompió los cobros contra `payment`.",
+    "la `1.5.0` llama a `oteldemo.PaymentService/Charge` con un plazo de 200 ms; `payment` tarda "
+    "más, la llamada vence con `context deadline exceeded` y `oteldemo.CheckoutService/PlaceOrder` "
+    "termina con `STATUS_CODE_ERROR`, lo que eleva la tasa de spans con error de `checkout`.",
+    "que `payment` también falle sin pasar por `checkout`, o que los errores empiecen antes del "
+    "despliegue de la `1.5.0`.",
+)
+
+
+def statement(prompt: str) -> str:
+    labels = ("Causa", "Mecanismo", "La refutaría")
+    if "**Causa:**" in prompt:
+        return "\n".join(f"**{label}:** {part}" for label, part in zip(labels, PARTS, strict=True))
+    labels = ("Causa", "Mecanismo", "Observación que la refutaría")
+    return " ".join(f"{label}: {part}" for label, part in zip(labels, PARTS, strict=True))
+
+
 failures: Counter[str] = Counter()
 
 
 def arguments(tool: str, service: str) -> dict:
     if tool == "query_prometheus":
         return {"datasource_uid": "webstore-metrics", "query_type": "instant", "end_time": "now",
-                "expr": f"sum by (service_name) ({ERRORS})"}  # fmt: skip
+                "expr": f"sum by (span_name) ({ERRORS.format(service)})"}  # fmt: skip
     if tool == "query_elasticsearch":
         return {"datasource_uid": "webstore-logs", "index": "otel-logs-*", "limit": 10,
                 "query": f'resource.service.name:"{service}"', "start_time": "now-15m",
@@ -75,7 +98,7 @@ def decide(state: dict, prompt: str) -> dict:
             return {"action": "use_tool", "tool": tool, "arguments": arguments(tool, service)}
     return {
         "action": "propose_hypothesis",
-        "statement": "El despliegue de `checkout` `1.5.0` rompió los cobros contra `payment`",
+        "statement": statement(prompt),
         "confidence": "medium",
         "supporting_evidence": [item["evidence_id"] for item in collected],
         "verdicts": {
@@ -102,16 +125,52 @@ class ScriptedModel:
         )
 
 
+# What the OTel demo's log index returns: whole documents, resource attributes included, so a
+# summary is cut at 8000 characters as in a real run.
+RESOURCE = {
+    "host.arch": "amd64", "host.name": "ip-10-0-0-12", "os.type": "linux",
+    "service.namespace": "opentelemetry-demo", "service.version": "1.5.0",
+    "telemetry.sdk.language": "go", "telemetry.sdk.name": "opentelemetry",
+}  # fmt: skip
+LOGS = [
+    ("ERROR", "failed to charge card: rpc error: code = DeadlineExceeded desc = context deadline"),
+    ("ERROR", "[PlaceOrder] payment failed: context deadline exceeded"),
+    ("INFO", "[PlaceOrder] user_id=4f1c currency=USD"),
+]  # fmt: skip
+
+
+def documents(service: str) -> list[dict]:
+    return [
+        {
+            "_index": "otel-logs-2026-11-02",
+            "_source": {
+                "@timestamp": f"2026-11-02T22:0{7 - index // 3}:{59 - index:02d}.{index:03d}Z",
+                "body": body,
+                "resource": {**RESOURCE, "service.name": service},
+                "severity": {"text": level},
+                "traceId": secrets.token_hex(16),
+            },
+        }
+        for index, (level, body) in enumerate(LOGS * 7)
+    ]
+
+
 class ScriptedMCP:
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
         if tool_name == "query_elasticsearch":
-            body = "checkout: charge failed: context deadline exceeded"
-            return {"total": 3, "documents": [{"_source": {"body": body}}], "warnings": []}
-        series = {"checkout": "12", "frontend": "24", "payment": "0"}
+            service = re.search(r'"([^"]+)"', arguments.get("query", "")) or None
+            return {"total": 20, "documents": documents(service[1] if service else "checkout")}
+        by = "span_name" if "span_name" in arguments.get("expr", "") else "service_name"
+        series = (
+            {"oteldemo.PaymentService/Charge": "9.758699999999997",
+             "oteldemo.CheckoutService/PlaceOrder": "9.758699999999997"}
+            if by == "span_name"
+            else {"checkout": "12", "frontend": "24.5", "payment": "0"}
+        )  # fmt: skip
         return {
             "resultType": "vector",
             "result": [
-                {"metric": {"service_name": name}, "value": [1761800000, value]}
+                {"metric": {by: name}, "value": [1761800000, value]}
                 for name, value in series.items()
             ],
         }

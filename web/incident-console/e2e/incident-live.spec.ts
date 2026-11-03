@@ -59,13 +59,20 @@ async function declare(summary: string): Promise<string> {
   return declared.incident_id;
 }
 
+/** The annotations of demo/grafana/alerting/midnight.yaml's error rule as Grafana expanded them in the walkthrough (2026-11-02). */
+const WALKTHROUGH = {
+  summary: "checkout: 19.05% of spans failed over the last 2 min (threshold 5%).",
+  description:
+    'Evidence: Prometheus datasource webstore-metrics, metric traces_span_metrics_calls_total with service_name="checkout" and status_code="STATUS_CODE_ERROR" for the errors, span_name for the failing operation; logs in datasource webstore-logs, index otel-logs-*, field resource.service.name:"checkout".',
+};
+
 /** One Grafana Alerting delivery to intake (#765), as the contact point sends it with its secret. */
-async function grafana(service: string, status: "firing" | "resolved", startsAt: string) {
+async function grafana(service: string, status: "firing" | "resolved", startsAt: string, annotations: Record<string, string> = { summary: `${service} no puede cobrar a payment` }) {
   const intake = await client(process.env.ALERT_INTAKE_GRAFANA_SECRET!);
   const alert = {
     status,
     labels: { alertname: "service-error-rate", service_name: service, severity: "critical" },
-    annotations: { summary: `${service} no puede cobrar a payment` },
+    annotations,
     startsAt,
     endsAt: status === "resolved" ? new Date().toISOString() : "0001-01-01T00:00:00Z",
     fingerprint: `service-error-rate-${service}`,
@@ -83,7 +90,7 @@ async function open(page: Page, incident: string, language: "es" | "en" = "es") 
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Clave de API").fill(process.env.DEMO_HUMAN_API_KEY!);
   await dialog.getByRole("button", { name: "Conectar", exact: true }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/checkout/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/checkout/i);
 }
 
 /** Declaring starts the investigation on the server (#858): the page follows it to the proposal. */
@@ -115,12 +122,12 @@ async function capture(page: Page, name: string, target?: ReturnType<Page["locat
   await page.emulateMedia({ colorScheme: "dark" });
 }
 
-/** The meta row's last update: a clock, the timeline's time format and the full date on hover; returns its instant. */
+/** The meta row's last update: said in words, the timeline's time format and the full date on hover; returns its instant. */
 async function lastUpdate(page: Page, name: string, full: RegExp): Promise<number> {
-  const meta = page.locator("article > p").first();
-  const stamp = meta.locator("time");
+  const updated = page.locator("[data-meta=updated]");
+  const stamp = updated.locator("time");
   await expect(stamp).toHaveText(/^\d{2}:\d{2}$/);
-  await expect(meta.locator("svg.lucide-clock")).toBeVisible();
+  await expect(updated).toHaveText(/^(Actualizado|Updated) \d{2}:\d{2}$/);
   await stamp.hover();
   await expect(page.getByRole("tooltip")).toHaveText(full);
   for (const scheme of ["dark", "light"] as const) {
@@ -151,6 +158,107 @@ test.describe("incidente RC-2 contra la API real", () => {
   test.beforeAll(() => mkdirSync(DIR, { recursive: true }));
   test.afterAll(() => writeFileSync(`${DIR}/verification.json`, JSON.stringify(record, null, 2)));
 
+  // First, so its Grafana alert for `checkout` opens an incident instead of joining a declared one.
+  test("la página se lee: título corto, hipótesis en partes, etapas con hora, resultados de las consultas y nada se sale", async ({ browser }) => {
+    test.setTimeout(420_000);
+    const incident = (await grafana("checkout", "firing", new Date(Date.now() - 120_000).toISOString(), WALKTHROUGH)).incident_id;
+    expect(incident).toBeTruthy();
+    record.page = { incident, widths: {} };
+    const widths = (record.page as { widths: Record<string, unknown> }).widths;
+    for (const language of ["es", "en"] as const) {
+      const es = language === "es";
+      for (const width of [1280, 390]) {
+        const page = await browser.newPage({ viewport: { width, height: 900 } });
+        await open(page, incident, language);
+        await expect(page.getByRole("region", { name: es ? "Propuesta de mitigación" : "Mitigation proposal" })).toBeVisible({ timeout: 120_000 });
+
+        // The title: the rule's own text in the page's language; the alert's hint behind its disclosure.
+        const title = page.getByRole("heading", { level: 1 });
+        await expect(title).toHaveText(es ? "Errores en checkout (19\u00a0% de spans, umbral 5\u00a0%)" : "Errors in checkout (19% of spans, threshold 5%)");
+        expect(parseFloat(await title.evaluate((element) => getComputedStyle(element).fontSize))).toBeLessThanOrEqual(44);
+        const alert = page.locator("article details", { hasText: es ? "Alerta de Grafana" : "Grafana alert" }).first();
+        await alert.locator("summary").click();
+        await expect(alert).toContainText("Evidence: Prometheus datasource webstore-metrics");
+
+        // The meta row says what each time is; severity is a coloured pill, never amber.
+        await expect(page.locator("[data-meta=declared]")).toHaveText(new RegExp(`^${es ? "Declarado" : "Declared"} \\d{2}:\\d{2}$`));
+        await expect(page.locator("[data-meta=updated]")).toHaveText(new RegExp(`^${es ? "Actualizado" : "Updated"} \\d{2}:\\d{2}$`));
+        const severity = page.locator("[data-severity=sev1]");
+        await expect(severity).toHaveText("SEV1");
+
+        // The hypothesis in labelled lines at body size; its evidence listed under it, one line each.
+        const hypothesis = page.locator("#hypothesis");
+        await expect(hypothesis.locator("dt")).toHaveText(["Causa", "Mecanismo", "La refutaría"]);
+        const body = await hypothesis.locator("dd").first().evaluate((element) => ({ size: parseFloat(getComputedStyle(element).fontSize), font: getComputedStyle(element).fontFamily }));
+        expect(body.size).toBeLessThanOrEqual(18);
+        expect(body.font).not.toMatch(/Fraunces/);
+        await expect(hypothesis.locator("ol > li")).toHaveCount(3);
+        await expect(hypothesis.locator("ol > li").first()).toContainText(es ? "apoya" : "supports");
+
+        // The timeline's hypothesis shows its cause and folds the rest.
+        const step = page.locator("li[id^=step-hyp_]");
+        await expect(step.locator("dt").first()).toHaveText("Causa");
+        await expect(step.locator("dt", { hasText: "La refutaría" })).toBeHidden();
+        await step.locator("summary").click();
+        await expect(step.locator("dt", { hasText: "La refutaría" })).toBeVisible();
+
+        // Each reached stage tells when, with the full date on hover; the rest tell nothing.
+        const stages = page.getByRole("list", { name: es ? "Progreso del incidente" : "Incident progress" }).locator("li");
+        await expect(stages).toHaveCount(6);
+        for (const index of [0, 1, 2]) await expect(stages.nth(index).locator("time")).toHaveText(/^\d{2}:\d{2}$/);
+        for (const index of [3, 4, 5]) await expect(stages.nth(index).locator("time")).toHaveCount(0);
+        await stages.nth(1).locator("time").hover();
+        await expect(page.getByRole("tooltip")).toHaveText(es ? /de 20\d\d/ : /, 20\d\d/);
+        await page.mouse.move(0, 0);
+
+        // What each query returned, readable: the vector as a table, the logs as hits and lines.
+        const metrics = page.locator("li[id^=step-ev_]", { hasText: es ? "Métricas de checkout" : "checkout metrics" }).locator("[data-result]");
+        await expect(metrics.locator("tr")).toHaveCount(2);
+        await expect(metrics.locator("tr").first()).toContainText(es ? /oteldemo\.\S+\s*9,76/ : /oteldemo\.\S+\s*9\.76/);
+        const logs = page.locator("li[id^=step-ev_]", { hasText: es ? "Logs de checkout" : "checkout logs" }).locator("[data-result]");
+        await expect(logs).toContainText(es ? "20 resultados" : "20 hits");
+        await expect(logs.locator("li")).toHaveCount(5);
+        await expect(logs.locator("li").first()).toContainText(/\d{2}:\d{2}:\d{2}\s*ERROR\s*checkout\s*.*context deadline/);
+        for (const summary of await page.locator("li[id^=step-ev_] details > summary").all()) await summary.click();
+
+        // Nothing leaves the page or its column, in either theme.
+        const overflow = await page.evaluate(() => {
+          const article = document.querySelector("article")!.getBoundingClientRect();
+          const outside = [...document.querySelectorAll("article *")]
+            .filter((element) => element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().right > article.right + 1)
+            .map((element) => element.outerHTML.slice(0, 80));
+          // What reaches past the window, named in the failure.
+          const wide = [...document.querySelectorAll("body *")]
+            .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
+            .map((element) => element.outerHTML.slice(0, 120));
+          return { page: document.documentElement.scrollWidth - window.innerWidth, outside, wide };
+        });
+        expect(overflow.page, JSON.stringify(overflow.wide)).toBeLessThanOrEqual(0);
+        expect(overflow.outside).toEqual([]);
+        expect(await amberOutsideDecision(page)).toEqual([]);
+        const contrast: Record<string, number> = {};
+        for (const scheme of ["dark", "light"] as const) {
+          await page.emulateMedia({ colorScheme: scheme });
+          contrast[scheme] = await severity.evaluate((element) => {
+            const rgb = (value: string) => value.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+            const luminance = (value: string) => {
+              const [r, g, b] = rgb(value).map((channel) => (channel / 255 <= 0.03928 ? channel / 255 / 12.92 : ((channel / 255 + 0.055) / 1.055) ** 2.4));
+              return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            };
+            const style = getComputedStyle(element);
+            const [a, b] = [luminance(style.color), luminance(style.backgroundColor)].sort((x, y) => y - x);
+            return (a + 0.05) / (b + 0.05);
+          });
+          expect(contrast[scheme]).toBeGreaterThanOrEqual(4.5);
+          expect(AMBER).not.toContain(await severity.evaluate((element) => getComputedStyle(element).backgroundColor));
+          await page.screenshot({ path: `${DIR}/pagina-${language}-${width}-${scheme === "dark" ? "noche" : "dia"}.png`, fullPage: true });
+        }
+        widths[`${language}-${width}`] = { overflow, severityContrast: contrast, title: await title.innerText() };
+        await page.close();
+      }
+    }
+  });
+
   test("las afirmaciones de la hipótesis muestran su evidencia y llevan a su paso; aprobar envía el comando gobernado", async ({ page }) => {
     const incident = await declare("checkout no puede cobrar a payment");
     record.approved = incident;
@@ -158,7 +266,8 @@ test.describe("incidente RC-2 contra la API real", () => {
     await investigate(page);
 
     const hypothesis = page.locator("#hypothesis");
-    await expect(hypothesis).toContainText("El despliegue de checkout 1.5.0 rompió los cobros contra payment.");
+    await expect(hypothesis.locator("dt")).toHaveText(["Causa", "Mecanismo", "La refutaría"]);
+    await expect(hypothesis.locator("dd").first()).toHaveText("el despliegue de checkout 1.5.0 rompió los cobros contra payment.");
     await expect(hypothesis.locator("code", { hasText: "1.5.0" }).first()).toHaveCSS("font-family", /JetBrains Mono/);
     const claims = hypothesis.getByRole("link");
     expect(await claims.count()).toBeGreaterThanOrEqual(2);
@@ -207,7 +316,7 @@ test.describe("incidente RC-2 contra la API real", () => {
     await page.evaluate(() => window.scrollTo(0, 0));
     const before = await lastUpdate(page, "actualizado-es", /de 20\d\d/);
     await page.waitForTimeout(17_000);
-    expect(Date.parse((await page.locator("article > p time").first().getAttribute("datetime"))!)).toBe(before);
+    expect(Date.parse((await page.locator("[data-meta=updated] time").getAttribute("datetime"))!)).toBe(before);
 
     // Night and day follow the system theme; the screenshots go to docs/evidence/issue-870/incident.
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -279,7 +388,8 @@ test.describe("incidente RC-2 contra la API real", () => {
     const items = decisions.getByRole("listitem");
     await expect(items).toHaveCount(2);
     await expect(items.nth(0)).toContainText(/Una propuesta anterior\s*Rechazada · Tú · \d{2}:\d{2}/);
-    await expect(items.nth(1)).toContainText(new RegExp(`${PLAN}\\s*Aprobada · Tú · \\d{2}:\\d{2}`));
+    // The decision taken names the cause it acted on, its mechanism folded.
+    await expect(items.nth(1)).toContainText(new RegExp(`${PLAN}\\s*Causa\\s*el despliegue de checkout 1\\.5\\.0[\\s\\S]*Aprobada · Tú · \\d{2}:\\d{2}`));
     expect(await page.locator("[data-decision]").count()).toBe(0);
     await decisions.scrollIntoViewIfNeeded();
     await capture(page, "decisiones-rechazo-y-aprobacion-es", decisions);
