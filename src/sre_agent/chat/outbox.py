@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from secrets import token_urlsafe
@@ -283,14 +284,50 @@ async def _edit_target(session: AsyncSession, payload: Mapping[str, Any]) -> int
     )
 
 
+# A Grafana summary carries the rule's text, then where its evidence lives for the agent
+# (demo/grafana/alerting/midnight.yaml). The title keeps the rule's text, worded as the console
+# words it (web/incident-console/src/lib/title.ts).
+_ERRORS = re.compile(
+    r"^(\S+?):\s*([\d.]+)\s*% of spans failed over the last .+?\(threshold ([\d.]+)\s*%\)", re.I
+)
+_LATENCY = re.compile(
+    r"^(\S+?):\s*p95 of server spans is ([\d.]+)\s*ms over the last .+?\(threshold ([\d.]+)\s*ms\)",
+    re.I,
+)
+_SENTENCE = re.compile(r"^(.+?[.!?])(\s|$)")
+# A hypothesis statement in labelled lines (**Causa:** …); the cause is its first line.
+_LABEL = re.compile(r"^\s*\*\*[^*\n]{1,40}:\*\*\s*")
+
+
+def incident_title(alert: Any) -> str | None:
+    summary = alert.get("summary") if isinstance(alert, Mapping) else None
+    if not isinstance(summary, str) or not summary:
+        return None
+    number = lambda value: f"{float(value):.0f}"  # noqa: E731
+    if errors := _ERRORS.match(summary):
+        service, value, threshold = errors.groups()
+        return f"Errores en {service} ({number(value)} % de spans, umbral {number(threshold)} %)"
+    if latency := _LATENCY.match(summary):
+        service, value, threshold = latency.groups()
+        return f"Lentitud en {service} (p95 de {number(value)} ms, umbral {number(threshold)} ms)"
+    sentence = (match[1] if (match := _SENTENCE.match(summary)) else summary).rstrip(".")
+    return sentence[:1].upper() + sentence[1:]
+
+
+def _cause(statement: str) -> str:
+    """The cause of a statement in labelled lines, without markup; a plain statement as is."""
+    if not _LABEL.match(statement):
+        return statement
+    return _LABEL.sub("", statement.strip().splitlines()[0]).replace("**", "")
+
+
 async def _incident_label(session: AsyncSession, payload: Mapping[str, Any]) -> str:
     state = await session.scalar(
         text("SELECT state FROM incident.incidents WHERE incident_id = :incident_id"),
         {"incident_id": payload["incident_id"]},
     )
-    alert = state.get("alert") if isinstance(state, Mapping) else None
-    summary = alert.get("summary") if isinstance(alert, Mapping) else None
-    return f"{payload['incident_id']}: {summary}" if summary else str(payload["incident_id"])
+    title = incident_title(state.get("alert")) if isinstance(state, Mapping) else None
+    return f"{payload['incident_id']}: {title}" if title else str(payload["incident_id"])
 
 
 async def _investigation_ack(session: AsyncSession, payload: Mapping[str, Any]) -> str:
@@ -317,7 +354,7 @@ async def _investigation_conclusion(session: AsyncSession, payload: Mapping[str,
         return f"{header}\nSin conclusión: {reason} ({code})."
     match outcome.get("action"):
         case "propose_hypothesis":
-            detail = f"Hipótesis ({outcome['confidence']}): {outcome['statement']}"
+            detail = f"Hipótesis ({outcome['confidence']}): {_cause(outcome['statement'])}"
         case "propose_mitigation":
             detail = "Mitigación propuesta: decide en el siguiente mensaje o en la consola."
         case "conclude":
@@ -384,8 +421,9 @@ async def mitigation_decision(
     basis = [h for h in hypotheses if h.get("hypothesis_id") == strategy.get("based_on_hypothesis")]
     cause = (basis or hypotheses or [{}])[-1].get("statement")
     lines = [f"{DECISION_MARKER} Decisión pendiente: {payload['incident_id']}"]
+    lines += [title] if (title := incident_title(alert)) else []
     lines.append(f"Servicio: {alert.get('service', 'sin servicio')}")
-    lines += [f"Causa: {cause}"] if cause else []
+    lines += [f"Causa: {_cause(cause)}"] if cause else []
     if alert.get("service") and alert.get("observed_at"):
         change = (
             await session.execute(

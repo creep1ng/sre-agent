@@ -5,8 +5,9 @@ import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { useNow } from "@/hooks/use-now";
 import { LOCALES, useLanguage, useT } from "@/i18n";
 import { useLive } from "@/lib/live";
+import { useTitle } from "@/lib/title";
 import { useInboxData, watchInbox, type InboxIncident } from "./live-data";
-import { firstSentence, headlineOf, inboxSections, type NightEvent } from "./sections";
+import { inboxSections, useHeadline, type NightEvent } from "./sections";
 
 const SEEN_KEY = "midnight-inbox-seen";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,6 +46,7 @@ function useClockTime() {
 const incidentPath = (incident: InboxIncident) => `/incidentes/${incident.incident_id}`;
 
 function Decision({ incident, words, now }: { incident: InboxIncident; words: string | null; now: number }) {
+  const headlineOf = useHeadline();
   const t = useT("inbox");
   const clock = useClockTime();
   const decision = incident.pending_decision!;
@@ -78,6 +80,7 @@ function Decision({ incident, words, now }: { incident: InboxIncident; words: st
 }
 
 function Tip({ incident }: { incident: InboxIncident }) {
+  const headlineOf = useHeadline();
   const t = useT("inbox");
   const recovered = incident.latest_run?.status !== "terminated";
   const [value, unit] = span(Date.parse(incident.updated_at) - Date.parse(incident.opened_at));
@@ -98,13 +101,15 @@ function Tip({ incident }: { incident: InboxIncident }) {
 }
 
 function NightRow({ event }: { event: NightEvent }) {
+  const headlineOf = useHeadline();
+  const title = useTitle();
   const t = useT("inbox");
   const clock = useClockTime();
   let what: ReactNode;
   if (event.kind === "alert") {
     what = (
       <>
-        <b className="font-medium text-foreground">{event.alert.service}</b> {firstSentence(event.alert.summary)}
+        <b className="font-medium text-foreground">{event.alert.service}</b> {title(event.alert.summary)}
       </>
     );
   } else if (event.kind === "incident") {
