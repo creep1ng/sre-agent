@@ -2189,6 +2189,95 @@ def test_a_dispatch_that_raises_ends_its_run_without_logging_the_message(
     assert "secret-marker-761" not in caplog.text
 
 
+def _run_state(run_id: str) -> dict[str, Any]:
+    with psycopg.connect(DATABASE_URL) as connection:
+        row = connection.execute(
+            "SELECT state FROM incident.runs WHERE run_id = %s", (run_id,)
+        ).fetchone()
+    return row[0]
+
+
+def _failing_dispatch(monkeypatch: pytest.MonkeyPatch, *, fallback_fails: bool) -> None:
+    """The dispatch fails after writing its intent, and so does ending it (the database stops
+    answering); with fallback_fails, the hand-off's fallback cannot claim the run either."""
+
+    async def fail(*_args: Any, **_kwargs: Any) -> None:
+        raise ConnectionError("database stopped answering")
+
+    claim = PostgresIncidentUnitOfWork.claim_run_dispatch
+    claims = 0
+
+    async def claim_once(self: Any, *args: Any, **kwargs: Any) -> Any:
+        nonlocal claims
+        claims += 1
+        if fallback_fails and claims > 1:
+            raise ConnectionError("database stopped answering")
+        return await claim(self, *args, **kwargs)
+
+    monkeypatch.setattr(IncidentRuntime, "current", fail)
+    monkeypatch.setattr(PostgresIncidentUnitOfWork, "complete_run_dispatch", fail)
+    monkeypatch.setattr(PostgresIncidentUnitOfWork, "claim_run_dispatch", claim_once)
+
+
+def test_a_dispatch_whose_outcome_cannot_be_written_ends_with_the_real_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#868 review (F1): the first attempt wrote its intent, then failed and could not record
+    the failure. The hand-off's fallback ends the run with investigator_failed, the real cause,
+    not producer_interrupted, which only a lost process means."""
+    incident_id = "inc-investigator-outcome-lost"
+    _add_incident(incident_id)
+    _grant_run_access()
+    _failing_dispatch(monkeypatch, fallback_fails=False)
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=ScriptedLLM(), mcp=ScriptedMCP())
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        started = _start(client, incident_id, "investigation-outcome-lost-0001")
+    assert started.status_code == 201, started.text
+    run = started.json()
+    assert (run["status"], run["terminated_reason"]) == ("terminated", "needs_human")
+    _, events, _ = _database_rows(incident_id, run["run_id"])
+    receipts = _receipts(events)
+    assert [(item["phase"], item["status"]) for item in receipts] == [
+        ("intent", "pending"),
+        ("outcome", "unknown"),
+    ]
+    assert receipts[-1]["reason_code"] == "investigator_failed"
+
+
+def test_a_fallback_that_fails_too_is_logged_and_left_to_the_startup_sweep(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """#868 review (F2): when the fallback fails as well, the error stays inside the hand-off:
+    the start still answers, the failure is logged with the incident and the run, and the run,
+    still `running` with its intent, is ended by the next startup's sweep."""
+    incident_id = "inc-investigator-fallback-fails"
+    _add_incident(incident_id)
+    _grant_run_access()
+    _failing_dispatch(monkeypatch, fallback_fails=True)
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=ScriptedLLM(), mcp=ScriptedMCP())
+    with _serve(app, port) as base_url, httpx.Client(base_url=base_url, timeout=15) as client:
+        _add_agent_mcp_grants(client, "positive")
+        started = _start(client, incident_id, "investigation-fallback-fails-0001")
+    assert started.status_code == 201, started.text
+    run_id = started.json()["run_id"]
+    assert started.json()["status"] == "running"
+    assert f"investigation_end_failed incident_id={incident_id} run_id={run_id}" in caplog.text
+    assert "database stopped answering" not in caplog.text
+
+    monkeypatch.undo()
+    port = _free_port()
+    app = _application(f"http://127.0.0.1:{port}", llm=ScriptedLLM(), mcp=ScriptedMCP())
+    with _serve(app, port):
+        pass
+    state = _run_state(run_id)
+    assert (state["status"], state["terminated_reason"]) == ("terminated", "needs_human")
+    _, events, _ = _database_rows(incident_id, run_id)
+    assert _receipts(events)[-1]["reason_code"] == "producer_interrupted"
+
+
 class GatedLLM(ScriptedLLM):
     """Holds every model call until the test opens the gate, so a run stays live."""
 
