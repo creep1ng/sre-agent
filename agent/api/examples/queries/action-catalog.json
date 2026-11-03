@@ -1,0 +1,30 @@
+{
+  "executor_status": "available",
+  "services": [
+    {
+      "service": "sre-checkout",
+      "operations": [
+        {
+          "operation": "deployment.restart",
+          "parameters": [],
+          "runner": null,
+          "executions": []
+        },
+        {
+          "operation": "deployment.rollback",
+          "parameters": [{ "name": "to_tag", "allowed": ["1.4.0"] }],
+          "runner": { "principal_id": "incident-harness", "display_name": "Incident harness" },
+          "executions": [
+            {
+              "occurred_at": "2026-11-02T21:14:03Z",
+              "outcome": "succeeded",
+              "reason_code": null,
+              "incident_id": "inc-vc-demo",
+              "approved_by": { "principal_id": "demo-human", "display_name": "Demo human" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

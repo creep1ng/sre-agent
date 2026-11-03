@@ -1,0 +1,95 @@
+# The action catalog returned to authorized readers (issue #870, #722).
+#
+# GET /v1/action-catalog. What the deploy-executor may run, per service: each operation with the
+# values its parameters may take, who runs it once a person approves (the agent the gateway runs
+# approvals as, when it holds mitigation.execute on the operation) and its latest attempts, from
+# the mitigation.execute audit. An attempt names its incident and approver when the data allows
+# it, never the parameters a proposal chose: those are reasoning, under run.read_context. Every
+# property declared here must be registered in agent/api/projection-policy.v1.yaml.
+---
+$schema: https://json-schema.org/draft/2020-12/schema
+$id: urn:sre-agent:schema:action-catalog:1.0.0
+title: ActionCatalog
+type: object
+additionalProperties: false
+required: [executor_status, services]
+properties:
+  executor_status:
+    description: >-
+      available: the operations are the executor's own catalog. unavailable: the executor did
+      not answer, so they come from the registered service_operation resources, without
+      parameters, and nothing can run until it answers. not_configured: this install has no
+      deploy-executor; nothing can run.
+    enum: [available, unavailable, not_configured]
+  services:
+    type: array
+    maxItems: 100
+    items: { $ref: '#/$defs/service' }
+$defs:
+  name: { type: string, pattern: '^[a-z][a-z0-9.-]{0,62}$' }
+  principal:
+    type: object
+    additionalProperties: false
+    required: [principal_id, display_name]
+    properties:
+      principal_id: { type: string, pattern: '^[a-z][a-z0-9_-]{2,63}$' }
+      display_name: { type: [string, "null"], maxLength: 200 }
+  service:
+    type: object
+    additionalProperties: false
+    required: [service, operations]
+    properties:
+      service: { $ref: '#/$defs/name' }
+      operations:
+        type: array
+        maxItems: 20
+        items: { $ref: '#/$defs/operation' }
+  operation:
+    type: object
+    additionalProperties: false
+    required: [operation, parameters, runner, executions]
+    properties:
+      operation: { $ref: '#/$defs/name' }
+      parameters:
+        description: Null when the executor did not answer and the parameters are unknown.
+        anyOf:
+          - type: "null"
+          - type: array
+            maxItems: 10
+            items:
+              type: object
+              additionalProperties: false
+              required: [name, allowed]
+              properties:
+                name: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+                allowed:
+                  description: The only values it may take; null when the executor cannot list them now.
+                  type: [array, "null"]
+                  maxItems: 50
+                  items: { type: string, maxLength: 128 }
+      runner:
+        description: Who runs it once a person approves; null when no one may.
+        anyOf: [{ type: "null" }, { $ref: '#/$defs/principal' }]
+      executions:
+        description: The latest mitigation.execute attempts, most recent first.
+        type: array
+        maxItems: 10
+        items: { $ref: '#/$defs/execution' }
+  execution:
+    type: object
+    additionalProperties: false
+    required: [occurred_at, outcome, reason_code, incident_id, approved_by]
+    properties:
+      occurred_at: { type: string, format: date-time }
+      outcome:
+        description: >-
+          succeeded: the executor ran it. refused: the agent held no grant. failed: the catalog,
+          the executor or its answer stopped it; nothing moved unless the executor says so.
+        enum: [succeeded, refused, failed]
+      reason_code: { type: [string, "null"], pattern: '^[a-z][a-z0-9_]{1,63}$' }
+      incident_id:
+        description: Null when the attempt's incident is no longer among the recent runs.
+        type: [string, "null"]
+        pattern: '^[a-z][a-z0-9_-]{2,63}$'
+      approved_by:
+        anyOf: [{ type: "null" }, { $ref: '#/$defs/principal' }]

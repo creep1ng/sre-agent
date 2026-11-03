@@ -48,6 +48,7 @@ SCHEMAS = {
     "incident-detail": AGENT / "schemas" / "incident-detail.schema.yaml",
     "incident-snapshot": AGENT / "schemas" / "incident-snapshot.schema.yaml",
     "incident-list": AGENT / "schemas" / "incident-list.schema.yaml",
+    "action-catalog": AGENT / "schemas" / "action-catalog.schema.yaml",
 }
 
 REQUIRED_PATHS = {
@@ -55,6 +56,7 @@ REQUIRED_PATHS = {
     "/v1/incidents/{incident_id}",
     "/v1/incidents/{incident_id}/timeline",
     "/v1/incidents/{incident_id}/snapshot",
+    "/v1/action-catalog",
 }
 
 POSITIVE = {
@@ -62,6 +64,7 @@ POSITIVE = {
     "timeline-page.json": "run-event",
     "snapshot.json": "incident-snapshot",
     "list.json": "incident-list",
+    "action-catalog.json": "action-catalog",
 }
 
 ERROR_EXAMPLES = {
@@ -205,7 +208,14 @@ def check_examples(registry: dict[str, dict]) -> list[str]:
         )  # noqa: E501
         for name, schema in registry.items()
         if name
-        in ("incident-detail", "incident-snapshot", "incident-list", "run-event", "error-envelope")
+        in (
+            "incident-detail",
+            "incident-snapshot",
+            "incident-list",
+            "action-catalog",
+            "run-event",
+            "error-envelope",
+        )
     }
     for filename, schema_name in POSITIVE.items():
         path = EXAMPLES / filename
@@ -249,6 +259,7 @@ def check_projection_registration() -> list[str]:
         "agent/schemas/incident-detail.schema.yaml",
         "agent/schemas/incident-snapshot.schema.yaml",
         "agent/schemas/incident-list.schema.yaml",
+        "agent/schemas/action-catalog.schema.yaml",
     } - listed
     if missing:
         return [f"projection policy does not register safe schemas: {sorted(missing)}"]
@@ -275,7 +286,10 @@ def main() -> int:
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         return 1
-    print("incident queries: OK (3 schemas, 4 paths, 4 positive and 5 error examples)")
+    print(
+        f"incident queries: OK ({len(SCHEMAS)} schemas, {len(REQUIRED_PATHS)} paths, "
+        f"{len(POSITIVE)} positive and {len(ERROR_EXAMPLES)} error examples)"
+    )
     return 0
 
 
