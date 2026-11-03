@@ -179,13 +179,16 @@ def event_summary(payload: Any) -> str:
         receipt = payload.get("dispatch_receipt")
         if isinstance(receipt, dict):
             status = receipt.get("status")
+            # A run's second dispatch verifies what its approval ran (#723).
+            verifying = str(receipt.get("dispatch_id")).endswith("-verify")
+            name = "Verification" if verifying else "Investigation"
             if status == "pending":
-                return "Investigation dispatch started."
+                return f"{name} dispatch started."
             if receipt.get("reason_code") == "investigation_no_measured_evidence":
-                return "Investigation dispatch ended: no cited evidence had measured data."
+                return f"{name} dispatch ended: no cited evidence had measured data."
             if status in {"success", "confirmed_failure", "unknown"}:
                 cause = dispatch_cause(receipt) if status != "success" else None
-                ended = f"Investigation dispatch ended: {status}."
+                ended = f"{name} dispatch ended: {status}."
                 return f"{ended} Cause: {cause}" if cause else ended
         patch = payload.get("run_patch")
         if isinstance(patch, dict) and patch.get("terminated_reason") == "denied":
@@ -197,6 +200,11 @@ def event_summary(payload: Any) -> str:
             return TERMINATED_SUMMARIES[patch["terminated_reason"]]
         outcome = payload.get("outcome")
         action = outcome.get("action") if isinstance(outcome, dict) else None
+        if action == "verify_mitigation" and isinstance(outcome, dict):
+            recovered = "recovered" if outcome.get("passed") is True else "had not recovered"
+            return f"Verification found the service {recovered}."
+        if action == "request_human" and payload.get("state") == "verifying":
+            return "Verification requested human review."
         summaries = {
             "propose_hypothesis": "Investigation proposed a hypothesis.",
             "propose_mitigation": "Investigation proposed a mitigation.",
