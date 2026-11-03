@@ -9,7 +9,7 @@ const pages = [
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme: "light" });
   for (const [file, anchor, png] of pages) {
-    await page.goto(base + file + anchor, { waitUntil: "networkidle" });
+    await page.goto(base + file + anchor, { waitUntil: "load", timeout: 60000 });
     const article = page.locator("article.markdown-body").first();
     await article.waitFor();
     // GitHub's sticky file header would cover the article in an element screenshot.
