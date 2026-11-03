@@ -1,0 +1,12 @@
+{
+"sent": [
+  {"message_id": 2, "chat_id": 424242, "text": "Decisión tomada: inc-8c4c7920f3695a42972e851487601ed8\nServicio: checkout\nCausa: El último despliegue de checkout devuelve errores 5xx.\nPropuesta: Apagar el flag paymentUnreachable que rompe checkout.\nRiesgo: bajo\nDetalle: el ejecutor aplica flag.set en checkout\nAprobada por Demo human desde Telegram, 2026-11-03 01:14 UTC.\nResuelto a las 01:14 UTC · 3 s tras la mitigación que aprobaste · ver la consola.", "received_at": "2026-11-03T01:14:41.189500+00:00", "buttons": []}
+],
+"answers": [
+  {"callback_query_id": "cbq-2", "text": "Aprobada por Demo human desde Telegram, 2026-11-03 01:14 UTC."}
+],
+"edits": [
+  {"text": "Decisión tomada: inc-8c4c7920f3695a42972e851487601ed8\nServicio: checkout\nCausa: El último despliegue de checkout devuelve errores 5xx.\nPropuesta: Apagar el flag paymentUnreachable que rompe checkout.\nRiesgo: bajo\nDetalle: el ejecutor aplica flag.set en checkout\nAprobada por Demo human desde Telegram, 2026-11-03 01:14 UTC.", "chat_id": 424242, "message_id": 2, "edited_at": "2026-11-03T01:14:44.239093+00:00"},
+  {"text": "Decisión tomada: inc-8c4c7920f3695a42972e851487601ed8\nServicio: checkout\nCausa: El último despliegue de checkout devuelve errores 5xx.\nPropuesta: Apagar el flag paymentUnreachable que rompe checkout.\nRiesgo: bajo\nDetalle: el ejecutor aplica flag.set en checkout\nAprobada por Demo human desde Telegram, 2026-11-03 01:14 UTC.\nResuelto a las 01:14 UTC · 3 s tras la mitigación que aprobaste · ver la consola.", "chat_id": 424242, "message_id": 2, "edited_at": "2026-11-03T01:14:47.781685+00:00"}
+]
+}
