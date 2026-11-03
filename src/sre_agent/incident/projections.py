@@ -18,6 +18,7 @@ from sre_agent.incident.reasons import (
     PROJECTED_REASON_CODES,
     START_CAUSES,
 )
+from sre_agent.incident.title import title_of
 from sre_agent.incident.workflow import IncidentWorkflow
 
 IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
@@ -371,6 +372,7 @@ def project_detail(
         "incident_id": record.incident_id,
         "workflow_version": workflow.version,
         "state": state.get("state"),
+        "title": title_of(state),
         "severity": severity,
         "impact": impact if isinstance(impact, str) else None,
         "alert": project_alert(alert) if alert is not None else None,
@@ -439,6 +441,7 @@ def project_list_item(
         "severity": severity if severity in SEVERITIES else None,
         "service": _text(alert.get("service")),
         "summary": _text(alert.get("summary")),
+        "title": title_of(state),
         "impact": _text(state.get("impact")),
         "opened_at": utc_iso(record.created_at),
         "updated_at": utc_iso(record.updated_at),

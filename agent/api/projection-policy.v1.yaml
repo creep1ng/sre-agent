@@ -114,6 +114,33 @@ safe_projection:
     - "executions"
     - "outcome"
     - "approved_by"
+    # The incident's short title: model output, let through by model_output_exception below.
+    - "title"
+
+# The one field of model output a safe projection may carry.
+#
+# WHY: maintainer decision of 2026-11-03 (issue #870), for the evaluated demo. A person woken
+# up by Midnight must recognise the incident at a glance in the inbox, the incident page and
+# Telegram; the alert's own words name a metric ("checkout: 19.05% of spans failed…"), not what
+# fails for the business ("Fallan los cobros en checkout"). Only the investigator can say that.
+#
+# WHY IT STAYS SAFE: one field, short, single line, and treated as untrusted wherever it goes.
+# It is not a channel for the rest of the reasoning: statements, findings, mitigation content and
+# raw tool output stay behind run.read_context.
+model_output_exception:
+  field: "title"
+  source: "hypotheses[-1].title, written by the investigator with each hypothesis"
+  decided_by: "maintainer, 2026-11-03 (issue #870)"
+  validation: >-
+    src/sre_agent/incident/title.py, on write (gateway) and on every read (projections,
+    Telegram): text only, a single line, control and invisible formatting characters stripped,
+    1 to 60 characters; anything else is no title (null).
+  rendering: >-
+    Plain text only, never markdown or HTML: React text nodes in the console, and Telegram
+    messages sent without parse_mode, so no entity is interpreted.
+  fallback: >-
+    Without a valid title every reader shows the alert's own first sentence, humanised for the
+    demo's rules (web/incident-console/src/lib/title.ts, src/sre_agent/chat/outbox.py).
 
 # The sensitive context lives behind its own endpoint and its own action.
 sensitive_context:

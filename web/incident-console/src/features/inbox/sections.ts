@@ -63,8 +63,8 @@ export function inboxSections(
   return { decisions, coffee, night };
 }
 
-/** An incident's headline: the title of the alert that opened it, as the incident page words it. */
+/** An incident's headline as the incident page words it: the investigator's title, else the alert's. */
 export function useHeadline() {
   const title = useTitle();
-  return (incident: InboxIncident) => title(incident.summary) ?? incident.impact ?? incident.incident_id;
+  return (incident: InboxIncident) => incident.title || title(incident.summary) || incident.impact || incident.incident_id;
 }

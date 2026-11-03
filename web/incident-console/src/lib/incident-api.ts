@@ -28,6 +28,8 @@ export interface IncidentDetail {
   incident_id: string;
   workflow_version: string;
   state: string;
+  /** The investigator's short title (#870), checked by the API; plain text, null until named. */
+  title?: string | null;
   severity: Severity | null;
   impact: string | null;
   alert: { alert_id: string; service: string; summary: string; observed_at: string; source: string } | null;

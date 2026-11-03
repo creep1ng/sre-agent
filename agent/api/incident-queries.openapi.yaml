@@ -42,7 +42,7 @@ paths:
           description: Incident list
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:incident-list:1.0.0' }
+              schema: { $ref: 'urn:sre-agent:schema:incident-list:1.1.0' }
               examples:
                 pending: { $ref: './examples/queries/list.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -67,7 +67,7 @@ paths:
           description: Incident detail
           content:
             application/json:
-              schema: { $ref: 'urn:sre-agent:schema:incident-detail:1.1.0' }
+              schema: { $ref: 'urn:sre-agent:schema:incident-detail:1.2.0' }
               examples:
                 current: { $ref: './examples/queries/detail.json' }
         '401': { $ref: '#/components/responses/Unauthorized' }
