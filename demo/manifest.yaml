@@ -103,6 +103,13 @@ failure_injection:
   flag: paymentUnreachable
   ui_path: "/feature"
 
+# The faults `fail --flag <name>` turns on, with the variant that breaks the service (#724).
+# The deploy-executor's flag.set may write these flags only, and only back to their
+# flag_baseline variant, through the instance's flag listener (`mcp_guest.py serve-flags`).
+fault_flags:
+  paymentUnreachable: "on"
+  paymentFailure: "100%"
+
 # The second enrolled service (#721), our own and not the store's. `fail --service sre-checkout`
 # deploys the broken release, `reset --service sre-checkout` the healthy one; the deploy-executor
 # rolls it back between the same tags, built into the local image store, not a registry.

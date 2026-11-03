@@ -153,12 +153,19 @@ def test_demo_permissions_converge_and_http_journey_remains_governed():
             assert conn.execute(
                 "SELECT g.action, g.resource_id, r.status FROM grants g JOIN resources r "
                 "USING (resource_type, resource_id) WHERE g.principal_id='incident-harness' "
-                "AND g.resource_type='service_operation'"
-            ).fetchall() == [("mitigation.execute", "sre-checkout:deployment.rollback", "active")]
+                "AND g.resource_type='service_operation' ORDER BY 2"
+            ).fetchall() == [
+                # The store's flag.set on EC2 (#724); the restart stays ungranted.
+                ("mitigation.execute", "checkout:flag.set", "active"),
+                ("mitigation.execute", "payment:flag.set", "active"),
+                ("mitigation.execute", "sre-checkout:deployment.rollback", "active"),
+            ]
             assert conn.execute(
                 "SELECT resource_id FROM resources "
                 "WHERE resource_type='service_operation' ORDER BY 1"
             ).fetchall() == [
+                ("checkout:flag.set",),
+                ("payment:flag.set",),
                 ("sre-checkout:deployment.restart",),
                 ("sre-checkout:deployment.rollback",),
             ]

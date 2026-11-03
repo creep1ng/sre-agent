@@ -171,7 +171,9 @@ lifetime and is stopped after transfer. Neither port opens public ingress.
 The local relay holds no MCP/provider/AWS keys and publishes no host port.
 
 The producer's `fail`/`reset` operations apply the manifest's declared flag/baseline
-and retain synthetic traffic. Read both metrics and logs through the governed SRE
+and retain synthetic traffic. They replace the flag file and do not restart flagd: flagd
+reloads it within ~1 s and keeps its clients' streams open (#724). A restart broke
+`payment`'s flag stream and opened a spurious `payment` incident. Read both metrics and logs through the governed SRE
 API after150s, as explained in [demo-signals](demo-signals.md); health alone is not
 signal recovery. `connect-mcp` only proves transport and denies anonymous callers;
 SRE readiness, user workflow acceptance and real signal recovery are separate.
@@ -217,14 +219,29 @@ nobody at the console. Measured on an instance on 2026-10-31
 ([record](evidence/issue-765/ec2-paymentfailure.json)): a 20 min healthy watch fired
 no rule; `paymentFailure` at 100% opened `payment` and `checkout` and dispatched both
 investigations 103.5 s and 164.9 s after the flag, and both resolved 87 s after `reset`.
-To inject it, edit `paymentFailure` in the flag working copy over SSM as `fail` does
-(`fail` itself turns on `paymentUnreachable`). If `/` on port 8090 refuses after
+To inject it, run `fail --flag paymentFailure` (#724; `fail` alone turns on
+`paymentUnreachable`). The faults `--flag` admits, and the variant each sets, are
+`fault_flags` in `demo/manifest.yaml`. If `/` on port 8090 refuses after
 `prepare-mcp`, check that `frontend-proxy` is running; the connect-mcp tunnel can end
 after about 25 idle minutes, so reconnect before a run.
 
 Grafana's anonymous user is Admin upstream, so anyone who reaches `/grafana` through
 `connect` can read the contact point and its secret. The secret guards only this
 demo's intake.
+
+## The executor turns the fault off (#724)
+
+`prepare-mcp` also starts the instance's flag listener (`mcp_guest.py serve-flags`, loopback
+port 17802, its own token in `flag-write.env`). `connect-mcp` hands the token off beside the
+MCP token, forwards the listener to local port `--local-port + 3` and links it as `otel-flags`
+on a second internal network, `<network>-flags`. With `SRE_OTEL_MODE=aws`, `setup_sre.py`
+starts the deploy-executor on that network with the EC2 catalog, so approving the agent's
+`flag.set` proposal turns the fault off: no `reset` is needed after an approval. See
+[the deploy-executor](deploy-executor.md#flagset-on-the-otel-demo-724) for the design and its
+limits.
+
+`connect-mcp` now pulls the relay's pinned image when it is missing, and without `--subnet`
+it creates each network on the first `10.231.N.0/24` no local Docker network uses.
 
 ## AWS references
 

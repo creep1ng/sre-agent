@@ -77,8 +77,34 @@ def tunnel(aws, instance, remote, local):
                 process.wait()
 
 
+def free_subnet():
+    """A private /24 no local Docker network uses: Docker's own pools can be exhausted, and a
+    stale network can hold the subnet an earlier connection picked."""
+    names = docker("network", "ls", "--format", "{{.ID}}").split()
+    used = [
+        ipaddress.ip_network(item["Subnet"])
+        for info in json.loads(docker("network", "inspect", *names) if names else "[]")
+        for item in (info.get("IPAM") or {}).get("Config") or ()
+        if item.get("Subnet")
+    ]
+    for third in range(256):
+        candidate = ipaddress.IPv4Network(f"10.231.{third}.0/24")
+        if not any(candidate.overlaps(net) for net in used if net.version == 4):
+            return str(candidate)
+    raise DemoError("no free private /24 in 10.231.0.0/16; pass an explicit --subnet")
+
+
+def image(name):
+    """The pinned relay image, pulled once if missing: the link then runs with --pull never."""
+    try:
+        docker("image", "inspect", "--format", "{{.Id}}", name)
+    except DemoError:
+        docker("pull", "--quiet", name)
+    return name
+
+
 @contextmanager
-def local_link(state, network, subnet, port, instance):
+def local_link(state, network, subnet, port, instance, alias="grafana-mcp"):
     if not re.fullmatch(r"sre-[a-z0-9_-]{3,55}", network):
         raise DemoError("AWS MCP network must use a dedicated sre- name")
     if subnet and not ipaddress.IPv4Network(subnet).is_private:
@@ -94,20 +120,20 @@ def local_link(state, network, subnet, port, instance):
             raise DemoError("existing MCP network subnet differs; preserve it")
     else:
         args = ["network", "create", "--internal", "--label", "sre.otel.owner=aws-ssm"]
-        if subnet:
-            args += ["--subnet", subnet]
-        docker(*args, network)
+        docker(*args, "--subnet", subnet or free_subnet(), network)
     transport = state / "transport"
     transport.mkdir(mode=0o700, exist_ok=True)
     if transport.is_symlink() or transport.stat().st_mode & 0o077:
         raise DemoError("transport directory must be private and owned")
-    path = transport / "ssm.sock"
+    path = transport / (alias + ".sock")
     if path.exists():
         raise DemoError("transport socket exists; retain active link or review stale owned state")
     name = network + "-link"
-    image = re.search(
-        r"(?m)^FROM (python:[^ ]+)", (ROOT / "docker/api.Dockerfile").read_text()
-    ).group(1)
+    relay = image(
+        re.search(r"(?m)^FROM (python:[^ ]+)", (ROOT / "docker/api.Dockerfile").read_text()).group(
+            1
+        )
+    )
     with UnixPipe(str(path), Pipe) as server:
         path.chmod(0o600)
         server.port = port
@@ -125,7 +151,7 @@ def local_link(state, network, subnet, port, instance):
                 "--network",
                 network,
                 "--network-alias",
-                "grafana-mcp",
+                alias,
                 "--label",
                 "sre.otel.owner=aws-ssm",
                 "--label",
@@ -141,11 +167,11 @@ def local_link(state, network, subnet, port, instance):
                 str(transport) + ":/transport:ro",
                 "-v",
                 str(Path(__file__).with_name("mcp_pipe.py")) + ":/pipe.py:ro",
-                image,
+                relay,
                 "python",
                 "/pipe.py",
                 "--socket",
-                "/transport/ssm.sock",
+                "/transport/" + path.name,
             )
             created = True
             yield

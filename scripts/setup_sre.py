@@ -140,6 +140,26 @@ def setup(path, stop=False):
             "api": {"environment": {"OPENROUTER_API_KEY": "", "OPENROUTER_MANAGEMENT_API_KEY": ""}},
         },
     }
+    aws = config["SRE_OTEL_MODE"] == "aws"
+    if aws:
+        # The deploy-executor acts on the instance's fault flags only (#724): the EC2 catalog,
+        # the flag listener's link that connect-mcp created, and its token as the executor's
+        # own env_file. It gets no Docker proxy, and the api reaches it on executor-call.
+        layer["networks"]["otel-flags"] = {
+            "name": config["SRE_MCP_NETWORK"] + "-flags",
+            "external": True,
+        }
+        layer["services"]["api"]["environment"]["DEPLOY_EXECUTOR_URL"] = (
+            "http://deploy-executor:8000"
+        )
+        layer["services"]["deploy-executor"] = {
+            "environment": {
+                "DEPLOY_EXECUTOR_CATALOG": "/app/agent/executor/catalog.otel-aws.v1.yaml",
+                "DEPLOY_EXECUTOR_FLAGS_URL": "http://otel-flags:8000",
+            },
+            "env_file": [str(Path(config["DEMO_STATE_DIR"]) / "flag-write.env")],
+            "networks": ["otel-flags"],
+        }
     paid = config.get("SRE_ENABLE_PAID_LLM", "0")
     if paid not in {"0", "1"} or (paid == "1" and not config.get("OPENROUTER_API_KEY")):
         raise SetupError("SRE_ENABLE_PAID_LLM must be 0 or explicitly 1 with an API-owned key")
@@ -233,6 +253,13 @@ def setup(path, stop=False):
         ("seed", ["run", "--build", "--rm", "seed"]),
         ("MCP registry", ["run", "--build", "--rm", "mcp-seed"]),
         ("demo permissions", ["run", "--rm", "seed", "python", "/setup/provision_demo.py"]),
+        *(
+            [("deploy-executor", ["up", "--build", "--no-deps", "--wait", "deploy-executor"])]
+            if aws
+            else []
+        ),
+        # The console at /app/ is its own service behind web; without it /app/ answers 502.
+        ("console", ["up", "--build", "--no-deps", "--wait", "incident-console"]),
         ("API/web", ["up", "--build", "--no-deps", "--wait", "api", "web"]),
     ]
     if config.get("TELEGRAM_BOT_TOKEN"):
