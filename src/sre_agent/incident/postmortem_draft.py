@@ -14,6 +14,9 @@ from sre_agent.incident.persistence import RunEvent
 from sre_agent.incident.postmortem import EVENT_ID_PATTERN, MAX_ITEMS, MAX_TEXT
 from sre_agent.incident.projections import TRANSITION_SUMMARIES, event_summary
 
+# Who a draft composed from the record names as its author: no model wrote it (#711).
+RECORD_AUTHOR = "system"
+
 WORDS = {
     "es": {
         "summary": "Incidente declarado sin alerta registrada.",

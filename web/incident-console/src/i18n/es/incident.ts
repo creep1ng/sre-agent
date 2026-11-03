@@ -149,6 +149,8 @@ const incident = {
   "stability.failing": "Sigue fallando",
   "postmortem.label": "Postmortem",
   "postmortem.drafting": "Midnight redacta el postmortem…",
+  "postmortem.byAgent": "Borrador del agente",
+  "postmortem.byRecord": "Borrador desde el registro",
   "postmortem.restricted": "Tu credencial no puede leer el texto del postmortem.",
   "postmortem.happened": "Qué pasó",
   "postmortem.cause": "Causa probable",

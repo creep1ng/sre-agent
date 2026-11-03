@@ -151,6 +151,8 @@ export default {
   "stability.failing": "Still failing",
   "postmortem.label": "Postmortem",
   "postmortem.drafting": "Midnight is drafting the postmortem…",
+  "postmortem.byAgent": "Draft by the agent",
+  "postmortem.byRecord": "Draft from the record",
   "postmortem.restricted": "Your credential cannot read the postmortem's text.",
   "postmortem.happened": "What happened",
   "postmortem.cause": "Probable cause",

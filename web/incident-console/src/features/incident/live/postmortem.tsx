@@ -89,6 +89,12 @@ export function PostmortemDraft({ live, story, sending, error, canDecide, onClos
       <p data-title={live.detail?.title ? "agent" : "alert"} className="mb-6 font-display text-xl leading-snug text-[var(--text-2)]">
         {title(live.detail)}
       </p>
+      {/* Which first draft this is: the model's, or the one composed from the record when the model failed (#711). */}
+      {content && typeof record === "object" && record?.version === 1 && (
+        <p data-draft={record.updated_by === "system" ? "record" : "agent"} className="-mt-4 mb-6 font-mono text-[13px] text-[var(--dim)]">
+          {t(record.updated_by === "system" ? "postmortem.byRecord" : "postmortem.byAgent")}
+        </p>
+      )}
       {record === "forbidden" || (record && !record.content_included) ? (
         <p className="text-[var(--dim)]">{t("postmortem.restricted")}</p>
       ) : !content ? (

@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
 from secrets import token_hex
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import select, text
@@ -26,7 +26,7 @@ from sre_agent.incident.persistence import (
     verification_dispatch,
 )
 from sre_agent.incident.postmortem import validate_content
-from sre_agent.incident.postmortem_draft import compose
+from sre_agent.incident.postmortem_draft import RECORD_AUTHOR, compose
 from sre_agent.incident.runtime import (
     ActorReference,
     IncidentCommand,
@@ -56,6 +56,7 @@ from sre_agent.investigator.contract import (
 )
 from sre_agent.investigator.loop import BOK_UNAVAILABLE, investigate
 from sre_agent.investigator.ports import EvidenceUnavailable
+from sre_agent.investigator.postmortem import narrate, written
 from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemoryRepository
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
 from sre_agent.persistence.models import ResourceRow
@@ -63,6 +64,8 @@ from sre_agent.persistence.repositories import CredentialRepository
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
 logger = logging.getLogger(__name__)
+# The model's postmortem draft must leave the record's fallback inside the 90 s after `resolved`.
+POSTMORTEM_SECONDS = 60.0
 
 # Runs whose dispatch wrote its intent and no outcome: at startup none has a dispatcher here.
 _INTERRUPTED_RUNS = text("""SELECT r.incident_id, r.run_id FROM incident.runs r
@@ -91,7 +94,7 @@ class InvestigationRunDispatcher:
         executor_url: str | None = None,
         tool_timeout_seconds: float = 30.0,
         verification_delay_seconds: float = 60.0,
-        postmortem_draft: bool = False,
+        postmortem_draft: Literal["agent", "record"] | None = None,
     ) -> None:
         self.sessions, self.runtime, self.units = sessions, runtime, units
         self.language, self.executor_url = language, executor_url
@@ -179,7 +182,7 @@ class InvestigationRunDispatcher:
         """Open the postmortem of a resolved incident and write the agent's draft (#711), so a
         person only reads, approves and closes it. Off, or without an agent identity, or on a
         failure, the manual path remains."""
-        if not self.postmortem_draft or self.gateway_settings is None:
+        if self.postmortem_draft is None or self.gateway_settings is None:
             return
         task = asyncio.create_task(self._draft_postmortem(incident_id))
         self._waiting.add(task)
@@ -191,7 +194,7 @@ class InvestigationRunDispatcher:
             if agent is None:
                 return
             # One key per incident: a second resolution replays the same start.
-            await self.runtime.start_run(
+            started = await self.runtime.start_run(
                 RunStart(
                     command_id=f"postmortem-{incident_id}",
                     incident_id=incident_id,
@@ -201,6 +204,27 @@ class InvestigationRunDispatcher:
                 )
             )
             async with self.units() as work:
+                incident = await work.incidents.get(incident_id)
+                run_ids = await work.runs.list_ids(incident_id)
+                events = [event for run in run_ids for event in await work.events.list_after(run)]
+            if incident is None:
+                return
+            content = compose(incident.state, events, self.language)
+            # The model writes the narrative (`postmortem` objective); the record is the fallback.
+            narrative = None
+            if self.postmortem_draft == "agent" and self.gateway and self.gateway_settings:
+                narrative = await narrate(
+                    self.gateway,
+                    incident_id=incident_id,
+                    run_id=started.run.run_id,
+                    state=incident.state,
+                    events=events,
+                    language=self.language,
+                    seconds=min(self.gateway_settings.timeout_seconds, POSTMORTEM_SECONDS),
+                )
+            content = written(content, narrative) if narrative else content
+            validate_content(content)
+            async with self.units() as work:
                 await work.postmortems.get(incident_id, lock=True)
                 incident = await work.incidents.get(incident_id)
                 reserved = (incident.state.get("postmortem") or {}) if incident else {}
@@ -208,17 +232,14 @@ class InvestigationRunDispatcher:
                     return
                 if await work.postmortems.get(incident_id) is not None:
                     return  # Someone wrote it first.
-                run_ids = await work.runs.list_ids(incident_id)
-                events = [event for run in run_ids for event in await work.events.list_after(run)]
-                content = compose(incident.state, events, self.language)
-                validate_content(content)
                 await work.postmortems.save(
                     reserved["postmortem_id"],
                     incident_id,
                     expected_version=0,
                     content=content,
                     run_ids=run_ids,
-                    actor_id=agent,
+                    # The model's draft is the agent's; the one composed from the record is not.
+                    actor_id=agent if narrative else RECORD_AUTHOR,
                     now=datetime.now(UTC),
                 )
         except Exception as error:

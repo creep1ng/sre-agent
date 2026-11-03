@@ -178,9 +178,16 @@ and the manual commands remain; if a person verified first, the agent measures n
 With `POSTMORTEM_DRAFT=agent` (the `compose.yaml` default) and an agent identity, once an
 incident is `resolved`, by that verdict or by a person's `verification_passed`, the API opens its
 postmortem (`start_postmortem`, one per incident) and writes version 1 as the agent's draft
-(#711). No model is asked: `incident/postmortem_draft.py` quotes what the incident recorded (the
-alert, the declared impact, the last hypothesis as the probable cause, the approved plan, the
-verification check) and cites its stored state changes. A person reviews it and closes. Like the
+(#711). The model writes it: the `postmortem` objective (`investigator/postmortem.py`) is one
+gateway call on the postmortem run, bounded to 60 s, with the facts the incident recorded (the
+alert, the impact, the last hypothesis, the evidence findings, the approved plan and what it ran,
+the check, the state changes). It answers four plain-text sections: what happened, the probable
+cause, what we did and how we verified. The reply is untrusted: exactly those keys, one paragraph
+each, control and invisible characters stripped, served only behind `run.read_context` and
+rendered as text. Times, the timeline, the cited actions and the impact come from the record
+(`incident/postmortem_draft.py`). If the call is denied, fails, is late or answers anything else,
+the draft composed from the record is saved instead, authored `system` instead of the agent, and
+the console says which one it shows. `POSTMORTEM_DRAFT=record` skips the model. Like the
 verification wait, it runs in the API process; off, or if it fails, the postmortem routes remain.
 
 ## Evidence verdicts
