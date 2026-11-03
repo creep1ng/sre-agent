@@ -120,9 +120,10 @@ class InvestigationRunDispatcher:
 
         Callers may hand off after the declaration/start response is committed.
         The claim and receipts make a duplicate hand-off converge instead of
-        starting a second investigation. A failure before the claim (the agent identity
-        cannot be read, the claim itself fails) still ends the run with
-        `investigator_failed`, so it never stays `running` with no dispatcher (#704).
+        starting a second investigation. A failure (the agent identity cannot be read, the
+        claim fails, or the outcome cannot be written) ends the run with
+        `investigator_failed` (#704). If ending it fails too, the error is logged and the run
+        stays `running`: the next startup's sweep ends it once its intent was written.
         """
         try:
             await self._dispatch(incident_id, run_id)
@@ -133,7 +134,15 @@ class InvestigationRunDispatcher:
                 run_id,
                 type(error).__name__,
             )
-            await self._dispatch(incident_id, run_id, end_reason="investigator_failed")
+            try:
+                await self._dispatch(incident_id, run_id, end_reason="investigator_failed")
+            except Exception as error:
+                logger.error(
+                    "investigation_end_failed incident_id=%s run_id=%s error=%s",
+                    incident_id,
+                    run_id,
+                    type(error).__name__,
+                )
 
     def after_approval(self, incident_id: str, run_id: str) -> None:
         """Verify what an approval ran once VERIFICATION_DELAY_SECONDS pass (#723). The wait
@@ -219,13 +228,15 @@ class InvestigationRunDispatcher:
                 interrupted_decision=self._decision(
                     incident_id, run_id, actor_reference, now, "interrupted investigation dispatch"
                 ),
+                # A hand-off's fallback ends an intent its own failed attempt left with that
+                # attempt's cause; only a lost process is producer_interrupted.
                 interrupted_event=self._receipt_event(
                     incident_id,
                     run_id,
                     actor_reference,
                     phase="outcome",
                     status="unknown",
-                    reason_code="producer_interrupted",
+                    reason_code=end_reason or "producer_interrupted",
                     now=now,
                 ),
                 # Nothing resumes an interrupted dispatch: its run ends and a human retries.

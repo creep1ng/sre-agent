@@ -70,9 +70,11 @@ active dispatch alone. A process interruption (an API restart mid-dispatch) leav
 still-pending receipt; when the API starts again, it claims every `running` run with a pending
 intent and no outcome that no live process holds, records `unknown` with `producer_interrupted`
 and ends the run `needs_human` (#704). So does an exact idempotent start replay. Nothing
-redispatches such a run: a person retries with a new run. A hand-off that fails before its claim
-(for example the agent identity cannot be read) still claims the run and ends it with
-`investigator_failed`, so no run stays `running` with no dispatcher. Terminal outcomes are immutable
+redispatches such a run: a person retries with a new run. A hand-off that fails (the agent
+identity cannot be read, or the outcome cannot be written) claims the run again and ends it with
+`investigator_failed`, even over the intent its failed attempt left. If that fails too (the
+database does not answer), the failure is logged with the incident and the run, and the run stays
+`running` until the next startup's sweep ends it, once its intent was written. Terminal outcomes are immutable
 on replay, so the service never repeats an ambiguous external call. Receipt metadata contains only correlation IDs and bounded
 status/reason codes, not prompts, model output, credentials, or raw tool arguments.
 An MCP HTTP 422 contract rejection is a `confirmed_failure`: validation runs before the
