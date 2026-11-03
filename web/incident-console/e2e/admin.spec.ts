@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { strToU8, zipSync } from "fflate";
 
 /*
  * The administration plane inside the RC-2 console: identities, permissions, models and resources,
@@ -211,7 +212,7 @@ test.describe("against the real control plane", () => {
       .locator("#bok-doc-0-body")
       .fill("Cuándo volver atrás.\n\n## Señales\nLa tasa de errores de pagos sube después de un despliegue.\n\n## Pasos\nHaz rollback a la versión anterior y verifica la latencia.");
     // Each heading opens a section: the text before the first one, then two sections.
-    await expect(page.locator('[data-bok-chunk-count="0"]')).toHaveText("3 fragmentos");
+    await expect(page.locator('[data-bok-chunk-count="0"]')).toHaveText("Fragmentos: 3");
     await page.getByRole("button", { name: "Publicar", exact: true }).click();
 
     const sheet = page.getByRole("dialog");
@@ -240,6 +241,51 @@ test.describe("against the real control plane", () => {
     await expect(sheet.locator("[data-bok-results] li").first()).toContainText("Rollback de checkout");
     await settle(page);
     await page.screenshot({ path: `${SHOTS}/09-conocimiento.png` });
+  });
+
+  test("a .zip of runbooks becomes a collection, and a Skill archive fills the Skill form", async ({ page }) => {
+    await open(page, { theme: "dark", language: "es" });
+    await connect(page, "es");
+
+    await go(page, "Conocimiento", "Conocimiento");
+    await page.getByRole("button", { name: "Publicar colección" }).click();
+    const runbooks = zipSync({
+      "runbooks/pagos.md": strToU8("# Pagos caídos\n\n## Señales\nSube la tasa de errores de pagos.\n\n## Pasos\nApaga el flag y mide otra vez."),
+      "runbooks/latencia.md": strToU8("# Latencia alta\n\nRevisa la latencia del checkout antes de escalar."),
+      "scripts/run.sh": strToU8("echo nada"),
+    });
+    await page.locator("#bok-upload").setInputFiles({ name: `runbooks-${STAMP}.zip`, mimeType: "application/zip", buffer: Buffer.from(runbooks) });
+    // Each .md is a document titled by its heading; anything else is left out and said so.
+    await expect(page.locator("[data-bok-upload-note]")).toContainText("Documentos cargados: 2.");
+    await expect(page.locator("[data-bok-upload-note]")).toContainText("Quedaron fuera: scripts/run.sh.");
+    await expect(page.locator("#bok-id")).toHaveValue(`runbooks-${STAMP}`);
+    await expect(page.locator("#bok-doc-0-title")).toHaveValue("Latencia alta");
+    await expect(page.locator("#bok-doc-1-title")).toHaveValue("Pagos caídos");
+    await page.getByRole("dialog").screenshot({ path: `${SHOTS}/10a-conocimiento-formulario.png` });
+    await page.getByRole("button", { name: "Publicar", exact: true }).click();
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.locator('[data-bok-document="pagos-caidos"]')).toContainText("Apaga el flag y mide otra vez.");
+    await expect(sheet.locator('[data-bok-document="latencia-alta"]')).toBeVisible();
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/10-conocimiento-zip.png` });
+    await page.keyboard.press("Escape");
+
+    await go(page, "Skills", "Skills");
+    await page.getByRole("button", { name: "Publicar versión" }).click();
+    const skill = zipSync({
+      "log-reader/SKILL.md": strToU8(
+        `---\nname: log-reader-${STAMP}\ndescription: Lee los logs del servicio y resume los errores.\n---\n# Lector de logs\n\nAgrupa los errores por mensaje y cita la hora del primero.`,
+      ),
+      "log-reader/scripts/parse.py": strToU8("print('x')"),
+    });
+    await page.locator("#skill-upload").setInputFiles({ name: "log-reader.zip", mimeType: "application/zip", buffer: Buffer.from(skill) });
+    await expect(page.locator("#skill-id")).toHaveValue(`log-reader-${STAMP}`);
+    await expect(page.locator("#skill-name")).toHaveValue("Lector de logs");
+    await expect(page.locator("#skill-description")).toHaveValue("Lee los logs del servicio y resume los errores.");
+    await expect(page.locator("[data-skill-upload-note]")).toContainText("quedaron fuera: log-reader/scripts/parse.py");
+    await page.getByRole("dialog").screenshot({ path: `${SHOTS}/08a-skill-formulario.png` });
+    await page.getByRole("button", { name: "Publicar", exact: true }).click();
+    await expect(page.getByRole("dialog").locator("[data-skill-instructions]")).toContainText("cita la hora del primero");
   });
 
   test("the same plane reads in English on the light theme", async ({ page }) => {

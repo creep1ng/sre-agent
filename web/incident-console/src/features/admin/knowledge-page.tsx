@@ -17,6 +17,8 @@ import {
   type BoKSearchResult,
   type BoKVersion,
 } from "@/lib/admin-api";
+import { UploadButton } from "./upload-button";
+import { baseName, firstHeading, readUpload } from "./uploads";
 import { useAdminQuery, useRetryKey } from "./use-admin-query";
 import { AdminPage, Empty, ErrorNote, Facts, Field, Mono, Panel, ROW, StatusBadge, TD, TH, Table } from "./ui";
 
@@ -330,6 +332,7 @@ function PublishDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [drafts, setDrafts] = useState<DraftDocument[]>([EMPTY_DOCUMENT]);
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const [error, setError] = useState<AdminError | "local" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -363,10 +366,41 @@ function PublishDialog({
       setName("");
       setDescription("");
       setDrafts([EMPTY_DOCUMENT]);
+      setUploadNote(null);
       setChecked(false);
       setError(null);
     }
     onOpenChange(next);
+  };
+
+  // Each Markdown file becomes a document; a .zip names the collection when it is still empty.
+  const load = async (files: File[]) => {
+    let upload;
+    try {
+      upload = await readUpload(files);
+    } catch {
+      setUploadNote(t("knowledge.uploadUnreadable"));
+      return;
+    }
+    const { texts, skipped } = upload;
+    if (texts.length === 0) {
+      setUploadNote(t("knowledge.uploadEmpty"));
+      return;
+    }
+    setDrafts(
+      texts.slice(0, MAX_DOCUMENTS).map(({ path, text }) => ({
+        title: (firstHeading(text) ?? baseName(path)).slice(0, 300),
+        source: path.slice(0, 500),
+        body: text,
+      })),
+    );
+    const archive = files.find((file) => /\.zip$/i.test(file.name));
+    if (archive && !collectionId.trim()) setCollectionId(slugify(baseName(archive.name)));
+    if (archive && !name.trim()) setName(baseName(archive.name));
+    const notes = [t("knowledge.uploadLoaded", { count: Math.min(texts.length, MAX_DOCUMENTS) })];
+    if (texts.length > MAX_DOCUMENTS) notes.push(t("knowledge.uploadTooMany", { max: MAX_DOCUMENTS }));
+    if (skipped.length) notes.push(t("knowledge.uploadSkipped", { files: skipped.slice(0, 5).join(", ") + (skipped.length > 5 ? "…" : "") }));
+    setUploadNote(notes.join(" "));
   };
 
   const submit = async () => {
@@ -470,6 +504,12 @@ function PublishDialog({
               onChange={(event) => setDescription(event.target.value)}
             />
           </Field>
+          <div className="flex flex-wrap items-center gap-3">
+            <UploadButton id="bok-upload" label={t("knowledge.upload")} accept=".md,.markdown,.zip" multiple onFiles={(files) => void load(files)} />
+            <p className="text-sm text-muted-foreground" data-bok-upload-note>
+              {uploadNote ?? t("knowledge.uploadHint")}
+            </p>
+          </div>
           {drafts.map((draft, index) => {
             const document = documents[index];
             return (

@@ -8,6 +8,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/i18n";
 import { adminApi, SEMVER, SKILL_ID, type AdminError, type SkillDependency, type SkillVersion } from "@/lib/admin-api";
+import { UploadButton } from "./upload-button";
+import { baseName, firstHeading, frontMatter, readUpload } from "./uploads";
 import { useAdminQuery, useRetryKey } from "./use-admin-query";
 import { AdminPage, Empty, ErrorNote, Facts, Field, Mono, Panel, ROW, StatusBadge, TD, TH, Table, Timestamp } from "./ui";
 
@@ -244,6 +246,7 @@ function PublishDialog({
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [dependencies, setDependencies] = useState("");
+  const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
   const [error, setError] = useState<AdminError | "local" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -270,10 +273,48 @@ function PublishDialog({
       setDescription("");
       setInstructions("");
       setDependencies("");
+      setUploadNote(null);
       setChecked(false);
       setError(null);
     }
     onOpenChange(next);
+  };
+
+  // A Skill archive (or its SKILL.md alone) fills the form: the manifest keeps only the instructions.
+  const load = async (files: File[]) => {
+    let upload;
+    try {
+      upload = await readUpload(files);
+    } catch {
+      setUploadNote(t("skills.uploadUnreadable"));
+      return;
+    }
+    const byDepth = [...upload.texts].sort((a, b) => a.path.split("/").length - b.path.split("/").length);
+    const skill =
+      byDepth.find(({ path }) => /(^|\/)skill\.md$/i.test(path)) ?? (upload.texts.length === 1 ? upload.texts[0] : undefined);
+    if (!skill) {
+      setUploadNote(t("skills.uploadNoSkill"));
+      return;
+    }
+    const { fields, body } = frontMatter(skill.text);
+    const id = (fields.name ?? baseName(files[0].name))
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64);
+    setSkillId(id);
+    setName((firstHeading(body) ?? fields.name ?? id).slice(0, 200));
+    setDescription((fields.description ?? "").slice(0, 500));
+    setInstructions(body.trim());
+    const left = [...upload.texts.filter((text) => text !== skill).map((text) => text.path), ...upload.skipped];
+    setUploadNote(
+      [
+        t("skills.uploadLoaded", { file: skill.path }),
+        left.length ? t("skills.uploadLeftOut", { files: left.slice(0, 5).join(", ") + (left.length > 5 ? "…" : "") }) : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
   };
 
   const submit = async () => {
@@ -328,6 +369,12 @@ function PublishDialog({
           ) : (
             error && <ErrorNote error={error} />
           )}
+          <div className="flex flex-wrap items-center gap-3">
+            <UploadButton id="skill-upload" label={t("skills.upload")} accept=".zip,.md" onFiles={(files) => void load(files)} />
+            <p className="text-sm text-muted-foreground" data-skill-upload-note>
+              {uploadNote ?? t("skills.uploadHint")}
+            </p>
+          </div>
           <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_9rem]">
             <Field id="skill-id" label={t("skills.field.id")} hint={t("skills.field.idHint")}>
               <Input
