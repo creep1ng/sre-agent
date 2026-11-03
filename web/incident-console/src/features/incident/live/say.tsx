@@ -1,4 +1,6 @@
 import { Fragment, useCallback } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useNow } from "@/hooks/use-now";
 import { LOCALES, useLanguage, useT } from "@/i18n";
 import type { Actor, Line } from "./story";
 
@@ -35,5 +37,22 @@ export function useWhen() {
       return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(ms).replace(".", "");
     },
     [locale],
+  );
+}
+
+/** A moment as the timeline tells it, with its full date and time on hover or focus. */
+export function Stamp({ at, className }: { at: number; className?: string }) {
+  const locale = LOCALES[useLanguage((state) => state.language)];
+  const when = useWhen();
+  const now = useNow();
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <time tabIndex={0} dateTime={new Date(at).toISOString()} className={className}>
+          {when(at, now)}
+        </time>
+      </TooltipTrigger>
+      <TooltipContent>{new Intl.DateTimeFormat(locale, { dateStyle: "full", timeStyle: "medium" }).format(at)}</TooltipContent>
+    </Tooltip>
   );
 }
