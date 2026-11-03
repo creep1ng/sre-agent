@@ -242,12 +242,17 @@ transitions:
   - id: continue_investigation
     from: investigating
     to: investigating
-    actor: [agent, human]
+    actor: [agent, human, system]
     decision_point: evidence_sufficiency
     on_outcome: continue_investigation
     requires_approval: false
     records_decision: true
-    guard: Bounded by the harness step budget; exhaustion escalates to a human.
+    guard: >-
+      Bounded by the harness step budget; exhaustion escalates to a human. A new run of an
+      incident whose runs ended is a person's retry, or the system's after a failed
+      verification, at most twice per incident (maintainer, 2026-11-03, #710): the agent
+      investigates again on its own and wakes a person only for a new proposal or once the
+      retries are spent.
 
   - id: propose_mitigation
     from: investigating

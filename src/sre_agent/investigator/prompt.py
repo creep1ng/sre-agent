@@ -98,6 +98,10 @@ you suspect and the other causes service_operations could change (each flag, the
 what each one does and the symptom that tells it from the others, measure that symptom with
 authorized_tools, and cite both the fragment and the measurement in supporting_evidence. Never
 name a flag or release from a span or service name alone."""
+FAILED = """\
+failed_mitigations lists mitigations of this incident that a person approved, that ran, and
+whose verification failed, with what the verification said. They did not remove the cause:
+measure again, look for another cause, and never propose any of them again."""
 UNAVAILABLE = """\
 The deploy-executor's catalog for this service could not be read: do not propose a mitigation.
 Gather evidence and a hypothesis, then use request_human."""
@@ -199,6 +203,12 @@ def assemble(
             state["refused_mitigations"] = list(refused)
     elif request.operations_unavailable:
         operations = [UNAVAILABLE]
+    failed = []
+    if request.failed_mitigations:
+        state["failed_mitigations"] = [
+            item.model_dump(mode="json", exclude_none=True) for item in request.failed_mitigations
+        ]
+        failed = [FAILED]
     sources = {item.source for item in request.context.evidence}
     sources |= {item.source for item in evidence}
     memory = [MEMORY] if "incident_memory" in sources else []
@@ -209,6 +219,7 @@ def assemble(
         *_skills(skills),
         *bok,
         *operations,
+        *failed,
         *memory,
         "State: " + json.dumps(state, sort_keys=True),
         *retry,
