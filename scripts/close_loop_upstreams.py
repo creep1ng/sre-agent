@@ -83,7 +83,14 @@ class MeasuringMCP(upstreams.ScriptedMCP):
         return await super().call_tool(tool_name, arguments)
 
 
-upstreams.decide = decide
+def postmortem(prompt: str) -> str:
+    """The scripted draft says a person verified; here Midnight did, with real orders."""
+    measured = "Midnight verificó cada mitigación con pedidos reales a `sre-checkout`."
+    return json.dumps(json.loads(drafted(prompt)) | {"how_we_verified": measured})
+
+
+drafted = upstreams.postmortem
+upstreams.decide, upstreams.postmortem = decide, postmortem
 
 if __name__ == "__main__":
     application = create_application(

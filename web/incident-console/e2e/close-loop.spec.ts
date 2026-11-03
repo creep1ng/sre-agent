@@ -183,8 +183,12 @@ async function journey(page: Page, report: Record<string, unknown>) {
     { operation: "deployment.rollback", outcome: "succeeded", approved_by: { principal_id: "demo-human" } },
   ]);
 
+  // The new tab shares the person's session; Administration asks for an administrator's key.
   const audits = await page.context().newPage();
-  await connect(audits, "admin/auditoria", ADMIN);
+  await audits.goto("admin/auditoria");
+  await audits.getByRole("button", { name: "Conectar con la API" }).click();
+  await audits.locator("#api-key").fill(ADMIN);
+  await audits.locator("#api-key").press("Enter");
   await audits.getByLabel("ID de incidente").fill(incident);
   await audits.getByRole("button", { name: "Aplicar filtros" }).click();
   await expect(audits.locator("td", { hasText: "mitigation.execute" })).toHaveCount(2, { timeout: 30_000 });
