@@ -15,6 +15,10 @@ console ──approve──▶ gateway (#722: exact grant, audit, idempotency by
                                                                                         dockerd
 ```
 
+A Telegram tap takes the same path: the Telegram gateway only queues the verified tap, and the
+API carries it out as the linked human ([Telegram channel](telegram-channel.md#deciding-from-the-chat)),
+so neither the signing key nor any credential lives in the internet-facing gateway.
+
 The harness never reaches the executor: it talks to the gateway only. The executor has no
 published port, sits on the internal `executor-call` network with the api alone, and verifies the
 gateway's signature on every operation (#743); the proxy sits on a second internal network that

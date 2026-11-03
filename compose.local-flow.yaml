@@ -13,6 +13,8 @@ services:
       ALERT_INTAKE_GRAFANA_SECRET: ${ALERT_INTAKE_GRAFANA_SECRET:?ALERT_INTAKE_GRAFANA_SECRET is required}
       ALERT_INTAKE_PRINCIPAL_ID: demo-human
       LOCAL_FLOW_MODEL: ${LOCAL_FLOW_MODEL:-scripted}
+      # The bot token lives on the gateway here, not in .env: the API still runs the taps (#722).
+      CHAT_TAPS_WORKER: "on"
       STEP_SECONDS: ${STEP_SECONDS:-2}
 
   seed:

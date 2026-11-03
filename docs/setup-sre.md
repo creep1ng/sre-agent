@@ -50,6 +50,10 @@ stops or destroys OTel and never imports files from another branch/worktree.
 | `SRE_RUNTIME_SUBNET`, `SRE_CONSUMER_SUBNET` | Optional private, nonoverlapping IPv4 CIDRs, selected after checking local networks when Docker pools are exhausted |
 | `SRE_ENABLE_PAID_LLM` | `0`; only explicit `1` plus API-owned `OPENROUTER_API_KEY` enables paid investigation calls |
 | `TRIAGE_AGENT_*`, `REMEDIATION_AGENT_*` | Existing seed assignments; aliases stay `triage-agent`/`remediation-agent` |
+| `TELEGRAM_BOT_TOKEN` | Empty; when set, setup also starts the Telegram gateway ([Telegram channel](telegram-channel.md)) |
+| `SRE_PUBLIC_HOST` | `127.0.0.1`; the host the operator opens the console on (for example a tailnet IP). With `WEB_PORT` it gives the chat's console link, `http://<host>:<WEB_PORT>/app/` |
+| `CONSOLE_PUBLIC_URL` | Empty; overrides the derived console link, for example behind a proxy |
+| `TELEGRAM_TIMEZONE` | Empty (UTC); the IANA zone chat messages tell time in, for example `America/Bogota` |
 
 ## Prepared AWS connection
 
@@ -104,7 +108,9 @@ For a private configuration elsewhere, add `--env-file /absolute/private/file.en
 The command validates inputs/Docker/ports/isolation, runs existing migrations,
 ordinary seed and MCP seed, prepares explicit demo permissions through the
 existing domain service, starts API/web and probes governed MCP metric/log calls.
-It prints the operational API/web URLs and whether paid LLM is enabled. Readiness
+With `TELEGRAM_BOT_TOKEN` set it also starts `telegram-gateway`, passing it the derived
+`CONSOLE_PUBLIC_URL`. It prints the operational API/web URLs, whether paid LLM is enabled and
+the console link the chat uses. Readiness
 allows empty signal results: connection success is not recovery evidence.
 
 Repeat the same command. It retains credentials, principal/grant IDs, incidents,
