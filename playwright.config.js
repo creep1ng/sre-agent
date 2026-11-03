@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/browser",
   // These suites require the isolated API/database fixture, not a static server.
-  testIgnore: ["api-seam.spec.js", "production-proxy.spec.js", "triage-origin.spec.js", "triage-context.spec.js", "triage-eligible.spec.js"],
+  testIgnore: ["api-seam.spec.js", "production-proxy.spec.js"],
   outputDir: "test-results/browser",
   reporter: [["line"], ["html", { outputFolder: "playwright-report", open: "never" }]],
   use: {

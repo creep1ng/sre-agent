@@ -68,63 +68,68 @@ function grant(id, action, resourceId) {
   };
 }
 
+// The console's Permissions page (/app/admin/permisos), in Spanish, connected with the admin key.
 async function connect(page) {
-  await page.goto("/public/admin/grants.html");
-  await page.fill("#api-key", ADMIN_KEY);
-  await page.click("#connect-button");
-  await expect(page.locator("#create-grant-button")).toBeEnabled();
+  await page.addInitScript(() =>
+    localStorage.setItem("midnight-language", JSON.stringify({ state: { language: "es" }, version: 0 })),
+  );
+  await page.goto("/app/admin/permisos");
+  await page.getByRole("button", { name: "Conectar con la API" }).click();
+  await page.locator("#api-key").fill(ADMIN_KEY);
+  await page.locator("#api-key").press("Enter");
+  await expect(page.getByRole("button", { name: "Conceder permiso" })).toBeEnabled();
 }
 
 async function capture(page, name) {
   if (!ARTIFACTS) return;
-  // A revoke scrolls the page and the table; capture both from their start.
-  await page.evaluate(() => {
-    document.getElementById("list-wrap").scrollLeft = 0;
-    window.scrollTo({ top: 0, behavior: "instant" });
-  });
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await page.screenshot({ path: join(ARTIFACTS, name), fullPage: true });
 }
 
 test("setup lets the agent roll sre-checkout back, and nothing else", async ({ page }) => {
   const agent = await call("GET", "/v1/grants?principal_id=incident-harness");
   expect(agent.status).toBe(200);
-  const operations = agent.body.items.filter((item) => item.resource.resource_type === "service_operation");
+  // On sre-checkout the agent may only roll back. Other services' operations (the OTel demo's
+  // flag.set on payment and checkout, #724) are setup grants of their own and not this case.
+  const sreCheckout = (item) => item.resource_id.startsWith("sre-checkout:");
+  const operations = agent.body.items.filter(
+    (item) => item.resource.resource_type === "service_operation" && sreCheckout(item.resource),
+  );
   expect(operations.map((item) => [item.action, item.resource.resource_id, item.status])).toEqual([
     ["mitigation.execute", ROLLBACK, "active"],
   ]);
   const catalog = await call("GET", "/v1/catalog/resources?resource_type=service_operation&limit=100");
   expect(catalog.status).toBe(200);
-  expect(catalog.body.items.map((item) => [item.resource_id, item.status]).sort()).toEqual([
+  expect(catalog.body.items.filter(sreCheckout).map((item) => [item.resource_id, item.status]).sort()).toEqual([
     [RESTART, "active"],
     [ROLLBACK, "active"],
   ]);
   await connect(page);
-  await page.selectOption("#principal-filter", "incident-harness");
-  const row = page.locator("[data-grant-row]", { hasText: `service_operation/${ROLLBACK}` });
+  await page.selectOption("#grants-principal", "incident-harness");
+  const row = page.locator("[data-grant-row]", { hasText: ROLLBACK });
   await expect(row).toContainText("mitigation.execute");
-  await expect(row).toContainText("active");
+  await expect(row).toContainText("Activo");
   await capture(page, "agent-grant.png");
 });
 
 test("the console offers only mitigation.execute, and a revoked grant is granted again anew", async ({ page }) => {
   await connect(page);
-  await page.click("#create-grant-button");
-  await expect(page.locator("#create-dialog")).toBeVisible();
-  await page.selectOption("#create-resource", `service_operation/${RESTART}`);
+  await page.getByRole("button", { name: "Conceder permiso" }).click();
+  await page.selectOption("#grant-resource", `service_operation/${RESTART}`);
   const actions = await page
-    .locator("#create-action option")
+    .locator("#grant-action option")
     .evaluateAll((options) => options.map((option) => option.value).filter(Boolean));
   expect(actions).toEqual(["mitigation.execute"]);
-  await page.fill("#create-grant-id", `grant-${PROBE}`);
-  await page.selectOption("#create-principal", PROBE);
-  await page.selectOption("#create-action", "mitigation.execute");
-  await page.click("#create-submit");
+  await page.fill("#grant-id", `grant-${PROBE}`);
+  await page.selectOption("#grant-principal", PROBE);
+  await page.selectOption("#grant-action", "mitigation.execute");
+  await page.getByRole("button", { name: "Conceder", exact: true }).click();
   const row = page.locator(`[data-grant-row='grant-${PROBE}']`);
-  await expect(row).toContainText(`service_operation/${RESTART}`);
-  await expect(row).toContainText("active");
-  await row.locator("[data-grant-revoke]").click();
-  await page.locator("#revoke-submit").click();
-  await expect(row).toContainText("revoked");
+  await expect(row).toContainText(RESTART);
+  await expect(row).toContainText("Activo");
+  await row.getByRole("button", { name: `Revocar grant-${PROBE}` }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Revocar" }).click();
+  await expect(row).toContainText("Revocado");
   await capture(page, "probe-revoked.png");
   const again = await call("POST", "/v1/grants", grant(`grant-${PROBE}-again`, "mitigation.execute", RESTART));
   expect(again.status).toBe(201);

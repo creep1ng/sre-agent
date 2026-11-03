@@ -61,16 +61,16 @@ test("la raíz abre la consola con las dos secciones y Alertas como vista inicia
   const governance = page.getByRole("list", { name: "Gobierno de IA" });
   await expect(incidents.getByRole("link")).toHaveText([
     "Alertas",
-    "Triage",
     "War room",
     "Decisiones",
     "Postmortem",
   ]);
   await expect(governance.getByRole("link")).toHaveText([
-    "Principals",
-    "Recursos y aliases",
-    "Grants",
-    "Auditoría y consumo",
+    "Identidades",
+    "Permisos",
+    "Modelos y recursos",
+    "Consumo",
+    "Auditoría",
   ]);
   await expect(page.locator("[data-console-nav][aria-current='page']")).toHaveText("Alertas");
   await expect(page.locator(".console-breadcrumb")).toContainText("Atención a incidentes");
@@ -229,17 +229,12 @@ test("el tema elegido aplica a toda la consola y persiste al recargar", async ({
   expect((await browserStorage(page)).local).toEqual({ "ma-theme": "light" });
 });
 
-test("Alertas entrega la alerta seleccionada a Triage sin copiar su ID", async ({ page }) => {
+test("Alertas entrega la alerta seleccionada a la bandeja de /app sin copiar su ID", async ({ page }) => {
   await page.goto("/?fixture=default");
   await expect(page.locator("#alert-inbox")).toHaveAttribute("data-state", "ready");
-  await page.evaluate(() => {
-    window.__sameDocument = true;
-  });
+  // Triage lives in the new console's inbox (#870); the old console hands the alert over there.
   await page.getByRole("button", { name: "Iniciar triage" }).click();
-  await expect(page).toHaveURL("/?view=triage&alert_id=alert-checkout-001");
-  await expect(page.locator("#alert-id")).toHaveValue("alert-checkout-001");
-  await expect(page.locator("[data-console-nav][aria-current='page']")).toHaveText("Triage");
-  expect(await page.evaluate(() => window.__sameDocument)).toBe(true);
+  await page.waitForURL(/\/app\/\?(.+&)?alert_id=alert-checkout-001(&|$)/);
 });
 
 test("la consola no tiene violaciones WCAG A/AA detectables", async ({ page }) => {

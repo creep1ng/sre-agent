@@ -165,8 +165,8 @@ checks the migration head above), then plain `ok` from the web container.
 Open <http://127.0.0.1:8888>: the server returns the console shell, whose raw HTML title
 is `midnight.agent`; the console boots into the Alerts inbox (4 fixture alerts) and the
 browser tab title then reads `Alertas · midnight.agent`. Then open
-<http://127.0.0.1:8888/public/admin/principals.html>: paste `ADMIN_HUMAN_API_KEY` and
-press "Connect and load". Expect 4 principals with their kinds. The key stays in the
+<http://127.0.0.1:8888/app/admin/identidades>, press "Conectar con la API" and paste
+`ADMIN_HUMAN_API_KEY`. Expect 4 identities with their kinds. The key stays in the
 masked field and in memory only, so it cannot leak into screenshots or shell history.
 Headless equivalent (raw shell; `curl` does not run the console script):
 
