@@ -151,6 +151,66 @@ test.describe("against the real control plane", () => {
     await expect(page.getByText(`${id} quedó inactiva.`)).toBeVisible();
   });
 
+  test("an operator rotates a key, revokes its replacement, and sees which key the console holds", async ({ page }) => {
+    const whoami = (key: string) => page.request.get("/api/v1/whoami", { headers: { Authorization: `Bearer ${key}` } });
+    // Only a key's prefix is masked, wherever it is shown; everything else is evidence.
+    const prefixes = [
+      page.locator("[data-credential] > div:first-child > span:first-child"),
+      page.getByRole("heading", { name: /la clave/ }),
+      page.locator("[data-sonner-toast]"),
+    ];
+    await open(page, { theme: "dark", language: "es" });
+    await connect(page, "es");
+
+    // The connected key is marked on its own identity, and only that one.
+    await page.locator('[data-principal-row="admin-human"]').click();
+    await expect(page.locator('[data-credential-list="admin-human"] [data-this-console]')).toHaveCount(1);
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/16-esta-consola.png`, mask: prefixes });
+    await page.keyboard.press("Escape");
+
+    const id = `rotation-bot-${STAMP}`;
+    await page.getByRole("button", { name: "Nueva identidad" }).click();
+    await page.locator("#principal-id").fill(id);
+    await page.locator("#principal-name").fill("Bot de rotación");
+    await page.getByRole("button", { name: "Crear identidad" }).click();
+    const sheet = page.getByRole("dialog");
+    await sheet.getByRole("button", { name: "Emitir clave" }).click();
+    await page.getByRole("button", { name: "Emitir", exact: true }).click();
+    const secret = page.locator("[data-secret]");
+    const first = (await secret.textContent()) ?? "";
+    expect((await whoami(first)).status()).toBe(200);
+    await page.getByRole("button", { name: "Cerrar" }).last().click();
+
+    const list = page.locator(`[data-credential-list="${id}"]`);
+    await list.getByRole("button", { name: /^Rotar la clave/ }).click();
+    await expect(page.getByRole("dialog", { name: /^Rotar la clave/ })).toBeVisible();
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/17-rotar-clave.png`, mask: prefixes });
+    await page.getByRole("button", { name: "Rotar clave" }).click();
+    await expect(secret).toHaveText(/^sre_/);
+    const second = (await secret.textContent()) ?? "";
+    expect(second).not.toBe(first);
+    // The rotation revoked the old key in the same step that issued the new one.
+    expect((await whoami(first)).status()).toBe(401);
+    expect((await whoami(second)).status()).toBe(200);
+    await page.getByRole("button", { name: "Cerrar" }).last().click();
+    await expect(list.locator("li")).toHaveCount(2);
+    await expect(list.locator("li").filter({ hasText: "Revocada" })).toHaveCount(1);
+
+    await list.getByRole("button", { name: /^Revocar la clave/ }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Revocar" }).click();
+    await expect(page.getByText(/^Clave .+ revocada\.$/)).toBeVisible();
+    expect((await whoami(second)).status()).toBe(401);
+    await expect(list.getByRole("button", { name: /^(Rotar|Revocar) la clave/ })).toHaveCount(0);
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/18-claves-revocadas.png`, mask: prefixes });
+
+    await sheet.getByRole("button", { name: "Desactivar" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Desactivar" }).click();
+    await expect(page.getByText(`${id} quedó inactiva.`)).toBeVisible();
+  });
+
   test("an operator publishes a Skill version, reads it and activates it", async ({ page }) => {
     await open(page, { theme: "dark", language: "es" });
     await connect(page, "es");

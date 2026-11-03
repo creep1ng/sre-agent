@@ -89,3 +89,12 @@ Stack rebased onto `main` `7413c94d`. On the top (layer 16), local Docker Compos
 - Python checks on the BoK layers over the new `main`: ruff, format and import contracts clean; 121 passed.
 
 New screenshots: `08a-skill-formulario.png` and `10a-conocimiento-formulario.png` (forms after an upload) and `10-conocimiento-zip.png`.
+
+## API keys: rotate and revoke (layer 18)
+
+`e2e/admin.spec.ts` and `e2e/shell.spec.ts` on layer 18, real API: 11 passed in two runs (the second with the final screenshot masks). The journey marks
+the key the console is connected with ("Esta consola") on `admin-human`, issues a key for a new identity, rotates
+it, and checks with `GET /v1/whoami` that the old key now gets 401 and the new one 200. It then revokes the new
+key (401 afterwards), and the list keeps both keys as revoked with their dates and no actions left.
+Screenshots: `16-esta-consola.png`, `17-rotar-clave.png` and `18-claves-revocadas.png`. A key's prefix is
+masked wherever it appears: in the list, the dialog title and the confirmation toast.

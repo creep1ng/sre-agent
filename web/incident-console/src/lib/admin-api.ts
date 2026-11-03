@@ -40,11 +40,18 @@ export interface Credential {
   status: string;
   created_at: string;
   expires_at?: string | null;
+  revoked_at?: string | null;
 }
 
 export interface IssuedCredential {
   key?: string;
   secret_revealed?: boolean;
+}
+
+/** A rotation revokes the old key and issues its replacement in one transaction. */
+export interface CredentialRotation {
+  old_credential: Credential;
+  issuance: IssuedCredential & { credential: Credential };
 }
 
 export interface ResourceRef {
@@ -310,6 +317,9 @@ export const adminApi = {
   listCredentials: (principalId: string) => request<Page<Credential>>(`/principals/${id(principalId)}/credentials`),
   issueCredential: (principalId: string, body: { expires_at?: string }, key: string) =>
     request<IssuedCredential>(`/principals/${id(principalId)}/credentials`, { method: "POST", body, idempotencyKey: key }),
+  revokeCredential: (credentialId: string) => request<undefined>(`/credentials/${id(credentialId)}`, { method: "DELETE" }),
+  rotateCredential: (credentialId: string, body: { expires_at?: string }, key: string) =>
+    request<CredentialRotation>(`/credentials/${id(credentialId)}/rotation`, { method: "POST", body, idempotencyKey: key }),
 
   listGrants: (filter: { principal_id: string } | { resource_id: string }) =>
     request<Page<Grant>>(`/grants?${query({ ...filter, limit: "100" })}`),
