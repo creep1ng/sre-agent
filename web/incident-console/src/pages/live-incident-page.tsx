@@ -1,15 +1,17 @@
-import { PlayIcon, RotateCcwIcon } from "lucide-react";
+import { ClockIcon, PlayIcon, RotateCcwIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
+import { Decisions, decisionsOf } from "@/features/incident/live/decisions";
 import { HypothesisProse } from "@/features/incident/live/hypothesis";
 import { Proposal, operationCall } from "@/features/incident/live/proposal";
-import { Prose } from "@/features/incident/live/say";
+import { Prose, Stamp } from "@/features/incident/live/say";
 import { PHASES, agentStatus, phaseOf, type AgentStatus } from "@/features/incident/live/status";
 import { buildStory, claimsOf, code } from "@/features/incident/live/story";
 import { Timeline } from "@/features/incident/live/timeline";
 import { useDecision } from "@/features/incident/live/use-decision";
+import { verificationOf } from "@/features/incident/live/verification";
 import { useT } from "@/i18n";
 import { useLiveIncident, type IncidentPhase, type LiveIncident } from "@/lib/live-incident";
 import { cn } from "@/lib/utils";
@@ -92,14 +94,27 @@ export function LiveIncidentPage() {
   const hypothesis = reasoning?.hypotheses.at(-1);
   const mitigation = reasoning?.mitigation_strategy;
   const operation = mitigation ? operationCall(mitigation) : null;
-  const decided = story.findLast((entry) => /^event\.(approved|rejected)/.test(entry.line.key));
+  const decisions = decisionsOf(live, story);
   const waiting = status.kind === "waiting";
+  // The report changes with the incident and its runs, never with the page's own polling.
+  const updated = Math.max(
+    Date.parse(detail.updated_at),
+    ...live.runs.map((run) => Date.parse(run.updated_at)),
+    ...live.events.map((event) => Date.parse(event.occurred_at)),
+  );
   return (
     <article className="mx-auto w-full max-w-4xl min-w-0 px-4 py-8 sm:px-8 lg:px-14 lg:py-12">
       <p className="mb-4 flex flex-wrap gap-3.5 font-mono text-[13px] font-medium text-[var(--mist)]">
         {detail.alert && <Prose text={code(detail.alert.service)} />}
         {detail.severity && <span>{detail.severity.toUpperCase()}</span>}
         <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${status.kind}`)}</span>
+        {Number.isFinite(updated) && (
+          <span className="inline-flex items-center gap-1.5">
+            <ClockIcon className="size-3.5" aria-hidden="true" />
+            <span className="sr-only">{t("updated")}</span>
+            <Stamp at={updated} />
+          </span>
+        )}
         {live.stale && <span className="text-[var(--danger)]">{t("stale")}</span>}
       </p>
       <h1 className="max-w-[18ch] font-display text-4xl leading-none font-light tracking-[-0.03em] sm:text-[54px]">
@@ -109,18 +124,21 @@ export function LiveIncidentPage() {
       <Start live={live} status={status} />
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
       {hypothesis && <HypothesisProse hypothesis={hypothesis} claims={claimsOf(live, story)} />}
-      <Timeline story={story} status={status} />
-      {mitigation && (
+      <Timeline story={story} status={status} verification={verificationOf(live, story)} />
+      {mitigation && status.kind === "waiting" && detail.state === "mitigating" && (
         <div className="mb-14">
           <Proposal
             mitigation={mitigation}
-            pending={waiting && detail.state === "mitigating"}
-            decision={decided}
             sending={decision.sending}
             error={decision.error}
             canDecide={Boolean(decision.me)}
-            onDecide={(choice) => waiting && void decision.decide(choice, status.run)}
+            onDecide={(choice) => void decision.decide(choice, status.run)}
           />
+        </div>
+      )}
+      {decisions.length > 0 && (
+        <div className="mb-14">
+          <Decisions decisions={decisions} mitigation={mitigation} />
         </div>
       )}
       <details className="border-t pt-4 text-sm text-[var(--dim)]">
