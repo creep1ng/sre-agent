@@ -21,6 +21,12 @@ notes, captures or this doc.
    then `python3 scripts/otel_ec2.py status`. If an instance is already up, someone else owns it.
    Otherwise `up`, then `prepare-mcp` (a new instance always needs it before `connect-mcp`). See
    [OTel Demo on EC2](otel-demo-ec2.md) for the TTL; `extend` keeps the session under 4 h in total.
+   `prepare-mcp` can succeed while the bootstrap is still pulling images; the bootstrap's own
+   `compose up` then recreates Grafana without its overlay (175M, no alert delivery). Once
+   `/var/log/cloud-init-output.log` says "Cloud-init … finished", run `prepare-mcp` again: the
+   overlay is unchanged, and it recreates Grafana with 1G (`docker inspect -f
+   '{{.HostConfig.Memory}}' grafana` prints `1073741824`). `connect-mcp` needs a new state
+   directory with mode `700`.
 2. **The env file.** Besides the keys of [the setup guide](setup-sre.md#prepared-aws-connection):
 
    ```text
