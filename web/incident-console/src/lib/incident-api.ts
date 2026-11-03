@@ -9,10 +9,10 @@ import type { Severity } from "./types";
 export type ApiResult<T> =
   | { kind: "ok"; body: T }
   | { kind: "auth" }
-  | { kind: "forbidden" }
+  | { kind: "forbidden"; code?: string }
   | { kind: "missing" }
-  | { kind: "conflict" }
-  | { kind: "transient" };
+  | { kind: "conflict"; code?: string }
+  | { kind: "transient"; code?: string };
 
 export type RunStatus = "running" | "awaiting_human" | "completed" | "terminated";
 
@@ -96,7 +96,20 @@ export interface Mitigation {
   approval_status?: string;
   /** #722: the catalog operation the executor runs once a person approves. */
   operation?: { service: string; operation: string; parameters?: Record<string, string> } | null;
+  /** #920: the deploy-executor's receipt once an approval ran the operation. */
+  execution?: Execution | null;
   created_at?: string;
+}
+
+export interface Execution {
+  execution_id: string;
+  outcome: string;
+  replayed: boolean;
+  /** Image references for a rollback or restart; a flag.set (#724) touches no image. */
+  before_image?: string;
+  after_image?: string;
+  executed_at: string;
+  duration_ms?: number;
 }
 
 export interface Reasoning {
@@ -114,6 +127,20 @@ export interface ChangeEvent {
   author: string | null;
   url: string | null;
   occurred_at: string;
+}
+
+/** A canonical alert as GET /v1/alerts lists it; intake (#765) lists resolved episodes apart. */
+export interface Alert {
+  alert_id: string;
+  service: string;
+  incident_id?: string | null;
+  origin?: { observed_at?: string } | null;
+}
+
+export interface Alerts {
+  alerts: Alert[];
+  /** Episodes Grafana resolved in the last day; `origin.observed_at` is when the resolution came in. */
+  resolved?: Alert[];
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -146,10 +173,17 @@ async function call<T>(
     return { kind: "transient" };
   }
   if (response.status === 401) return { kind: "auth" };
-  if (response.status === 403) return { kind: "forbidden" };
   if (response.status === 404) return { kind: "missing" };
-  if (response.status === 409) return { kind: "conflict" };
-  if (![200, 201, 202].includes(response.status)) return { kind: "transient" };
+  if (![200, 201, 202].includes(response.status)) {
+    // The error's code tells a refused approval (#923) from a credential or a stale version.
+    const code = await response.json().then(
+      (body: unknown) => (isObject(body) && isObject(body.error) && typeof body.error.code === "string" ? body.error.code : undefined),
+      () => undefined,
+    );
+    if (response.status === 403) return { kind: "forbidden", code };
+    if (response.status === 409) return { kind: "conflict", code };
+    return { kind: "transient", code };
+  }
   try {
     const body: unknown = await response.json();
     return accept(body) ? { kind: "ok", body } : { kind: "transient" };
@@ -166,6 +200,7 @@ const isPage = (body: unknown): body is EventPage =>
   isObject(body) && Array.isArray(body.events) && typeof body.next_cursor === "string";
 const isContext = (body: unknown): body is { reasoning: Reasoning } =>
   isObject(body) && isObject(body.reasoning) && Array.isArray(body.reasoning.hypotheses) && Array.isArray(body.reasoning.evidence);
+const isAlerts = (body: unknown): body is Alerts => isObject(body) && Array.isArray(body.alerts);
 const isChanges = (body: unknown): body is { changes: ChangeEvent[] } => isObject(body) && Array.isArray(body.changes);
 
 const at = (id: string) => `/incidents/${encodeURIComponent(id)}`;
@@ -183,6 +218,7 @@ export const incidentApi = {
     call(token, `${at(id)}/runs/${encodeURIComponent(run)}/context`, signal, isContext),
   changes: (token: string, service: string, signal: AbortSignal) =>
     call(token, `/changes?service=${encodeURIComponent(service)}&limit=5`, signal, isChanges),
+  alerts: (token: string, signal: AbortSignal) => call(token, "/alerts", signal, isAlerts),
   whoami: (token: string, signal: AbortSignal) =>
     call(token, "/whoami", signal, (body): body is { principal_id: string } => isObject(body) && typeof body.principal_id === "string"),
   /** A governed human command on a run (approve_mitigation, reject_mitigation); the key replays one submission. */

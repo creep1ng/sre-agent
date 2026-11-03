@@ -15,7 +15,7 @@ const EN = {
   "letter.p1": "I keep a company’s internal services running on an on-premise server, literally the nightmare of many engineers. Sure enough, a service has gone down before, and I found out because someone told me on a Saturday, at 7 in the evening, that they needed to pull an urgent report, and I was in no position to help. When I checked, the service had been down since Thursday.",
   "letter.p2": "I really do not need another dashboard to visit, and the idea of a coding agent holding the production keys terrifies me. I want to <em>sleep</em> soundly, knowing that, if something needs my judgement, a message will reach me. The rest will be resolved, or reported and ready to act on the next day.",
   "letter.p3": "Midnight grows out of that idea. It listens to the signals my infrastructure gives, remembers my incidents and how I solved them, and operates through predefined, pre-approved actions, keeping the full trail in case I need it.",
-  "letter.p4": "Most of what happens at night gets resolved without waking me. It is not a no by default. It is our product.",
+  "letter.p4": "Most of what happens at night gets resolved without waking me. It’s not a bug. It is our product.",
   "msg.label": "Midnight’s message on Telegram",
   "msg.time": "Sat 02:47",
   "msg.p1": 'Payments at <b>Tienda&nbsp;Ruiz</b> have been failing at <span class="nb">38&nbsp;%</span> since 02:31.',
