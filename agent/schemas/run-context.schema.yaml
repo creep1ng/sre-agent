@@ -125,6 +125,21 @@ $defs:
           service: { type: string, minLength: 1, maxLength: 200 }
           operation: { type: string, minLength: 1, maxLength: 100 }
           parameters: { type: object, additionalProperties: { type: string, maxLength: 128 } }
+      execution:
+        description: >-
+          The deploy-executor's receipt for the operation the approval ran, as incident-state
+          1.3.0 records it (#722). Absent until an approval runs one.
+        type: object
+        additionalProperties: false
+        required: [execution_id, outcome, replayed, executed_at]
+        properties:
+          execution_id: { type: string, pattern: '^exe_[0-9a-f]{16}$' }
+          outcome: { type: string, minLength: 1, maxLength: 64 }
+          replayed: { type: boolean }
+          before_image: { type: string, maxLength: 300 }
+          after_image: { type: string, maxLength: 300 }
+          executed_at: { type: string, format: date-time }
+          duration_ms: { type: integer, minimum: 0 }
       created_by: { enum: [human, agent] }
       created_at: { type: string, format: date-time }
 

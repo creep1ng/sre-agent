@@ -1,0 +1,12 @@
+# Catalog of the RC-2 incident page journeys (#870, #722), read by the deploy-executor that
+# compose.incident-console-e2e.yaml starts: one enrolled service of the journeys' own project,
+# sre-checkout, released as midnight-e2e/checkout 1.5.0 with 1.4.0 in the image store, so an
+# approved rollback really recreates its container and returns a real receipt.
+schema_version: "v1"
+defaults:
+  compose_project: self
+services:
+  - service: sre-checkout
+    compose_service: sre-checkout
+    image_repository: midnight-e2e/checkout
+    operations: [deployment.rollback, deployment.restart]
