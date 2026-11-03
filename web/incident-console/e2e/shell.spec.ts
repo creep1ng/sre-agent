@@ -36,7 +36,7 @@ test("live mode lists only sections backed by the API", async ({ page }) => {
   await page.keyboard.press("Control+k");
   const search = page.getByRole("dialog", { name: "Buscar" });
   // The administration plane reads the API too, so live mode offers it.
-  await expect(search.getByRole("option")).toHaveText([/Bandeja/, /Acciones/, /Identidades/, /Permisos/, /Modelos y recursos/, /Skills/, /Consumo/, /Auditoría/]);
+  await expect(search.getByRole("option")).toHaveText([/Bandeja/, /Acciones/, /Identidades/, /Permisos/, /Modelos y recursos/, /Skills/, /Conocimiento/, /Consumo/, /Auditoría/]);
 });
 
 test("the sidebar folds from the keyboard and a reload remembers it", async ({ page }) => {

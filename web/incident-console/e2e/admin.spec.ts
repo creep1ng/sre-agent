@@ -46,6 +46,7 @@ test("the administration plane lives in the console's own navigation", async ({ 
     /Permisos/,
     /Modelos y recursos/,
     /Skills/,
+    /Conocimiento/,
     /Consumo/,
     /Auditoría/,
   ]);
@@ -182,6 +183,55 @@ test.describe("against the real control plane", () => {
     await expect(page.getByText("Esa versión ya existe con otro contenido. Publica una versión nueva.")).toBeVisible();
   });
 
+  test("an operator publishes a knowledge collection and the search finds it once it is granted", async ({ page }) => {
+    await open(page, { theme: "dark", language: "es" });
+    await connect(page, "es");
+    await go(page, "Conocimiento", "Conocimiento");
+    const collection = `runbooks-checkout-${STAMP}`;
+    const resource = `${collection}@1.0.0`;
+    await page.getByRole("button", { name: "Publicar colección" }).click();
+    await page.locator("#bok-id").fill(collection);
+    await page.locator("#bok-name").fill("Runbooks de checkout");
+    await page.locator("#bok-description").fill("Qué hacer cuando checkout falla.");
+    // A document without text is refused before anything is sent.
+    await page.locator("#bok-doc-0-title").fill("Rollback de checkout");
+    await page.getByRole("button", { name: "Publicar", exact: true }).click();
+    await expect(page.getByText("Revisa los campos marcados. No se envió nada.")).toBeVisible();
+    await page
+      .locator("#bok-doc-0-body")
+      .fill("Cuándo volver atrás.\n\n## Señales\nLa tasa de errores de pagos sube después de un despliegue.\n\n## Pasos\nHaz rollback a la versión anterior y verifica la latencia.");
+    // Each heading opens a section: the text before the first one, then two sections.
+    await expect(page.locator('[data-bok-chunk-count="0"]')).toHaveText("3 fragmentos");
+    await page.getByRole("button", { name: "Publicar", exact: true }).click();
+
+    const sheet = page.getByRole("dialog");
+    await expect(sheet.getByRole("heading", { name: "Runbooks de checkout" })).toBeVisible();
+    await expect(sheet.getByText("Activo")).toBeVisible();
+    await expect(sheet.locator('[data-bok-document="rollback-de-checkout"]')).toContainText("Haz rollback a la versión anterior");
+    // Publishing grants nothing: the search answers as it would to an agent without the grant.
+    await sheet.locator("#bok-query").fill("rollback");
+    await sheet.getByRole("button", { name: "Buscar" }).click();
+    await expect(sheet.getByText(`Tu identidad no puede buscar en ${resource}.`, { exact: false })).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await go(page, "Permisos", "Permisos");
+    await page.getByRole("button", { name: "Conceder permiso" }).click();
+    await page.locator("#grant-id").fill(`grant-bok-${STAMP}`);
+    await page.locator("#grant-principal").selectOption("admin-human");
+    await page.locator("#grant-resource").selectOption(`bok_collection/${resource}`);
+    await page.locator("#grant-action").selectOption("bok.search");
+    await page.getByRole("button", { name: "Conceder", exact: true }).click();
+    await expect(page.locator(`[data-grant-row="grant-bok-${STAMP}"]`)).toContainText("bok.search");
+
+    await go(page, "Conocimiento", "Conocimiento");
+    await page.locator(`[data-collection-row="${resource}"]`).click();
+    await sheet.locator("#bok-query").fill("rollback");
+    await sheet.getByRole("button", { name: "Buscar" }).click();
+    await expect(sheet.locator("[data-bok-results] li").first()).toContainText("Rollback de checkout");
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/09-conocimiento.png` });
+  });
+
   test("the same plane reads in English on the light theme", async ({ page }) => {
     await open(page, { theme: "light", language: "en" });
     await connect(page, "en");
@@ -197,6 +247,10 @@ test.describe("against the real control plane", () => {
     await expect(page.locator("[data-skill-row]").first()).toBeVisible();
     await settle(page);
     await page.screenshot({ path: `${SHOTS}/14-skills-light.png` });
+    await go(page, "Knowledge", "Knowledge");
+    await expect(page.locator("[data-collection-row]").first()).toBeVisible();
+    await settle(page);
+    await page.screenshot({ path: `${SHOTS}/15-knowledge-light.png` });
     await go(page, "Consumption", "Consumption");
     await page.getByRole("button", { name: "Change limits" }).click();
     await settle(page);

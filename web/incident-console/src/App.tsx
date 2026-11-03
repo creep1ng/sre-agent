@@ -13,6 +13,7 @@ import { CatalogPage } from "@/pages/catalog-page";
 import { AuditPage } from "@/features/admin/audit-page";
 import { ConsumptionPage } from "@/features/admin/consumption-page";
 import { IdentitiesPage } from "@/features/admin/identities-page";
+import { KnowledgePage } from "@/features/admin/knowledge-page";
 import { PermissionsPage } from "@/features/admin/permissions-page";
 import { ResourcesPage } from "@/features/admin/resources-page";
 import { SkillsPage } from "@/features/admin/skills-page";
@@ -106,6 +107,7 @@ export function App() {
               <Route path="permisos" element={<PermissionsPage />} />
               <Route path="recursos" element={<ResourcesPage />} />
               <Route path="skills" element={<SkillsPage />} />
+              <Route path="conocimiento" element={<KnowledgePage />} />
               <Route path="consumo" element={<ConsumptionPage />} />
               <Route path="auditoria" element={<AuditPage />} />
             </Route>

@@ -95,6 +95,42 @@ export interface SkillStatus {
   updated_at: string;
 }
 
+export interface BoKChunk {
+  section_id: string;
+  chunk_index: number;
+  content: string;
+}
+
+export interface BoKDocument {
+  document_id: string;
+  title: string;
+  source_ref: string;
+  chunks: BoKChunk[];
+}
+
+export interface BoKVersion {
+  resource_id: string;
+  collection_id: string;
+  version: string;
+  owner_id: string;
+  display_name: string;
+  description: string;
+  status: string;
+  document_count: number;
+  chunk_count: number;
+  documents?: BoKDocument[];
+}
+
+export interface BoKSearchResult {
+  document_id: string;
+  section_id: string;
+  chunk_index: number;
+  title: string;
+  source_ref: string;
+  content: string;
+  score: number;
+}
+
 export interface ModelAlias {
   model_alias_id: string;
   alias: string;
@@ -292,6 +328,18 @@ export const adminApi = {
       method: "PUT",
       body: { status, expected_updated_at: expectedUpdatedAt },
     }),
+  listCollections: () => request<Page<CatalogResource>>("/catalog/resources?resource_type=bok_collection&limit=100"),
+  getCollection: (collectionId: string, version: string) =>
+    request<BoKVersion>(`/bok/collections/${id(collectionId)}/versions/${id(version)}`),
+  publishCollection: (
+    body: { collection_id: string; version: string; display_name: string; description: string; documents: BoKDocument[] },
+    key: string,
+  ) => request<BoKVersion>("/bok/collections/versions", { method: "POST", body, idempotencyKey: key }),
+  searchCollection: (collectionId: string, version: string, query: string) =>
+    request<{ results: BoKSearchResult[] }>(`/bok/collections/${id(collectionId)}/versions/${id(version)}/search`, {
+      method: "POST",
+      body: { query, limit: 5 },
+    }),
   listModelAliases: () => request<Page<ModelAlias>>("/model-aliases?limit=100"),
   getModelAlias: (aliasId: string) => request<ModelAlias>(`/model-aliases/${id(aliasId)}`),
   replaceAssignment: (
@@ -358,6 +406,9 @@ export const ADMIN_RESOURCES: readonly ResourceRef[] = [
 /** A Skill id and its semantic version, as `POST /v1/skills/versions` validates them. */
 export const SKILL_ID = /^[a-z][a-z0-9-]{2,62}[a-z0-9]$/;
 export const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+
+/** A BoK collection, document or section id, as the publish route validates it. */
+export const BOK_SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
 
 export const SLUG = /^[a-z][a-z0-9_-]{2,63}$/;
 export const CONCRETE_MODEL = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/;

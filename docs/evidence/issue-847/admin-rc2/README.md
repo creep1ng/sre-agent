@@ -70,3 +70,11 @@ Whole suite before the last spec update: 104 passed, 33 skipped, 1 failed (the o
 a version from the console, is refused a dependency that is not `id@version` before sending, reads the
 manifest (published, not active), activates it, and is refused the same version with other content (409).
 Screenshots: `08-skill.png` (es, dark) and `14-skills-light.png` (en, light).
+
+## Knowledge (#33, layers 12–14)
+
+`e2e/admin.spec.ts` and `e2e/shell.spec.ts` on the Knowledge layer, real API with the BoK publish route: 9 passed,
+twice in a row. The journey publishes a collection from the console (a document without text is refused before
+sending; three headings make three chunks), reads its content, is refused a search without a grant, grants
+`bok.search` on the exact version in Permissions, and the search finds the published text.
+Screenshots: `09-conocimiento.png` (es, dark) and `15-knowledge-light.png` (en, light).
