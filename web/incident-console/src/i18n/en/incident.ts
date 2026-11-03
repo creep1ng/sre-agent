@@ -24,6 +24,8 @@ export default {
   "status.waiting": "waiting for your decision",
   "status.stopped": "stopped",
   "status.other": "in progress",
+  "status.resolved": "Resolved",
+  "status.closed": "Closed",
   "status.untitled": "Declared incident",
   "title.errors": "Errors in {service} ({value}% of spans, threshold {threshold}%)",
   "title.latency": "Slow {service} (p95 {value}\u00a0ms, threshold {threshold}\u00a0ms)",

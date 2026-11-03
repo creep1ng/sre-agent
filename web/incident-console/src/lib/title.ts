@@ -34,3 +34,14 @@ export function useTitle() {
     [t, locale],
   );
 }
+
+/** The incident's title everywhere it shows: the investigator's (#870), else the alert's words; never empty. */
+export function useIncidentTitle() {
+  const t = useT("incident");
+  const title = useTitle();
+  return useCallback(
+    (detail: { title?: string | null; impact?: string | null; alert?: { summary: string } | null } | null | undefined): string =>
+      detail?.title || title(detail?.alert?.summary) || detail?.impact || t("status.untitled"),
+    [t, title],
+  );
+}

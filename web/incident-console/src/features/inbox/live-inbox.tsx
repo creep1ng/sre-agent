@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
+import { Inline } from "@/features/incident/live/statement";
 import { useNow } from "@/hooks/use-now";
 import { LOCALES, useLanguage, useT } from "@/i18n";
 import { useLive } from "@/lib/live";
@@ -67,7 +68,11 @@ function Decision({ incident, words, now }: { incident: InboxIncident; words: st
           <span className="text-muted-foreground">{t("decision.waiting", { time: clock(decision.waiting_since) })}</span>
         </div>
         <h3 className="mb-3 font-display text-3xl leading-[1.1] tracking-[-.015em] sm:text-[38px]">{headlineOf(incident)}</h3>
-        {text && <p className="mb-5 max-w-[56ch] text-[var(--text-2)]">{text}</p>}
+        {text && (
+          <p data-words="" className="mb-5 max-w-[56ch] text-[var(--text-2)]">
+            <Inline text={text} />
+          </p>
+        )}
         <Link
           to={incidentPath(incident)}
           className="inline-flex rounded-[10px] bg-star px-5 py-4 text-[15px] font-medium text-on-star transition-opacity hover:opacity-90"

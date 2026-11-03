@@ -22,6 +22,8 @@ const incident = {
   "status.waiting": "espera tu decisión",
   "status.stopped": "detenido",
   "status.other": "en curso",
+  "status.resolved": "Resuelto",
+  "status.closed": "Cerrado",
   "status.untitled": "Incidente declarado",
   "title.errors": "Errores en {service} ({value}\u00a0% de spans, umbral {threshold}\u00a0%)",
   "title.latency": "Lentitud en {service} (p95 de {value}\u00a0ms, umbral {threshold}\u00a0ms)",

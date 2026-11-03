@@ -15,7 +15,7 @@ import { useDecision } from "@/features/incident/live/use-decision";
 import { StabilityCheck, verificationOf } from "@/features/incident/live/verification";
 import { useT } from "@/i18n";
 import { useLiveIncident, type IncidentPhase, type LiveIncident } from "@/lib/live-incident";
-import { useTitle } from "@/lib/title";
+import { useIncidentTitle } from "@/lib/title";
 import { cn } from "@/lib/utils";
 
 function Blocked({ phase }: { phase: Exclude<IncidentPhase, "ready"> }) {
@@ -99,7 +99,7 @@ export function LiveIncidentPage() {
   const live = useLiveIncident(incidentId);
   const decision = useDecision(live);
   const t = useT("incident");
-  const title = useTitle();
+  const title = useIncidentTitle();
   if (live.phase !== "ready" || !live.detail) return <Blocked phase={live.phase === "ready" ? "loading" : live.phase} />;
 
   const { detail } = live;
@@ -133,7 +133,13 @@ export function LiveIncidentPage() {
             {detail.severity.toUpperCase()}
           </span>
         )}
-        <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${verdict || closing ? "waiting" : status.kind}`)}</span>
+        <span
+          data-status={status.kind}
+          data-decision={waiting ? "" : undefined}
+          className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]", status.kind === "resolved" && !waiting && "text-[var(--ok)]")}
+        >
+          {t(`status.${verdict || closing ? "waiting" : status.kind}`)}
+        </span>
         {times[0] !== null && (
           <span data-meta="declared" className="font-normal text-[var(--dim)]">
             {t("phase.declared")} <Stamp at={times[0]} className="text-[var(--mist)]" />
@@ -150,7 +156,7 @@ export function LiveIncidentPage() {
         data-title={detail.title ? "agent" : "alert"}
         className="max-w-[30ch] font-display text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance break-words sm:text-[44px]"
       >
-        {detail.title || title(detail.alert?.summary) || detail.impact || t("status.untitled")}
+        {title(detail)}
       </h1>
       {detail.alert && (
         <details className="mt-3 max-w-[72ch] text-[13px] text-[var(--dim)]">
