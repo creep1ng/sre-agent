@@ -185,3 +185,52 @@ The maintainer reviewed the work shipped on 2026-10-30 and the local run of #765
 | PRs that add Alembic revisions are renumbered and chained before each merge. | Several stacks each added `20261030_01`; merging them broke `main` until #846. | #846 |
 | The investigator's model-call timeout follows `OPENROUTER_TIMEOUT_SECONDS`. | A fixed 45 s cut calls the provider may take 60 s to answer. | #843, #844 |
 | The local OTel demo gives `product-catalog` and `checkout` 64 MiB of memory instead of upstream's 20 MiB. | At 20 MiB the store starves and fires false alerts. | #818 |
+
+## Sixth round of decisions (2026-11-02 and 2026-11-03)
+
+The maintainer walked the demo candidate on the EC2 OTel demo and set the scope of the evaluated
+demo of 2026-11-04. The value column names the value of [the vision](vision.md) each decision
+serves. Checked on `main` at `3961b304`.
+
+| Decision | Reason | Value | Issue |
+| --- | --- | --- | --- |
+| Cutoff: whatever is not on `main` by 2026-11-03 23:00 UTC ships after the tag `rc-2026-11-04`. | A smaller change that lands beats a complete one that misses the demo. | 6 | #870 |
+| Manual triage is discarded: declaration stays automatic from alerts. #703 is closed. | Declaring, dismissing and linking by hand as the main path breaks "silence is the default". | 1 | #703 |
+| Requesting changes or giving a reason on reject, and a CI job for `web/incident-console/e2e`, are known demo limitations. Pending. | Neither is on the demo path; the E2E suites still run in their containers. | 6 | #709 |
+| #710 joins the demo: «El servicio está estable» / «Sigue fallando» on the incident page are the fallback of the agent's automatic verification. On `main` (#991). | Automatic verification can fail or be slow on EC2; a person must still be able to say the service recovered. | 3 | #710, #723 |
+| #711 joins the demo: a read-only postmortem preview and «Aprobar y cerrar» in one action, with a closing timeline. On `main` (#992, #993). Inline editing and Markdown export are pending. Plan B: the previous console's `/?view=postmortem&incident_id=…` stays served. | The walkthrough ends by closing the incident from the RC-2 console. | 3, 4 | #711 |
+| In live mode, `/app/incidentes` shows no simulated incidents: without an incident it opens the inbox. On `main` (#985). | The simulator's seed listed incidents that never happened. | 6 | #715, #870 |
+| The actions page has no copy-signature button. On `main` (#964). | The page shows what may run and what ran; a signature to copy is not a decision. | 2 | #870, #722 |
+| The demo opens on the action catalog (`/app/acciones`), and on EC2 an approval runs `flag.set` through the deploy-executor with no operator shell. On `main` (#937–#941, #950–#954, #964). | Nothing outside the catalog can run, and nothing on it runs without a person's approval. | 2, 3 | #722, #724 |
+| The chat side writes the recovery message: on `resolved` it edits the decision message («Resuelto a las … · … tras la mitigación que aprobaste · ver la consola»). Verification waits in-process in the API for M1. On `main` (#933, #934, #943–#945). | One message per decision, edited, instead of a new one. | 1 | #723 |
+| Milestones: #31 and #33 move to M1, #28 to M3, and the integrations of #847 move to #971 (M3). Done on GitHub. | Skills and BoK publishing matter for the investigation; MCP registration and integrations do not block the demo. | 4 | #28, #31, #33, #847, #971 |
+| The investigator writes the incident's short title: a projection-policy exception for exactly one `title` field, validated server-side and shown as text. An invalid or missing title falls back to the alert's title; the title stays in the hypothesis language, so the English console shows it in Spanish (accepted for the demo). On `main` (#989, #990). | The alert's words do not say what fails; the agent's title does. | 1 | #870 |
+| Verification runs 150 s after the mitigation, over a window that starts at `executed_at`. On `main` (#983). | On EC2 a 60 s delay measured a window that still held the fault. | 6 | #723 |
+| The agent's catalog lists flags and their allowed values but not their current values. After a refused `flag.set`, the run gets steps to search the BoK and measure again, and the prompt asks for the BoK before naming a fault flag (options b and c). On `main` (#996–#998). | The agent must name the flag from the signals, not read the answer from the catalog. | 6, 2 | #724 |
+| The `flag.set` executor contract is published as 1.1.0 after the demo. Pending: `schemas/executor/1.0.0` stays. | Publishing a contract is not on the demo path. | 5 | #724 |
+
+## Seventh round of decisions (2026-11-03 morning)
+
+| Decision | Reason | Value | Issue |
+| --- | --- | --- | --- |
+| A model writes the postmortem draft: one bounded call with strict parsing and no tools; if it fails, the record's draft stays, labelled «Borrador desde el registro» instead of «Borrador del agente». `POSTMORTEM_DRAFT=agent` in compose. On `main` (#999). This overrides the draft composed without a model of #992. | A narrative read from the record reads as a form; the fallback keeps the close working when the model fails. | 4, 7 | #711 |
+| After a failed verification, the agent's own or a person's «Sigue fallando», the system starts a new investigation told what ran and failed, at most twice per incident; then it stops and sends one Telegram message saying a person is needed. Workflow rule: the system may retry, the agent may not. On `main` (#1004–#1007). This overrides "keep only «Reintentar la investigación»". | A failed mitigation should not need a person to press retry, but retries must stay bounded. | 1, 7 | #710 |
+| A recovered incident reads «Resuelto» and a closed one «Cerrado» instead of «en curso»; the inbox renders code spans instead of literal backticks; the postmortem carries the agent's title. On `main` (#1000). | The walkthrough showed a resolved incident still «en curso». | 6 | #870, #711, #995 |
+
+### Pending with the maintainer (2026-11-03)
+
+Each is shipped as described; the recommendation is to keep it for the demo and revisit after it.
+
+- **What counts toward the limit of 2.** Failed verifications per incident, whoever retried in
+  between: a person's manual retry that fails again also spends one. Recommendation: keep, the
+  bound is about the incident, not about who retried.
+- **Retries are silent in Telegram.** They start as `system`, so the chat stays quiet until a
+  decision is needed. Recommendation: keep, it serves "silence is the default".
+- **The gave-up message is not amber,** although a person is needed: the marker stays on decision
+  messages. Recommendation: keep for the demo; decide after it whether "a person is needed" is a
+  decision.
+- **The postmortem is one call writing four sections.** Impact stays the person's words, the
+  probable cause keeps the record's certainty grade, and the timeline and cited actions stay the
+  record's. Recommendation: keep, it bounds cost and keeps facts out of the model's hands.
+- **«Resuelto» before the draft exists.** An incident in its postmortem with no draft yet reads
+  «Resuelto», since the service has recovered. Recommendation: keep.

@@ -5,6 +5,9 @@ The one path of the demo script that no stack tested alone: **fault → incident
 incident page → decision message edited → alert resolved → verification → recovery edit**, and
 `/app/acciones` listing `checkout · flag.set` with its run.
 
+To run the evaluated demo itself on `main` against EC2, follow
+[the demo script](../../demo-2026-11-04-script.md).
+
 ## What ran
 
 The candidate is `main` at `4aed175c` with the five demo stacks merged in their merge order:
