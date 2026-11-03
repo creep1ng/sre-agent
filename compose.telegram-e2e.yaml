@@ -1,4 +1,6 @@
-# Seed-container mounts for scripts/run_telegram_e2e.sh (#766): the E2E phases and their artifacts.
+# Overlay of scripts/run_telegram_e2e.sh (#766, #722): the E2E phases and their artifacts in the
+# seed container, and the deploy-executor acting on an sre-checkout of this project: 1.5.0 runs,
+# 1.4.0 is only put in the image store (build it, never run it) as the rollback target.
 services:
   seed:
     volumes:
@@ -6,3 +8,31 @@ services:
       - ${TELEGRAM_E2E_ARTIFACTS:?set by scripts/run_telegram_e2e.sh}:/artifacts
     environment:
       AUDIT_HMAC_KEY: ${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}
+
+  deploy-executor:
+    environment:
+      DEPLOY_EXECUTOR_CATALOG: /e2e/catalog.yaml
+    volumes:
+      - ./scripts/telegram_e2e_catalog.yaml:/e2e/catalog.yaml:ro
+
+  sre-checkout:
+    image: demo/checkout:1.5.0
+    build:
+      context: docker
+      dockerfile: checkout.Dockerfile
+      args:
+        CHECKOUT_VERSION: "1.5.0"
+    restart: unless-stopped
+    networks: [runtime]
+
+  sre-checkout-previous:
+    profiles: ["telegram-e2e"]
+    image: demo/checkout:1.4.0
+    build:
+      context: docker
+      dockerfile: checkout.Dockerfile
+      args:
+        CHECKOUT_VERSION: "1.4.0"
+    command: ["true"]
+    restart: "no"
+    networks: [runtime]

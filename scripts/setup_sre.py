@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -62,6 +63,12 @@ def setup(path, stop=False):
     # Ignore ambient Compose/remote-Docker overrides. This entrypoint is Unix local only.
     env = {name: os.environ[name] for name in ("PATH", "HOME", "TMPDIR") if name in os.environ}
     env.update(config, DOCKER_HOST="unix:///var/run/docker.sock")
+    # The chat's «Ver incidente» button (#723): the console where the operator reaches it.
+    host = config.get("SRE_PUBLIC_HOST") or "127.0.0.1"
+    if not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", host):
+        raise SetupError("SRE_PUBLIC_HOST must be a host name or IPv4 address")
+    console = "http://" + host + ":" + config.get("WEB_PORT", "8080") + "/app/"
+    env["CONSOLE_PUBLIC_URL"] = config.get("CONSOLE_PUBLIC_URL") or console
     version = (
         run(["docker", "compose", "version", "--short"], env, "Compose preflight")
         .strip()
@@ -103,7 +110,7 @@ def setup(path, stop=False):
         check_checkout([json.loads(line) for line in text.splitlines() if line.strip()])
         # Base services need no MCP env_file. Orphans are confined to this checked
         # project (e.g. the one-shot MCP seed); no volumes or owner resources go.
-        run(base + ["down", "--remove-orphans"], env, "scoped SRE stop")
+        run(base + ["--profile", "telegram", "down", "--remove-orphans"], env, "scoped SRE stop")
         print("setup: SRE stopped; data/OTel/foreign projects preserved")
         return
     internal = run(
@@ -220,14 +227,19 @@ def setup(path, stop=False):
     for name in ("OPENROUTER_API_KEY", "OPENROUTER_MANAGEMENT_API_KEY", "MCP_GRAFANA_SERVER_TOKEN"):
         if harness.get("environment", {}).get(name):
             raise SetupError("harness secret boundary conflict; restore the shipped Compose files")
-    for stage, args in (
+    stages = [
         ("database", ["up", "--wait", "db"]),
         ("migrations", ["run", "--build", "--rm", "migrate"]),
         ("seed", ["run", "--build", "--rm", "seed"]),
         ("MCP registry", ["run", "--build", "--rm", "mcp-seed"]),
         ("demo permissions", ["run", "--rm", "seed", "python", "/setup/provision_demo.py"]),
         ("API/web", ["up", "--build", "--no-deps", "--wait", "api", "web"]),
-    ):
+    ]
+    if config.get("TELEGRAM_BOT_TOKEN"):
+        # Started here so it gets CONSOLE_PUBLIC_URL; its token stays in the env file.
+        telegram = ["--profile", "telegram", "up", "--build", "--no-deps", "--wait"]
+        stages.append(("Telegram gateway", telegram + ["telegram-gateway"]))
+    for stage, args in stages:
         output = run(compose + args, env, stage)
         # Only the fixed reset notes cross over; other output may carry configuration.
         for line in output.splitlines():
@@ -282,6 +294,7 @@ def setup(path, stop=False):
     )
     print("setup: API " + base + "; web http://127.0.0.1:" + config.get("WEB_PORT", "8080"))
     print("setup: paid LLM " + ("explicitly enabled" if paid == "1" else "disabled"))
+    print("setup: chat console link " + env["CONSOLE_PUBLIC_URL"])
 
 
 def main():
