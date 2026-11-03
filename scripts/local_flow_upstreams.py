@@ -13,7 +13,10 @@ the runtime refuses one that is already off.
 
 LOCAL_FLOW_MODEL=real keeps the configured provider (OPENROUTER_API_KEY in .env); otherwise the
 model is scripted like scripts/interrupt_policy_upstreams.py: one measured query, a hypothesis
-citing it, then a rollback proposal that waits for a human decision."""
+citing it, then a rollback proposal that waits for a human decision. Asked to verify what an
+approval ran (#723), it queries the service again and passes only when that query measured no
+errors; the Grafana MCP answers a query that names a service with 0 once its rule stopped
+firing, so the verification has data to cite."""
 
 import asyncio
 import json
@@ -38,11 +41,43 @@ RULES = {
 INTAKE = "http://127.0.0.1:8000/v1/alert-intake/grafana"
 STATE = re.compile(r"^State: (.*)$", re.MULTILINE)
 REFUSED = re.compile(r"rejected: (\w+) is already ")
+SERVICE = re.compile(r'service_name="([^"]+)"')
+
+
+def _errors_query(service: str) -> dict:
+    query = {
+        "datasource_uid": "webstore-metrics",
+        "query_type": "instant",
+        "expr": f'sum(increase(http_server_errors_total{{service_name="{service}"}}[5m]))',
+        "end_time": "now",
+    }
+    return {"action": "use_tool", "tool": "query_prometheus", "arguments": query}
+
+
+def verify(service: str, collected: list[dict]) -> dict:
+    """A verification (#723): measure the service now, then judge from what that query returned."""
+    measured = [item for item in collected if not item.get("empty")]
+    if not measured:
+        return _errors_query(service)
+    values = [
+        float(sample["value"][1])
+        for item in measured
+        for sample in json.loads(item["summary"]).get("result", [])
+    ]
+    passed = not any(values)
+    return {
+        "action": "verify_mitigation",
+        "passed": passed,
+        "summary": f"{service}: {max(values, default=0):g} errores 5xx tras la mitigación.",
+        "supporting_evidence": [item["evidence_id"] for item in measured],
+    }
 
 
 def decide(state: dict, rejected: set[str] = frozenset()) -> dict:
     incident, collected = state["incident"], state["collected_evidence"]
     service = incident["alert"].get("service") or "sre-checkout"
+    if state["objective"] == "verify":
+        return verify(service, collected)
     # The catalog lists flags without their current values (#724): the scripted model tries them
     # in order, and skips one the runtime refused as already off.
     flags = (state.get("service_operations") or {}).get("flags") or {}
@@ -72,13 +107,7 @@ def decide(state: dict, rejected: set[str] = frozenset()) -> dict:
             "based_on_hypothesis": incident["hypotheses"][-1]["hypothesis_id"],
         }
     if not collected:
-        query = {
-            "datasource_uid": "webstore-metrics",
-            "query_type": "instant",
-            "expr": f'sum(increase(http_server_errors_total{{service_name="{service}"}}[5m]))',
-            "end_time": "now",
-        }
-        return {"action": "use_tool", "tool": "query_prometheus", "arguments": query}
+        return _errors_query(service)
     cited = [item["evidence_id"] for item in collected]
     return {
         "action": "propose_hypothesis",
@@ -110,9 +139,14 @@ class GrafanaMCP:
         if tool_name != "query_prometheus":
             return {"total": 0, "documents": []}
         firing = [service for rule, (service, _) in RULES.items() if _firing(rule)]
+        # A query naming a service measures it: 42 errors while its rule fires, else 0.
+        named = SERVICE.findall(str(arguments.get("expr", "")))
+        values = {name: "42" if name in firing else "0" for name in named} or dict.fromkeys(
+            firing, "42"
+        )
         samples = [
-            {"metric": {"service_name": service}, "value": [datetime.now(UTC).timestamp(), "42"]}
-            for service in firing
+            {"metric": {"service_name": service}, "value": [datetime.now(UTC).timestamp(), value]}
+            for service, value in values.items()
         ]
         return {"resultType": "vector", "result": samples}
 
