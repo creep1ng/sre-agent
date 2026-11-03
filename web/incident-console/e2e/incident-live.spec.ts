@@ -658,7 +658,8 @@ test.describe("incidente RC-2 contra la API real", () => {
     const step = page.locator("#step-verification");
     await expect(step).toContainText("Verificación · la señal se recuperó", { timeout: 30_000 });
     await expect(step).toContainText("Tú · Servicio verificado estable");
-    expect((await read(`/incidents/${incident}`)).state).toBe("resolved");
+    // Resolved; the agent may already have opened its postmortem (#711).
+    expect(["resolved", "postmortem"]).toContain((await read(`/incidents/${incident}`)).state);
     await noTechnicalIds(page);
     await step.scrollIntoViewIfNeeded();
     await capture(page, "verificacion-estable-es", step);
