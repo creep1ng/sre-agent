@@ -70,8 +70,9 @@ human approves. The origin is `console` for the route or `<kind>:<id>` for anoth
 | 401 / 403 / 422 / 503 | As the other control routes; a refused publish stores nothing |
 
 The audit event records the author as its HMAC principal reference; it and the idempotency
-record never carry the content. The origin is validated but not yet persisted: the closed
-audit correlation has no slot for it.
+record never carry the content. The version itself stores the author's principal id and the
+origin (migration `20261103_01`); the owner read returns them as `published_by` and `origin`,
+`null` for seeded versions and those published earlier. A replay keeps the first values.
 
 ## Isolation and evidence
 

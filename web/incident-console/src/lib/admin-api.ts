@@ -118,6 +118,8 @@ export interface BoKVersion {
   status: string;
   document_count: number;
   chunk_count: number;
+  published_by?: string | null;
+  origin?: string | null;
   documents?: BoKDocument[];
 }
 

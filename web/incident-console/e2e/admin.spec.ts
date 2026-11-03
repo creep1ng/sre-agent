@@ -218,6 +218,9 @@ test.describe("against the real control plane", () => {
     const sheet = page.getByRole("dialog");
     await expect(sheet.getByRole("heading", { name: "Runbooks de checkout" })).toBeVisible();
     await expect(sheet.getByText("Activo")).toBeVisible();
+    // The version names who published it and from where.
+    await expect(sheet.locator('dt:text-is("Publicada por") + dd')).toHaveText("admin-human");
+    await expect(sheet.locator('dt:text-is("Origen") + dd')).toHaveText("console");
     await expect(sheet.locator('[data-bok-document="rollback-de-checkout"]')).toContainText("Haz rollback a la versión anterior");
     // Publishing grants nothing: the search answers as it would to an agent without the grant.
     await sheet.locator("#bok-query").fill("rollback");

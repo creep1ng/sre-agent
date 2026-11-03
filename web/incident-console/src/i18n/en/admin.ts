@@ -215,6 +215,8 @@ export default {
   "knowledge.d.documents": "Documents",
   "knowledge.d.chunks": "Chunks",
   "knowledge.d.owner": "Owner",
+  "knowledge.d.publishedBy": "Published by",
+  "knowledge.d.origin": "Origin",
   "knowledge.d.content": "Content",
   "knowledge.search": "Try a search",
   "knowledge.searchPlaceholder": "rollback, latency, payments…",

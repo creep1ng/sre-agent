@@ -213,6 +213,8 @@ const admin = {
   "knowledge.d.documents": "Documentos",
   "knowledge.d.chunks": "Fragmentos",
   "knowledge.d.owner": "Dueño",
+  "knowledge.d.publishedBy": "Publicada por",
+  "knowledge.d.origin": "Origen",
   "knowledge.d.content": "Contenido",
   "knowledge.search": "Probar una búsqueda",
   "knowledge.searchPlaceholder": "rollback, latencia, pagos…",

@@ -1,5 +1,5 @@
 import { PlusIcon, RefreshCwIcon, SearchIcon, XIcon } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -174,6 +174,8 @@ export function KnowledgePage() {
   );
 }
 
+type Fact = [string, ReactNode];
+
 function CollectionSheet({ resourceId, onClose }: { resourceId: string | null; onClose: () => void }) {
   const t = useT("admin");
   const target = resourceId ? split(resourceId) : null;
@@ -208,6 +210,10 @@ function CollectionSheet({ resourceId, onClose }: { resourceId: string | null; o
                   [t("knowledge.d.documents"), String(record.document_count)],
                   [t("knowledge.d.chunks"), String(record.chunk_count)],
                   [t("knowledge.d.owner"), <Mono>{record.owner_id}</Mono>],
+                  ...(record.published_by
+                    ? [[t("knowledge.d.publishedBy"), <Mono>{record.published_by}</Mono>] satisfies Fact]
+                    : []),
+                  ...(record.origin ? [[t("knowledge.d.origin"), <Mono>{record.origin}</Mono>] satisfies Fact] : []),
                 ]}
               />
               {target && <SearchBox key={resourceId} collectionId={target.collectionId} version={target.version} />}

@@ -86,6 +86,8 @@ class BoKVersionSummary(BaseModel):
 
 
 class BoKVersionRecord(BoKVersionSummary):
+    published_by: str | None
+    origin: str | None
     documents: list[BoKDocumentPublish]
 
 
@@ -103,7 +105,8 @@ async def publish_bok_version(
     if re.fullmatch(ORIGIN_PATTERN, origin) is None:
         raise ValueError("bok_origin_invalid")
     bundle = {**request.model_dump(mode="json"), "owner_id": BOK_OWNER_ID, "visibility": "private"}
-    created = await publish_bundle(session, bundle, ["bok"])
+    provenance = {"published_by": author.principal_id, "origin": origin}
+    created = await publish_bundle(session, bundle, ["bok"], provenance)
     summary = BoKVersionSummary(
         resource_id=f"{request.collection_id}@{request.version}",
         collection_id=request.collection_id,
@@ -175,5 +178,7 @@ async def read_bok_version(
         status=row.status,
         document_count=len(published),
         chunk_count=sum(len(document.chunks) for document in published),
+        published_by=row.published_by,
+        origin=row.origin,
         documents=published,
     )
