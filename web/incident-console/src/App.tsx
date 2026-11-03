@@ -10,6 +10,7 @@ import { resumePolling, stopPolling } from "@/lib/live";
 import { appMode } from "@/lib/mode";
 import { subscribeNotices, useStore } from "@/lib/store";
 import { CatalogPage } from "@/pages/catalog-page";
+import { ConsumptionPage } from "@/features/admin/consumption-page";
 import { IdentitiesPage } from "@/features/admin/identities-page";
 import { PermissionsPage } from "@/features/admin/permissions-page";
 import { ResourcesPage } from "@/features/admin/resources-page";
@@ -102,6 +103,7 @@ export function App() {
               <Route path="identidades" element={<IdentitiesPage />} />
               <Route path="permisos" element={<PermissionsPage />} />
               <Route path="recursos" element={<ResourcesPage />} />
+              <Route path="consumo" element={<ConsumptionPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
