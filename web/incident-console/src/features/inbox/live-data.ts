@@ -1,13 +1,15 @@
 import { create } from "zustand";
 import { POLL_MS, useLive } from "@/lib/live";
 
-/** One row of GET /v1/incidents (incident-list:1.0.0). */
+/** One row of GET /v1/incidents (incident-list:1.1.0). */
 export interface InboxIncident {
   incident_id: string;
   state: string;
   severity: string | null;
   service: string | null;
   summary: string | null;
+  /** The investigator's short title (#870), checked by the API; null until a hypothesis names it. */
+  title?: string | null;
   impact: string | null;
   opened_at: string;
   updated_at: string;

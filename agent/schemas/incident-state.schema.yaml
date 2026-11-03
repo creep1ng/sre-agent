@@ -16,9 +16,13 @@
 # 1.3.0 (issue #722): additive minor. `mitigation_strategy` gains optional `operation`, the
 # deploy-executor operation an approval runs, and once it ran `execution_mode: executed` with the
 # executor's `execution` receipt. Every 1.2.0 document stays valid.
+#
+# 1.4.0 (issue #870): additive minor. `$defs/hypothesis` gains optional `title`, the
+# incident's short name the investigator writes with the hypothesis (maintainer decision
+# 2026-11-03). Every 1.3.0 document stays valid.
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:incident-state:1.3.0
+$id: urn:sre-agent:schema:incident-state:1.4.0
 title: IncidentState
 type: object
 additionalProperties: false
@@ -243,6 +247,13 @@ $defs:
     properties:
       hypothesis_id: { type: string, pattern: '^hyp_[a-z0-9_-]{1,60}$' }
       statement: { type: string, minLength: 1, maxLength: 4000 }
+      title:
+        description: The incident's short name (1.4.0), plain text on one line; written only
+          when valid (src/sre_agent/incident/title.py).
+        type: string
+        minLength: 1
+        maxLength: 60
+        pattern: '^[^\n\r]+$'
       confidence: { enum: [low, medium, high] }
       status: { enum: [open, supported, refuted, superseded] }
       supporting_evidence:

@@ -24,6 +24,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.chat.digest import render_digest
+from sre_agent.incident.title import title_of
 from sre_agent.persistence.database import Database
 
 MAX_ATTEMPTS = 10
@@ -299,7 +300,11 @@ _SENTENCE = re.compile(r"^(.+?[.!?])(\s|$)")
 _LABEL = re.compile(r"^\s*\*\*[^*\n]{1,40}:\*\*\s*")
 
 
-def incident_title(alert: Any) -> str | None:
+def incident_title(state: Mapping[str, Any]) -> str | None:
+    """The investigator's title once a hypothesis names the incident, else the alert's words."""
+    if title := title_of(state):
+        return title
+    alert = state.get("alert")
     summary = alert.get("summary") if isinstance(alert, Mapping) else None
     if not isinstance(summary, str) or not summary:
         return None
@@ -326,7 +331,7 @@ async def _incident_label(session: AsyncSession, payload: Mapping[str, Any]) -> 
         text("SELECT state FROM incident.incidents WHERE incident_id = :incident_id"),
         {"incident_id": payload["incident_id"]},
     )
-    title = incident_title(state.get("alert")) if isinstance(state, Mapping) else None
+    title = incident_title(state) if isinstance(state, Mapping) else None
     return f"{payload['incident_id']}: {title}" if title else str(payload["incident_id"])
 
 
@@ -421,7 +426,7 @@ async def mitigation_decision(
     basis = [h for h in hypotheses if h.get("hypothesis_id") == strategy.get("based_on_hypothesis")]
     cause = (basis or hypotheses or [{}])[-1].get("statement")
     lines = [f"{DECISION_MARKER} Decisión pendiente: {payload['incident_id']}"]
-    lines += [title] if (title := incident_title(alert)) else []
+    lines += [title] if (title := incident_title(state)) else []
     lines.append(f"Servicio: {alert.get('service', 'sin servicio')}")
     lines += [f"Causa: {_cause(cause)}"] if cause else []
     if alert.get("service") and alert.get("observed_at"):

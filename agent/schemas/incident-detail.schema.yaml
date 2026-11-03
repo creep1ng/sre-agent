@@ -4,12 +4,17 @@
 # persisted incident: identity, workflow position, severity/impact, the
 # canonical alert fragment, bounded approvals, run summaries and the aggregate
 # version. No hypotheses, mitigation content, postmortem body, evidence
-# content, decisions rationale, prompts, secrets or raw tool output.
+# content, decisions rationale, prompts, secrets or raw tool output, except:
+#   The incident's short title (#870), the one field of model output allowed here: the
+#   latest hypothesis's title, checked on read (src/sre_agent/incident/title.py); null without
+#   one. See model_output_exception in agent/api/projection-policy.v1.yaml.
+#
+# 1.2.0 (issue #870): additive minor, `title`.
 # Every property declared here must be registered in
 # agent/api/projection-policy.v1.yaml (allow-list, fail closed).
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:incident-detail:1.1.0
+$id: urn:sre-agent:schema:incident-detail:1.2.0
 title: IncidentDetail
 type: object
 additionalProperties: false
@@ -23,6 +28,12 @@ properties:
   state:
     enum: [detected, triage, dismissed, linked, active, investigating,
            mitigating, verifying, resolved, postmortem, closed]
+  title:
+    type: [string, "null"]
+    minLength: 1
+    maxLength: 60
+    pattern: '^[^\n\r]+$'
+    default: null
   severity:
     type: [string, "null"]
     enum: [sev1, sev2, sev3, sev4, null]

@@ -4,11 +4,16 @@
 # workflow position, the service and summary of the alert that opened it, its latest
 # run and the decision that run waits for. Like the detail, it names a pending
 # mitigation but carries none of its content; that is reasoning, read from the run
-# context under run.read_context. Every property declared here must be registered in
+# context under run.read_context. The one exception is `title`:
+#   The incident's short title (#870), the one field of model output allowed here: the
+#   latest hypothesis's title, checked on read (src/sre_agent/incident/title.py); null without
+#   one. See model_output_exception in agent/api/projection-policy.v1.yaml.
+# 1.1.0 (issue #870): additive minor, `title`.
+# Every property declared here must be registered in
 # agent/api/projection-policy.v1.yaml (allow-list, fail closed).
 ---
 $schema: https://json-schema.org/draft/2020-12/schema
-$id: urn:sre-agent:schema:incident-list:1.0.0
+$id: urn:sre-agent:schema:incident-list:1.1.0
 title: IncidentList
 type: object
 additionalProperties: false
@@ -40,6 +45,11 @@ $defs:
       severity: { enum: [sev1, sev2, sev3, sev4, null] }
       service: { $ref: '#/$defs/text' }
       summary: { $ref: '#/$defs/text' }
+      title:
+        type: [string, "null"]
+        minLength: 1
+        maxLength: 60
+        pattern: '^[^\n\r]+$'
       impact: { $ref: '#/$defs/text' }
       opened_at: { $ref: '#/$defs/time' }
       updated_at: { $ref: '#/$defs/time' }

@@ -296,6 +296,14 @@ class ProposeHypothesis(_Strict):
     supporting_evidence: Annotated[list[EvidenceId], Field(min_length=1)]
     # Recorded on each evidence item (CollectedEvidence.verdict), not in the outcome.
     verdicts: dict[EvidenceId, EvidenceVerdict] = Field(default_factory=dict, exclude=True)
+    # The incident's short title (#870). The gateway checks it before recording it
+    # (incident/title.py); here a title that is not text is dropped, never a reason to retry.
+    title: str | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def _drop_invalid_title(cls, value: Any) -> Any:
+        return value if isinstance(value, str) and len(value) <= 1000 else None
 
     @field_validator("verdicts", mode="before")
     @classmethod

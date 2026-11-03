@@ -36,6 +36,7 @@ from sre_agent.incident.runtime import (
     escalation,
     termination,
 )
+from sre_agent.incident.title import clean_title
 from sre_agent.investigator.client import GatewayClient, GatewaySettings, MCPGatewayClient
 from sre_agent.investigator.contract import (
     UNMEASURED,
@@ -890,6 +891,9 @@ class InvestigationRunDispatcher:
             "created_by": "agent",
             "created_at": datetime.now(UTC).isoformat(),
         }
+        # The one piece of model output a safe projection shows (#870): recorded only when valid.
+        if title := clean_title(outcome.title):
+            hypothesis["title"] = title
         return {
             "hypotheses": [*self._existing_hypotheses(view.incident_state), hypothesis],
             "evidence": list(evidence),

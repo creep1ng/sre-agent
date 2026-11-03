@@ -146,8 +146,11 @@ export function LiveIncidentPage() {
         )}
         {live.stale && <span className="text-[var(--danger)]">{t("stale")}</span>}
       </p>
-      <h1 className="max-w-[30ch] font-display text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance break-words sm:text-[44px]">
-        {title(detail.alert?.summary) ?? detail.impact ?? t("status.untitled")}
+      <h1
+        data-title={detail.title ? "agent" : "alert"}
+        className="max-w-[30ch] font-display text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance break-words sm:text-[44px]"
+      >
+        {detail.title || title(detail.alert?.summary) || detail.impact || t("status.untitled")}
       </h1>
       {detail.alert && (
         <details className="mt-3 max-w-[72ch] text-[13px] text-[var(--dim)]">
