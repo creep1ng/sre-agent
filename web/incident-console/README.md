@@ -209,6 +209,21 @@ timeline step, one chronological timeline, the agent's live status and the propo
 «Aprobar» and «Rechazar» send the governed `approve_mitigation` / `reject_mitigation` command.
 Copy lives in the `incident` namespace (`src/i18n/{es,en}/incident.ts`).
 
+Once decided, the proposal leaves amber and becomes «Decisiones tomadas»: each decision with
+what, who and when. The meta row's clock is the newest event of the incident or its runs. After
+an approval, the «Verificación» step tells whether Grafana resolved the incident's alert (intake,
+#765) and how long after the approval, and folds in a recorded `verification_passed` /
+`verification_failed`. `SignalChart` (`live/verification.tsx`) draws the stored series once #723
+records one (#927); nothing is drawn before.
+
+A proposal names its catalog operation (#722) in words, `flag.set` included, with the call and a
+«del catálogo» mark; one without an operation says it is free text nobody runs. Once an approval
+runs it, «Decisiones tomadas» and the timeline tell the deploy-executor's receipt (operation,
+service, outcome, before → after; execution id and duration in its detail), and an approval the
+gateway refused or the executor failed shows its reason while the incident keeps waiting. The
+journeys' stack runs the deploy-executor with `scripts/incident_console_catalog.yaml`, which enrols
+a local `sre-checkout` (1.5.0 running, 1.4.0 in the image store).
+
 Journeys against the composed stack (scripted model and Grafana MCP, everything else real):
 
 ```sh

@@ -41,6 +41,7 @@ test("/ sirve la landing en español, con fuentes propias y sin peticiones a ter
   expect(await page.evaluate(() => ["300 40px Fraunces", "400 19px Newsreader", "500 14px 'JetBrains Mono'"].every((font) => document.fonts.check(font)))).toBe(true);
   expect(urls.filter((url) => url.endsWith(".woff2")).length).toBeGreaterThanOrEqual(3);
   await page.screenshot({ path: `${SHOTS}/desktop-es.png`, fullPage: true, animations: "disabled" });
+  await page.locator("section.letter").screenshot({ path: `${SHOTS}/letter-es.png`, animations: "disabled" });
 
   await expectOnlyOwnOrigin(page, urls);
   // A CSP violation (inline style or script) would show up here as a console error.
@@ -74,6 +75,7 @@ test("el selector ES · EN cambia el idioma y lo recuerda al recargar", async ({
   await expect(page.getByRole("button", { name: "EN" })).toHaveAttribute("aria-pressed", "true");
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `${SHOTS}/desktop-en.png`, fullPage: true, animations: "disabled" });
+  await page.locator("section.letter").screenshot({ path: `${SHOTS}/letter-en.png`, animations: "disabled" });
 
   await page.getByRole("button", { name: "ES" }).click();
   await page.reload();
