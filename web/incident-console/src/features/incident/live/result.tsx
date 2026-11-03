@@ -51,7 +51,15 @@ function logs(summary: string): Shown | null {
     const raw = field(chunk, /"body"\s*:\s*("(?:[^"\\]|\\.)*")/);
     const text = raw ? (parse(raw) as string | undefined) : undefined;
     if (!text) return [];
-    return [{ at: field(chunk, /"@timestamp"\s*:\s*"([^"]+)"/), service: field(chunk, /"service\.name"\s*:\s*"([^"]+)"/), level: field(chunk, /"severity"\s*:\s*\{[^}]*?"text"\s*:\s*"([^"]+)"/), body: text }];
+    // Raw OpenTelemetry documents, or the compact records the investigator keeps since #996.
+    return [
+      {
+        at: field(chunk, /"@?timestamp"\s*:\s*"([^"]+)"/),
+        service: field(chunk, /"service(?:\.name)?"\s*:\s*"([^"]+)"/),
+        level: field(chunk, /"severity"\s*:\s*(?:\{[^}]*?"text"\s*:\s*)?"([^"]+)"/),
+        body: text,
+      },
+    ];
   });
   if (!Number.isFinite(total) && lines.length === 0) return null;
   // Errors and warnings first, then the newest.
