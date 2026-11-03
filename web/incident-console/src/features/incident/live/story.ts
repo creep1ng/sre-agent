@@ -1,5 +1,5 @@
 import incident from "@/i18n/es/incident";
-import type { ChangeEvent, Evidence } from "@/lib/incident-api";
+import type { ChangeEvent, Evidence, Mitigation } from "@/lib/incident-api";
 import type { LiveIncident } from "@/lib/live-incident";
 
 /*
@@ -34,7 +34,8 @@ export interface StoryEntry {
   /** The evidence number the hypothesis claims point to. */
   number?: number;
   tone?: "critical";
-  query?: { tool: string; text: string; window: string };
+  /** What the agent asked its source, under a label that names it: a metrics query, a log search… */
+  query?: { label: Key; tool: string; text: string; window: string };
   link?: { to: string; external?: boolean };
 }
 
@@ -66,6 +67,26 @@ const HUMAN: Record<string, string> = {
   "Mitigation approved.": "event.approved",
   "Mitigation sent back for changes.": "event.rejected",
 };
+
+/** Why an approval did not run (#923): the incident and the run stay as they were. */
+const NOT_APPLIED = new Set(["precondition_failed", "operation_not_authorized", "executor_unavailable", "execution_failed"]);
+const OUTCOMES = new Set(["rolled_back", "restarted", "flag_set", "already_at_target"]);
+
+/** What the deploy-executor ran on approval, from its receipt: operation, service, outcome, before → after. */
+export function executionLine(mitigation: Mitigation | null | undefined): Line | null {
+  const ran = mitigation?.execution;
+  const operation = mitigation?.operation;
+  if (!ran || !operation) return null;
+  const parameters = operation.parameters ?? {};
+  const change =
+    ran.before_image && ran.after_image
+      ? `${code(ran.before_image)} → ${code(ran.after_image)}`
+      : parameters.flag
+        ? `${code(parameters.flag)} → ${code(parameters.variant ?? "")}`
+        : "";
+  const outcome = OUTCOMES.has(ran.outcome) ? { key: `receipt.outcome.${ran.outcome}` as Key } : code(ran.outcome);
+  return { key: change ? "receipt.ran.change" : "receipt.ran", params: { operation: code(operation.operation), service: code(operation.service), outcome, change } };
+}
 
 /** A cause the catalog words, else the generic one: every ending has a cause. */
 function cause(code: string | null | undefined): Line {
@@ -99,13 +120,23 @@ function eventEntry(event: Event, live: LiveIncident, me: string | null | undefi
     const reason = live.runs.find((run) => run.run_id === event.run_id)?.terminated_reason ?? null;
     return { ...base, line: { key: "event.stopped", params: { cause: cause(reason) } }, tone: "critical" };
   }
-  const human = HUMAN[event.summary];
+  if (event.summary.startsWith("Approval not applied:") && NOT_APPLIED.has(event.reason_code ?? "")) {
+    const key = base.actor.kind === "you" ? "event.notApplied.you" : "event.notApplied";
+    return { ...base, line: { key, params: { cause: cause(event.reason_code) } }, tone: "critical" };
+  }
+  // An approval that ran an operation says so in its summary (#923); the receipt tells the rest.
+  const human = HUMAN[event.summary] ?? (event.summary.startsWith("Mitigation approved;") ? "event.approved" : undefined);
   // Only a person retries; the agent continuing within a run is not a story entry.
   if (human && event.actor.type === "human") {
     return { ...base, line: { key: (base.actor.kind === "you" ? `${human}.you` : human) as Key } };
   }
   const key = SUMMARIES[event.summary];
   return key ? { ...base, line: { key } } : null;
+}
+
+/** The stored query, when there is one: a recalled memory's postmortem, a knowledge fragment's address. */
+function queryOf(item: Evidence, label: Key): StoryEntry["query"] {
+  return item.query ? { label, tool: item.tool ?? item.source, text: item.query, window: item.time_window ?? "" } : undefined;
 }
 
 /** A recalled memory (#773) names the closed incident whose postmortem it came from. */
@@ -117,10 +148,12 @@ function evidenceEntry(item: Evidence, cited: Set<string>, service: string): Sto
   if (item.source === "incident_memory") {
     const memory = MEMORY.exec(item.query ?? "");
     const link = memory ? { to: `/incidentes/${memory[1]}` } : undefined;
-    return { ...base, line: { key: "evidence.memory", params }, verdict: "memory", quote: item.finding ?? item.summary, link };
+    const query = queryOf(item, "evidence.query.memory");
+    return { ...base, line: { key: "evidence.memory", params }, verdict: "memory", quote: item.finding ?? item.summary, link, query };
   }
   if (item.source === "bok" || item.tool === "bok.search") {
-    return { ...base, line: { key: "evidence.knowledge" }, verdict: "knowledge", quote: item.finding ?? item.summary };
+    const query = queryOf(item, "evidence.query.knowledge");
+    return { ...base, line: { key: "evidence.knowledge" }, verdict: "knowledge", quote: item.finding ?? item.summary, query };
   }
   const key: Key =
     item.tool === "query_prometheus"
@@ -138,7 +171,7 @@ function evidenceEntry(item: Evidence, cited: Set<string>, service: string): Sto
     line: { key, params },
     verdict,
     quote: (verdict && item.finding) || undefined,
-    query: item.query ? { tool: item.tool ?? item.source, text: item.query, window: item.time_window ?? "" } : undefined,
+    query: queryOf(item, key.replace("evidence.", "evidence.query.") as Key),
   };
 }
 
@@ -177,6 +210,10 @@ export function buildStory(live: LiveIncident, me?: string | null): StoryEntry[]
   if (mitigation) {
     const at = Date.parse(mitigation.created_at ?? "");
     entries.push({ id: "step-mitigation", at, actor: { kind: "agent" }, line: { key: "event.mitigation" }, quote: mitigation.description });
+  }
+  const executed = executionLine(mitigation);
+  if (executed) {
+    entries.push({ id: "step-execution", at: Date.parse(mitigation!.execution!.executed_at), actor: { kind: "system", name: "deploy-executor" }, line: executed });
   }
   const story = entries.filter((entry): entry is StoryEntry => entry !== null && Number.isFinite(entry.at)).sort((a, b) => a.at - b.at);
   let number = 0;
