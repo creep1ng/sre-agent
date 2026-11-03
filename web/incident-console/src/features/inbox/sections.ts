@@ -1,3 +1,4 @@
+import { useTitle } from "@/lib/title";
 import type { LiveAlert } from "@/lib/types";
 import type { ChangeEvent, InboxIncident } from "./live-data";
 
@@ -62,12 +63,8 @@ export function inboxSections(
   return { decisions, coffee, night };
 }
 
-/** The first sentence of an alert summary: the rule's text before where its evidence lives. */
-export function firstSentence(text: string): string {
-  const sentence = /^(.+?[.!?])(\s|$)/.exec(text)?.[1] ?? text;
-  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
-}
-
-export function headlineOf(incident: InboxIncident): string {
-  return firstSentence(incident.summary ?? incident.impact ?? incident.incident_id);
+/** An incident's headline: the title of the alert that opened it, as the incident page words it. */
+export function useHeadline() {
+  const title = useTitle();
+  return (incident: InboxIncident) => title(incident.summary) ?? incident.impact ?? incident.incident_id;
 }

@@ -14,6 +14,7 @@ import { useDecision } from "@/features/incident/live/use-decision";
 import { verificationOf } from "@/features/incident/live/verification";
 import { useT } from "@/i18n";
 import { useLiveIncident, type IncidentPhase, type LiveIncident } from "@/lib/live-incident";
+import { useTitle } from "@/lib/title";
 import { cn } from "@/lib/utils";
 
 function Blocked({ phase }: { phase: Exclude<IncidentPhase, "ready"> }) {
@@ -85,6 +86,7 @@ export function LiveIncidentPage() {
   const live = useLiveIncident(incidentId);
   const decision = useDecision(live);
   const t = useT("incident");
+  const title = useTitle();
   if (live.phase !== "ready" || !live.detail) return <Blocked phase={live.phase === "ready" ? "loading" : live.phase} />;
 
   const { detail } = live;
@@ -117,9 +119,15 @@ export function LiveIncidentPage() {
         )}
         {live.stale && <span className="text-[var(--danger)]">{t("stale")}</span>}
       </p>
-      <h1 className="max-w-[18ch] font-display text-4xl leading-none font-light tracking-[-0.03em] sm:text-[54px]">
-        {detail.alert?.summary ?? t("status.untitled")}
+      <h1 className="max-w-[26ch] font-display text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance break-words sm:text-[44px]">
+        {title(detail.alert?.summary) ?? detail.impact ?? t("status.untitled")}
       </h1>
+      {detail.alert && (
+        <details className="mt-3 max-w-[72ch] text-[13px] text-[var(--dim)]">
+          <summary className="cursor-pointer font-mono text-[var(--mist)]">{t("title.alert")}</summary>
+          <p className="mt-1.5 leading-relaxed break-words">{detail.alert.summary}</p>
+        </details>
+      )}
       <Phases state={detail.state} waiting={waiting} />
       <Start live={live} status={status} />
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
