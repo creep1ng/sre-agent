@@ -1,0 +1,14 @@
+# The close-the-loop journey (#723) on compose.incident-console-e2e.yaml's stack, with the model
+# verifying against the real sre-checkout (scripts/close_loop_upstreams.py) 10 s after an approval
+# instead of 150 s. Commands: scripts/run_close_loop_e2e.sh.
+services:
+  api:
+    command: ["python", "/e2e/close_loop_upstreams.py"]
+    volumes:
+      - ./scripts/close_loop_upstreams.py:/e2e/close_loop_upstreams.py:ro
+    environment:
+      VERIFICATION_DELAY_SECONDS: "10"
+
+  incident-console-e2e:
+    environment:
+      CLOSE_LOOP_E2E: "1"
