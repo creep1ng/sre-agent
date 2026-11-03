@@ -26,6 +26,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   done
   env="${env//<set-long-random-audit-hmac-key>/$(hex)}"
   env="${env//<set-long-random-executor-signing-key>/$(hex)}"
+  env="${env//<set-long-random-grafana-intake-secret>/$(hex)}"
   env="${env//<lab\/model>/openai/gpt-4o-mini}"
   env="${env//<provider>/openai}"
   ENV_FILE="$(mktemp)"
@@ -40,7 +41,9 @@ mkdir -p "$(dirname "$LOG")"
 # The db healthcheck answers on the socket while a fresh volume still initialises; migrate needs TCP.
 "${COMPOSE[@]}" up --wait db
 "${COMPOSE[@]}" exec -T db sh -c 'for _ in $(seq 60); do pg_isready -h 127.0.0.1 -q && exit 0; sleep 1; done; exit 1'
-"${COMPOSE[@]}" up --build --wait db api web
+"${COMPOSE[@]}" up --build --wait db api web deploy-executor sre-checkout
+# The rollback target only has to be in the image store; it never runs.
+"${COMPOSE[@]}" --profile e2e build sre-checkout-previous
 "${COMPOSE[@]}" run --rm --no-deps -T seed python -m sre_agent.persistence.seeds --seed-mcp
 "${COMPOSE[@]}" run --rm --no-deps -T seed python scripts/provision_demo.py
 "${COMPOSE[@]}" --profile e2e build incident-console-e2e

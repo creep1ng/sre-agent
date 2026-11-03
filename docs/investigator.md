@@ -162,9 +162,11 @@ before and after, and when it ran).
 - A verdict cites at least one item this verification measured with data. The incident's
   earlier evidence shows the service before the mitigation ran, and a query with no data shows
   nothing. Otherwise it is invalid output, retried once with the reason.
-- The prompt states what ran and the check, and offers no BoK, operations or past incidents.
+- The prompt states what ran and the check, asks for a window that starts after the receipt's
+  `executed_at`, and offers no BoK, operations or past incidents.
 
-The API dispatches it `VERIFICATION_DELAY_SECONDS` (60 by default) after an approval that ran
+The API dispatches it `VERIFICATION_DELAY_SECONDS` (60 by default; `compose.yaml` passes 150, the
+alert rule's 2 min window plus margin) after an approval that ran
 its operation, as the run's second dispatch, `{run_id}-verify`, with its own receipts. The wait
 lives in the API process: after a restart, the manual commands decide. A passed verdict applies
 `verification_passed` (to `resolved`) and a failed one `verification_failed` (to
