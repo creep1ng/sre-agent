@@ -217,20 +217,19 @@ serves. Checked on `main` at `3961b304`.
 | After a failed verification, the agent's own or a person's «Sigue fallando», the system starts a new investigation told what ran and failed, at most twice per incident; then it stops and sends one Telegram message saying a person is needed. Workflow rule: the system may retry, the agent may not. On `main` (#1004–#1007). This overrides "keep only «Reintentar la investigación»". | A failed mitigation should not need a person to press retry, but retries must stay bounded. | 1, 7 | #710 |
 | A recovered incident reads «Resuelto» and a closed one «Cerrado» instead of «en curso»; the inbox renders code spans instead of literal backticks; the postmortem carries the agent's title. On `main` (#1000). | The walkthrough showed a resolved incident still «en curso». | 6 | #870, #711, #995 |
 
-### Pending with the maintainer (2026-11-03)
+## Eighth round of decisions (2026-11-03 afternoon)
 
-Each is shipped as described; the recommendation is to keep it for the demo and revisit after it.
+At about 16:10 UTC the maintainer accepted the recommendations on the five questions left open by
+#1000, #999 and #1004, after a real-model rehearsal on EC2 in which the automatic verifier asked
+for a person.
 
-- **What counts toward the limit of 2.** Failed verifications per incident, whoever retried in
-  between: a person's manual retry that fails again also spends one. Recommendation: keep, the
-  bound is about the incident, not about who retried.
-- **Retries are silent in Telegram.** They start as `system`, so the chat stays quiet until a
-  decision is needed. Recommendation: keep, it serves "silence is the default".
-- **The gave-up message is not amber,** although a person is needed: the marker stays on decision
-  messages. Recommendation: keep for the demo; decide after it whether "a person is needed" is a
-  decision.
-- **The postmortem is one call writing four sections.** Impact stays the person's words, the
-  probable cause keeps the record's certainty grade, and the timeline and cited actions stay the
-  record's. Recommendation: keep, it bounds cost and keeps facts out of the model's hands.
-- **«Resuelto» before the draft exists.** An incident in its postmortem with no draft yet reads
-  «Resuelto», since the service has recovered. Recommendation: keep.
+| Decision | Reason | Value | Issue |
+| --- | --- | --- | --- |
+| Every failed verification of an incident counts toward the limit of 2 re-investigations, including one after a person's manual retry. On `main` (#1004). | The bound is about the incident, not about who retried. | 7 | #710 |
+| Re-investigations are silent in Telegram: they start as `system`, and the chat hears only when a decision is needed. On `main` (#1004). | Silence is the default. | 1 | #710 |
+| The gave-up message is not amber, although a person is needed: amber stays on decision messages. On `main` (#1004). | Amber marks a decision waiting, and this message asks for none in particular. | 1 | #710 |
+| The postmortem draft is one model call writing four sections; the impact, the probable cause's certainty grade, the timeline and the cited actions stay the record's. On `main` (#999). | In the rehearsal the real model's draft was good and appeared 9 s after `resolved`; one call bounds cost and keeps facts out of the model's hands. | 4, 7 | #711 |
+| An incident in its postmortem reads «Resuelto» before its draft exists. On `main` (#1000). | The service has recovered; the draft is paperwork. | 6 | #870, #711 |
+| The verifier is given the current time and the seconds since the mitigation ran. Pending: the fix merges before the cutoff only if it is green, and is then checked again with the real model on EC2. | In the rehearsal the verifier lacked the current time and stopped for a person. | 6 | #723 |
+| If that fix misses the cutoff, the tag `rc-2026-11-04` is cut anyway, with «El servicio está estable» as the documented plan B ([demo script](demo-2026-11-04-script.md#the-walk), step 6). | The manual verdict resolved the incident in the rehearsal at 16:04 UTC. | 3 | #710, #723 |
+| This record and the demo script (#1008) merge before the cutoff. | The demo is run from `main`. | 6 | #870 |
