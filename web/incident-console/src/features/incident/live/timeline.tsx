@@ -6,6 +6,7 @@ import { useT } from "@/i18n";
 import { formatClock } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Prose, useActorName, useSay, useWhen } from "./say";
+import { Statement } from "./statement";
 import type { AgentStatus } from "./status";
 import type { StoryEntry, Verdict } from "./story";
 import { VerificationStep, type Verification } from "./verification";
@@ -56,10 +57,14 @@ function Step({ entry }: { entry: StoryEntry }) {
           <Prose text={say(entry.line)} />
           {author && <span className="text-[var(--dim)]"> · {t("change.by", { author })}</span>}
         </p>
-        {entry.quote && (
-          <p className="mt-1 text-[var(--text-2)]">
-            <Prose text={entry.quote} />
-          </p>
+        {entry.quote && entry.line.key === "event.hypothesis" ? (
+          <Statement statement={entry.quote} compact className="mt-1 text-[var(--text-2)]" />
+        ) : (
+          entry.quote && (
+            <p className="mt-1 break-words text-[var(--text-2)]">
+              <Prose text={entry.quote} />
+            </p>
+          )
         )}
         {(entry.verdict || entry.link) && (
           <span className="mt-1.5 block font-mono text-[13px] leading-normal text-[var(--dim)]">

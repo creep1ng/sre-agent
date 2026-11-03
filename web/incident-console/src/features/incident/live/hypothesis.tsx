@@ -5,6 +5,7 @@ import { useT } from "@/i18n";
 import type { Hypothesis } from "@/lib/incident-api";
 import { cn } from "@/lib/utils";
 import { Prose, useSay, useWhen } from "./say";
+import { Statement } from "./statement";
 import type { StoryEntry } from "./story";
 import { VERDICT_TONE } from "./timeline";
 
@@ -25,13 +26,12 @@ function Claim({ entry }: { entry: StoryEntry }) {
         href={`#${entry.id}`}
         aria-describedby={card}
         className={cn(
-          "rounded-sm underline decoration-[var(--mist-line)] decoration-[1.5px] underline-offset-[6px] outline-none [text-decoration-skip-ink:none]",
+          "rounded-sm break-words underline decoration-[var(--mist-line)] decoration-[1.5px] underline-offset-[5px] outline-none [text-decoration-skip-ink:none]",
           "hover:bg-[var(--mist-wash)] hover:decoration-[var(--mist)] focus-visible:bg-[var(--mist-wash)] focus-visible:decoration-[var(--mist)]",
           context && "decoration-dashed",
         )}
       >
         <Prose text={sentence(entry.quote ?? source)} />
-        <sup className="ml-0.5 font-mono text-[11px] font-medium text-[var(--mist)]">{entry.number}</sup>
       </a>
       <span
         id={card}
@@ -72,27 +72,38 @@ function Claim({ entry }: { entry: StoryEntry }) {
   );
 }
 
-/** The hypothesis as prose: the agent's statement, then each claim it cites with its evidence. */
+/** The hypothesis in its parts, then each piece of evidence it cites: one line each, verdict first. */
 export function HypothesisProse({ hypothesis, claims }: { hypothesis: Hypothesis; claims: StoryEntry[] }) {
   const t = useT("incident");
   const filled = { low: 1, medium: 2, high: 3 }[hypothesis.confidence] ?? 0;
   return (
-    <div>
-      <p id="hypothesis" className="mb-3.5 max-w-[36ch] [&_code]:text-[0.65em] [&_code]:font-normal [&_code]:whitespace-nowrap font-display text-[30px] leading-[1.4] font-light tracking-[-0.01em]">
-        <Prose text={`${sentence(hypothesis.statement)}.`} />
-        {claims.map((claim) => (
-          <span key={claim.id}>
-            {" "}
-            <Claim entry={claim} />.
-          </span>
-        ))}
-      </p>
-      <p className="mb-11 font-mono text-[13px] text-[var(--mist)]">
-        {[1, 2, 3].map((bar) => (
-          <i key={bar} className={cn("mr-[3px] inline-block h-1.5 w-[22px] rounded-[3px] align-[1px]", bar <= filled ? "bg-[var(--mist)]" : "bg-[var(--night-3)]")} />
-        ))}{" "}
-        {t(`confidence.${hypothesis.confidence}`)}
-      </p>
-    </div>
+    <section id="hypothesis" aria-label={t("hypothesis.label")} className="mb-12">
+      <h2 className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[13px] font-medium text-[var(--mist)]">
+        {t("hypothesis.label")}
+        <span className="font-normal">
+          {[1, 2, 3].map((bar) => (
+            <i key={bar} className={cn("mr-[3px] inline-block h-1.5 w-[22px] rounded-[3px] align-[1px]", bar <= filled ? "bg-[var(--mist)]" : "bg-[var(--night-3)]")} />
+          ))}{" "}
+          {t(`confidence.${hypothesis.confidence}`)}
+        </span>
+      </h2>
+      <Statement statement={hypothesis.statement} className="max-w-[68ch] text-[17px] leading-[1.55] sm:text-[18px]" />
+      {claims.length > 0 && (
+        <>
+          <h3 className="mt-7 mb-2 font-mono text-[13px] font-medium text-[var(--mist)]">{t("hypothesis.evidence")}</h3>
+          <ol className="max-w-[68ch] list-none p-0 text-[15px] leading-normal">
+            {claims.map((claim) => (
+              <li key={claim.id} className="grid grid-cols-[2rem_minmax(0,1fr)] border-t py-2.5 first:border-t-0">
+                <span className="pt-0.5 font-mono text-[12px] font-medium text-[var(--mist)]">{claim.number}</span>
+                <span className="min-w-0">
+                  {claim.verdict && <em className={cn("mr-2 font-mono text-[12px] not-italic", VERDICT_TONE[claim.verdict])}>{t(`verdict.${claim.verdict}`)}</em>}
+                  <Claim entry={claim} />
+                </span>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+    </section>
   );
 }

@@ -146,7 +146,11 @@ export function LiveIncidentPage() {
       )}
       {decisions.length > 0 && (
         <div className="mb-14">
-          <Decisions decisions={decisions} mitigation={mitigation} />
+          <Decisions
+            decisions={decisions}
+            mitigation={mitigation}
+            basis={reasoning?.hypotheses.find((item) => item.hypothesis_id === mitigation?.based_on_hypothesis) ?? hypothesis}
+          />
         </div>
       )}
       <details className="border-t pt-4 text-sm text-[var(--dim)]">

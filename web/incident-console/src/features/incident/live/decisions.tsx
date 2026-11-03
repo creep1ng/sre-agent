@@ -1,8 +1,9 @@
 import { useT } from "@/i18n";
-import type { Mitigation } from "@/lib/incident-api";
+import type { Hypothesis, Mitigation } from "@/lib/incident-api";
 import type { LiveIncident } from "@/lib/live-incident";
 import { usePlan } from "./proposal";
 import { Prose, Stamp, useActorName, useSay } from "./say";
+import { Statement } from "./statement";
 import { executionLine, type StoryEntry } from "./story";
 
 export type Outcome = "approved" | "rejected" | "changes_requested";
@@ -67,7 +68,7 @@ function Receipt({ mitigation }: { mitigation: Mitigation }) {
 }
 
 /** What was decided, by whom and when. Nothing here waits for anyone, so nothing is amber. */
-export function Decisions({ decisions, mitigation }: { decisions: Decided[]; mitigation: Mitigation | null | undefined }) {
+export function Decisions({ decisions, mitigation, basis }: { decisions: Decided[]; mitigation: Mitigation | null | undefined; basis?: Hypothesis }) {
   const t = useT("incident");
   const name = useActorName();
   return (
@@ -79,6 +80,7 @@ export function Decisions({ decisions, mitigation }: { decisions: Decided[]; mit
             <p className="mb-1.5 font-display text-[22px] leading-[1.15] [&_code]:text-[0.7em] [&_code]:font-normal">
               {current && mitigation ? <Title mitigation={mitigation} /> : t("decisions.earlier")}
             </p>
+            {current && basis && <Statement statement={basis.statement} compact className="mb-2 max-w-[68ch] text-[15px] text-[var(--text-2)]" />}
             <p className="font-mono text-[13px] text-[var(--dim)]">
               <span className={TONE[outcome]}>{t(`decision.${outcome}`)}</span> · {name(entry.actor)} ·{" "}
               <Stamp at={entry.at} />

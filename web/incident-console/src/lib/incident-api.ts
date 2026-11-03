@@ -94,6 +94,7 @@ export interface Mitigation {
   risk?: "low" | "medium" | "high";
   verification_check?: string;
   approval_status?: string;
+  based_on_hypothesis?: string | null;
   /** #722: the catalog operation the executor runs once a person approves. */
   operation?: { service: string; operation: string; parameters?: Record<string, string> } | null;
   /** #920: the deploy-executor's receipt once an approval ran the operation. */
