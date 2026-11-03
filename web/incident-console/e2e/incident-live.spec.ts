@@ -52,6 +52,22 @@ async function declare(summary: string): Promise<string> {
   return declared.incident_id;
 }
 
+/** One Grafana Alerting delivery to intake (#765), as the contact point sends it with its secret. */
+async function grafana(service: string, status: "firing" | "resolved", startsAt: string) {
+  const intake = await client(process.env.ALERT_INTAKE_GRAFANA_SECRET!);
+  const alert = {
+    status,
+    labels: { alertname: "service-error-rate", service_name: service, severity: "critical" },
+    annotations: { summary: `${service} no puede cobrar a payment` },
+    startsAt,
+    endsAt: status === "resolved" ? new Date().toISOString() : "0001-01-01T00:00:00Z",
+    fingerprint: `service-error-rate-${service}`,
+  };
+  const response = await intake.post(`${API}/alert-intake/grafana`, { data: { status, groupKey: service, alerts: [alert] } });
+  expect(response.status(), await response.text()).toBe(200);
+  return (await response.json()).episodes[0];
+}
+
 /** Opens the incident in a language; the key lives only in this tab's memory, so it is connected each time. */
 async function open(page: Page, incident: string, language: "es" | "en" = "es") {
   await page.addInitScript((value) => localStorage.setItem("midnight-language", JSON.stringify({ state: { language: value }, version: 0 })), language);
@@ -80,6 +96,43 @@ function amberOutsideDecision(page: Page) {
     }
     return found;
   }, AMBER);
+}
+
+/** Element and themed captures: night and day, with the language in the name. */
+async function capture(page: Page, name: string, target?: ReturnType<Page["locator"]>) {
+  for (const scheme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const path = `${DIR}/${name}-${scheme === "dark" ? "noche" : "dia"}.png`;
+    await (target ? target.screenshot({ path }) : page.screenshot({ path, fullPage: true }));
+  }
+  await page.emulateMedia({ colorScheme: "dark" });
+}
+
+/** The meta row's last update: a clock, the timeline's time format and the full date on hover; returns its instant. */
+async function lastUpdate(page: Page, name: string, full: RegExp): Promise<number> {
+  const meta = page.locator("article > p").first();
+  const stamp = meta.locator("time");
+  await expect(stamp).toHaveText(/^\d{2}:\d{2}$/);
+  await expect(meta.locator("svg.lucide-clock")).toBeVisible();
+  await stamp.hover();
+  await expect(page.getByRole("tooltip")).toHaveText(full);
+  for (const scheme of ["dark", "light"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.screenshot({ path: `${DIR}/${name}-${scheme === "dark" ? "noche" : "dia"}.png`, clip: { x: 0, y: 0, width: 1440, height: 260 } });
+  }
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.mouse.move(0, 0);
+  return Date.parse((await stamp.getAttribute("datetime"))!);
+}
+
+/** Opens one evidence disclosure by its label, checks the stored query and captures its step. */
+async function disclosure(page: Page, label: string, query: RegExp, name: string) {
+  const summary = page.locator("details > summary", { hasText: label });
+  await expect(summary).toHaveCount(1);
+  await summary.click();
+  await expect(summary.locator("xpath=..").locator("pre")).toHaveText(query);
+  await summary.scrollIntoViewIfNeeded();
+  await capture(page, name, summary.locator("xpath=ancestor::li[1]"));
 }
 
 async function noTechnicalIds(page: Page) {
@@ -134,6 +187,18 @@ test.describe("incidente RC-2 contra la API real", () => {
     await noTechnicalIds(page);
     expect(await amberOutsideDecision(page)).toEqual([]);
 
+    // Each disclosure names what the agent asked: no generic label on measured evidence.
+    await expect(page.locator("details > summary", { hasText: /^Ver la consulta$/ })).toHaveCount(0);
+    await disclosure(page, "Ver la búsqueda de logs", /query_elasticsearch · .*\nresource\.service\.name:"checkout"/, "evidencia-logs-es");
+    await disclosure(page, "Ver la consulta de métricas", /query_prometheus · .*\n.*traces_span_metrics_calls_total/, "evidencia-metricas-es");
+    record.disclosures = await page.locator("details > summary").allInnerTexts();
+
+    // The last update is the newest recorded event: a poll with nothing new leaves it as it is.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const before = await lastUpdate(page, "actualizado-es", /de 20\d\d/);
+    await page.waitForTimeout(17_000);
+    expect(Date.parse((await page.locator("article > p time").first().getAttribute("datetime"))!)).toBe(before);
+
     // Night and day follow the system theme; the screenshots go to docs/evidence/issue-870/incident.
     await page.evaluate(() => window.scrollTo(0, 0));
     for (const scheme of ["dark", "light"] as const) {
@@ -153,9 +218,14 @@ test.describe("incidente RC-2 contra la API real", () => {
     expect(command.headers()["idempotency-key"]).toMatch(/^console-approve_mitigation-[0-9a-f]{32}$/);
     expect((await command.response())?.status()).toBe(202);
 
-    const proposal = page.getByRole("region", { name: "Propuesta de mitigación" });
-    await expect(proposal).toContainText(/Aprobada · Tú · \d{2}:\d{2}/);
+    // Decided, the proposal is no longer a proposal: it is a decision taken, out of amber.
+    const decisions = page.getByRole("region", { name: "Decisiones tomadas" });
+    await expect(decisions).toContainText(PLAN);
+    await expect(decisions).toContainText(/Aprobada · Tú · \d{2}:\d{2}/);
+    await expect(page.getByRole("region", { name: "Propuesta de mitigación" })).toHaveCount(0);
     await expect(timeline.getByText("Tú · Aprobaste la mitigación")).toBeVisible();
+    await decisions.scrollIntoViewIfNeeded();
+    await capture(page, "decisiones-es", decisions);
     await expect(page.getByRole("button", { name: "Aprobar" })).toHaveCount(0);
     expect(await amberOutsideDecision(page)).toEqual([]);
     expect(await page.locator("[data-decision]").count()).toBe(0);
@@ -164,6 +234,11 @@ test.describe("incidente RC-2 contra la API real", () => {
     const approved = events.find((event: { summary: string }) => event.summary === "Mitigation approved.");
     expect(approved.actor).toMatchObject({ type: "human", reference: { principal_id: "demo-human" } });
     record.approvedBy = approved.actor.reference.principal_id;
+    // The decision moved the report forward to at least the approval.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const after = await lastUpdate(page, "actualizado-decidido-es", /de 20\d\d/);
+    expect(after).toBeGreaterThan(before);
+    expect(after).toBeGreaterThanOrEqual(Math.floor(Date.parse(approved.occurred_at) / 1000) * 1000);
   });
 
   test("rechazar envía reject_mitigation y la historia lo registra", async ({ page }) => {
@@ -176,11 +251,30 @@ test.describe("incidente RC-2 contra la API real", () => {
     const command = await sent;
     expect(command.postDataJSON().command).toBe("reject_mitigation");
     expect((await command.response())?.status()).toBe(202);
-    await expect(page.getByRole("region", { name: "Propuesta de mitigación" })).toContainText(/Rechazada · Tú/);
+    const decisions = page.getByRole("region", { name: "Decisiones tomadas" });
+    await expect(decisions).toContainText(/Rechazada · Tú · \d{2}:\d{2}/);
     await expect(page.getByRole("list", { name: "Línea de tiempo del incidente" }).getByText("Tú · Rechazaste la mitigación")).toBeVisible();
     const reasoning = await read(`/incidents/${incident}/runs/${(await read(`/incidents/${incident}`)).runs.at(-1).run_id}/context`);
     record.rejectedStatus = reasoning.reasoning.mitigation_strategy.approval_status;
     expect(record.rejectedStatus).toBe("rejected");
+
+    // A rejection ends the run; a retry proposes again, amber returns above the decision taken.
+    await page.getByRole("button", { name: "Reintentar la investigación" }).click();
+    await expect(page.getByRole("heading", { level: 2, name: PLAN })).toBeVisible({ timeout: 90_000 });
+    const proposal = page.getByRole("region", { name: "Propuesta de mitigación" });
+    await expect(proposal).toBeVisible();
+    await expect(decisions.getByRole("listitem")).toHaveCount(1);
+    expect(await amberOutsideDecision(page)).toEqual([]);
+    await page.getByRole("button", { name: "Aprobar" }).click();
+    await expect(proposal).toHaveCount(0);
+    const items = decisions.getByRole("listitem");
+    await expect(items).toHaveCount(2);
+    await expect(items.nth(0)).toContainText(/Una propuesta anterior\s*Rechazada · Tú · \d{2}:\d{2}/);
+    await expect(items.nth(1)).toContainText(new RegExp(`${PLAN}\\s*Aprobada · Tú · \\d{2}:\\d{2}`));
+    expect(await page.locator("[data-decision]").count()).toBe(0);
+    await decisions.scrollIntoViewIfNeeded();
+    await capture(page, "decisiones-rechazo-y-aprobacion-es", decisions);
+    record.decisionsAfterRetry = await items.allInnerTexts();
   });
 
   test("una decisión tomada en otro canal aparece con quién decidió, en inglés", async ({ page }) => {
@@ -214,11 +308,72 @@ test.describe("incidente RC-2 contra la API real", () => {
       authorization: { action: "run.approve", resource: { type: "incident_workflow", id: "incident-response" } },
     }, 202);
     // No reload: the page polls and shows the outcome with the person who decided.
-    const proposal = page.getByRole("region", { name: "Mitigation proposal" });
-    await expect(proposal).toContainText(/Approved · Ana · \d{2}:\d{2}/, { timeout: 30_000 });
+    const decisions = page.getByRole("region", { name: "Decisions taken" });
+    await expect(decisions).toContainText(/Approved · Ana · \d{2}:\d{2}/, { timeout: 30_000 });
+    await expect(decisions).toContainText(PLAN);
     await expect(page.getByRole("list", { name: "Incident timeline" }).getByText("Ana · Approved the mitigation")).toBeVisible();
     await expect(page.getByRole("button", { name: "Approve" })).toHaveCount(0);
     await page.screenshot({ path: `${DIR}/decidido-en-otro-canal-en.png`, fullPage: true });
+    await decisions.scrollIntoViewIfNeeded();
+    await capture(page, "decisiones-en", decisions);
+    await disclosure(page, "See the log search", /query_elasticsearch · /, "evidencia-logs-en");
+    await disclosure(page, "See the metrics query", /query_prometheus · /, "evidencia-metricas-en");
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await lastUpdate(page, "actualizado-en", /, 20\d\d/);
+  });
+
+  test("tras aprobar, la verificación cuenta cuándo Grafana dejó de alertar", async ({ page }) => {
+    // An alert of its own service, so intake declares a new incident instead of joining another.
+    const service = `checkout-${STAMP}`;
+    const startsAt = new Date(Date.now() - 60_000).toISOString();
+    const incident = (await grafana(service, "firing", startsAt)).incident_id;
+    expect(incident).toBeTruthy();
+    record.verified = incident;
+    await open(page, incident);
+    await expect(page.getByText("SEV1", { exact: true })).toBeVisible();
+    await investigate(page);
+    await page.getByRole("button", { name: "Aprobar" }).click();
+
+    // Approved while Grafana still alerts: the step waits, in no amber, it is not a decision.
+    const step = page.locator("#step-verification");
+    await expect(step).toContainText("Verificación · en espera");
+    await expect(step).toContainText("Grafana sigue alertando.");
+    expect(await amberOutsideDecision(page)).toEqual([]);
+
+    // Grafana resolves its alert: the step tells when and how long after the approval.
+    const resolved = await grafana(service, "resolved", startsAt);
+    expect(resolved).toMatchObject({ status: "resolved", incident_id: incident });
+    await expect(step).toContainText(/Verificación · la señal se recuperó/, { timeout: 30_000 });
+    await expect(step).toContainText(/Grafana dejó de alertar a las \d{2}:\d{2}, \d+ (s|min) después de aprobar la mitigación\./);
+    await expect(step.locator("svg[role=img]")).toHaveCount(0);
+    record.resolvedText = await step.innerText();
+
+    // A person confirms the service is stable through the governed command; the step folds it in.
+    const { version, runs } = await read(`/incidents/${incident}`);
+    await send(await client(process.env.DEMO_HUMAN_API_KEY!), `/incidents/${incident}/runs/${runs.at(-1).run_id}/commands`, {
+      command: "verification_passed",
+      expected_incident_version: version,
+      actor: "human",
+      actor_reference: { reference_version: "1.0.0", principal_id: "demo-human" },
+      turn_id: null,
+      disposition: null,
+      comment: null,
+      authorization: { action: "run.command", resource: { type: "incident_workflow", id: "incident-response" } },
+    }, 202);
+    await expect(step).toContainText("Tú · Servicio verificado estable", { timeout: 30_000 });
+    await expect(page.getByRole("list", { name: "Línea de tiempo del incidente" }).getByText("Servicio verificado estable")).toHaveCount(1);
+    await step.scrollIntoViewIfNeeded();
+    await capture(page, "verificacion-es", step);
+    await capture(page, "verificacion-pagina-es");
+    record.verifiedText = await step.innerText();
+
+    const english = await page.context().newPage();
+    await open(english, incident, "en");
+    const stepEn = english.locator("#step-verification");
+    await expect(stepEn).toContainText("Verification · the signal recovered");
+    await expect(stepEn).toContainText(/Grafana stopped alerting at \d{2}:\d{2}, \d+ (s|min) after the mitigation was approved\./);
+    await stepEn.scrollIntoViewIfNeeded();
+    await capture(english, "verificacion-en", stepEn);
   });
 
   test("un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {

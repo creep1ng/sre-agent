@@ -209,6 +209,13 @@ timeline step, one chronological timeline, the agent's live status and the propo
 «Aprobar» and «Rechazar» send the governed `approve_mitigation` / `reject_mitigation` command.
 Copy lives in the `incident` namespace (`src/i18n/{es,en}/incident.ts`).
 
+Once decided, the proposal leaves amber and becomes «Decisiones tomadas»: each decision with
+what, who and when. The meta row's clock is the newest event of the incident or its runs. After
+an approval, the «Verificación» step tells whether Grafana resolved the incident's alert (intake,
+#765) and how long after the approval, and folds in a recorded `verification_passed` /
+`verification_failed`. `SignalChart` (`live/verification.tsx`) draws the stored series once #723
+records one (#927); nothing is drawn before.
+
 Journeys against the composed stack (scripted model and Grafana MCP, everything else real):
 
 ```sh
