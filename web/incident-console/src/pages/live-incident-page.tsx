@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
+import { Decisions, decisionsOf } from "@/features/incident/live/decisions";
 import { HypothesisProse } from "@/features/incident/live/hypothesis";
 import { Proposal, operationCall } from "@/features/incident/live/proposal";
 import { Prose } from "@/features/incident/live/say";
@@ -92,7 +93,7 @@ export function LiveIncidentPage() {
   const hypothesis = reasoning?.hypotheses.at(-1);
   const mitigation = reasoning?.mitigation_strategy;
   const operation = mitigation ? operationCall(mitigation) : null;
-  const decided = story.findLast((entry) => /^event\.(approved|rejected)/.test(entry.line.key));
+  const decisions = decisionsOf(live, story);
   const waiting = status.kind === "waiting";
   return (
     <article className="mx-auto w-full max-w-4xl min-w-0 px-4 py-8 sm:px-8 lg:px-14 lg:py-12">
@@ -110,17 +111,20 @@ export function LiveIncidentPage() {
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
       {hypothesis && <HypothesisProse hypothesis={hypothesis} claims={claimsOf(live, story)} />}
       <Timeline story={story} status={status} />
-      {mitigation && (
+      {mitigation && status.kind === "waiting" && detail.state === "mitigating" && (
         <div className="mb-14">
           <Proposal
             mitigation={mitigation}
-            pending={waiting && detail.state === "mitigating"}
-            decision={decided}
             sending={decision.sending}
             error={decision.error}
             canDecide={Boolean(decision.me)}
-            onDecide={(choice) => waiting && void decision.decide(choice, status.run)}
+            onDecide={(choice) => void decision.decide(choice, status.run)}
           />
+        </div>
+      )}
+      {decisions.length > 0 && (
+        <div className="mb-14">
+          <Decisions decisions={decisions} mitigation={mitigation} />
         </div>
       )}
       <details className="border-t pt-4 text-sm text-[var(--dim)]">
