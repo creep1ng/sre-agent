@@ -1,0 +1,13 @@
+# Tested 613f942e55c0382111e317d9b85a5891e30e7efb, scripts/run_incident_console_e2e.sh
+✓   1 e2e/incident-live.spec.ts:168:3 › incidente RC-2 contra la API real › la página se lee: título corto, hipótesis en partes, etapas con hora, resultados de las consultas y nada se sale (1.1m)
+✓   2 e2e/incident-live.spec.ts:288:3 › incidente RC-2 contra la API real › un título inválido del agente no se muestra: la página y la lista usan el de la alerta (24.4s)
+✓   3 e2e/incident-live.spec.ts:307:3 › incidente RC-2 contra la API real › las afirmaciones de la hipótesis muestran su evidencia y llevan a su paso; aprobar envía el comando gobernado (54.8s)
+✓   4 e2e/incident-live.spec.ts:407:3 › incidente RC-2 contra la API real › rechazar envía reject_mitigation y la historia lo registra (49.2s)
+✓   5 e2e/incident-live.spec.ts:444:3 › incidente RC-2 contra la API real › una decisión tomada en otro canal aparece con quién decidió, en inglés (45.0s)
+✓   6 e2e/incident-live.spec.ts:489:3 › incidente RC-2 contra la API real › tras aprobar, la verificación cuenta cuándo Grafana dejó de alertar (1.3m)
+✓   7 e2e/incident-live.spec.ts:546:3 › incidente RC-2 contra la API real › la propuesta nombra su operación del catálogo; una aprobación rechazada no mueve nada y la que corre deja su recibo (1.7m)
+✓   8 e2e/incident-live.spec.ts:665:3 › incidente RC-2 contra la API real › tras ejecutar la mitigación, «Sigue fallando» devuelve el incidente a investigación y la línea de tiempo dice qué falló (1.3m)
+✓   9 e2e/incident-live.spec.ts:702:3 › incidente RC-2 contra la API real › tras ejecutar la mitigación, «El servicio está estable» resuelve el incidente (1.4m)
+✓  10 e2e/incident-live.spec.ts:738:3 › incidente RC-2 contra la API real › el borrador del agente se lee en secciones; «Aprobar y cerrar» cierra el incidente y el cierre cuenta sus hitos (36.1s)
+✓  11 e2e/incident-live.spec.ts:818:3 › incidente RC-2 contra la API real › un despacho fallido muestra su causa y solo una persona lo reintenta (45.9s)
+incident console journeys PASS [11 passed]
