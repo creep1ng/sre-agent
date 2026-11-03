@@ -1,16 +1,22 @@
 import { SearchIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { Navigate, useNavigate } from "react-router";
 import { ServiceChip, SeverityBadge, StatusPill } from "@/components/badges";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime, formatDuration } from "@/lib/format";
+import { appMode } from "@/lib/mode";
 import { incidentStatus } from "@/lib/status";
 import { alertsOf, useStore } from "@/lib/store";
 import type { Incident } from "@/lib/types";
 
+/** The list reads the simulator only: live mode sends its address to the inbox, which reads the API. */
 export function IncidentsPage() {
+  return appMode === "live" ? <Navigate to="/" replace /> : <SimulatedIncidentsPage />;
+}
+
+function SimulatedIncidentsPage() {
   const now = useNow();
   const navigate = useNavigate();
   const incidents = useStore((s) => s.incidents);
