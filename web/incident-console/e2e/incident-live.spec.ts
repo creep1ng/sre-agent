@@ -714,9 +714,19 @@ test.describe("incidente RC-2 contra la API real", () => {
     await capture(page, "verificacion-estable-pagina-es");
     record.stableText = await step.innerText();
 
-    // Resolved, the agent opens the postmortem with its draft (#711): under 90 s, as the server stamps both.
+    // Resolved, the model writes the postmortem draft (#711): under 90 s, as the server stamps both.
+    const { draft, seconds } = await drafted(incident);
+    expect(draft.updated_by).toBe("incident-harness");
+    expect(draft.content.summary).toBe("Los clientes no pudieron pagar: `sre-checkout` fallaba al cobrar.");
+    expect(draft.content.cause.statement).toContain("1.5.0");
+    expect((await read(`/incidents/${incident}`)).state).toBe("postmortem");
+    record.draft = { seconds, timeline: draft.content.timeline.length, by: draft.updated_by };
+  });
+
+  /** The postmortem's first version once the API wrote it, and how long after `resolved`, as the server stamps both. */
+  async function drafted(incident: string) {
     const demo = await client(process.env.DEMO_HUMAN_API_KEY!);
-    let draft: { version: number; created_at: string; updated_by: string; content: { timeline: unknown[]; cause: { statement: string } } } | null = null;
+    let draft: { version: number; created_at: string; updated_by: string; content: { summary: string; timeline: unknown[]; cause: { statement: string } } } | null = null;
     await expect
       .poll(async () => {
         const response = await demo.get(`${API}/incidents/${incident}/postmortem`);
@@ -729,11 +739,8 @@ test.describe("incidente RC-2 contra la API real", () => {
     const stable = events.find((event: { summary: string }) => event.summary === "Service verified stable.");
     const seconds = (Date.parse(draft!.created_at) - Date.parse(stable.occurred_at)) / 1000;
     expect(seconds).toBeLessThan(90);
-    expect(draft!.updated_by).toBe("incident-harness");
-    expect(draft!.content.cause.statement).toContain("1.5.0");
-    expect((await read(`/incidents/${incident}`)).state).toBe("postmortem");
-    record.draft = { seconds, timeline: draft!.content.timeline.length, by: draft!.updated_by };
-  });
+    return { draft: draft!, seconds };
+  }
 
   test("el borrador del agente se lee en secciones; «Aprobar y cerrar» cierra el incidente y el cierre cuenta sus hitos", async ({ browser }) => {
     // The incident the previous journey resolved: the agent already wrote its draft (#711).
@@ -750,6 +757,8 @@ test.describe("incidente RC-2 contra la API real", () => {
         await expect(draft.getByRole("heading", { level: 3 })).toHaveText(
           es ? ["Qué pasó", "Causa probable", "Qué hicimos", "Cómo verificamos", "Cronología", "Lo que no sabemos"] : ["What happened", "Probable cause", "What we did", "How we verified", "Timeline", "What we do not know"],
         );
+        await expect(draft.locator("[data-draft]")).toHaveText(es ? "Borrador del agente" : "Draft by the agent");
+        await expect(draft).toContainText("Los clientes no pudieron pagar");
         await expect(draft.locator("dd").first()).toContainText("1.5.0");
         // The postmortem carries the incident's title, the one the page, the list and Telegram show.
         await expect(draft.locator("[data-title]")).toHaveText(AGENT_TITLE);
@@ -813,6 +822,29 @@ test.describe("incidente RC-2 contra la API real", () => {
     await expect(english.locator("[data-status]")).toHaveText("Closed");
     await capture(english, "estado-cerrado-en", english.locator("article > p").first());
     await capture(english, "cierre-en-390", closingEn);
+  });
+
+  test("si el modelo no escribe el borrador, queda el compuesto desde el registro y la página lo dice", async ({ page }) => {
+    const summary = "sre-checkout no cobra [e2e:reinicio] [e2e:sin-borrador]";
+    const { incident, version } = await executed(page, summary);
+    record.fallback = incident;
+    await verdict(page, "El servicio está estable", "verification_passed", version);
+    const { draft: stored, seconds } = await drafted(incident);
+    expect(stored.updated_by).toBe("system");
+    expect(stored.content.summary).toBe(summary);
+    record.fallbackDraft = { seconds, by: stored.updated_by };
+    const draft = page.getByRole("region", { name: "Postmortem" });
+    await expect(draft.locator("[data-draft]")).toHaveText("Borrador desde el registro", { timeout: 30_000 });
+    await expect(draft.getByRole("button", { name: "Aprobar y cerrar" })).toBeVisible();
+    await draft.scrollIntoViewIfNeeded();
+    await capture(page, "postmortem-registro-es", draft);
+    const english = await page.context().newPage();
+    await english.setViewportSize({ width: 390, height: 900 });
+    await open(english, incident, "en");
+    const draftEn = english.getByRole("region", { name: "Postmortem" });
+    await expect(draftEn.locator("[data-draft]")).toHaveText("Draft from the record");
+    await draftEn.scrollIntoViewIfNeeded();
+    await capture(english, "postmortem-registro-en-390", draftEn);
   });
 
   test("un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {

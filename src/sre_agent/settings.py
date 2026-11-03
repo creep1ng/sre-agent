@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from os import environ
+from typing import Literal
 
 from sre_agent.investigator.client import GatewaySettings
 from sre_agent.investigator.contract import OutputLanguage
@@ -24,8 +25,8 @@ class Settings:
     investigator_output_language: OutputLanguage = "es"
     # How long after an approval that ran its operation the agent measures the service (#723).
     verification_delay_seconds: float = 60.0
-    # Whether the agent opens a resolved incident's postmortem with its draft (#711).
-    postmortem_draft: bool = False
+    # Who drafts a resolved incident's postmortem: the model, the record, or nobody (#711).
+    postmortem_draft: Literal["agent", "record"] | None = None
     # The deploy-executor's base URL: its catalog tells the agent what it may propose (#722).
     deploy_executor_url: str | None = None
     # What signs the operation an approval runs; the executor checks it (#743, #722).
@@ -103,6 +104,12 @@ class Settings:
             raise ValueError("VERIFICATION_DELAY_SECONDS must be numeric") from None
         if delay < 0:
             raise ValueError("VERIFICATION_DELAY_SECONDS must not be negative")
+        # agent: the model writes the postmortem draft, the record is its fallback; record: only
+        # the draft composed from the record; anything else: a person opens the postmortem (#711).
+        mode = environment.get("POSTMORTEM_DRAFT")
+        draft: Literal["agent", "record"] | None = (
+            "agent" if mode == "agent" else "record" if mode == "record" else None
+        )
         return cls(
             database_url,
             api_key,
@@ -116,7 +123,7 @@ class Settings:
             investigator_tool_timeout_seconds=tool_timeout,
             investigator_output_language=language,
             verification_delay_seconds=delay,
-            postmortem_draft=environment.get("POSTMORTEM_DRAFT") == "agent",
+            postmortem_draft=draft,
             deploy_executor_url=environment.get("DEPLOY_EXECUTOR_URL") or None,
             chat_taps_worker=environment.get("CHAT_TAPS_WORKER") == "on",
             deploy_executor_signing_key=environment.get("DEPLOY_EXECUTOR_SIGNING_KEY") or None,

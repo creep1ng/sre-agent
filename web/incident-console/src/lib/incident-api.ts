@@ -190,6 +190,8 @@ export interface Postmortem {
   version: number;
   review: { status: "pending" | "approved" | "changes_requested"; reviewed_version: number | null; reviewer_id: string | null; reviewed_at: string | null };
   content_included: boolean;
+  /** Who wrote the current version: the agent, `system` for the draft composed from the record (#711), or a person. */
+  updated_by: string;
   content?: PostmortemContent;
 }
 

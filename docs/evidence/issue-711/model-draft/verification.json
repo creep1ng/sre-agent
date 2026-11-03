@@ -1,0 +1,16 @@
+{
+  "sanitized": true,
+  "stamp": "bbf51a55",
+  "stable": "inc-82fe68ed86712306288801cef4f201b7",
+  "draft": {
+    "seconds": 2.567,
+    "timeline": 6,
+    "by": "incident-harness"
+  },
+  "fallback": "inc-be4c19b5eaef641ab0492f143d482039",
+  "fallbackDraft": {
+    "seconds": 2.757,
+    "by": "system"
+  },
+  "closing": "Resumen de cierre\n\nFallan los cobros en checkout\n\nDetección\n08:28\nDeclaración\n08:28\n0 s tras la detección\nMitigación\n08:28\n19 s tras la detección\nRecuperación\n08:28\n20 s tras la detección\nCierre\n08:29\n41 s tras la detección"
+}

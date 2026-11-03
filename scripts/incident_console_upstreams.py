@@ -11,6 +11,10 @@ An alert whose summary carries `[e2e:falla]` gets two replies that are not JSON 
 first investigation ends with `investigation_invalid_output` and a human retry succeeds. The
 hypothesis carries a short title when the prompt asks for one; `[e2e:titulo]` gets a title on
 two lines and over 60 characters, which the API drops.
+
+The `postmortem` objective (#711) gets the four narrative sections, written from the facts it
+was given; `[e2e:sin-borrador]` gets a reply that is not JSON, so the draft composed from the
+record stands.
 """
 
 import asyncio
@@ -27,6 +31,7 @@ from sre_agent.gateway.providers import ProviderRequest, ProviderResult
 
 STEP_SECONDS = float(os.environ.get("STEP_SECONDS", "2"))
 STATE = re.compile(r"^State: (.*)$", re.MULTILINE)
+FACTS = re.compile(r"^Facts: (.*)$", re.MULTILINE)
 CHANGES = "midnight_recent_changes"
 ERRORS = (
     'increase(traces_span_metrics_calls_total{{service_name="{}",'
@@ -110,22 +115,47 @@ def decide(state: dict, prompt: str) -> dict:
         if tool not in {item["tool"] for item in collected}:
             service = incident["alert"]["service"]
             return {"action": "use_tool", "tool": tool, "arguments": arguments(tool, service)}
+    # A recalled past incident (#773) is context, not a measure: only the queries are judged.
+    measured = [item for item in collected if item["tool"] in FINDINGS]
     return {
         "action": "propose_hypothesis",
         **({"title": title(incident["alert"]["summary"])} if '"title"' in prompt else {}),
         "statement": statement(prompt),
         "confidence": "medium",
-        "supporting_evidence": [item["evidence_id"] for item in collected],
+        "supporting_evidence": [item["evidence_id"] for item in measured],
         "verdicts": {
             item["evidence_id"]: {"verdict": "supports", "finding": FINDINGS[item["tool"]]}
-            for item in collected
+            for item in measured
         },
     }
+
+
+def postmortem(prompt: str) -> str:
+    facts = json.loads(FACTS.findall(prompt)[-1])
+    if "[e2e:sin-borrador]" in (facts["alert"]["summary"] or ""):
+        return "Esta respuesta no es JSON."
+    service, ran = facts["alert"]["service"], facts["mitigation"]["ran"] or {}
+    return json.dumps({
+        "what_happened": f"Los clientes no pudieron pagar: `{service}` fallaba al cobrar.",
+        "probable_cause": "El despliegue de `checkout` `1.5.0` rompió los cobros contra "
+        "`payment`; la investigación lo sustentó con métricas, logs y cambios recientes.",
+        "what_we_did": f"Una persona aprobó {facts['mitigation']['plan']}; el deploy-executor "
+        f"lo ejecutó ({ran.get('outcome')}).",
+        "how_we_verified": "Una persona confirmó que el servicio quedó estable.",
+    })  # fmt: skip
 
 
 class ScriptedModel:
     async def create(self, request: ProviderRequest) -> ProviderResult:
         await asyncio.sleep(STEP_SECONDS)
+        if "Objective: postmortem" in request.input:
+            text = postmortem(request.input)
+            return ProviderResult(
+                response_id=f"resp_{secrets.token_hex(8)}",
+                model=request.model,
+                text=text,
+                provider=request.provider,
+            )
         state = json.loads(STATE.findall(request.input)[-1])
         incident = state["incident"]
         text = json.dumps(decide(state, request.input))
