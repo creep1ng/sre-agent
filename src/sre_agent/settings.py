@@ -22,6 +22,8 @@ class Settings:
     investigator_gateway: GatewaySettings | None = field(default=None, repr=False)
     investigator_tool_timeout_seconds: float = 30.0
     investigator_output_language: OutputLanguage = "es"
+    # How long after an approval that ran its operation the agent measures the service (#723).
+    verification_delay_seconds: float = 60.0
     # The deploy-executor's base URL: its catalog tells the agent what it may propose (#722).
     deploy_executor_url: str | None = None
     # What signs the operation an approval runs; the executor checks it (#743, #722).
@@ -91,6 +93,12 @@ class Settings:
         # The gateway's MCP transport stops at 30 s (MCP_TIMEOUT_SECONDS), so more never helps.
         if not 0 < tool_timeout <= 30:
             raise ValueError("INVESTIGATOR_TOOL_TIMEOUT_SECONDS must be between 0 and 30")
+        try:
+            delay = float(environment.get("VERIFICATION_DELAY_SECONDS") or "60")
+        except ValueError:
+            raise ValueError("VERIFICATION_DELAY_SECONDS must be numeric") from None
+        if delay < 0:
+            raise ValueError("VERIFICATION_DELAY_SECONDS must not be negative")
         return cls(
             database_url,
             api_key,
@@ -103,6 +111,7 @@ class Settings:
             investigator_gateway=investigator_gateway,
             investigator_tool_timeout_seconds=tool_timeout,
             investigator_output_language=language,
+            verification_delay_seconds=delay,
             deploy_executor_url=environment.get("DEPLOY_EXECUTOR_URL") or None,
             deploy_executor_signing_key=environment.get("DEPLOY_EXECUTOR_SIGNING_KEY") or None,
             openrouter_base_url=base_url,
