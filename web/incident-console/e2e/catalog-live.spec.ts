@@ -17,6 +17,7 @@ const STAMP = randomBytes(4).toString("hex");
 const DIR = "e2e/artifacts/action-catalog";
 const AMBER = ["rgb(242, 180, 90)", "rgb(166, 90, 0)"];
 const PLAN = "Volver sre-checkout a la 1.4.0";
+const LEAD = "Las operaciones que Midnight puede ejecutar en tus servicios. Su agente ejecuta cada una solo después de que una persona la aprueba.";
 
 test.use({ video: "off", trace: "off" });
 test.describe.configure({ mode: "serial" });
@@ -66,19 +67,35 @@ test.describe("catálogo de acciones RC-2 contra la API real", () => {
   test.skip(!enabled, "Requiere ACTION_CATALOG_E2E=1 y la pila de compose.action-catalog-e2e.yaml");
   test.beforeAll(() => mkdirSync(DIR, { recursive: true }));
 
-  test("lo que Midnight puede hacer, una aprobación real y su ejecución en el catálogo", async ({ page }) => {
+  test("las acciones de Midnight, una aprobación real y su ejecución en el catálogo", async ({ page }) => {
     const record: Record<string, unknown> = { sanitized: true, stamp: STAMP };
     await open(page, "acciones");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Lo que Midnight puede hacer");
-    await expect(page.getByText("Nada fuera de esta lista puede ejecutarse, y nada de ella se ejecuta sin la aprobación de una persona.")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Acciones");
+    await expect(page.getByText(LEAD)).toBeVisible();
+    // Who runs an operation is said once, in the lead; the old promise line is gone.
+    await expect(page.getByText(/Nada fuera de esta lista|La ejecuta el agente de Midnight/)).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 2 })).toHaveText(["sre-checkout"]);
+    const service = page.locator('[data-service="sre-checkout"]');
+    await expect(service.locator("header")).toContainText("2 acciones · sin ejecuciones");
     const rollback = operation(page, "deployment.rollback");
-    await expect(rollback).toContainText(/sre-checkout · deployment\.rollback · to_tag (= 1\.4\.0|∈ \{.*1\.4\.0.*\})/);
-    await expect(rollback).toContainText("La ejecuta el agente de Midnight, tras tu aprobación.");
+    await expect(rollback.getByRole("heading", { level: 3 })).toHaveText("Volver a una versión anterior");
+    await expect(rollback.locator("h3 + code")).toHaveText("deployment.rollback");
+    await expect(rollback.locator("dt")).toHaveText(["to_tag"]);
+    await expect(rollback.locator("dd code")).toContainText(["1.4.0"]);
+    // No runs: the summary line says it and there is no empty disclosure.
     await expect(rollback).toContainText("Nunca se ha ejecutado.");
+    await expect(rollback.locator("details")).toHaveCount(0);
     await expect(operation(page, "deployment.restart")).toContainText("Nadie puede ejecutarla: ningún permiso la cubre.");
+    await expect(operation(page, "deployment.restart").locator("dl")).toHaveCount(0);
     expect(await amber(page)).toEqual([]);
     await shoot(page, "catalogo-antes", "es");
+    const englishBefore = await page.context().newPage();
+    await open(englishBefore, "acciones", "en");
+    await expect(englishBefore.getByRole("heading", { level: 1 })).toHaveText("Actions");
+    await expect(englishBefore.locator('[data-service="sre-checkout"] header')).toContainText("2 actions · no runs yet");
+    await expect(operation(englishBefore, "deployment.rollback")).toContainText("It has never run.");
+    await shoot(englishBefore, "catalogo-antes", "en");
+    await englishBefore.close();
     const before = await api("/action-catalog");
     expect(before.status).toBe(200);
     record.before = before.body;
@@ -110,7 +127,13 @@ test.describe("catálogo de acciones RC-2 contra la API real", () => {
     await expect.poll(async () => (await api(`/incidents/${incident}`)).body.state, { timeout: 90_000 }).toBe("verifying");
 
     await page.getByRole("complementary").getByRole("link", { name: "Acciones" }).click();
-    await expect(rollback.getByRole("listitem")).toHaveCount(1, { timeout: 20_000 });
+    // The runs stay folded until asked for; the summary carries the count.
+    const runs = rollback.locator("details");
+    await expect(runs.locator("summary")).toHaveText("Ejecuciones recientes (1)", { timeout: 20_000 });
+    await expect(runs).not.toHaveAttribute("open");
+    await expect(service.locator("header")).toContainText(/2 acciones · última ejecución \d{2}:\d{2}/);
+    await runs.locator("summary").click();
+    await expect(rollback.getByRole("listitem")).toHaveCount(1);
     await expect(rollback).toContainText(/\d{2}:\d{2}\s*Se ejecutó\s*aprobó Demo human\s*Ver el incidente/);
     await expect(rollback.getByRole("link", { name: "Ver el incidente" })).toHaveAttribute("href", `/app/incidentes/${incident}`);
     expect(await amber(page)).toEqual([]);
@@ -134,7 +157,8 @@ test.describe("catálogo de acciones RC-2 contra la API real", () => {
     // The same page in English, after the run.
     const english = await page.context().newPage();
     await open(english, "acciones", "en");
-    await expect(english.getByRole("heading", { level: 1 })).toHaveText("What Midnight may do");
+    await expect(english.getByRole("heading", { level: 1 })).toHaveText("Actions");
+    await operation(english, "deployment.rollback").getByText("Recent runs (1)", { exact: true }).click();
     await expect(operation(english, "deployment.rollback")).toContainText(/Ran\s*approved by Demo human\s*Open the incident/);
     await expect(operation(english, "deployment.restart")).toContainText("No one can run it: no grant covers it.");
     await shoot(english, "catalogo-despues", "en");
@@ -146,8 +170,11 @@ test.describe("catálogo de acciones RC-2 contra la API real", () => {
     await expect(page.getByRole("status")).toHaveText(
       "El ejecutor no responde: nada puede ejecutarse hasta que vuelva. Estas son las operaciones registradas.",
     );
-    await expect(operation(page, "deployment.rollback")).toContainText("sre-checkout · deployment.rollback · parámetros desconocidos");
-    await expect(operation(page, "deployment.rollback")).toContainText(/Se ejecutó\s*aprobó Demo human/);
+    const rollback = operation(page, "deployment.rollback");
+    await expect(rollback.locator("h3 + code")).toHaveText("deployment.rollback");
+    await expect(rollback).toContainText("parámetros desconocidos");
+    await rollback.getByText("Ejecuciones recientes (1)", { exact: true }).click();
+    await expect(rollback).toContainText(/Se ejecutó\s*aprobó Demo human/);
     await shoot(page, "catalogo-sin-ejecutor", "es");
     const unavailable = await api("/action-catalog");
     expect(unavailable.status).toBe(200);

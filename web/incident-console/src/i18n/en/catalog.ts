@@ -2,8 +2,8 @@ import type { Messages } from "@/i18n";
 import type catalog from "../es/catalog";
 
 export default {
-  title: "What Midnight may do",
-  promise: "Nothing outside this list can run, and nothing on it runs without a person's approval.",
+  title: "Actions",
+  lead: "The operations Midnight can run on your services. Its agent runs each one only after a person approves it.",
   "blocked.unauthenticated": "Connect a credential",
   "blocked.loading": "Loading the catalog…",
   "blocked.auth": "The API rejected the credential",
@@ -16,12 +16,15 @@ export default {
   empty: "No operations are registered.",
   "operation.deployment.rollback": "Roll back to an earlier release",
   "operation.deployment.restart": "Restart on the current release",
+  "service.one": "1 action",
+  "service.many": "{count} actions",
+  "service.last": "last run {when}",
+  "service.never": "no runs yet",
   "operation.flag.set": "Turn a fault flag off",
-  "runner.agent": "Midnight's agent runs it, after your approval.",
   "runner.none": "No one can run it: no grant covers it.",
   "parameters.unknown": "parameters unknown",
   "parameters.unlisted": "values unavailable",
-  executions: "Recent runs",
+  executions: "Recent runs ({count})",
   "executions.none": "It has never run.",
   "outcome.succeeded": "Ran",
   "outcome.refused": "Refused: no grant",
