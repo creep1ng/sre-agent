@@ -1,0 +1,93 @@
+{
+ "approve": {
+  "answer": "Aprobada por Demo human desde Telegram, 2026-11-02 15:14 UTC-5.",
+  "message_after": "Decisión tomada: inc-767-approve-a0248d11\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nAprobada por Demo human desde Telegram, 2026-11-02 15:14 UTC-5.",
+  "receipt": {
+   "outcome": "rolled_back",
+   "replayed": false,
+   "after_image": "demo/checkout:1.4.0",
+   "duration_ms": 3884,
+   "executed_at": "2026-11-02T20:14:09.788Z",
+   "before_image": "demo/checkout:1.5.0",
+   "execution_id": "exe_f7ae30a255cd4e93"
+  },
+  "state": "verifying",
+  "timeline_last": "Mitigation approved; the deploy-executor ran deployment.rollback on sre-checkout: rolled_back (demo/checkout:1.5.0 → demo/checkout:1.4.0).",
+  "mitigation_execute_audit": [
+   [
+    "success",
+    null,
+    200
+   ]
+  ],
+  "decisions": [
+   [
+    "apply_mitigation",
+    "approve",
+    "demo-human",
+    "human",
+    "telegram",
+    "2026-11-02 20:14:13.742795+00:00"
+   ]
+  ],
+  "checks": {
+   "the tap runs the rollback on the deploy-executor (receipt)": true,
+   "the timeline tells what ran": true,
+   "the attempt is audited as mitigation.execute": true,
+   "the tap records one approval": true,
+   "as the linked human, through Telegram": true,
+   "the mitigation is approved": true,
+   "the answer says who decided": true,
+   "the message shows who decided and loses its buttons": true,
+   "it keeps the link to the incident": true,
+   "the decision time is in the configured zone": true
+  }
+ },
+ "refused": {
+  "answer": "No se aplicó: el ejecutor ya no ofrece la operación como se propuso (precondition_failed).",
+  "message_after": "🟠 Decisión pendiente: inc-767-refused-a0248d11\nServicio: sre-checkout\nCausa: El despliegue v2.4.1 de sre-checkout rompió el pago.\nCambio sospechoso: despliegue v2.4.1 (2026-10-31 05:00 UTC-5)\nPropuesta: Volver sre-checkout a la versión anterior, v2.4.0.\nRiesgo: bajo\nDetalle: operación del catálogo deployment.rollback\nTu aprobación no se aplicó a las 15:14 UTC-5: el ejecutor ya no ofrece la operación como se propuso (precondition_failed).",
+  "buttons_after": [
+   [
+    [
+     "Aprobar",
+     "a:f805e6d99f2b4b4eb7cc8187f2b6afdf"
+    ],
+    [
+     "Rechazar",
+     "r:f805e6d99f2b4b4eb7cc8187f2b6afdf"
+    ]
+   ],
+   [
+    [
+     "Ver incidente",
+     "http://midnight.example:8080/app/incidentes/inc-767-refused-a0248d11"
+    ]
+   ]
+  ],
+  "state": "mitigating",
+  "version_before_after": [
+   3,
+   3
+  ],
+  "timeline_last": "Approval not applied: the deploy-executor's catalog no longer offers the operation as proposed. The incident stays mitigating.",
+  "mitigation_execute_audit": [
+   [
+    "success",
+    null,
+    200
+   ],
+   [
+    "error",
+    "status_conflict",
+    409
+   ]
+  ],
+  "checks": {
+   "nothing moves: still mitigating, same version, nothing ran": true,
+   "the answer says why": true,
+   "the message says why and keeps its buttons to retry": true,
+   "the timeline tells the refusal": true,
+   "the attempt is audited with its reason": true
+  }
+ }
+}

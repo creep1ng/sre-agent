@@ -34,6 +34,12 @@ That function now queues:
   proposing a mitigation when #767's `incident.enqueue_mitigation_decision()` exists: then #767's
   decision message (cause, suspect change, proposal, buttons) is the single immediate message.
 
+An edit is not an interrupt. When a decision on a mitigation is taken on any channel, or its
+verification passes or fails, the decision message the person already has is edited in place
+(`decision_update`, migration `20261102_01`; see [the Telegram channel](telegram-channel.md#editing-the-decision-message)).
+That writes no `event_decisions` row and sends nothing new, so the policy does not gate it; a chat
+that never got the decision message gets no edit either.
+
 ## Daily digest
 
 The Telegram gateway queues one `daily_digest` message per linked chat each day at

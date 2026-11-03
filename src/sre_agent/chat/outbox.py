@@ -2,7 +2,8 @@
 
 Producers call `enqueue` inside their own transaction; dispatch receipts are enqueued by the
 `run_events_chat_outbox` trigger. The gateway renders each message when it sends it, so a new
-message kind is one entry in `RENDERERS`.
+message kind is one entry in `RENDERERS`. A kind in `EDITS` rewrites a message already sent
+instead of sending a new one: `decisions_chat_update` queues one on every decision (20261102_01).
 """
 
 from __future__ import annotations
@@ -10,10 +11,13 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from secrets import token_urlsafe
 from typing import Any
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +34,35 @@ logger = logging.getLogger("sre_agent.chat.outbox")
 # Telegram inline keyboard rows; a renderer returns one with its text to offer buttons.
 Keyboard = list[list[dict[str, str]]]
 Rendered = str | tuple[str, Keyboard | None]
+
+
+def chat_timezone() -> ZoneInfo:
+    """The zone chat messages tell time in: TELEGRAM_TIMEZONE, else the digest's, else UTC."""
+    name = os.environ.get("TELEGRAM_TIMEZONE") or os.environ.get("TELEGRAM_DIGEST_TIMEZONE")
+    return ZoneInfo(name or "UTC")
+
+
+def clock(moment: datetime, pattern: str = "%Y-%m-%d %H:%M") -> str:
+    """`moment` in the chat's zone, labelled with its offset: «13:46 UTC-5», «18:46 UTC»."""
+    local = moment.astimezone(chat_timezone())
+    minutes = int(local.utcoffset().total_seconds() // 60)
+    hours, rest = divmod(abs(minutes), 60)
+    offset = ("-" if minutes < 0 else "+") + str(hours) + (f":{rest:02d}" if rest else "")
+    return f"{local:{pattern}} UTC{offset if minutes else ''}"
+
+
+def incident_link(incident_id: str) -> Keyboard:
+    """A «Ver incidente» button to the RC-2 console when CONSOLE_PUBLIC_URL is set."""
+    base = os.environ.get("CONSOLE_PUBLIC_URL", "").strip()
+    if not base:
+        return []
+    url = f"{base.rstrip('/')}/incidentes/{quote(incident_id, safe='')}"
+    return [[{"text": "Ver incidente", "url": url}]]
+
+
+def asks_decision(keyboard: Keyboard | None) -> bool:
+    """Whether a keyboard still offers decision buttons (a link alone decides nothing)."""
+    return any("callback_data" in button for row in keyboard or [] for button in row)
 
 
 class DeliveryError(Exception):
@@ -162,12 +195,15 @@ class ChatStore:
         return removed is not None
 
     async def deliver_next(
-        self, send: Callable[[int, str, Keyboard | None], Awaitable[None]]
+        self,
+        send: Callable[[int, str, Keyboard | None], Awaitable[int | None]],
+        edit: Callable[[int, int, str, Keyboard | None], Awaitable[None]],
     ) -> bool:
         """Send the oldest due message of one chat; False when nothing is due.
 
-        The row stays locked until the send is recorded, so two gateways never send it twice.
-        A gateway killed between the send and the commit sends it again (at least once).
+        `send` returns the chat's id for the new message, which a later edit needs. The row stays
+        locked until the send is recorded, so two gateways never send it twice. A gateway killed
+        between the send and the commit sends it again (at least once).
         """
         async with self.database.transaction() as session:
             row = (
@@ -199,15 +235,25 @@ class ChatStore:
                 return True
             if len(body) > MAX_TEXT:
                 body = body[:MAX_TEXT] + "… (texto completo en la consola)"
+            sent_as, skipped = None, None
             try:
-                await send(row["chat_id"], body, keyboard)
+                if row["kind"] not in EDITS:
+                    sent_as = await send(row["chat_id"], body, keyboard)
+                elif asks_decision(keyboard) and not row["payload"].get("refused"):
+                    skipped = "still pending"
+                elif (target := await _edit_target(session, row["payload"])) is None:
+                    # Its message was never sent (dropped or unlinked): there is nothing to edit.
+                    skipped = "nothing to edit"
+                else:
+                    await edit(row["chat_id"], target, body, keyboard)
             except DeliveryError as error:
                 await self._failed(session, row, error)
                 return True
             await session.execute(
                 text("""UPDATE incident.chat_outbox SET sent_at = clock_timestamp(),
-                    attempts = attempts + 1, last_error = NULL WHERE message_id = :message_id"""),
-                {"message_id": row["message_id"]},
+                    attempts = attempts + 1, last_error = :skipped,
+                    telegram_message_id = :sent_as WHERE message_id = :message_id"""),
+                {"message_id": row["message_id"], "sent_as": sent_as, "skipped": skipped},
             )
             return True
 
@@ -228,6 +274,13 @@ class ChatStore:
                 "message_id": row["message_id"],
             },
         )
+
+
+async def _edit_target(session: AsyncSession, payload: Mapping[str, Any]) -> int | None:
+    return await session.scalar(
+        text("SELECT telegram_message_id FROM incident.chat_outbox WHERE message_id = :target"),
+        {"target": payload["target"]},
+    )
 
 
 async def _incident_label(session: AsyncSession, payload: Mapping[str, Any]) -> str:
@@ -308,6 +361,14 @@ DECISION_MARKER = "🟠"
 RISKS = {"low": "bajo", "medium": "medio", "high": "alto"}
 OUTCOMES = {"approve": "Aprobada", "reject": "Rechazada", "request_changes": "Devuelta"}
 RELINK = "Para decidir desde aquí, vuelve a vincular este chat a tu usuario."
+CHANGED = "El incidente cambió desde este mensaje: te envío la propuesta actualizada."
+# Why an approval sent from the chat was not applied (gateway/execution.py, #722): nothing moved.
+REFUSALS = {
+    "precondition_failed": "el ejecutor ya no ofrece la operación como se propuso",
+    "operation_not_authorized": "el agente no tiene permiso para ejecutar esta operación",
+    "executor_unavailable": "el ejecutor no está configurado o no respondió",
+    "execution_failed": "el ejecutor respondió con un fallo",
+}
 
 
 async def mitigation_decision(
@@ -337,7 +398,7 @@ async def mitigation_decision(
             )
         ).one_or_none()
         if change is not None:
-            when = change.occurred_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+            when = clock(change.occurred_at)
             lines.append(f"Cambio sospechoso: despliegue {change.version or ''} ({when})")
     lines.append(f"Propuesta: {strategy.get('description') or 'detalle en la consola'}")
     if strategy.get("risk") in RISKS:
@@ -348,17 +409,18 @@ async def mitigation_decision(
         lines.append(
             f"Detalle: el ejecutor aplica {operation['operation']} en {operation['service']}"
         )
+    link = incident_link(payload["incident_id"]) or None
     if (
         strategy.get("mitigation_id") == payload["mitigation_id"]
         and strategy.get("approval_status") == "pending"
     ):
         if payload.get("principal_id") is None:
-            # Linked before #767: no human to decide as, so no buttons.
-            return "\n".join([*lines, RELINK]), None
+            # Linked before #767: no human to decide as, so no decision buttons.
+            return "\n".join([*lines, RELINK]), link
         token = payload["token"]
         buttons = [{"text": "Aprobar", "callback_data": f"a:{token}"}]
         buttons.append({"text": "Rechazar", "callback_data": f"r:{token}"})
-        return "\n".join(lines), [buttons]
+        return "\n".join(lines), [buttons, *(link or [])]
     # The first decision after this proposal is the one on it.
     decided = (
         await session.execute(
@@ -374,14 +436,67 @@ async def mitigation_decision(
     # Decided: the amber marker goes, since nothing waits for a human any more.
     lines[0] = f"Decisión tomada: {payload['incident_id']}"
     if decided is None:
-        return "\n".join([*lines, "Esta propuesta ya no está pendiente."]), None
+        return "\n".join([*lines, "Esta propuesta ya no está pendiente."]), link
     decision, actor = decided.document, decided.document.get("actor_reference") or {}
     who = decided.display_name or actor.get("principal_id")
     where = "Telegram" if decision.get("channel") == "telegram" else "la consola"
-    when = datetime.fromisoformat(decision["decided_at"]).astimezone(UTC)
+    when = datetime.fromisoformat(decision["decided_at"])
     outcome = OUTCOMES.get(decision.get("outcome"), "Decidida")
-    lines.append(f"{outcome} por {who} desde {where}, {when:%Y-%m-%d %H:%M UTC}.")
-    return "\n".join(lines), None
+    lines.append(f"{outcome} por {who} desde {where}, {clock(when)}.")
+    if decision.get("outcome") == "approve":
+        mine = actor.get("principal_id") == payload.get("principal_id")
+        see = "ver incidente" if link else "ver la consola"
+        lines += await _verification(session, payload["incident_id"], when, mine, see)
+    return "\n".join(lines), link
+
+
+async def _verification(
+    session: AsyncSession, incident_id: str, approved_at: datetime, mine: bool, see: str
+) -> list[str]:
+    """How the approved mitigation ended: the first stability check after it (#723)."""
+    checked = (
+        await session.execute(
+            text("""SELECT document ->> 'transition_id' AS transition_id, decided_at
+                FROM incident.decisions
+                WHERE incident_id = :incident_id AND decided_at >= :approved_at
+                  AND document ->> 'transition_id' IN ('verification_passed', 'verification_failed')
+                ORDER BY decided_at LIMIT 1"""),
+            {"incident_id": incident_id, "approved_at": approved_at},
+        )
+    ).one_or_none()
+    if checked is None:
+        return []
+    at = clock(checked.decided_at, "%H:%M")
+    if checked.transition_id == "verification_failed":
+        return [f"La verificación falló a las {at}: el incidente vuelve a investigarse."]
+    seconds = round((checked.decided_at - approved_at).total_seconds())
+    after = f"{seconds} s" if seconds < 120 else f"{round(seconds / 60)} min"
+    which = "que aprobaste" if mine else "aprobada"
+    return [f"Resuelto a las {at} · {after} tras la mitigación {which} · {see}."]
+
+
+async def _decision_update(
+    session: AsyncSession, payload: Mapping[str, Any]
+) -> tuple[str, Keyboard | None]:
+    """The decision message as it reads now, to replace the one the chat has; after a tap that
+    decided nothing, why (`refused`, keeping the buttons) or that a fresh proposal follows."""
+    target = await session.scalar(
+        text("SELECT payload FROM incident.chat_outbox WHERE message_id = :target"),
+        {"target": payload["target"]},
+    )
+    message, keyboard = await mitigation_decision(session, target)
+    if not asks_decision(keyboard):
+        return message, keyboard
+    lines = message.splitlines()
+    if payload.get("stale"):
+        lines[0] = f"Propuesta desactualizada: {target['incident_id']}"
+        link = [row for row in keyboard or [] if not asks_decision([row])] or None
+        return "\n".join([*lines, CHANGED]), link
+    if code := payload.get("refused"):
+        at = clock(datetime.fromisoformat(payload["at"]), "%H:%M")
+        reason = REFUSALS.get(code, "no se pudo aplicar")
+        lines.append(f"Tu aprobación no se aplicó a las {at}: {reason} ({code}).")
+    return "\n".join(lines), keyboard
 
 
 def _split(rendered: Rendered) -> tuple[str, Keyboard | None]:
@@ -397,6 +512,7 @@ def _fixed(message: str) -> Callable[[AsyncSession, Mapping[str, Any]], Awaitabl
 
 RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[Rendered]]] = {
     "daily_digest": render_digest,
+    "decision_update": _decision_update,
     "mitigation_decision": mitigation_decision,
     "investigation_ack": _investigation_ack,
     "investigation_conclusion": _investigation_conclusion,
@@ -408,3 +524,4 @@ RENDERERS: dict[str, Callable[[AsyncSession, Mapping[str, Any]], Awaitable[Rende
     "link_private_only": _fixed("Solo se vincula un chat privado con el bot. Abre el enlace ahí."),
     "not_linked": _fixed("Este chat no está vinculado. Ábrelo con un enlace de vinculación."),
 }
+EDITS = frozenset({"decision_update"})

@@ -1,0 +1,11 @@
+# The deploy-executor's catalog in the Telegram E2E (#722, scripts/run_telegram_e2e.sh): the same
+# sre-checkout entry as agent/executor/catalog.v1.yaml, but in the E2E's own Compose project, so
+# a rollback never touches an otel-demo another stack or the operator may be running.
+schema_version: "v1"
+defaults:
+  compose_project: self
+services:
+  - service: sre-checkout
+    compose_service: sre-checkout
+    image_repository: demo/checkout
+    operations: [deployment.rollback, deployment.restart]
