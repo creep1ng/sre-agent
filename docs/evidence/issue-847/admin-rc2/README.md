@@ -78,3 +78,14 @@ twice in a row. The journey publishes a collection from the console (a document 
 sending; three headings make three chunks), reads its content, is refused a search without a grant, grants
 `bok.search` on the exact version in Permissions, and the search finds the published text.
 Screenshots: `09-conocimiento.png` (es, dark) and `15-knowledge-light.png` (en, light).
+
+## After the rebase onto main and the maintainer's feedback (2026-11-03)
+
+Stack rebased onto `main` `7413c94d`. On the top (layer 16), local Docker Compose worktree stack:
+- RC-2 console suite (`incident-console-e2e`, `ADMIN_REAL=1`): 36 passed, 21 skipped (opt-in journeys), 0 failed.
+- `admin.spec.ts` + `shell.spec.ts` with the follow-ups: 10 passed. They cover aligned form fields, the Skill owner as the connected identity, a `.zip` of runbooks published as a collection, and a Skill `.zip` filling its form.
+- #722 grant journey through `/app/admin/permisos`: 3 passed, three runs in a row after scoping its "nothing else" check to `sre-checkout`. Since #724 `provision_demo.py` also grants `flag.set` on `payment` and `checkout`, so the unscoped check failed on `main` too. One earlier run failed once in the second case and did not repeat.
+- Previous console, static suites: 104 passed, 33 skipped, 1 failed. The failure was `console-shell` Back/Forward navigation under load; it passed 3 of 3 when repeated alone and does not touch administration.
+- Python checks on the BoK layers over the new `main`: ruff, format and import contracts clean; 121 passed.
+
+New screenshots: `08a-skill-formulario.png` and `10a-conocimiento-formulario.png` (forms after an upload) and `10-conocimiento-zip.png`.
