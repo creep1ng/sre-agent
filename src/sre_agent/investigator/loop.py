@@ -18,6 +18,7 @@ from uuid import UUID
 from sre_agent.investigator.contract import (
     UNMEASURED,
     CollectedEvidence,
+    Conclude,
     FailureDiagnostic,
     InvalidOutput,
     InvestigationRequest,
@@ -35,11 +36,13 @@ from sre_agent.investigator.contract import (
     ToolInvocation,
     Turn,
     UseTool,
+    VerifyMitigation,
     operation_problem,
     parse_action,
     task_id_for,
     unfounded_citations,
     unknown_references,
+    unmeasured_verdict,
 )
 from sre_agent.investigator.ports import (
     BoKFragment,
@@ -68,6 +71,14 @@ UNREADABLE = {
     "es": "No se pudo leer el catálogo del deploy-executor: la mitigación la decide una persona.",
     "en": "The deploy-executor's catalog could not be read: a person decides the mitigation.",
 }
+
+
+# What the model is told when a verification (#723) does not end as one must.
+VERIFICATION_ENDS = "a verification ends only with verify_mitigation or request_human"
+UNMEASURED_VERDICT = (
+    "cite evidence measured in this verification: what the investigation measured shows the "
+    "service before the mitigation ran, and a query with no data shows nothing"
+)
 
 
 class InvalidOperation(InvalidOutput):
@@ -317,9 +328,16 @@ async def investigate(
             action = parse_action(reply.text)
             if isinstance(action, SearchBoK) and not request.bok_collections():
                 raise InvalidOutput("search_bok is not offered in this run")
+            verifying = request.objective == "verify"
+            if verifying and isinstance(action, ProposeHypothesis | ProposeMitigation | Conclude):
+                raise InvalidOutput(VERIFICATION_ENDS)
+            if not verifying and isinstance(action, VerifyMitigation):
+                raise InvalidOutput("verify_mitigation is only valid in a verification")
             unknown = unknown_references(action, request, {item.evidence_id for item in evidence})
             if unknown:
                 raise InvalidOutput("unknown references: " + ", ".join(unknown))
+            if unmeasured_verdict(action, evidence[len(recalled) :]):
+                raise InvalidOutput(UNMEASURED_VERDICT)
             if unfounded := unfounded_citations(action, request, evidence):
                 # Empty or BoK evidence alone never supports a hypothesis: the model is told why.
                 cited = ", ".join(unfounded)
