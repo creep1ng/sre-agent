@@ -2,12 +2,12 @@
 narrative of a resolved incident from what the incident recorded.
 
 The model writes four sections: what happened, the probable cause, what we did and how we
-verified. Everything else in the draft (the declared impact, the timeline, the cited actions,
-their times, the title) comes from the record (`incident/postmortem_draft.py`). The reply is
-untrusted: one JSON object with exactly those keys, each one paragraph of plain text, with control
-and invisible formatting characters stripped. Anything else is no narrative, and the caller keeps
-the draft composed from the record. The text is served only behind run.read_context
-(GET …/postmortem) and rendered as text, never as HTML.
+verified, from the facts the incident recorded (`incident/postmortem_draft.facts`). Everything
+else in the draft (the declared impact, the timeline, the cited actions, their times, the title)
+comes from the record too. The reply is untrusted: one JSON object with exactly those keys, each
+one paragraph of plain text, with control and invisible formatting characters stripped.
+Anything else is no narrative, and the caller keeps the draft composed from the record. The text
+is served only behind run.read_context (GET …/postmortem) and rendered as text, never as HTML.
 """
 
 from __future__ import annotations
@@ -15,18 +15,15 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from secrets import token_hex
 from typing import Any
 
-from sre_agent.incident.persistence import RunEvent
-from sre_agent.incident.projections import TRANSITION_SUMMARIES, event_summary
 from sre_agent.investigator.contract import OutputLanguage, task_id_for
 from sre_agent.investigator.ports import Gateway
 
 SECTIONS = ("what_happened", "probable_cause", "what_we_did", "how_we_verified")
 MAX_SECTION = 1500
-MAX_FACT = 600
 MAX_INPUT = 32_000
 LANGUAGES = {"es": "Spanish", "en": "English"}
 # C0 and C1 controls, zero-width characters and bidirectional overrides.
@@ -43,48 +40,6 @@ HTML, no times, no ids, no title):
 what_happened: what failed, where and for whom. probable_cause: the cause the investigation
 supported, how it reached the service and how sure it is. what_we_did: the action a person
 approved and what it ran. how_we_verified: the check and its verdict."""
-
-
-def _cut(value: Any) -> str | None:
-    return value.strip()[:MAX_FACT] if isinstance(value, str) and value.strip() else None
-
-
-def _mapping(value: Any) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
-
-
-def facts(state: Mapping[str, Any], events: Sequence[RunEvent]) -> dict[str, Any]:
-    """What the model may use: the alert, the impact, the last hypothesis, the measured
-    evidence, the approved plan with what it ran, the check, and the state changes in order."""
-    alert = _mapping(state.get("alert"))
-    hypotheses = [item for item in state.get("hypotheses") or () if isinstance(item, Mapping)]
-    strategy = _mapping(state.get("mitigation_strategy"))
-    ran = _mapping(strategy.get("execution"))
-    evidence = [_mapping(item) for item in state.get("evidence") or ()]
-    moved = [e for e in events if _mapping(e.payload).get("transition_id") in TRANSITION_SUMMARIES]
-    changes = sorted(moved, key=lambda event: (event.occurred_at, event.sequence))
-    operation = strategy.get("operation")
-    return {
-        "alert": {key: _cut(alert.get(key)) for key in ("service", "severity", "summary")},
-        "impact": _cut(state.get("impact")),
-        "hypothesis": _cut(hypotheses[-1].get("statement")) if hypotheses else None,
-        "evidence": [
-            {
-                "source": _cut(item.get("tool") or item.get("source")),
-                "finding": _cut(item.get("finding") or item.get("summary")),
-            }
-            for item in evidence[-12:]
-        ],
-        "mitigation": {
-            "plan": _cut(strategy.get("description")),
-            "operation": operation if isinstance(operation, Mapping) else None,
-            "ran": {key: _cut(ran.get(key)) for key in ("outcome", "before_image", "after_image")}
-            if ran
-            else None,
-            "verification_check": _cut(strategy.get("verification_check")),
-        },
-        "state_changes": [event_summary(event.payload) for event in changes],
-    }
 
 
 def parse(text: str) -> dict[str, str] | None:
@@ -112,8 +67,7 @@ async def narrate(
     *,
     incident_id: str,
     run_id: str,
-    state: Mapping[str, Any],
-    events: Sequence[RunEvent],
+    facts: Mapping[str, Any],
     language: OutputLanguage,
     seconds: float,
 ) -> dict[str, str] | None:
@@ -122,7 +76,7 @@ async def narrate(
         (
             INSTRUCTIONS.replace("LANGUAGE", LANGUAGES[language]),
             "Objective: postmortem",
-            "Facts: " + json.dumps(facts(state, events), ensure_ascii=False),
+            "Facts: " + json.dumps(facts, ensure_ascii=False),
         )
     )[:MAX_INPUT]
     task_id = task_id_for(f"turn_{token_hex(8)}")

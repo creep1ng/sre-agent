@@ -26,7 +26,7 @@ from sre_agent.incident.persistence import (
     verification_dispatch,
 )
 from sre_agent.incident.postmortem import validate_content
-from sre_agent.incident.postmortem_draft import RECORD_AUTHOR, compose
+from sre_agent.incident.postmortem_draft import RECORD_AUTHOR, compose, facts
 from sre_agent.incident.runtime import (
     ActorReference,
     IncidentCommand,
@@ -217,8 +217,7 @@ class InvestigationRunDispatcher:
                     self.gateway,
                     incident_id=incident_id,
                     run_id=started.run.run_id,
-                    state=incident.state,
-                    events=events,
+                    facts=facts(incident.state, events),
                     language=self.language,
                     seconds=min(self.gateway_settings.timeout_seconds, POSTMORTEM_SECONDS),
                 )
