@@ -244,7 +244,7 @@ Failure modes, written before the code:
 - **The catalog trusts the alert's service name.** `checkout` and `payment` are the store's names
   only in this catalog; locally they stay unenrolled (`catalog.v1.yaml`), as decided in #751.
 - **The contract file stays 1.0.0.** `schemas/executor/1.0.0` does not describe `flag.set` yet:
-  publishing it as 1.1.0 is pending (decision for the maintainer).
+  publishing it as 1.1.0 comes after the 2026-11-04 demo (maintainer decision of 2026-11-03).
 
 ## Levels of autonomy
 
