@@ -1,4 +1,4 @@
-import { ExternalLinkIcon, InboxIcon, LandmarkIcon, SearchIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
+import { InboxIcon, KeyRoundIcon, SearchIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { NavLink } from "react-router";
 import { AgentAvatar, BrandMark, Logo } from "@/components/brand";
@@ -14,6 +14,11 @@ import { AccountMenu } from "./account-menu";
 import { FoldButton } from "./fold-button";
 
 export const SIDEBAR_ID = "console-sidebar";
+
+/** The administration plane, in the order an operator sets Midnight up. */
+export const ADMIN_NAV = [
+  { to: "/admin/identidades", icon: KeyRoundIcon, label: "nav.identities" },
+] as const;
 
 const ITEM =
   "group relative flex h-10 items-center gap-3 rounded-lg px-3 text-base font-medium text-muted-foreground transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
@@ -129,8 +134,9 @@ export function Sidebar({
   onFoldedChange?: (folded: boolean) => void;
 }) {
   const t = useT("shell");
+  const admin = useT("admin");
   return (
-    <div className={cn("flex h-full flex-col gap-6 p-4", folded && "items-stretch px-3")}>
+    <div className={cn("flex h-full flex-col gap-6 overflow-y-auto p-4", folded && "items-stretch px-3")}>
       <div className={cn("flex items-center gap-2 pt-1", folded ? "flex-col" : "justify-between pl-2")}>
         {folded ? <BrandMark className="size-6 text-[var(--mark)]" /> : <Logo />}
         {onFoldedChange && (
@@ -173,23 +179,14 @@ export function Sidebar({
         <NavItem to="/acciones" icon={ShieldCheckIcon} label={t("nav.actions")} folded={folded} />
       </nav>
 
-      {/* The administration console still lives outside the new console: one link, a new tab. */}
-      <div className="mt-2 border-t border-sidebar-border pt-3">
-        <nav aria-label={t("nav.admin")}>
-          <RailTip folded={folded} label={t("nav.governance")}>
-            <a
-              href="/public/admin/principals.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(ITEM, folded && "justify-center px-0")}
-            >
-              <LandmarkIcon className="size-4 shrink-0" aria-hidden="true" />
-              <span className={cn("flex-1", folded && "sr-only")}>{t("nav.governance")}</span>
-              {!folded && <ExternalLinkIcon className="size-3.5 text-muted-foreground" aria-hidden="true" />}
-            </a>
-          </RailTip>
-        </nav>
-      </div>
+      <nav className="flex flex-col gap-1 border-t border-sidebar-border pt-4" aria-label={t("nav.admin")}>
+        {!folded && (
+          <span className="px-3 pb-1 font-mono text-[11px] tracking-[.08em] text-muted-foreground uppercase">{t("nav.admin")}</span>
+        )}
+        {ADMIN_NAV.map((item) => (
+          <NavItem key={item.to} to={item.to} icon={item.icon} label={admin(item.label)} folded={folded} />
+        ))}
+      </nav>
 
       <div className="mt-auto flex flex-col gap-3">
         <AgentPresence inbox={inbox} folded={folded} />

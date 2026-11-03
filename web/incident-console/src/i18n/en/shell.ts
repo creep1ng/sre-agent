@@ -7,7 +7,6 @@ export default {
   "nav.incidents": "Incidents",
   "nav.actions": "Actions",
   "nav.admin": "Administration",
-  "nav.governance": "AI governance",
   "nav.sections": "Console sections",
   "nav.title": "Navigation",
   "nav.fold": "Collapse navigation",

@@ -9,6 +9,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useT } from "@/i18n";
+import { ADMIN_NAV } from "./sidebar";
 import { appMode } from "@/lib/mode";
 import { incidentStatus } from "@/lib/status";
 import { useStore } from "@/lib/store";
@@ -17,6 +18,7 @@ import { SEVERITY } from "@/lib/vocabulary";
 export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
   const t = useT("shell");
+  const admin = useT("admin");
   const storeIncidents = useStore((s) => s.incidents);
   const alerts = useStore((s) => s.alerts);
   // Seeded alerts and incidents belong to the simulator, not to the live console.
@@ -46,6 +48,13 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
           <CommandItem onSelect={() => go("/acciones")}>
             <ShieldCheckIcon /> {t("nav.actions")}
           </CommandItem>
+        </CommandGroup>
+        <CommandGroup heading={t("nav.admin")}>
+          {ADMIN_NAV.map(({ to, icon: Icon, label }) => (
+            <CommandItem key={to} onSelect={() => go(to)}>
+              <Icon /> {admin(label)}
+            </CommandItem>
+          ))}
         </CommandGroup>
         {newAlerts.length > 0 && (
           <CommandGroup heading="Alertas nuevas">
