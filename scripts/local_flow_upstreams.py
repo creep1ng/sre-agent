@@ -62,15 +62,21 @@ def _errors_query(service: str, window: str = "5m") -> dict:
     return {"action": "use_tool", "tool": "query_prometheus", "arguments": query}
 
 
-def verify(service: str, collected: list[dict], since: str | None = None) -> dict:
-    """A verification (#723): measure the service now, from `since` when it is given, then judge
-    from what that query returned."""
+def verify(
+    service: str, collected: list[dict], windowed: bool = False, elapsed: int | None = None
+) -> dict:
+    """A verification (#723): measure the service now, over the seconds since the execution when
+    its prompt asks for that window, then judge from what that query returned. Like the real model
+    on 2026-11-03, it has no clock of its own: without the state's seconds_since_execution it
+    cannot size that window and asks for a person."""
     measured = [item for item in collected if not item.get("empty")]
     if not measured:
-        if since is None:
+        if not windowed:
             return _errors_query(service)
-        elapsed = datetime.now(UTC) - datetime.fromisoformat(since.replace("Z", "+00:00"))
-        return _errors_query(service, f"{max(int(elapsed.total_seconds()), 1)}s")
+        if elapsed is None:
+            reason = "No tengo la hora actual para medir solo después de la ejecución."
+            return {"action": "request_human", "reason": reason}
+        return _errors_query(service, f"{max(elapsed, 1)}s")
     values = [
         float(sample["value"][1])
         for item in measured
@@ -173,8 +179,7 @@ def decide(state: dict, rejected: set[str] = frozenset(), windowed: bool = False
     incident, collected = state["incident"], state["collected_evidence"]
     service = incident["alert"].get("service") or "sre-checkout"
     if state["objective"] == "verify":
-        ran = (state.get("mitigation") or {}).get("execution") or {}
-        return verify(service, collected, ran.get("executed_at") if windowed else None)
+        return verify(service, collected, windowed, state.get("seconds_since_execution"))
     # A flag that ran and still failed its verification (#710) is no candidate either.
     failed = state.get("failed_mitigations") or []
     ran = {((item.get("operation") or {}).get("parameters") or {}).get("flag") for item in failed}

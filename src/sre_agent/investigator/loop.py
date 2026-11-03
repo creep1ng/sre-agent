@@ -287,7 +287,15 @@ async def investigate(
     while len(turns) < budget:
         turn_id = new_id("turn")
         prompt = assemble(
-            request, evidence, turns, budget - len(turns), feedback, loaded, language, refused
+            request,
+            evidence,
+            turns,
+            budget - len(turns),
+            feedback,
+            loaded,
+            language,
+            refused,
+            clock(),
         )
         if len(prompt) > MAX_INPUT:
             return finish("needs_human", detail="assembled input exceeds the gateway limit")
