@@ -5,6 +5,9 @@ services:
     ports: !reset []
   api:
     ports: !reset []
+    # The old console's suites open a resolved incident's postmortem by hand (#711).
+    environment:
+      POSTMORTEM_DRAFT: "off"
   web:
     ports: !reset []
     # The old console's browser suites still open its / and its alerts, triage and war room (#870).
