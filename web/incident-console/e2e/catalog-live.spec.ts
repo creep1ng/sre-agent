@@ -104,7 +104,9 @@ test.describe("catálogo de acciones RC-2 contra la API real", () => {
     await page.getByRole("dialog").getByRole("button", { name: "Conectar", exact: true }).click();
     await expect(page.getByRole("heading", { level: 2, name: PLAN })).toBeVisible({ timeout: 120_000 });
     await page.getByRole("button", { name: "Aprobar" }).click();
-    await expect(page.getByRole("region", { name: "Propuesta de mitigación" })).toContainText(/Aprobada/, { timeout: 90_000 });
+    // The card says it, or once the RC-2 feedback (#928) is in, «Decisiones tomadas» takes it in.
+    const decided = page.getByRole("region", { name: /^(Propuesta de mitigación|Decisiones tomadas)$/ });
+    await expect(decided.filter({ hasText: /Aprobada/ })).toHaveCount(1, { timeout: 90_000 });
     await expect.poll(async () => (await api(`/incidents/${incident}`)).body.state, { timeout: 90_000 }).toBe("verifying");
 
     await page.getByRole("complementary").getByRole("link", { name: "Acciones" }).click();
