@@ -163,6 +163,34 @@ export interface Alerts {
   resolved?: Alert[];
 }
 
+/** One cited moment of a postmortem: the stored event that confirms it. */
+export interface Cited {
+  event_id: string;
+  description: string;
+}
+
+/** The postmortem's sections (#335, #43). */
+export interface PostmortemContent {
+  summary: string;
+  impact: string;
+  timeline: Cited[];
+  cause: { statement: string; certainty: "confirmed" | "probable" | "hypothesis" | "unknown" };
+  strategy: string;
+  actions_taken: Cited[];
+  verification: string;
+  pending: string[];
+  unknowns: string[];
+}
+
+/** GET …/postmortem: its text only with run.read_context. */
+export interface Postmortem {
+  postmortem_id: string;
+  version: number;
+  review: { status: "pending" | "approved" | "changes_requested"; reviewed_version: number | null; reviewer_id: string | null; reviewed_at: string | null };
+  content_included: boolean;
+  content?: PostmortemContent;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -221,6 +249,8 @@ const isPage = (body: unknown): body is EventPage =>
 const isContext = (body: unknown): body is { reasoning: Reasoning } =>
   isObject(body) && isObject(body.reasoning) && Array.isArray(body.reasoning.hypotheses) && Array.isArray(body.reasoning.evidence);
 const isAlerts = (body: unknown): body is Alerts => isObject(body) && Array.isArray(body.alerts);
+const isPostmortem = (body: unknown): body is Postmortem =>
+  isObject(body) && typeof body.version === "number" && isObject(body.review) && typeof body.content_included === "boolean";
 const isChanges = (body: unknown): body is { changes: ChangeEvent[] } => isObject(body) && Array.isArray(body.changes);
 const isCatalog = (body: unknown): body is ActionCatalog =>
   isObject(body) && typeof body.executor_status === "string" && Array.isArray(body.services);
@@ -244,6 +274,11 @@ export const incidentApi = {
   whoami: (token: string, signal: AbortSignal) =>
     call(token, "/whoami", signal, (body): body is { principal_id: string } => isObject(body) && typeof body.principal_id === "string"),
   catalog: (token: string, signal: AbortSignal) => call(token, "/action-catalog", signal, isCatalog),
+  /** The incident's postmortem; `missing` until one is written. */
+  postmortem: (token: string, id: string, signal: AbortSignal) => call(token, `${at(id)}/postmortem`, signal, isPostmortem),
+  /** A human review of one postmortem version (#335). */
+  review: (token: string, id: string, version: number, key: string, signal: AbortSignal) =>
+    call(token, `${at(id)}/postmortem/reviews`, signal, isPostmortem, { body: { version, outcome: "approved" }, key }),
   /** A governed human command on a run (approve_mitigation, reject_mitigation); the key replays one submission. */
   command: (token: string, id: string, run: string, body: unknown, key: string, signal: AbortSignal) =>
     call(token, `${at(id)}/runs/${encodeURIComponent(run)}/commands`, signal, isRun, { body, key }),

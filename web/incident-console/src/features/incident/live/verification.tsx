@@ -52,7 +52,7 @@ export function verificationOf(live: LiveIncident, story: StoryEntry[]): Verific
 }
 
 /** "95 s", "4 min", "2 h": how long the signal took to recover. */
-function span(ms: number): string {
+export function span(ms: number): string {
   const seconds = Math.round(ms / 1000);
   if (seconds < 120) return `${seconds} s`;
   if (seconds < 7200) return `${Math.round(seconds / 60)} min`;

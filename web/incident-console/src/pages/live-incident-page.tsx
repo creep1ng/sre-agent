@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { Decisions, decisionsOf } from "@/features/incident/live/decisions";
 import { HypothesisProse } from "@/features/incident/live/hypothesis";
+import { ClosingSummary, PostmortemDraft } from "@/features/incident/live/postmortem";
 import { Proposal, operationCall } from "@/features/incident/live/proposal";
 import { Prose, Stamp } from "@/features/incident/live/say";
 import { PHASES, agentStatus, phaseOf, phaseTimes, type AgentStatus } from "@/features/incident/live/status";
@@ -112,7 +113,10 @@ export function LiveIncidentPage() {
   // An executed mitigation waits for a verdict (#710): the agent's verification, else yours.
   const verdict = detail.state === "verifying" && Boolean(mitigation?.execution);
   const verifyingRun = live.runs.findLast((run) => run.current_state === "verifying");
-  const waiting = status.kind === "waiting" || verdict;
+  // The agent's draft waits for a person to approve it and close (#711).
+  const postmortemRun = live.runs.findLast((run) => run.current_state === "postmortem");
+  const closing = detail.state === "postmortem" && typeof live.postmortem === "object" && Boolean(live.postmortem?.content);
+  const waiting = status.kind === "waiting" || verdict || closing;
   const times = phaseTimes(live.events, phaseOf(detail.state));
   // The report changes with the incident and its runs, never with the page's own polling.
   const updated = Math.max(
@@ -129,7 +133,7 @@ export function LiveIncidentPage() {
             {detail.severity.toUpperCase()}
           </span>
         )}
-        <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${verdict ? "waiting" : status.kind}`)}</span>
+        <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${verdict || closing ? "waiting" : status.kind}`)}</span>
         {times[0] !== null && (
           <span data-meta="declared" className="font-normal text-[var(--dim)]">
             {t("phase.declared")} <Stamp at={times[0]} className="text-[var(--mist)]" />
@@ -152,6 +156,7 @@ export function LiveIncidentPage() {
         </details>
       )}
       <Phases state={detail.state} waiting={waiting} times={times} />
+      {detail.state === "closed" && <ClosingSummary live={live} />}
       <Start live={live} status={status} />
       {live.reasoning === "forbidden" && <p className="mb-8 text-[var(--dim)]">{t("reasoning.forbidden")}</p>}
       {hypothesis && <HypothesisProse hypothesis={hypothesis} claims={claimsOf(live, story)} />}
@@ -186,6 +191,16 @@ export function LiveIncidentPage() {
             basis={reasoning?.hypotheses.find((item) => item.hypothesis_id === mitigation?.based_on_hypothesis) ?? hypothesis}
           />
         </div>
+      )}
+      {["resolved", "postmortem", "closed"].includes(detail.state) && (
+        <PostmortemDraft
+          live={live}
+          story={story}
+          sending={decision.sending !== null}
+          error={decision.error}
+          canDecide={Boolean(decision.me && postmortemRun)}
+          onClose={(version, approved) => postmortemRun && void decision.close(postmortemRun.run_id, version, approved)}
+        />
       )}
       <details className="border-t pt-4 text-sm text-[var(--dim)]">
         <summary className="cursor-pointer">{t("technical")}</summary>

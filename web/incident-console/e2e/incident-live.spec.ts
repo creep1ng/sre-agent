@@ -687,6 +687,75 @@ test.describe("incidente RC-2 contra la API real", () => {
     record.draft = { seconds, timeline: draft!.content.timeline.length, by: draft!.updated_by };
   });
 
+  test("el borrador del agente se lee en secciones; «Aprobar y cerrar» cierra el incidente y el cierre cuenta sus hitos", async ({ browser }) => {
+    // The incident the previous journey resolved: the agent already wrote its draft (#711).
+    const incident = record.stable as string;
+    expect(incident).toBeTruthy();
+    const stages = (page: Page, es: boolean) => page.getByRole("list", { name: es ? "Progreso del incidente" : "Incident progress" }).locator("li");
+    let closer: Page | undefined;
+    for (const language of ["en", "es"] as const) {
+      const es = language === "es";
+      for (const width of [390, 1280]) {
+        const page = await browser.newPage({ viewport: { width, height: 900 } });
+        await open(page, incident, language);
+        const draft = page.getByRole("region", { name: "Postmortem" });
+        await expect(draft.getByRole("heading", { level: 3 })).toHaveText(
+          es ? ["Qué pasó", "Causa probable", "Qué hicimos", "Cómo verificamos", "Cronología", "Lo que no sabemos"] : ["What happened", "Probable cause", "What we did", "How we verified", "Timeline", "What we do not know"],
+        );
+        await expect(draft.locator("dd").first()).toContainText("1.5.0");
+        const moments = draft.getByRole("list", { name: es ? "Cronología" : "Timeline" }).locator("li");
+        expect(await moments.count()).toBeGreaterThanOrEqual(4);
+        for (const moment of await moments.all()) await expect(moment.locator("time")).toHaveText(/^\d{2}:\d{2}$/);
+        await expect(moments.last()).toContainText(es ? "Midnight · Postmortem iniciado" : "Midnight · Postmortem started");
+        expect(await draft.innerText()).not.toMatch(TECHNICAL);
+        await expect(moments.filter({ hasText: /Investigation (started|continued)\.|Mitigation proposed\./ })).toHaveCount(0);
+        // Approving and closing is the decision pending: amber there, on its stage and the status only.
+        await expect(draft.getByRole("button", { name: es ? "Aprobar y cerrar" : "Approve and close" })).toBeVisible();
+        expect(await amberOutsideDecision(page)).toEqual([]);
+        await expect(stages(page, es).nth(4).locator("time")).toHaveText(/^\d{2}:\d{2}$/);
+        await draft.scrollIntoViewIfNeeded();
+        await capture(page, `postmortem-${language}-${width}`, draft);
+        if (es && width === 1280) closer = page;
+        else await page.close();
+      }
+    }
+    const page = closer!;
+    const draft = page.getByRole("region", { name: "Postmortem" });
+    const detail = await read(`/incidents/${incident}`);
+    const reviewed = page.waitForRequest((request) => request.url().endsWith("/postmortem/reviews"));
+    const closed = page.waitForRequest((request) => request.url().includes("/commands") && request.method() === "POST");
+    await draft.getByRole("button", { name: "Aprobar y cerrar" }).click();
+    const review = await reviewed;
+    expect(review.postDataJSON()).toEqual({ version: 1, outcome: "approved" });
+    expect((await review.response())?.status()).toBe(201);
+    const command = await closed;
+    expect(command.postDataJSON()).toMatchObject({ command: "close_incident", expected_incident_version: detail.version, authorization: { action: "run.approve" } });
+    expect((await command.response())?.status()).toBe(202);
+
+    // Closed: the closing summary tells each milestone's time and how long after detection.
+    const closing = page.getByRole("region", { name: "Resumen de cierre" });
+    await expect(closing.locator("li")).toHaveCount(5, { timeout: 30_000 });
+    for (const milestone of ["detected", "declared", "mitigated", "recovered", "closed"]) {
+      await expect(closing.locator(`[data-milestone=${milestone}] time`)).toHaveText(/^\d{2}:\d{2}$/);
+    }
+    await expect(closing.locator("[data-milestone=mitigated]")).toContainText(/\d+ (s|min) tras la detección/);
+    await expect(closing.locator("[data-milestone=recovered]")).toContainText(/\d+ (s|min) tras la detección/);
+    expect((await read(`/incidents/${incident}`)).state).toBe("closed");
+    for (const index of [4, 5]) await expect(stages(page, true).nth(index).locator("time")).toHaveText(/^\d{2}:\d{2}$/);
+    await expect(draft.getByRole("button", { name: "Aprobar y cerrar" })).toHaveCount(0);
+    expect(await page.locator("[data-decision]").count()).toBe(0);
+    await noTechnicalIds(page);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await capture(page, "cierre-es-1280", closing);
+    await capture(page, "cierre-pagina-es");
+    record.closing = await closing.innerText();
+    const english = await browser.newPage({ viewport: { width: 390, height: 900 } });
+    await open(english, incident, "en");
+    const closingEn = english.getByRole("region", { name: "Closing summary" });
+    await expect(closingEn.locator("[data-milestone=mitigated]")).toContainText(/\d+ (s|min) after detection/);
+    await capture(english, "cierre-en-390", closingEn);
+  });
+
   test("un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {
     const incident = await declare("checkout no puede cobrar a payment [e2e:falla]");
     record.retried = incident;
