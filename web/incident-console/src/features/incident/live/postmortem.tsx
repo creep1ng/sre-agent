@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n";
 import type { Cited, Postmortem as PostmortemRecord } from "@/lib/incident-api";
 import type { LiveIncident } from "@/lib/live-incident";
+import { useIncidentTitle } from "@/lib/title";
 import { cn } from "@/lib/utils";
 import { Prose, Stamp, useActorName, useSay } from "./say";
 import { Statement } from "./statement";
@@ -73,6 +74,7 @@ interface PostmortemProps {
  */
 export function PostmortemDraft({ live, story, sending, error, canDecide, onClose }: PostmortemProps) {
   const t = useT("incident");
+  const title = useIncidentTitle();
   const say = useSay();
   const record = live.postmortem;
   const state = live.detail?.state;
@@ -83,7 +85,10 @@ export function PostmortemDraft({ live, story, sending, error, canDecide, onClos
   const approved = (pm: PostmortemRecord) => pm.review.status === "approved" && pm.review.reviewed_version === pm.version;
   return (
     <section aria-label={t("postmortem.label")} className="mb-14 rounded-2xl border px-[30px] py-7">
-      <h2 className="mb-6 font-display text-[30px] leading-[1.1] tracking-[-0.01em]">{t("postmortem.label")}</h2>
+      <h2 className="mb-1.5 font-display text-[30px] leading-[1.1] tracking-[-0.01em]">{t("postmortem.label")}</h2>
+      <p data-title={live.detail?.title ? "agent" : "alert"} className="mb-6 font-display text-xl leading-snug text-[var(--text-2)]">
+        {title(live.detail)}
+      </p>
       {record === "forbidden" || (record && !record.content_included) ? (
         <p className="text-[var(--dim)]">{t("postmortem.restricted")}</p>
       ) : !content ? (
@@ -147,11 +152,15 @@ function milestones(live: LiveIncident): Partial<Record<(typeof MILESTONES)[numb
 /** A closed incident's summary: its milestones in order, each with how long after detection. */
 export function ClosingSummary({ live }: { live: LiveIncident }) {
   const t = useT("incident");
+  const title = useIncidentTitle();
   const times = milestones(live);
   const start = times.detected;
   return (
     <section aria-label={t("closing.label")} className="mb-12">
-      <h2 className="mb-4 font-display text-[26px] leading-[1.1] tracking-[-0.01em]">{t("closing.label")}</h2>
+      <h2 className="mb-1 font-display text-[26px] leading-[1.1] tracking-[-0.01em]">{t("closing.label")}</h2>
+      <p data-title={live.detail?.title ? "agent" : "alert"} className="mb-4 text-[var(--text-2)]">
+        {title(live.detail)}
+      </p>
       <ol aria-label={t("closing.label")} className="grid list-none gap-y-2 p-0 sm:grid-cols-5 sm:gap-x-4">
         {MILESTONES.map((milestone) => {
           const at = times[milestone];

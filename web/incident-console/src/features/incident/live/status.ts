@@ -5,6 +5,8 @@ export type AgentStatus =
   | { kind: "working"; since: number }
   | { kind: "waiting"; run: string; since: number }
   | { kind: "stopped" }
+  | { kind: "resolved" }
+  | { kind: "closed" }
   | { kind: "other" };
 
 /** The triage run stays open in `active`; an investigation run moves past it. */
@@ -20,10 +22,16 @@ export function agentStatus(live: LiveIncident): AgentStatus {
     const first = live.events.find((event) => event.run_id === run?.run_id);
     return { kind: "working", since: first ? Date.parse(first.occurred_at) : Date.now() };
   }
-  if (!run) return state === "active" ? { kind: "idle" } : { kind: "other" };
+  if (!run) return state === "active" ? { kind: "idle" } : settled(state);
   // A denied run stored before #788 waits for `escalate`, which nothing accepts: it stopped.
   if (run.status === "awaiting_human" && run.pending_command !== "escalate") return { kind: "waiting", run: run.run_id, since: Date.parse(run.updated_at) };
-  return state === "investigating" ? { kind: "stopped" } : { kind: "other" };
+  return state === "investigating" ? { kind: "stopped" } : settled(state);
+}
+
+/** A recovered incident says so; nothing waits for anyone, so it is never amber. */
+function settled(state: string): AgentStatus {
+  if (state === "closed") return { kind: "closed" };
+  return state === "resolved" || state === "postmortem" ? { kind: "resolved" } : { kind: "other" };
 }
 
 /** The lifecycle phase each workflow state belongs to. */

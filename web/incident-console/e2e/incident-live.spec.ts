@@ -275,6 +275,10 @@ test.describe("incidente RC-2 contra la API real", () => {
       await connect(inbox, "", language);
       const card = inbox.locator("article[data-decision]", { hasText: AGENT_TITLE });
       await expect(card.getByRole("heading", { level: 3 })).toHaveText(AGENT_TITLE);
+      // The plan's identifiers render as code, never as literal backticks.
+      const words = card.locator("[data-words]");
+      await expect(words.locator("code", { hasText: "checkout" })).toBeVisible();
+      await expect(words).not.toContainText("`");
       await capture(inbox, `titulo-bandeja-${language}`, card);
       await inbox.close();
     }
@@ -521,6 +525,9 @@ test.describe("incidente RC-2 contra la API real", () => {
       authorization: { action: "run.command", resource: { type: "incident_workflow", id: "incident-response" } },
     }, 202);
     await expect(step).toContainText("Tú · Servicio verificado estable", { timeout: 30_000 });
+    // Recovered, it is no longer «en curso»: resolved, or the postmortem's close waiting for you.
+    await expect(page.locator("[data-status]")).toHaveText(/^(Resuelto|espera tu decisión)$/);
+    record.statusAfterVerified = await page.locator("[data-status]").innerText();
     await expect(page.getByRole("list", { name: "Línea de tiempo del incidente" }).getByText("Servicio verificado estable")).toHaveCount(1);
     await step.scrollIntoViewIfNeeded();
     await capture(page, "verificacion-es", step);
@@ -744,6 +751,9 @@ test.describe("incidente RC-2 contra la API real", () => {
           es ? ["Qué pasó", "Causa probable", "Qué hicimos", "Cómo verificamos", "Cronología", "Lo que no sabemos"] : ["What happened", "Probable cause", "What we did", "How we verified", "Timeline", "What we do not know"],
         );
         await expect(draft.locator("dd").first()).toContainText("1.5.0");
+        // The postmortem carries the incident's title, the one the page, the list and Telegram show.
+        await expect(draft.locator("[data-title]")).toHaveText(AGENT_TITLE);
+        await expect(draft.locator("[data-title]")).toHaveAttribute("data-title", "agent");
         const moments = draft.getByRole("list", { name: es ? "Cronología" : "Timeline" }).locator("li");
         expect(await moments.count()).toBeGreaterThanOrEqual(4);
         for (const moment of await moments.all()) await expect(moment.locator("time")).toHaveText(/^\d{2}:\d{2}$/);
@@ -781,6 +791,10 @@ test.describe("incidente RC-2 contra la API real", () => {
     }
     await expect(closing.locator("[data-milestone=mitigated]")).toContainText(/\d+ (s|min) tras la detección/);
     await expect(closing.locator("[data-milestone=recovered]")).toContainText(/\d+ (s|min) tras la detección/);
+    await expect(closing.locator("[data-title]")).toHaveText(AGENT_TITLE);
+    // A closed incident says so, not «en curso», and nothing in it is amber.
+    await expect(page.locator("[data-status]")).toHaveText("Cerrado");
+    await expect(page.locator("[data-status]")).toHaveAttribute("data-status", "closed");
     expect((await read(`/incidents/${incident}`)).state).toBe("closed");
     for (const index of [4, 5]) await expect(stages(page, true).nth(index).locator("time")).toHaveText(/^\d{2}:\d{2}$/);
     await expect(draft.getByRole("button", { name: "Aprobar y cerrar" })).toHaveCount(0);
@@ -789,11 +803,15 @@ test.describe("incidente RC-2 contra la API real", () => {
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(page, "cierre-es-1280", closing);
     await capture(page, "cierre-pagina-es");
+    await capture(page, "estado-cerrado-es", page.locator("article > p").first());
     record.closing = await closing.innerText();
     const english = await browser.newPage({ viewport: { width: 390, height: 900 } });
     await open(english, incident, "en");
     const closingEn = english.getByRole("region", { name: "Closing summary" });
     await expect(closingEn.locator("[data-milestone=mitigated]")).toContainText(/\d+ (s|min) after detection/);
+    await expect(closingEn.locator("[data-title]")).toHaveText(AGENT_TITLE);
+    await expect(english.locator("[data-status]")).toHaveText("Closed");
+    await capture(english, "estado-cerrado-en", english.locator("article > p").first());
     await capture(english, "cierre-en-390", closingEn);
   });
 
