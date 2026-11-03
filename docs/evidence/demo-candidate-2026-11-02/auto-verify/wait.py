@@ -10,7 +10,7 @@ import urllib.request
 
 API, INCIDENT = "http://127.0.0.1:8000/v1", os.environ["INCIDENT_ID"]
 AUTH = {"Authorization": "Bearer " + os.environ["DEMO_HUMAN_API_KEY"]}
-TIMEOUT = float(os.environ.get("WAIT_SECONDS") or 180)
+TIMEOUT = float(os.environ.get("WAIT_SECONDS") or 300)
 
 
 def get(path):
