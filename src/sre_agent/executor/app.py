@@ -32,8 +32,9 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from starlette.background import BackgroundTask
 
-from sre_agent.executor.catalog import OPERATIONS, EnrolledService, load_catalog
+from sre_agent.executor.catalog import DOCKER_OPERATIONS, OPERATIONS, EnrolledService, load_catalog
 from sre_agent.executor.docker import DockerClient, DockerInvalid, DockerTimeout, DockerUnavailable
+from sre_agent.executor.flags import FlagClient
 from sre_agent.executor.operations import ExecutionError, Operations, container_view
 from sre_agent.executor.signature import SIGNATURE_HEADER, TIMESTAMP_HEADER, usable_key, verify
 
@@ -218,8 +219,10 @@ class Executor:
         signing_key: bytes | None,
         signature_window: float,
         record_change: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        flags: FlagClient | None = None,
     ) -> None:
         self._catalog = catalog
+        self._flags = flags
         self._record_change = record_change
         self._operations = operations
         self._journal = journal
@@ -329,6 +332,14 @@ class Executor:
                     outcome, before, after = await self._operations.rollback(
                         service, payload["to_tag"], execution_id, intent
                     )
+                elif operation_name == "flag.set":
+                    if self._flags is None:
+                        raise ExecutionError(
+                            503, "flags_unavailable", "this executor has no flag listener", True
+                        )
+                    outcome, before, after = await self._flags.set(
+                        service, payload["flag"], payload["variant"], intent
+                    )
                 else:
                     outcome, before, after = await self._operations.restart(service, intent)
         except (ExecutionError, DockerTimeout, DockerUnavailable, DockerInvalid) as error:
@@ -381,6 +392,14 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
         float(settings.get("DEPLOY_EXECUTOR_SETTLE_SECONDS", "30")),
     )
     signing_key = usable_key(settings.get("DEPLOY_EXECUTOR_SIGNING_KEY"))
+    # The OTel demo's flag listener (#724), reached through connect-mcp's link; flag.set only.
+    flags = FlagClient(
+        client,
+        settings.get("DEPLOY_EXECUTOR_FLAGS_URL"),
+        settings.get("DEPLOY_EXECUTOR_FLAGS_TOKEN"),
+    )
+    uses_docker = any(service.operations & DOCKER_OPERATIONS for service in catalog.values())
+    uses_flags = any(service.flags for service in catalog.values())
     changes_url = settings.get("DEPLOY_EXECUTOR_CHANGES_URL", "").rstrip("/")
     changes_key = settings.get("DEPLOY_EXECUTOR_CHANGES_API_KEY", "")
 
@@ -405,6 +424,7 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
         signing_key,
         float(settings.get("DEPLOY_EXECUTOR_SIGNATURE_WINDOW_SECONDS", "300")),
         record_change if changes_url and changes_key else None,
+        flags,
     )
 
     @asynccontextmanager
@@ -427,11 +447,17 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
         if journal.problem is not None:  # fail closed without a restart loop (#762)
             body = {"status": "unavailable", "dependency": "journal", "reason": journal.problem[1]}
             return JSONResponse(body, status_code=503)
-        try:
-            await docker.ping()
-        except Exception:  # the answer names the dependency, never the transport error
-            return JSONResponse({"status": "unavailable", "dependency": "docker"}, status_code=503)
-        return JSONResponse({"status": "ok", "dependency": "docker"})
+        # Only what the catalog acts through: the EC2 catalog has no container, so no Docker.
+        checks = [("docker", docker.ping)] if uses_docker else []
+        checks += [("flags", flags.variants)] if uses_flags else []
+        for dependency, check in checks:
+            try:
+                await check()
+            except Exception:  # the answer names the dependency, never the transport error
+                body = {"status": "unavailable", "dependency": dependency}
+                return JSONResponse(body, status_code=503)
+        names = ",".join(name for name, _ in checks) or "none"
+        return JSONResponse({"status": "ok", "dependency": names})
 
     @app.get("/v1/catalog")
     async def read_catalog() -> dict[str, Any]:
@@ -443,6 +469,16 @@ def create_executor_application(settings: Mapping[str, str] = environ) -> FastAP
         enrolled = catalog.get(service)
         if enrolled is None:
             return _error(404, "service_not_enrolled", f"'{service}' is not enrolled")
+        if not enrolled.operations & DOCKER_OPERATIONS:
+            # A flag service has no container here: its view is each flag's current variant.
+            try:
+                current = await flags.variants()
+            except ExecutionError as error:
+                return _docker_error(error)
+            view = {**enrolled.describe(), "container": None, "available_tags": []}
+            for name, offer in view["flags"].items():
+                offer["variant"] = current.get(name)
+            return JSONResponse(view)
         try:
             inspect = await operations.find(enrolled)
             tags = await operations.available_tags(enrolled)
