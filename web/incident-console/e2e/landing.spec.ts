@@ -126,6 +126,13 @@ test("la consola anterior sigue donde /app aún no llega, y lo que /app reemplaz
   await expect(page).toHaveURL(/\/app\/$/);
   await page.goto("/?view=war-room&incident_id=INC-11");
   await expect(page).toHaveURL(/\/app\/incidentes\/INC-11$/);
+  // Without an incident the war room opens the inbox: /app/incidentes lists only the simulator's.
+  await page.goto("/?view=war-room");
+  await expect(page).toHaveURL(/\/app\/$/);
+  await page.goto("/app/incidentes");
+  await expect(page).toHaveURL(/\/app\/$/);
+  await expect(page.getByText(/INC-\d+/)).toHaveCount(0);
+  await page.screenshot({ path: `${SHOTS}/incidentes-en-vivo.png`, fullPage: true });
 });
 
 test("/llms.txt existe y describe Midnight para agentes", async ({ page, request }) => {
