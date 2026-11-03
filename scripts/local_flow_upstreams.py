@@ -15,8 +15,9 @@ LOCAL_FLOW_MODEL=real keeps the configured provider (OPENROUTER_API_KEY in .env)
 model is scripted like scripts/interrupt_policy_upstreams.py: one measured query, a hypothesis
 citing it, then a rollback proposal that waits for a human decision. Asked to verify what an
 approval ran (#723), it queries the service again and passes only when that query measured no
-errors; the Grafana MCP answers a query that names a service with 0 once its rule stopped
-firing, so the verification has data to cite."""
+errors. Like Prometheus on EC2, the Grafana MCP counts 42 errors for a query naming a service
+whose window reaches back to when its rule last fired, and 0 otherwise; the model keeps its
+window after the receipt's executed_at only when its prompt asks it to."""
 
 import asyncio
 import json
@@ -42,23 +43,32 @@ INTAKE = "http://127.0.0.1:8000/v1/alert-intake/grafana"
 STATE = re.compile(r"^State: (.*)$", re.MULTILINE)
 REFUSED = re.compile(r"rejected: (\w+) is already ")
 SERVICE = re.compile(r'service_name="([^"]+)"')
+WINDOW = re.compile(r"\[(\d+)([smh])\]")
+# What the verify prompt says when it asks for a window after the mitigation (#723).
+AFTER_MITIGATION = "after mitigation.execution.executed_at"
+# Rule id -> when the stand-in last saw it firing: its errors stay in any window reaching back.
+LAST_FIRING: dict[str, datetime] = {}
 
 
-def _errors_query(service: str) -> dict:
+def _errors_query(service: str, window: str = "5m") -> dict:
     query = {
         "datasource_uid": "webstore-metrics",
         "query_type": "instant",
-        "expr": f'sum(increase(http_server_errors_total{{service_name="{service}"}}[5m]))',
+        "expr": f'sum(increase(http_server_errors_total{{service_name="{service}"}}[{window}]))',
         "end_time": "now",
     }
     return {"action": "use_tool", "tool": "query_prometheus", "arguments": query}
 
 
-def verify(service: str, collected: list[dict]) -> dict:
-    """A verification (#723): measure the service now, then judge from what that query returned."""
+def verify(service: str, collected: list[dict], since: str | None = None) -> dict:
+    """A verification (#723): measure the service now, from `since` when it is given, then judge
+    from what that query returned."""
     measured = [item for item in collected if not item.get("empty")]
     if not measured:
-        return _errors_query(service)
+        if since is None:
+            return _errors_query(service)
+        elapsed = datetime.now(UTC) - datetime.fromisoformat(since.replace("Z", "+00:00"))
+        return _errors_query(service, f"{max(int(elapsed.total_seconds()), 1)}s")
     values = [
         float(sample["value"][1])
         for item in measured
@@ -73,11 +83,12 @@ def verify(service: str, collected: list[dict]) -> dict:
     }
 
 
-def decide(state: dict, rejected: set[str] = frozenset()) -> dict:
+def decide(state: dict, rejected: set[str] = frozenset(), windowed: bool = False) -> dict:
     incident, collected = state["incident"], state["collected_evidence"]
     service = incident["alert"].get("service") or "sre-checkout"
     if state["objective"] == "verify":
-        return verify(service, collected)
+        ran = (state.get("mitigation") or {}).get("execution") or {}
+        return verify(service, collected, ran.get("executed_at") if windowed else None)
     # The catalog lists flags without their current values (#724): the scripted model tries them
     # in order, and skips one the runtime refused as already off.
     flags = (state.get("service_operations") or {}).get("flags") or {}
@@ -129,7 +140,7 @@ class ScriptedModel:
         return ProviderResult(
             response_id=f"resp_{secrets.token_hex(8)}",
             model=request.model,
-            text=json.dumps(decide(state, rejected)),
+            text=json.dumps(decide(state, rejected, AFTER_MITIGATION in request.input)),
             provider=request.provider,
         )
 
@@ -139,11 +150,21 @@ class GrafanaMCP:
         if tool_name != "query_prometheus":
             return {"total": 0, "documents": []}
         firing = [service for rule, (service, _) in RULES.items() if _firing(rule)]
-        # A query naming a service measures it: 42 errors while its rule fires, else 0.
-        named = SERVICE.findall(str(arguments.get("expr", "")))
-        values = {name: "42" if name in firing else "0" for name in named} or dict.fromkeys(
-            firing, "42"
-        )
+        expr = str(arguments.get("expr", ""))
+        # A query naming a service measures it: 42 errors while its rule fires, or while its
+        # window still reaches back to when it fired, else 0.
+        window = WINDOW.search(expr)
+        seconds = int(window[1]) * {"s": 1, "m": 60, "h": 3600}[window[2]] if window else 0
+        start = datetime.now(UTC).timestamp() - seconds
+        recent = {
+            service
+            for rule, (service, _) in RULES.items()
+            if rule in LAST_FIRING and LAST_FIRING[rule].timestamp() >= start
+        }
+        named = SERVICE.findall(expr)
+        values = {
+            name: "42" if name in firing or name in recent else "0" for name in named
+        } or dict.fromkeys(firing, "42")
         samples = [
             {"metric": {"service_name": service}, "value": [datetime.now(UTC).timestamp(), value]}
             for service, value in values.items()
@@ -159,8 +180,12 @@ def _firing(rule: str) -> bool:
             flags = json.loads((FLOW_DIR / "otel-state/flagd/demo.flagd.json").read_text())
         except (OSError, ValueError):
             return False
-        return flags["flags"][content[5:]]["defaultVariant"] != "off"
-    return content == "firing"
+        firing = flags["flags"][content[5:]]["defaultVariant"] != "off"
+    else:
+        firing = content == "firing"
+    if firing:
+        LAST_FIRING[rule] = datetime.now(UTC)
+    return firing
 
 
 def _now() -> str:
