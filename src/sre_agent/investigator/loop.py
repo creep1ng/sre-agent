@@ -81,6 +81,14 @@ UNMEASURED_VERDICT = (
 )
 
 
+# What the model is told after a refused mitigation, with the steps the refusal leaves (#724).
+REFUSED_NEXT = (
+    "{steps} steps are left: before proposing again, measure what tells the cause apart from "
+    "the operation just refused{bok}, propose a hypothesis citing it, then its mitigation"
+)
+REFUSED_BOK = ", and search authorized_bok_collections for how each candidate shows"
+
+
 class InvalidOperation(InvalidOutput):
     """A mitigation that does not name an operation its service can run."""
 
@@ -202,6 +210,9 @@ async def investigate(
     recalled: Sequence[CollectedEvidence] = (),
 ) -> InvestigationResult:
     limits = limits or Limits()
+    # A refusal may raise it once (#724); every bound below reads this, not limits.max_steps.
+    budget = limits.max_steps
+    refused: list[str] = []
     turns: list[Turn] = []
     # Past incidents recalled for this run (#773) are evidence the model may cite, each with
     # the record it came from; nothing else enters memory evidence.
@@ -240,7 +251,7 @@ async def investigate(
             skills=[_pinned(skill) for skill in loaded],
             request_ids=request_ids,
             mcp_request_ids=mcp_request_ids,
-            remaining_step_budget=max(0, limits.max_steps - len(turns)),
+            remaining_step_budget=max(0, budget - len(turns)),
             failure_diagnostic=failure_diagnostic,
         )
 
@@ -273,10 +284,10 @@ async def investigate(
             )
             return finish(status, detail=str(error), failure_diagnostic=diagnostic)
 
-    while len(turns) < limits.max_steps:
+    while len(turns) < budget:
         turn_id = new_id("turn")
         prompt = assemble(
-            request, evidence, turns, limits.max_steps - len(turns), feedback, loaded, language
+            request, evidence, turns, budget - len(turns), feedback, loaded, language, refused
         )
         if len(prompt) > MAX_INPUT:
             return finish("needs_human", detail="assembled input exceeds the gateway limit")
@@ -359,6 +370,19 @@ async def investigate(
             if feedback is not None:
                 return finish("invalid_output", detail=str(error))
             feedback = str(error)
+            if isinstance(error, InvalidOperation):
+                refused.append(str(error))
+                # The model named a cause the runtime can tell is wrong: once per run it gets the
+                # steps to measure another one instead of running out (#724).
+                if budget == limits.max_steps:
+                    budget = max(budget, len(turns) + limits.steps_after_refusal)
+                if len(turns) >= budget:
+                    reason = f"{NO_OPERATION[language]}: {error}"
+                    return finish(
+                        "needs_human", outcome=RequestHuman(action="request_human", reason=reason)
+                    )
+                bok_hint = REFUSED_BOK if request.bok_collections() else ""
+                feedback += "; " + REFUSED_NEXT.format(steps=budget - len(turns), bok=bok_hint)
             continue
         feedback = None
         if isinstance(action, ProposeMitigation) and request.operations_unavailable:
@@ -501,7 +525,7 @@ async def investigate(
             tool=action.tool, arguments=action.arguments, result_summary=result.summary[:8000]
         )
         turns.append(turn.model_copy(update={"tool_invocation": invocation}))
-    return finish("max_steps", detail=f"step budget of {limits.max_steps} exhausted")
+    return finish("max_steps", detail=f"step budget of {budget} exhausted")
 
 
 async def _respond(

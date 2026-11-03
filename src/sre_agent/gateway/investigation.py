@@ -546,8 +546,11 @@ class InvestigationRunDispatcher:
                 )
                 return
             offset += len(result.turns)
+            # A run that got its steps after a refusal (#724) does not get them again.
+            granted = len(result.turns) + result.remaining_step_budget > limits.max_steps
             limits = Limits(
                 max_steps=result.remaining_step_budget,
+                steps_after_refusal=0 if granted else limits.steps_after_refusal,
                 gateway_timeout_seconds=model_timeout,
                 tool_timeout_seconds=tool_timeout,
             )

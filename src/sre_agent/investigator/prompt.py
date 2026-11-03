@@ -87,7 +87,17 @@ an earlier release: its to_tag is an available tag other than the running one, t
 evidence shows healthy. A restart keeps the running release. A flag.set turns a fault flag of
 the demo back to normal: flags lists the flags it may set and their allowed values, not their
 current values. Name the flag your measured evidence implicates, with one of its allowed values.
+refused_mitigations, when present, says why each proposal of this run was refused: do not
+propose those again.
 If no listed operation can remove the cause, use request_human instead of a mitigation."""
+# With both a collection and operations, the BoK comes before the change (#724): several causes
+# share one symptom, and the fragment says which measurement tells them apart.
+BOK_FIRST = """\
+Before a hypothesis that leads to a mitigation, search authorized_bok_collections for the cause
+you suspect and the other causes service_operations could change (each flag, the release): find
+what each one does and the symptom that tells it from the others, measure that symptom with
+authorized_tools, and cite both the fragment and the measurement in supporting_evidence. Never
+name a flag or release from a span or service name alone."""
 UNAVAILABLE = """\
 The deploy-executor's catalog for this service could not be read: do not propose a mitigation.
 Gather evidence and a hypothesis, then use request_human."""
@@ -135,6 +145,7 @@ def assemble(
     feedback: str | None = None,
     skills: Sequence[ResolvedSkill] = (),
     language: OutputLanguage = "es",
+    refused: Sequence[str] = (),
 ) -> str:
     retry = [f"Your previous reply was rejected: {feedback}. Reply again."] if feedback else []
     state = {
@@ -183,7 +194,9 @@ def assemble(
         state["service_operations"] = request.service_operations.model_dump(
             mode="json", exclude={"flags": {"__all__": {"variant"}}}
         )
-        operations = [OPERATIONS]
+        operations = [OPERATIONS, *([BOK_FIRST] if collections else [])]
+        if refused:
+            state["refused_mitigations"] = list(refused)
     elif request.operations_unavailable:
         operations = [UNAVAILABLE]
     sources = {item.source for item in request.context.evidence}

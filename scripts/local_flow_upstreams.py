@@ -8,8 +8,10 @@ FLOW_DIR reads `firing`; writing anything else afterwards sends one `resolved` d
 Grafana MCP answers every Prometheus query with 42 server errors of the alert's service.
 A rule file reading `flag:<name>` fires instead while that flag is not `off` in the flag stand-in
 of compose.local-flow-flags.yaml (#724), so approving its flag.set resolves the alert. Without
-current flag values in the catalog, the scripted model proposes the listed flags in order, and
-the runtime refuses one that is already off.
+current flag values in the catalog, the scripted model plays the 2026-11-03 walkthrough's first
+run: it reads the logs, guesses the first listed flag and proposes it. When the runtime refuses it
+as already off, it spends the steps the refusal leaves on the BoK and one more query, then names a
+flag a fragment it found explains, or asks for a human when none does or no step is left.
 
 LOCAL_FLOW_MODEL=real keeps the configured provider (OPENROUTER_API_KEY in .env); otherwise the
 model is scripted like scripts/interrupt_policy_upstreams.py: one measured query, a hypothesis
@@ -41,7 +43,7 @@ RULES = {
 }
 INTAKE = "http://127.0.0.1:8000/v1/alert-intake/grafana"
 STATE = re.compile(r"^State: (.*)$", re.MULTILINE)
-REFUSED = re.compile(r"rejected: (\w+) is already ")
+REFUSED = re.compile(r"(\w+) is already ")
 SERVICE = re.compile(r'service_name="([^"]+)"')
 WINDOW = re.compile(r"\[(\d+)([smh])\]")
 # What the verify prompt says when it asks for a window after the mitigation (#723).
@@ -83,31 +85,98 @@ def verify(service: str, collected: list[dict], since: str | None = None) -> dic
     }
 
 
+def _flag_mitigation(service: str, flag: str, variant: str, hypothesis: str) -> dict:
+    return {
+        "action": "propose_mitigation",
+        "description": f"Apagar el flag {flag} que rompe {service}.",
+        "steps": [f"Poner {flag} en {variant} con flag.set."],
+        "risk": "low",
+        "verification_check": f"Los errores de {service} vuelven a cero.",
+        "based_on_hypothesis": hypothesis,
+        "operation": {
+            "service": service,
+            "operation": "flag.set",
+            "parameters": {"flag": flag, "variant": variant},
+        },
+    }
+
+
+def _flag_hypothesis(service: str, flag: str, cited: list[str], why: str) -> dict:
+    return {
+        "action": "propose_hypothesis",
+        "statement": f"El flag {flag} rompe {service}: {why}",
+        "confidence": "medium",
+        "supporting_evidence": cited,
+        "verdicts": {
+            evidence: {"verdict": "supports", "finding": "Lo cita la hipótesis."}
+            for evidence in cited
+        },
+    }
+
+
+def _logs_query(service: str) -> dict:
+    query = {
+        "datasource_uid": "webstore-logs",
+        "index": "otel-logs-*",
+        "query": f'resource.service.name:"{service}"',
+        "start_time": "now-5m",
+        "end_time": "now",
+        "limit": 20,
+    }
+    return {"action": "use_tool", "tool": "query_elasticsearch", "arguments": query}
+
+
+def flag_step(state: dict, refused: set[str]) -> dict:
+    """The walkthrough's first run on a service the catalog reaches through flags (#724)."""
+    incident, collected = state["incident"], state["collected_evidence"]
+    service = incident["alert"].get("service")
+    flags = state["service_operations"]["flags"]
+    candidates = [name for name in flags if name not in refused]
+    measured = [i["evidence_id"] for i in collected if i["source"] != "bok" and not i.get("empty")]
+    fragments = [item for item in collected if item["source"] == "bok"]
+    calls = [call["tool"] for call in state["tool_calls"]]
+    hypotheses = incident["hypotheses"]
+    if not hypotheses:
+        # As the real run did: one metric, the logs of the service and of the one its span names,
+        # then a flag guessed from the span name.
+        logs = sum(tool == "query_elasticsearch" for tool in calls)
+        if not collected:
+            return _errors_query(service)
+        if "query_elasticsearch" in state["authorized_tools"] and logs < 2:
+            return _logs_query([service, "payment"][logs])
+        why = "su nombre coincide con el span que falla."
+        return _flag_hypothesis(service, candidates[0], measured[-1:], why)
+    latest = hypotheses[-1]
+    named = next((flag for flag in candidates if flag in latest["statement"]), None)
+    if named:
+        return _flag_mitigation(service, named, flags[named]["allowed"][0], latest["hypothesis_id"])
+    if state["steps_left"] <= 1 or not candidates:
+        reason = f"Ningún flag que pueda cambiar explica lo medido en {service}."
+        return {"action": "request_human", "reason": reason}
+    collections = state.get("authorized_bok_collections") or []
+    if collections and "bok.search" not in calls:
+        query = " or ".join(candidates)
+        return {"action": "search_bok", "collection": collections[0], "query": query}
+    if calls[-1] == "bok.search":
+        return _errors_query(service)
+    explained = [
+        (flag, item) for flag in candidates for item in fragments if flag in item["summary"]
+    ]
+    if not explained:
+        return _errors_query(service)
+    flag = explained[0][0]
+    cited = [*measured[-1:], *(item["evidence_id"] for name, item in explained if name == flag)]
+    return _flag_hypothesis(service, flag, cited, "lo explica el fragmento del BoK citado.")
+
+
 def decide(state: dict, rejected: set[str] = frozenset(), windowed: bool = False) -> dict:
     incident, collected = state["incident"], state["collected_evidence"]
     service = incident["alert"].get("service") or "sre-checkout"
     if state["objective"] == "verify":
         ran = (state.get("mitigation") or {}).get("execution") or {}
         return verify(service, collected, ran.get("executed_at") if windowed else None)
-    # The catalog lists flags without their current values (#724): the scripted model tries them
-    # in order, and skips one the runtime refused as already off.
-    flags = (state.get("service_operations") or {}).get("flags") or {}
-    candidates = [name for name in flags if name not in rejected]
-    if incident["hypotheses"] and candidates:  # the executor's catalog offers flag.set
-        flag, variant = candidates[0], flags[candidates[0]]["allowed"][0]
-        return {
-            "action": "propose_mitigation",
-            "description": f"Apagar el flag {flag} que rompe {service}.",
-            "steps": [f"Poner {flag} en {variant} con flag.set."],
-            "risk": "low",
-            "verification_check": f"Los errores de {service} vuelven a cero.",
-            "based_on_hypothesis": incident["hypotheses"][-1]["hypothesis_id"],
-            "operation": {
-                "service": service,
-                "operation": "flag.set",
-                "parameters": {"flag": flag, "variant": variant},
-            },
-        }
+    if (state.get("service_operations") or {}).get("flags"):  # the executor offers flag.set
+        return flag_step(state, rejected)
     if incident["hypotheses"]:
         return {
             "action": "propose_mitigation",
