@@ -3,7 +3,7 @@ import { incidentApi } from "@/lib/incident-api";
 import { useLive } from "@/lib/live";
 import type { LiveIncident } from "@/lib/live-incident";
 
-export type Choice = "approve" | "reject";
+export type Choice = "approve" | "reject" | "stable" | "failing";
 export type DecisionError = "forbidden" | "stale" | "failed" | "notApplied";
 
 // Why the gateway did not apply an approval (#923); the timeline words it, and the next try is a new one.
@@ -12,12 +12,20 @@ const NOT_APPLIED = new Set(["precondition_failed", "operation_not_authorized", 
 // randomUUID needs a secure context; a console served over plain http on a LAN has none.
 const nonce = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-const COMMAND: Record<Choice, string> = { approve: "approve_mitigation", reject: "reject_mitigation" };
+const COMMAND: Record<Choice, string> = {
+  approve: "approve_mitigation",
+  reject: "reject_mitigation",
+  stable: "verification_passed",
+  failing: "verification_failed",
+};
+// The action each command asserts, as agent/api/authorization.v1.yaml maps it.
+const ACTION: Record<Choice, string> = { approve: "run.approve", reject: "run.approve", stable: "run.command", failing: "run.command" };
 
 /**
- * Who you are (to tell your decisions from other people's) and the governed decision on the
- * proposed mitigation, the same command the previous console sends: bound to the incident
- * version on screen, with one idempotency key per submission that a manual retry reuses.
+ * Who you are (to tell your decisions from other people's) and the governed decisions on the
+ * proposed mitigation and on whether it worked (#710), the same commands the previous console
+ * sends: bound to the incident version on screen, with one idempotency key per submission that a
+ * manual retry reuses.
  */
 export function useDecision(live: LiveIncident & { refresh: () => void }) {
   const token = useLive((s) => s.token);
@@ -54,7 +62,7 @@ export function useDecision(live: LiveIncident & { refresh: () => void }) {
         turn_id: null,
         disposition: null,
         comment: null,
-        authorization: { action: "run.approve", resource: { type: "incident_workflow", id: "incident-response" } },
+        authorization: { action: ACTION[choice], resource: { type: "incident_workflow", id: "incident-response" } },
       };
       let result;
       try {

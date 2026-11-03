@@ -1,10 +1,12 @@
 import { CheckIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useNow } from "@/hooks/use-now";
 import { useT } from "@/i18n";
 import type { LiveIncident } from "@/lib/live-incident";
 import { cn } from "@/lib/utils";
 import { Prose, useActorName, useSay, useWhen } from "./say";
 import type { StoryEntry } from "./story";
+import type { Choice, DecisionError } from "./use-decision";
 
 /**
  * The failing signal measured again by the agent's verification (#723): the query, the alert
@@ -28,6 +30,8 @@ export interface Verification {
   firing: boolean;
   /** The recorded `verification_passed` or `verification_failed`, folded into this step. */
   check?: StoryEntry;
+  /** What the mitigation was expected to bring back: the plan's own verification check. */
+  expected?: string;
   series?: SignalSeries;
 }
 
@@ -43,7 +47,8 @@ export function verificationOf(live: LiveIncident, story: StoryEntry[]): Verific
   const at = Math.max(approval.at + 1, check?.at ?? 0, resolvedAt ?? 0);
   // Intake records the resolution to the second: a resolution in the approval's own second is not before it.
   const approvedAt = Math.floor(approval.at / 1000) * 1000;
-  return { at, outcome, approvedAt, resolvedAt, firing, check };
+  const expected = typeof live.reasoning === "object" ? live.reasoning?.mitigation_strategy?.verification_check : undefined;
+  return { at, outcome, approvedAt, resolvedAt, firing, check, expected };
 }
 
 /** "95 s", "4 min", "2 h": how long the signal took to recover. */
@@ -83,7 +88,7 @@ export function VerificationStep({ verification, row, time }: { verification: Ve
   const name = useActorName();
   const when = useWhen();
   const now = useNow();
-  const { outcome, resolvedAt, approvedAt, check, firing, series } = verification;
+  const { outcome, resolvedAt, approvedAt, check, firing, expected, series } = verification;
   const shown = check?.at ?? resolvedAt;
   const signal = resolvedAt
     ? t(resolvedAt >= approvedAt ? "verification.resolved" : "verification.resolvedBefore", { time: when(resolvedAt, now), after: span(resolvedAt - approvedAt) })
@@ -109,8 +114,64 @@ export function VerificationStep({ verification, row, time }: { verification: Ve
             {name(check.actor)} · <Prose text={say(check.line)} />
           </p>
         )}
+        {/* A failed verification, by the agent or by a person, says what was not met and what follows (#710). */}
+        {outcome === "failed" && (
+          <p className="mt-1 text-[var(--text-2)]">
+            {expected && (
+              <>
+                {t("verification.failed.expected")} <Prose text={expected} />{" "}
+              </>
+            )}
+            {t("verification.failed.next")}
+          </p>
+        )}
         {series && <SignalChart series={series} approvedAt={approvedAt} />}
       </div>
     </li>
+  );
+}
+
+interface StabilityProps {
+  expected?: string;
+  sending: Choice | null;
+  error: DecisionError | null;
+  canDecide: boolean;
+  onDecide: (choice: "stable" | "failing") => void;
+}
+
+/**
+ * Whether the executed mitigation worked, asked of you while the incident waits for a verdict
+ * (#710): the fallback to the agent's own verification, a decision and so in amber.
+ */
+export function StabilityCheck({ expected, sending, error, canDecide, onDecide }: StabilityProps) {
+  const t = useT("incident");
+  return (
+    <section
+      aria-label={t("stability.label")}
+      data-decision=""
+      className="overflow-hidden rounded-2xl border border-star bg-[color-mix(in_oklab,var(--star)_8%,transparent)]"
+    >
+      <div className="px-[30px] pt-7 pb-5">
+        <h2 className="font-display text-[30px] leading-[1.1] tracking-[-0.01em]">{t("stability.title")}</h2>
+        {expected && (
+          <p className="mt-3 text-[var(--text-2)]">
+            {t("stability.expected")} <Prose text={expected} />
+          </p>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-star px-[18px] py-4">
+        {error && (
+          <span role="alert" className="mr-auto text-sm text-[var(--danger)]">
+            {t(`decision.${error}`)}
+          </span>
+        )}
+        <Button variant="outline" size="lg" className="font-mono" disabled={!canDecide || sending !== null} onClick={() => onDecide("failing")}>
+          {t("stability.failing")}
+        </Button>
+        <Button size="lg" className="bg-star font-mono text-on-star hover:bg-star/90" disabled={!canDecide || sending !== null} onClick={() => onDecide("stable")}>
+          {t("stability.stable")}
+        </Button>
+      </div>
+    </section>
   );
 }

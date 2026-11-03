@@ -11,7 +11,7 @@ import { PHASES, agentStatus, phaseOf, phaseTimes, type AgentStatus } from "@/fe
 import { buildStory, claimsOf, code } from "@/features/incident/live/story";
 import { Timeline } from "@/features/incident/live/timeline";
 import { useDecision } from "@/features/incident/live/use-decision";
-import { verificationOf } from "@/features/incident/live/verification";
+import { StabilityCheck, verificationOf } from "@/features/incident/live/verification";
 import { useT } from "@/i18n";
 import { useLiveIncident, type IncidentPhase, type LiveIncident } from "@/lib/live-incident";
 import { useTitle } from "@/lib/title";
@@ -109,7 +109,10 @@ export function LiveIncidentPage() {
   const mitigation = reasoning?.mitigation_strategy;
   const operation = mitigation ? operationCall(mitigation) : null;
   const decisions = decisionsOf(live, story);
-  const waiting = status.kind === "waiting";
+  // An executed mitigation waits for a verdict (#710): the agent's verification, else yours.
+  const verdict = detail.state === "verifying" && Boolean(mitigation?.execution);
+  const verifyingRun = live.runs.findLast((run) => run.current_state === "verifying");
+  const waiting = status.kind === "waiting" || verdict;
   const times = phaseTimes(live.events, phaseOf(detail.state));
   // The report changes with the incident and its runs, never with the page's own polling.
   const updated = Math.max(
@@ -126,7 +129,7 @@ export function LiveIncidentPage() {
             {detail.severity.toUpperCase()}
           </span>
         )}
-        <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${status.kind}`)}</span>
+        <span data-decision={waiting ? "" : undefined} className={cn(waiting && "text-star-ink", status.kind === "stopped" && "text-[var(--danger)]")}>{t(`status.${verdict ? "waiting" : status.kind}`)}</span>
         {times[0] !== null && (
           <span data-meta="declared" className="font-normal text-[var(--dim)]">
             {t("phase.declared")} <Stamp at={times[0]} className="text-[var(--mist)]" />
@@ -161,6 +164,17 @@ export function LiveIncidentPage() {
             error={decision.error}
             canDecide={Boolean(decision.me)}
             onDecide={(choice) => void decision.decide(choice, status.run)}
+          />
+        </div>
+      )}
+      {verdict && verifyingRun && (
+        <div className="mb-14">
+          <StabilityCheck
+            expected={mitigation?.verification_check}
+            sending={decision.sending}
+            error={decision.error}
+            canDecide={Boolean(decision.me)}
+            onDecide={(choice) => void decision.decide(choice, verifyingRun.run_id)}
           />
         </div>
       )}

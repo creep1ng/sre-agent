@@ -43,11 +43,11 @@ async function investigation(incident: string): Promise<{ version: number; run: 
   return { version, run: run.run_id };
 }
 
-/** Declares an incident from a checkout alert as the demo human. */
-async function declare(summary: string): Promise<string> {
+/** Declares an incident from a checkout alert (or another service's) as the demo human. */
+async function declare(summary: string, service = "checkout"): Promise<string> {
   const demo = await client(process.env.DEMO_HUMAN_API_KEY!);
   const alert = `alt-e2e870-${STAMP}-${randomBytes(3).toString("hex")}`;
-  const context = { service: "checkout", severity: "sev2", source: "e2e-870", summary, observed_at: new Date().toISOString() };
+  const context = { service, severity: "sev2", source: "e2e-870", summary, observed_at: new Date().toISOString() };
   const declared = await send(demo, `/alerts/${alert}/triage/commands`, {
     operation: "triage_declare",
     expected_version: 1,
@@ -575,6 +575,95 @@ test.describe("incidente RC-2 contra la API real", () => {
     await decisionsEn.scrollIntoViewIfNeeded();
     await capture(english, "recibo-decisiones-en", decisionsEn);
     await capture(english, "recibo-pagina-en");
+  });
+
+  /** An sre-checkout incident whose approved restart the deploy-executor ran: it waits for a verdict (#710). */
+  async function executed(page: Page, summary: string) {
+    // The setup grants the agent the rollback only; the restart is granted once, as an administrator would.
+    if (!record.restartGranted) {
+      const resource = { resource_type: "service_operation", resource_id: "sre-checkout:deployment.restart" };
+      const grant = { grant_id: `grant-agent-restart-${STAMP}`, principal_id: "incident-harness", action: "mitigation.execute", resource, effect: "allow" };
+      await send(await client(process.env.ADMIN_HUMAN_API_KEY!), "/grants", grant, 201);
+      record.restartGranted = true;
+    }
+    const incident = await declare(summary, "sre-checkout");
+    await open(page, incident);
+    await expect(page.getByRole("heading", { level: 2, name: "Reiniciar sre-checkout" })).toBeVisible({ timeout: 90_000 });
+    await page.getByRole("button", { name: "Aprobar" }).click();
+    await expect(page.getByRole("region", { name: "Decisiones tomadas" }).locator("[data-receipt]")).toContainText("Se ejecutó deployment.restart en sre-checkout: reiniciado", { timeout: 60_000 });
+    const check = page.getByRole("region", { name: "Verificación de la recuperación" });
+    await expect(check.getByRole("heading", { level: 2 })).toHaveText("¿El servicio se recuperó?");
+    await expect(check).toContainText("Lo esperado: Las llamadas con error de checkout vuelven a cero.");
+    // A verdict is a decision: amber on the question, its stage and the status, nowhere else.
+    expect(await amberOutsideDecision(page)).toEqual([]);
+    await expect(page.locator("[data-decision]")).toHaveCount(3);
+    await expect(page.getByRole("list", { name: "Progreso del incidente" }).locator("li[aria-current=step]")).toHaveAttribute("data-decision", "");
+    return { incident, check, version: (await read(`/incidents/${incident}`)).version as number };
+  }
+
+  /** Sends one verdict from the question and checks the governed command it became. */
+  async function verdict(page: Page, button: string, command: string, version: number) {
+    const sent = page.waitForRequest((request) => request.url().includes("/commands") && request.method() === "POST");
+    await page.getByRole("button", { name: button }).click();
+    const request = await sent;
+    const body = request.postDataJSON();
+    expect(body).toMatchObject({ command, expected_incident_version: version, actor: "human", authorization: { action: "run.command" } });
+    expect(request.headers()["idempotency-key"]).toMatch(new RegExp(`^console-${command}-[0-9a-f]{32}$`));
+    expect((await request.response())?.status()).toBe(202);
+    await expect(page.getByRole("region", { name: "Verificación de la recuperación" })).toHaveCount(0);
+    expect(await page.locator("[data-decision]").count()).toBe(0);
+  }
+
+  test("tras ejecutar la mitigación, «Sigue fallando» devuelve el incidente a investigación y la línea de tiempo dice qué falló", async ({ page }) => {
+    const { incident, check, version } = await executed(page, "sre-checkout sigue sin cobrar [e2e:reinicio]");
+    record.failing = incident;
+    await check.scrollIntoViewIfNeeded();
+    await capture(page, "verificar-pregunta-es", check);
+    const english = await page.context().newPage();
+    await english.setViewportSize({ width: 390, height: 900 });
+    await open(english, incident, "en");
+    const checkEn = english.getByRole("region", { name: "Recovery check" });
+    await expect(checkEn.getByRole("button", { name: "Still failing" })).toBeVisible();
+    await expect(checkEn.getByRole("button", { name: "The service is stable" })).toBeVisible();
+    await checkEn.scrollIntoViewIfNeeded();
+    await capture(english, "verificar-pregunta-en-390", checkEn);
+
+    await verdict(page, "Sigue fallando", "verification_failed", version);
+    const step = page.locator("#step-verification");
+    await expect(step).toContainText("Verificación · la señal no se recuperó", { timeout: 30_000 });
+    await expect(step).toContainText("Tú · La verificación falló; se vuelve a investigar");
+    await expect(step).toContainText(
+      "No se cumplió lo esperado: Las llamadas con error de checkout vuelven a cero. El incidente vuelve a investigación; Midnight investiga de nuevo cuando se lo pidas.",
+    );
+    expect((await read(`/incidents/${incident}`)).state).toBe("investigating");
+    await expect(page.getByRole("button", { name: "Reintentar la investigación" })).toBeVisible();
+    await noTechnicalIds(page);
+    await step.scrollIntoViewIfNeeded();
+    await capture(page, "verificacion-fallida-es", step);
+    await capture(page, "verificacion-fallida-pagina-es");
+    record.failingText = await step.innerText();
+
+    await open(english, incident, "en");
+    const stepEn = english.locator("#step-verification");
+    await expect(stepEn).toContainText("Verification · the signal did not recover");
+    await expect(stepEn).toContainText("Not met: Las llamadas con error de checkout vuelven a cero. The incident is back under investigation; Midnight investigates again when you ask it to.");
+    await stepEn.scrollIntoViewIfNeeded();
+    await capture(english, "verificacion-fallida-en-390", stepEn);
+  });
+
+  test("tras ejecutar la mitigación, «El servicio está estable» resuelve el incidente", async ({ page }) => {
+    const { incident, version } = await executed(page, "sre-checkout no cobra tras desplegar [e2e:reinicio]");
+    record.stable = incident;
+    await verdict(page, "El servicio está estable", "verification_passed", version);
+    const step = page.locator("#step-verification");
+    await expect(step).toContainText("Verificación · la señal se recuperó", { timeout: 30_000 });
+    await expect(step).toContainText("Tú · Servicio verificado estable");
+    expect((await read(`/incidents/${incident}`)).state).toBe("resolved");
+    await noTechnicalIds(page);
+    await step.scrollIntoViewIfNeeded();
+    await capture(page, "verificacion-estable-es", step);
+    await capture(page, "verificacion-estable-pagina-es");
+    record.stableText = await step.innerText();
   });
 
   test("un despacho fallido muestra su causa y solo una persona lo reintenta", async ({ page }) => {

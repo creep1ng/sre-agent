@@ -138,6 +138,13 @@ const incident = {
   "verification.resolvedBefore": "Grafana dejó de alertar a las {time}, antes de aprobar la mitigación.",
   "verification.firing": "Grafana sigue alertando.",
   "verification.chart": "Serie de {query} antes y después de la mitigación",
+  "verification.failed.expected": "No se cumplió lo esperado:",
+  "verification.failed.next": "El incidente vuelve a investigación; Midnight investiga de nuevo cuando se lo pidas.",
+  "stability.label": "Verificación de la recuperación",
+  "stability.title": "¿El servicio se recuperó?",
+  "stability.expected": "Lo esperado:",
+  "stability.stable": "El servicio está estable",
+  "stability.failing": "Sigue fallando",
 
   "evidence.metrics": "Métricas de {service}",
   "evidence.logs": "Logs de {service}",

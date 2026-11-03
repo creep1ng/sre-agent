@@ -140,6 +140,13 @@ export default {
   "verification.resolvedBefore": "Grafana stopped alerting at {time}, before the mitigation was approved.",
   "verification.firing": "Grafana is still alerting.",
   "verification.chart": "Series of {query} before and after the mitigation",
+  "verification.failed.expected": "Not met:",
+  "verification.failed.next": "The incident is back under investigation; Midnight investigates again when you ask it to.",
+  "stability.label": "Recovery check",
+  "stability.title": "Did the service recover?",
+  "stability.expected": "Expected:",
+  "stability.stable": "The service is stable",
+  "stability.failing": "Still failing",
 
   "evidence.metrics": "{service} metrics",
   "evidence.logs": "{service} logs",
