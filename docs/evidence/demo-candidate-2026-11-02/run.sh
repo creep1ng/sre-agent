@@ -3,9 +3,10 @@
 # → one tap in the fake Bot API → the API's tap worker runs flag.set → receipt → message edited →
 # alert resolved → verification → recovery edit. Usage, from the checkout root with a filled .env:
 #   OUT=/tmp/demo-candidate docs/evidence/demo-candidate-2026-11-02/run.sh
+# With VERIFY_STEP=$HERE/auto-verify/wait.py nobody verifies: it waits for the agent (#723).
 # Scripted model, no EC2. The project is removed on exit.
 set -euo pipefail
-HERE=docs/evidence/demo-candidate-2026-11-02
+HERE=docs/evidence/demo-candidate-2026-11-02 VERIFY_STEP="${VERIFY_STEP:-docs/evidence/demo-candidate-2026-11-02/verify.py}"
 OUT="${OUT:?set OUT to an empty directory}"
 export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-demo-candidate}" LOCAL_FLOW_MODEL=scripted
 export API_PORT="${API_PORT:-18200}" WEB_PORT="${WEB_PORT:-18201}" POSTGRES_PORT="${POSTGRES_PORT:-18202}"
@@ -40,9 +41,9 @@ dc exec -T -e DEMO_HUMAN_API_KEY="$K" -e DECIDE=telegram -e FLAGD_ADDRESS=flagd:
   python - flow < scripts/flag_set_e2e.py > "$OUT/flow.json"
 stamp "flow done: approved in Telegram, flag.set ran, alert resolved"
 INCIDENT=$(grep -o '"incident_id": "[^"]*"' "$OUT/flow.json" | head -1 | cut -d'"' -f4)
-dc exec -T -e DEMO_HUMAN_API_KEY="$K" -e INCIDENT_ID="$INCIDENT" api python - < "$HERE/verify.py" \
+dc exec -T -e DEMO_HUMAN_API_KEY="$K" -e INCIDENT_ID="$INCIDENT" api python - < "$VERIFY_STEP" \
   > "$OUT/verification.json"
-stamp "verification_passed recorded on $INCIDENT"
+stamp "verification step done on $INCIDENT: $(cat "$OUT/verification.json")"
 dc --profile e2e run --build --rm --no-deps -e DEMO_HUMAN_API_KEY="$K" -e INCIDENT_ID="$INCIDENT" \
   -e SHOTS=/shots -v "$PWD/$HERE/capture.spec.ts:/e2e/e2e/demo-candidate.capture.spec.ts:ro" \
   -v "$OUT/shots:/shots" incident-console-e2e \
