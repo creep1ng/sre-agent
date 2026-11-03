@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from datetime import datetime
+from typing import Any
 
 from sre_agent.investigator.contract import (
     CollectedEvidence,
@@ -49,7 +51,9 @@ Reply with exactly one JSON object and no other text, shaped as one of:
 {"action": "request_human", "reason": "..."}
 Measure the service again with authorized_tools before deciding, over a window that starts
 after mitigation.execution.executed_at: a range or increase()/rate() window of N seconds, with N
-the seconds from executed_at to now, or a range query whose start is executed_at. A longer
+the seconds from executed_at to now, or a range query whose start is executed_at. now is the
+current time and seconds_since_execution those seconds: a window ending now of at most
+seconds_since_execution seconds, such as [Ns] with that N, starts after the execution. A longer
 window still holds the failure from before the mitigation and proves nothing about it now.
 passed is true only when what you measured now meets verification_check, and false when it does
 not. Cite at least one item
@@ -141,6 +145,18 @@ def _skills(skills: Sequence[ResolvedSkill]) -> list[str]:
     return [SKILLS, *parts] if parts else []
 
 
+def _since_execution(request: InvestigationRequest, now: datetime) -> int | None:
+    """Whole seconds from the receipt's executed_at to now, when the receipt has a valid time."""
+    execution = request.mitigation.execution if request.mitigation else None
+    try:
+        executed = datetime.fromisoformat(execution.executed_at or "") if execution else None
+    except ValueError:
+        return None
+    if executed is None or executed.tzinfo is None:
+        return None
+    return max(int((now - executed).total_seconds()), 0)
+
+
 def assemble(
     request: InvestigationRequest,
     evidence: list[CollectedEvidence],
@@ -150,9 +166,10 @@ def assemble(
     skills: Sequence[ResolvedSkill] = (),
     language: OutputLanguage = "es",
     refused: Sequence[str] = (),
+    now: datetime | None = None,
 ) -> str:
     retry = [f"Your previous reply was rejected: {feedback}. Reply again."] if feedback else []
-    state = {
+    state: dict[str, Any] = {
         "objective": request.objective,
         "steps_left": steps_left,
         "incident": request.context.model_dump(mode="json"),
@@ -185,6 +202,10 @@ def assemble(
     if request.mitigation is not None:
         # A verification (#723) measures what ran: no BoK, operations or memory to propose from.
         state["mitigation"] = request.mitigation.model_dump(mode="json", exclude_none=True)
+        # The model has no clock: without these it cannot size a window after the execution.
+        if now is not None and (elapsed := _since_execution(request, now)) is not None:
+            state["now"] = now.isoformat(timespec="seconds")
+            state["seconds_since_execution"] = elapsed
         guidance = [VERIFY, LANGUAGE.format(language=LANGUAGES[language]), *_skills(skills)]
         return "\n".join([*guidance, "State: " + json.dumps(state, sort_keys=True), *retry])
     collections = request.bok_collections()

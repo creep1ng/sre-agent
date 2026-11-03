@@ -1,0 +1,81 @@
+{
+  "incident_id": "inc-1bff65b4df45d9a04699ac467c354ebc",
+  "steps": [
+    {
+      "step": "incident declared from the alert",
+      "ok": true,
+      "elapsed_s": 2.1
+    },
+    {
+      "step": "proposal 1 comes from a run started by the alert",
+      "ok": true,
+      "elapsed_s": 12.7
+    },
+    {
+      "step": "proposal 1 approved through the API",
+      "ok": true,
+      "elapsed_s": 13.2
+    },
+    {
+      "step": "the agent's verification failed: the incident is investigating again",
+      "ok": true,
+      "elapsed_s": 29.6
+    },
+    {
+      "step": "re-investigation 1 of 2 started by the system",
+      "ok": true,
+      "elapsed_s": 29.8
+    },
+    {
+      "step": "proposal 2 comes from a run started by the system after the failed verification",
+      "ok": true,
+      "elapsed_s": 38.2
+    },
+    {
+      "step": "the run behind proposal 2 was told the 1 failed attempt(s)",
+      "ok": true,
+      "elapsed_s": 38.5
+    },
+    {
+      "step": "proposal 2 approved through the API",
+      "ok": true,
+      "elapsed_s": 38.7
+    },
+    {
+      "step": "the second proposal ran and the verification resolved the incident",
+      "ok": true,
+      "elapsed_s": 55.1
+    },
+    {
+      "step": "every verification turn was told now and the seconds since the execution",
+      "ok": true,
+      "elapsed_s": 55.5
+    }
+  ],
+  "verification_turns": [
+    {
+      "now": "2026-11-03T16:23:01+00:00",
+      "executed_at": "2026-11-03T16:22:51.481Z",
+      "seconds_since_execution": 10,
+      "expr": "sum(increase(http_server_errors_total{service_name=\"checkout\"}[10s]))"
+    },
+    {
+      "now": "2026-11-03T16:23:03+00:00",
+      "executed_at": "2026-11-03T16:22:51.481Z",
+      "seconds_since_execution": 12,
+      "expr": null
+    },
+    {
+      "now": "2026-11-03T16:23:27+00:00",
+      "executed_at": "2026-11-03T16:23:16.946Z",
+      "seconds_since_execution": 10,
+      "expr": "sum(increase(http_server_errors_total{service_name=\"checkout\"}[10s]))"
+    },
+    {
+      "now": "2026-11-03T16:23:29+00:00",
+      "executed_at": "2026-11-03T16:23:16.946Z",
+      "seconds_since_execution": 12,
+      "expr": null
+    }
+  ]
+}

@@ -183,6 +183,31 @@ for attempt in range(1, attempts + 1):
 if SCENARIO == "retry":
     until("the incident resolves", lambda: incident()["state"] in ("resolved", "postmortem"), 240)
     step("the second proposal ran and the verification resolved the incident", True)
+    # The model has no clock: each verification turn is told now and the seconds since the
+    # execution, and the query it made fits inside them (2026-11-03 EC2 rehearsal).
+    verifying = []
+    for run_id, _ in runs(incident_id):
+        context = api(f"/v1/incidents/{incident_id}/runs/{run_id}/context")[1] or {}
+        for turn in context.get("turns", []):
+            lines = (turn.get("assembled_input") or "").splitlines()
+            state = next(json.loads(x[7:]) for x in lines if x.startswith("State: "))
+            if state["objective"] == "verify":
+                invoked = turn.get("tool_invocation") or {}
+                expr = (invoked.get("arguments") or {}).get("expr")
+                verifying.append(
+                    {
+                        "now": state.get("now"),
+                        "executed_at": state["mitigation"]["execution"]["executed_at"],
+                        "seconds_since_execution": state.get("seconds_since_execution"),
+                        "expr": expr,
+                    }
+                )
+    step(
+        "every verification turn was told now and the seconds since the execution",
+        verifying
+        and all(v["now"] and isinstance(v["seconds_since_execution"], int) for v in verifying),
+        turns=verifying,
+    )
 else:
     gave_up = until(
         "the chat says a person is needed",
