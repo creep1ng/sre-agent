@@ -82,6 +82,10 @@ export function PostmortemDraft({ live, story, sending, error, canDecide, onClos
   const mitigation = typeof live.reasoning === "object" ? live.reasoning?.mitigation_strategy : null;
   const ran = executionLine(mitigation);
   const open = state === "postmortem" && content !== undefined;
+  // The agent that opened the postmortem wrote the model's draft; `system` wrote the record's; a person, neither.
+  const opener = live.events.find((event) => event.summary === "Postmortem started." && event.actor.type === "agent")?.actor.reference?.principal_id;
+  const author = typeof record === "object" && record?.version === 1 ? record.updated_by : undefined;
+  const draft = author === "system" ? "record" : author && author === opener ? "agent" : null;
   const approved = (pm: PostmortemRecord) => pm.review.status === "approved" && pm.review.reviewed_version === pm.version;
   return (
     <section aria-label={t("postmortem.label")} className="mb-14 rounded-2xl border px-[30px] py-7">
@@ -90,9 +94,9 @@ export function PostmortemDraft({ live, story, sending, error, canDecide, onClos
         {title(live.detail)}
       </p>
       {/* Which first draft this is: the model's, or the one composed from the record when the model failed (#711). */}
-      {content && typeof record === "object" && record?.version === 1 && (
-        <p data-draft={record.updated_by === "system" ? "record" : "agent"} className="-mt-4 mb-6 font-mono text-[13px] text-[var(--dim)]">
-          {t(record.updated_by === "system" ? "postmortem.byRecord" : "postmortem.byAgent")}
+      {content && draft && (
+        <p data-draft={draft} className="-mt-4 mb-6 font-mono text-[13px] text-[var(--dim)]">
+          {t(draft === "record" ? "postmortem.byRecord" : "postmortem.byAgent")}
         </p>
       )}
       {record === "forbidden" || (record && !record.content_included) ? (

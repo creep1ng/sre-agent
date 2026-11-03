@@ -205,10 +205,11 @@ class InvestigationRunDispatcher:
             )
             async with self.units() as work:
                 incident = await work.incidents.get(incident_id)
+                # A replayed resolution finds the draft written: no second model call.
+                if incident is None or await work.postmortems.get(incident_id) is not None:
+                    return
                 run_ids = await work.runs.list_ids(incident_id)
                 events = [event for run in run_ids for event in await work.events.list_after(run)]
-            if incident is None:
-                return
             content = compose(incident.state, events, self.language)
             # The model writes the narrative (`postmortem` objective); the record is the fallback.
             narrative = None
