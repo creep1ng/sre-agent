@@ -38,6 +38,7 @@ from sre_agent.control.consumption_limits import (
 )
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
 from sre_agent.gateway.incidents import IncidentQueryService, incident_router
+from sre_agent.gateway.action_catalog import ActionCatalogService, action_catalog_router
 from sre_agent.gateway.execution import OperationExecutor
 from sre_agent.gateway.investigation import InvestigationRunDispatcher
 from sre_agent.gateway.run_context import RunContextService, run_context_router
@@ -189,6 +190,22 @@ def create_application(
         postmortems_router(
             PostmortemService(
                 database.sessions, workflow, lambda: PostgresIncidentUnitOfWork(database)
+            )
+        )
+    )
+    application.include_router(
+        action_catalog_router(
+            ActionCatalogService(
+                database.sessions,
+                workflow,
+                lambda: PostgresIncidentUnitOfWork(database),
+                # The same executor client an approval uses: its catalog and grant check (#870).
+                OperationExecutor(
+                    database.sessions,
+                    incident_runtime,
+                    runtime_settings,
+                    audit=audit_store or PostgresAuditStore(database.sessions),
+                ),
             )
         )
     )
