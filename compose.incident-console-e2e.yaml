@@ -1,5 +1,7 @@
-# Journeys of the RC-2 incident page (#870, #708, #709): real API, database, investigator and web
-# proxy; the model and Grafana MCP are scripts/incident_console_upstreams.py.
+# Journeys of the RC-2 incident page (#870, #708, #709): real API, database, investigator, web
+# proxy and deploy-executor (#722) over its Docker proxy; the model and Grafana MCP are
+# scripts/incident_console_upstreams.py. The executor's catalog enrols this project's
+# sre-checkout only (scripts/incident_console_catalog.yaml).
 # Commands: scripts/run_incident_console_e2e.sh.
 services:
   api:
@@ -7,6 +9,34 @@ services:
     volumes: ["./scripts/incident_console_upstreams.py:/e2e/incident_console_upstreams.py:ro"]
     environment:
       STEP_SECONDS: "${STEP_SECONDS:-2}"
+      DEPLOY_EXECUTOR_URL: http://deploy-executor:8000
+
+  deploy-executor:
+    volumes:
+      - ./scripts/incident_console_catalog.yaml:/e2e/catalog.yaml:ro
+    environment:
+      DEPLOY_EXECUTOR_CATALOG: /e2e/catalog.yaml
+
+  # The enrolled service: the broken release runs, the healthy one waits in the image store.
+  sre-checkout:
+    image: midnight-e2e/checkout:1.5.0
+    build:
+      context: docker
+      dockerfile: checkout.Dockerfile
+      args: {CHECKOUT_VERSION: "1.5.0"}
+    restart: unless-stopped
+    networks: [runtime]
+
+  sre-checkout-previous:
+    profiles: ["e2e"]
+    image: midnight-e2e/checkout:1.4.0
+    build:
+      context: docker
+      dockerfile: checkout.Dockerfile
+      args: {CHECKOUT_VERSION: "1.4.0"}
+    command: ["true"]
+    restart: "no"
+    networks: [runtime]
 
   seed:
     volumes: ["./scripts:/app/scripts:ro"]
