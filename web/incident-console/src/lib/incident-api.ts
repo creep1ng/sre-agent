@@ -118,6 +118,25 @@ export interface Reasoning {
   mitigation_strategy: Mitigation | null;
 }
 
+/** #870: what the deploy-executor may run, who runs it once a person approves, and what it ran. */
+export interface ActionCatalog {
+  executor_status: "available" | "unavailable" | "not_configured";
+  services: { service: string; operations: CatalogOperation[] }[];
+}
+
+export interface CatalogOperation {
+  operation: string;
+  /** Null when the executor did not answer; `allowed` null when it cannot list the values now. */
+  parameters: { name: string; allowed: string[] | null }[] | null;
+  runner: Principal | null;
+  executions: { occurred_at: string; outcome: "succeeded" | "refused" | "failed"; reason_code: string | null; incident_id: string | null; approved_by: Principal | null }[];
+}
+
+export interface Principal {
+  principal_id: string;
+  display_name: string | null;
+}
+
 export interface ChangeEvent {
   change_id: string;
   service: string;
@@ -202,6 +221,8 @@ const isContext = (body: unknown): body is { reasoning: Reasoning } =>
   isObject(body) && isObject(body.reasoning) && Array.isArray(body.reasoning.hypotheses) && Array.isArray(body.reasoning.evidence);
 const isAlerts = (body: unknown): body is Alerts => isObject(body) && Array.isArray(body.alerts);
 const isChanges = (body: unknown): body is { changes: ChangeEvent[] } => isObject(body) && Array.isArray(body.changes);
+const isCatalog = (body: unknown): body is ActionCatalog =>
+  isObject(body) && typeof body.executor_status === "string" && Array.isArray(body.services);
 
 const at = (id: string) => `/incidents/${encodeURIComponent(id)}`;
 
@@ -221,6 +242,7 @@ export const incidentApi = {
   alerts: (token: string, signal: AbortSignal) => call(token, "/alerts", signal, isAlerts),
   whoami: (token: string, signal: AbortSignal) =>
     call(token, "/whoami", signal, (body): body is { principal_id: string } => isObject(body) && typeof body.principal_id === "string"),
+  catalog: (token: string, signal: AbortSignal) => call(token, "/action-catalog", signal, isCatalog),
   /** A governed human command on a run (approve_mitigation, reject_mitigation); the key replays one submission. */
   command: (token: string, id: string, run: string, body: unknown, key: string, signal: AbortSignal) =>
     call(token, `${at(id)}/runs/${encodeURIComponent(run)}/commands`, signal, isRun, { body, key }),

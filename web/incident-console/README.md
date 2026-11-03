@@ -230,6 +230,17 @@ Journeys against the composed stack (scripted model and Grafana MCP, everything 
 COMPOSE_PROJECT_NAME=incident-e2e-$RANDOM scripts/run_incident_console_e2e.sh
 ```
 
+## Action catalog (RC-2, #870)
+
+`/app/acciones` (**Acciones**, shield icon) shows what Midnight may run, before any fault: per
+service, each operation of the deploy-executor with the only values its parameters may take,
+whether Midnight's agent runs it after a person approves (its `mitigation.execute` grant) and its
+latest runs from the audit, with the approver and a link to the incident. It reads
+`GET /v1/action-catalog` every 15 s with the session's key (`run.read`); the gateway reads the
+executor, never the browser. An executor that does not answer is said in red, with the registered
+operations and no parameters. Nothing on the page is a decision, so nothing is amber. In mock mode
+it shows the local demo's `sre-checkout` catalog with no runs.
+
 ## Stack
 
 Vite 8, React 19, TypeScript 7, Tailwind CSS 4, shadcn/ui on Radix, lucide icons, sonner,

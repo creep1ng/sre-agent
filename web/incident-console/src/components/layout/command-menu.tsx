@@ -1,4 +1,4 @@
-import { InboxIcon, SirenIcon } from "lucide-react";
+import { InboxIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
 import { useNavigate } from "react-router";
 import {
   CommandDialog,
@@ -43,6 +43,9 @@ export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChang
               <SirenIcon /> {t("nav.incidents")}
             </CommandItem>
           )}
+          <CommandItem onSelect={() => go("/acciones")}>
+            <ShieldCheckIcon /> {t("nav.actions")}
+          </CommandItem>
         </CommandGroup>
         {newAlerts.length > 0 && (
           <CommandGroup heading="Alertas nuevas">

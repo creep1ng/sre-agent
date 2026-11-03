@@ -9,6 +9,7 @@ import { useApplyTheme } from "@/hooks/use-theme";
 import { resumePolling, stopPolling } from "@/lib/live";
 import { appMode } from "@/lib/mode";
 import { subscribeNotices, useStore } from "@/lib/store";
+import { CatalogPage } from "@/pages/catalog-page";
 import { InboxPage } from "@/pages/inbox-page";
 import { IncidentPage } from "@/pages/incident-page";
 import { IncidentsPage } from "@/pages/incidents-page";
@@ -92,6 +93,7 @@ export function App() {
             <Route index element={<InboxPage />} />
             <Route path="incidentes" element={<IncidentsPage />} />
             <Route path="incidentes/:incidentId" element={<IncidentPage />} />
+            <Route path="acciones" element={<CatalogPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
