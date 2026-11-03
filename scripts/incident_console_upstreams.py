@@ -115,15 +115,17 @@ def decide(state: dict, prompt: str) -> dict:
         if tool not in {item["tool"] for item in collected}:
             service = incident["alert"]["service"]
             return {"action": "use_tool", "tool": tool, "arguments": arguments(tool, service)}
+    # A recalled past incident (#773) is context, not a measure: only the queries are judged.
+    measured = [item for item in collected if item["tool"] in FINDINGS]
     return {
         "action": "propose_hypothesis",
         **({"title": title(incident["alert"]["summary"])} if '"title"' in prompt else {}),
         "statement": statement(prompt),
         "confidence": "medium",
-        "supporting_evidence": [item["evidence_id"] for item in collected],
+        "supporting_evidence": [item["evidence_id"] for item in measured],
         "verdicts": {
             item["evidence_id"]: {"verdict": "supports", "finding": FINDINGS[item["tool"]]}
-            for item in collected
+            for item in measured
         },
     }
 
