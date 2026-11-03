@@ -250,6 +250,7 @@ def unlinked(incident_id: str) -> None:
 
 # #767: mitigation proposals for the broken sre-checkout deploy, one per journey.
 JOURNEYS = ("approve", "reject", "console", "unlinked", "stale", "refused")
+TITLE = "Fallan los pagos en sre-checkout"
 # Approving these runs a catalog operation on the deploy-executor (#722): `approve` rolls this
 # project's sre-checkout back from 1.5.0 to 1.4.0; `refused`, approved after it, asks for the tag
 # already running, which the executor's catalog no longer offers. The rest stay simulated.
@@ -300,7 +301,9 @@ async def _propose(stamp: str) -> dict[str, dict[str, str]]:
                 run = {"workflow_version": "1.0.0", "current_state": "active", "status": "running"}
                 await work.runs.add(run_id, incident_id, run, now=now)
             agent = ActorReference(principal_id="incident-harness")
-            hypothesize = {"hypotheses": [hypothesis], "evidence": evidence}
+            # The investigator's title (#870); the reject journey has none and shows the alert's.
+            named = hypothesis | ({} if journey == "reject" else {"title": TITLE})
+            hypothesize = {"hypotheses": [named], "evidence": evidence}
             steps = (
                 ("start_investigation", "system", None, {}),
                 ("continue_investigation", "agent", "continue_investigation",
@@ -376,6 +379,14 @@ def proposals(stamp: str, legacy_code: str) -> None:
                     )
                 )
                 for m in messages
+            ),
+            "it is titled by the investigator, else by the alert's own words (#870)": sorted(
+                (m["text"].splitlines()[0].split("-")[2], m["text"].splitlines()[1])
+                for m in messages
+            )
+            == sorted(
+                (journey, "Checkout 5xx above 5 %" if journey == "reject" else TITLE)
+                for journey in JOURNEYS
             ),
             "a proposal with a catalog operation names it": all(
                 ("Detalle: el ejecutor aplica deployment.rollback en sre-checkout" in m["text"])

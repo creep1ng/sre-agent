@@ -8,7 +8,9 @@ then proposes a hypothesis citing all of them with a verdict and a finding each,
 in words for a service with no catalog, as `deployment.rollback` to 1.4.0 for an enrolled one.
 An enrolled service whose alert carries `[e2e:reinicio]` gets `deployment.restart` instead.
 An alert whose summary carries `[e2e:falla]` gets two replies that are not JSON first, so its
-first investigation ends with `investigation_invalid_output` and a human retry succeeds.
+first investigation ends with `investigation_invalid_output` and a human retry succeeds. The
+hypothesis carries a short title when the prompt asks for one; `[e2e:titulo]` gets a title on
+two lines and over 60 characters, which the API drops.
 """
 
 import asyncio
@@ -45,6 +47,13 @@ PARTS = (
     "que `payment` también falle sin pasar por `checkout`, o que los errores empiecen antes del "
     "despliegue de la `1.5.0`.",
 )
+
+
+def title(summary: str) -> str:
+    """The incident's short title (#870); `[e2e:titulo]` gets one the API must refuse."""
+    if "[e2e:titulo]" in summary:
+        return "Fallan los cobros en checkout\nporque el despliegue 1.5.0 vence el plazo de payment"
+    return "Fallan los cobros en checkout"
 
 
 def statement(prompt: str) -> str:
@@ -103,6 +112,7 @@ def decide(state: dict, prompt: str) -> dict:
             return {"action": "use_tool", "tool": tool, "arguments": arguments(tool, service)}
     return {
         "action": "propose_hypothesis",
+        **({"title": title(incident["alert"]["summary"])} if '"title"' in prompt else {}),
         "statement": statement(prompt),
         "confidence": "medium",
         "supporting_evidence": [item["evidence_id"] for item in collected],
