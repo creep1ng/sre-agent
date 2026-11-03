@@ -29,6 +29,7 @@ from sre_agent.incident.persistence import (
     SnapshotRecord,
     TextContextRecord,
     TransitionResult,
+    verification_dispatch,
 )
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.memories import PostgresIncidentMemoryRepository
@@ -631,7 +632,9 @@ class PostgresIncidentUnitOfWork:
         interrupted_decision: DecisionDraft,
         interrupted_event: EventDraft,
         interrupted_termination: EventDraft | None = None,
+        dispatch_id: str | None = None,
     ) -> Literal["claimed", "active", "complete", "interrupted"]:
+        dispatch = dispatch_id or run_id
         lock_name = self._dispatch_lock_name(incident_id, run_id)
         if self._dispatch_connection is not None:
             raise RuntimeError("unit of work already holds a dispatch lock")
@@ -664,9 +667,16 @@ class PostgresIncidentUnitOfWork:
             for item in await self._dispatch_events(run_id)
             if isinstance(item, Mapping)
         ]
+        if dispatch != run_id:
+            # A verification follows the run's finished investigation: only its receipts count.
+            receipts = [
+                item
+                for item in receipts
+                if isinstance(item, Mapping) and item.get("dispatch_id") == dispatch
+            ]
         terminal = any(
             isinstance(receipt, Mapping)
-            and receipt.get("dispatch_id") == run_id
+            and receipt.get("dispatch_id") == dispatch
             and receipt.get("phase") == "outcome"
             and receipt.get("status") in {"success", "confirmed_failure", "unknown"}
             for receipt in receipts
@@ -675,7 +685,7 @@ class PostgresIncidentUnitOfWork:
             return "complete"
         pending = any(
             isinstance(receipt, Mapping)
-            and receipt.get("dispatch_id") == run_id
+            and receipt.get("dispatch_id") == dispatch
             and receipt.get("phase") == "intent"
             and receipt.get("status") == "pending"
             for receipt in receipts
@@ -709,7 +719,9 @@ class PostgresIncidentUnitOfWork:
         incident_patch: JsonDocument | None = None,
         run_patch: JsonDocument | None = None,
         contexts: Sequence[TextContextRecord] = (),
+        dispatch_id: str | None = None,
     ) -> bool:
+        dispatch = dispatch_id or run_id
         await self._lock_run_event_sequence(run_id)
         incident, _run = await self._lock_incident_run(incident_id, run_id)
         receipts = [
@@ -719,7 +731,7 @@ class PostgresIncidentUnitOfWork:
         ]
         if any(
             isinstance(receipt, Mapping)
-            and receipt.get("dispatch_id") == run_id
+            and receipt.get("dispatch_id") == dispatch
             and receipt.get("phase") == "outcome"
             and receipt.get("status") in {"success", "confirmed_failure", "unknown"}
             for receipt in receipts
@@ -727,7 +739,7 @@ class PostgresIncidentUnitOfWork:
             return False
         if not any(
             isinstance(receipt, Mapping)
-            and receipt.get("dispatch_id") == run_id
+            and receipt.get("dispatch_id") == dispatch
             and receipt.get("phase") == "intent"
             and receipt.get("status") == "pending"
             for receipt in receipts
@@ -743,7 +755,7 @@ class PostgresIncidentUnitOfWork:
             for event in events
             if event.kind == "dispatch_receipt"
             and isinstance((receipt := event.payload.get("dispatch_receipt")), Mapping)
-            and receipt.get("dispatch_id") == run_id
+            and receipt.get("dispatch_id") == dispatch
             and receipt.get("phase") == "outcome"
             and receipt.get("status") in {"success", "confirmed_failure", "unknown"}
         ]
@@ -876,7 +888,7 @@ class PostgresIncidentUnitOfWork:
             raise ValueError("snapshot state must match the committed transition state")
         await self._lock_run_event_sequence(run_id)
         if dispatch_id is not None:
-            if dispatch_id != run_id:
+            if dispatch_id not in (run_id, verification_dispatch(run_id)):
                 raise IncidentStaleWriteError("investigation dispatch identity does not match run")
             receipts = [
                 item.get("dispatch_receipt")
