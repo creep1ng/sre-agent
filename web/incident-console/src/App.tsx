@@ -11,6 +11,7 @@ import { appMode } from "@/lib/mode";
 import { subscribeNotices, useStore } from "@/lib/store";
 import { CatalogPage } from "@/pages/catalog-page";
 import { IdentitiesPage } from "@/features/admin/identities-page";
+import { PermissionsPage } from "@/features/admin/permissions-page";
 import { InboxPage } from "@/pages/inbox-page";
 import { IncidentPage } from "@/pages/incident-page";
 import { IncidentsPage } from "@/pages/incidents-page";
@@ -98,6 +99,7 @@ export function App() {
             <Route path="admin">
               <Route index element={<Navigate to="identidades" replace />} />
               <Route path="identidades" element={<IdentitiesPage />} />
+              <Route path="permisos" element={<PermissionsPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

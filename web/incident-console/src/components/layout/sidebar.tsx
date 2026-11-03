@@ -1,4 +1,4 @@
-import { InboxIcon, KeyRoundIcon, SearchIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
+import { InboxIcon, KeyRoundIcon, LockKeyholeIcon, SearchIcon, ShieldCheckIcon, SirenIcon } from "lucide-react";
 import type { ReactElement } from "react";
 import { NavLink } from "react-router";
 import { AgentAvatar, BrandMark, Logo } from "@/components/brand";
@@ -18,6 +18,7 @@ export const SIDEBAR_ID = "console-sidebar";
 /** The administration plane, in the order an operator sets Midnight up. */
 export const ADMIN_NAV = [
   { to: "/admin/identidades", icon: KeyRoundIcon, label: "nav.identities" },
+  { to: "/admin/permisos", icon: LockKeyholeIcon, label: "nav.permissions" },
 ] as const;
 
 const ITEM =
