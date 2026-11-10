@@ -80,6 +80,7 @@ assert.match(errors(data({ fields: { Summary: 'Stamp <stamp> seeded.' } })), /Co
 assert.deepEqual(validate(data({ fields: { 'Actual result': '<details>\n<summary>SQL</summary>\n\n1 row\n</details>' } })), []);
 assert.match(errors(data({ fields: { 'Actual result': '<details open>\n1 row\n</details>' } })), /Complete section: Actual result/);
 assert.match(errors(data({ fields: { 'Actual result': '<details>\n<the rows>\n</details>' } })), /Complete section: Actual result/);
+assert.match(errors(data({ fields: { Summary: '<details>\n<summary></summary>\n</details>' } })), /Complete section: Summary/);
 
 function context() {
   return {

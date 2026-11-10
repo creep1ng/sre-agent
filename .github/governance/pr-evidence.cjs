@@ -26,7 +26,7 @@ function parse(body) {
   const result = {};
   for (const match of clean(body || '').matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm)) {
     if (Object.hasOwn(result, match[1])) throw new Error('Duplicate PR section');
-    result[match[1]] = attachments(clean(match[2]));
+    result[match[1]] = attachments(clean(match[2])).trim();
   }
   return result;
 }
