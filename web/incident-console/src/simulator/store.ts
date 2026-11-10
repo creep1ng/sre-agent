@@ -5,7 +5,9 @@
  */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { translate, type Namespaces, type Params } from "@/i18n";
 import { formatDuration } from "@/lib/format";
+import "./messages";
 import { SCENARIOS, postmortemSteps } from "./scenarios";
 import type {
   AgentJob,
@@ -34,6 +36,9 @@ const STABLE_AFTER_MS = 20 * SECOND;
 const FAIL_AFTER_MS = 2400;
 /** Agent events older than this when processed (e.g. after a reload) do not raise a toast. */
 const TOAST_WINDOW_MS = 5 * SECOND;
+
+/** The simulator's texts, in the language chosen when each one is written. */
+const t = (key: keyof Namespaces["simulator"], params?: Params) => translate("simulator", key, params);
 
 /* ------------------------------------------------------------------ notices */
 
@@ -119,7 +124,7 @@ function primaryAlert(state: State, incident: Incident): Alert {
 }
 
 function confidenceLabel(confidence: "low" | "medium" | "high") {
-  return { low: "baja", medium: "media", high: "alta" }[confidence];
+  return t(`confidence.${confidence}`);
 }
 
 /* ------------------------------------------------------- history (seeded) */
@@ -172,29 +177,29 @@ function closedIncident(scenario: ScenarioKey, number: number, startedAt: number
     ],
     verification: { checklist: draft.steps.map(() => true), appliedAt, stableSuggestedAt: confirmedAt - MINUTE, confirmedAt },
     events: [
-      event(alert.detectedAt, "system", `Detectamos: ${alert.summary}`, { kind: "milestone" }),
-      event(declaredAt, "you", `Declaraste el incidente · ${SEVERITY[alert.severity].short}`, {
+      event(alert.detectedAt, "system", t("event.detected", { summary: alert.summary }), { kind: "milestone" }),
+      event(declaredAt, "you", t("event.declared", { severity: SEVERITY[alert.severity].short }), {
         detail: alert.suggestedImpact,
         kind: "milestone",
       }),
-      event(declaredAt, "agent", "Empezó a investigar", { kind: "milestone" }),
+      event(declaredAt, "agent", t("event.investigating"), { kind: "milestone" }),
       ...findings.map((finding) =>
         event(finding.at, "agent", finding.title, { detail: SOURCE_LABEL[finding.source], kind: "finding" }),
       ),
-      event(proposedAt, "agent", `Propuso una hipótesis con confianza ${confidenceLabel(hypothesis.confidence)}`, {
+      event(proposedAt, "agent", t("event.hypothesis", { confidence: confidenceLabel(hypothesis.confidence) }), {
         detail: hypothesis.statement,
         kind: "milestone",
       }),
-      event(proposedAt, "agent", `Propuso: ${draft.summary}`, { kind: "milestone" }),
-      event(approvedAt, "you", `Aprobaste: ${draft.summary}`, { kind: "milestone" }),
-      event(appliedAt, "you", "Aplicaste la mitigación", { kind: "milestone" }),
-      event(confirmedAt, "you", "Confirmaste que el servicio está estable", { kind: "milestone", tone: "success" }),
-      event(confirmedAt, "system", `Incidente resuelto en ${formatDuration(confirmedAt - alert.startedAt)}`, {
+      event(proposedAt, "agent", t("event.proposed", { summary: draft.summary }), { kind: "milestone" }),
+      event(approvedAt, "you", t("event.approved", { summary: draft.summary }), { kind: "milestone" }),
+      event(appliedAt, "you", t("event.applied"), { kind: "milestone" }),
+      event(confirmedAt, "you", t("event.confirmed"), { kind: "milestone", tone: "success" }),
+      event(confirmedAt, "system", t("event.resolved", { duration: formatDuration(confirmedAt - alert.startedAt) }), {
         kind: "milestone",
         tone: "success",
       }),
-      event(draftedAt, "agent", "Redactó el borrador del postmortem", { kind: "milestone" }),
-      event(closedAt, "you", "Aprobaste el postmortem y cerraste el incidente", { kind: "milestone", tone: "success" }),
+      event(draftedAt, "agent", t("event.drafted"), { kind: "milestone" }),
+      event(closedAt, "you", t("event.closed"), { kind: "milestone", tone: "success" }),
     ],
     resolvedAt: confirmedAt,
     closedAt,
@@ -297,12 +302,12 @@ export const useStore = create<State>()(
           }),
           proposals: [],
           events: [
-            event(alert.detectedAt, "system", `Detectamos: ${alert.summary}`, { kind: "milestone" }),
-            event(now, "you", `Declaraste el incidente · ${SEVERITY[severity].short}`, {
+            event(alert.detectedAt, "system", t("event.detected", { summary: alert.summary }), { kind: "milestone" }),
+            event(now, "you", t("event.declared", { severity: SEVERITY[severity].short }), {
               detail: impact.trim() || alert.suggestedImpact,
               kind: "milestone",
             }),
-            event(now, "agent", "Empezó a investigar", { kind: "milestone" }),
+            event(now, "agent", t("event.investigating"), { kind: "milestone" }),
           ],
           runIds: [`run_${hex(16)}`],
         };
@@ -340,7 +345,7 @@ export const useStore = create<State>()(
               alertIds: [...incident.alertIds, alertId],
               events: [
                 ...incident.events,
-                event(now, "you", `Vinculaste la alerta «${alert.title}»`, { detail: alert.summary, kind: "milestone" }),
+                event(now, "you", t("event.linked", { title: alert.title }), { detail: alert.summary, kind: "milestone" }),
               ],
             })),
           };
@@ -364,7 +369,7 @@ export const useStore = create<State>()(
                 verification: { checklist: current.steps.map(() => false) },
                 events: [
                   ...incident.events,
-                  event(now, "you", `Aprobaste: ${current.summary}`, { detail: note, kind: "milestone" }),
+                  event(now, "you", t("event.approved", { summary: current.summary }), { detail: note, kind: "milestone" }),
                 ],
               };
             }
@@ -382,10 +387,10 @@ export const useStore = create<State>()(
                 event(
                   now,
                   "you",
-                  outcome === "rejected" ? "Rechazaste la propuesta" : "Pediste cambios a la propuesta",
+                  outcome === "rejected" ? t("event.rejected") : t("event.changes"),
                   { detail: note, kind: "milestone", tone: "warning" },
                 ),
-                event(now, "agent", "Está preparando una nueva propuesta"),
+                event(now, "agent", t("event.revising")),
               ],
             };
           });
@@ -417,8 +422,8 @@ export const useStore = create<State>()(
               },
               events: [
                 ...current.events,
-                event(now, "you", "Aplicaste la mitigación", { kind: "milestone" }),
-                event(now, "agent", "Está vigilando la señal para confirmar la recuperación"),
+                event(now, "you", t("event.applied"), { kind: "milestone" }),
+                event(now, "agent", t("event.watching")),
               ],
             })),
           };
@@ -440,12 +445,12 @@ export const useStore = create<State>()(
               runIds: [...incident.runIds, `run_${hex(16)}`],
               events: [
                 ...incident.events,
-                event(now, "you", "Confirmaste que el servicio está estable", { kind: "milestone", tone: "success" }),
-                event(now, "system", `Incidente resuelto en ${formatDuration(now - alert.startedAt)}`, {
+                event(now, "you", t("event.confirmed"), { kind: "milestone", tone: "success" }),
+                event(now, "system", t("event.resolved", { duration: formatDuration(now - alert.startedAt) }), {
                   kind: "milestone",
                   tone: "success",
                 }),
-                event(now, "agent", "Empezó a redactar el postmortem"),
+                event(now, "agent", t("event.drafting")),
               ],
             };
           });
@@ -471,8 +476,8 @@ export const useStore = create<State>()(
               runIds: [...current.runIds, `run_${hex(16)}`],
               events: [
                 ...current.events,
-                event(now, "you", "Indicaste que el servicio sigue fallando", { kind: "milestone", tone: "warning" }),
-                event(now, "agent", "Volvió a investigar", { kind: "milestone" }),
+                event(now, "you", t("event.notStable"), { kind: "milestone", tone: "warning" }),
+                event(now, "agent", t("event.reinvestigating"), { kind: "milestone" }),
               ],
             })),
           };
@@ -490,8 +495,8 @@ export const useStore = create<State>()(
               runIds: [...incident.runIds, `run_${hex(16)}`],
               events: [
                 ...incident.events,
-                event(now, "you", "Reintentaste la investigación"),
-                event(now, "agent", "Empezó a investigar", { kind: "milestone" }),
+                event(now, "you", t("event.retried")),
+                event(now, "agent", t("event.investigating"), { kind: "milestone" }),
               ],
             };
           });
@@ -521,7 +526,7 @@ export const useStore = create<State>()(
               postmortem: { ...incident.postmortem, status: "approved", approvedAt: now },
               events: [
                 ...incident.events,
-                event(now, "you", "Aprobaste el postmortem y cerraste el incidente", {
+                event(now, "you", t("event.closed"), {
                   kind: "milestone",
                   tone: "success",
                 }),
@@ -548,7 +553,7 @@ export const useStore = create<State>()(
                   severity,
                   events: [
                     ...incident.events,
-                    event(Date.now(), "you", `Cambiaste la gravedad a ${SEVERITY[severity].short}`, {
+                    event(Date.now(), "you", t("event.severity", { severity: SEVERITY[severity].short }), {
                       kind: "milestone",
                     }),
                   ],
@@ -566,11 +571,11 @@ export const useStore = create<State>()(
         set({ alerts: [alert, ...state.alerts] });
         notify(
           {
-            title: `Nueva alerta · ${SEVERITY[alert.severity].short}`,
+            title: t("notice.alert", { severity: SEVERITY[alert.severity].short }),
             description: alert.title,
             tone: alert.severity === "sev1" ? "error" : "warning",
             href: "/",
-            actionLabel: "Ver",
+            actionLabel: t("action.view"),
           },
           now,
           now,
@@ -618,11 +623,11 @@ function advance(state: State, incident: Incident, now: number): Incident {
       const at = job.startedAt + job.failAfterMs;
       notify(
         {
-          title: `${current.id} · El agente no pudo investigar`,
-          description: "Su identidad está desactivada. Revisa el incidente para corregirlo.",
+          title: t("notice.failed", { id: current.id }),
+          description: t("notice.failed.detail"),
           tone: "error",
           href: `/incidentes/${current.id}`,
-          actionLabel: "Ver",
+          actionLabel: t("action.view"),
         },
         at,
         now,
@@ -632,15 +637,15 @@ function advance(state: State, incident: Incident, now: number): Incident {
         job: {
           ...job,
           failure: {
-            title: "El agente no pudo empezar a investigar",
-            reason: "Su identidad («incident-harness») está desactivada, así que el gateway rechazó la investigación.",
-            fix: "Actívala en Administración → Identidades y vuelve a intentarlo.",
+            title: t("failure.title"),
+            reason: t("failure.reason"),
+            fix: t("failure.fix"),
             at,
           },
         },
         events: [
           ...current.events,
-          event(at, "system", "El agente se detuvo: su identidad está desactivada", {
+          event(at, "system", t("event.stopped"), {
             kind: "milestone",
             tone: "critical",
           }),
@@ -678,11 +683,11 @@ function advance(state: State, incident: Incident, now: number): Incident {
     const at = verification.appliedAt + STABLE_AFTER_MS;
     notify(
       {
-        title: `${current.id} · El servicio parece estable`,
-        description: "El agente recomienda confirmar la recuperación.",
+        title: t("notice.stable", { id: current.id }),
+        description: t("notice.stable.detail"),
         tone: "success",
         href: `/incidentes/${current.id}`,
-        actionLabel: "Confirmar",
+        actionLabel: t("action.confirm"),
       },
       at,
       now,
@@ -692,8 +697,8 @@ function advance(state: State, incident: Incident, now: number): Incident {
       verification: { ...verification, stableSuggestedAt: at },
       events: [
         ...current.events,
-        event(at, "agent", "La señal se mantiene bajo el umbral", {
-          detail: "Recomienda confirmar la recuperación.",
+        event(at, "agent", t("event.stable"), {
+          detail: t("event.stable.detail"),
           kind: "milestone",
         }),
       ],
@@ -709,11 +714,11 @@ function finishJob(state: State, incident: Incident, job: AgentJob, at: number, 
   if (job.kind === "postmortem") {
     notify(
       {
-        title: `${incident.id} · Postmortem listo para revisar`,
-        description: "El agente lo redactó con la historia del incidente.",
+        title: t("notice.postmortem", { id: incident.id }),
+        description: t("notice.postmortem.detail"),
         tone: "info",
         href: `/incidentes/${incident.id}`,
-        actionLabel: "Revisar",
+        actionLabel: t("action.review"),
       },
       at,
       now,
@@ -721,7 +726,7 @@ function finishJob(state: State, incident: Incident, job: AgentJob, at: number, 
     const withEvent: Incident = {
       ...incident,
       job: undefined,
-      events: [...incident.events, event(at, "agent", "Redactó el borrador del postmortem", { kind: "milestone" })],
+      events: [...incident.events, event(at, "agent", t("event.drafted"), { kind: "milestone" })],
     };
     return {
       ...withEvent,
@@ -736,11 +741,11 @@ function finishJob(state: State, incident: Incident, job: AgentJob, at: number, 
   const number = incident.proposals.length + 1;
   notify(
     {
-      title: `${incident.id} · El agente propone una mitigación`,
+      title: t("notice.proposal", { id: incident.id }),
       description: draft.summary,
       tone: "warning",
       href: `/incidentes/${incident.id}`,
-      actionLabel: "Revisar",
+      actionLabel: t("action.review"),
     },
     at,
     now,
@@ -748,13 +753,13 @@ function finishJob(state: State, incident: Incident, job: AgentJob, at: number, 
   const events = [...incident.events];
   if (!previous) {
     events.push(
-      event(at, "agent", `Propuso una hipótesis con confianza ${confidenceLabel(hypothesis.confidence)}`, {
+      event(at, "agent", t("event.hypothesis", { confidence: confidenceLabel(hypothesis.confidence) }), {
         detail: hypothesis.statement,
         kind: "milestone",
       }),
     );
   }
-  events.push(event(at, "agent", `Propuso: ${draft.summary}`, { kind: "milestone" }));
+  events.push(event(at, "agent", t("event.proposed", { summary: draft.summary }), { kind: "milestone" }));
   return {
     ...incident,
     state: "mitigating",
