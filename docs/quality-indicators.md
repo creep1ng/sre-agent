@@ -65,6 +65,21 @@ values except where noted:
 - I18 also reads transition ids written in quotes, and fails when it finds none.
 - The text output starts with `commit: <sha>` of the measured checkout.
 
+## Top-level scripts named after an issue or a proof of concept
+
+I24's target admits only the scripts that `tests/` or the live path uses. After #1017 moved the
+rest to `scripts/archive/`, these stay, each with what uses it:
+
+| Script | Used by |
+| --- | --- |
+| `capture_evidence_verdict.mjs` | `docs/investigator.md` (evidence-verdict E2E capture) |
+| `capture_issue25_audit_terminal.py` | `tests/test_audit_read_terminal_boundary.py` |
+| `capture_issue718_war_room.mjs` | `compose.bok-topology-e2e.yaml` |
+| `ht06_harness_poc.py` | `docs/adrs/ADR-007-harness.md` |
+| `issue29_capture.py`, `issue29_capture_browser.cjs`, `issue29_capture_openapi_browser.cjs` | `docs/governed-grafana-mcp-demo.md` |
+| `issue29_counting_relay.py` | the counting-relay test in `tests/` and `compose.issue29-counter.yaml` |
+| `issue454_demo.py` | nothing; it stays until #1024 renames the support module it imports, then moves |
+
 ## Indicators
 
 "Core" is the packages `incident`, `investigator`, `triage`, `chat`, `bok`, `governance`,

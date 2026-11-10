@@ -80,6 +80,10 @@ or validate internal GitHub Actions runner steps. The current metadata validator
 nonempty fenced command block; a human reviewer must verify that the PR follows this container
 boundary.
 
+For Compose failures on a shared host (exhausted Docker address pools, a lingering checks
+database, migration suites that need their own PostgreSQL cluster), see
+[troubleshooting local stacks](codex-worktrees.md#troubleshooting-local-stacks).
+
 ## Evidence boundaries
 
 Choose exactly one primary Evidence kind: `mock`, `controlled integration`,
