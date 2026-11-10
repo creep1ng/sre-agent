@@ -66,7 +66,14 @@ from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemor
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
 from sre_agent.persistence.models import ResourceRow
 from sre_agent.persistence.repositories import CredentialRepository
-from sre_agent.vocabulary import IncidentState, RunObjective, TransitionId
+from sre_agent.vocabulary import (
+    RUN_ENDING_STATUSES,
+    HarnessStatus,
+    IncidentState,
+    RunObjective,
+    RunStatus,
+    TransitionId,
+)
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
 logger = logging.getLogger(__name__)
@@ -75,7 +82,7 @@ POSTMORTEM_SECONDS = 60.0
 
 # Runs whose dispatch wrote its intent and no outcome: at startup none has a dispatcher here.
 _INTERRUPTED_RUNS = text("""SELECT r.incident_id, r.run_id FROM incident.runs r
-    WHERE r.state->>'status' = 'running'
+    WHERE r.state->>'status' = :running
       AND EXISTS (SELECT 1 FROM incident.run_events e WHERE e.run_id = r.run_id
                   AND e.kind = 'dispatch_receipt'
                   AND e.payload->'dispatch_receipt'->>'phase' = 'intent')
@@ -308,7 +315,9 @@ class InvestigationRunDispatcher:
         """
         try:
             async with self.sessions() as session:
-                rows = (await session.execute(_INTERRUPTED_RUNS)).all()
+                rows = (
+                    await session.execute(_INTERRUPTED_RUNS, {"running": RunStatus.RUNNING})
+                ).all()
         except Exception as error:
             logger.error("investigation_sweep_failed error=%s", type(error).__name__)
             return
@@ -367,7 +376,7 @@ class InvestigationRunDispatcher:
                 ),
                 # Nothing resumes an interrupted dispatch: its run ends and a human retries.
                 interrupted_termination=self._termination_event(
-                    termination("needs_human", now), (), now, self._state(run_id)
+                    termination(HarnessStatus.NEEDS_HUMAN, now), (), now, self._state(run_id)
                 ),
                 dispatch_id=self._verifying.get(run_id),
             )
@@ -526,7 +535,7 @@ class InvestigationRunDispatcher:
                 status=status,
                 reason_code=f"mcp_discovery_{error.kind}",
                 request_ids=request_ids,
-                escalate="denied" if error.kind == "denied" else None,
+                escalate=HarnessStatus.DENIED if error.kind == "denied" else None,
             )
             return
 
@@ -590,7 +599,7 @@ class InvestigationRunDispatcher:
                 self._note(run_id, "bok_unavailable")
             contexts = self._contexts(incident_id, run_id, result, offset)
             if not (
-                result.status == "completed"
+                result.status == HarnessStatus.COMPLETED
                 and isinstance(result.outcome, ProposeHypothesis)
                 and result.remaining_step_budget >= 1
             ):
@@ -628,7 +637,7 @@ class InvestigationRunDispatcher:
 
         all_request_ids = _unique_ids(request_ids)
         mcp_request_ids = _unique_ids(run_mcp_ids)
-        if result.status == "denied":
+        if result.status == HarnessStatus.DENIED:
             await self._finish(
                 work,
                 incident_id,
@@ -640,11 +649,11 @@ class InvestigationRunDispatcher:
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
                 diagnostic=self._result_diagnostic(result),
-                escalate="denied",
+                escalate=HarnessStatus.DENIED,
                 contexts=contexts,
             )
             return
-        if result.status == "pre_dispatch_rejected":
+        if result.status == HarnessStatus.PRE_DISPATCH_REJECTED:
             await self._finish(
                 work,
                 incident_id,
@@ -659,7 +668,10 @@ class InvestigationRunDispatcher:
                 contexts=contexts,
             )
             return
-        if result.outcome is None or result.status not in {"completed", "needs_human"}:
+        if result.outcome is None or result.status not in {
+            HarnessStatus.COMPLETED,
+            HarnessStatus.NEEDS_HUMAN,
+        }:
             await self._finish(
                 work,
                 incident_id,
@@ -804,9 +816,9 @@ class InvestigationRunDispatcher:
         turn_id = result.turns[-1].turn_id if result.turns else None
         # Events written with a transition carry the state it reaches, as the timeline reads them.
         reached = (
-            ("resolved" if result.outcome.passed else "investigating")
+            (IncidentState.RESOLVED if result.outcome.passed else IncidentState.INVESTIGATING)
             if isinstance(result.outcome, VerifyMitigation)
-            else "mitigating"
+            else IncidentState.MITIGATING
             if isinstance(result.outcome, ProposeMitigation)
             else self._state(run_id)
         )
@@ -855,16 +867,17 @@ class InvestigationRunDispatcher:
         )
         if command is not None:
             await self.runtime.execute(command)
-            if reached == "resolved":
+            if reached == IncidentState.RESOLVED:
                 self.after_resolved(incident_id)
             elif isinstance(result.outcome, VerifyMitigation):
                 self.after_verification_failed(incident_id)
             return
         # No transition follows this outcome, so the run ends here and a human decides the next.
         run_patch = termination(
-            {"conclude": "completed", "propose_hypothesis": "max_steps"}.get(
-                result.outcome.action, "needs_human"
-            ),
+            {
+                "conclude": HarnessStatus.COMPLETED,
+                "propose_hypothesis": HarnessStatus.MAX_STEPS,
+            }.get(result.outcome.action, HarnessStatus.NEEDS_HUMAN),
             now,
         )
         await work.complete_run_dispatch(
@@ -1085,7 +1098,7 @@ class InvestigationRunDispatcher:
         run_patch: Mapping[str, Any],
         request_ids: Sequence[UUID],
         now: datetime,
-        state: str = "investigating",
+        state: str = IncidentState.INVESTIGATING,
         reason_code: str | None = None,
     ) -> EventDraft:
         return EventDraft(
@@ -1218,7 +1231,7 @@ class InvestigationRunDispatcher:
         request_ids: Sequence[UUID],
         turn_id: str | None,
         incident_patch: Mapping[str, Any] | None = None,
-        state: str = "investigating",
+        state: str = IncidentState.INVESTIGATING,
     ) -> EventDraft:
         assert result.outcome is not None
         action = result.outcome.action
@@ -1284,11 +1297,13 @@ class InvestigationRunDispatcher:
 
 def _terminated_reason(reason_code: str, result_status: str | None) -> str:
     """The run-state contract's reason for a dispatch that ended without a transition."""
-    if result_status in {"max_steps", "invalid_output", "upstream_unavailable", "needs_human"}:
+    # A completed result that reaches here produced no outcome, and a denied one escalates on
+    # its own path: both end as needs_human.
+    if result_status in RUN_ENDING_STATUSES - {HarnessStatus.COMPLETED, HarnessStatus.DENIED}:
         return result_status
     if reason_code == "mcp_discovery_transient":
-        return "upstream_unavailable"
-    return "needs_human"
+        return HarnessStatus.UPSTREAM_UNAVAILABLE
+    return HarnessStatus.NEEDS_HUMAN
 
 
 def _cited_memories_only(
@@ -1307,12 +1322,16 @@ def _unique_ids(values: Sequence[UUID]) -> list[UUID]:
 
 def _ended_reason(result: InvestigationResult) -> str:
     """The receipt's reason; a hypothesis rejected for citing no measured data says so (#760)."""
-    if result.status == "invalid_output" and (result.detail or "").startswith(UNMEASURED):
+    if result.status == HarnessStatus.INVALID_OUTPUT and (result.detail or "").startswith(
+        UNMEASURED
+    ):
         return "investigation_no_measured_evidence"
     # A tool held past INVESTIGATOR_TOOL_TIMEOUT_SECONDS names the timeout (#719); any other tool
     # that did not answer is a cause distinct from the model provider (#705).
     if result.failure_diagnostic is not None and result.failure_diagnostic.stage == "tool_timeout":
         return "tool_timeout"
-    if result.status == "upstream_unavailable" and (result.detail or "").startswith("tool failed:"):
+    if result.status == HarnessStatus.UPSTREAM_UNAVAILABLE and (result.detail or "").startswith(
+        "tool failed:"
+    ):
         return "investigation_tool_unavailable"
     return f"investigation_{result.status}"

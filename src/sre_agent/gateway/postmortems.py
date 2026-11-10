@@ -30,7 +30,7 @@ from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.memories import PostgresIncidentMemoryRepository
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
-from sre_agent.vocabulary import is_identifier
+from sre_agent.vocabulary import IncidentState, is_identifier
 
 WRITE_ACTION, REVIEW_ACTION, READ_ACTION, CONTENT_ACTION = (
     "run.command",
@@ -144,7 +144,9 @@ class PostmortemService:
                 if incident is None:
                     return error_envelope(request_id, 404)
                 reserved = incident.state.get("postmortem") or {}
-                if incident.state.get("state") != "postmortem" or not reserved.get("postmortem_id"):
+                if incident.state.get("state") != IncidentState.POSTMORTEM or not reserved.get(
+                    "postmortem_id"
+                ):
                     return error_envelope(request_id, 409, NOT_OPEN)
                 if cited - await work.postmortems.known_event_ids(incident_id, cited):
                     return error_envelope(request_id, 422, UNKNOWN_EVENT)
@@ -191,7 +193,7 @@ class PostmortemService:
                 incident = await work.incidents.get(incident_id)
                 if incident is None:
                     return error_envelope(request_id, 404)
-                if incident.state.get("state") != "postmortem":
+                if incident.state.get("state") != IncidentState.POSTMORTEM:
                     return error_envelope(request_id, 409, NOT_OPEN)
                 if record is None:
                     return error_envelope(request_id, 404, NOT_FOUND)

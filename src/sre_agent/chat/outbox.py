@@ -483,9 +483,14 @@ async def mitigation_decision(
                 LEFT JOIN principals p
                   ON p.principal_id = d.document -> 'actor_reference' ->> 'principal_id'
                 WHERE d.run_id = :run_id AND d.decided_at >= CAST(:proposed_at AS timestamptz)
-                  AND d.document ->> 'transition_id' IN ('apply_mitigation', 'reject_mitigation')
+                  AND d.document ->> 'transition_id' IN (:approved, :rejected)
                 ORDER BY d.decided_at LIMIT 1"""),
-            {"run_id": payload["run_id"], "proposed_at": payload["proposed_at"]},
+            {
+                "run_id": payload["run_id"],
+                "proposed_at": payload["proposed_at"],
+                "approved": TransitionId.APPLY_MITIGATION,
+                "rejected": TransitionId.REJECT_MITIGATION,
+            },
         )
     ).one_or_none()
     # Decided: the amber marker goes, since nothing waits for a human any more.
@@ -514,9 +519,14 @@ async def _verification(
             text("""SELECT document ->> 'transition_id' AS transition_id, decided_at
                 FROM incident.decisions
                 WHERE incident_id = :incident_id AND decided_at >= :approved_at
-                  AND document ->> 'transition_id' IN ('verification_passed', 'verification_failed')
+                  AND document ->> 'transition_id' IN (:passed, :failed)
                 ORDER BY decided_at LIMIT 1"""),
-            {"incident_id": incident_id, "approved_at": approved_at},
+            {
+                "incident_id": incident_id,
+                "approved_at": approved_at,
+                "passed": TransitionId.VERIFICATION_PASSED,
+                "failed": TransitionId.VERIFICATION_FAILED,
+            },
         )
     ).one_or_none()
     if checked is None:

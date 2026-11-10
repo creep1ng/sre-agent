@@ -18,15 +18,16 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.vocabulary import TriageStatus
 
 INTAKE_DETECTOR = "grafana-alerting"
 WORKFLOW = ("incident_workflow", "incident-response")
 # Triage store status -> alert triage_status; an alert without a stored decision is `new`.
 TRIAGE_STATUS = {
-    "open": "triaging",
-    "declared": "declared",
-    "linked": "linked",
-    "dismissed": "dismissed",
+    TriageStatus.OPEN: "triaging",
+    TriageStatus.DECLARED: "declared",
+    TriageStatus.LINKED: "linked",
+    TriageStatus.DISMISSED: "dismissed",
 }
 _EPISODES = text("""
 SELECT e.*, t.status AS triage, t.incident_id AS triage_incident_id
