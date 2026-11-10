@@ -235,6 +235,22 @@ for a person.
 | This record and the demo script (#1008) merge before the cutoff. | The demo is run from `main`. | 6 | #870 |
 | The EC2 demo gives Grafana 1G of memory, and the bootstrap retries `compose up` up to three times, 30 s apart. Approved at about 16:55 UTC; on `main` (#1011). | In the maintainer's review that day the Demo Dashboard failed and the fault could not be shown: upstream caps Grafana at 175M, a dashboard load peaks near 275M and the kernel killed it. Two of three fresh instances that day started only half the store. | 6 | #870 |
 
+## Ninth round of decisions (2026-11-09)
+
+After a read-only code-quality audit of `main` at `0cb2ad44`, the maintainer opened epic #1015
+(clean, understandable codebase; light hexagonal architecture over the existing ports).
+
+| Decision | Reason | Value | Issue |
+| --- | --- | --- | --- |
+| The previous console (`index.html`, `public/`, `styles/`) is retired: its remaining views move to `/app` and it is deleted, and the CI browser job runs the `web/incident-console` e2e instead. It waits for #715 and #711. | Two consoles split the evidence; today CI tests only the previous one. | 5 | #1019 |
+| `docs/evidence` leaves git, and a local copy is kept with checksums (`~/sre-agent-evidence-archive/0cb2ad44/SHA256SUMS` on the maintainer's host, 1,014 files). Rewriting git history is not part of it. | 101.8 MB of 133 MB tracked, and its scripts and texts surface in every code search. | 7 | #1018 |
+| New PR evidence, screenshots and videos, is attached to the PR body or a PR comment, for good. GitHub takes `.mp4`, `.mov` and `.webm` up to 10 MB (100 MB on paid plans); the repository is public, so attachments are readable without signing in. Video stays optional. | Storage now exists without growing git. | 7, 6 | #1018 |
+| Where the code and `agent/workflows/incident-response.yaml` or `agent/schemas/` disagree on the lifecycle, the code wins and the YAML and schemas are corrected. Today the only real divergence is the `verifying` objective; the triage statuses and `pre_dispatch_rejected` are deliberate mappings and stay. | The code is what runs; those files are not published releases. | 2 | #1020 |
+| Governed routes share one authentication semantics and one order, the one in [architecture](architecture.md): validate, authenticate, authorize; inactive principals are rejected on every route. Responses that change are listed per route in the PR. | Safer, already the documented rule, and one way to authenticate instead of two. | 3 | #1021 |
+| The console's scenario simulator exists only behind a build variable, on in the demo compose and off in production. | The console is a client of the engine, not a second simulated engine. | 5 | #1025 |
+| Milestones: cheap enabling work (#1016, #1017, #1018, #1020, #1024) in M2, the large refactors and #1019, #1025 in M3. They move if they do not fit: no academic release is left to honour. | No strict release commitments remain after the 2026-11-04 demo. | — | #1015 |
+| Every issue of the epic carries quality indicators with a baseline measured at `0cb2ad44` and a target, measured by a versioned script so they can be checked after implementation. | We claim only what we measured. | 6 | #1016 |
+
 ## Administration plane decisions (2026-11-02 and 2026-11-03)
 
 The maintainer reviewed the administration plane rewritten inside `/app/admin` in the RC-2 style.
