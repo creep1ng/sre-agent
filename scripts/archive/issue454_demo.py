@@ -19,7 +19,7 @@ import httpx
 import psycopg
 import uvicorn
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tests"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
 from request_attribution_support import (
     ADMIN,
     AUDIT_KEY,
@@ -51,7 +51,7 @@ class CreditedControlledProvider(ControlledProvider):
 
 def main() -> None:
     # Refuse arbitrary production/demo databases before any API or SQL mutation.
-    runpy.run_path(str(Path(__file__).with_name("assert_test_database_isolated.py")))
+    runpy.run_path(str(Path(__file__).resolve().parents[1] / "assert_test_database_isolated.py"))
     application = create_application(
         Settings(DATABASE_URL, AUDIT_KEY, audit_hmac_key=AUDIT_KEY),
         llm_provider=CreditedControlledProvider(),

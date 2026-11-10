@@ -77,8 +77,7 @@ rest to `scripts/archive/`, these stay, each with what uses it:
 | `capture_issue718_war_room.mjs` | `compose.bok-topology-e2e.yaml` |
 | `ht06_harness_poc.py` | `docs/adrs/ADR-007-harness.md` |
 | `issue29_capture.py`, `issue29_capture_browser.cjs`, `issue29_capture_openapi_browser.cjs` | `docs/governed-grafana-mcp-demo.md` |
-| `issue29_counting_relay.py` | the counting-relay test in `tests/` and `compose.issue29-counter.yaml` |
-| `issue454_demo.py` | nothing; it stays until #1024 renames the support module it imports, then moves |
+| `issue29_counting_relay.py` | `tests/test_mcp_counting_relay.py` and `compose.issue29-counter.yaml` |
 
 ## Indicators
 
