@@ -30,9 +30,10 @@ to the API in its own follow-up PR, using the map below.
 - **Mock mode.** Append `?mock` once per tab to run the simulator instead (`/app/?mock`). The flag
   is stored in `sessionStorage` and the query is removed. The two modes share the same UI shell.
   Only a build with `CONSOLE_SIMULATOR=1` holds the simulator (`src/simulator/`): the e2e overlay
-  `compose.incident-console-e2e.yaml` and the demo overlay `compose.mcp.yaml` turn it on, and so
-  does `CONSOLE_SIMULATOR=1` in the environment of a `docker compose` build. The default build is
-  live only: `?mock` does nothing and the bundle has no simulator code.
+  `compose.incident-console-e2e.yaml` turns it on, and so does `CONSOLE_SIMULATOR=1` in the
+  environment of a `docker compose` build. Every other build is live only, the one
+  `scripts/setup_sre.py` installs included ([setup](../../docs/setup-sre.md)): `?mock` does
+  nothing and the bundle has no simulator code.
 
 ## Run it
 

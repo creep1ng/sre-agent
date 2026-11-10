@@ -18,11 +18,6 @@ services:
       - mcp-boundary
       - mcp-consumer
 
-  # The demo console carries the scenario simulator, opened with `?mock` (#1025).
-  incident-console:
-    build:
-      args: {CONSOLE_SIMULATOR: "1"}
-
   # The harness can reach only the governed API. Without this internal network,
   # its runtime bridge can reach the demo's host-published Grafana proxy.
   harness:

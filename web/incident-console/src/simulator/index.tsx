@@ -2,7 +2,7 @@
  * The scenario simulator of the console (mock mode): an in-browser backend that plays the
  * agent through the scripted OpenTelemetry demo failures, and the screens that read it. It is
  * loaded by src/lib/simulator.ts only in a build with CONSOLE_SIMULATOR=1 and a tab opened with
- * `?mock`; production code never imports this directory.
+ * `?mock`. Outside this directory, only the feature components its pages render import its store.
  */
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
