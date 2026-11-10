@@ -34,7 +34,7 @@ from issue454_support import (
 from issue454_support import (
     clean_history as clean_history,
 )
-from issue454_support import migrated_database as migrated_database
+from issue454_support import seeded_database as seeded_database
 
 from sre_agent.application import create_application
 from sre_agent.gateway.openrouter import OpenRouterProvider

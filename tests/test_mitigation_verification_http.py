@@ -27,7 +27,7 @@ import httpx
 import psycopg
 import pytest
 import test_incident_investigator_http as suite
-from test_incident_investigator_http import migrated_database  # noqa: F401  (module fixture)
+from test_incident_investigator_http import seeded_database  # noqa: F401  (module fixture)
 from test_mitigation_execution_http import CALLS, SIGNING_KEY, _executor
 
 from sre_agent.application import create_application
@@ -50,7 +50,7 @@ MEASURE = suite._scripted_decision({"incident": {"hypotheses": []}, "collected_e
 @pytest.fixture(scope="module", autouse=True)
 def operation_grant(request: pytest.FixtureRequest) -> None:
     """The executor's catalog and the grant the demo provisions: roll sre-checkout back."""
-    request.getfixturevalue("migrated_database")
+    request.getfixturevalue("seeded_database")
     database, admin = Database(suite.DATABASE_URL), f"Bearer {suite.ADMIN_KEY}"
 
     async def setup() -> None:

@@ -51,23 +51,7 @@ SEED_ENV = {
 
 
 @pytest.fixture(scope="module", autouse=True)
-def migrated_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, consumption_reservations, "
-            "consumption_limit_policies, "
-            "bok_section_chunks, bok_documents, "
-            "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
-            "mcp_tools, mcp_servers, "
-            "principals, idempotency_records, alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
-
+def seeded_database(migrated_database: None) -> None:
     async def bootstrap() -> None:
         database = Database(DATABASE_URL)
         try:
@@ -267,7 +251,7 @@ def migrated_database() -> None:
 
 
 @pytest.fixture(autouse=True)
-def isolated_mutations(migrated_database):
+def isolated_mutations(seeded_database):
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         connection.execute("TRUNCATE TABLE audit_events, request_attributions")
     try:
@@ -284,7 +268,7 @@ def isolated_mutations(migrated_database):
 
 
 @pytest.fixture
-def client(migrated_database: None):
+def client(seeded_database: None):
     application = create_application(Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY))
     with TestClient(application) as test_client:
         yield test_client

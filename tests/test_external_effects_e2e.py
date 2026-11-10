@@ -34,7 +34,7 @@ from test_incident_investigator_http import (
     _receipts,
     _start,
     _stop_app_process,
-    migrated_database,  # noqa: F401 -- reuse the existing synthetic DB fixture
+    seeded_database,  # noqa: F401 -- reuse the existing synthetic DB fixture
 )
 
 from sre_agent.application import create_application

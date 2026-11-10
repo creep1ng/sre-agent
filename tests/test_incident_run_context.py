@@ -30,7 +30,7 @@ from test_incident_investigator_http import (
     _receipts,
     _serve,
     _start,
-    migrated_database,  # noqa: F401 -- a fresh synthetic DB: this module adds a principal
+    seeded_database,  # noqa: F401 -- a fresh synthetic DB: this module adds a principal
 )
 
 from sre_agent.incident.persistence import (
