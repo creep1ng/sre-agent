@@ -7,7 +7,9 @@ from uuid import UUID
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from issue454_support import (
+from jsonschema import Draft202012Validator
+from referencing import Registry, Resource
+from request_attribution_support import (
     ADMIN,
     AUDIT_KEY,
     CONSUMER,
@@ -20,12 +22,10 @@ from issue454_support import (
     read_item,
     record_artifact,
 )
-from issue454_support import (
+from request_attribution_support import (
     clean_history as clean_history,
 )
-from issue454_support import seeded_database as seeded_database
-from jsonschema import Draft202012Validator
-from referencing import Registry, Resource
+from request_attribution_support import seeded_database as seeded_database
 from sqlalchemy import event
 
 from sre_agent.application import create_application
