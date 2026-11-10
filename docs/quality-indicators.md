@@ -14,8 +14,10 @@ The host needs Git and Docker only, plus the `.env` that every `compose.yaml` co
 `.env.example`; the service reads no value from it).
 
 ```sh
-# The checkout that holds compose.yaml; add --json for one JSON object.
+# The checkout that holds compose.yaml.
 docker compose --profile quality run --build --rm quality
+# One JSON object. Without --build, which writes the build log to stdout as well.
+docker compose --profile quality run --rm quality --json
 # Any other commit: measure a clone of it.
 git clone --quiet . /tmp/quality-base
 git -C /tmp/quality-base checkout --quiet --detach 0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63
@@ -26,8 +28,12 @@ Measure a normal clone. In a linked worktree `.git` is a file pointing at the co
 outside the mount, so the command fails there; clone the worktree's commit as shown above.
 
 The script exits 1 and prints no indicator when `git` or `rg` is missing or fails, when the
-checkout has no `.git` (or is not the top of one), or when a file list it measures is empty.
-`rg` exit status 1 (no match) is a valid result only for I21.
+checkout has no `.git` (or is not the top of one), or when a file list or the transition ids it
+measures come out empty. `rg` exit status 1 (no match) is a valid result only for I21.
+
+`commit:` is the `HEAD` of the measured checkout, but the values come from its files. When they
+differ from `HEAD` the line ends with `(working tree differs)` and `--json` has `"dirty": true`.
+Evidence for a PR is measured on a clean clone of the tested SHA.
 
 ## Differences from the audit script
 
@@ -41,6 +47,10 @@ values except where noted:
 - `rg` runs with `--no-config --no-ignore-global`, so a personal ripgrep config or global
   gitignore cannot change I20 and I21. The container's ripgrep 14.1.1 and the audit's 15.2.0 give
   the same I20 and I21 on `0cb2ad44`.
+- I09 also counts `import sre_agent.persistence.x` and `from sre_agent import persistence` (the
+  same for `gateway`), which the audit missed. No core file uses those forms on `0cb2ad44`, so the
+  baseline stays 8.
+- I18 also reads transition ids written in quotes, and fails when it finds none.
 - The text output starts with `commit: <sha>` of the measured checkout.
 
 ## Indicators
@@ -87,4 +97,18 @@ include blank lines, comments and docstrings.
 | I34 legacy console paths tracked | Tracked files under `index.html`, `public/`, `styles/` | Assets the landing page uses | Moving the files to another directory | 39 | 0, except landing assets listed in the PR | #1019 |
 | I35 `store.ts` lines / `scenarios.ts` in `src/lib` | Newlines in `web/incident-console/src/lib/store.ts`; whether `src/lib/scenarios.ts` exists | None known | Moving the simulator to another bundled path (the bundle check in #1025 catches it) | 776 / True | ≤ 300 / False | #1025 |
 
-Adding this page and the script raised I23 and I26 by one each over the baseline.
+Adding this page and the script raised I23 and I26 by one each over the baseline, I20 by three
+files (those two and `docker/quality.Dockerfile`) and I21 by two (both mention `grant`).
+
+## Indicators the script does not measure
+
+Three stories declare indicators outside I01–I35. The script does not measure them; the PR of
+the owning story states how it measured each one.
+
+| Indicator | Baseline | Target | Issue |
+| --- | --- | --- | --- |
+| Places that declare the catalog's resource types | 5 | 1, plus the CHECK constraints derived from it | #1022 |
+| Core packages covered by `.importlinter` | `incident`, `governance`, `investigator`, `executor` | also `triage`, `chat`, `bok` and the application | #1023 |
+| `os.environ` reads outside the settings | 7 | 0 | #1023 |
+| `scenarios.ts` strings in the production bundle (`rg` over `dist/`) | present | absent without the build variable | #1025 |
+| Repeated `busy`/`error` pairs in administration pages | 13 | 0 | #1025 |

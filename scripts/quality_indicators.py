@@ -47,17 +47,21 @@ def required(name: str, files: list[str]) -> list[str]:
     return files
 
 
+def package(module: str) -> str:
+    parts = module.split(".")
+    return ".".join(parts[:2]) if parts[0] == "sre_agent" else parts[0]
+
+
 def imports(tree: ast.AST) -> set[str]:
     """Top-level packages, and `sre_agent.<package>` for the project's own imports."""
     modules = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            modules |= {alias.name.split(".")[0] for alias in node.names}
+            modules |= {package(alias.name) for alias in node.names}
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            parts = node.module.split(".")
-            modules.add(
-                ".".join(parts[:2]) if parts[0] == "sre_agent" and len(parts) > 1 else parts[0]
-            )
+            modules.add(package(node.module))
+            if node.module == "sre_agent":
+                modules |= {f"sre_agent.{alias.name}" for alias in node.names}
     return modules
 
 
@@ -142,7 +146,8 @@ def measure() -> dict[str, object]:
         r"class \w*Error(Envelope|Response|Detail)\b"
     )
     out["I17 issue references (#NNN) in src"] = count(r"#\d{2,4}\b")
-    transitions = set(re.findall(r"^\s*-?\s*id:\s*([a-z_]+)\s*$", Path(WORKFLOW).read_text(), re.M))
+    ids = re.findall(r"^\s*-?\s*id:\s*[\"']?([a-z_]+)[\"']?\s*$", Path(WORKFLOW).read_text(), re.M)
+    transitions = set(required(f"transition ids in {WORKFLOW}", ids))
     literals = sum(
         isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in transitions
         for tree in trees.values()
@@ -208,7 +213,8 @@ def measure() -> dict[str, object]:
     store_lines = store.read_text().count("\n") if store.exists() else "absent"
     scenarios = Path("web/incident-console/src/lib/scenarios.ts").exists()
     out["I35 web store.ts lines / scenarios.ts in src/lib"] = f"{store_lines} / {scenarios}"
-    return {"commit": run("git", "rev-parse", "HEAD")[0], "indicators": out}
+    dirty = bool(run("git", "status", "--porcelain"))
+    return {"commit": run("git", "rev-parse", "HEAD")[0], "dirty": dirty, "indicators": out}
 
 
 def main() -> int:
@@ -225,7 +231,7 @@ def main() -> int:
     if options.json:
         print(json.dumps(result, indent=2))
     else:
-        print(f"commit: {result['commit']}")
+        print(f"commit: {result['commit']}" + (" (working tree differs)" * result["dirty"]))
         for name, value in result["indicators"].items():
             print(f"{name}: {value}")
     return 0
