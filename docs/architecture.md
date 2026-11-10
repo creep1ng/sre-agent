@@ -10,7 +10,7 @@ capabilities without making ORM, DTO, or provider models authoritative.
 | --- | --- | --- |
 | Control plane | `sre_agent.control` | Authenticated and authorized administration of Principals and credentials; later catalog/grant surfaces remain separately owned |
 | Incident-resolution plane | `sre_agent.incident` | Workflow transitions, decisions, replay ports, and authoritative incident/run persistence |
-| Harness | `sre_agent.harness` | Incident conversation and capability-orchestration boundary; it is not part of the gateway |
+| Investigator | `sre_agent.investigator` | The bounded investigation loop that takes an incident context and an objective and consumes the gateway; it is not part of the gateway ([design](investigator.md)) |
 | Gateway | `sre_agent.gateway` | Health, authentication, capability authorization, governed responses, provider, and audit adapters |
 | Deploy executor | `sre_agent.executor` | A separate process of the same image: named `deployment.rollback`/`deployment.restart` operations over docker-socket-proxy, idempotent by key and by state; it imports no other plane ([design](deploy-executor.md)) |
 

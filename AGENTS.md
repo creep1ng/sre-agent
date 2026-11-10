@@ -72,3 +72,39 @@ Read [the team workflow](docs/team-workflow.md) before contributing and
 The [rollout record](docs/governance-rollout.md) distinguishes implemented local
 configuration from activated GitHub protections. Never equate workflow presence
 or a green status with semantic acceptance or active merge protection.
+
+## Glossary
+
+The terms as the code, `agent/workflows/incident-response.yaml` and `agent/schemas/` use them.
+
+- **Incident**: a declared problem with a service, identified by `incident_id`. It moves through
+  the states of the workflow (`detected` to `closed`) only by the transitions declared there.
+  Triage turns an alert into one (`triage_declare`), and the incident is the session from that
+  declaration to closure.
+- **Run**: one execution of the agent on an incident, identified by `run_id` (`run_…`). It starts
+  with an objective (`triage`, `investigate`, `mitigate` or `postmortem` in the run-start request)
+  and its status is `running`, `awaiting_human`, `completed` or `terminated`
+  (`run-state.schema.yaml`).
+- **Investigation**: the investigator's bounded loop inside a run (`src/sre_agent/investigator/`):
+  it reads evidence through the gateway and returns hypotheses or a mitigation proposal within a
+  step budget. The incident is in the `investigating` state meanwhile. The investigator's own
+  objective adds `verify` to the four public ones.
+- **Action**: the verb a grant allows on a resource (`Grant.action`, for example `mcp.discovery`,
+  `bok.search`, `invoke`, `mitigation.execute`); an audit event's `action` field records the
+  same kind of verb. The name of what an agent output does (`propose_mitigation`) can equal a
+  transition id without being a transition. The console's action catalog lists the operations
+  below.
+- **Operation**: a named operation in the deploy-executor's catalog (`deployment.rollback`,
+  `deployment.restart`, `flag.set`; `agent/executor/catalog*.yaml`), granted as the
+  `service_operation` resource `{service}:{operation}` and run only with a person's approval.
+  An audit event's `operation` field names the governed operation that produced it
+  (`responses.create`, `mcp.invoke`, `grants.create`, `mitigation.execute`, ...), the vocabulary
+  of the `ck_audit_events_operation` constraint.
+- **Capability**: a resource, and optionally an action on it, that the gateway authorized for the
+  principal of a run (`Capability` in `investigator/contract.py`, the run's
+  `authorized_capabilities`). The agent uses nothing that is not one.
+- **Harness**: not a package. The workflow YAML and older documents call the investigator "the
+  investigator harness", and the seeded agent principal it acts as is `incident-harness`; in new
+  text, prefer "investigator". The contract harness is the `harness` Compose
+  service that validates `schemas/` (`docker compose --profile harness run --rm harness`), and
+  `issue-14-harness` is the deterministic gate of governed responses.

@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from pathlib import Path
 from typing import Any
 
-from sre_agent import control, harness, incident
+from sre_agent import control, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.chat.taps import TapWorker
 from sre_agent.gateway import health
@@ -112,7 +112,7 @@ def create_application(
     application.openapi = openapi_with_release_metadata  # type: ignore[method-assign]
     application.include_router(health.health_router(probe))
     application.include_router(identity_router)
-    application.state.planes = (control, incident, harness)
+    application.state.planes = (control, incident)
     application.state.session_provider = database.sessions
     application.state.database = database
     application.state.llm_provider = provider
