@@ -10,9 +10,9 @@
 //               approval -> closed, then the API confirms the closed incident
 //
 // Env: PLAYWRIGHT_BASE_URL, DEMO_HUMAN_API_KEY, INCIDENT_ID, RUN_ID, EVIDENCE_DIR.
-// Usage: node scripts/capture_issue41_verify_close_real.mjs verify|postmortem|close
+// Usage: node scripts/archive/capture_issue41_verify_close_real.mjs verify|postmortem|close
 import { chromium, request } from "@playwright/test";
-import { connectConsole } from "../tests/browser/support/console-session.mjs";
+import { connectConsole } from "../../tests/browser/support/console-session.mjs";
 
 const phase = process.argv[2];
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://web";

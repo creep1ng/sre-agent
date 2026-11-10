@@ -7,7 +7,7 @@ set -euo pipefail
 : "${CA1_EVIDENCE_DIR:?absolute writable evidence directory required}"
 : "${CA1_PROJECT:?fresh exclusive project required}"
 [[ "$CA1_PROJECT" == ca1-* ]] || exit 2
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 c=(docker compose --env-file "$CA1_ENV_FILE" -f compose.yaml -f "$CA1_OVERRIDE" -p "$CA1_PROJECT")
 mkdir -p "$CA1_EVIDENCE_DIR"
 exec > >(tee "$CA1_EVIDENCE_DIR/journey.log") 2>&1
@@ -24,7 +24,7 @@ ready() {
 }
 phase() {
   "${c[@]}" run --rm --no-deps --user "$(id -u):$(id -g)" -e API_URL=http://api:8000 python-checks \
-    sh -c 'export DATABASE_URL="$DEMO_DATABASE_URL"; exec python scripts/prove_ca1_http_restart.py "$1"' sh "$1"
+    sh -c 'export DATABASE_URL="$DEMO_DATABASE_URL"; exec python scripts/archive/prove_ca1_http_restart.py "$1"' sh "$1"
 }
 identity() {
   local api db

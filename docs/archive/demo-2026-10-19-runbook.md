@@ -16,12 +16,12 @@ fixture-based drafts of this runbook (T1/T2/T3 slices, `pm_demo0001`, unpublishe
 - Git, Docker Engine + Compose >= 2.24.4, Python 3.10+, AWS CLI with the `otel-demo` profile and
   the Session Manager plugin (user-local in `~/.local/bin` is enough), the pinned relay image
   from `docker/api.Dockerfile` already pulled (`connect-mcp` runs with `--pull never`).
-- A private env file (mode 0600) as in [setup-sre.md](setup-sre.md), with four distinct `sre_`
+- A private env file (mode 0600) as in [setup-sre.md](../setup-sre.md), with four distinct `sre_`
   keys, `SRE_OTEL_MODE=aws`, a unique `SRE_SETUP_PROJECT`, free ports, explicit
   `SRE_RUNTIME_SUBNET`/`SRE_CONSUMER_SUBNET` if Docker pools are exhausted, and for the paid
   investigation: `SRE_ENABLE_PAID_LLM=1`, `OPENROUTER_API_KEY`, `OPENROUTER_TIMEOUT_SECONDS=30`
   (the investigator then waits 45 s per model call, 75 s with `OPENROUTER_MANAGEMENT_API_KEY`;
-  see [investigator.md](investigator.md#demo-model)),
+  see [investigator.md](../investigator.md#demo-model)),
   `TRIAGE_AGENT_MODEL=anthropic/claude-haiku-5.5`, `TRIAGE_AGENT_PROVIDER=anthropic` (same for
   `REMEDIATION_AGENT_*`; measured in #880, calls of 1.6-8.1 s). The previous
   `z-ai/glm-5.3-flash` on `relace` had calls of up to 80 s, past the 60 s it ran with (#718). The

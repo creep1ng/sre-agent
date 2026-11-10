@@ -55,7 +55,7 @@ observables (`"{code}: {detail}"`).
 
 ```bash
 python scripts/validate_incident_contracts.py
-python scripts/adapt_otel_signal.py
+python scripts/archive/adapt_otel_signal.py
 pytest tests/test_otel_signal_adapter.py -q
 ```
 

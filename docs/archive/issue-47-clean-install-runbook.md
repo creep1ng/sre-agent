@@ -4,7 +4,7 @@
 worktrees, no manual database work.** The runbook pins a release SHA, configures private
 local secrets, and verifies migrations, demo seed, health checks, backup and a scoped
 reset. It uses the plain packaged stack (`compose.yaml`); the richer operator setup for
-OpenTelemetry targets lives in [the setup guide](setup-sre.md) and is out of scope.
+OpenTelemetry targets lives in [the setup guide](../setup-sre.md) and is out of scope.
 
 Follow every step in order and fill the [Runner log](#runner-log) while you execute.
 No step requires the author's help; if one does, record it as a gap.
@@ -244,7 +244,7 @@ recovery: they can destroy other projects' data, including a shared stack's.
 The clean seed is deliberately minimal: `demo-human` authenticates but holds zero
 incident-workflow grants, so triage reads answer HTTP 403
 (`not_authorized`, "Sin acceso") until the operator is provisioned. The full operator
-setup ([setup-sre.md](setup-sre.md)) obtains those grants through the same governed
+setup ([setup-sre.md](../setup-sre.md)) obtains those grants through the same governed
 provisioning path; this optional section applies that path to the packaged stack. It
 does not modify the seed and is not required by the base verification above. Run it
 when you need to exercise triage or declare incidents with the demo key (J2 in the
@@ -316,7 +316,7 @@ delete it (`rm compose.provision.yaml`) when you no longer need the optional pat
 | Right after a fresh volume (first start or reset), `up --wait` stops with `service "migrate" didn't complete successfully: exit 1` and `docker compose logs db` shows `the database system is shutting down` | PostgreSQL restarts once while it initializes a new volume and `migrate` can hit that restart. Rerun `docker compose up --wait`: the volume is kept and migrate/seed converge |
 | `migrate` exits non-zero | Inspect `docker compose logs migrate`; fix configuration; rerun `docker compose run --rm migrate`. The volume is preserved; do not delete it |
 | Data from an older experiment appears | Two checkouts share one `COMPOSE_PROJECT_NAME`; the pre-check before the first start catches it. Compare `docker volume ls` with your project name, then finish the owner or use a unique name |
-| `seed_state_conflict` | Seed rows do not match the configured inputs; see the routing reconciliation notes in the [README](../README.md#when-a-changed-env-route-does-not-take-effect). Do not delete the volume to force it |
+| `seed_state_conflict` | Seed rows do not match the configured inputs; see the routing reconciliation notes in the [README](../../README.md#when-a-changed-env-route-does-not-take-effect). Do not delete the volume to force it |
 | Web pages fail to load data | Check `docker compose ps` and the API readiness URL first; web only proxies `/api/` to `api:8000` |
 
 ## Cleanup

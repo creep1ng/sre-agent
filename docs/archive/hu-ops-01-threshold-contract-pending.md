@@ -14,7 +14,7 @@
 | --- | --- |
 | `threshold / umbral / auto-triage` en el repo | Sin regla: solo metadata de display (`public/fixtures/alerts.json`, `"threshold": "5%"` en 1 de 4 alertas), texto del wireframe, muestra del timeline (`index.html`) e `IntersectionObserver` (`scripts/showcase.js`) |
 | `control plane` | Solo administra principals/credenciales/grants/auditoría (`schemas/releases/*/openapi/control-plane.yaml`); **cero** conceptos de severidad, triage o policy. `src/sre_agent/control/` es un boundary vacío por diseño |
-| Escala de severidad | Solo existe la escala UI-local `critical \| warning \| info` (`docs/hu-ops-01-alert-inbox.md`, `severityMeta` en `alerts.js`); sin mapeo a `sev1..sev4` del gateway |
+| Escala de severidad | Solo existe la escala UI-local `critical \| warning \| info` (`docs/archive/hu-ops-01-alert-inbox.md`, `severityMeta` en `alerts.js`); sin mapeo a `sev1..sev4` del gateway |
 | Mecanismo de triage | Único real: evento DOM `midnight:triage-requested` (acción manual, contrato Sprint 1) |
 
 ## Contrato faltante (4 decisiones, ninguna en el repo)

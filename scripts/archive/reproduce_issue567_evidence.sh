@@ -29,8 +29,8 @@ docker compose "$@" --profile checks run --build -d --name "$container" \
   -v "$ISSUE567_OUTPUT:/proof" python-checks sh -c '
     python scripts/assert_test_database_isolated.py &&
     pytest -q -s -p no:cacheprovider tests/test_external_effects_e2e.py &&
-    python scripts/inspect_issue567_evidence.py /proof &&
-    shellcheck docker/harness-entrypoint.sh scripts/worktree-compose scripts/reproduce_issue567_evidence.sh &&
+    python scripts/archive/inspect_issue567_evidence.py /proof &&
+    shellcheck docker/harness-entrypoint.sh scripts/worktree-compose scripts/archive/reproduce_issue567_evidence.sh &&
     ruff check --no-cache . && ruff format --check --no-cache . && uv lock --check --no-cache &&
     lint-imports --no-cache &&
     mypy --cache-dir=/tmp/mypy src/sre_agent/incident/commands.py src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py src/sre_agent/governance/dto.py src/sre_agent/investigator &&
@@ -42,7 +42,7 @@ docker logs "$container" > "$ISSUE567_OUTPUT/verification.log" 2>&1
 printf 'Exit code: %s\n' "$status" >> "$ISSUE567_OUTPUT/identity.txt"
 test "$status" = 0 || exit 1
 docker compose "$@" --profile e2e run --build --rm --no-deps --user "$(id -u):$(id -g)" \
-  -v "$ISSUE567_OUTPUT:/proof" -v "$PWD/scripts/capture_issue567_evidence.cjs:/e2e/capture-issue567.cjs:ro" \
+  -v "$ISSUE567_OUTPUT:/proof" -v "$PWD/scripts/archive/capture_issue567_evidence.cjs:/e2e/capture-issue567.cjs:ro" \
   e2e node /e2e/capture-issue567.cjs /proof
 test "$(git rev-parse HEAD)" = "$ISSUE567_TESTED_SHA"
 test -z "$(git status --porcelain)"

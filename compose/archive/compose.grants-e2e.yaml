@@ -1,5 +1,5 @@
 # Issue #759 E2E: revoke and grant again through the real API and database.
-#   docker compose -f compose.yaml -f compose.grants-e2e.yaml up --build --wait db api
+#   docker compose -f compose.yaml -f compose/archive/compose.grants-e2e.yaml up --build --wait db api
 #   ... run --rm -T seed sh -c 'python -m sre_agent.persistence.seeds --seed-mcp && python /e2e/provision_demo.py'
 #   ... --profile grants-e2e run --rm grants-e2e cycle
 #   ... run --rm -T seed sh -c '{ python -m sre_agent.persistence.seeds --seed-mcp &&
@@ -34,7 +34,7 @@ services:
       DEMO_HUMAN_API_KEY: ${DEMO_HUMAN_API_KEY:?DEMO_HUMAN_API_KEY is required}
       ARTIFACT_DIR: /artifacts
     volumes:
-      - ./scripts/grant_regrant_e2e.py:/e2e/grant_regrant_e2e.py:ro
+      - ./scripts/archive/grant_regrant_e2e.py:/e2e/grant_regrant_e2e.py:ro
       - type: bind
         source: ${GRANTS_E2E_ARTIFACTS:-./artifacts/issue-759}
         target: /artifacts

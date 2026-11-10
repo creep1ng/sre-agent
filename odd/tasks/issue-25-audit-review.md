@@ -293,7 +293,7 @@ append returns503 rather than claiming success.
 - tests/test_audit_reads_http.py, tests/test_audit_reads_openapi.py,
   tests/test_audit_read_terminal_boundary.py: actualHTTP/SQL/schema/mutation proof.
 - tests/browser/audit-events.spec.js: behavioralUI/nav/content/error journeys.
-- scripts/verify_issue25_audit.py, capture_issue25_audit_terminal.py,
+- scripts/archive/verify_issue25_audit.py, capture_issue25_audit_terminal.py,
   capture_issue25_audit.mjs, capture_issue25_correlation.mjs,
   capture_issue25_query_failure.mjs, control_issue25_query_fault.py: actual helpers.
 - .env.worktree ignoredmode600 synthetic/private; NEVERprint/source/commit/upload.

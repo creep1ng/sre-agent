@@ -25,7 +25,7 @@ import psycopg
 from jsonschema import Draft202012Validator, FormatChecker
 from psycopg.rows import dict_row
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -426,7 +426,7 @@ def main() -> int:
     commands = {"before": before, "after": after}
     if len(sys.argv) != 2 or sys.argv[1] not in {"prepare", *commands}:
         print(
-            "usage: python scripts/prove_ca1_http_restart.py {prepare|before|after}",
+            "usage: python scripts/archive/prove_ca1_http_restart.py {prepare|before|after}",
             file=sys.stderr,
         )
         return 2

@@ -77,7 +77,7 @@ publication and verification of the documentation deliverables.
 
 ### Historical text that is not current authority
 
-- `docs/hu-ops-01-threshold-contract-pending.md` records a Sprint 1 contract gap. Its statement
+- `docs/archive/hu-ops-01-threshold-contract-pending.md` records a Sprint 1 contract gap. Its statement
   that the control boundary is empty predates the real administrative API and is not current.
 - `docs/incident-run-contract-consumers.md` records the contract-only state before the incident
   runtime and persistence work units. Use it for wire compatibility, not implementation status.
