@@ -1,7 +1,7 @@
 """Reproducible demo for HT-INC-08 (issue #149): one OTel signal → one alert.
 
 Usage:
-    python scripts/adapt_otel_signal.py
+    python scripts/archive/adapt_otel_signal.py
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPOSITORY_ROOT / "src"))
 
 from sre_agent.incident.signals import adapt_otel_signal  # noqa: E402

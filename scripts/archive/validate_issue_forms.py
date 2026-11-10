@@ -20,7 +20,7 @@ ORDER = [
     "Fuera de alcance",
     "Decisiones abiertas",
 ]
-ROOT = Path(__file__).parents[1]
+ROOT = Path(__file__).parents[2]
 EXPECTED_FORM = {
     "ht": ("[HT-XX] ", "type: technical task"),
     "hu": ("[HU-XX] ", "type: user story"),

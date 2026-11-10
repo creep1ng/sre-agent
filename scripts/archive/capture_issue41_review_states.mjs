@@ -2,10 +2,10 @@
 // workflow transitions while the console Decisiones view is captured, one PNG
 // per state plus the conflict recovery pair. Fixtures, not live transport:
 // run-command:2.1.0 is not published yet, so a PNG documents UI behavior only.
-// Reproduction: PLAYWRIGHT_BASE_URL=... node scripts/capture_issue41_review_states.mjs
+// Reproduction: PLAYWRIGHT_BASE_URL=... node scripts/archive/capture_issue41_review_states.mjs
 // (host with the local node_modules symlink, or inside the e2e container — PR).
 import { chromium } from "@playwright/test";
-import { connectConsole } from "../tests/browser/support/console-session.mjs";
+import { connectConsole } from "../../tests/browser/support/console-session.mjs";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4173";
 const INCIDENT = "inc-demo";

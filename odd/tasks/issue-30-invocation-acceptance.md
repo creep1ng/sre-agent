@@ -12,7 +12,7 @@ No retries/fallbacks, autonomous tool calling, UI, Skills, BoK, merge or issue c
 Preserve other worktrees, credentials and volumes; no prune/down -v.
 Baseline main: 4a4515b99b6f5931f43969f7147c6ec90519344f (clean fast-forward).
 RDD off (global). TDD ON: global Gentle AI state `strict_tdd=true`, found after
-initial inventory; runner: python scripts/issue30_capture.py inside python-checks.
+initial inventory; runner: python scripts/archive/issue30_capture.py inside python-checks.
 Write failure assertions first; observe real E2E RED before runtime fixes, then
 GREEN and refactor. No post-hoc unit tests. Existing checks: containerized pytest.
 

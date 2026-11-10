@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""E2E for #759 (compose.grants-e2e.yaml): a revoked grant can be granted again.
+"""E2E for #759 (compose/archive/compose.grants-e2e.yaml): a revoked grant can be granted again.
 
 Phase `cycle`: as admin-human, grant restricted-harness `admin.read` on the principals list,
 revoke it and grant it again under a new grant_id and Idempotency-Key. Its access goes

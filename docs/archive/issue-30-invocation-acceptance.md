@@ -9,7 +9,7 @@ At that planning snapshot, #18/#129/#187/#29 were recorded as closed/Done in Pro
 
 ## Environment / exact recipe
 
-Follow [#29's setup and image-identity procedure](governed-grafana-mcp-demo.md),
+Follow [#29's setup and image-identity procedure](../governed-grafana-mcp-demo.md),
 using a fresh unique ISSUE30_PROJECT and ignored `.env`/`.env.worktree`: distinct
 synthetic API keys, random database password/audit key, model `synthetic/control`,
 provider `synthetic`, empty provider keys. Never source/print configuration.
@@ -21,14 +21,14 @@ code between build/capture. Record Docker/Compose/Python versions, uv.lock and
 pinned demo digests, and built/running API image equality plus ready health.
 
 ```sh
-docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose.issue30.yaml config --quiet
-docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose.issue30.yaml build api python-checks
-docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose.issue30.yaml up --build --force-recreate -d --wait --wait-timeout 120 mcp-seed api grafana-mcp issue30-fault-proxy mcp-upstream
-docker run --rm --user "$(id -u):$(id -g)" --network "container:$API_CONTAINER" --env-file .env --env-file .env.worktree -e TESTED_SHA="$TESTED_SHA" -v "$PWD/scripts:/app/scripts:ro" -v "$CAPTURE_DIR:/capture" "$ISSUE30_PROJECT-python-checks:latest" python /app/scripts/issue30_capture.py
-docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose.issue30.yaml --profile checks run --build --rm python-checks
+docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose/archive/compose.issue30.yaml config --quiet
+docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose/archive/compose.issue30.yaml build api python-checks
+docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose/archive/compose.issue30.yaml up --build --force-recreate -d --wait --wait-timeout 120 mcp-seed api grafana-mcp issue30-fault-proxy mcp-upstream
+docker run --rm --user "$(id -u):$(id -g)" --network "container:$API_CONTAINER" --env-file .env --env-file .env.worktree -e TESTED_SHA="$TESTED_SHA" -v "$PWD/scripts:/app/scripts:ro" -v "$CAPTURE_DIR:/capture" "$ISSUE30_PROJECT-python-checks:latest" python /app/scripts/archive/issue30_capture.py
+docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose/archive/compose.issue30.yaml --profile checks run --build --rm python-checks
 docker build -f docker/e2e.Dockerfile -t "$ISSUE30_PROJECT-evidence-browser:local" .
-docker run --rm --user "$(id -u):$(id -g)" --network "${ISSUE30_PROJECT}_runtime" --env-file .env --env-file .env.worktree -e TESTED_SHA="$TESTED_SHA" -v "$PWD/scripts/issue30_capture_browser.cjs:/e2e/capture-browser.cjs:ro" -v "$CAPTURE_DIR:/capture" "$ISSUE30_PROJECT-evidence-browser:local" node /e2e/capture-browser.cjs
-docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose.issue30.yaml stop
+docker run --rm --user "$(id -u):$(id -g)" --network "${ISSUE30_PROJECT}_runtime" --env-file .env --env-file .env.worktree -e TESTED_SHA="$TESTED_SHA" -v "$PWD/scripts/archive/issue30_capture_browser.cjs:/e2e/capture-browser.cjs:ro" -v "$CAPTURE_DIR:/capture" "$ISSUE30_PROJECT-evidence-browser:local" node /e2e/capture-browser.cjs
+docker compose -p "$ISSUE30_PROJECT" --env-file .env --env-file .env.worktree -f compose.yaml -f compose.mcp.yaml -f compose.issue29-counter.yaml -f compose/archive/compose.issue30.yaml stop
 ```
 
 API_CONTAINER comes from the scoped Compose `ps -q api`; require image equality
@@ -107,9 +107,9 @@ assertions. None of those captures, records, outcomes or SHAs is changed or rela
 | --- | --- | --- |
 | CA1 | Partial | [GREEN line 12](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L12): 200, normalized vector(1), one relay `tools/call` and one real forward. Current [gateway][invoke-source] retains one call and `X-Request-ID`, but its result adapter changed since the tested SHA; no new current-main replay. |
 | CA2 | Partial | [GREEN lines 5–7](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L5-L7): no grant/nonvisible tool/invalid credential = 403/403/401, safe errors and zero calls/forwards. Current authorization still precedes execution; no new current-main counter evidence. |
-| CA3 | Partial | [GREEN lines 8–11](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L8-L11): 422/504/503/502 with safe published [MCP errors](../schemas/mcp/1.0.0/grafana-mcp.yaml). Validation makes zero calls; injected faults make one relay attempt but zero real forwards. Current input validation/error mapping exists; transport/result handling changed, so historical success is not a new execution. |
+| CA3 | Partial | [GREEN lines 8–11](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L8-L11): 422/504/503/502 with safe published [MCP errors](../../schemas/mcp/1.0.0/grafana-mcp.yaml). Validation makes zero calls; injected faults make one relay attempt but zero real forwards. Current input validation/error mapping exists; transport/result handling changed, so historical success is not a new execution. |
 | CA4 | Partial; interpretation satisfied | [GREEN lines 3–12](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L3-L12): correlated metadata-only rows with stage-appropriate HMAC attribution; line 8 retains action/correlation/error and omits the three fields exactly as approved. Current schema/projector agree. The 401 has zero `mcp.invoke` rows; the 422 decision does not approve that separate boundary. No new current-main SQL evidence or full audit-schema validation of persisted rows. |
-| CA5 | Partial | [GREEN lines 3–4](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L3-L4): known ID before any discovery, 200/403, call/forward 1/1 and 0/0. The [replay client](../scripts/issue30_capture.py) still orders these first; current invocation does not require discovery. No new current-main replay. |
+| CA5 | Partial | [GREEN lines 3–4](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L3-L4): known ID before any discovery, 200/403, call/forward 1/1 and 0/0. The [replay client](../../scripts/archive/issue30_capture.py) still orders these first; current invocation does not require discovery. No new current-main replay. |
 
 All GREEN references in the table mean **historical evidence**, not tests run in
 this documentation review. The runner, audit helper, browser client, overlays and

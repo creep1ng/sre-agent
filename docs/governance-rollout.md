@@ -56,7 +56,7 @@ Publication planning for #183 is authorized, but every actual PR still needs
 current-base metadata and maintainer review. CI requires no approval comment,
 label, or commit confirmation. Partial deliveries reference, rather than close, #183.
 
-The [local validation record](governance-pilot.md) separates executed checks from
+The [local validation record](archive/governance-pilot.md) separates executed checks from
 remaining hosted and human acceptance evidence.
 
 ## Pilot before required checks

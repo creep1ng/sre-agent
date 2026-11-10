@@ -167,12 +167,18 @@ database until an operator-approved migration or restore plan exists.
 | `src/sre_agent/application.py` | Single FastAPI composition root |
 | `src/sre_agent/control/` | Control-plane boundary |
 | `src/sre_agent/incident/` | Incident-resolution-plane boundary |
-| `src/sre_agent/harness/` | Contract and fixture harness boundary |
+| `src/sre_agent/triage/` | Alert triage: dismiss, link or declare an incident |
+| `src/sre_agent/investigator/` | The investigator: the bounded investigation loop that consumes the gateway ([design](docs/investigator.md)) |
 | `src/sre_agent/gateway/` | HTTP gateway and health probes |
 | `src/sre_agent/executor/` | The deploy-executor: named remediation operations over docker-socket-proxy ([design](docs/deploy-executor.md)) |
+| `agent/` | Incident workflow, API and state schemas, and the deploy-executor's catalog |
 | `schemas/` | Versioned contract authority and conformance tooling |
-| `index.html`, `public/console/` | Integrated console: incident response and AI governance in one document ([design](docs/design/ht-web-shell/ht-web-shell.md)) |
-| `design-system.html`, `styles/`, `scripts/`, `public/` | Design-system catalog and the surfaces mounted by the console |
+| `web/incident-console/` | The incident console at `/app/`: alert inbox, incidents and administration ([README](web/incident-console/README.md)) |
+| `landing/` | The Midnight landing page served at `/` |
+| `design-system.html` | The design-system catalog, shipped by the web image and covered by `tests/browser/showcase.spec.js` |
+| `index.html`, `public/`, `styles/` | The previous console, at the addresses `/app/` has not replaced yet ([design](docs/design/ht-web-shell/ht-web-shell.md)) |
+| `scripts/` | Worktree, setup, demo, E2E and CI entry points; `scripts/archive/` keeps the historical ones |
+| `docs/` | Documentation, indexed in [docs/README.md](docs/README.md) |
 
 See [runtime boundaries](docs/architecture.md), the [operator incident journey](docs/design/ht-inc-07-ux-journey/ht-inc-07-ux-journey.md), and the [Codex worktree workflow](docs/codex-worktrees.md).
 
@@ -211,6 +217,9 @@ container mounts `schemas/` read-only, so write the lock from its output:
 ```bash
 docker compose --profile checks run --rm harness sh -c 'npm --prefix schemas/tooling run --silent lock:releases >&2 && cat schemas/releases.lock.json' > schemas/releases.lock.json.new && mv schemas/releases.lock.json.new schemas/releases.lock.json
 ```
+
+In the same commit, point the `!/schemas/releases/…/` line of `.rgignore` at the new release, so
+an unfiltered `rg` keeps showing the release in force and hides the earlier ones.
 
 To verify issue #13 only, run its HTTP behavior tests and pinned contract obligation:
 

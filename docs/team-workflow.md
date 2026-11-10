@@ -131,37 +131,9 @@ Automated validation can check field presence and references. It requires a real
 
 ### Containerized PR reproduction
 
-The PR's `Reproduction commands` are contributor-facing demo commands. Every command in that
-fenced block must use `docker compose` or `docker run`; do not provide host `uv`, `npm`, `pytest`,
-or equivalent package-tool commands. The host prerequisites are Git, Docker, and safe local
-configuration preparation, recorded under `Environment`. Tools may execute as arguments within
-the selected container.
-
-Declare any untracked `.env` prerequisite under `Environment`, using `.env.example` as the
-starting point and local non-production values. Compose interpolates the complete file before
-profile filtering, so even a `checks`-profile demonstration needs every required configuration
-value present. Do not paste, source, print, commit, or attach that file. Docker confines
-execution, but does not automatically pin image tags or dependencies: record the tested SHA and
-relevant image build/lockfile provenance with the command.
-
-Use existing Compose services only. The present isolated checks and harness support these examples:
-
-```sh
-docker compose --profile checks run --build --rm python-checks pytest -q tests/test_authentication.py
-docker compose --profile checks run --build --rm harness npm --prefix schemas/tooling run conformance -- --consumer issue-10
-```
-
-Both package tools run inside the containers. These one-shot commands avoid a global volume
-teardown; do not add `docker compose down -v` to a PR demo. A change that needs a running service
-must use the existing scoped Compose service and state its safe project-specific cleanup.
-
-This rule applies to PR reproduction and demonstration, not GitHub Actions' internal runner
-commands. The current metadata validator only confirms a nonempty fenced block, so the reviewer
-must enforce the container boundary during evidence review.
-
-For Compose failures on a shared host (exhausted Docker address pools, a lingering checks
-database, migration suites that need their own PostgreSQL cluster), see
-[troubleshooting local stacks](codex-worktrees.md#troubleshooting-local-stacks).
+The PR's `Reproduction commands` run only through `docker compose` or `docker run`; the host
+supplies Git, Docker and safe local configuration. The rule, its examples and the container
+pitfalls are in [containerized PR reproduction](pr-evidence.md#containerized-pr-reproduction).
 
 ## Peer reproduction exercise
 

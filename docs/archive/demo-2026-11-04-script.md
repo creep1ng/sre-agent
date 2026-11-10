@@ -4,7 +4,7 @@ How to run the evaluated demo end to end on `main` against the OTel Demo on EC2:
 incident with nobody at the console, the agent names the flag, a person approves in Telegram, the
 executor turns the fault off, the agent verifies, a model drafts the postmortem and the person
 closes it. The decisions behind this path are in
-[the sixth and seventh rounds](product-direction-2026-10-28.md#sixth-round-of-decisions-2026-11-02-and-2026-11-03);
+[the sixth and seventh rounds](../product-direction-2026-10-28.md#sixth-round-of-decisions-2026-11-02-and-2026-11-03);
 the path's last recorded runs are in [the demo candidate](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/demo-candidate-2026-11-02/README.md).
 
 Run `mkdir -p /tmp/demo-reset` once; the commands below keep their private files there.
@@ -20,14 +20,14 @@ notes, captures or this doc.
 1. **The instance.** `export OTEL_DEMO_EXPECTED_ACCOUNT_ID=$(cat ~/.config/sre-agent/otel-account)`,
    then `python3 scripts/otel_ec2.py status`. If an instance is already up, someone else owns it.
    Otherwise `up`, then `prepare-mcp` (a new instance always needs it before `connect-mcp`). See
-   [OTel Demo on EC2](otel-demo-ec2.md) for the TTL; `extend` keeps the session under 4 h in total.
+   [OTel Demo on EC2](../otel-demo-ec2.md) for the TTL; `extend` keeps the session under 4 h in total.
    `prepare-mcp` can succeed while the bootstrap is still pulling images; the bootstrap's own
    `compose up` then recreates Grafana without its overlay (175M, no alert delivery). Once
    `/var/log/cloud-init-output.log` says "Cloud-init … finished", run `prepare-mcp` again: the
    overlay is unchanged, and it recreates Grafana with 1G (`docker inspect -f
    '{{.HostConfig.Memory}}' grafana` prints `1073741824`). `connect-mcp` needs a new state
    directory with mode `700`.
-2. **The env file.** Besides the keys of [the setup guide](setup-sre.md#prepared-aws-connection):
+2. **The env file.** Besides the keys of [the setup guide](../setup-sre.md#prepared-aws-connection):
 
    ```text
    SRE_OTEL_MODE=aws
@@ -52,7 +52,7 @@ notes, captures or this doc.
    networks `$NET` and `$NET-flags`, `flag-write.env`, `connection.json`), so it runs first.
 4. **SRE.** `python3 scripts/setup_sre.py --env-file "$ENV"`. It must print "paid LLM explicitly
    enabled" and start `telegram-gateway`. The first time, link the chat to `demo-human` as in
-   [the Telegram channel](telegram-channel.md#set-up); the reset below keeps that link.
+   [the Telegram channel](../telegram-channel.md#set-up); the reset below keeps that link.
 5. **The store tunnel.** In its own terminal:
    `python3 scripts/otel_ec2.py connect --local-port 18690 --remote-port 8090`. The store is
    `http://127.0.0.1:18690/`, Grafana `/grafana/`, the flags `/feature/`.

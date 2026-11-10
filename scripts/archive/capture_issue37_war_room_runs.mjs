@@ -7,9 +7,9 @@
 // seeded SEED_STAMP; DEMO_HUMAN_API_KEY comes from the e2e service environment:
 //   docker compose --profile e2e run --rm --no-deps -v ./scripts:/e2e/scripts:ro \
 //     -v ./artifacts:/e2e/artifacts -e PLAYWRIGHT_BASE_URL=http://web \
-//     -e SEED_STAMP=<stamp> e2e node scripts/capture_issue37_war_room_runs.mjs
+//     -e SEED_STAMP=<stamp> e2e node scripts/archive/capture_issue37_war_room_runs.mjs
 import { chromium } from "@playwright/test";
-import { connectConsole } from "../tests/browser/support/console-session.mjs";
+import { connectConsole } from "../../tests/browser/support/console-session.mjs";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:8091";
 const key = process.env.DEMO_HUMAN_API_KEY;

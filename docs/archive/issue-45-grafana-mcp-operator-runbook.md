@@ -6,11 +6,11 @@ Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 
 ## Start here
 
-1. Read [demo operations](demo-env.md), [signal definitions](demo-signals.md)
-   and [gateway topology](governed-grafana-mcp-demo.md).
+1. Read [demo operations](../demo-env.md), [signal definitions](../demo-signals.md)
+   and [gateway topology](../governed-grafana-mcp-demo.md).
 2. Confirm capacity, isolated resources and explicit target authorization.
 3. Distinguish a healthy service, a controlled test and a real failure signal.
-4. Follow the staged recovery checklist in the [issue tracker](../odd/tasks/issue-45-grafana-mcp-verification.md).
+4. Follow the staged recovery checklist in the [issue tracker](../../odd/tasks/issue-45-grafana-mcp-verification.md).
    Full-probe/cycle commands recorded there remain historical or planned;
    P3/P4 commands below describe their historical stages; P5 covers known-ID
    denial, P6 covers offline witness reconciliation, and P7-D checks only
@@ -22,15 +22,15 @@ Grafana MCP through the governed gateway. All real CA1–CA8 remain open.
 | Item | Verified reference or required condition |
 |---|---|
 | Base | `9eb3eb3dd3d55facfcd28d35490f85fedb95ac10` |
-| Gateway contract | [MCP 1.0.0](../schemas/mcp/1.0.0/) |
+| Gateway contract | [MCP 1.0.0](../../schemas/mcp/1.0.0/) |
 | OpenTelemetry demo | Tag `3.0.0`, commit `1755859a9de82c2e5e225be68abc401a5ebf2b4f` |
-| Grafana MCP | `grafana/mcp-grafana:1.3.0`; exact image pins in [digests.lock](../demo/digests.lock) |
+| Grafana MCP | `grafana/mcp-grafana:1.3.0`; exact image pins in [digests.lock](../../demo/digests.lock) |
 | Resources | 4 CPUs, 4 GB free memory, 15 GB free disk; reassess before launch |
 | Port/name isolation | The demo uses global `grafana-mcp` and `sre-mcp-boundary` names; a separate checkout alone is insufficient |
 | Current capacity boundary | The recovered local environment had about 8 GB free and no OTel demo; no full demo was launched for this stage |
 | Live authorization | Local/GitHub development does not authorize cloud, SSH, remote transfer or paid-provider probes |
 
-The [manifest](../demo/manifest.yaml) declares the permitted demo layers and
+The [manifest](../../demo/manifest.yaml) declares the permitted demo layers and
 ports. Do not add an MCP bypass port, attach the harness to demo networks or
 reuse another project's resources to manufacture successful evidence.
 
@@ -45,7 +45,7 @@ fixed shared Compose project name. This stage does not start a stack.
 
 For future authorized gateway checks, only named non-production gateway
 credentials belong in the harness. The Grafana MCP/provider token does not.
-The current [gateway overlay](../compose.mcp.yaml) supplies its token to the
+The current [gateway overlay](../../compose.mcp.yaml) supplies its token to the
 API, not the harness. Keep that boundary unchanged.
 
 ## Acceptance gaps that must remain explicit
@@ -94,7 +94,7 @@ targeted checks. Its rendered screenshot is historical full-candidate evidence,
 not discovery-stage evidence. PR #424 published the prerequisite documentation;
 P3 has separate current controlled HTTP/CLI evidence, not live CA completion.
 Its publication, hosted CI and human review remain parent-owned. See
-[PR evidence requirements](pr-evidence.md).
+[PR evidence requirements](../pr-evidence.md).
 
 ## Rollback and next step
 

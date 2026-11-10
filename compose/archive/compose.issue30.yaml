@@ -68,6 +68,6 @@ services:
     environment:
       ISSUE30_UPSTREAM_URL: http://mcp-upstream:8000
     volumes:
-      - ./scripts/issue30_fault_proxy.py:/instrument/issue30_fault_proxy.py:ro
+      - ./scripts/archive/issue30_fault_proxy.py:/instrument/issue30_fault_proxy.py:ro
     networks: [mcp-boundary]
     restart: "no"

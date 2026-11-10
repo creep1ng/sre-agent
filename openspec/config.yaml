@@ -5,7 +5,7 @@ context: |
   OpenSpec is the authoritative store for SDD artifacts.
   Execution mode: interactive.
   Current implementation: Python 3.12 FastAPI application with PostgreSQL persistence, Alembic migrations, Docker Compose services, static web catalog, GitHub Actions CI, Python/Node/browser/Compose checks, and versioned JSON Schema/OpenAPI contracts.
-  Architecture: sre_agent.application.create_application is the composition root. Control, incident, harness, and gateway packages are separate planes; schemas/releases remains the immutable contract authority.
+  Architecture: sre_agent.application.create_application is the composition root. Control, incident, investigator, and gateway packages are separate planes; schemas/releases remains the immutable contract authority.
   MVP governance: single workspace; Principal kind is human or agent; API-key authentication; direct principal-action-resource grants; absence of a grant denies access. Governed responses authorize before provider routing and persist metadata-only audit evidence.
   Shared contract location: /schemas at the repository root.
   Contract versioning: follow Semantic Versioning 2.0.0; the current runtime contract version is 2.0.0, and historical releases remain immutable.
