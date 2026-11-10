@@ -148,8 +148,9 @@ work unit:
 
 - **New Alembic revision.** Set `REQUIRED_SCHEMA_VERSION` in `src/sre_agent/gateway/health.py`
   to the new head, otherwise `/health/ready` returns `503`; `tests/test_health.py` compares it
-  with the head Alembic computes. Update the tests that still pin the exact head
-  (`tests/test_health.py` and `tests/test_skill_migration_compatibility.py`).
+  with the head Alembic computes. Other tests still pin the head as a literal: list them with
+  `git grep -nF PREVIOUS_HEAD tests/`, where `PREVIOUS_HEAD` is the revision id the new one
+  replaces, and update each.
 - **New table or schema.** No test change: the `migrated_database` fixture in
   `tests/conftest.py` drops every schema, `public` included, before it migrates
   (`reset_database()` in `tests/database_support.py`).
