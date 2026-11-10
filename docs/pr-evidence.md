@@ -106,7 +106,8 @@ accepts images, and `.mp4`, `.mov` and `.webm` videos up to 10 MB on the free pl
 paid plans ([attaching files](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files)).
 Evidence that is neither image nor video (JSON, TXT, SQL, logs) goes as an attached file in a PR
 comment (`.json`, `.txt`, `.log`, `.sql`, `.md`, `.csv`, `.zip`, `.gz`, up to 25 MB), or as text
-inside a `<details>` block of the PR body.
+inside a `<details>` block of the PR body. Put that text in a code fence: there the validator
+reads `<` and `>` as data, so a log line such as `{"key": "<redacted>"}` does not fail the section.
 
 The repository is public, and so are its attachments: anyone can open them without signing in.
 The sanitization rule below applies to them in full.
@@ -149,7 +150,8 @@ placeholders, a missing screenshot HTTPS reference, a video that is neither an H
 commands, downloads evidence, judges videos, or verifies that a named OpenSpec
 path really satisfies the issue. It reads GitHub's pasted `<img>` tag for a
 `github.com/user-attachments/assets/` image as that URL and ignores bare `<details>` and
-`<summary>` tags; any other tag still counts as a placeholder. Until the PRs opened before
+`<summary>` tags; any other tag still counts as a placeholder, except inside a code fence
+folded in a bare `<details>` block. Until the PRs opened before
 #1018 are closed, it also accepts the earlier sentence
 `Deferred: media storage unavailable; screenshot evidence is mandatory.`. A human checks those claims and the DoD checklist.
 
@@ -160,7 +162,9 @@ path really satisfies the issue. It reads GitHub's pasted `<img>` tag for a
 - A section fails if it contains the whole words `TODO`, `TBD`, or `PLACEHOLDER` in any letter
   case, anywhere, including explanatory prose and quoted text. Any `<...>` text also fails it,
   including autolinks such as `<https://...>` and angle-bracket variables in commands. A line
-  holding only `...`, `…`, or `[ ]` fails too. Rephrase instead.
+  holding only `...`, `…`, or `[ ]` fails too. Rephrase instead. The one exception: a code fence
+  inside a bare `<details>` block, in any section but `Reproduction commands`, is evidence text
+  and may hold `<...>`; the words above still fail it.
 - `Tested SHA` is the bare 40-character lowercase hexadecimal SHA, alone in the section: no
   backticks, label, or annotation.
 - `Base SHA` equals the PR API `base.sha` exactly. Copy it from

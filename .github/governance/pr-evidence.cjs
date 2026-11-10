@@ -18,6 +18,10 @@ const noVideo = ['Not recorded; screenshot evidence is mandatory.',
 const attachments = value => value
   .replace(/<img\s(?:[a-z]+="[^"<>]*"\s*)*?src="(https:\/\/github\.com\/user-attachments\/assets\/[\w-]+)"(?:\s*[a-z]+="[^"<>]*")*\s*\/?>/gi, '$1')
   .replace(/<\/?(?:details|summary)>/gi, '');
+// Text evidence folded in a bare <details> block is data: inside its code fences < and > are
+// not placeholders. Commands stay strict, so an angle-bracket variable still fails them.
+const folded = value => value.replace(/<details>[\s\S]*?<\/details>/gi,
+  block => block.replace(/```[\s\S]*?```/g, fence => fence.replace(/[<>]/g, ' ')));
 const clean = value => value
   .replace(/\r\n?/g, '\n')
   .replace(/<!--[\s\S]*?-->/g, '')
@@ -26,7 +30,8 @@ function parse(body) {
   const result = {};
   for (const match of clean(body || '').matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm)) {
     if (Object.hasOwn(result, match[1])) throw new Error('Duplicate PR section');
-    result[match[1]] = attachments(clean(match[2])).trim();
+    const text = clean(match[2]);
+    result[match[1]] = attachments(match[1] === 'Reproduction commands' ? text : folded(text)).trim();
   }
   return result;
 }

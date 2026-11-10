@@ -82,6 +82,21 @@ assert.match(errors(data({ fields: { 'Actual result': '<details open>\n1 row\n</
 assert.match(errors(data({ fields: { 'Actual result': '<details>\n<the rows>\n</details>' } })), /Complete section: Actual result/);
 assert.match(errors(data({ fields: { Summary: '<details>\n<summary></summary>\n</details>' } })), /Complete section: Summary/);
 
+// Text evidence folded in a details block: its code fences are data, so < and > pass inside them.
+const log = '<details>\n<summary>Audit row</summary>\n\n```json\n{"key": "<redacted>"}\n```\n</details>';
+assert.deepEqual(validate(data({ fields: { 'Actual result': log } })), []);
+for (const [name, value] of [
+  ['Actual result', `${log}\n\nBetween <the runs>.\n\n${log}`],
+  ['Actual result', '```json\n{"key": "<redacted>"}\n```'],
+  ['Actual result', `${log}\n\nThen <the rest>.`],
+  ['Actual result', log.replace('<details>', '<details open>')],
+  ['Actual result', log.replace('\n```\n</details>', '\n</details>')],
+  ['Actual result', log.replace('<redacted>', 'TODO')],
+  ['Reproduction commands', '<details>\n\n```sh\ndocker run --rm alpine:3.21 echo <your-key>\n```\n</details>'],
+]) {
+  assert.match(errors(data({ fields: { [name]: value } })), new RegExp(`Complete section: ${name}`), value);
+}
+
 function context() {
   return {
     repo: { owner: 'owner', repo: 'repo' },
