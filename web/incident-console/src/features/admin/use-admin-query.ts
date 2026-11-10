@@ -53,3 +53,21 @@ export function useRetryKey(prefix: string) {
     },
   };
 }
+
+/**
+ * A form's write: `busy` while `call` runs and the error of its last failure, which `run` clears
+ * first. `setError` also takes the form's own errors, such as a local validation.
+ */
+export function useAdminMutation<Local extends string = never>() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<AdminError | Local | null>(null);
+  const run = useCallback(async <T>(call: () => Promise<AdminResult<T>>): Promise<AdminResult<T>> => {
+    setBusy(true);
+    setError(null);
+    const result = await call();
+    setBusy(false);
+    if (!result.ok) setError(result.error);
+    return result;
+  }, []);
+  return { busy, error, setError, run };
+}

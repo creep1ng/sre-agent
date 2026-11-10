@@ -11,7 +11,6 @@ import {
   adminApi,
   BOK_SLUG,
   SEMVER,
-  type AdminError,
   type BoKChunk,
   type BoKDocument,
   type BoKSearchResult,
@@ -19,7 +18,7 @@ import {
 } from "@/lib/admin-api";
 import { UploadButton } from "./upload-button";
 import { baseName, firstHeading, readUpload } from "./uploads";
-import { useAdminQuery, useRetryKey } from "./use-admin-query";
+import { useAdminMutation, useAdminQuery, useRetryKey } from "./use-admin-query";
 import { AdminPage, Empty, ErrorNote, Facts, Field, Mono, Panel, ROW, StatusBadge, TD, TH, Table } from "./ui";
 
 const MAX_DOCUMENTS = 20;
@@ -248,18 +247,13 @@ function CollectionSheet({ resourceId, onClose }: { resourceId: string | null; o
 function SearchBox({ collectionId, version }: { collectionId: string; version: string }) {
   const t = useT("admin");
   const [query, setQuery] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AdminError | null>(null);
+  const { busy, error, run } = useAdminMutation();
   const [results, setResults] = useState<BoKSearchResult[] | null>(null);
 
   const search = async () => {
     if (!query.trim()) return;
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.searchCollection(collectionId, version, query.trim());
-    setBusy(false);
+    const result = await run(() => adminApi.searchCollection(collectionId, version, query.trim()));
     if (!result.ok) {
-      setError(result.error);
       setResults(null);
       return;
     }
@@ -340,8 +334,7 @@ function PublishDialog({
   const [drafts, setDrafts] = useState<DraftDocument[]>([EMPTY_DOCUMENT]);
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
-  const [error, setError] = useState<AdminError | "local" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAdminMutation<"local">();
   const retry = useRetryKey("bok-publish");
 
   const taken = new Set<string>();
@@ -422,14 +415,8 @@ function PublishDialog({
       description: description.trim(),
       documents,
     };
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.publishCollection(body, retry.keyFor(body));
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
+    const result = await run(() => adminApi.publishCollection(body, retry.keyFor(body)));
+    if (!result.ok) return;
     retry.settle();
     toast.success(t("knowledge.published", { id: result.body.resource_id }));
     onPublished(result.body);

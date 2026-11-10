@@ -8,7 +8,7 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { incidentStatus } from "@/lib/status";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { Alert, Incident } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DISMISS_REASONS } from "@/lib/vocabulary";

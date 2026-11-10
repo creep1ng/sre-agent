@@ -134,10 +134,13 @@ services:
     networks: [runtime]
 
   # The new incident console (web/incident-console), served by the web proxy at /app.
+  # CONSOLE_SIMULATOR=1 bundles the scenario simulator (`?mock`) that the e2e specs and the demo
+  # use; the default build leaves it out.
   incident-console:
     build:
       context: web/incident-console
       target: serve
+      args: {CONSOLE_SIMULATOR: "${CONSOLE_SIMULATOR:-0}"}
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/health"]
       interval: 2s

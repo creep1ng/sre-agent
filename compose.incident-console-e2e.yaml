@@ -40,6 +40,11 @@ services:
     restart: "no"
     networks: [runtime]
 
+  # The specs in simulated mode (`?mock`) need the scenario simulator in the console's build.
+  incident-console:
+    build:
+      args: {CONSOLE_SIMULATOR: "1"}
+
   seed:
     volumes: ["./scripts:/app/scripts:ro"]
     environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}

@@ -19,7 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { useNow } from "@/hooks/use-now";
 import { formatSignal, formatTime } from "@/lib/format";
 import { currentValue } from "@/lib/signal";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { Alert, Incident } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Panel, PanelSection } from "./panel";

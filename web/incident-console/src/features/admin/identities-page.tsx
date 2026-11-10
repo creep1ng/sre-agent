@@ -24,9 +24,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/i18n";
-import { adminApi, SLUG, type AdminError, type Credential, type Principal, type PrincipalKind } from "@/lib/admin-api";
+import { adminApi, SLUG, type Credential, type Principal, type PrincipalKind } from "@/lib/admin-api";
 import { useLive } from "@/lib/live";
-import { useAdminQuery, useRetryKey } from "./use-admin-query";
+import { useAdminMutation, useAdminQuery, useRetryKey } from "./use-admin-query";
 import {
   AdminPage,
   Empty,
@@ -338,8 +338,7 @@ function CreatePrincipalDialog({
   const [name, setName] = useState("");
   const [kind, setKind] = useState<PrincipalKind>("agent");
   const [checked, setChecked] = useState(false);
-  const [error, setError] = useState<AdminError | "local" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAdminMutation<"local">();
   const retry = useRetryKey("principal-create");
 
   const idOk = SLUG.test(principalId.trim());
@@ -364,14 +363,8 @@ function CreatePrincipalDialog({
       return;
     }
     const body = { principal_id: principalId.trim(), kind, display_name: name.trim() };
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.createPrincipal(body, retry.keyFor(body));
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
+    const result = await run(() => adminApi.createPrincipal(body, retry.keyFor(body)));
+    if (!result.ok) return;
     retry.settle();
     toast.success(t("identities.created", { id: result.body.principal_id }));
     onCreated(result.body);
@@ -457,19 +450,16 @@ function DeactivateDialog({
   onDone: () => void;
 }) {
   const t = useT("admin");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AdminError | null>(null);
+  const { busy, error, setError, run } = useAdminMutation();
 
   const confirm = async () => {
-    setBusy(true);
-    setError(null);
-    // The precondition is the version the operator is looking at, read fresh when possible.
-    const fresh = await adminApi.getPrincipal(principal.principal_id);
-    const expected = fresh.ok ? fresh.body.updated_at : principal.updated_at;
-    const result = await adminApi.deactivatePrincipal(principal.principal_id, expected);
-    setBusy(false);
+    const result = await run(async () => {
+      // The precondition is the version the operator is looking at, read fresh when possible.
+      const fresh = await adminApi.getPrincipal(principal.principal_id);
+      const expected = fresh.ok ? fresh.body.updated_at : principal.updated_at;
+      return adminApi.deactivatePrincipal(principal.principal_id, expected);
+    });
     if (!result.ok) {
-      setError(result.error);
       if (result.error === "conflict") onDone();
       return;
     }
@@ -523,20 +513,13 @@ function RevokeDialog({
   onDone: () => void;
 }) {
   const t = useT("admin");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AdminError | null>(null);
+  const { busy, error, setError, run } = useAdminMutation();
   const prefix = credential?.prefix ?? "";
 
   const confirm = async () => {
     if (!credential) return;
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.revokeCredential(credential.credential_id);
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
+    const result = await run(() => adminApi.revokeCredential(credential.credential_id));
+    if (!result.ok) return;
     toast.success(t("identities.revoked", { prefix }));
     onClose();
     onDone();
@@ -600,8 +583,7 @@ function IssueDialog({
 }) {
   const t = useT("admin");
   const [expires, setExpires] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AdminError | "replay" | null>(null);
+  const { busy, error, setError, run } = useAdminMutation<"replay">();
   const [secret, setSecret] = useState<string | null>(null);
   const retry = useRetryKey(replacing ? "credential-rotate" : "credential-issue");
 
@@ -616,17 +598,11 @@ function IssueDialog({
 
   const submit = async () => {
     const body = expires.trim() ? { expires_at: expires.trim() } : {};
-    setBusy(true);
-    setError(null);
     const result = replacing
-      ? await adminApi.rotateCredential(replacing.credential_id, body, retry.keyFor({ replacing: replacing.credential_id, body }))
-      : await adminApi.issueCredential(principalId, body, retry.keyFor({ principalId, body }));
-    setBusy(false);
+      ? await run(() => adminApi.rotateCredential(replacing.credential_id, body, retry.keyFor({ replacing: replacing.credential_id, body })))
+      : await run(() => adminApi.issueCredential(principalId, body, retry.keyFor({ principalId, body })));
     onIssued();
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
+    if (!result.ok) return;
     retry.settle();
     const issued = "issuance" in result.body ? result.body.issuance : result.body;
     if (issued.secret_revealed === true && typeof issued.key === "string") {

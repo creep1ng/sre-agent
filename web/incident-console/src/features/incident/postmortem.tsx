@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime, formatTime } from "@/lib/format";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { Certainty, Incident, PostmortemDoc } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CERTAINTY, SEVERITY } from "@/lib/vocabulary";

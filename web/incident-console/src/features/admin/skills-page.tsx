@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { useT } from "@/i18n";
-import { adminApi, SEMVER, SKILL_ID, type AdminError, type SkillDependency, type SkillVersion } from "@/lib/admin-api";
+import { adminApi, SEMVER, SKILL_ID, type SkillDependency, type SkillVersion } from "@/lib/admin-api";
 import { UploadButton } from "./upload-button";
 import { baseName, firstHeading, frontMatter, readUpload } from "./uploads";
-import { useAdminQuery, useRetryKey } from "./use-admin-query";
+import { useAdminMutation, useAdminQuery, useRetryKey } from "./use-admin-query";
 import { AdminPage, Empty, ErrorNote, Facts, Field, Mono, Panel, ROW, StatusBadge, TD, TH, Table, Timestamp } from "./ui";
 
 /** `incident-triage@1.0.0` → its id and version; the catalog names a Skill version that way. */
@@ -131,8 +131,7 @@ function SkillSheet({
     target ? () => adminApi.getSkillStatus(target.skillId, target.version) : null,
     `skill-status:${resourceId}`,
   );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AdminError | null>(null);
+  const { busy, error, setError, run } = useAdminMutation();
   const record = skill.data?.resource_id === resourceId ? skill.data : null;
   const never = status.state.phase === "error" && status.state.error === "missing";
   const current = never ? "published" : status.data?.resource_id === resourceId ? status.data.status : undefined;
@@ -141,12 +140,8 @@ function SkillSheet({
 
   const change = async (next: "active" | "inactive") => {
     if (!target || !expected) return;
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.setSkillStatus(target.skillId, target.version, next, expected);
-    setBusy(false);
+    const result = await run(() => adminApi.setSkillStatus(target.skillId, target.version, next, expected));
     if (!result.ok) {
-      setError(result.error);
       if (result.error === "conflict") status.reload();
       return;
     }
@@ -248,8 +243,7 @@ function PublishDialog({
   const [dependencies, setDependencies] = useState("");
   const [uploadNote, setUploadNote] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
-  const [error, setError] = useState<AdminError | "local" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAdminMutation<"local">();
   const retry = useRetryKey("skill-publish");
 
   const ownerId = me.data?.principal_id ?? "";
@@ -329,14 +323,8 @@ function PublishDialog({
       owner_id: ownerId,
       manifest: { display_name: name.trim(), description: description.trim(), instructions, dependencies: deps },
     };
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.publishSkill(body, retry.keyFor(body));
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
+    const result = await run(() => adminApi.publishSkill(body, retry.keyFor(body)));
+    if (!result.ok) return;
     retry.settle();
     toast.success(t("skills.published", { id: result.body.resource_id }));
     onPublished(result.body);

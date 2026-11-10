@@ -122,7 +122,10 @@ It receives no run approval. Setup catalogs the enrolled operations of `sre-chec
 demo's own service, as `service_operation` resources and grants it only `mitigation.execute` on
 `sre-checkout:deployment.rollback` (#722), plus `checkout:flag.set` and `payment:flag.set` for
 the store on EC2 (#724), which only the EC2 catalog enrols.
-Setup also starts the RC-2 console (`incident-console`), so `/app/` answers. With
+Setup also starts the RC-2 console (`incident-console`), so `/app/` answers. That console is live
+only: its bundle has no scenario simulator and `?mock` does nothing. A console with the simulator
+needs `CONSOLE_SIMULATOR=1` when its image is built: add that line to the setup configuration
+file, or export it before a manual `docker compose` build. With
 `SRE_OTEL_MODE=aws` it starts the deploy-executor with `agent/executor/catalog.otel-aws.v1.yaml`
 on the `<SRE_MCP_NETWORK>-flags` network `connect-mcp` created, gives it `flag-write.env`, and
 points the api at it. The executor has no Docker proxy there. aws mode then also requires

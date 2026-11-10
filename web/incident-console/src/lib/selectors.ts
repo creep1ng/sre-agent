@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useLive } from "./live";
-import { useStore } from "./store";
 import { incidentStatus } from "./status";
 import type { Alert, Incident, LiveAlert } from "./types";
 import { SEVERITY } from "./vocabulary";
@@ -82,14 +81,6 @@ export function buildInbox(alerts: Alert[], incidents: Incident[], now: number):
   };
 }
 
-export function useInbox(now: number): InboxModel {
-  const alerts = useStore((s) => s.alerts);
-  const incidents = useStore((s) => s.incidents);
-  // The model only changes with the data; `now` matters for the recent window only.
-  const minute = Math.floor(now / 60_000);
-  return useMemo(() => buildInbox(alerts, incidents, minute * 60_000), [alerts, incidents, minute]);
-}
-
 export function useLiveInbox(now: number): InboxModel {
   const alerts = useLive((s) => s.alerts);
   const minute = Math.floor(now / 60_000);
@@ -97,8 +88,4 @@ export function useLiveInbox(now: number): InboxModel {
     () => buildInbox(alerts.map(liveAlertToAlert), [], minute * 60_000),
     [alerts, minute],
   );
-}
-
-export function useIncident(id: string | undefined): Incident | undefined {
-  return useStore((s) => s.incidents.find((incident) => incident.id === id));
 }

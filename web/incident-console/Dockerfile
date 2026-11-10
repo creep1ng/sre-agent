@@ -1,10 +1,11 @@
-# The incident console (React). It starts in mock mode: an in-browser simulator plays the
-# backend until each screen is connected to the API.
+# The incident console (React). CONSOLE_SIMULATOR=1 bundles the scenario simulator that `?mock`
+# opens (e2e and demo builds); the default production build leaves it out.
 FROM node:22.14-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
+ARG CONSOLE_SIMULATOR=0
 RUN npm run build
 
 # The E2E runner holds only its test inputs and drives the console through the web proxy.

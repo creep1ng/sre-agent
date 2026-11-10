@@ -15,7 +15,7 @@ import {
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime, formatDuration } from "@/lib/format";
 import { incidentStatus } from "@/lib/status";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { Alert, Incident } from "@/lib/types";
 import { SEVERITIES, SEVERITY } from "@/lib/vocabulary";
 import { TechnicalDetails } from "./technical-details";

@@ -10,14 +10,13 @@ import {
   adminApi,
   TOKENS,
   USD,
-  type AdminError,
   type ConsumptionFilter,
   type ConsumptionLimits,
   type ConsumptionSummary,
   type UsageRequest,
 } from "@/lib/admin-api";
 import type { Tone } from "@/lib/vocabulary";
-import { useAdminQuery, useRetryKey } from "./use-admin-query";
+import { useAdminMutation, useAdminQuery, useRetryKey } from "./use-admin-query";
 import { AdminPage, Empty, ErrorNote, Field, Mono, Panel, Timestamp, useNumber } from "./ui";
 
 type Scope = "month" | "incident" | "request";
@@ -206,8 +205,7 @@ function LimitsForm({
   const t = useT("admin");
   const [tokens, setTokens] = useState(policy.incident_token_limit === null ? "" : String(policy.incident_token_limit));
   const [usd, setUsd] = useState(policy.monthly_usd_limit === null ? "" : String(policy.monthly_usd_limit));
-  const [error, setError] = useState<AdminError | "local" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAdminMutation<"local">();
   const retry = useRetryKey("limits");
 
   const tokensOk = tokens.trim() === "" || TOKENS.test(tokens.trim());
@@ -223,12 +221,8 @@ function LimitsForm({
       incident_token_limit: tokens.trim() ? Number(tokens.trim()) : null,
       monthly_usd_limit: usd.trim() || null,
     };
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.replaceLimits(body, retry.keyFor(body));
-    setBusy(false);
+    const result = await run(() => adminApi.replaceLimits(body, retry.keyFor(body)));
     if (!result.ok) {
-      setError(result.error);
       if (result.error === "conflict") {
         retry.settle();
         onConflict();

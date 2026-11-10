@@ -1,7 +1,8 @@
 # Code-quality indicators (EP-14)
 
-Epic #1015 states its progress with the indicators I01–I35. `scripts/quality_indicators.py`
-measures them on a full git checkout; this page records each definition, its baseline on `main`
+Epic #1015 states its progress with the indicators I01–I35, and a story that declares one
+outside them adds it to the script with its row here (#1025 added I36 and I37).
+`scripts/quality_indicators.py` measures them on a full git checkout; this page records each definition, its baseline on `main`
 at `0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63`, its target and the issue that moves it. An
 indicator is evidence for a reviewer, not a goal in itself: a value reached by one of the routes
 in the "Met without improving the code" column does not count as delivery.
@@ -22,6 +23,17 @@ docker compose --profile quality run --rm quality --json
 git clone --quiet . /tmp/quality-base
 git -C /tmp/quality-base checkout --quiet --detach 0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63
 QUALITY_REPO=/tmp/quality-base docker compose --profile quality run --build --rm quality
+```
+
+I36 reads the console's production build in `web/incident-console/dist` of the measured checkout,
+which git ignores. Build it in the clone right before measuring, without `CONSOLE_SIMULATOR`;
+with no build there, I36 prints `not measured`.
+
+```sh
+docker run --rm -u "$(id -u):$(id -g)" -e npm_config_cache=/tmp/npm \
+  -v /tmp/quality-base/web/incident-console:/app -w /app \
+  node:22.14-alpine@sha256:9bef0ef1e268f60627da9ba7d7605e8831d5b56ad07487d24d1aa386336d1944 \
+  sh -c 'npm ci --no-audit --no-fund && npm run build'
 ```
 
 Measure a normal clone. In a linked worktree `.git` is a file pointing at the common repository
@@ -95,20 +107,20 @@ include blank lines, comments and docstrings.
 | I32 test files named after issues | `tests/*.py` paths matching `issue_?\d` | None known | Renaming without regrouping | 6 | 0 | #1024 |
 | I33 CI runs `web/incident-console` e2e | Any tracked `.github/workflows/*` contains `incident-console` | A comment, or a job that only builds | Mentioning the path without running the e2e | False | True | #1019 |
 | I34 legacy console paths tracked | Tracked files under `index.html`, `public/`, `styles/` | Assets the landing page uses | Moving the files to another directory | 39 | 0, except landing assets listed in the PR | #1019 |
-| I35 `store.ts` lines / `scenarios.ts` in `src/lib` | Newlines in `web/incident-console/src/lib/store.ts`; whether `src/lib/scenarios.ts` exists | None known | Moving the simulator to another bundled path (the bundle check in #1025 catches it) | 776 / True | ≤ 300 / False | #1025 |
+| I35 `store.ts` lines / `scenarios.ts` in `src/lib` | Newlines in `web/incident-console/src/lib/store.ts`; whether `src/lib/scenarios.ts` exists | None known | Moving the simulator to another bundled path (I36 catches it) | 776 / True | ≤ 300 / False | #1025 |
+| I36 `scenarios.ts` strings in the console bundle | Double-quoted literals of 20 or more characters without escapes, outside comments and template literals, in the tracked `web/incident-console/src/**/scenarios.ts`, and how many of them appear in `web/incident-console/dist/**/*.js` once `\u`/`\x` escapes are decoded; `not measured` without a build | A long literal that another module also bundles; a `dist` left from another commit or built with `CONSOLE_SIMULATOR=1` | Building the scripts' texts by concatenation or template literals, which are not counted | 162 of 162 | 0 of N in a build without `CONSOLE_SIMULATOR` | #1025 |
+| I37 busy/error pairs in administration pages | Per tracked `web/incident-console/src/features/admin/*-page.tsx`, the smaller of its `const [busy, setBusy] = useState` and `const [error, setError] = useState` counts, summed | A page whose busy flag is not a form's write | Renaming the state, or a per-page hook that repeats the same pair | 13 | 0 | #1025 |
 
 Adding this page and the script raised I23 and I26 by one each over the baseline, I20 by three
 files (those two and `docker/quality.Dockerfile`) and I21 by two (both mention `grant`).
 
 ## Indicators the script does not measure
 
-Three stories declare indicators outside I01–I35. The script does not measure them; the PR of
-the owning story states how it measured each one.
+Two stories declare indicators outside I01–I35 that the script does not measure yet; the PR of
+the owning story adds each one to the script and moves its row to the table above.
 
 | Indicator | Baseline | Target | Issue |
 | --- | --- | --- | --- |
 | Places that declare the catalog's resource types | 5 | 1, plus the CHECK constraints derived from it | #1022 |
 | Core packages covered by `.importlinter` | `incident`, `governance`, `investigator`, `executor` | also `triage`, `chat`, `bok` and the application | #1023 |
 | `os.environ` reads outside the settings | 7 | 0 | #1023 |
-| `scenarios.ts` strings in the production bundle (`rg` over `dist/`) | present | absent without the build variable | #1025 |
-| Repeated `busy`/`error` pairs in administration pages | 13 | 0 | #1025 |

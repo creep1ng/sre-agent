@@ -6,7 +6,7 @@ import { ToneBadge } from "@/components/badges";
 import { RelativeTime } from "@/components/relative-time";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { Confidence, Incident, Proposal } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CONFIDENCE, RISK } from "@/lib/vocabulary";
