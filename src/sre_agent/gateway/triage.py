@@ -14,11 +14,11 @@ from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import CredentialRepository
 from sre_agent.triage.service import (
-    ID_PATTERN,
     InvestigationDispatcher,
     TriageError,
     TriageService,
 )
+from sre_agent.vocabulary import is_identifier
 
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 RETRY_AFTER_SECONDS = "5"
@@ -168,7 +168,7 @@ class TriageHttpService:
     async def get_state(self, alert_id: str, authorization: str | None) -> JSONResponse:
         """Contract getAlertTriage: current triage state, no mutation."""
         request_id = uuid4()
-        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+        if not isinstance(alert_id, str) or not is_identifier(alert_id):
             return self._error(request_id, 400, "invalid_command")
         try:
             context = await self._authenticate(authorization)
@@ -189,7 +189,7 @@ class TriageHttpService:
     async def get_context(self, alert_id: str, authorization: str | None) -> JSONResponse:
         """Return advisory state and domain-authorized next actions."""
         request_id = uuid4()
-        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+        if not isinstance(alert_id, str) or not is_identifier(alert_id):
             return self._error(request_id, 400, "invalid_command")
         try:
             context = await self._authenticate(authorization)
@@ -212,7 +212,7 @@ class TriageHttpService:
     ) -> JSONResponse:
         """List eligible link destinations without checking alert inventory or triage state."""
         request_id = uuid4()
-        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+        if not isinstance(alert_id, str) or not is_identifier(alert_id):
             return self._error(request_id, 400, "invalid_command")
         try:
             context = await self._authenticate(authorization)

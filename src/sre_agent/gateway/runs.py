@@ -45,7 +45,6 @@ from sre_agent.incident.projections import (
     project_run_state,
 )
 from sre_agent.incident.runtime import (
-    OBJECTIVE_TRANSITIONS,
     ActorReference,
     ApprovalRequiredError,
     IncidentNotFoundError,
@@ -63,6 +62,7 @@ from sre_agent.persistence.repositories import (
     GrantRepository,
     PrincipalRepository,
 )
+from sre_agent.vocabulary import RUN_OBJECTIVE_TRANSITIONS
 
 logger = logging.getLogger(__name__)
 START_ACTION = "run.start"
@@ -171,7 +171,7 @@ class RunStartService:
         if body.get("workflow_version") != self.workflow.version:
             return True
         objective = body.get("objective")
-        if not isinstance(objective, str) or objective not in OBJECTIVE_TRANSITIONS:
+        if not isinstance(objective, str) or objective not in RUN_OBJECTIVE_TRANSITIONS:
             return True
         resume = body.get("resume_from_run_id")
         return resume is not None and re.fullmatch(RUN_ID_PATTERN, str(resume)) is None

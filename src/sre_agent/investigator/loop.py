@@ -56,6 +56,7 @@ from sre_agent.investigator.ports import (
     SkillSource,
 )
 from sre_agent.investigator.prompt import assemble
+from sre_agent.vocabulary import AgentObjective, HarnessStatus
 
 MAX_INPUT = 65_536
 MAX_OUTPUT = 65_536
@@ -276,11 +277,11 @@ async def investigate(
                     request_id=error.request_id,
                 )
             status: Status = (
-                "denied"
+                HarnessStatus.DENIED
                 if error.kind == "denied"
-                else "upstream_unavailable"
+                else HarnessStatus.UPSTREAM_UNAVAILABLE
                 if error.kind == "transient"
-                else "needs_human"
+                else HarnessStatus.NEEDS_HUMAN
             )
             return finish(status, detail=str(error), failure_diagnostic=diagnostic)
 
@@ -298,7 +299,9 @@ async def investigate(
             clock(),
         )
         if len(prompt) > MAX_INPUT:
-            return finish("needs_human", detail="assembled input exceeds the gateway limit")
+            return finish(
+                HarnessStatus.NEEDS_HUMAN, detail="assembled input exceeds the gateway limit"
+            )
         try:
             reply = await _respond(
                 gateway, request, prompt, task_id_for(turn_id), limits, revalidate
@@ -315,7 +318,9 @@ async def investigate(
                         http_status=error.status,
                         request_id=error.request_id,
                     )
-                return finish("denied", detail=str(error), failure_diagnostic=failure_diagnostic)
+                return finish(
+                    HarnessStatus.DENIED, detail=str(error), failure_diagnostic=failure_diagnostic
+                )
             if error.kind == "transient":
                 failure_diagnostic = None
                 if error.status is None or error.status >= 500:
@@ -326,11 +331,11 @@ async def investigate(
                         request_id=error.request_id,
                     )
                 return finish(
-                    "upstream_unavailable",
+                    HarnessStatus.UPSTREAM_UNAVAILABLE,
                     detail=str(error),
                     failure_diagnostic=failure_diagnostic,
                 )
-            return finish("needs_human", detail=str(error))
+            return finish(HarnessStatus.NEEDS_HUMAN, detail=str(error))
         request_ids.append(reply.request_id)
         turn = Turn(
             turn_id=turn_id,
@@ -347,7 +352,7 @@ async def investigate(
             action = parse_action(reply.text)
             if isinstance(action, SearchBoK) and not request.bok_collections():
                 raise InvalidOutput("search_bok is not offered in this run")
-            verifying = request.objective == "verify"
+            verifying = request.objective == AgentObjective.VERIFY
             if verifying and isinstance(action, ProposeHypothesis | ProposeMitigation | Conclude):
                 raise InvalidOutput(VERIFICATION_ENDS)
             if not verifying and isinstance(action, VerifyMitigation):
@@ -373,10 +378,11 @@ async def investigate(
                 # Retried with the validation error and still invalid: a person decides.
                 reason = f"{NO_OPERATION[language]}: {error}"
                 return finish(
-                    "needs_human", outcome=RequestHuman(action="request_human", reason=reason)
+                    HarnessStatus.NEEDS_HUMAN,
+                    outcome=RequestHuman(action="request_human", reason=reason),
                 )
             if feedback is not None:
-                return finish("invalid_output", detail=str(error))
+                return finish(HarnessStatus.INVALID_OUTPUT, detail=str(error))
             feedback = str(error)
             if isinstance(error, InvalidOperation):
                 refused.append(str(error))
@@ -387,7 +393,8 @@ async def investigate(
                 if len(turns) >= budget:
                     reason = f"{NO_OPERATION[language]}: {error}"
                     return finish(
-                        "needs_human", outcome=RequestHuman(action="request_human", reason=reason)
+                        HarnessStatus.NEEDS_HUMAN,
+                        outcome=RequestHuman(action="request_human", reason=reason),
                     )
                 bok_hint = REFUSED_BOK if request.bok_collections() else ""
                 feedback += "; " + REFUSED_NEXT.format(steps=budget - len(turns), bok=bok_hint)
@@ -396,14 +403,16 @@ async def investigate(
         if isinstance(action, ProposeMitigation) and request.operations_unavailable:
             turns.append(turn)
             return finish(
-                "needs_human",
+                HarnessStatus.NEEDS_HUMAN,
                 outcome=RequestHuman(action="request_human", reason=UNREADABLE[language]),
             )
         if isinstance(action, SearchBoK):
             ask = action
             if bok is None or ask.collection not in request.bok_collections():
                 turns.append(turn)
-                return finish("denied", detail=f"bok collection not authorized: {ask.collection}")
+                return finish(
+                    HarnessStatus.DENIED, detail=f"bok collection not authorized: {ask.collection}"
+                )
             try:
                 found = await _attempts(partial(_search, bok, ask), limits)
             except GatewayError as error:
@@ -442,13 +451,13 @@ async def investigate(
         if not isinstance(action, UseTool):
             turns.append(turn)
             if isinstance(action, RequestHuman):
-                return finish("needs_human", outcome=action)
+                return finish(HarnessStatus.NEEDS_HUMAN, outcome=action)
             if isinstance(action, ProposeHypothesis):
                 evidence[:] = [_judged(item, action, language) for item in evidence]
-            return finish("completed", outcome=action)
+            return finish(HarnessStatus.COMPLETED, outcome=action)
         if not request.authorizes_tool(action.tool):
             turns.append(turn)
-            return finish("denied", detail=f"tool not authorized: {action.tool}")
+            return finish(HarnessStatus.DENIED, detail=f"tool not authorized: {action.tool}")
         try:
             result = await asyncio.wait_for(
                 provider.collect(action.tool, action.arguments), limits.tool_timeout_seconds
@@ -471,13 +480,13 @@ async def investigate(
                 request_ids.append(error.request_id)
                 mcp_request_ids.append(error.request_id)
             status = (
-                "denied"
+                HarnessStatus.DENIED
                 if isinstance(error, EvidenceUnavailable) and error.kind == "denied"
-                else "pre_dispatch_rejected"
+                else HarnessStatus.PRE_DISPATCH_REJECTED
                 if isinstance(error, EvidenceUnavailable)
                 and error.kind == "rejected"
                 and error.status == 422
-                else "upstream_unavailable"
+                else HarnessStatus.UPSTREAM_UNAVAILABLE
             )
             failure_diagnostic = None
             if (
@@ -533,7 +542,7 @@ async def investigate(
             tool=action.tool, arguments=action.arguments, result_summary=result.summary[:8000]
         )
         turns.append(turn.model_copy(update={"tool_invocation": invocation}))
-    return finish("max_steps", detail=f"step budget of {budget} exhausted")
+    return finish(HarnessStatus.MAX_STEPS, detail=f"step budget of {budget} exhausted")
 
 
 async def _respond(

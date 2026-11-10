@@ -53,29 +53,41 @@ from sre_agent.persistence.repositories import (
     ResourceRepository,
 )
 from sre_agent.triage.store import TriageRepository
+from sre_agent.vocabulary import (
+    TRIAGE_TRANSITIONS,
+    IncidentState,
+    RunObjective,
+    TransitionId,
+    TriageStatus,
+    is_identifier,
+)
 
 WORKFLOW_TYPE = "incident_workflow"
 WORKFLOW_ID = "incident-response"
 READ_ACTION = "alert.read"
 SEVERITIES = ("sev1", "sev2", "sev3", "sev4")
 ACTIONS = {
-    "open_triage": "alert.triage",
-    "triage_dismiss": "alert.dismiss",
-    "triage_link": "alert.associate",
-    "triage_declare": "incident.declare",
+    TransitionId.OPEN_TRIAGE: "alert.triage",
+    TransitionId.TRIAGE_DISMISS: "alert.dismiss",
+    TransitionId.TRIAGE_LINK: "alert.associate",
+    TransitionId.TRIAGE_DECLARE: "incident.declare",
 }
 STATES = {
-    "open_triage": "open",
-    "triage_dismiss": "dismissed",
-    "triage_link": "linked",
-    "triage_declare": "declared",
+    TransitionId.OPEN_TRIAGE: TriageStatus.OPEN,
+    TransitionId.TRIAGE_DISMISS: TriageStatus.DISMISSED,
+    TransitionId.TRIAGE_LINK: TriageStatus.LINKED,
+    TransitionId.TRIAGE_DECLARE: TriageStatus.DECLARED,
 }
-OPERATION_ORDER = ("open_triage", "triage_dismiss", "triage_link", "triage_declare")
-EXTERNAL_OPERATIONS = {"triage_dismiss", "triage_link"}
-TERMINAL_STATES = {"dismissed", "linked", "declared"}
+OPERATION_ORDER = TRIAGE_TRANSITIONS
+EXTERNAL_OPERATIONS = {TransitionId.TRIAGE_DISMISS, TransitionId.TRIAGE_LINK}
+TERMINAL_STATES = {TriageStatus.DISMISSED, TriageStatus.LINKED, TriageStatus.DECLARED}
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
-ELIGIBLE = {"active", "investigating", "mitigating", "verifying"}
-ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
+ELIGIBLE = {
+    IncidentState.ACTIVE,
+    IncidentState.INVESTIGATING,
+    IncidentState.MITIGATING,
+    IncidentState.VERIFYING,
+}
 RFC3339_PATTERN = (
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?"
     r"(?:Z|[+-]\d{2}:\d{2})$"
@@ -188,7 +200,7 @@ class TriageService:
                 continue
             if not await self._has_action(session, principal, ACTIONS[operation]):
                 continue
-            if operation == "triage_link" and not await self._has_action(
+            if operation == TransitionId.TRIAGE_LINK and not await self._has_action(
                 session, principal, "run.read"
             ):
                 continue
@@ -211,7 +223,7 @@ class TriageService:
             not isinstance(operation, str)
             or operation not in ACTIONS
             or not isinstance(alert_id, str)
-            or not re.fullmatch(ID_PATTERN, alert_id)
+            or not is_identifier(alert_id)
             or type(expected_version) is not int
             or not isinstance(key, str)
             or not re.fullmatch(KEY_PATTERN, key)
@@ -219,18 +231,22 @@ class TriageService:
             raise TriageError(400, "invalid_command")
         if reason is not None and not isinstance(reason, str):
             raise TriageError(422, "invalid_reason")
-        if (operation == "open_triage") == (reason is not None):
+        if (operation == TransitionId.OPEN_TRIAGE) == (reason is not None):
             raise TriageError(422, "invalid_reason")
         if reason is not None and not 1 <= len(reason) <= 1000:
             raise TriageError(422, "invalid_reason")
-        if operation == "triage_link" and (
-            not isinstance(target, str) or not re.fullmatch(ID_PATTERN, target)
+        if operation == TransitionId.TRIAGE_LINK and (
+            not isinstance(target, str) or not is_identifier(target)
         ):
             raise TriageError(422, "invalid_target")
-        if operation == "triage_link" and severity is not None and severity not in SEVERITIES:
+        if (
+            operation == TransitionId.TRIAGE_LINK
+            and severity is not None
+            and severity not in SEVERITIES
+        ):
             raise TriageError(422, "invalid_severity")
         # Declaration impact is the operator-stated incident consequence.
-        if operation == "triage_declare":
+        if operation == TransitionId.TRIAGE_DECLARE:
             if severity not in SEVERITIES:
                 raise TriageError(422, "invalid_severity")
             if not isinstance(impact, str) or not impact.strip() or len(impact) > 2000:
@@ -300,10 +316,10 @@ class TriageService:
             payload["alert_context"] = alert_context
         scope = f"triage:{alert_id}"
         digest = _digest(idempotency_key)
-        created = 201 if operation == "triage_declare" else 200
+        created = 201 if operation == TransitionId.TRIAGE_DECLARE else 200
         async with self._database.transaction() as session:
             await self._authorize(session, principal, ACTIONS[operation])
-            if operation == "triage_link":
+            if operation == TransitionId.TRIAGE_LINK:
                 await self._authorize(session, principal, "run.read")
             if not self._principal_may_issue(principal, operation):
                 raise TriageError(403, "operator_required")
@@ -340,7 +356,7 @@ class TriageService:
                 stored.setdefault("responsible_system", None)
                 investigation_run_id = (
                     await self._investigation_run_id(session, stored.get("incident_id"))
-                    if operation == "triage_declare"
+                    if operation == TransitionId.TRIAGE_DECLARE
                     else None
                 )
                 return TriageResult(
@@ -357,9 +373,12 @@ class TriageService:
                 raise TriageError(409, "stale_version")
             current_status = (current or {}).get("status")
             if current_status in TERMINAL_STATES:
-                if operation == "triage_declare" and current_status == "declared":
+                if (
+                    operation == TransitionId.TRIAGE_DECLARE
+                    and current_status == TriageStatus.DECLARED
+                ):
                     raise TriageError(409, "already_declared")
-                if operation == "triage_link":
+                if operation == TransitionId.TRIAGE_LINK:
                     # Keep the established destination error when a target has
                     # since become ineligible; this check performs no writes.
                     await self._transition(
@@ -524,7 +543,7 @@ class TriageService:
         *,
         responsible_system: str | None = None,
     ) -> _TransitionOutcome:
-        if operation == "triage_link":
+        if operation == TransitionId.TRIAGE_LINK:
             if target_incident_id is None:
                 raise TriageError(422, "invalid_target")
             row = (
@@ -545,7 +564,7 @@ class TriageService:
             if row["state"] not in ELIGIBLE:
                 raise TriageError(409, "destination_ineligible")
             return _TransitionOutcome(target_incident_id)
-        if operation != "triage_declare":
+        if operation != TransitionId.TRIAGE_DECLARE:
             return _TransitionOutcome(None)
         now = datetime.now(UTC)
         incident_id = f"inc-{digest[:32]}"
@@ -554,7 +573,7 @@ class TriageService:
         incident_state = {
             "workflow_id": self._workflow.workflow_id,
             "workflow_version": self._workflow.version,
-            "state": "triage",
+            "state": IncidentState.TRIAGE,
             "severity": None,
             "impact": None,
             "alert": {"alert_id": alert_id, **(alert_context or {})},
@@ -565,7 +584,7 @@ class TriageService:
         }
         run_state = {
             "workflow_version": self._workflow.version,
-            "current_state": "triage",
+            "current_state": IncidentState.TRIAGE,
             "status": "running",
             "pending_command": None,
         }
@@ -603,7 +622,7 @@ class TriageService:
             command_id=f"cmd-{digest[:32]}",
             incident_id=incident_id,
             run_id=run_id,
-            transition_id="triage_declare",
+            transition_id=TransitionId.TRIAGE_DECLARE,
             # An automatic declaration (#765) is the system's, never the operator's.
             actor="human" if responsible_system is None else "system",
             actor_reference=(
@@ -642,7 +661,7 @@ class TriageService:
                 RunStart(
                     command_id=self._investigation_command_id(incident_id),
                     incident_id=incident_id,
-                    objective="investigate",
+                    objective=RunObjective.INVESTIGATE,
                     # An automatic declaration (#765) starts the run as the system that
                     # declared; a person's declaration starts it as that person.
                     actor="human" if responsible_system is None else "system",

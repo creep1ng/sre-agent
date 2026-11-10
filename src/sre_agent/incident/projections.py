@@ -20,27 +20,27 @@ from sre_agent.incident.reasons import (
 )
 from sre_agent.incident.title import title_of
 from sre_agent.incident.workflow import IncidentWorkflow
+from sre_agent.vocabulary import IDENTIFIER_PATTERN, RunStatus, TransitionId
 
-IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
 RUN_ID_PATTERN = r"^run_[a-z0-9]{8,32}$"
 CURSOR_PATTERN = r"^seq:(-?\d+)$"
 SEVERITIES = frozenset({"sev1", "sev2", "sev3", "sev4"})
-RUN_STATUSES = frozenset({"running", "awaiting_human", "completed", "terminated"})
+RUN_STATUSES = frozenset(RunStatus)
 
 TRANSITION_SUMMARIES = {
-    "open_triage": "Triage opened.",
-    "triage_dismiss": "Alert dismissed.",
-    "triage_link": "Alert linked to an existing incident.",
-    "triage_declare": "Incident declared.",
-    "start_investigation": "Investigation started.",
-    "continue_investigation": "Investigation continued.",
-    "propose_mitigation": "Mitigation proposed.",
-    "apply_mitigation": "Mitigation approved.",
-    "reject_mitigation": "Mitigation sent back for changes.",
-    "verification_failed": "Verification failed; returned to investigating.",
-    "verification_passed": "Service verified stable.",
-    "start_postmortem": "Postmortem started.",
-    "close_incident": "Incident closed.",
+    TransitionId.OPEN_TRIAGE: "Triage opened.",
+    TransitionId.TRIAGE_DISMISS: "Alert dismissed.",
+    TransitionId.TRIAGE_LINK: "Alert linked to an existing incident.",
+    TransitionId.TRIAGE_DECLARE: "Incident declared.",
+    TransitionId.START_INVESTIGATION: "Investigation started.",
+    TransitionId.CONTINUE_INVESTIGATION: "Investigation continued.",
+    TransitionId.PROPOSE_MITIGATION: "Mitigation proposed.",
+    TransitionId.APPLY_MITIGATION: "Mitigation approved.",
+    TransitionId.REJECT_MITIGATION: "Mitigation sent back for changes.",
+    TransitionId.VERIFICATION_FAILED: "Verification failed; returned to investigating.",
+    TransitionId.VERIFICATION_PASSED: "Service verified stable.",
+    TransitionId.START_POSTMORTEM: "Postmortem started.",
+    TransitionId.CLOSE_INCIDENT: "Incident closed.",
 }
 # A run that ended without a terminal workflow state; a new run of the incident may retry.
 TERMINATED_SUMMARIES = {
@@ -166,7 +166,7 @@ def executed_summary(incident_state: Any) -> str | None:
 
 def event_summary(payload: Any) -> str:
     transition_id = payload.get("transition_id") if isinstance(payload, dict) else None
-    if transition_id == "apply_mitigation":
+    if transition_id == TransitionId.APPLY_MITIGATION:
         executed = executed_summary(payload.get("incident_state"))
         if executed:
             return executed

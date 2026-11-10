@@ -23,9 +23,17 @@ from pydantic import (
     model_validator,
 )
 
+from sre_agent.vocabulary import (
+    AGENT_OBJECTIVES,
+    AgentObjective,
+    HarnessStatus,
+    Identifier,
+    IncidentState,
+)
+
 EvidenceId = Annotated[str, Field(pattern=r"^ev_[a-z0-9_-]{1,60}$")]
 HypothesisId = Annotated[str, Field(pattern=r"^hyp_[a-z0-9_-]{1,60}$")]
-IncidentId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+IncidentId = Identifier
 Name = Annotated[str, Field(min_length=1, max_length=200)]
 Text = Annotated[str, Field(min_length=1, max_length=4000)]
 Step = Annotated[str, Field(min_length=1, max_length=1000)]
@@ -33,17 +41,9 @@ Level = Literal["low", "medium", "high"]
 # What one piece of evidence says about the hypothesis it is recorded with (#707).
 Verdict = Literal["supports", "contradicts", "inconclusive"]
 Finding = Annotated[str, Field(min_length=1, max_length=300)]
-Objective = Literal["triage", "investigate", "mitigate", "verify", "postmortem"]
+Objective = AgentObjective
 OutputLanguage = Literal["es", "en"]
-Status = Literal[
-    "completed",
-    "needs_human",
-    "denied",
-    "max_steps",
-    "invalid_output",
-    "pre_dispatch_rejected",
-    "upstream_unavailable",
-]
+Status = HarnessStatus
 _TURN = re.compile(r"^turn_[a-z0-9]{8,32}$")
 _FENCE = re.compile(r"^```(?:json)?[ \t]*\n(?P<body>.*)\n```$", re.DOTALL)
 _EVIDENCE = re.compile(r"^ev_[a-z0-9_-]{1,60}$")
@@ -94,10 +94,17 @@ class EvidenceContext(_Projection):
 
 class IncidentContext(_Projection):
     incident_id: IncidentId
-    state: Literal["triage", "investigating", "mitigating", "verifying", "postmortem"]
+    state: IncidentState
     alert: AlertContext
     hypotheses: list[HypothesisContext] = Field(default_factory=list)
     evidence: list[EvidenceContext] = Field(default_factory=list)
+
+    @field_validator("state")
+    @classmethod
+    def _state_allows_an_agentic_step(cls, value: IncidentState) -> IncidentState:
+        if value not in AGENT_OBJECTIVES:
+            raise ValueError(f"state '{value}' allows no agentic step")
+        return value
 
 
 SkillId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{2,62}[a-z0-9]$")]
@@ -252,7 +259,7 @@ class InvestigationRequest(_Strict):
 
     @model_validator(mode="after")
     def _verification_measures_its_mitigation(self) -> InvestigationRequest:
-        if (self.objective == "verify") != (self.mitigation is not None):
+        if (self.objective == AgentObjective.VERIFY) != (self.mitigation is not None):
             raise ValueError("only a verification carries the mitigation it measures, and it must")
         return self
 
@@ -531,7 +538,7 @@ class InvestigationResult(_Strict):
         final = self.outcome is not None and not isinstance(self.outcome, RequestHuman)
         if final != (self.status == "completed"):
             raise ValueError("only a completed result carries a final outcome, and it must")
-        if isinstance(self.outcome, RequestHuman) and self.status != "needs_human":
+        if isinstance(self.outcome, RequestHuman) and self.status != HarnessStatus.NEEDS_HUMAN:
             raise ValueError("a request for a human requires status needs_human")
         if [turn.sequence for turn in self.turns] != list(range(len(self.turns))):
             raise ValueError("turn sequences must run from 0 without gaps")
