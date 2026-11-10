@@ -66,6 +66,14 @@ from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemor
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
 from sre_agent.persistence.models import ResourceRow
 from sre_agent.persistence.repositories import CredentialRepository
+from sre_agent.vocabulary import (
+    RUN_ENDING_STATUSES,
+    HarnessStatus,
+    IncidentState,
+    RunObjective,
+    RunStatus,
+    TransitionId,
+)
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
 logger = logging.getLogger(__name__)
@@ -74,7 +82,7 @@ POSTMORTEM_SECONDS = 60.0
 
 # Runs whose dispatch wrote its intent and no outcome: at startup none has a dispatcher here.
 _INTERRUPTED_RUNS = text("""SELECT r.incident_id, r.run_id FROM incident.runs r
-    WHERE r.state->>'status' = 'running'
+    WHERE r.state->>'status' = :running
       AND EXISTS (SELECT 1 FROM incident.run_events e WHERE e.run_id = r.run_id
                   AND e.kind = 'dispatch_receipt'
                   AND e.payload->'dispatch_receipt'->>'phase' = 'intent')
@@ -123,7 +131,7 @@ class InvestigationRunDispatcher:
         if not any(
             event.kind == "state_change"
             and event.payload.get("transition_id")
-            in {"start_investigation", "continue_investigation"}
+            in {TransitionId.START_INVESTIGATION, TransitionId.CONTINUE_INVESTIGATION}
             for event in started.events
         ):
             return
@@ -175,7 +183,10 @@ class InvestigationRunDispatcher:
             logger.error("verification_handoff_failed run_id=%s error=%s", run_id, name)
             return
         strategy = view.incident_state.get("mitigation_strategy") or {}
-        if view.incident_state.get("state") != "verifying" or "execution" not in strategy:
+        if (
+            view.incident_state.get("state") != IncidentState.VERIFYING
+            or "execution" not in strategy
+        ):
             return  # A person verified it first, or nothing ran: there is nothing to measure.
         self._verifying[run_id] = verification_dispatch(run_id)
         try:
@@ -203,7 +214,7 @@ class InvestigationRunDispatcher:
                 RunStart(
                     command_id=f"postmortem-{incident_id}",
                     incident_id=incident_id,
-                    objective="postmortem",
+                    objective=RunObjective.POSTMORTEM,
                     actor="agent",
                     actor_reference=ActorReference(agent),
                 )
@@ -233,7 +244,11 @@ class InvestigationRunDispatcher:
                 await work.postmortems.get(incident_id, lock=True)
                 incident = await work.incidents.get(incident_id)
                 reserved = (incident.state.get("postmortem") or {}) if incident else {}
-                if not incident or incident.state.get("state") != "postmortem" or not reserved:
+                if (
+                    not incident
+                    or incident.state.get("state") != IncidentState.POSTMORTEM
+                    or not reserved
+                ):
                     return
                 if await work.postmortems.get(incident_id) is not None:
                     return  # Someone wrote it first.
@@ -277,7 +292,7 @@ class InvestigationRunDispatcher:
                 RunStart(
                     command_id=f"reinvestigate-{incident_id}-{failed}",
                     incident_id=incident_id,
-                    objective="investigate",
+                    objective=RunObjective.INVESTIGATE,
                     actor="system",
                     actor_reference=ActorReference(agent),
                 )
@@ -289,7 +304,7 @@ class InvestigationRunDispatcher:
 
     def _state(self, run_id: str) -> str:
         """The state a dispatch's own events carry: a verification's incident stays verifying."""
-        return "verifying" if run_id in self._verifying else "investigating"
+        return IncidentState.VERIFYING if run_id in self._verifying else IncidentState.INVESTIGATING
 
     async def end_interrupted(self) -> None:
         """At startup, end every run whose dispatch lost its process (an API restart).
@@ -300,7 +315,9 @@ class InvestigationRunDispatcher:
         """
         try:
             async with self.sessions() as session:
-                rows = (await session.execute(_INTERRUPTED_RUNS)).all()
+                rows = (
+                    await session.execute(_INTERRUPTED_RUNS, {"running": RunStatus.RUNNING})
+                ).all()
         except Exception as error:
             logger.error("investigation_sweep_failed error=%s", type(error).__name__)
             return
@@ -359,7 +376,7 @@ class InvestigationRunDispatcher:
                 ),
                 # Nothing resumes an interrupted dispatch: its run ends and a human retries.
                 interrupted_termination=self._termination_event(
-                    termination("needs_human", now), (), now, self._state(run_id)
+                    termination(HarnessStatus.NEEDS_HUMAN, now), (), now, self._state(run_id)
                 ),
                 dispatch_id=self._verifying.get(run_id),
             )
@@ -518,7 +535,7 @@ class InvestigationRunDispatcher:
                 status=status,
                 reason_code=f"mcp_discovery_{error.kind}",
                 request_ids=request_ids,
-                escalate="denied" if error.kind == "denied" else None,
+                escalate=HarnessStatus.DENIED if error.kind == "denied" else None,
             )
             return
 
@@ -541,7 +558,7 @@ class InvestigationRunDispatcher:
                     InvestigationRequest(
                         incident_id=incident_id,
                         run_id=run_id,
-                        objective="verify" if verifying else "investigate",
+                        objective=self.runtime.workflow.agent_objective(self._state(run_id)),
                         context=context,
                         authorized_capabilities=capabilities,
                         service_operations=operations,
@@ -582,7 +599,7 @@ class InvestigationRunDispatcher:
                 self._note(run_id, "bok_unavailable")
             contexts = self._contexts(incident_id, run_id, result, offset)
             if not (
-                result.status == "completed"
+                result.status == HarnessStatus.COMPLETED
                 and isinstance(result.outcome, ProposeHypothesis)
                 and result.remaining_step_budget >= 1
             ):
@@ -620,7 +637,7 @@ class InvestigationRunDispatcher:
 
         all_request_ids = _unique_ids(request_ids)
         mcp_request_ids = _unique_ids(run_mcp_ids)
-        if result.status == "denied":
+        if result.status == HarnessStatus.DENIED:
             await self._finish(
                 work,
                 incident_id,
@@ -632,11 +649,11 @@ class InvestigationRunDispatcher:
                 mcp_request_ids=mcp_request_ids,
                 result_status=result.status,
                 diagnostic=self._result_diagnostic(result),
-                escalate="denied",
+                escalate=HarnessStatus.DENIED,
                 contexts=contexts,
             )
             return
-        if result.status == "pre_dispatch_rejected":
+        if result.status == HarnessStatus.PRE_DISPATCH_REJECTED:
             await self._finish(
                 work,
                 incident_id,
@@ -651,7 +668,10 @@ class InvestigationRunDispatcher:
                 contexts=contexts,
             )
             return
-        if result.outcome is None or result.status not in {"completed", "needs_human"}:
+        if result.outcome is None or result.status not in {
+            HarnessStatus.COMPLETED,
+            HarnessStatus.NEEDS_HUMAN,
+        }:
             await self._finish(
                 work,
                 incident_id,
@@ -796,9 +816,9 @@ class InvestigationRunDispatcher:
         turn_id = result.turns[-1].turn_id if result.turns else None
         # Events written with a transition carry the state it reaches, as the timeline reads them.
         reached = (
-            ("resolved" if result.outcome.passed else "investigating")
+            (IncidentState.RESOLVED if result.outcome.passed else IncidentState.INVESTIGATING)
             if isinstance(result.outcome, VerifyMitigation)
-            else "mitigating"
+            else IncidentState.MITIGATING
             if isinstance(result.outcome, ProposeMitigation)
             else self._state(run_id)
         )
@@ -847,16 +867,17 @@ class InvestigationRunDispatcher:
         )
         if command is not None:
             await self.runtime.execute(command)
-            if reached == "resolved":
+            if reached == IncidentState.RESOLVED:
                 self.after_resolved(incident_id)
             elif isinstance(result.outcome, VerifyMitigation):
                 self.after_verification_failed(incident_id)
             return
         # No transition follows this outcome, so the run ends here and a human decides the next.
         run_patch = termination(
-            {"conclude": "completed", "propose_hypothesis": "max_steps"}.get(
-                result.outcome.action, "needs_human"
-            ),
+            {
+                "conclude": HarnessStatus.COMPLETED,
+                "propose_hypothesis": HarnessStatus.MAX_STEPS,
+            }.get(result.outcome.action, HarnessStatus.NEEDS_HUMAN),
             now,
         )
         await work.complete_run_dispatch(
@@ -895,7 +916,7 @@ class InvestigationRunDispatcher:
             if result.remaining_step_budget < 1:
                 return None
             patch = self._hypothesis_patch(outcome, view, evidence)
-            transition_id, transition_outcome = "continue_investigation", "continue_investigation"
+            transition_id = TransitionId.CONTINUE_INVESTIGATION
             inputs: Mapping[str, Any] = {
                 "remaining_step_budget": result.remaining_step_budget,
                 "incident_patch": patch,
@@ -915,18 +936,20 @@ class InvestigationRunDispatcher:
                 "created_at": datetime.now(UTC).isoformat(),
             }
             patch = {"mitigation_strategy": mitigation, "evidence": evidence}
-            transition_id, transition_outcome = "propose_mitigation", "propose_mitigation"
+            transition_id = TransitionId.PROPOSE_MITIGATION
             inputs = {"incident_patch": patch}
         elif isinstance(outcome, VerifyMitigation):
             # What the verification measured joins the incident's evidence (#723).
-            transition_id, transition_outcome = (
-                ("verification_passed", "stable")
+            transition_id = (
+                TransitionId.VERIFICATION_PASSED
                 if outcome.passed
-                else ("verification_failed", "not_stable")
+                else TransitionId.VERIFICATION_FAILED
             )
             inputs = {"incident_patch": {"evidence": evidence}}
         else:
             return None
+        # Each of these transitions declares the one decision outcome it records.
+        transition_outcome = self.runtime.workflow.transition(transition_id).outcomes[0]
         dispatch_id = self._verifying.get(run_id, run_id)
         return IncidentCommand(
             command_id=f"investigation-{dispatch_id}",
@@ -1075,7 +1098,7 @@ class InvestigationRunDispatcher:
         run_patch: Mapping[str, Any],
         request_ids: Sequence[UUID],
         now: datetime,
-        state: str = "investigating",
+        state: str = IncidentState.INVESTIGATING,
         reason_code: str | None = None,
     ) -> EventDraft:
         return EventDraft(
@@ -1208,7 +1231,7 @@ class InvestigationRunDispatcher:
         request_ids: Sequence[UUID],
         turn_id: str | None,
         incident_patch: Mapping[str, Any] | None = None,
-        state: str = "investigating",
+        state: str = IncidentState.INVESTIGATING,
     ) -> EventDraft:
         assert result.outcome is not None
         action = result.outcome.action
@@ -1274,11 +1297,13 @@ class InvestigationRunDispatcher:
 
 def _terminated_reason(reason_code: str, result_status: str | None) -> str:
     """The run-state contract's reason for a dispatch that ended without a transition."""
-    if result_status in {"max_steps", "invalid_output", "upstream_unavailable", "needs_human"}:
+    # A completed result that reaches here produced no outcome, and a denied one escalates on
+    # its own path: both end as needs_human.
+    if result_status in RUN_ENDING_STATUSES - {HarnessStatus.COMPLETED, HarnessStatus.DENIED}:
         return result_status
     if reason_code == "mcp_discovery_transient":
-        return "upstream_unavailable"
-    return "needs_human"
+        return HarnessStatus.UPSTREAM_UNAVAILABLE
+    return HarnessStatus.NEEDS_HUMAN
 
 
 def _cited_memories_only(
@@ -1297,12 +1322,16 @@ def _unique_ids(values: Sequence[UUID]) -> list[UUID]:
 
 def _ended_reason(result: InvestigationResult) -> str:
     """The receipt's reason; a hypothesis rejected for citing no measured data says so (#760)."""
-    if result.status == "invalid_output" and (result.detail or "").startswith(UNMEASURED):
+    if result.status == HarnessStatus.INVALID_OUTPUT and (result.detail or "").startswith(
+        UNMEASURED
+    ):
         return "investigation_no_measured_evidence"
     # A tool held past INVESTIGATOR_TOOL_TIMEOUT_SECONDS names the timeout (#719); any other tool
     # that did not answer is a cause distinct from the model provider (#705).
     if result.failure_diagnostic is not None and result.failure_diagnostic.stage == "tool_timeout":
         return "tool_timeout"
-    if result.status == "upstream_unavailable" and (result.detail or "").startswith("tool failed:"):
+    if result.status == HarnessStatus.UPSTREAM_UNAVAILABLE and (result.detail or "").startswith(
+        "tool failed:"
+    ):
         return "investigation_tool_unavailable"
     return f"investigation_{result.status}"

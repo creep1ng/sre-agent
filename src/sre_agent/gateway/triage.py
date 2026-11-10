@@ -14,11 +14,11 @@ from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import CredentialRepository
 from sre_agent.triage.service import (
-    ID_PATTERN,
     InvestigationDispatcher,
     TriageError,
     TriageService,
 )
+from sre_agent.vocabulary import TransitionId, is_identifier
 
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 RETRY_AFTER_SECONDS = "5"
@@ -28,10 +28,12 @@ MALFORMED = object()
 # runtime dependency to load it here): unknown operations and extra keys are
 # 422; required/type/value rules stay owned by the service.
 ALLOWED_KEYS = {
-    "open_triage": frozenset({"operation", "expected_version"}),
-    "triage_dismiss": frozenset({"operation", "expected_version", "reason"}),
-    "triage_link": frozenset({"operation", "expected_version", "reason", "target_incident_id"}),
-    "triage_declare": frozenset(
+    TransitionId.OPEN_TRIAGE: frozenset({"operation", "expected_version"}),
+    TransitionId.TRIAGE_DISMISS: frozenset({"operation", "expected_version", "reason"}),
+    TransitionId.TRIAGE_LINK: frozenset(
+        {"operation", "expected_version", "reason", "target_incident_id"}
+    ),
+    TransitionId.TRIAGE_DECLARE: frozenset(
         {"operation", "expected_version", "reason", "severity", "impact", "alert_context"}
     ),
 }
@@ -168,7 +170,7 @@ class TriageHttpService:
     async def get_state(self, alert_id: str, authorization: str | None) -> JSONResponse:
         """Contract getAlertTriage: current triage state, no mutation."""
         request_id = uuid4()
-        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+        if not isinstance(alert_id, str) or not is_identifier(alert_id):
             return self._error(request_id, 400, "invalid_command")
         try:
             context = await self._authenticate(authorization)
@@ -189,7 +191,7 @@ class TriageHttpService:
     async def get_context(self, alert_id: str, authorization: str | None) -> JSONResponse:
         """Return advisory state and domain-authorized next actions."""
         request_id = uuid4()
-        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+        if not isinstance(alert_id, str) or not is_identifier(alert_id):
             return self._error(request_id, 400, "invalid_command")
         try:
             context = await self._authenticate(authorization)
@@ -212,7 +214,7 @@ class TriageHttpService:
     ) -> JSONResponse:
         """List eligible link destinations without checking alert inventory or triage state."""
         request_id = uuid4()
-        if not isinstance(alert_id, str) or re.fullmatch(ID_PATTERN, alert_id) is None:
+        if not isinstance(alert_id, str) or not is_identifier(alert_id):
             return self._error(request_id, 400, "invalid_command")
         try:
             context = await self._authenticate(authorization)

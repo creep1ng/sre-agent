@@ -24,6 +24,18 @@ from sre_agent.incident.persistence import (
     TransitionResult,
 )
 from sre_agent.incident.workflow import IncidentWorkflow, InvalidWorkflowError, Transition
+from sre_agent.vocabulary import (
+    DECLARED_STATES,
+    RUN_OBJECTIVE_TRANSITIONS,
+    TRIAGE_TRANSITIONS,
+    HarnessStatus,
+    IncidentState,
+    RunCommand,
+    RunObjective,
+    RunStatus,
+    TransitionId,
+    is_identifier,
+)
 
 
 class IncidentRuntimeError(RuntimeError):
@@ -131,21 +143,18 @@ class RunStart:
         ).hexdigest()
 
 
-OBJECTIVE_TRANSITIONS = {
-    "triage": "open_triage",
-    "investigate": "start_investigation",
-    "mitigate": "propose_mitigation",
-    "postmortem": "start_postmortem",
-}
-
 # Harness statuses that block a run for a human, with the workflow escalation trigger each is.
-ESCALATION_TRIGGERS = {"denied": "authorization denied for a capability required by the objective"}
+ESCALATION_TRIGGERS: dict[str, str] = {
+    HarnessStatus.DENIED: "authorization denied for a capability required by the objective"
+}
 
 
 # A run that a human sends back to investigating has no agent working on it: it ends, and
 # the next investigation of the incident is a new run (see `start_run`).
-RETURNS_TO_INVESTIGATION = frozenset({"reject_mitigation", "verification_failed"})
-LIVE_RUN_STATUSES = frozenset({"running", "awaiting_human"})
+RETURNS_TO_INVESTIGATION = frozenset(
+    {TransitionId.REJECT_MITIGATION, TransitionId.VERIFICATION_FAILED}
+)
+LIVE_RUN_STATUSES = frozenset({RunStatus.RUNNING, RunStatus.AWAITING_HUMAN})
 
 
 def termination(reason: str, now: datetime) -> dict[str, Any]:
@@ -154,7 +163,9 @@ def termination(reason: str, now: datetime) -> dict[str, Any]:
     The incident keeps its state; only a new run (a human retry) investigates it again.
     """
     return {
-        "status": "completed" if reason == "completed" else "terminated",
+        "status": RunStatus.COMPLETED
+        if reason == HarnessStatus.COMPLETED
+        else RunStatus.TERMINATED,
         "pending_command": None,
         "terminated_reason": reason,
         "updated_at": now.isoformat(),
@@ -193,15 +204,12 @@ def _default_id(prefix: str) -> str:
 class IncidentRuntime:
     """Execute only named transitions from one pinned workflow version."""
 
-    _DECLARED_STATES = frozenset(
-        {"active", "investigating", "mitigating", "verifying", "resolved", "postmortem", "closed"}
-    )
-    _PATCHABLE_BY_TRANSITION = {
-        "continue_investigation": frozenset({"impact", "hypotheses", "evidence"}),
-        "propose_mitigation": frozenset({"mitigation_strategy", "evidence"}),
-        "verification_failed": frozenset({"evidence"}),
-        "verification_passed": frozenset({"evidence"}),
-        "start_postmortem": frozenset({"postmortem"}),
+    _PATCHABLE_BY_TRANSITION: dict[str, frozenset[str]] = {
+        TransitionId.CONTINUE_INVESTIGATION: frozenset({"impact", "hypotheses", "evidence"}),
+        TransitionId.PROPOSE_MITIGATION: frozenset({"mitigation_strategy", "evidence"}),
+        TransitionId.VERIFICATION_FAILED: frozenset({"evidence"}),
+        TransitionId.VERIFICATION_PASSED: frozenset({"evidence"}),
+        TransitionId.START_POSTMORTEM: frozenset({"postmortem"}),
     }
 
     def __init__(
@@ -220,6 +228,10 @@ class IncidentRuntime:
         self._clock = clock
         self._id_factory = id_factory
         self._snapshot_interval = snapshot_interval
+
+    @property
+    def workflow(self) -> IncidentWorkflow:
+        return self._workflow
 
     async def current(self, incident_id: str, run_id: str) -> IncidentView:
         async with self._unit_of_work() as work:
@@ -264,11 +276,11 @@ class IncidentRuntime:
             decided_at=now,
             run_id=run_id,
         )
-        payload = {"refused_command": "approve_mitigation", "reason_code": reason_code}
+        payload = {"refused_command": RunCommand.APPROVE_MITIGATION, "reason_code": reason_code}
         event = EventDraft(
             event_id=self._id_factory("evt"),
             kind="denial" if denial else "human_command",
-            payload={**payload, "request_id": request_id, "state": "mitigating"},
+            payload={**payload, "request_id": request_id, "state": IncidentState.MITIGATING},
             occurred_at=now,
         )
         async with self._unit_of_work() as work:
@@ -305,7 +317,7 @@ class IncidentRuntime:
         it starts commit or roll back together.
         """
 
-        transition_id = OBJECTIVE_TRANSITIONS.get(request.objective)
+        transition_id = RUN_OBJECTIVE_TRANSITIONS.get(request.objective)
         if transition_id is None:
             raise InvalidTransitionError(f"objective '{request.objective}' has no transition")
         payload_hash = request.payload_sha256()
@@ -321,8 +333,8 @@ class IncidentRuntime:
             if incident is None:
                 raise IncidentNotFoundError(request.incident_id)
             inputs = None
-            retry = incident.state.get("state") == "investigating"
-            if request.objective == "investigate" and retry:
+            retry = incident.state.get("state") == IncidentState.INVESTIGATING
+            if request.objective == RunObjective.INVESTIGATE and retry:
                 # A retry: the incident is still under investigation but its runs ended. The
                 # new run reopens it through the evidence_sufficiency decision of a person, or of
                 # the system after a failed verification (#710), never beside a run that is
@@ -330,7 +342,7 @@ class IncidentRuntime:
                 if request.actor not in {"human", "system"}:
                     raise InvalidTransitionError("only a person or the system retries")
                 await self._refuse_beside_live_run(work, incident)
-                transition_id = "continue_investigation"
+                transition_id = TransitionId.CONTINUE_INVESTIGATION
                 inputs = {"human_retry": True} if request.actor == "human" else {"retry": True}
             now = self._clock()
             run = await work.runs.add(
@@ -339,7 +351,7 @@ class IncidentRuntime:
                 {
                     "workflow_version": self._workflow.version,
                     "current_state": incident.state.get("state"),
-                    "status": "running",
+                    "status": RunStatus.RUNNING,
                 },
                 now=now,
             )
@@ -364,7 +376,7 @@ class IncidentRuntime:
                 and run.state.get("current_state") == state
                 and run.state.get("status") in LIVE_RUN_STATUSES
                 # A denied run stored before #788 waits for `escalate`, which nothing accepts.
-                and run.state.get("pending_command") != "escalate"
+                and run.state.get("pending_command") != RunCommand.ESCALATE
             ):
                 raise InvalidTransitionError(f"run '{run_id}' is still live on this incident")
 
@@ -384,7 +396,7 @@ class IncidentRuntime:
             raise InvalidTransitionError(str(error)) from error
         self._validate(command, transition, incident.state, incident.version)
         postmortem_version = None
-        if transition.transition_id == "close_incident":
+        if transition.transition_id == TransitionId.CLOSE_INCIDENT:
             postmortem_version = await self._reviewed_postmortem_version(work, incident)
         now = self._clock()
         incident_state, run_state = self._reduce(
@@ -542,14 +554,14 @@ class IncidentRuntime:
         if command.actor == "human" and command.actor_reference is None:
             raise PreconditionFailedError("human commands require an actor reference")
         if (
-            transition.transition_id == "triage_declare"
+            transition.transition_id == TransitionId.TRIAGE_DECLARE
             and command.actor == "system"
             and command.actor_reference is None
         ):
             raise PreconditionFailedError("a system declaration names its responsible system")
         if command.actor_reference is not None and (
             command.actor_reference.reference_version != "1.0.0"
-            or re.fullmatch(r"[a-z][a-z0-9_-]{2,63}", command.actor_reference.principal_id) is None
+            or not is_identifier(command.actor_reference.principal_id)
         ):
             raise PreconditionFailedError("actor reference is invalid")
         if (
@@ -561,7 +573,10 @@ class IncidentRuntime:
             raise ApprovalRequiredError(transition.transition_id)
         if command.approval and not transition.requires_approval:
             raise PreconditionFailedError("approval is not valid for this transition")
-        if transition.requires_approval or transition.transition_id == "reject_mitigation":
+        if (
+            transition.requires_approval
+            or transition.transition_id == TransitionId.REJECT_MITIGATION
+        ):
             if command.expected_incident_version is None:
                 raise MissingIncidentVersionError("human review requires an incident version")
             if (
@@ -591,9 +606,9 @@ class IncidentRuntime:
     ) -> None:
         inputs = command.inputs or {}
         transition_id = transition.transition_id
-        if transition_id == "triage_link" and not inputs.get("target_incident_id"):
+        if transition_id == TransitionId.TRIAGE_LINK and not inputs.get("target_incident_id"):
             raise PreconditionFailedError("triage_link requires target_incident_id")
-        if transition_id == "triage_declare":
+        if transition_id == TransitionId.TRIAGE_DECLARE:
             if not inputs.get("severity"):
                 raise PreconditionFailedError("triage_declare requires severity")
             impact = inputs.get("impact")
@@ -603,13 +618,13 @@ class IncidentRuntime:
                 )
         # A retry opens a new run: the step budget it checks belongs to the agent's run.
         if (
-            transition_id == "continue_investigation"
+            transition_id == TransitionId.CONTINUE_INVESTIGATION
             and not inputs.get("human_retry")
             and not inputs.get("retry")
             and inputs.get("remaining_step_budget", 0) < 1
         ):
             raise PreconditionFailedError("continue_investigation requires remaining step budget")
-        if transition_id == "propose_mitigation":
+        if transition_id == TransitionId.PROPOSE_MITIGATION:
             hypotheses = state.get("hypotheses") or []
             evidence = state.get("evidence") or []
             if (
@@ -634,7 +649,7 @@ class IncidentRuntime:
                 raise PreconditionFailedError(
                     "propose_mitigation requires a new pending mitigation artifact"
                 )
-        if transition_id in {"apply_mitigation", "reject_mitigation"}:
+        if transition_id in {TransitionId.APPLY_MITIGATION, TransitionId.REJECT_MITIGATION}:
             strategy = state.get("mitigation_strategy")
             if not isinstance(strategy, Mapping) or not self._artifact_id(
                 strategy.get("mitigation_id"), "mit"
@@ -642,17 +657,18 @@ class IncidentRuntime:
                 raise PreconditionFailedError(
                     f"{transition_id} requires an identified mitigation_strategy"
                 )
-        if transition_id in {"verification_failed", "verification_passed"} and not state.get(
-            "evidence"
-        ):
+        if transition_id in {
+            TransitionId.VERIFICATION_FAILED,
+            TransitionId.VERIFICATION_PASSED,
+        } and not state.get("evidence"):
             raise PreconditionFailedError(f"{transition_id} requires verification evidence")
-        if transition_id in {"verification_failed", "verification_passed"}:
+        if transition_id in {TransitionId.VERIFICATION_FAILED, TransitionId.VERIFICATION_PASSED}:
             strategy = state.get("mitigation_strategy")
             if not isinstance(strategy, Mapping) or not strategy.get("verification_check"):
                 raise PreconditionFailedError(
                     f"{transition_id} requires a mitigation verification check"
                 )
-        if transition_id == "close_incident":
+        if transition_id == TransitionId.CLOSE_INCIDENT:
             postmortem = state.get("postmortem")
             if not isinstance(postmortem, Mapping) or not self._artifact_id(
                 postmortem.get("postmortem_id"), "pm"
@@ -699,38 +715,39 @@ class IncidentRuntime:
         if not isinstance(patch, Mapping) or not set(patch) <= allowed_patch:
             raise PreconditionFailedError("incident_patch contains unsupported fields")
         incident.update(patch)
-        if transition.transition_id == "start_postmortem" and not incident.get("postmortem"):
+        if transition.transition_id == TransitionId.START_POSTMORTEM and not incident.get(
+            "postmortem"
+        ):
             # Reserve the artifact identity with the transition, so every path into
             # `postmortem` (run objective or command) leaves the id close_incident reads.
             incident["postmortem"] = {"postmortem_id": self._id_factory("pm")}
         incident["state"] = transition.target
         incident["updated_at"] = now.isoformat()
-        if transition.target in self._DECLARED_STATES:
+        if transition.target in DECLARED_STATES:
             incident["incident_id"] = command.incident_id
             incident["linked_incident_id"] = None
-        elif transition.target == "linked":
+        elif transition.target == IncidentState.LINKED:
             incident["incident_id"] = None
         else:
             incident["incident_id"] = None
             incident["linked_incident_id"] = None
-        if transition.transition_id == "triage_link":
+        if transition.transition_id == TransitionId.TRIAGE_LINK:
             incident["linked_incident_id"] = inputs["target_incident_id"]
-        if transition.transition_id == "triage_declare":
+        if transition.transition_id == TransitionId.TRIAGE_DECLARE:
             incident["severity"] = inputs["severity"]
             incident["impact"] = inputs["impact"]
-        if transition.transition_id in {
-            "open_triage",
-            "triage_dismiss",
-            "triage_link",
-            "triage_declare",
-        }:
+        if transition.transition_id in TRIAGE_TRANSITIONS:
             alert = dict(incident.get("alert") or {})
-            alert["status"] = {
-                "triage_dismiss": "dismissed",
-                "triage_link": "linked",
-            }.get(transition.transition_id, "triaged")
+            alert_status: dict[str, str] = {
+                TransitionId.TRIAGE_DISMISS: "dismissed",
+                TransitionId.TRIAGE_LINK: "linked",
+            }
+            alert["status"] = alert_status.get(transition.transition_id, "triaged")
             incident["alert"] = alert
-        if transition.transition_id in {"apply_mitigation", "reject_mitigation"}:
+        if transition.transition_id in {
+            TransitionId.APPLY_MITIGATION,
+            TransitionId.REJECT_MITIGATION,
+        }:
             strategy = dict(incident["mitigation_strategy"])
             outcome = command.outcome or transition.outcomes[0]
             strategy["approval_status"] = {
@@ -761,32 +778,40 @@ class IncidentRuntime:
         run["current_state"] = transition.target
         run["updated_at"] = now.isoformat()
         if transition.target in self._workflow.terminal_states:
-            run.update(status="completed", pending_command=None, terminated_reason="completed")
-        elif transition.target == "mitigating":
-            run.update(status="awaiting_human", pending_command="approve_mitigation")
+            run.update(
+                status=RunStatus.COMPLETED,
+                pending_command=None,
+                terminated_reason=HarnessStatus.COMPLETED,
+            )
+        elif transition.target == IncidentState.MITIGATING:
+            run.update(
+                status=RunStatus.AWAITING_HUMAN, pending_command=RunCommand.APPROVE_MITIGATION
+            )
         elif transition.transition_id in RETURNS_TO_INVESTIGATION:
-            run.update(termination("needs_human", now))
+            run.update(termination(HarnessStatus.NEEDS_HUMAN, now))
         else:
-            run.update(status="running", pending_command=None, terminated_reason=None)
+            run.update(status=RunStatus.RUNNING, pending_command=None, terminated_reason=None)
         return incident, run
 
     def _validate_result(self, transition: Transition, incident_state: Mapping[str, Any]) -> None:
-        if transition.target in self._DECLARED_STATES:
+        if transition.target in DECLARED_STATES:
             if not incident_state.get("incident_id") or not incident_state.get("severity"):
                 raise PreconditionFailedError("declared incidents require identity and severity")
         elif incident_state.get("incident_id") is not None:
             raise PreconditionFailedError(
                 "pre-declaration states cannot carry an incident identity"
             )
-        if transition.transition_id == "triage_declare":
+        if transition.transition_id == TransitionId.TRIAGE_DECLARE:
             impact = incident_state.get("impact")
             if not isinstance(impact, str) or not impact.strip() or len(impact) > 2000:
                 raise PreconditionFailedError(
                     "triage_declare requires nonblank operator impact of at most 2000 characters"
                 )
-        if transition.target == "linked" and not incident_state.get("linked_incident_id"):
+        if transition.target == IncidentState.LINKED and not incident_state.get(
+            "linked_incident_id"
+        ):
             raise PreconditionFailedError("linked incidents require a target incident identity")
-        if transition.target == "closed" and not incident_state.get("postmortem"):
+        if transition.target == IncidentState.CLOSED and not incident_state.get("postmortem"):
             raise PreconditionFailedError("closed incidents require a postmortem")
 
     def _decision_document(
@@ -807,10 +832,10 @@ class IncidentRuntime:
                 "recorded_at": now.isoformat(),
                 "reviewed_incident_version": command.expected_incident_version,
             }
-            if transition.transition_id == "apply_mitigation":
+            if transition.transition_id == TransitionId.APPLY_MITIGATION:
                 strategy = incident_state["mitigation_strategy"]
                 approval["mitigation_id"] = strategy["mitigation_id"]
-            elif transition.transition_id == "close_incident":
+            elif transition.transition_id == TransitionId.CLOSE_INCIDENT:
                 postmortem = incident_state["postmortem"]
                 approval["postmortem_id"] = postmortem["postmortem_id"]
                 approval["postmortem_version"] = postmortem_version

@@ -17,6 +17,8 @@ import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from sre_agent.vocabulary import is_identifier
+
 MAPPING_VERSION = "1.0.0"
 CORRELATION_VERSION = "otel-correlation 1.0.0"
 DETECTOR = "opentelemetry-demo"
@@ -25,7 +27,6 @@ SOURCE = "opentelemetry-demo"
 _SEVERITIES = frozenset({"sev1", "sev2", "sev3", "sev4"})
 _TRACE_RE = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_RE = re.compile(r"^[0-9a-f]{16}$")
-_ALERT_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{2,63}$")
 # Full RFC 3339 date-time with an explicit timezone. Date-only and
 # timezone-naive values are rejected: the adapter never invents time or zone.
 _RFC3339_RE = re.compile(
@@ -207,7 +208,7 @@ def adapt_otel_signal(raw: dict) -> AdaptedSignal:
             dropped.append(top)
 
     alert_id = _alert_id(service, name, trace_id, span_id)
-    if not _ALERT_ID_RE.match(alert_id):
+    if not is_identifier(alert_id):
         raise SignalRejected("invalid_format", f"derived alert_id '{alert_id}' violates contract")
 
     summary = f"{name.strip()} on {service.strip()} (trace {trace_id[:8]})"[:2000]

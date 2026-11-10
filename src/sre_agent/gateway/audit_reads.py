@@ -22,6 +22,7 @@ from sre_agent.persistence.repositories import (
     GrantRepository,
     ResourceRepository,
 )
+from sre_agent.vocabulary import IDENTIFIER_PATTERN, is_identifier
 
 READ_ACTION = "admin.read"
 RESOURCE_TYPE = "administrative_control"
@@ -35,7 +36,6 @@ FORBIDDEN_PARAMS = (
     "cursor page offset continuation_token next content raw_content"
     " redacted_content include_content"
 ).split()
-ID_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
 CANONICAL_UUID_PATTERN = (
     r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
     r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
@@ -54,7 +54,7 @@ AUDIT_EVENT_ID_SCHEMA = {
         },
         {
             "type": "string",
-            "pattern": ID_PATTERN,
+            "pattern": IDENTIFIER_PATTERN,
             "not": {"pattern": CANONICAL_UUID_PATTERN},
         },
     ]
@@ -103,7 +103,11 @@ AUDIT_LIST_SCHEMA = {
     },
 }
 AUDIT_QUERY_PARAMETERS = [
-    {"name": "principal_id", "in": "query", "schema": {"type": "string", "pattern": ID_PATTERN}},
+    {
+        "name": "principal_id",
+        "in": "query",
+        "schema": {"type": "string", "pattern": IDENTIFIER_PATTERN},
+    },
     {"name": "decision", "in": "query", "schema": {"enum": ["allow", "deny"]}},
     {"name": "model_alias_id", "in": "query", "schema": {"type": "string"}},
     {"name": "request_id", "in": "query", "schema": {"type": "string", "format": "uuid"}},
@@ -138,10 +142,7 @@ _audit_bearer = HTTPBearer(auto_error=False, scheme_name="bearerAuth")
 
 def _valid_event_id(value: Any) -> bool:
     event_id = str(value)
-    return (
-        re.fullmatch(CANONICAL_UUID_PATTERN, event_id) is not None
-        or re.fullmatch(ID_PATTERN, event_id) is not None
-    )
+    return re.fullmatch(CANONICAL_UUID_PATTERN, event_id) is not None or is_identifier(event_id)
 
 
 def _event_id_json_schema(schema: dict[str, Any]) -> None:
@@ -315,7 +316,7 @@ class AuditReadsService:
             except ValueError:
                 return None
         if (value := raw.get("principal_id")) is not None:
-            if not re.fullmatch(ID_PATTERN, str(value)):
+            if not is_identifier(str(value)):
                 return None
             parsed["principal_digest"] = self._digest("principal", str(value))
         for key, domain in (

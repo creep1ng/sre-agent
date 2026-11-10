@@ -25,28 +25,29 @@ from dataclasses import dataclass
 from typing import Any
 
 from sre_agent.incident.runtime import ActorReference, IncidentCommand, InvalidTransitionError
+from sre_agent.vocabulary import RunCommand, TransitionId
 
 # `reject_mitigation` and `request_changes` share one transition on purpose: the
 # workflow declares a single edge back to investigating carrying two outcomes,
 # and the outcome is what tells a reviewer "rejected" from "sent back for
 # changes". Collapsing them would erase that distinction from the audit trail.
 COMMAND_TRANSITIONS: Mapping[str, tuple[str, str | None]] = {
-    "approve_mitigation": ("apply_mitigation", "approve"),
-    "reject_mitigation": ("reject_mitigation", "reject"),
-    "request_changes": ("reject_mitigation", "request_changes"),
+    RunCommand.APPROVE_MITIGATION: (TransitionId.APPLY_MITIGATION, "approve"),
+    RunCommand.REJECT_MITIGATION: (TransitionId.REJECT_MITIGATION, "reject"),
+    RunCommand.REQUEST_CHANGES: (TransitionId.REJECT_MITIGATION, "request_changes"),
     # run-command:2.1.0. The guards (evidence, verification check, postmortem)
     # stay in the runtime; closing declares no decision point, hence no outcome.
-    "verification_passed": ("verification_passed", "stable"),
-    "verification_failed": ("verification_failed", "not_stable"),
-    "close_incident": ("close_incident", None),
+    RunCommand.VERIFICATION_PASSED: (TransitionId.VERIFICATION_PASSED, "stable"),
+    RunCommand.VERIFICATION_FAILED: (TransitionId.VERIFICATION_FAILED, "not_stable"),
+    RunCommand.CLOSE_INCIDENT: (TransitionId.CLOSE_INCIDENT, None),
 }
 DISPOSITION_TRANSITIONS: Mapping[str, str] = {
-    "dismiss": "triage_dismiss",
-    "link": "triage_link",
-    "declare": "triage_declare",
+    "dismiss": TransitionId.TRIAGE_DISMISS,
+    "link": TransitionId.TRIAGE_LINK,
+    "declare": TransitionId.TRIAGE_DECLARE,
 }
-APPROVING_COMMANDS = frozenset({"approve_mitigation", "close_incident"})
-DEFERRED_COMMANDS = frozenset({"escalate", "cancel_run"})
+APPROVING_COMMANDS = frozenset({RunCommand.APPROVE_MITIGATION, RunCommand.CLOSE_INCIDENT})
+DEFERRED_COMMANDS = frozenset({RunCommand.ESCALATE, RunCommand.CANCEL_RUN})
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +78,7 @@ def resolve(request: HumanCommand) -> IncidentCommand:
         raise InvalidTransitionError(
             f"command '{request.command}' performs no state transition in this workflow version"
         )
-    if request.command == "propose_disposition":
+    if request.command == RunCommand.PROPOSE_DISPOSITION:
         transition_id = DISPOSITION_TRANSITIONS.get(request.disposition or "")
         if transition_id is None:
             raise InvalidTransitionError("propose_disposition requires a declared disposition")

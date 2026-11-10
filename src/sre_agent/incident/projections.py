@@ -20,36 +20,47 @@ from sre_agent.incident.reasons import (
 )
 from sre_agent.incident.title import title_of
 from sre_agent.incident.workflow import IncidentWorkflow
+from sre_agent.vocabulary import (
+    HarnessStatus,
+    IncidentState,
+    RunCommand,
+    RunStatus,
+    TransitionId,
+    is_identifier,
+)
 
-IDENTIFIER_PATTERN = r"^[a-z][a-z0-9_-]{2,63}$"
 RUN_ID_PATTERN = r"^run_[a-z0-9]{8,32}$"
 CURSOR_PATTERN = r"^seq:(-?\d+)$"
 SEVERITIES = frozenset({"sev1", "sev2", "sev3", "sev4"})
-RUN_STATUSES = frozenset({"running", "awaiting_human", "completed", "terminated"})
+RUN_STATUSES = frozenset(RunStatus)
 
 TRANSITION_SUMMARIES = {
-    "open_triage": "Triage opened.",
-    "triage_dismiss": "Alert dismissed.",
-    "triage_link": "Alert linked to an existing incident.",
-    "triage_declare": "Incident declared.",
-    "start_investigation": "Investigation started.",
-    "continue_investigation": "Investigation continued.",
-    "propose_mitigation": "Mitigation proposed.",
-    "apply_mitigation": "Mitigation approved.",
-    "reject_mitigation": "Mitigation sent back for changes.",
-    "verification_failed": "Verification failed; returned to investigating.",
-    "verification_passed": "Service verified stable.",
-    "start_postmortem": "Postmortem started.",
-    "close_incident": "Incident closed.",
+    TransitionId.OPEN_TRIAGE: "Triage opened.",
+    TransitionId.TRIAGE_DISMISS: "Alert dismissed.",
+    TransitionId.TRIAGE_LINK: "Alert linked to an existing incident.",
+    TransitionId.TRIAGE_DECLARE: "Incident declared.",
+    TransitionId.START_INVESTIGATION: "Investigation started.",
+    TransitionId.CONTINUE_INVESTIGATION: "Investigation continued.",
+    TransitionId.PROPOSE_MITIGATION: "Mitigation proposed.",
+    TransitionId.APPLY_MITIGATION: "Mitigation approved.",
+    TransitionId.REJECT_MITIGATION: "Mitigation sent back for changes.",
+    TransitionId.VERIFICATION_FAILED: "Verification failed; returned to investigating.",
+    TransitionId.VERIFICATION_PASSED: "Service verified stable.",
+    TransitionId.START_POSTMORTEM: "Postmortem started.",
+    TransitionId.CLOSE_INCIDENT: "Incident closed.",
 }
 # A run that ended without a terminal workflow state; a new run of the incident may retry.
 TERMINATED_SUMMARIES = {
-    "completed": "Investigation concluded; the run ended.",
-    "max_steps": "Investigation run ended: step budget exhausted; a new run may retry.",
-    "needs_human": "Investigation run ended: it needs a human; a new run may retry.",
-    "invalid_output": "Investigation run ended: invalid agent output; a new run may retry.",
-    "upstream_unavailable": "Investigation run ended: the model provider or an MCP tool "
-    "was unavailable; a new run may retry.",
+    HarnessStatus.COMPLETED: "Investigation concluded; the run ended.",
+    HarnessStatus.MAX_STEPS: "Investigation run ended: step budget exhausted; a new run may retry.",
+    HarnessStatus.NEEDS_HUMAN: "Investigation run ended: it needs a human; a new run may retry.",
+    HarnessStatus.INVALID_OUTPUT: (
+        "Investigation run ended: invalid agent output; a new run may retry."
+    ),
+    HarnessStatus.UPSTREAM_UNAVAILABLE: (
+        "Investigation run ended: the model provider or an MCP tool "
+        "was unavailable; a new run may retry."
+    ),
 }
 
 
@@ -104,7 +115,7 @@ def actor_reference(document: Any) -> dict[str, Any] | None:
     if (
         reference.get("reference_version") != "1.0.0"
         or not isinstance(principal_id, str)
-        or re.fullmatch(IDENTIFIER_PATTERN, principal_id) is None
+        or not is_identifier(principal_id)
         or (display_name is not None and not isinstance(display_name, str))
     ):
         return None
@@ -134,9 +145,7 @@ def dispatch_cause(receipt: dict[str, Any]) -> str | None:
     if code not in DISPATCH_CAUSES:
         return None
     agent = receipt.get("agent_principal_id")
-    if code == "harness_identity_unavailable" and (
-        isinstance(agent, str) and re.fullmatch(IDENTIFIER_PATTERN, agent)
-    ):
+    if code == "harness_identity_unavailable" and (isinstance(agent, str) and is_identifier(agent)):
         return (
             f"the configured identity '{agent}' is inactive or not an agent; "
             "reactivate it in Principals or ask an administrator."
@@ -166,7 +175,7 @@ def executed_summary(incident_state: Any) -> str | None:
 
 def event_summary(payload: Any) -> str:
     transition_id = payload.get("transition_id") if isinstance(payload, dict) else None
-    if transition_id == "apply_mitigation":
+    if transition_id == TransitionId.APPLY_MITIGATION:
         executed = executed_summary(payload.get("incident_state"))
         if executed:
             return executed
@@ -192,7 +201,7 @@ def event_summary(payload: Any) -> str:
                 ended = f"{name} dispatch ended: {status}."
                 return f"{ended} Cause: {cause}" if cause else ended
         patch = payload.get("run_patch")
-        if isinstance(patch, dict) and patch.get("terminated_reason") == "denied":
+        if isinstance(patch, dict) and patch.get("terminated_reason") == HarnessStatus.DENIED:
             return (
                 "Authorization denied; an administrator must grant the capability, "
                 "then a new run may retry."
@@ -204,7 +213,7 @@ def event_summary(payload: Any) -> str:
         if action == "verify_mitigation" and isinstance(outcome, dict):
             recovered = "recovered" if outcome.get("passed") is True else "had not recovered"
             return f"Verification found the service {recovered}."
-        if action == "request_human" and payload.get("state") == "verifying":
+        if action == "request_human" and payload.get("state") == IncidentState.VERIFYING:
             return "Verification requested human review."
         summaries = {
             "propose_hypothesis": "Investigation proposed a hypothesis.",
@@ -215,7 +224,7 @@ def event_summary(payload: Any) -> str:
         if isinstance(action, str) and action in summaries:
             return summaries[action]
         cause = EXECUTION_CAUSES.get(str(payload.get("reason_code")))
-        if payload.get("refused_command") == "approve_mitigation" and cause:
+        if payload.get("refused_command") == RunCommand.APPROVE_MITIGATION and cause:
             return f"Approval not applied: {cause} The incident stays mitigating."
     return "Incident event recorded."
 
@@ -422,9 +431,12 @@ def project_list_item(
             "updated_at": utc_iso(run.updated_at),
         }
         command = latest["pending_command"]
-        if latest["status"] == "awaiting_human" and command in {"approve_mitigation", "escalate"}:
+        if latest["status"] == RunStatus.AWAITING_HUMAN and command in {
+            RunCommand.APPROVE_MITIGATION,
+            RunCommand.ESCALATE,
+        }:
             proposed = (
-                command == "approve_mitigation"
+                command == RunCommand.APPROVE_MITIGATION
                 and isinstance(strategy, dict)
                 and strategy.get("approval_status") == "pending"
             )

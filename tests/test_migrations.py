@@ -1,4 +1,6 @@
 import os
+import re
+from typing import get_args
 
 import psycopg
 import pytest
@@ -8,6 +10,7 @@ from database_support import reset_database
 from sqlalchemy import text
 
 from sre_agent.gateway.health import postgres_readiness_probe
+from sre_agent.governance.dto import AuditEvent
 from sre_agent.persistence.database import Database
 
 DATABASE_URL = os.environ.get(
@@ -658,3 +661,18 @@ def test_consumption_put_binding_persists_and_blocks_lossy_downgrade() -> None:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
             "20261103_01",
         )
+
+
+def test_audit_operation_literal_is_the_check_of_the_migrated_database() -> None:
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
+    command.upgrade(config, "head")
+    with psycopg.connect(DATABASE_URL) as connection:
+        operation_check = connection.execute(
+            "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
+            "WHERE conname='ck_audit_events_operation'"
+        ).fetchone()[0]
+    checked = set(re.findall(r"'([^']+)'", operation_check))
+    declared = set(get_args(AuditEvent.model_fields["operation"].annotation))
+    assert declared - checked == set(), "only in governance/dto.py"
+    assert checked - declared == set(), "only in the migrated CHECK"

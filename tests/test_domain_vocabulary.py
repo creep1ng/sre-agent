@@ -1,0 +1,194 @@
+"""The vocabulary in `sre_agent.vocabulary` and its copies in the workflow and agent schemas."""
+
+from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
+
+from sre_agent.vocabulary import (
+    AGENT_OBJECTIVES,
+    IDENTIFIER_PATTERN,
+    RUN_ENDING_STATUSES,
+    RUN_OBJECTIVE_TRANSITIONS,
+    TRIAGE_TRANSITIONS,
+    AgentObjective,
+    IncidentState,
+    RunCommand,
+    RunObjective,
+    RunStatus,
+    TransitionId,
+    TriageStatus,
+)
+
+ROOT = Path(__file__).parents[1]
+SCHEMAS = ROOT / "agent" / "schemas"
+
+# Fields whose pattern in agent/ is the identifier, whatever the pattern looks like.
+IDENTIFIER_FIELDS = {
+    "incident_id",
+    "alert_id",
+    "linked_incident_id",
+    "target_incident_id",
+    "principal_id",
+    "task_id",
+    "IncidentId",
+}
+# Patterns in agent/ that start like the identifier and are other formats on purpose.
+DISTINCT_PATTERNS = {
+    "^[a-z][a-z0-9_]{2,63}$": "run-event reason_code",
+    "^[a-z][a-z0-9_]{1,63}$": "action-catalog reason_code",
+    "^[a-z][a-z0-9_]{0,63}$": "action-catalog parameter name",
+    "^[a-z][a-z0-9.-]{0,62}$": "action-catalog service and operation name",
+}
+
+
+def load(path: Path) -> Any:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def schema(name: str) -> Any:
+    return load(SCHEMAS / f"{name}.schema.yaml")
+
+
+def values(enum: list[Any]) -> set[str]:
+    return {value for value in enum if value is not None}
+
+
+@pytest.fixture(scope="module")
+def workflow() -> Any:
+    return load(ROOT / "agent" / "workflows" / "incident-response.yaml")
+
+
+def test_workflow_transitions_are_the_vocabulary(workflow: Any) -> None:
+    declared = [transition["id"] for transition in workflow["transitions"]]
+    assert set(declared) - set(TransitionId) == set(), "only in the workflow"
+    assert set(TransitionId) - set(declared) == set(), "only in the vocabulary"
+
+
+def test_workflow_and_schema_states_are_the_vocabulary(workflow: Any) -> None:
+    assert set(workflow["states"]) == set(IncidentState)
+    copies = {
+        "incident-state": schema("incident-state")["properties"]["state"]["enum"],
+        "incident-detail": schema("incident-detail")["properties"]["state"]["enum"],
+        "incident-list": schema("incident-list")["$defs"]["item"]["properties"]["state"]["enum"],
+        "run-state": schema("run-state")["properties"]["current_state"]["enum"],
+    }
+    for name, enum in copies.items():
+        assert values(enum) == set(IncidentState), name
+
+
+def test_workflow_objectives_are_the_ones_the_code_dispatches(workflow: Any) -> None:
+    declared = {
+        state: definition["agent_objective"]
+        for state, definition in workflow["states"].items()
+        if definition.get("allows_agentic_step")
+    }
+    assert declared == AGENT_OBJECTIVES
+    for state, definition in workflow["states"].items():
+        assert ("agent_objective" in definition) == bool(definition.get("allows_agentic_step")), (
+            state
+        )
+    assert set(AGENT_OBJECTIVES.values()) == set(AgentObjective)
+
+
+def test_run_commands_are_the_vocabulary() -> None:
+    current = schema("run-command-2.1.0")["properties"]["command"]["enum"]
+    assert set(current) == set(RunCommand)
+    assert set(schema("run-command")["properties"]["command"]["enum"]) <= set(RunCommand)
+
+
+def test_run_statuses_are_the_vocabulary() -> None:
+    copies = {
+        "run-state": schema("run-state")["properties"]["status"]["enum"],
+        "incident-snapshot": schema("incident-snapshot")["properties"]["run"]["properties"][
+            "status"
+        ]["enum"],
+        "incident-list": schema("incident-list")["$defs"]["item"]["properties"]["latest_run"][
+            "anyOf"
+        ][1]["properties"]["status"]["enum"],
+        "incident-detail": schema("incident-detail")["properties"]["runs"]["items"]["properties"][
+            "status"
+        ]["enum"],
+    }
+    for name, enum in copies.items():
+        assert values(enum) == set(RunStatus), name
+
+
+def test_run_objectives_open_a_transition_into_their_objective(workflow: Any) -> None:
+    assert set(schema("run-start-request")["properties"]["objective"]["enum"]) == set(RunObjective)
+    assert set(RUN_OBJECTIVE_TRANSITIONS) == set(RunObjective)
+    transitions = {transition["id"]: transition for transition in workflow["transitions"]}
+
+    def opened(transition_id: str) -> str | None:
+        """The objective a transition enters, unless it starts in a state with that objective."""
+        if transition_id not in transitions:
+            return f"undeclared transition {transition_id}"
+        transition = transitions[transition_id]
+        target = workflow["states"][transition["to"]].get("agent_objective")
+        sources = transition["from"]
+        sources = sources if isinstance(sources, list) else [sources]
+        if any(workflow["states"][source].get("agent_objective") == target for source in sources):
+            return f"{transition_id} stays in {target}"
+        return target
+
+    reached = {
+        objective: opened(transition) for objective, transition in RUN_OBJECTIVE_TRANSITIONS.items()
+    }
+    assert reached == {objective: objective.value for objective in RunObjective}
+
+
+def test_a_run_ends_with_any_harness_status_but_a_pre_dispatch_rejection() -> None:
+    enum = schema("run-state")["properties"]["terminated_reason"]["enum"]
+    assert values(enum) == RUN_ENDING_STATUSES
+
+
+def test_triage_statuses_and_transitions_are_the_vocabulary() -> None:
+    assert set(schema("triage-state")["properties"]["status"]["enum"]) == set(TriageStatus)
+    enum = schema("triage-context")["properties"]["allowed_actions"]["items"]["enum"]
+    assert enum == list(TRIAGE_TRANSITIONS)
+
+
+# Keywords that nest a schema without naming the field it describes.
+NESTING = {"items", "schema", "oneOf", "anyOf", "allOf", "properties", "if", "then", "else"}
+
+
+def patterns(node: Any, field: str | None = None) -> list[tuple[str | None, str]]:
+    """Every `pattern` under `node`, with the name of the field it constrains."""
+    if isinstance(node, dict):
+        found = [(field, node["pattern"])] if isinstance(node.get("pattern"), str) else []
+        # An OpenAPI parameter names its field in `name`, beside the schema that constrains it.
+        if isinstance(node.get("name"), str) and "in" in node:
+            field = node["name"]
+        return found + [
+            item
+            for key, value in node.items()
+            for item in patterns(value, field if key in NESTING | {"parameters"} else str(key))
+        ]
+    if isinstance(node, list):
+        return [item for value in node for item in patterns(value, field)]
+    return []
+
+
+def test_identifier_copies_in_agent_contracts_are_the_vocabulary_pattern() -> None:
+    files = sorted((ROOT / "agent").glob("**/*.yaml"))
+    found = [
+        (str(path.relative_to(ROOT)), field, pattern)
+        for path in files
+        for field, pattern in patterns(load(path))
+    ]
+    assert any(pattern == IDENTIFIER_PATTERN for _, _, pattern in found)
+    on_identifiers = [
+        (path, field, pattern)
+        for path, field, pattern in found
+        if field in IDENTIFIER_FIELDS and pattern != IDENTIFIER_PATTERN
+    ]
+    assert on_identifiers == []
+    drifted = [
+        (path, field, pattern)
+        for path, field, pattern in found
+        if pattern.startswith("^[a-z][a-z0-9")
+        and pattern != IDENTIFIER_PATTERN
+        and pattern not in DISTINCT_PATTERNS
+    ]
+    assert drifted == []

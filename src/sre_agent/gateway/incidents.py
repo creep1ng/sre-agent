@@ -27,7 +27,6 @@ from sre_agent.governance.authorization import (
 from sre_agent.governance.dto import Principal, PrincipalContext, ResourceType
 from sre_agent.incident.persistence import IncidentRecord, IncidentUnitOfWork, RunRecord
 from sre_agent.incident.projections import (
-    IDENTIFIER_PATTERN,
     RUN_ID_PATTERN,
     MissingDecisionError,
     UnsupportedWorkflowDataError,
@@ -42,6 +41,7 @@ from sre_agent.incident.projections import (
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
+from sre_agent.vocabulary import IDENTIFIER_PATTERN
 
 WORKFLOW_RESOURCE_TYPE: ResourceType = "incident_workflow"
 READ_ACTION = "run.read"

@@ -22,9 +22,10 @@ from sqlalchemy import text
 from sre_agent.chat.outbox import CHANGED, REFUSALS, asks_decision, mitigation_decision
 from sre_agent.chat.taps import INCIDENT_CHANGED, queue_tap, tap_outcome
 from sre_agent.persistence.database import Database
+from sre_agent.vocabulary import RunCommand
 
 CALLBACK = re.compile(r"^([ar]):([0-9a-f]{32})$")
-COMMANDS = {"a": "approve_mitigation", "r": "reject_mitigation"}
+COMMANDS = {"a": RunCommand.APPROVE_MITIGATION, "r": RunCommand.REJECT_MITIGATION}
 NOT_DECIDED = {
     401: "Tu usuario ya no está activo: no se decidió nada.",
     403: "No tienes permiso para decidir esta mitigación: no se decidió nada.",

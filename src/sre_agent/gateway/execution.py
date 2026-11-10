@@ -35,6 +35,7 @@ from sre_agent.persistence.repositories import (
     ResourceRepository,
 )
 from sre_agent.settings import Settings
+from sre_agent.vocabulary import IncidentState
 
 if TYPE_CHECKING:
     from sre_agent.gateway.responses import AuditStore
@@ -121,7 +122,7 @@ class OperationExecutor:
         strategy = view.incident_state.get("mitigation_strategy") or {}
         if (
             "operation" not in strategy
-            or view.incident_state.get("state") != "mitigating"
+            or view.incident_state.get("state") != IncidentState.MITIGATING
             or view.incident_version != expected_version
         ):
             # Nothing to run, or the runtime replays this approval or refuses it as stale.

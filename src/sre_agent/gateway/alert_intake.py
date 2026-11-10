@@ -42,6 +42,7 @@ from sre_agent.triage.service import (
     TriageError,
     TriageService,
 )
+from sre_agent.vocabulary import TransitionId
 
 SOURCE = "grafana"
 DEFAULT_SEVERITY = "sev3"
@@ -267,13 +268,13 @@ class AlertIntakeService:
         }
         if target is not None:
             command |= {
-                "operation": "triage_link",
+                "operation": TransitionId.TRIAGE_LINK,
                 "reason": f"Grafana rule {row['rule']} on {row['service']} joins open incident.",
                 "target_incident_id": target,
             }
         else:
             command |= {
-                "operation": "triage_declare",
+                "operation": TransitionId.TRIAGE_DECLARE,
                 "reason": f"Grafana rule {row['rule']} fired on {row['service']}.",
                 "severity": row["severity"],
                 "impact": f"Grafana rule {row['rule']} is firing on {row['service']}.",

@@ -17,6 +17,7 @@ from sqlalchemy import text
 from sre_agent.chat.outbox import enqueue
 from sre_agent.incident.persistence import IncidentUnitOfWork, RunEvent
 from sre_agent.investigator.contract import FailedMitigation
+from sre_agent.vocabulary import TransitionId
 
 MAX_REINVESTIGATIONS = 2
 # What the new run is told when a person, not the agent, judged the verification.
@@ -50,7 +51,7 @@ async def failed_mitigations(work: IncidentUnitOfWork, incident_id: str) -> list
     found: list[FailedMitigation] = []
     for event in events:
         if event.kind != "state_change" or event.payload.get("transition_id") != (
-            "verification_failed"
+            TransitionId.VERIFICATION_FAILED
         ):
             continue
         state: Any = event.payload.get("incident_state") or {}

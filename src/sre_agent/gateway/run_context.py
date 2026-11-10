@@ -19,8 +19,9 @@ from sre_agent.gateway.incidents import (
 from sre_agent.governance.authorization import AuthorizationDecisionEngine, AuthorizationEvaluation
 from sre_agent.governance.dto import Principal
 from sre_agent.incident.persistence import TextContextRecord
-from sre_agent.incident.projections import IDENTIFIER_PATTERN, RUN_ID_PATTERN, utc_iso
+from sre_agent.incident.projections import RUN_ID_PATTERN, utc_iso
 from sre_agent.persistence.repositories import GrantRepository
+from sre_agent.vocabulary import IDENTIFIER_PATTERN
 
 CONTEXT_ACTION = "run.read_context"
 TURN_FIELDS = ("assembled_input", "model_output", "tool_invocation", "request_id")

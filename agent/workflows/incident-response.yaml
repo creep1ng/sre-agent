@@ -93,13 +93,11 @@ states:
   detected:
     description: An alert exists and has not been dispositioned.
     process_stages: [1]
-    entry_condition: An alert record exists with service, severity and timestamp.
     allows_agentic_step: false
 
   triage:
     description: The alert is being dispositioned.
     process_stages: [2]
-    entry_condition: A human or the harness opened the alert for triage.
     allows_agentic_step: true
     agent_objective: triage
 
@@ -117,7 +115,6 @@ states:
   active:
     description: An incident is declared and a war room exists. Session starts here.
     process_stages: [3]
-    entry_condition: incident_id assigned, severity set, war room created.
     allows_agentic_step: false
 
   investigating:
@@ -137,7 +134,7 @@ states:
     description: Service stability is being checked after the intervention.
     process_stages: [6]
     allows_agentic_step: true
-    agent_objective: investigate
+    agent_objective: verify
 
   resolved:
     description: Service is stable. The postmortem does not exist yet.
