@@ -30,6 +30,7 @@ import psycopg
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from incident_http_testkit import _assert_run_lookup_is_scoped
 from sqlalchemy import event
 
 from sre_agent.application import create_application
@@ -222,26 +223,6 @@ def _send(
     finally:
         if query_log is not None:
             event.remove(engine, "before_cursor_execute", capture)
-
-
-def _assert_run_lookup_is_scoped(
-    statements: list[tuple[str, Any]], *, incident_id: str, run_id: str
-) -> None:
-    run_queries = [
-        (statement.lower(), parameters)
-        for statement, parameters in statements
-        if "from incident.runs" in statement.lower()
-    ]
-    assert run_queries
-    for statement, parameters in run_queries:
-        normalized = " ".join(statement.split())
-        assert "where run_id=" in normalized and "and incident_id=" in normalized, normalized
-        assert run_id in str(parameters)
-        assert incident_id in str(parameters)
-    assert not any(
-        "from incident.snapshots" in query.lower() or "from incident.run_events" in query.lower()
-        for query, _ in statements
-    )
 
 
 def _state(incident_id: str) -> str:

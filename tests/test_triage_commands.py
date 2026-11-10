@@ -2,13 +2,12 @@
 
 import asyncio
 import os
-from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg
 import pytest
+from triage_testkit import _principal
 
-from sre_agent.governance.dto import Principal
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import GrantRepository
@@ -17,21 +16,9 @@ from sre_agent.triage.service import TriageError, TriageService
 DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"
 )
-NOW = datetime(2026, 9, 23, tzinfo=UTC)
 ACTIONS = ("alert.read", "alert.triage", "alert.dismiss")
 REASON = "Sustained 5xx spike on checkout."
 SERVICE: TriageService | None = None
-
-
-def _principal(pid: str) -> Principal:
-    return Principal(
-        principal_id=pid,
-        kind="human",
-        display_name=pid,
-        status="active",
-        created_at=NOW,
-        updated_at=NOW,
-    )
 
 
 @pytest.fixture(scope="module", autouse=True)

@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from control_testkit import _deny, _service
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -26,7 +27,7 @@ from sre_agent.control.service import (
 )
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed
-from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
+from sre_agent.governance.authorization import AuthorizationEvaluation
 from sre_agent.governance.dto import AuditEvent, PolicyDecision, Principal, PrincipalContext
 
 ALIAS_BODY = {
@@ -58,25 +59,9 @@ def _context() -> PrincipalContext:
     )
 
 
-def _deny() -> AuthorizationEvaluation:
-    return AuthorizationEvaluation(
-        PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None),
-        AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
-    )
-
-
-class _Audit:
-    async def append(self, event: object) -> object:
-        return event
-
-
 class _TargetAccessed:
     def __init__(self, *_args: object, **_kwargs: object) -> None:
         raise AssertionError("target repository access must follow authorization")
-
-
-def _service() -> ControlService:
-    return ControlService(None, _Audit(), AuditProjector(b"x" * 32))
 
 
 def test_alias_create_rejects_non_openrouter_router_before_effects(monkeypatch) -> None:

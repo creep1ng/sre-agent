@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from control_testkit import _context, _deny, _service
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -25,9 +26,7 @@ from sre_agent.control.service import (
 from sre_agent.control.service import (
     control_router as build_control_router,
 )
-from sre_agent.gateway.audit import AuditProjector
-from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
-from sre_agent.governance.dto import AuditEvent, PolicyDecision, Principal, PrincipalContext
+from sre_agent.governance.dto import AuditEvent
 
 EXPECTED_UPDATED_AT = "2026-09-18T00:00:00Z"
 ASSIGNMENT_BODY = {
@@ -41,40 +40,6 @@ STATUS_BODY = {"status": "inactive", "expected_updated_at": EXPECTED_UPDATED_AT}
 ALIAS_SCOPE = ("administrative_control", "model_aliases")
 ASSIGNMENT_ROUTE = ("PUT", "/v1/model-aliases/{id}/assignment")
 STATUS_ROUTE = ("PUT", "/v1/model-aliases/{id}/status")
-
-
-def _context() -> PrincipalContext:
-    from datetime import UTC, datetime
-
-    now = datetime(2026, 9, 18, tzinfo=UTC)
-    return PrincipalContext(
-        principal=Principal(
-            principal_id="admin-human",
-            kind="human",
-            display_name="Admin",
-            status="active",
-            created_at=now,
-            updated_at=now,
-        ),
-        credential_id="credential-admin-human",
-        authenticated_at=now,
-    )
-
-
-def _deny() -> AuthorizationEvaluation:
-    return AuthorizationEvaluation(
-        PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None),
-        AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
-    )
-
-
-class _Audit:
-    async def append(self, event: object) -> object:
-        return event
-
-
-def _service() -> ControlService:
-    return ControlService(None, _Audit(), AuditProjector(b"x" * 32))
 
 
 def test_alias_mutation_scopes_require_admin_write_model_aliases() -> None:

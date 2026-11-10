@@ -11,15 +11,15 @@ from typing import get_args
 from unittest.mock import AsyncMock
 
 import pytest
+from control_testkit import _context, _deny, _service
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.control.service import CONTROL_OPERATIONS, ControlService
 from sre_agent.control.service import control_router as build_control_router
-from sre_agent.gateway.audit import AuditProjector
-from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
-from sre_agent.governance.dto import AuditEvent, PolicyDecision, Principal, PrincipalContext
+from sre_agent.governance.authorization import AuthorizationEvaluation
+from sre_agent.governance.dto import AuditEvent, PolicyDecision
 
 CATALOG_SCOPE = ("administrative_control", "catalog")
 LIST_ROUTE = ("GET", "/v1/catalog/resources")
@@ -40,40 +40,6 @@ CATALOG_BODY = {
         "tags": ["mcp", "tools"],
     },
 }
-
-
-def _context() -> PrincipalContext:
-    from datetime import UTC, datetime
-
-    now = datetime(2026, 9, 18, tzinfo=UTC)
-    return PrincipalContext(
-        principal=Principal(
-            principal_id="admin-human",
-            kind="human",
-            display_name="Admin",
-            status="active",
-            created_at=now,
-            updated_at=now,
-        ),
-        credential_id="credential-admin-human",
-        authenticated_at=now,
-    )
-
-
-def _deny() -> AuthorizationEvaluation:
-    return AuthorizationEvaluation(
-        PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None),
-        AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
-    )
-
-
-class _Audit:
-    async def append(self, event: object) -> object:
-        return event
-
-
-def _service() -> ControlService:
-    return ControlService(None, _Audit(), AuditProjector(b"x" * 32))
 
 
 def test_catalog_scopes_require_admin_catalog_governance() -> None:
