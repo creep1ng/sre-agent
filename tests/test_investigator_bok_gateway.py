@@ -15,8 +15,14 @@ import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from test_control_acceptance import ADMIN_KEY, AUDIT_KEY, DATABASE_URL, SEED_ENV, headers
-from test_control_acceptance import client as _client_fixture  # noqa: F401
+from test_control_acceptance import (
+    ADMIN_KEY,
+    AUDIT_KEY,
+    DATABASE_URL,
+    SEED_ENV,
+    audit_key,  # noqa: F401
+    headers,
+)
 from test_control_acceptance import migrated_acceptance_database as _database_fixture  # noqa: F401
 from test_investigator_bok import (
     CITE_FRAGMENT,
@@ -44,11 +50,6 @@ KEY = SEED_ENV["INCIDENT_HARNESS_API_KEY"]
 CONTENT = "Assign severity from customer impact, scope, and active risk."
 RESTRICTED = ("Deployment checks", "rollback readiness before deployment")
 LOCKED = "/v1/bok/collections/demo-platform-operations/versions/1.0.0/chunks/deployment-checks/"
-
-
-@pytest.fixture
-def client(request: pytest.FixtureRequest) -> TestClient:
-    return request.getfixturevalue("_client_fixture")
 
 
 @pytest.fixture(autouse=True)

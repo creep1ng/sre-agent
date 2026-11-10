@@ -77,10 +77,8 @@ def migrated_audit_database() -> Iterator[None]:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    app = create_application(Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY))
-    with TestClient(app, raise_server_exceptions=False) as test_client:
-        yield test_client
+def audit_key() -> str:
+    return AUDIT_KEY
 
 
 def _projection_rows(*, request_id: str | None = None) -> list[dict[str, Any]]:

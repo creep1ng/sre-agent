@@ -7,7 +7,7 @@ from test_control_acceptance import (
     ADMIN_KEY,
     DATABASE_URL,
     RESTRICTED_KEY,
-    client,  # noqa: F401 — pytest registers the imported fixture
+    audit_key,  # noqa: F401 — pytest registers the imported fixture
     headers,
     migrated_acceptance_database,  # noqa: F401 — module-scoped autouse fixture
 )

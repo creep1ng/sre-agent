@@ -85,10 +85,8 @@ def isolated_audit_events():
 
 
 @pytest.fixture
-def client() -> TestClient:
-    application = create_application(Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY))
-    with TestClient(application, raise_server_exceptions=False) as test_client:
-        yield test_client
+def audit_key() -> str:
+    return AUDIT_KEY
 
 
 def auth(key: str = ADMIN_KEY) -> dict[str, str]:
