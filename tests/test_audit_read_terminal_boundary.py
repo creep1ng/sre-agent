@@ -12,8 +12,7 @@ from typing import Any
 
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
+from database_support import migrate_database
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 
@@ -64,20 +63,7 @@ def migrated_audit_database() -> Iterator[None]:
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         if connection.info.dbname not in {"python_checks", "sre_agent_issue25_audit"}:
             pytest.fail("audit HTTP acceptance requires its dedicated test database")
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, alert_triage, consumption_limit_policies, "
-            "bok_section_chunks, "
-            "bok_documents, "
-            "bok_collection_versions, audit_events, skill_versions, grants, credentials, "
-            "resources, mcp_tools, mcp_servers, principals, idempotency_records, "
-            "alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
+    migrate_database(DATABASE_URL)
 
     async def bootstrap() -> None:
         database = Database(DATABASE_URL)

@@ -18,9 +18,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import psycopg
-from alembic import command
-from alembic.config import Config
+from database_support import migrate_database
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
@@ -63,14 +61,7 @@ def grafana(status: str, service: str, starts_at: str, rule: str = "service-erro
 
 
 def prepare_database() -> None:
-    with psycopg.connect(URL, autocommit=True) as conn:
-        conn.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        for (table,) in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'"):
-            conn.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
-        conn.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    cfg = Config("alembic.ini")
-    cfg.set_main_option("sqlalchemy.url", URL)
-    command.upgrade(cfg, "head")
+    migrate_database(URL)
     routes = {f"{a}_AGENT_{p}": v for a in ("TRIAGE", "REMEDIATION") for p, v in ROUTE}
     settings = SeedSettings.from_environment({**KEYS, **routes})
 

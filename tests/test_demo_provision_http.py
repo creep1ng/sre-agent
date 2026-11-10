@@ -14,8 +14,7 @@ import sys
 from pathlib import Path
 
 import psycopg
-from alembic import command
-from alembic.config import Config
+from database_support import migrate_database
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
@@ -44,14 +43,7 @@ KEYS = {
 
 
 def test_demo_permissions_converge_and_http_journey_remains_governed():
-    with psycopg.connect(URL, autocommit=True) as conn:
-        conn.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        for (table,) in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'"):
-            conn.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
-        conn.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    cfg = Config("alembic.ini")
-    cfg.set_main_option("sqlalchemy.url", URL)
-    command.upgrade(cfg, "head")
+    migrate_database(URL)
     settings = SeedSettings.from_environment(
         {
             **KEYS,

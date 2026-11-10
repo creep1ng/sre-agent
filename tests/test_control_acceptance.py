@@ -9,8 +9,6 @@ from pathlib import Path
 import psycopg
 import pytest
 import yaml
-from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry
@@ -55,23 +53,8 @@ RELEASE_23 = Path(__file__).parents[1] / "schemas/releases/2.3.0/json-schema"
 
 
 @pytest.fixture(scope="module", autouse=True)
-def migrated_acceptance_database() -> None:
+def migrated_acceptance_database(migrated_database: None) -> None:
     """Use only the dedicated database, never another test suite's database."""
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, consumption_limit_policies, "
-            "bok_section_chunks, bok_documents, "
-            "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, "
-            "resources, alert_triage, mcp_tools, mcp_servers, "
-            "principals, idempotency_records, alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
 
     async def bootstrap() -> None:
         database = Database(DATABASE_URL)
