@@ -9,6 +9,9 @@ from fastapi.testclient import TestClient
 from sre_agent.application import create_application
 from sre_agent.settings import Settings
 
+# The shared assertions in this support module report like the ones written in a test file.
+pytest.register_assert_rewrite("incident_http_testkit")
+
 
 @pytest.fixture(scope="module")
 def migrated_database() -> None:

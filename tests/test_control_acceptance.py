@@ -2,13 +2,13 @@
 
 import asyncio
 import json
-import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import psycopg
 import pytest
 import yaml
+from database_support import DATABASE_URL
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry
@@ -31,10 +31,6 @@ from sre_agent.persistence.repositories import (
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
 
-DATABASE_URL = os.environ.get(
-    "CONTROL_ACCEPTANCE_DATABASE_URL",
-    os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"),
-)
 AUDIT_KEY = "issue147-acceptance-audit-key"
 ADMIN_KEY = "sre_admn_0123456789abcdefghijklmnop"
 RESTRICTED_KEY = "sre_rest_0123456789abcdefghijklmnop"
@@ -54,7 +50,7 @@ RELEASE_23 = Path(__file__).parents[1] / "schemas/releases/2.3.0/json-schema"
 
 @pytest.fixture(scope="module", autouse=True)
 def migrated_acceptance_database(migrated_database: None) -> None:
-    """Use only the dedicated database, never another test suite's database."""
+    """Seed the acceptance principals into the freshly migrated test database."""
 
     async def bootstrap() -> None:
         database = Database(DATABASE_URL)

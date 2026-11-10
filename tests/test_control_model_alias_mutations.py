@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from control_testkit import _context, _deny, _service
+from control_testkit import _context, _deny, _service, _TargetAccessed
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -145,10 +145,6 @@ def test_alias_mutations_reject_malformed_identifiers(alias_id: str, method: str
 @pytest.mark.parametrize("method", ["replace_alias_assignment", "replace_alias_status"])
 def test_alias_mutation_denial_precedes_lookup(method: str, monkeypatch) -> None:
     import sre_agent.control.service as service_module
-
-    class _TargetAccessed:
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
-            raise AssertionError("target repository access must follow authorization")
 
     monkeypatch.setattr(service_module, "ModelAliasRepository", _TargetAccessed)
     from contextlib import asynccontextmanager

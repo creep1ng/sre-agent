@@ -36,5 +36,10 @@ class _Audit:
         return event
 
 
+class _TargetAccessed:
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("target repository access must follow authorization")
+
+
 def _service() -> ControlService:
     return ControlService(None, _Audit(), AuditProjector(b"x" * 32))

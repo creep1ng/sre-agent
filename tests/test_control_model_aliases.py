@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from control_testkit import _deny, _service
+from control_testkit import _deny, _service, _TargetAccessed
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -57,11 +57,6 @@ def _context() -> PrincipalContext:
         credential_id="credential-admin-human",
         authenticated_at=now,
     )
-
-
-class _TargetAccessed:
-    def __init__(self, *_args: object, **_kwargs: object) -> None:
-        raise AssertionError("target repository access must follow authorization")
 
 
 def test_alias_create_rejects_non_openrouter_router_before_effects(monkeypatch) -> None:

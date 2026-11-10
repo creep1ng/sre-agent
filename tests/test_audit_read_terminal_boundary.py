@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import hmac
 import importlib.util
-import os
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
@@ -12,7 +11,7 @@ from typing import Any
 
 import psycopg
 import pytest
-from database_support import migrate_database
+from database_support import DATABASE_URL, migrate_database
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 
@@ -21,10 +20,6 @@ from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
 
-DATABASE_URL = os.environ.get(
-    "AUDIT_READS_DATABASE_URL",
-    os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"),
-)
 AUDIT_KEY = "issue25-audit-reads-test-key"
 ADMIN_KEY = "sre_admn_0123456789abcdefghijklmnop"
 DEMO_KEY = "sre_demo_0123456789abcdefghijklmnop"
@@ -59,7 +54,7 @@ def _terminal_capture_module() -> ModuleType:
 
 @pytest.fixture(scope="module", autouse=True)
 def migrated_audit_database() -> Iterator[None]:
-    """Reset only the explicitly configured isolated acceptance database."""
+    """Reset the test database, and only when it is one this module may reset."""
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         if connection.info.dbname not in {"python_checks", "sre_agent_issue25_audit"}:
             pytest.fail("audit HTTP acceptance requires its dedicated test database")
