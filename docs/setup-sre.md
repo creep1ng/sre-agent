@@ -96,7 +96,7 @@ Disconnected/expired/invalid contracts fail closed; local mode stays independent
 After extending expiry, reconnect through the owner CLI to refresh this private
 contract. For a different instance, use new private state rather than rotate an
 existing token unexpectedly. Feature/live acceptance is recorded separately in
-[the CA matrix](evidence/issue-618/acceptance.md); it is not a main-release claim.
+[the CA matrix](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-618/acceptance.md); it is not a main-release claim.
 
 ## Start and repeat
 

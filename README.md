@@ -17,7 +17,7 @@ owner-only local environment file and replace every placeholder. Do not print ke
 One command then prepares SRE (no worktrees, manual grants or test recipes). Local
 is available. For AWS, prepare the [private owner connection](docs/setup-sre.md#prepared-aws-connection)
 first; the same SRE command consumes it without AWS credentials or paid defaults.
-[Acceptance status](docs/evidence/issue-618/acceptance.md) distinguishes tested feature behavior from the final main release.
+[Acceptance status](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-618/acceptance.md) distinguishes tested feature behavior from the final main release.
 
 ```bash
 cp .env.example .env

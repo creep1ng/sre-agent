@@ -7,8 +7,8 @@
 # then, through the real runtime and API: an incident opened last night at 23:40 (Bogota) that
 # waits for a mitigation decision, one opened at 22:05 that the operator approved and verified
 # over HTTP, and two change events of last night recorded by the deploy-executor principal.
-# Then e2e/inbox-real.spec.ts runs in incident-console-e2e; its screenshots are copied to
-# docs/evidence/issue-870/inbox/. Remove the project afterwards with
+# Then e2e/inbox-real.spec.ts runs in incident-console-e2e; its screenshots stay in
+# web/incident-console/e2e/artifacts/inbox/, which git ignores. Remove the project afterwards with
 #   docker compose -f compose.yaml -f compose.e2e.yaml --project-name <unique> --profile e2e \
 #     down -v --remove-orphans
 set -Eeuo pipefail
@@ -46,6 +46,4 @@ rc=0 owner="$(id -u):$(id -g)"
 "${COMPOSE[@]}" --profile e2e run --rm --build --no-deps -e INBOX_REAL=1 -e INBOX_STAMP="$STAMP" \
   incident-console-e2e sh -c \
   "npx playwright test e2e/inbox-real.spec.ts; s=\$?; chown -R $owner e2e/artifacts; exit \$s" || rc=$?
-mkdir -p "$ROOT/docs/evidence/issue-870/inbox"
-cp "$ROOT"/web/incident-console/e2e/artifacts/inbox/*.png "$ROOT/docs/evidence/issue-870/inbox/" || rc=1
 exit "$rc"

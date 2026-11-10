@@ -185,22 +185,22 @@ No current public PR or hosted CI result is claimed. Parent refreshed issue #45 
 
 ## First-stage evidence
 
-The fresh [prerequisite-guide screenshot](../../docs/evidence/issue-45-pr01/prerequisites.png) renders only this stage's operator guide, source SHA-256 `4e7b75726b9c155ebb9ec759a46188e9d1c76833590b4e6b82a997c7ee8be3fc`. It does not reuse the historical full-candidate image. PNG and guide were inspected for sensitive values; no environment, credentials, raw private paths or provider payloads are included.
+The fresh [prerequisite-guide screenshot](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr01/prerequisites.png) renders only this stage's operator guide, source SHA-256 `4e7b75726b9c155ebb9ec759a46188e9d1c76833590b4e6b82a997c7ee8be3fc`. It does not reuse the historical full-candidate image. PNG and guide were inspected for sensitive values; no environment, credentials, raw private paths or provider payloads are included.
 
 ## Next Step
 
-The documentation prerequisite stage has its own observed structural/rendered evidence and a [sanitized report](../../docs/evidence/issue-45-pr01/report.md). Fresh cached-image readback returned exit 0 / Node v22.14.0 and exact guide bytes. The public Node base is not cached; the source-validated Compose build recipe is explicitly unexecuted. Guide/PNG bytes are unchanged; current tracker mirror is pending. Parent reviews, commits and publishes it, then independently scopes the next semantic stage against its actual base. Preserve all real CA1–CA8 gaps and producer dependencies; no automatic integration is authorized.
+The documentation prerequisite stage has its own observed structural/rendered evidence and a [sanitized report](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr01/report.md). Fresh cached-image readback returned exit 0 / Node v22.14.0 and exact guide bytes. The public Node base is not cached; the source-validated Compose build recipe is explicitly unexecuted. Guide/PNG bytes are unchanged; current tracker mirror is pending. Parent reviews, commits and publishes it, then independently scopes the next semantic stage against its actual base. Preserve all real CA1–CA8 gaps and producer dependencies; no automatic integration is authorized.
 
 ## P3 execution checkpoint
 
 Base `73fd51ab6ea9a2235b51aa70e851ab930e89a5c0`, branch `codex/issue-45-02-discovery`; parent PR [#424](https://github.com/creep1ng/sre-agent/pull/424) is published with 346 changed lines. Parent refreshed issue #45 OPEN / Project #8 Todo / Sprint 4. Some PR checks passed and others are running; requested human review is not approval. Only this new discovery worktree is writable. Original recovery, full recovery and published first-stage worktree stay read-only. Existing task history and future stages remain intact.
 
-P3 checks: the exact existing worktree checks harness ran Node E2E from current mounted tests. Initial runner setup rejected unsupported `--no-build` before execution; removing that flag restored the authorized command. No build/pull occurred. [Current controlled evidence](../../docs/evidence/issue-45-pr02/report.md) is separate from historical full-recovery results. All live acceptance tasks remain open; publication and human review remain parent-owned.
+P3 checks: the exact existing worktree checks harness ran Node E2E from current mounted tests. Initial runner setup rejected unsupported `--no-build` before execution; removing that flag restored the authorized command. No build/pull occurred. [Current controlled evidence](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr02/report.md) is separate from historical full-recovery results. All live acceptance tasks remain open; publication and human review remain parent-owned.
 Final P3 checks passed: 2/2 current controlled tests, two Node syntax checks, 18 relative links, five shell blocks parsed only, whitespace/privacy checks and a genuine offline rendered E2E screenshot. Protected original/full recovery and published first-stage hashes/status/HEAD are unchanged. No actual CA completion, hosted CI or human approval is inferred; the tracker mirror remains pending.
 
 ## PR #425 review correction checkpoint
 
-- [x] **MCP45-P3-R1 — Validate raw discovery tool entries**: PR #425 (`efb8446` over `73fd51a`); fix [review finding](https://github.com/creep1ng/sre-agent/pull/425#discussion_r4140568933) by validating raw `tools` cardinality and each expected string ID before normalization. Fresh HTTP/CLI scenarios observed RED (malformed extra entry accepted; `0 !== 1`), minimal fix GREEN 2/2, syntax checks passed on Node v22.14.0. Updated [current report](../../docs/evidence/issue-45-pr02/report.md) and exact-source screenshot; current diff is 392 text additions+deletions plus one PNG file, within 400. No CA1–CA8 closes; parent owns mirror/publication. Initial Docker denial was retried with authorized escalation; original recovery roots stayed untouched.
+- [x] **MCP45-P3-R1 — Validate raw discovery tool entries**: PR #425 (`efb8446` over `73fd51a`); fix [review finding](https://github.com/creep1ng/sre-agent/pull/425#discussion_r4140568933) by validating raw `tools` cardinality and each expected string ID before normalization. Fresh HTTP/CLI scenarios observed RED (malformed extra entry accepted; `0 !== 1`), minimal fix GREEN 2/2, syntax checks passed on Node v22.14.0. Updated [current report](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr02/report.md) and exact-source screenshot; current diff is 392 text additions+deletions plus one PNG file, within 400. No CA1–CA8 closes; parent owns mirror/publication. Initial Docker denial was retried with authorized escalation; original recovery roots stayed untouched.
 
 ## Current preview-helper prerequisite (2026-09-30)
 
@@ -243,7 +243,7 @@ The configured gateway is documented as an origin; non-root paths currently pass
 
 - [x] **MCP45-URL-R1 — Observe configured-path HTTP/CLI RED**: permanent CLI test first; cached networkless runner observed the non-root base path incorrectly returned status 0 instead of rejecting configuration.
 - [x] **MCP45-URL-R2 — Reject unsupported gateway paths**: `validGatewayUrl` now accepts only root pathname; root and `/` both make the normal two discovery GETs, while `/mcp-gateway` and `/mcp-gateway/` fail before any HTTP. GREEN 2/2, syntax and diff checks passed.
-- [ ] **MCP45-URL-R3 — Bind correction proof and propagate**: concise [root-correction report](../../docs/evidence/issue-45-gateway-root/report.md)/current hashes prepared; genuine screenshot, independent review, hosted CI and parent-owned publication remain pending.
+- [ ] **MCP45-URL-R3 — Bind correction proof and propagate**: concise [root-correction report](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-gateway-root/report.md)/current hashes prepared; genuine screenshot, independent review, hosted CI and parent-owned publication remain pending.
 
 URL correction test evidence is in `/tmp/issue45-gateway-root-evidence/url-red.log` and `url-green.log`; no screenshot was attempted in this slice. The controlled fix does not close CA1–CA8.
 
@@ -251,12 +251,12 @@ Gateway-root parent checkpoint: exact current source/test hashes in the correcti
 
 ## P4 restacked validation checkpoint
 
-Parent local root correction `f23e9a01f01b0ef85c3a7a43a134e413af0a87dc` is now the base for this P4 candidate; P4 remains the current stage and all root/P4 checkpoints above remain intact. The first combined-suite run failed at the root-slash case because the P4 fixture still held the deliberately empty log response from the preceding empty-result scenario. Restoring the successful fixture before root-slash validation corrected the test adapter; no P4 or root source behavior changed. Current cached networkless suite passed 2/2, syntax and whitespace checks passed, and exact hashes/command are in the updated [P4 report](../../docs/evidence/issue-45-pr03/report.md). A fresh screenshot for this combined test hash, independent review, hosted CI, task mirror refresh, public propagation and human acceptance remain parent-owned; CA1–CA8 stay open.
+Parent local root correction `f23e9a01f01b0ef85c3a7a43a134e413af0a87dc` is now the base for this P4 candidate; P4 remains the current stage and all root/P4 checkpoints above remain intact. The first combined-suite run failed at the root-slash case because the P4 fixture still held the deliberately empty log response from the preceding empty-result scenario. Restoring the successful fixture before root-slash validation corrected the test adapter; no P4 or root source behavior changed. Current cached networkless suite passed 2/2, syntax and whitespace checks passed, and exact hashes/command are in the updated [P4 report](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr03/report.md). A fresh screenshot for this combined test hash, independent review, hosted CI, task mirror refresh, public propagation and human acceptance remain parent-owned; CA1–CA8 stay open.
 
 
 ## Root correction publication checkpoint
 
-Current source is the discovery-based root correction; P4 restack `265c9dafe3182c01522db99369b70735467468f9` above describes a separate local child, not installed P4 code here. Real parent-controlled screenshot is now attached in [the correction report](../../docs/evidence/issue-45-gateway-root/report.md), SHA-256 `56bc41f324877a53ab9dc1ecc1bb3a4fb7a279003550f0d314c3969115133587`. Host sandboxed Chromium rendered actual Docker output and assertions; source/test hashes are unchanged from independently verified `f23e9a01`. This does not resolve PR424's containerized Markdown-preview finding. Public binding, current hosted CI and human review remain pending; URL-R3 stays unchecked. Public425 is draft at unchanged9eb3 and its own source remains unfixed.
+Current source is the discovery-based root correction; P4 restack `265c9dafe3182c01522db99369b70735467468f9` above describes a separate local child, not installed P4 code here. Real parent-controlled screenshot is now attached in [the correction report](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-gateway-root/report.md), SHA-256 `56bc41f324877a53ab9dc1ecc1bb3a4fb7a279003550f0d314c3969115133587`. Host sandboxed Chromium rendered actual Docker output and assertions; source/test hashes are unchanged from independently verified `f23e9a01`. This does not resolve PR424's containerized Markdown-preview finding. Public binding, current hosted CI and human review remain pending; URL-R3 stays unchecked. Public425 is draft at unchanged9eb3 and its own source remains unfixed.
 
 
 ## P4 restack onto published PR #430 parent (2026-09-30)
@@ -270,7 +270,7 @@ Parent published the report-only correction as PR #430 head `bb384f08ed65b6429b2
 
 ## P4 current evidence attachment
 
-Parent exact committed `fac4831` Docker rerun passed2/2 with unchanged hashes. Genuine [P4 PNG](../../docs/evidence/issue-45-pr03/queries.png), SHA-256 `ff6bc808650b42bca8d239a4c41612df6a71fffd347513b6e32d9857498b6448`, now records observed queries, safe summaries and actual assertions. P4-C remains unchecked pending publication/hosted CI; requested human review and real CA1–CA8 remain open.
+Parent exact committed `fac4831` Docker rerun passed2/2 with unchanged hashes. Genuine [P4 PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr03/queries.png), SHA-256 `ff6bc808650b42bca8d239a4c41612df6a71fffd347513b6e32d9857498b6448`, now records observed queries, safe summaries and actual assertions. P4-C remains unchecked pending publication/hosted CI; requested human review and real CA1–CA8 remain open.
 
 ## Current P5 known-ID denial stage (2026-09-30)
 
@@ -288,7 +288,7 @@ Next step: parent completes P5-C evidence/publication readiness. New scope forec
 
 ## P5 parent committed proof checkpoint
 
-Parent committed source/tests/docs as `638942a4aa6278ae4c32bb61e72d214aaffe5e28`, then exact cached networkless Docker syntax/E2E passed2/2 with unchanged report hashes. [Actual P5 PNG](../../docs/evidence/issue-45-pr04/known-id.png), SHA-256 `ff510c21f80a58a4e57db727d3bf58d3c9144d2e1a7092d7b947b00280b21edb`, binds observed denied-summary and first-request assertions. P5-C remains open for current publication/hosted CI; real CA1–CA8 and human acceptance remain pending.
+Parent committed source/tests/docs as `638942a4aa6278ae4c32bb61e72d214aaffe5e28`, then exact cached networkless Docker syntax/E2E passed2/2 with unchanged report hashes. [Actual P5 PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr04/known-id.png), SHA-256 `ff510c21f80a58a4e57db727d3bf58d3c9144d2e1a7092d7b947b00280b21edb`, binds observed denied-summary and first-request assertions. P5-C remains open for current publication/hosted CI; real CA1–CA8 and human acceptance remain pending.
 
 Latest P5 checkpoint: PR #432 was published at `0022a2a7373bba3309a0c82caf2e0e6ab7b9fe97`; hosted CI run `36683005655` completed with all eight jobs passing. Governance, reconciliation and GitGuardian checks passed; the current body and full task mirror were read back. P5-C controlled-delivery proof is complete; no human acceptance or CA1–CA8 closure is claimed.
 
@@ -324,7 +324,7 @@ Next step: parent owns R3 independent verification, fresh screenshot, report/tas
 
 ## P5 correction parent committed evidence checkpoint
 
-Exact `db7eef3cbfdd2090519145a73b5437e8069fd45c` independently passed cached Docker syntax/HTTP-CLI 2/2 with source `9af21e534a7d60abf3a0ecf3bb3b2ec60d7fb93064ee27fc770224d2db5baa01` and test `7346b55130ffec319789576a3e49265fda7a7e0d53725e3c71efc648138127c9` unchanged. Real [fresh correction PNG](../../docs/evidence/issue-45-pr04/known-id-corrected.png), SHA-256 `3fc38417cc40fb56c410bfc13768f09ffa457076be3acfe4b7b989f97d288063`, was visually inspected. R3/P5-C remain pending publication/current hosted CI/human request; P6 remains frozen local child. No real CA closed.
+Exact `db7eef3cbfdd2090519145a73b5437e8069fd45c` independently passed cached Docker syntax/HTTP-CLI 2/2 with source `9af21e534a7d60abf3a0ecf3bb3b2ec60d7fb93064ee27fc770224d2db5baa01` and test `7346b55130ffec319789576a3e49265fda7a7e0d53725e3c71efc648138127c9` unchanged. Real [fresh correction PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr04/known-id-corrected.png), SHA-256 `3fc38417cc40fb56c410bfc13768f09ffa457076be3acfe4b7b989f97d288063`, was visually inspected. R3/P5-C remain pending publication/current hosted CI/human request; P6 remains frozen local child. No real CA closed.
 
 ## P5 corrected public candidate verification checkpoint
 
@@ -354,7 +354,7 @@ Observed P5 retryable correction candidate: source `5aecebdcbdb4601296f8969a9832
 
 ## P5 retryable parent committed evidence checkpoint
 
-Exact `c2500771560c8e89b3e4d4656547ab8871146250` independently passed cached Docker syntax and HTTP/CLI2/2 with unchanged source5aecebdc/test0429268a. Real [fresh retryable PNG](../../docs/evidence/issue-45-pr04/known-id-retryable.png),SHA-256 `71ba7b1fc7b5ee7e9f302a8c30a45797b72974b3acc167295e6ad50bedb915b2`, visually inspected/sanitized. RET-R3/P5-C pending publication/currentCI; P6bc118 deliberately RED and frozen. All real CA1–CA8/human acceptance open.
+Exact `c2500771560c8e89b3e4d4656547ab8871146250` independently passed cached Docker syntax and HTTP/CLI2/2 with unchanged source5aecebdc/test0429268a. Real [fresh retryable PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr04/known-id-retryable.png),SHA-256 `71ba7b1fc7b5ee7e9f302a8c30a45797b72974b3acc167295e6ad50bedb915b2`, visually inspected/sanitized. RET-R3/P5-C pending publication/currentCI; P6bc118 deliberately RED and frozen. All real CA1–CA8/human acceptance open.
 
 ## P5 retryable current hosted proof and P6 next step
 
@@ -373,7 +373,7 @@ Observed retryable:false RED/GREEN. Parent found that the earlier witness-negati
 
 ## P6 parent committed evidence checkpoint
 
-Exact `afcc54680d50069acfaa0349bc08ba74232839c1` independently passed Docker syntax/HTTP-CLI2/2 with unchanged source06260e9c/test29013ec0. Actual [P6 PNG](../../docs/evidence/issue-45-pr05/offline-witness.png),SHA-256 `88c5787b707f6bad23e27961e87410652b9a5bee75cb868ccc29aa27b91df1cd`, visually inspected/sanitized. P6-C remains pending publication/currentCI; all real CAs/human acceptance open.
+Exact `afcc54680d50069acfaa0349bc08ba74232839c1` independently passed Docker syntax/HTTP-CLI2/2 with unchanged source06260e9c/test29013ec0. Actual [P6 PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr05/offline-witness.png),SHA-256 `88c5787b707f6bad23e27961e87410652b9a5bee75cb868ccc29aa27b91df1cd`, visually inspected/sanitized. P6-C remains pending publication/currentCI; all real CAs/human acceptance open.
 
 ## P6 input-read and runbook review correction
 
@@ -400,7 +400,7 @@ Parent exact cached Node22.14 networkless Docker, memory/swap 256MiB, syntax and
 
 ## P6 bounded-read committed proof and fresh capture
 
-Exact d4146e58b21fbbafd70c3d36f28ec884e2924e82 independently passed syntax/full Docker CLI3/3, memory/swap256MiB, no network/skips; unchanged source8a9d9262/testc5e016a9. Real [bounded-read PNG](../../docs/evidence/issue-45-pr05/offline-witness-bounded.png),1600×2000/340903bytes/SHAe22fab60b1bd66d2c835f1d97c9292adcfa7dcea01d49858322ca0d7e57f67af inspected/sanitized; historical PNG retained. IO-R3 remains pending publication/currentCI/human request, all real CAs open.
+Exact d4146e58b21fbbafd70c3d36f28ec884e2924e82 independently passed syntax/full Docker CLI3/3, memory/swap256MiB, no network/skips; unchanged source8a9d9262/testc5e016a9. Real [bounded-read PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr05/offline-witness-bounded.png),1600×2000/340903bytes/SHAe22fab60b1bd66d2c835f1d97c9292adcfa7dcea01d49858322ca0d7e57f67af inspected/sanitized; historical PNG retained. IO-R3 remains pending publication/currentCI/human request, all real CAs open.
 
 ## P7-D service-name and direct-IP slice (2026-09-30)
 
@@ -457,7 +457,7 @@ P7-D service/IP proof is separate from this candidate: local source `8d639e4c36c
 
 ## Tracker recovery parent evidence checkpoint
 
-Exact committed `bdc2d96a18a00d0426ff0a2209662c5417c5e7e7` read-only/networkless Node22.14 inspection exited0 and found seven selected markers; no application runtime or Markdown preview ran. Real [tracker inspection PNG](../../docs/evidence/issue-45-pr06-tracker/tracker-inspection.png),1600×1500/152003bytes/SHA`c4f39f73ef3c51790ca5d3a1cb31292e8f4f3cd6861d1e65ba0e6638eb59c072`, visually inspected/sanitized, records that tested checkpoint; later changes only record this proof/checklist and attach media. Initial entrypoint failure retained, direct Node command corrected. TR-C exact publication/CI/human request remains pending; all real CA1–CA8 open.
+Exact committed `bdc2d96a18a00d0426ff0a2209662c5417c5e7e7` read-only/networkless Node22.14 inspection exited0 and found seven selected markers; no application runtime or Markdown preview ran. Real [tracker inspection PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr06-tracker/tracker-inspection.png),1600×1500/152003bytes/SHA`c4f39f73ef3c51790ca5d3a1cb31292e8f4f3cd6861d1e65ba0e6638eb59c072`, visually inspected/sanitized, records that tested checkpoint; later changes only record this proof/checklist and attach media. Initial entrypoint failure retained, direct Node command corrected. TR-C exact publication/CI/human request remains pending; all real CA1–CA8 open.
 
 ## Tracker recovery public candidate checkpoint
 
@@ -469,7 +469,7 @@ Parent preserved complete service/IP source/tests/runbook/report/task in local `
 
 ## P7-D restacked parent verification and capture
 
-Exact committed66ff3d87f5deeb1eba9c86c5800f4cd2f836b647 independently passed cached Node22.14 networknone256MiB Docker syntax4files and7/7(4direct+3gateway),no skips; source8d639/test205885 unchanged. Real [P7-D PNG](../../docs/evidence/issue-45-pr06/service-ip.png),1600×2100/252193bytes/SHA`2f42b09e81780d16ff9e8565d34720c31f0fbd8099d2d2122bededc12ba16a7f`, inspected/sanitized; actual committed output excerpt, not full/liveboundary. P7-D-C publication/exactCI/humanrequest pending. All real CA1–CA8 and P7-E remain open.
+Exact committed66ff3d87f5deeb1eba9c86c5800f4cd2f836b647 independently passed cached Node22.14 networknone256MiB Docker syntax4files and7/7(4direct+3gateway),no skips; source8d639/test205885 unchanged. Real [P7-D PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr06/service-ip.png),1600×2100/252193bytes/SHA`2f42b09e81780d16ff9e8565d34720c31f0fbd8099d2d2122bededc12ba16a7f`, inspected/sanitized; actual committed output excerpt, not full/liveboundary. P7-D-C publication/exactCI/humanrequest pending. All real CA1–CA8 and P7-E remain open.
 
 ## P7-D public candidate and parent prerequisite CI checkpoint
 

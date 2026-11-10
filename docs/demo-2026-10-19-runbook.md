@@ -139,8 +139,8 @@ python3 scripts/otel_ec2.py down                                    # or let the
 
 Executed 2026-10-19 11:42Z-13:11Z by the maintainer's rehearsal session, through the real console
 (Playwright in the repository e2e image, `--network host`, as demo-human), with each state
-transition confirmed through the API. Evidence: [docs/evidence/demo-2026-10-19/](evidence/demo-2026-10-19/)
-and the two #691 captures in [docs/evidence/issue-672/](evidence/issue-672/).
+transition confirmed through the API. Evidence: [docs/evidence/demo-2026-10-19/](https://github.com/creep1ng/sre-agent/tree/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/demo-2026-10-19)
+and the two #691 captures in [docs/evidence/issue-672/](https://github.com/creep1ng/sre-agent/tree/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-672).
 
 | Run | Code | Result |
 | --- | --- | --- |

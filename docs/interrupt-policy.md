@@ -88,4 +88,4 @@ shows the event: `/v1/alerts/{id}/triage`, `/v1/incidents/{id}/runs/{run}`, or
 
 `scripts/run_interrupt_policy_e2e.sh` (needs `scripts/bootstrap-worktree.py`) runs the real API,
 Postgres, gateway and fake Bot API, with the model and Grafana MCP scripted by
-`scripts/interrupt_policy_upstreams.py`. Evidence: `docs/evidence/issue-771/`.
+`scripts/interrupt_policy_upstreams.py`. Evidence: [`docs/evidence/issue-771/`](https://github.com/creep1ng/sre-agent/tree/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-771).

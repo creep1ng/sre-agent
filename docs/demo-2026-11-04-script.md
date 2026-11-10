@@ -5,7 +5,7 @@ incident with nobody at the console, the agent names the flag, a person approves
 executor turns the fault off, the agent verifies, a model drafts the postmortem and the person
 closes it. The decisions behind this path are in
 [the sixth and seventh rounds](product-direction-2026-10-28.md#sixth-round-of-decisions-2026-11-02-and-2026-11-03);
-the path's last recorded runs are in [the demo candidate](evidence/demo-candidate-2026-11-02/README.md).
+the path's last recorded runs are in [the demo candidate](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/demo-candidate-2026-11-02/README.md).
 
 Run `mkdir -p /tmp/demo-reset` once; the commands below keep their private files there.
 
@@ -135,7 +135,7 @@ reset` first.
 | # | Do | Expect | Plan B |
 | --- | --- | --- | --- |
 | 1 | Open `http://127.0.0.1:$WEB_PORT/app/acciones`. | `checkout · flag.set` with `flag ∈ {paymentFailure, paymentUnreachable}` and `variant = off`: nothing else may run, and nothing runs without approval. | |
-| 2 | `python3 scripts/otel_ec2.py fail` (`paymentUnreachable`). Close the console. | On the store, Place Order leaves you on the cart; the Demo Dashboard, `/grafana/d/W2gX2zHVk?var-service=checkout`, shows checkout's errors. Grafana's rule fires and the incident opens with nobody at the console; on 2026-10-31 that took 103.5 s and 164.9 s after `paymentFailure` ([record](evidence/issue-765/ec2-paymentfailure.json)). | No incident: check that both loops run (the alert relay is `$MCP_PORT + 2`), then Grafana's Alerting → Alert rules. |
+| 2 | `python3 scripts/otel_ec2.py fail` (`paymentUnreachable`). Close the console. | On the store, Place Order leaves you on the cart; the Demo Dashboard, `/grafana/d/W2gX2zHVk?var-service=checkout`, shows checkout's errors. Grafana's rule fires and the incident opens with nobody at the console; on 2026-10-31 that took 103.5 s and 164.9 s after `paymentFailure` ([record](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-765/ec2-paymentfailure.json)). | No incident: check that both loops run (the alert relay is `$MCP_PORT + 2`), then Grafana's Alerting → Alert rules. |
 | 3 | Open the inbox, `/app/`, then the incident. | The agent's title (for example «Fallan los cobros en checkout») and its hypothesis with the evidence it measured. | Run stopped without a proposal: «Reintentar la investigación» on the incident page. |
 | 4 | Telegram. | One decision message: proposal `flag.set paymentUnreachable=off` on `checkout`, with «Aprobar»; the same proposal in the inbox, in amber. | A wrong flag is refused and the run measures again (#996). No message: approve from the inbox. |
 | 5 | Tap «Aprobar». | The message is edited: «Aprobada por … desde Telegram, HH:MM UTC.», buttons gone. The incident page shows the receipt, `paymentUnreachable` → `off`; the incident is verifying. | |

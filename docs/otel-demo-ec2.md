@@ -216,7 +216,7 @@ forwards 17801 to local port `--local-port + 2` and relays each delivery, body a
 `SRE_OTEL_MODE=aws`, `setup_sre.py` reads the same `alert-intake.env` from
 `DEMO_STATE_DIR` and gives the API the secret, so a firing rule opens the incident with
 nobody at the console. Measured on an instance on 2026-10-31
-([record](evidence/issue-765/ec2-paymentfailure.json)): a 20 min healthy watch fired
+([record](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-765/ec2-paymentfailure.json)): a 20 min healthy watch fired
 no rule; `paymentFailure` at 100% opened `payment` and `checkout` and dispatched both
 investigations 103.5 s and 164.9 s after the flag, and both resolved 87 s after `reset`.
 To inject it, run `fail --flag paymentFailure` (#724; `fail` alone turns on

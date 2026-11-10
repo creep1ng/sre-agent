@@ -137,7 +137,7 @@ docker compose --project-directory "$PWD" --env-file .env --env-file .env.worktr
 
 Use the existing harness image or an independently authorized harness build;
 this stage reused the cached image without building. See the P3
-[controlled evidence](evidence/issue-45-pr02/report.md). Known-ID invocation,
+[controlled evidence](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr02/report.md). Known-ID invocation,
 upstream counters and cycle verification remain pending.
 
 ## P4: controlled metric/log smoke queries
@@ -163,7 +163,7 @@ docker run --pull never --network none --rm \
   node --test /source/tests/test_demo_mcp_gateway_probe.mjs
 ```
 
-See the [P4 controlled evidence report](evidence/issue-45-pr03/report.md).
+See the [P4 controlled evidence report](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-45-pr03/report.md).
 Live Grafana/MCP behavior, provider credentials, an independent counter, full
 redaction, network isolation and all CA1–CA8 remain unverified.
 

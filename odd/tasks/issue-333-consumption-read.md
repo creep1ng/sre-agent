@@ -102,7 +102,7 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
 - U333-9: 103 seed/migration/readiness/control/response regressions passed in
   33.87s; usage audit-before-release, failure suppression, denial cause and Bearer
   challenge also passed in the 48-test run. No historical fixes were reapplied.
-- Local evidence and all-eight-thread ledger: [residual review](../../docs/evidence/issue-333-residual-review.md).
+- Local evidence and all-eight-thread ledger: [residual review](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-333-residual-review.md).
   Actual FastAPI/SQL captures and visually inspected Chromium screenshot are ready
   for parent verification; capture rerun passed 2 tests (42 deselected, 7.00s).
   Independent verification, publication, hosted CI and human acceptance remain pending.
@@ -127,7 +127,7 @@ review request. Local, controlled-provider and hosted evidence stay distinct.
   schema/semantic checks had 16 failed / 11 passed. Focused schema GREEN: 27 passed.
   Final runtime/usage/audit: 74 passed; full tooling: 123 passed; all ten immutable
   releases validate; all 194 published 2.4.0 file hashes are unchanged. Ruff and
-  whitespace checks pass. [Invariant evidence](../../docs/evidence/issue-333-contract-invariants.md).
+  whitespace checks pass. [Invariant evidence](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-333-contract-invariants.md).
 - Runtime identity is restored; reconcile the full Engram mirror before commit.
   Future delegated agents use the current user-selected GPT-6 Luna high profile.
 

@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
  * The web proxy's / serves the Midnight landing (#870): Spanish or English, remembered, with
  * every asset served by the proxy itself. «Abrir la consola» opens /app/. The previous console
  * keeps the addresses /app does not replace yet, and the ones it does replace redirect there.
- * Screenshots land in e2e/artifacts/landing; docs/evidence/issue-870/landing keeps a copy.
+ * Screenshots land in e2e/artifacts/landing, which git ignores.
  */
 
 const SHOTS = "e2e/artifacts/landing";

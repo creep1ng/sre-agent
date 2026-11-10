@@ -363,7 +363,7 @@ test.describe("incidente RC-2 contra la API real", () => {
     await page.waitForTimeout(17_000);
     expect(Date.parse((await page.locator("[data-meta=updated] time").getAttribute("datetime"))!)).toBe(before);
 
-    // Night and day follow the system theme; the screenshots go to docs/evidence/issue-870/incident.
+    // Night and day follow the system theme; the screenshots go to e2e/artifacts/incident-live.
     await page.evaluate(() => window.scrollTo(0, 0));
     for (const scheme of ["dark", "light"] as const) {
       await page.emulateMedia({ colorScheme: scheme });

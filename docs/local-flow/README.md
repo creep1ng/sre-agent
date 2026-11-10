@@ -198,7 +198,7 @@ dc --profile e2e run --build --rm --no-deps -e LOCAL_FLOW_DECIDE=telegram \
 
 ## Runs recorded
 
-Under `docs/evidence/local-flow/`, each with its screenshots and `local-flow.json`.
+Under [`docs/evidence/local-flow/`](https://github.com/creep1ng/sre-agent/tree/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/local-flow), each with its screenshots and `local-flow.json`.
 
 | Directory | Code | Model | Deploy recorded | Decided in | Result |
 | --- | --- | --- | --- | --- | --- |

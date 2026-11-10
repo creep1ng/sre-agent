@@ -1,12 +1,12 @@
 // Real evidence for issue #37 T1 (HU-OPS demo, Monday Oct 19): opens the console
 // war room against the REAL compose stack, starts the investigation of the
 // stamped incident with the demo-human operator, waits for the projected run
-// strip and captures docs/evidence/37-war-room-run-start.png.
+// strip and captures artifacts/37-war-room-run-start.png.
 //
 // Runs in the e2e container on the stack network, after scripts/seed_war_room_runs.py
 // seeded SEED_STAMP; DEMO_HUMAN_API_KEY comes from the e2e service environment:
 //   docker compose --profile e2e run --rm --no-deps -v ./scripts:/e2e/scripts:ro \
-//     -v ./docs/evidence:/e2e/docs/evidence -e PLAYWRIGHT_BASE_URL=http://web \
+//     -v ./artifacts:/e2e/artifacts -e PLAYWRIGHT_BASE_URL=http://web \
 //     -e SEED_STAMP=<stamp> e2e node scripts/capture_issue37_war_room_runs.mjs
 import { chromium } from "@playwright/test";
 import { connectConsole } from "../tests/browser/support/console-session.mjs";
@@ -37,7 +37,7 @@ try {
   const contentHeight = await page.evaluate(() => document.body.scrollHeight);
   await page.setViewportSize({ width: 1440, height: Math.min(contentHeight, 4000) });
   await page.waitForTimeout(200);
-  await page.screenshot({ path: "docs/evidence/37-war-room-run-start.png" });
+  await page.screenshot({ path: "artifacts/37-war-room-run-start.png" });
   const runId = await page.locator("#run-select").inputValue();
   const strip = (await page.locator("#run-state").textContent()) ?? "";
   console.log(

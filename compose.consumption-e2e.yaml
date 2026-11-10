@@ -6,7 +6,7 @@
 #   ... --profile consumption-e2e run --rm consumption-e2e
 # The summary goes to stdout and to a temporary file inside the container. To keep it, mount a
 # directory and point ARTIFACT_DIR at it:
-#   ... run --rm -v "$PWD/docs/evidence/issue-758:/artifacts" -e ARTIFACT_DIR=/artifacts consumption-e2e
+#   ... run --rm -v "$PWD/artifacts/issue-758:/artifacts" -e ARTIFACT_DIR=/artifacts consumption-e2e
 # CI runs it from scripts/run_real_journeys.sh incidents.
 services:
   api:
