@@ -49,7 +49,8 @@ Read [the team workflow](docs/team-workflow.md) before contributing and
   task's reported result. Clearly separate local tests from hosted CI evidence.
 - Every PR requesting acceptance needs an issue, scope, tested/base SHA, environment,
   containerized reproduction commands, actual/expected results, a screenshot and human
-  review. Video is optional only with the documented media-storage deferral. The PR's
+  review. Screenshots and videos are attached to the PR, never committed (an agent leaves
+  the files at a reported path for the maintainer to attach); video is optional. The PR's
   `Reproduction commands` use `docker compose` or `docker run`;
   `uv`, `npm`, and similar tools run only inside those containers. The host supplies
   Git, Docker, and safe local configuration setup. This applies to PR demonstrations,

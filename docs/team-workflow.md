@@ -72,7 +72,7 @@ behavior, contract, or design decision. Write `direct` under `Delivery route` an
 
 **Complete direct example:** correct a wording typo in an existing operator guide. The issue states
 the exact replacement; no public behavior changes. Edit the guide, render or preview it, record
-the tested SHA and preview command, attach a screenshot showing the rendered result and either a real video link or the documented media-storage deferral,
+the tested SHA and preview command, attach a screenshot showing the rendered result and either a real video or the documented no-video sentence,
 then ask a reviewer to confirm the issue criterion.
 
 ### SDD route
@@ -87,7 +87,7 @@ Create the proposal, requirements/scenarios, design, and tasks in OpenSpec; have
 contract reviewed; implement the approved tasks; run applicable contract and integration checks;
 link every criterion to the resulting evidence; complete verification; then archive the accepted
 delta into the durable spec. The PR still requires the same screenshot, commands, SHA, and
-environment evidence as a direct change; video is optional only with the documented media-storage deferral.
+environment evidence as a direct change; video is optional; without one, write the documented no-video sentence.
 
 SDD is a route-selection tool, not paperwork for trivial edits. Direct work never skips evidence,
 security, or human review.
@@ -114,7 +114,7 @@ and validator behavior are in [PR evidence requirements](pr-evidence.md).
 | --- | --- |
 | Traceability | Linked issue; scope; covered and pending criteria; selected route and any OpenSpec links |
 | Reproduction | Tested commit SHA, base, environment, prerequisites, expected versus actual results, and containerized PR commands |
-| Demonstration | **One screenshot for every PR**, including documentation-only work; show the actual artifact, not an invented running service. A video is optional while storage is unavailable and must be either a real link or the documented deferral. |
+| Demonstration | **One screenshot for every PR**, including documentation-only work; show the actual artifact, not an invented running service. Screenshots and videos are attached to the PR, not committed ([where evidence lives](pr-evidence.md#where-evidence-lives)). A video is optional and must be either a real attachment or link, or the documented no-video sentence. |
 | Criterion mapping | Each acceptance criterion maps to a test, request/response, capture, file, or demonstration; label mocks, controlled integration, and live external-service evidence accurately |
 | Operational assessment | Risks, compatibility effects, and rollback procedure |
 | Sanitization | No secret, sensitive header, personal data, confidential content, or unsafe raw log is attached or linked |
@@ -127,7 +127,7 @@ fixed line limit or require a size-exception label; the maintainer evaluates sco
 When a change grows beyond one reviewable PR (see the 400-line guidance in `AGENTS.md`), prefer a
 feature branch delivered as a stack of PRs managed with `gh stack` over a size exception.
 
-Automated validation can check field presence and references. It requires a real screenshot, and accepts only a real video link or the exact documented storage deferral; it cannot establish that media proves behavior. The human reviewer owns that judgement.
+Automated validation can check field presence and references. It requires a real screenshot, and accepts only a real video link or the exact documented no-video sentence; it cannot establish that media proves behavior. The human reviewer owns that judgement.
 
 ### Containerized PR reproduction
 
@@ -170,7 +170,7 @@ During onboarding, every contributor completes this exercise:
 1. Prepare a small issue-linked PR using only this guide and repository documentation.
 2. A different contributor checks out the recorded SHA, follows the stated prerequisites and
    commands, and independently reproduces the expected result.
-3. The reproducer reviews the criterion-to-evidence mapping, required screenshot, any linked video or its documented deferral, sanitization, and selected delivery route.
+3. The reproducer reviews the criterion-to-evidence mapping, required screenshot, any attached video or the no-video sentence, sanitization, and selected delivery route.
 4. Record gaps in the issue or PR and improve the shared documentation before declaring the
    onboarding exercise complete.
 

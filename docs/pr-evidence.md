@@ -1,7 +1,7 @@
 # Pull-request acceptance evidence
 
 Every PR submitted for acceptance, including documentation, infrastructure, contracts
-and tests-only changes, needs a screenshot and reproducible commands. Video is optional while media storage is unavailable: use a real HTTPS recording link or write exactly `Deferred: media storage unavailable; screenshot evidence is mandatory.`. Do not invent a URL. Use the repository template's exact English headings; HTML guidance comments are ignored.
+and tests-only changes, needs a screenshot and reproducible commands. Video is optional: attach a real recording, or write exactly `Not recorded; screenshot evidence is mandatory.`. Do not invent a URL. Use the repository template's exact English headings; HTML guidance comments are ignored.
 Drafts may be incomplete but cannot receive a passing `pr-governance` status.
 
 ## Author path
@@ -15,7 +15,7 @@ Drafts may be incomplete but cannot receive a passing `pr-governance` status.
    reproduction commands must invoke `docker compose` or `docker run`; `uv`, `npm`,
    `pytest`, and similar tools may appear only as commands executed inside the selected
    container.
-4. Link a real HTTPS screenshot. Optionally link a real HTTPS recording; while media storage is unavailable, use the exact documented deferral instead. Use an appropriate rendered artifact for documentation; do not invent a running server for a textual or contract change.
+4. Attach a real screenshot to the PR (see [Where evidence lives](#where-evidence-lives)). Optionally attach a real recording; without one, write the exact no-video sentence instead. Use an appropriate rendered artifact for documentation; do not invent a running server for a textual or contract change.
 5. Explain expected/actual results, remaining scope, compatibility and rollback.
    Sanitize all evidence, then declare exactly `Sanitized: yes` in Security.
 6. Obtain ordinary independent human review. CI does not prove semantic acceptance.
@@ -96,10 +96,30 @@ Unacceptable: only a test count, unrelated screenshot, example.com link,
 placeholder, invented SVG, generated capture, or a claimed live integration
 demonstrated with a fixture.
 
-Host screenshots in the repository: commit them under `docs/evidence/` (for example
-`docs/evidence/issue-720/`) and link them with a GitHub URL pinned to the full pushed commit SHA,
-such as `https://github.com/creep1ng/sre-agent/blob/` followed by the 40-character SHA, the path,
-and `?raw=true`. A SHA-pinned link stays immutable after later pushes.
+## Where evidence lives
+
+Maintainer decision (2026-11-09): evidence for new PRs, screenshots and videos, is attached to
+the PR body or to a PR comment, not committed. Dragging a file into the editor makes GitHub
+insert an `<img src="https://github.com/user-attachments/assets/…">` tag for an image and a bare
+`https://github.com/user-attachments/…` URL for a video; leave either as GitHub wrote it. GitHub
+accepts images, and `.mp4`, `.mov` and `.webm` videos up to 10 MB on the free plan and 100 MB on
+paid plans ([attaching files](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files)).
+Evidence that is neither image nor video (JSON, TXT, SQL, logs) goes as an attached file in a PR
+comment (`.json`, `.txt`, `.log`, `.sql`, `.md`, `.csv`, `.zip`, `.gz`, up to 25 MB), or as text
+inside a `<details>` block of the PR body.
+
+The repository is public, and so are its attachments: anyone can open them without signing in.
+The sanitization rule below applies to them in full.
+
+An agent cannot upload attachments through `gh` or the REST API. When an agent prepares a PR, it
+leaves each file at a path it reports, fills every other section, and the maintainer attaches
+the files by hand.
+
+E2E runs and capture scripts write to directories git ignores (`artifacts/` at the root,
+`web/incident-console/e2e/artifacts/`); attach what a PR needs from there. `docs/evidence/` left
+git in #1018 and `.gitignore` keeps it out. Evidence committed before then opens on GitHub at
+[`0cb2ad44`](https://github.com/creep1ng/sre-agent/tree/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence),
+and the maintainer keeps a local copy of that tree with its `SHA256SUMS`.
 
 Screenshots, any recordings, commands and artifacts must exclude API keys,
 Authorization headers, personal data, full prompts/outputs and sensitive request
@@ -125,9 +145,13 @@ proposal before asking for acceptance.
 ## What automation does and does not prove
 
 `pr-governance` rejects missing/duplicate sections, empty command blocks,
-placeholders, a missing screenshot HTTPS reference, a video that is neither an HTTPS reference nor the exact documented deferral, stale base SHA, unsupported delivery/evidence kinds, and incomplete size data. It never executes supplied
+placeholders, a missing screenshot HTTPS reference, a video that is neither an HTTPS reference nor the exact no-video sentence, stale base SHA, unsupported delivery/evidence kinds, and incomplete size data. It never executes supplied
 commands, downloads evidence, judges videos, or verifies that a named OpenSpec
-path really satisfies the issue. A human checks those claims and the DoD checklist.
+path really satisfies the issue. It reads GitHub's pasted `<img>` tag for a
+`github.com/user-attachments/assets/` image as that URL and ignores bare `<details>` and
+`<summary>` tags; any other tag still counts as a placeholder. Until the PRs opened before
+#1018 are closed, it also accepts the earlier sentence
+`Deferred: media storage unavailable; screenshot evidence is mandatory.`. A human checks those claims and the DoD checklist.
 
 ## Field formats the validator enforces
 

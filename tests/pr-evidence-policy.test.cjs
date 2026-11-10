@@ -7,7 +7,10 @@ const { run, validate } = require('../.github/governance/pr-evidence.cjs');
 const sha = 'a'.repeat(40);
 const tested = 'c'.repeat(40);
 const screenshot = 'https://github.com/creep1ng/sre-agent/issues/183';
-const deferredVideo = 'Deferred: media storage unavailable; screenshot evidence is mandatory.';
+const noVideo = 'Not recorded; screenshot evidence is mandatory.';
+const legacyNoVideo = 'Deferred: media storage unavailable; screenshot evidence is mandatory.';
+const attachment = 'https://github.com/user-attachments/assets/5f3c1a2e-8b7d-4c6a-9e1f-0a2b3c4d5e6f';
+const pasted = `<img width="1280" height="800" alt="Inbox at night" src="${attachment}" />`;
 
 function body(overrides = {}) {
   const fields = {
@@ -22,7 +25,7 @@ function body(overrides = {}) {
     'Reproduction commands': '```sh\ndocker run --rm alpine:3.21 true\n```',
     'Expected result': 'The fixture passes structural validation.',
     'Actual result': 'The fixture passed structural validation.',
-    Video: deferredVideo,
+    Video: noVideo,
     Screenshot: screenshot,
     'Evidence kind': 'rendered artifact',
     'Evidence freshness': 'Tested SHA is the candidate SHA.',
@@ -57,6 +60,26 @@ assert.deepEqual(validate(data({
   additions: 401,
 })), []);
 assert.match(errors(data({ additions: -1 })), /Size metadata is unavailable/);
+
+// What GitHub inserts when a file is attached: an <img> tag for an image, a bare URL for a video.
+assert.deepEqual(validate(data({ fields: { Screenshot: pasted, Video: attachment } })), []);
+assert.deepEqual(validate(data({ fields: { Screenshot: `<img src="${attachment}">` } })), []);
+assert.deepEqual(validate(data({ fields: { 'Acceptance evidence': `CA1: the inbox.\n\n${pasted}` } })), []);
+assert.deepEqual(validate(data({ fields: { Video: legacyNoVideo } })), []);
+for (const Screenshot of [
+  '<your capture>',
+  pasted.replace('https://', 'http://'),
+  pasted.replace('github.com', 'example.org'),
+  pasted.replace('github.com', 'github.com.example.org'),
+  `<img src="https://github.com/creep1ng/sre-agent/blob/${sha}/shot.png">`,
+  `${pasted} <your capture>`,
+]) {
+  assert.match(errors(data({ fields: { Screenshot } })), /Complete section: Screenshot/, Screenshot);
+}
+assert.match(errors(data({ fields: { Summary: 'Stamp <stamp> seeded.' } })), /Complete section: Summary/);
+assert.deepEqual(validate(data({ fields: { 'Actual result': '<details>\n<summary>SQL</summary>\n\n1 row\n</details>' } })), []);
+assert.match(errors(data({ fields: { 'Actual result': '<details open>\n1 row\n</details>' } })), /Complete section: Actual result/);
+assert.match(errors(data({ fields: { 'Actual result': '<details>\n<the rows>\n</details>' } })), /Complete section: Actual result/);
 
 function context() {
   return {
