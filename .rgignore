@@ -1,0 +1,14 @@
+# Historical material that stays versioned but out of an unfiltered `rg` (#1017).
+# `rg --no-ignore-dot` (or `--no-ignore`) searches it too.
+
+# Contract releases: only the release in force, the highest version in
+# schemas/releases.lock.json. Cutting a release moves this line to it.
+/schemas/releases/*
+!/schemas/releases/2.8.0/
+
+/docs/evidence/
+/docs/archive/
+/openspec/changes/archive/
+/odd/
+/scripts/archive/
+/compose/archive/

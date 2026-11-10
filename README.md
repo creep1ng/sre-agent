@@ -212,6 +212,9 @@ container mounts `schemas/` read-only, so write the lock from its output:
 docker compose --profile checks run --rm harness sh -c 'npm --prefix schemas/tooling run --silent lock:releases >&2 && cat schemas/releases.lock.json' > schemas/releases.lock.json.new && mv schemas/releases.lock.json.new schemas/releases.lock.json
 ```
 
+In the same commit, point the `!/schemas/releases/…/` line of `.rgignore` at the new release, so
+an unfiltered `rg` keeps showing the release in force and hides the earlier ones.
+
 To verify issue #13 only, run its HTTP behavior tests and pinned contract obligation:
 
 ```bash
