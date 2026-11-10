@@ -29,6 +29,10 @@ to the API in its own follow-up PR, using the map below.
   `new` and `triaging` count toward the headline; the card actions belong to the triage story.
 - **Mock mode.** Append `?mock` once per tab to run the simulator instead (`/app/?mock`). The flag
   is stored in `sessionStorage` and the query is removed. The two modes share the same UI shell.
+  Only a build with `CONSOLE_SIMULATOR=1` holds the simulator (`src/simulator/`): the e2e overlay
+  `compose.incident-console-e2e.yaml` and the demo overlay `compose.mcp.yaml` turn it on, and so
+  does `CONSOLE_SIMULATOR=1` in the environment of a `docker compose` build. The default build is
+  live only: `?mock` does nothing and the bundle has no simulator code.
 
 ## Run it
 
@@ -45,7 +49,7 @@ proxy forwards `/app/` to it (`docker/nginx.conf.template`). The proxy resolves 
 request, so `/` and `/api/` keep working when the console container is absent.
 
 - Browser journeys (Playwright 1.63, pinned image), through the proxy:
-  `HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose --profile e2e run --build --rm incident-console-e2e`.
+  `CONSOLE_SIMULATOR=1 HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose --profile e2e run --build --rm incident-console-e2e`.
   Screenshots (`screens/`, `design/`, `proxy/`, `live/`), videos and the HTML report land in
   `web/incident-console/e2e/artifacts/`. The journeys also check that no screen shows protocol
   details (`open_triage`, `run_`, `evt_`, «Versión esperada», …).

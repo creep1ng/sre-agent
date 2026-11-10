@@ -1,32 +1,11 @@
-import {
-  FlaskConicalIcon,
-  KeyRoundIcon,
-  LogOutIcon,
-  MonitorIcon,
-  MoonIcon,
-  RotateCcwIcon,
-  SirenIcon,
-  SunIcon,
-} from "lucide-react";
+import { KeyRoundIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme, type ThemePreference } from "@/hooks/use-theme";
 import { useLanguage, useT, type Language } from "@/i18n";
 import { useLive } from "@/lib/live";
-import { appMode } from "@/lib/mode";
-import { LIVE_SCENARIOS } from "@/simulator/scenarios";
-import { useStore } from "@/simulator/store";
+import { simulator } from "@/lib/simulator";
 import { cn } from "@/lib/utils";
 
 /** A segmented choice: every option stays visible, the current one is pressed. */
@@ -66,55 +45,8 @@ function Segmented<T extends string>({
   );
 }
 
-const ROW =
+export const ROW =
   "flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left text-sm text-[var(--text-2)] transition-colors outline-none hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
-
-/** The simulator's controls, only in mock mode. */
-function DemoScenario({ onDone }: { onDone: () => void }) {
-  const agentFailure = useStore((s) => s.settings.agentFailure);
-  const setAgentFailure = useStore((s) => s.setAgentFailure);
-  const spawnAlert = useStore((s) => s.spawnAlert);
-  const reset = useStore((s) => s.reset);
-  const navigate = useNavigate();
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className={ROW}>
-        <FlaskConicalIcon className="size-4" aria-hidden="true" /> Escenario de demostración
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="end" className="w-72">
-        <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">Simular una alerta nueva</DropdownMenuLabel>
-        {LIVE_SCENARIOS.map((scenario) => (
-          <DropdownMenuItem
-            key={scenario.key}
-            onSelect={() => {
-              const created = spawnAlert(scenario.key);
-              if (!created) toast.info("Esa alerta ya está en la bandeja o tiene un incidente abierto.");
-              onDone();
-              navigate("/");
-            }}
-          >
-            <SirenIcon /> {scenario.label}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuCheckboxItem checked={agentFailure} onCheckedChange={(value) => setAgentFailure(Boolean(value))}>
-          El agente falla al investigar
-        </DropdownMenuCheckboxItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={() => {
-            reset();
-            onDone();
-            navigate("/");
-            toast.success("Escenario reiniciado");
-          }}
-        >
-          <RotateCcwIcon /> Reiniciar escenario
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 function Action({ icon: Icon, onClick, children }: { icon: typeof SunIcon; onClick: () => void; children: ReactNode }) {
   return (
@@ -135,7 +67,7 @@ export function AccountMenu({ onConnect, folded = false }: { onConnect: () => vo
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const t = useT("shell");
-  const live = appMode === "live";
+  const live = !simulator;
   const name = live ? t("account.apiSession") : "demo-human";
 
   return (
@@ -175,8 +107,8 @@ export function AccountMenu({ onConnect, folded = false }: { onConnect: () => vo
           ]}
         />
         <div className="-mx-2 border-t border-border pt-1.5">
-          {!live ? (
-            <DemoScenario onDone={() => setOpen(false)} />
+          {simulator ? (
+            <simulator.DemoScenario onDone={() => setOpen(false)} />
           ) : token ? (
             <Action
               icon={LogOutIcon}

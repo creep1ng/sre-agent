@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Measure the EP-14 code-quality indicators I01-I35 of a full git checkout (#1016).
+"""Measure the EP-14 code-quality indicators I01-I36 of a full git checkout (#1016).
 
 Usage: quality_indicators.py [REPO] [--json]. Definitions, baselines and targets are in
 docs/quality-indicators.md. The script needs git, ripgrep and a .git in REPO; when any of
 them fails, or a file list it measures comes out empty, it exits 1 and prints no indicator,
-so a broken tool can never pass for a met target.
+so a broken tool can never pass for a met target. I36 reads the console's build in
+web/incident-console/dist, which is not tracked: without it, I36 says "not measured".
 """
 
 import argparse
@@ -19,6 +20,7 @@ from pathlib import Path
 CORE = ("incident", "investigator", "triage", "chat", "bok", "governance", "executor", "mcp")
 LIVE = ("src/", "tests/", "web/", "agent/", "migrations/")
 WORKFLOW = "agent/workflows/incident-response.yaml"
+CONSOLE = "web/incident-console"
 
 
 class MeasurementError(Exception):
@@ -75,6 +77,34 @@ def is_authorization_partition(node: ast.AST) -> bool:
         and node.func.value.id == "authorization"
         and [ast.literal_eval(arg) for arg in node.args if isinstance(arg, ast.Constant)] == [" "]
     )
+
+
+def bundled_scenario_strings() -> str:
+    """How many string literals of the console's scenarios.ts appear in its built JavaScript."""
+    scenarios = required(
+        f"git ls-files {CONSOLE}/src/**/scenarios.ts", git_files(f"{CONSOLE}/src/**/scenarios.ts")
+    )
+    # Comments, template literals and single-quoted strings are read past, not counted. Long
+    # literals only: short ones ("payments", "Tasa de error") also live in other modules.
+    token = re.compile(
+        r"//[^\n]*|/\*.*?\*/|`(?:[^`\\]|\\.)*`|'(?:[^'\\\n]|\\.)*'|\"((?:[^\"\\\n]|\\.)*)\"", re.S
+    )
+    strings = {
+        match[1]
+        for path in scenarios
+        for match in token.finditer(Path(path).read_text())
+        if match[1] and len(match[1]) >= 20 and "\\" not in match[1]
+    }
+    required(f"string literals in {' '.join(scenarios)}", sorted(strings))
+    bundle = sorted(Path(f"{CONSOLE}/dist").rglob("*.js"))
+    if not bundle:
+        return f"not measured (no {CONSOLE}/dist/**/*.js; build the console first)"
+    escape = re.compile(r"\\u\{([0-9a-fA-F]+)\}|\\u([0-9a-fA-F]{4})|\\x([0-9a-fA-F]{2})")
+    text = "".join(
+        escape.sub(lambda m: chr(int(m.group(1) or m.group(2) or m.group(3), 16)), p.read_text())
+        for p in bundle
+    )
+    return f"{sum(literal in text for literal in strings)} of {len(strings)}"
 
 
 def measure() -> dict[str, object]:
@@ -213,6 +243,9 @@ def measure() -> dict[str, object]:
     store_lines = store.read_text().count("\n") if store.exists() else "absent"
     scenarios = Path("web/incident-console/src/lib/scenarios.ts").exists()
     out["I35 web store.ts lines / scenarios.ts in src/lib"] = f"{store_lines} / {scenarios}"
+    out[f"I36 scenarios.ts strings in the console bundle ({CONSOLE}/dist)"] = (
+        bundled_scenario_strings()
+    )
     dirty = bool(run("git", "status", "--porcelain"))
     return {"commit": run("git", "rev-parse", "HEAD")[0], "dirty": dirty, "indicators": out}
 

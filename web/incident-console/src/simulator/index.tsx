@@ -1,8 +1,8 @@
 /*
  * The scenario simulator of the console (mock mode): an in-browser backend that plays the
  * agent through the scripted OpenTelemetry demo failures, and the screens that read it. It is
- * loaded by src/lib/simulator.ts in a tab opened with `?mock`; production code reaches it only
- * through that module.
+ * loaded by src/lib/simulator.ts only in a build with CONSOLE_SIMULATOR=1 and a tab opened with
+ * `?mock`; production code never imports this directory.
  */
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { setClock } from "@/hooks/use-now";
 import { subscribeNotices, useStore } from "./store";
 
+export { DemoScenario } from "./demo-scenario";
 export { InboxPage } from "./inbox-page";
 export { IncidentPage } from "./incident-page";
 export { IncidentsPage } from "./incidents-page";

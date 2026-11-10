@@ -1,5 +1,14 @@
-import * as simulated from "@/simulator";
 import { appMode } from "./mode";
 
-/** The scenario simulator (`src/simulator/`) in mock mode, `null` in live mode. */
-export const simulator = appMode === "mock" ? simulated : null;
+type Simulator = typeof import("@/simulator");
+
+/**
+ * The scenario simulator (`src/simulator/`), loaded before the first render in mock mode and
+ * `null` otherwise. Only a build with `CONSOLE_SIMULATOR=1` holds it: without the variable the
+ * import below is dead code and the bundle has no simulator chunk.
+ */
+export let simulator: Simulator | null = null;
+
+export async function loadSimulator(): Promise<void> {
+  if (__CONSOLE_SIMULATOR__ && appMode === "mock") simulator = await import("@/simulator");
+}

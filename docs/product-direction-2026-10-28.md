@@ -250,6 +250,7 @@ After a read-only code-quality audit of `main` at `0cb2ad44`, the maintainer ope
 | The console's scenario simulator exists only behind a build variable, on in the demo compose and off in production. | The console is a client of the engine, not a second simulated engine. | 5 | #1025 |
 | Milestones: cheap enabling work (#1016, #1017, #1018, #1020, #1024) in M2, the large refactors and #1019, #1025 in M3. They move if they do not fit: no academic release is left to honour. | No strict release commitments remain after the 2026-11-04 demo. | — | #1015 |
 | Every issue of the epic carries quality indicators with a baseline measured at `0cb2ad44` and a target, measured by a versioned script so they can be checked after implementation. | We claim only what we measured. | 6 | #1016 |
+| An indicator that a story declares outside I01–I35 is added to the versioned script by that story's PR, with its row in [quality indicators](quality-indicators.md). | A number stated by hand in a PR cannot be measured again the same way. | 6 | #1022, #1023, #1025 |
 
 ## Administration plane decisions (2026-11-02 and 2026-11-03)
 
