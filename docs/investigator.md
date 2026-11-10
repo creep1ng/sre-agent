@@ -2,7 +2,7 @@
 
 The bounded investigation loop of issue #185, decided in
 [ADR-007](adrs/ADR-007-harness.md) and specified in
-`openspec/changes/issue-185-investigator-harness/`. It lives in
+`openspec/changes/archive/2026-11-10-issue-185-investigator-harness/`. It lives in
 `src/sre_agent/investigator/`, takes an incident context and an objective, talks to the
 gateway through governed Responses and MCP endpoints, and returns a validated result.
 The loop remains stateless; on an `investigate` run start, the application composition
