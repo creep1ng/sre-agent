@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useNow } from "@/hooks/use-now";
 import { formatDayTime } from "@/lib/format";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { Alert, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SEVERITIES, SEVERITY, TONE_CLASSES } from "@/lib/vocabulary";

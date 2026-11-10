@@ -1,14 +1,12 @@
-import { useEffect, useRef } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
-import { toast } from "sonner";
+import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AppShell } from "@/components/layout/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { setClock } from "@/hooks/use-now";
 import { useApplyTheme } from "@/hooks/use-theme";
 import { resumePolling, stopPolling } from "@/lib/live";
-import { appMode } from "@/lib/mode";
-import { subscribeNotices, useStore } from "@/lib/store";
+import { simulator } from "@/lib/simulator";
 import { CatalogPage } from "@/pages/catalog-page";
 import { AuditPage } from "@/features/admin/audit-page";
 import { ConsumptionPage } from "@/features/admin/consumption-page";
@@ -17,27 +15,8 @@ import { KnowledgePage } from "@/features/admin/knowledge-page";
 import { PermissionsPage } from "@/features/admin/permissions-page";
 import { ResourcesPage } from "@/features/admin/resources-page";
 import { SkillsPage } from "@/features/admin/skills-page";
-import { InboxPage } from "@/pages/inbox-page";
-import { IncidentPage } from "@/pages/incident-page";
-import { IncidentsPage } from "@/pages/incidents-page";
-
-/** Drives the mock backend: the agent advances on its own while the app is open. */
-function Simulator() {
-  useEffect(() => {
-    let lastSecond = 0;
-    const id = window.setInterval(() => {
-      const now = Date.now();
-      useStore.getState().tick(now);
-      const second = Math.floor(now / 1000);
-      if (second !== lastSecond) {
-        lastSecond = second;
-        setClock(now);
-      }
-    }, 400);
-    return () => window.clearInterval(id);
-  }, []);
-  return null;
-}
+import { LiveInbox } from "@/features/inbox/live-inbox";
+import { LiveIncidentPage } from "@/pages/live-incident-page";
 
 /** Keeps relative times fresh without the mock simulator. */
 function Clock() {
@@ -57,49 +36,18 @@ function LivePoller() {
   return <Clock />;
 }
 
-function Notifier() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const pathRef = useRef(location.pathname);
-  pathRef.current = location.pathname;
-  useEffect(
-    () =>
-      subscribeNotices((notice) => {
-        if (notice.href && notice.href !== "/" && notice.href === pathRef.current) return;
-        const show =
-          notice.tone === "success"
-            ? toast.success
-            : notice.tone === "warning"
-              ? toast.warning
-              : notice.tone === "error"
-                ? toast.error
-                : toast.info;
-        show(notice.title, {
-          description: notice.description,
-          duration: 7000,
-          action:
-            notice.href && notice.actionLabel
-              ? { label: notice.actionLabel, onClick: () => navigate(notice.href!) }
-              : undefined,
-        });
-      }),
-    [navigate],
-  );
-  return null;
-}
-
 export function App() {
   useApplyTheme();
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <TooltipProvider delayDuration={250}>
-        {appMode === "mock" ? <Simulator /> : <LivePoller />}
-        <Notifier />
+        {simulator ? <simulator.Ticker /> : <LivePoller />}
         <Routes>
           <Route element={<AppShell />}>
-            <Route index element={<InboxPage />} />
-            <Route path="incidentes" element={<IncidentsPage />} />
-            <Route path="incidentes/:incidentId" element={<IncidentPage />} />
+            <Route index element={simulator ? <simulator.InboxPage /> : <LiveInbox />} />
+            {/* The incident list reads the simulator only; live mode sends its address to the inbox. */}
+            <Route path="incidentes" element={simulator ? <simulator.IncidentsPage /> : <Navigate to="/" replace />} />
+            <Route path="incidentes/:incidentId" element={simulator ? <simulator.IncidentPage /> : <LiveIncidentPage />} />
             <Route path="acciones" element={<CatalogPage />} />
             <Route path="admin">
               <Route index element={<Navigate to="identidades" replace />} />

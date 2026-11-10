@@ -10,21 +10,19 @@ import {
 } from "@/components/ui/command";
 import { useT } from "@/i18n";
 import { ADMIN_NAV } from "./sidebar";
-import { appMode } from "@/lib/mode";
 import { incidentStatus } from "@/lib/status";
-import { useStore } from "@/lib/store";
+import { simulator } from "@/lib/simulator";
 import { SEVERITY } from "@/lib/vocabulary";
 
 export function CommandMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const navigate = useNavigate();
   const t = useT("shell");
   const admin = useT("admin");
-  const storeIncidents = useStore((s) => s.incidents);
-  const alerts = useStore((s) => s.alerts);
   // Seeded alerts and incidents belong to the simulator, not to the live console.
-  const mock = appMode === "mock";
-  const newAlerts = mock ? alerts.filter((alert) => alert.status === "new") : [];
-  const incidents = mock ? storeIncidents : [];
+  const incidents = simulator?.useStore((s) => s.incidents) ?? [];
+  const alerts = simulator?.useStore((s) => s.alerts) ?? [];
+  const mock = Boolean(simulator);
+  const newAlerts = alerts.filter((alert) => alert.status === "new");
 
   const go = (to: string) => {
     onOpenChange(false);

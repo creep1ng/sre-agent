@@ -25,8 +25,8 @@ import { useTheme, type ThemePreference } from "@/hooks/use-theme";
 import { useLanguage, useT, type Language } from "@/i18n";
 import { useLive } from "@/lib/live";
 import { appMode } from "@/lib/mode";
-import { LIVE_SCENARIOS } from "@/lib/scenarios";
-import { useStore } from "@/lib/store";
+import { LIVE_SCENARIOS } from "@/simulator/scenarios";
+import { useStore } from "@/simulator/store";
 import { cn } from "@/lib/utils";
 
 /** A segmented choice: every option stays visible, the current one is pressed. */

@@ -5,7 +5,7 @@ import { ToneBadge } from "@/components/badges";
 import { Button } from "@/components/ui/button";
 import { useNow } from "@/hooks/use-now";
 import { formatClock, plural } from "@/lib/format";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { AgentJob, Incident } from "@/lib/types";
 import { SOURCE_LABEL } from "@/lib/vocabulary";
 import { FindingRow, SourceIcon } from "./findings";

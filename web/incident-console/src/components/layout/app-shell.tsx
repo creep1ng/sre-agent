@@ -8,17 +8,16 @@ import { useFolded } from "@/hooks/use-folded";
 import { useNow } from "@/hooks/use-now";
 import { ConnectDialog } from "@/features/inbox/connect-dialog";
 import { useT } from "@/i18n";
-import { appMode } from "@/lib/mode";
-import { useInbox, useLiveInbox } from "@/lib/selectors";
+import { useLiveInbox } from "@/lib/selectors";
+import { simulator } from "@/lib/simulator";
 import { cn } from "@/lib/utils";
 import { CommandMenu } from "./command-menu";
 import { SIDEBAR_ID, Sidebar } from "./sidebar";
 
 export function AppShell() {
   const now = useNow();
-  const mockInbox = useInbox(now);
-  const liveInbox = useLiveInbox(now);
-  const inbox = appMode === "live" ? liveInbox : mockInbox;
+  // `simulator` is fixed before the first render, so the same hook runs on every render.
+  const inbox = (simulator?.useInbox ?? useLiveInbox)(now);
   const [menuOpen, setMenuOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);

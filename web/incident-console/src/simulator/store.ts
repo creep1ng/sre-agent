@@ -5,7 +5,7 @@
  */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { formatDuration } from "./format";
+import { formatDuration } from "@/lib/format";
 import { SCENARIOS, postmortemSteps } from "./scenarios";
 import type {
   AgentJob,
@@ -21,8 +21,8 @@ import type {
   Settings,
   Severity,
   TimelineEvent,
-} from "./types";
-import { SEVERITY, SOURCE_LABEL } from "./vocabulary";
+} from "@/lib/types";
+import { SEVERITY, SOURCE_LABEL } from "@/lib/vocabulary";
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;

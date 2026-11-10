@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Input } from "@/components/ui/input";
 import { useNow } from "@/hooks/use-now";
 import { formatDayLabel, formatTime } from "@/lib/format";
-import { useStore } from "@/lib/store";
+import { useStore } from "@/simulator/store";
 import type { Alert, Finding, Incident, Proposal, TimelineEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { RISK, VERDICT } from "@/lib/vocabulary";

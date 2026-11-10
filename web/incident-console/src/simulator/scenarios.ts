@@ -3,7 +3,7 @@
  * flag of the store (flagd) and the evidence the governed MCP tools return for it.
  * The texts show the target quality: Spanish, human, no ids.
  */
-import { formatDuration, formatTime } from "./format";
+import { formatDuration, formatTime } from "@/lib/format";
 import type {
   AgentStep,
   Alert,
@@ -15,7 +15,7 @@ import type {
   ScenarioKey,
   Severity,
   SignalSpec,
-} from "./types";
+} from "@/lib/types";
 
 export type ProposalDraft = ProposalDraftRef;
 

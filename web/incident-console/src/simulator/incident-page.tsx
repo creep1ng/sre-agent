@@ -10,11 +10,9 @@ import { ProposalPanel } from "@/features/incident/proposal-panel";
 import { RecoveryPanel } from "@/features/incident/recovery-panel";
 import { LifecycleStepper } from "@/features/incident/stepper";
 import { StoryRail } from "@/features/incident/story-panel";
-import { appMode } from "@/lib/mode";
-import { useIncident } from "@/lib/selectors";
-import { alertsOf, useStore } from "@/lib/store";
 import type { Alert, Incident } from "@/lib/types";
-import { LiveIncidentPage } from "./live-incident-page";
+import { useIncident } from "./selectors";
+import { alertsOf, useStore } from "./store";
 
 function nowPanel(incident: Incident, alert: Alert): { key: string; node: ReactNode } {
   switch (incident.state) {
@@ -36,12 +34,8 @@ function nowPanel(incident: Incident, alert: Alert): { key: string; node: ReactN
   }
 }
 
-export function IncidentPage() {
-  return appMode === "live" ? <LiveIncidentPage /> : <SimulatedIncidentPage />;
-}
-
 /** Mock mode: the in-browser simulator plays the whole lifecycle. */
-function SimulatedIncidentPage() {
+export function IncidentPage() {
   const { incidentId } = useParams();
   const incident = useIncident(incidentId);
   const allAlerts = useStore((s) => s.alerts);
