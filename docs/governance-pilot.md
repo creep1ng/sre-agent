@@ -68,7 +68,7 @@ not automatically closed.
 ## Required before acceptance
 
 - Publish reviewable work units through the approved-issue policy.
-- Capture a screenshot of the actual delivered result at its published SHA. Video is optional while media storage is unavailable; include a real link or the documented deferral, never a fabricated URL.
+- Capture a screenshot of the actual delivered result at its published SHA and attach it to the PR. Video is optional; attach a real recording or write the documented no-video sentence, never a fabricated URL.
 - Complete the hosted negative/positive scenarios in the rollout guide.
 - Have the maintainer judge the evidence, scope, and risk when deciding whether to merge.
 - Run the same diagnostics in hosted GitHub Actions after publication; local pass evidence does not establish a hosted check or merge protection.
