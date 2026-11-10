@@ -276,7 +276,7 @@ class IncidentRuntime:
             decided_at=now,
             run_id=run_id,
         )
-        payload = {"refused_command": "approve_mitigation", "reason_code": reason_code}
+        payload = {"refused_command": RunCommand.APPROVE_MITIGATION, "reason_code": reason_code}
         event = EventDraft(
             event_id=self._id_factory("evt"),
             kind="denial" if denial else "human_command",
@@ -376,7 +376,7 @@ class IncidentRuntime:
                 and run.state.get("current_state") == state
                 and run.state.get("status") in LIVE_RUN_STATUSES
                 # A denied run stored before #788 waits for `escalate`, which nothing accepts.
-                and run.state.get("pending_command") != "escalate"
+                and run.state.get("pending_command") != RunCommand.ESCALATE
             ):
                 raise InvalidTransitionError(f"run '{run_id}' is still live on this incident")
 
@@ -788,7 +788,7 @@ class IncidentRuntime:
                 status=RunStatus.AWAITING_HUMAN, pending_command=RunCommand.APPROVE_MITIGATION
             )
         elif transition.transition_id in RETURNS_TO_INVESTIGATION:
-            run.update(termination("needs_human", now))
+            run.update(termination(HarnessStatus.NEEDS_HUMAN, now))
         else:
             run.update(status=RunStatus.RUNNING, pending_command=None, terminated_reason=None)
         return incident, run

@@ -536,7 +536,7 @@ class InvestigationResult(_Strict):
     @model_validator(mode="after")
     def _status_matches_outcome(self) -> InvestigationResult:
         final = self.outcome is not None and not isinstance(self.outcome, RequestHuman)
-        if final != (self.status == "completed"):
+        if final != (self.status == HarnessStatus.COMPLETED):
             raise ValueError("only a completed result carries a final outcome, and it must")
         if isinstance(self.outcome, RequestHuman) and self.status != HarnessStatus.NEEDS_HUMAN:
             raise ValueError("a request for a human requires status needs_human")

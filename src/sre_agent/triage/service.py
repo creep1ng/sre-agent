@@ -57,6 +57,7 @@ from sre_agent.vocabulary import (
     TRIAGE_TRANSITIONS,
     IncidentState,
     RunObjective,
+    RunStatus,
     TransitionId,
     TriageStatus,
     is_identifier,
@@ -585,7 +586,7 @@ class TriageService:
         run_state = {
             "workflow_version": self._workflow.version,
             "current_state": IncidentState.TRIAGE,
-            "status": "running",
+            "status": RunStatus.RUNNING,
             "pending_command": None,
         }
         try:
@@ -611,7 +612,7 @@ class TriageService:
                     event_id=f"evt_{_digest(f'run-start-blocked:{digest}')[:24]}",
                     kind="run_start_blocked",
                     payload={
-                        "state": "active",
+                        "state": IncidentState.ACTIVE,
                         "reason_code": RUN_START_NOT_AUTHORIZED,
                         "request_id": None,
                     },

@@ -78,7 +78,7 @@ def resolve(request: HumanCommand) -> IncidentCommand:
         raise InvalidTransitionError(
             f"command '{request.command}' performs no state transition in this workflow version"
         )
-    if request.command == "propose_disposition":
+    if request.command == RunCommand.PROPOSE_DISPOSITION:
         transition_id = DISPOSITION_TRANSITIONS.get(request.disposition or "")
         if transition_id is None:
             raise InvalidTransitionError("propose_disposition requires a declared disposition")

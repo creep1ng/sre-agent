@@ -20,7 +20,14 @@ from sre_agent.incident.reasons import (
 )
 from sre_agent.incident.title import title_of
 from sre_agent.incident.workflow import IncidentWorkflow
-from sre_agent.vocabulary import RunStatus, TransitionId, is_identifier
+from sre_agent.vocabulary import (
+    HarnessStatus,
+    IncidentState,
+    RunCommand,
+    RunStatus,
+    TransitionId,
+    is_identifier,
+)
 
 RUN_ID_PATTERN = r"^run_[a-z0-9]{8,32}$"
 CURSOR_PATTERN = r"^seq:(-?\d+)$"
@@ -44,12 +51,16 @@ TRANSITION_SUMMARIES = {
 }
 # A run that ended without a terminal workflow state; a new run of the incident may retry.
 TERMINATED_SUMMARIES = {
-    "completed": "Investigation concluded; the run ended.",
-    "max_steps": "Investigation run ended: step budget exhausted; a new run may retry.",
-    "needs_human": "Investigation run ended: it needs a human; a new run may retry.",
-    "invalid_output": "Investigation run ended: invalid agent output; a new run may retry.",
-    "upstream_unavailable": "Investigation run ended: the model provider or an MCP tool "
-    "was unavailable; a new run may retry.",
+    HarnessStatus.COMPLETED: "Investigation concluded; the run ended.",
+    HarnessStatus.MAX_STEPS: "Investigation run ended: step budget exhausted; a new run may retry.",
+    HarnessStatus.NEEDS_HUMAN: "Investigation run ended: it needs a human; a new run may retry.",
+    HarnessStatus.INVALID_OUTPUT: (
+        "Investigation run ended: invalid agent output; a new run may retry."
+    ),
+    HarnessStatus.UPSTREAM_UNAVAILABLE: (
+        "Investigation run ended: the model provider or an MCP tool "
+        "was unavailable; a new run may retry."
+    ),
 }
 
 
@@ -190,7 +201,7 @@ def event_summary(payload: Any) -> str:
                 ended = f"{name} dispatch ended: {status}."
                 return f"{ended} Cause: {cause}" if cause else ended
         patch = payload.get("run_patch")
-        if isinstance(patch, dict) and patch.get("terminated_reason") == "denied":
+        if isinstance(patch, dict) and patch.get("terminated_reason") == HarnessStatus.DENIED:
             return (
                 "Authorization denied; an administrator must grant the capability, "
                 "then a new run may retry."
@@ -202,7 +213,7 @@ def event_summary(payload: Any) -> str:
         if action == "verify_mitigation" and isinstance(outcome, dict):
             recovered = "recovered" if outcome.get("passed") is True else "had not recovered"
             return f"Verification found the service {recovered}."
-        if action == "request_human" and payload.get("state") == "verifying":
+        if action == "request_human" and payload.get("state") == IncidentState.VERIFYING:
             return "Verification requested human review."
         summaries = {
             "propose_hypothesis": "Investigation proposed a hypothesis.",
@@ -213,7 +224,7 @@ def event_summary(payload: Any) -> str:
         if isinstance(action, str) and action in summaries:
             return summaries[action]
         cause = EXECUTION_CAUSES.get(str(payload.get("reason_code")))
-        if payload.get("refused_command") == "approve_mitigation" and cause:
+        if payload.get("refused_command") == RunCommand.APPROVE_MITIGATION and cause:
             return f"Approval not applied: {cause} The incident stays mitigating."
     return "Incident event recorded."
 
@@ -420,9 +431,12 @@ def project_list_item(
             "updated_at": utc_iso(run.updated_at),
         }
         command = latest["pending_command"]
-        if latest["status"] == "awaiting_human" and command in {"approve_mitigation", "escalate"}:
+        if latest["status"] == RunStatus.AWAITING_HUMAN and command in {
+            RunCommand.APPROVE_MITIGATION,
+            RunCommand.ESCALATE,
+        }:
             proposed = (
-                command == "approve_mitigation"
+                command == RunCommand.APPROVE_MITIGATION
                 and isinstance(strategy, dict)
                 and strategy.get("approval_status") == "pending"
             )
