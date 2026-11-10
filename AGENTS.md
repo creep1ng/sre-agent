@@ -78,9 +78,10 @@ or a green status with semantic acceptance or active merge protection.
 The terms as the code, `agent/workflows/incident-response.yaml` and `agent/schemas/` use them.
 
 - **Incident**: a declared problem with a service, identified by `incident_id`. It moves through
-  the states of the workflow (`detected` to `closed`) only by the transitions declared there.
-  Triage turns an alert into one (`triage_declare`), and the incident is the session from that
-  declaration to closure.
+  the workflow's incident states (`active` to `closed`) only by the transitions declared there.
+  An alert starts in `detected`; triage dismisses it, links it to an existing incident or
+  declares a new one (`triage_declare`), and the incident is the session from that declaration
+  to closure.
 - **Run**: one execution of the agent on an incident, identified by `run_id` (`run_…`). It starts
   with an objective (`triage`, `investigate`, `mitigate` or `postmortem` in the run-start request)
   and its status is `running`, `awaiting_human`, `completed` or `terminated`

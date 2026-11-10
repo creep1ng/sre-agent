@@ -3,6 +3,8 @@
 
 # Contract releases: only the release in force, the highest version in
 # schemas/releases.lock.json. Cutting a release moves this line to it.
+# CI and tests still read older releases (scripts/validate_run_api.py validates against
+# 2.0.0, for example): to trace what a validator or test reads, search with --no-ignore-dot.
 /schemas/releases/*
 !/schemas/releases/2.8.0/
 

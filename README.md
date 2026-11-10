@@ -175,6 +175,7 @@ database until an operator-approved migration or restore plan exists.
 | `schemas/` | Versioned contract authority and conformance tooling |
 | `web/incident-console/` | The incident console at `/app/`: alert inbox, incidents and administration ([README](web/incident-console/README.md)) |
 | `landing/` | The Midnight landing page served at `/` |
+| `design-system.html` | The design-system catalog, shipped by the web image and covered by `tests/browser/showcase.spec.js` |
 | `index.html`, `public/`, `styles/` | The previous console, at the addresses `/app/` has not replaced yet ([design](docs/design/ht-web-shell/ht-web-shell.md)) |
 | `scripts/` | Worktree, setup, demo, E2E and CI entry points; `scripts/archive/` keeps the historical ones |
 | `docs/` | Documentation, indexed in [docs/README.md](docs/README.md) |
