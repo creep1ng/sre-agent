@@ -9,7 +9,19 @@ const sections = [
   'Screenshot', 'Evidence kind', 'Evidence freshness', 'Risks and rollback', 'Security',
 ];
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const videoDeferral = 'Deferred: media storage unavailable; screenshot evidence is mandatory.';
+// The first sentence replaced the deferral when attachments became the media storage (#1018);
+// the deferral stays accepted while PRs opened before it are still open.
+const noVideo = ['Not recorded; screenshot evidence is mandatory.',
+  'Deferred: media storage unavailable; screenshot evidence is mandatory.'];
+// What GitHub pastes for an attached image reads as its URL; <details> and <summary> without
+// attributes fold text away. Any other tag still marks the section incomplete.
+const attachments = value => value
+  .replace(/<img\s(?:[a-z]+="[^"<>]*"\s*)*?src="(https:\/\/github\.com\/user-attachments\/assets\/[\w-]+)"(?:\s*[a-z]+="[^"<>]*")*\s*\/?>/gi, '$1')
+  .replace(/<\/?(?:details|summary)>/gi, '');
+// Text evidence folded in a bare <details> block is data: inside its code fences < and > are
+// not placeholders. Commands stay strict, so an angle-bracket variable still fails them.
+const folded = value => value.replace(/<details>[\s\S]*?<\/details>/gi,
+  block => block.replace(/```[\s\S]*?```/g, fence => fence.replace(/[<>]/g, ' ')));
 const clean = value => value
   .replace(/\r\n?/g, '\n')
   .replace(/<!--[\s\S]*?-->/g, '')
@@ -18,7 +30,8 @@ function parse(body) {
   const result = {};
   for (const match of clean(body || '').matchAll(/^## ([^\n]+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm)) {
     if (Object.hasOwn(result, match[1])) throw new Error('Duplicate PR section');
-    result[match[1]] = clean(match[2]);
+    const text = clean(match[2]);
+    result[match[1]] = attachments(match[1] === 'Reproduction commands' ? text : folded(text)).trim();
   }
   return result;
 }
@@ -70,8 +83,8 @@ function validate(data) {
   for (const name of ['Screenshot', 'Acceptance evidence']) {
     if (!reference(fields[name])) errors.push(`${name} requires a non-placeholder HTTPS reference`);
   }
-  if (!reference(fields.Video) && fields.Video !== videoDeferral) {
-    errors.push('Video must be an HTTPS reference or the documented storage deferral');
+  if (!reference(fields.Video) && !noVideo.includes(fields.Video)) {
+    errors.push('Video must be an HTTPS reference or the documented no-video sentence');
   }
   if (!/```(?:sh|bash|shell)\n[\s\S]*?\S[\s\S]*?\n```/.test(fields['Reproduction commands'] || '')) {
     errors.push('Reproduction commands require a nonempty sh/bash/shell code block');

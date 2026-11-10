@@ -1,6 +1,0 @@
-Running 4 tests using 1 worker
-  ✓  1 e2e/incident-live.spec.ts:95:3 › incidente RC-2 contra la API real › las afirmaciones de la hipótesis muestran su evidencia y llevan a su paso; aprobar envía el comando gobernado (20.8s)
-  ✓  2 e2e/incident-live.spec.ts:171:3 › incidente RC-2 contra la API real › rechazar envía reject_mitigation y la historia lo registra (36.5s)
-  ✓  3 e2e/incident-live.spec.ts:188:3 › incidente RC-2 contra la API real › una decisión tomada en otro canal aparece con quién decidió, en inglés (31.3s)
-  ✓  4 e2e/incident-live.spec.ts:228:3 › incidente RC-2 contra la API real › un despacho fallido muestra su causa y solo una persona lo reintenta (23.0s)
-  4 passed (1.9m)

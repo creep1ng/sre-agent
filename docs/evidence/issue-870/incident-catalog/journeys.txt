@@ -1,9 +1,0 @@
-Running 6 tests using 1 worker
-  ✓  1 e2e/incident-live.spec.ts:154:3 › incidente RC-2 contra la API real › las afirmaciones de la hipótesis muestran su evidencia y llevan a su paso; aprobar envía el comando gobernado (40.7s)
-  ✓  2 e2e/incident-live.spec.ts:253:3 › incidente RC-2 contra la API real › rechazar envía reject_mitigation y la historia lo registra (20.3s)
-  ✓  3 e2e/incident-live.spec.ts:289:3 › incidente RC-2 contra la API real › una decisión tomada en otro canal aparece con quién decidió, en inglés (31.7s)
-  ✓  4 e2e/incident-live.spec.ts:334:3 › incidente RC-2 contra la API real › tras aprobar, la verificación cuenta cuándo Grafana dejó de alertar (49.8s)
-  ✓  5 e2e/incident-live.spec.ts:388:3 › incidente RC-2 contra la API real › la propuesta nombra su operación del catálogo; una aprobación rechazada no mueve nada y la que corre deja su recibo (38.3s)
-  ✓  6 e2e/incident-live.spec.ts:470:3 › incidente RC-2 contra la API real › un despacho fallido muestra su causa y solo una persona lo reintenta (21.5s)
-  6 passed (3.4m)
-incident console journeys PASS [6 passed]

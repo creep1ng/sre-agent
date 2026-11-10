@@ -1,3 +1,0 @@
-mcp seed converged
-seed converged
-demo permissions converged; restricted identity unchanged

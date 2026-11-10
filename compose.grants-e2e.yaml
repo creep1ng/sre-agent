@@ -7,14 +7,18 @@
 #   ... --profile grants-e2e run --rm grants-e2e after-seed
 #   ... run --rm -T seed sh -c '{ ...the same three commands...; } > /artifacts/seed-rerun-2.txt 2>&1'
 #   ... --profile grants-e2e run --rm grants-e2e second-seed
-# The summary lands in artifacts/issue-759/, which git ignores: create it first with mkdir -p, or
-# Docker creates it as root (GRANTS_E2E_ARTIFACTS overrides it).
+# The summary lands in artifacts/issue-759/, which git ignores (GRANTS_E2E_ARTIFACTS overrides
+# it). Create it first with mkdir -p: the run stops if it is missing, so Docker never creates it
+# as root.
 services:
   seed:
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     volumes:
       - ./scripts:/e2e:ro
-      - ${GRANTS_E2E_ARTIFACTS:-./artifacts/issue-759}:/artifacts
+      - type: bind
+        source: ${GRANTS_E2E_ARTIFACTS:-./artifacts/issue-759}
+        target: /artifacts
+        bind: {create_host_path: false}
     environment: {AUDIT_HMAC_KEY: "${AUDIT_HMAC_KEY:?AUDIT_HMAC_KEY is required}"}
 
   grants-e2e:
@@ -31,7 +35,10 @@ services:
       ARTIFACT_DIR: /artifacts
     volumes:
       - ./scripts/grant_regrant_e2e.py:/e2e/grant_regrant_e2e.py:ro
-      - ${GRANTS_E2E_ARTIFACTS:-./artifacts/issue-759}:/artifacts
+      - type: bind
+        source: ${GRANTS_E2E_ARTIFACTS:-./artifacts/issue-759}
+        target: /artifacts
+        bind: {create_host_path: false}
     depends_on:
       api: {condition: service_healthy}
     networks: [runtime]

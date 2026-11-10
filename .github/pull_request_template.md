@@ -34,12 +34,12 @@ Document host Git/Docker/configuration prerequisites under Environment, not as h
 <!-- Describe behavior, not only test counts. -->
 
 ## Video
-<!-- Optional while media storage is unavailable. Provide a real HTTPS recording link, or write exactly:
-Deferred: media storage unavailable; screenshot evidence is mandatory.
+<!-- Optional. Attach a real recording (GitHub inserts its URL), or write exactly:
+Not recorded; screenshot evidence is mandatory.
 Never add a fabricated URL. -->
 
 ## Screenshot
-<!-- Required HTTPS image link showing the resulting artifact or behavior. Do not use a fabricated URL. -->
+<!-- Required: attach an image showing the resulting artifact or behavior; never commit it. Do not use a fabricated URL. -->
 
 ## Evidence kind
 <!-- Exactly: mock, controlled integration, real external service, or rendered artifact. -->

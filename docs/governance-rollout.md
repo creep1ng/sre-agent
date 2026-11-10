@@ -67,10 +67,10 @@ just to make the first PR green. Use a team-authorized sandbox for hosted negati
 cases, or a real contribution for the positive path; do not manufacture noisy PRs
 against production. Local API simulations complement but do not replace this pilot.
 
-Record candidate/base/tested SHA, workflow URL, observed status and a sanitized screenshot of the actual acceptance result for these scenarios. A video is optional while media storage is unavailable; use its real link or the documented deferral, never a fabricated URL:
+Record candidate/base/tested SHA, workflow URL, observed status and a sanitized screenshot of the actual acceptance result for these scenarios. A video is optional; use its real link or the documented no-video sentence, never a fabricated URL:
 
 - Both small and large PRs report valid size metadata without a custom approval gate.
-- Missing screenshot or commands fails; a video passes only as a real link or the documented storage deferral; empty templates fail.
+- Missing screenshot or commands fails; a video passes only as a real link or the documented no-video sentence; empty templates fail.
 - Change base/head: recompute metadata and reevaluate evidence freshness during merge review.
 - Manifest/lock mismatch, direct/indirect forbidden import against a copied candidate, and scoped type mismatch fail their respective stage.
 - Candidate API/web images run with no source mount or host ports; the ordinary and bad-proxy browser scenarios pass/fail as designed.
