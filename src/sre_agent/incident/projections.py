@@ -20,7 +20,7 @@ from sre_agent.incident.reasons import (
 )
 from sre_agent.incident.title import title_of
 from sre_agent.incident.workflow import IncidentWorkflow
-from sre_agent.vocabulary import IDENTIFIER_PATTERN, RunStatus, TransitionId
+from sre_agent.vocabulary import RunStatus, TransitionId, is_identifier
 
 RUN_ID_PATTERN = r"^run_[a-z0-9]{8,32}$"
 CURSOR_PATTERN = r"^seq:(-?\d+)$"
@@ -104,7 +104,7 @@ def actor_reference(document: Any) -> dict[str, Any] | None:
     if (
         reference.get("reference_version") != "1.0.0"
         or not isinstance(principal_id, str)
-        or re.fullmatch(IDENTIFIER_PATTERN, principal_id) is None
+        or not is_identifier(principal_id)
         or (display_name is not None and not isinstance(display_name, str))
     ):
         return None
@@ -134,9 +134,7 @@ def dispatch_cause(receipt: dict[str, Any]) -> str | None:
     if code not in DISPATCH_CAUSES:
         return None
     agent = receipt.get("agent_principal_id")
-    if code == "harness_identity_unavailable" and (
-        isinstance(agent, str) and re.fullmatch(IDENTIFIER_PATTERN, agent)
-    ):
+    if code == "harness_identity_unavailable" and (isinstance(agent, str) and is_identifier(agent)):
         return (
             f"the configured identity '{agent}' is inactive or not an agent; "
             "reactivate it in Principals or ask an administrator."

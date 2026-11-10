@@ -7,7 +7,6 @@ never a name in the body. Reading the progress (`run.read`) is not reading the
 text: content and review comments leave only with `run.read_context`.
 """
 
-import re
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -27,11 +26,11 @@ from sre_agent.incident.postmortem import (
     PostmortemRecord,
     validate_content,
 )
-from sre_agent.incident.projections import IDENTIFIER_PATTERN
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.memories import PostgresIncidentMemoryRepository
 from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
+from sre_agent.vocabulary import is_identifier
 
 WRITE_ACTION, REVIEW_ACTION, READ_ACTION, CONTENT_ACTION = (
     "run.command",
@@ -123,7 +122,7 @@ class PostmortemService:
         request_id = uuid4()
         version = body.get("expected_version") if isinstance(body, dict) else None
         if (
-            re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None
+            not is_identifier(incident_id)
             or not isinstance(body, dict)
             or set(body) != {"expected_version", "content"}
             or type(version) is not int
@@ -171,7 +170,7 @@ class PostmortemService:
         version = body.get("version") if isinstance(body, dict) else None
         comment = body.get("comment") if isinstance(body, dict) else None
         if (
-            re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None
+            not is_identifier(incident_id)
             or not isinstance(body, dict)
             or not {"version", "outcome"} <= set(body) <= {"version", "outcome", "comment"}
             or type(version) is not int
@@ -214,7 +213,7 @@ class PostmortemService:
 
     async def read(self, incident_id: str, authorization: str | None) -> JSONResponse:
         request_id = uuid4()
-        if re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None:
+        if not is_identifier(incident_id):
             return error_envelope(request_id, 422)
         _, allowed, error = await self._principal(
             request_id, authorization, (READ_ACTION, CONTENT_ACTION)

@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sre_agent.chat.digest import render_digest
 from sre_agent.incident.title import title_of
 from sre_agent.persistence.database import Database
+from sre_agent.vocabulary import TransitionId
 
 MAX_ATTEMPTS = 10
 MAX_BACKOFF_SECONDS = 60
@@ -521,7 +522,7 @@ async def _verification(
     if checked is None:
         return []
     at = clock(checked.decided_at, "%H:%M")
-    if checked.transition_id == "verification_failed":
+    if checked.transition_id == TransitionId.VERIFICATION_FAILED:
         return [f"La verificación falló a las {at}: el incidente vuelve a investigarse."]
     seconds = round((checked.decided_at - approved_at).total_seconds())
     after = f"{seconds} s" if seconds < 120 else f"{round(seconds / 60)} min"

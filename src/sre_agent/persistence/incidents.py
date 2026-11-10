@@ -34,6 +34,7 @@ from sre_agent.incident.persistence import (
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.memories import PostgresIncidentMemoryRepository
 from sre_agent.persistence.postmortems import PostgresPostmortemRepository
+from sre_agent.vocabulary import TransitionId
 
 
 def _document(value: JsonDocument) -> str:
@@ -1036,7 +1037,7 @@ class PostgresIncidentUnitOfWork:
             },
         )
         approval = decision.document.get("approval")
-        if decision.document.get("transition_id") == "close_incident" and approval:
+        if decision.document.get("transition_id") == TransitionId.CLOSE_INCIDENT and approval:
             # The closed incident enters memory with its close, or neither commits (#773).
             await PostgresIncidentMemoryRepository(session).remember(
                 incident_state, approval, stored_events[0].event_id, updated_at

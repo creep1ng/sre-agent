@@ -25,6 +25,7 @@ from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRe
 from sre_agent.governance.dto import AuditEvent, Consumption
 from sre_agent.persistence.models import RequestAttributionRow
 from sre_agent.persistence.repositories import AuditRepository, ResourceRepository
+from sre_agent.vocabulary import Identifier
 
 
 class ResponsesRequest(BaseModel):
@@ -43,9 +44,9 @@ class ResponsesRequest(BaseModel):
     )
     model: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")]
     input: Annotated[str, Field(min_length=1, max_length=65_536)]
-    incident_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] = None  # type: ignore[assignment]
-    run_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] = None  # type: ignore[assignment]
-    task_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] = None  # type: ignore[assignment]
+    incident_id: Identifier = None  # type: ignore[assignment]
+    run_id: Identifier = None  # type: ignore[assignment]
+    task_id: Identifier = None  # type: ignore[assignment]
 
 
 class ResponseContent(BaseModel):

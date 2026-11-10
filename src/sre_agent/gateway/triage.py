@@ -18,7 +18,7 @@ from sre_agent.triage.service import (
     TriageError,
     TriageService,
 )
-from sre_agent.vocabulary import is_identifier
+from sre_agent.vocabulary import TransitionId, is_identifier
 
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 RETRY_AFTER_SECONDS = "5"
@@ -28,10 +28,12 @@ MALFORMED = object()
 # runtime dependency to load it here): unknown operations and extra keys are
 # 422; required/type/value rules stay owned by the service.
 ALLOWED_KEYS = {
-    "open_triage": frozenset({"operation", "expected_version"}),
-    "triage_dismiss": frozenset({"operation", "expected_version", "reason"}),
-    "triage_link": frozenset({"operation", "expected_version", "reason", "target_incident_id"}),
-    "triage_declare": frozenset(
+    TransitionId.OPEN_TRIAGE: frozenset({"operation", "expected_version"}),
+    TransitionId.TRIAGE_DISMISS: frozenset({"operation", "expected_version", "reason"}),
+    TransitionId.TRIAGE_LINK: frozenset(
+        {"operation", "expected_version", "reason", "target_incident_id"}
+    ),
+    TransitionId.TRIAGE_DECLARE: frozenset(
         {"operation", "expected_version", "reason", "severity", "impact", "alert_context"}
     ),
 }

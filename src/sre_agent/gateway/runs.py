@@ -39,7 +39,6 @@ from sre_agent.incident.persistence import (
     IncidentUnitOfWork,
 )
 from sre_agent.incident.projections import (
-    IDENTIFIER_PATTERN,
     RUN_ID_PATTERN,
     UnsupportedWorkflowDataError,
     project_run_state,
@@ -62,7 +61,12 @@ from sre_agent.persistence.repositories import (
     GrantRepository,
     PrincipalRepository,
 )
-from sre_agent.vocabulary import RUN_OBJECTIVE_TRANSITIONS
+from sre_agent.vocabulary import (
+    RUN_OBJECTIVE_TRANSITIONS,
+    RunCommand,
+    RunObjective,
+    is_identifier,
+)
 
 logger = logging.getLogger(__name__)
 START_ACTION = "run.start"
@@ -160,7 +164,7 @@ class RunStartService:
         return context.principal, None
 
     def _invalid_request(self, incident_id: str, idempotency_key: str | None, body: Any) -> bool:
-        if re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None:
+        if not is_identifier(incident_id):
             return True
         if idempotency_key is None:
             return True
@@ -232,7 +236,7 @@ class RunStartService:
             return self._error(request_id, 503)
         sequence = max((event.sequence for event in result.events), default=-1)
         run = result.run
-        if body["objective"] == "investigate" and self.investigator is not None:
+        if body["objective"] == RunObjective.INVESTIGATE and self.investigator is not None:
             try:
                 await self.investigator.after_start(result)
                 async with self.units() as work:
@@ -300,15 +304,15 @@ def runs_router(service: RunStartService) -> APIRouter:
 # agent/api/authorization.v1.yaml. The route resolves the action itself and asks
 # the engine for it; it never infers authority from the body or from a name.
 COMMAND_ACTIONS = {
-    "approve_mitigation": "run.approve",
-    "reject_mitigation": "run.approve",
-    "request_changes": "run.command",
-    "propose_disposition": "run.command",
-    "escalate": "run.command",
-    "cancel_run": "run.command",
-    "verification_passed": "run.command",
-    "verification_failed": "run.command",
-    "close_incident": "run.approve",
+    RunCommand.APPROVE_MITIGATION: "run.approve",
+    RunCommand.REJECT_MITIGATION: "run.approve",
+    RunCommand.REQUEST_CHANGES: "run.command",
+    RunCommand.PROPOSE_DISPOSITION: "run.command",
+    RunCommand.ESCALATE: "run.command",
+    RunCommand.CANCEL_RUN: "run.command",
+    RunCommand.VERIFICATION_PASSED: "run.command",
+    RunCommand.VERIFICATION_FAILED: "run.command",
+    RunCommand.CLOSE_INCIDENT: "run.approve",
 }
 COMMAND_FIELDS = frozenset(
     {
@@ -323,15 +327,15 @@ COMMAND_FIELDS = frozenset(
     }
 )
 VERSIONED_REVIEW_COMMANDS = frozenset(
-    {"approve_mitigation", "reject_mitigation", "request_changes"}
+    {RunCommand.APPROVE_MITIGATION, RunCommand.REJECT_MITIGATION, RunCommand.REQUEST_CHANGES}
 )
 # run-command:2.1.0 commands have no pre-version clients to replay, so the
 # reviewed version is always required, and closing must assert run.approve in
 # the body: the explicit human approval the workflow requires to close.
 VERSION_REQUIRED_COMMANDS = frozenset(
-    {"verification_passed", "verification_failed", "close_incident"}
+    {RunCommand.VERIFICATION_PASSED, RunCommand.VERIFICATION_FAILED, RunCommand.CLOSE_INCIDENT}
 )
-EXPLICIT_APPROVAL_COMMANDS = frozenset({"close_incident"})
+EXPLICIT_APPROVAL_COMMANDS = frozenset({RunCommand.CLOSE_INCIDENT})
 DISPOSITIONS = frozenset({"dismiss", "link", "declare"})
 TURN_ID_PATTERN = r"^turn_[a-z0-9]{8,32}$"
 MAX_COMMENT = 2000
@@ -422,14 +426,14 @@ class RunCommandService:
         return (
             reference.get("reference_version") != "1.0.0"
             or not isinstance(reference.get("principal_id"), str)
-            or re.fullmatch(IDENTIFIER_PATTERN, reference["principal_id"]) is None
+            or not is_identifier(reference["principal_id"])
             or (name is not None and (not isinstance(name, str) or len(name) > 200))
         )
 
     def _invalid_request(
         self, incident_id: str, run_id: str, idempotency_key: str | None, body: Any
     ) -> bool:
-        if re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None:
+        if not is_identifier(incident_id):
             return True
         if re.fullmatch(RUN_ID_PATTERN, run_id) is None:
             return True
@@ -464,7 +468,7 @@ class RunCommandService:
         if self._invalid_reference(body.get("actor_reference")):
             return True
         disposition = body.get("disposition")
-        if command == "propose_disposition":
+        if command == RunCommand.PROPOSE_DISPOSITION:
             if not isinstance(disposition, str) or disposition not in DISPOSITIONS:
                 return True
         elif disposition is not None:
@@ -559,7 +563,7 @@ class RunCommandService:
         )
         try:
             transition = resolve(request)
-            if command == "approve_mitigation" and self.executor is not None:
+            if command == RunCommand.APPROVE_MITIGATION and self.executor is not None:
                 # Checked, then run, before anything moves: verifying means it ran (#722).
                 execution = await self.executor.run(
                     incident_id, run_id, request.expected_incident_version, request_id
@@ -602,10 +606,10 @@ class RunCommandService:
         if transition.execution is not None and self.verifier is not None:
             # It ran: the agent measures the service once the delay passes (#723).
             self.verifier.after_approval(incident_id, run_id)
-        if command == "verification_passed" and self.verifier is not None:
+        if command == RunCommand.VERIFICATION_PASSED and self.verifier is not None:
             # Resolved: the agent opens the postmortem with its draft (#711).
             self.verifier.after_resolved(incident_id)
-        if command == "verification_failed" and self.verifier is not None:
+        if command == RunCommand.VERIFICATION_FAILED and self.verifier is not None:
             # Still failing: the agent investigates again on its own (#710).
             self.verifier.after_verification_failed(incident_id)
         sequence = max((event.sequence for event in result.events), default=-1)

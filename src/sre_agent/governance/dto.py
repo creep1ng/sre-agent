@@ -5,7 +5,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
-Identifier = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+from sre_agent.vocabulary import Identifier
+
 ResourceType = Literal[
     "llm_model",
     "mcp_server",

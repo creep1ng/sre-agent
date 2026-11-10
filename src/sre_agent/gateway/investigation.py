@@ -66,6 +66,7 @@ from sre_agent.persistence.memories import RECALL_CONTENT, PostgresIncidentMemor
 from sre_agent.persistence.memories import SOURCE as MEMORY_SOURCE
 from sre_agent.persistence.models import ResourceRow
 from sre_agent.persistence.repositories import CredentialRepository
+from sre_agent.vocabulary import IncidentState, RunObjective, TransitionId
 
 UnitOfWorkFactory = Callable[[], IncidentUnitOfWork]
 logger = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ class InvestigationRunDispatcher:
         if not any(
             event.kind == "state_change"
             and event.payload.get("transition_id")
-            in {"start_investigation", "continue_investigation"}
+            in {TransitionId.START_INVESTIGATION, TransitionId.CONTINUE_INVESTIGATION}
             for event in started.events
         ):
             return
@@ -175,7 +176,10 @@ class InvestigationRunDispatcher:
             logger.error("verification_handoff_failed run_id=%s error=%s", run_id, name)
             return
         strategy = view.incident_state.get("mitigation_strategy") or {}
-        if view.incident_state.get("state") != "verifying" or "execution" not in strategy:
+        if (
+            view.incident_state.get("state") != IncidentState.VERIFYING
+            or "execution" not in strategy
+        ):
             return  # A person verified it first, or nothing ran: there is nothing to measure.
         self._verifying[run_id] = verification_dispatch(run_id)
         try:
@@ -203,7 +207,7 @@ class InvestigationRunDispatcher:
                 RunStart(
                     command_id=f"postmortem-{incident_id}",
                     incident_id=incident_id,
-                    objective="postmortem",
+                    objective=RunObjective.POSTMORTEM,
                     actor="agent",
                     actor_reference=ActorReference(agent),
                 )
@@ -233,7 +237,11 @@ class InvestigationRunDispatcher:
                 await work.postmortems.get(incident_id, lock=True)
                 incident = await work.incidents.get(incident_id)
                 reserved = (incident.state.get("postmortem") or {}) if incident else {}
-                if not incident or incident.state.get("state") != "postmortem" or not reserved:
+                if (
+                    not incident
+                    or incident.state.get("state") != IncidentState.POSTMORTEM
+                    or not reserved
+                ):
                     return
                 if await work.postmortems.get(incident_id) is not None:
                     return  # Someone wrote it first.
@@ -277,7 +285,7 @@ class InvestigationRunDispatcher:
                 RunStart(
                     command_id=f"reinvestigate-{incident_id}-{failed}",
                     incident_id=incident_id,
-                    objective="investigate",
+                    objective=RunObjective.INVESTIGATE,
                     actor="system",
                     actor_reference=ActorReference(agent),
                 )
@@ -289,7 +297,7 @@ class InvestigationRunDispatcher:
 
     def _state(self, run_id: str) -> str:
         """The state a dispatch's own events carry: a verification's incident stays verifying."""
-        return "verifying" if run_id in self._verifying else "investigating"
+        return IncidentState.VERIFYING if run_id in self._verifying else IncidentState.INVESTIGATING
 
     async def end_interrupted(self) -> None:
         """At startup, end every run whose dispatch lost its process (an API restart).
@@ -895,7 +903,7 @@ class InvestigationRunDispatcher:
             if result.remaining_step_budget < 1:
                 return None
             patch = self._hypothesis_patch(outcome, view, evidence)
-            transition_id, transition_outcome = "continue_investigation", "continue_investigation"
+            transition_id = TransitionId.CONTINUE_INVESTIGATION
             inputs: Mapping[str, Any] = {
                 "remaining_step_budget": result.remaining_step_budget,
                 "incident_patch": patch,
@@ -915,18 +923,20 @@ class InvestigationRunDispatcher:
                 "created_at": datetime.now(UTC).isoformat(),
             }
             patch = {"mitigation_strategy": mitigation, "evidence": evidence}
-            transition_id, transition_outcome = "propose_mitigation", "propose_mitigation"
+            transition_id = TransitionId.PROPOSE_MITIGATION
             inputs = {"incident_patch": patch}
         elif isinstance(outcome, VerifyMitigation):
             # What the verification measured joins the incident's evidence (#723).
-            transition_id, transition_outcome = (
-                ("verification_passed", "stable")
+            transition_id = (
+                TransitionId.VERIFICATION_PASSED
                 if outcome.passed
-                else ("verification_failed", "not_stable")
+                else TransitionId.VERIFICATION_FAILED
             )
             inputs = {"incident_patch": {"evidence": evidence}}
         else:
             return None
+        # Each of these transitions declares the one decision outcome it records.
+        transition_outcome = self.runtime.workflow.transition(transition_id).outcomes[0]
         dispatch_id = self._verifying.get(run_id, run_id)
         return IncidentCommand(
             command_id=f"investigation-{dispatch_id}",

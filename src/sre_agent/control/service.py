@@ -40,6 +40,7 @@ from sre_agent.governance.dto import (
 )
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
+from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
 
 IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ERRORS: dict[int, tuple[str, str]] = {
@@ -230,7 +231,7 @@ assert all(CONTROL_OPERATIONS[route][1:] == scope for route, scope in CONTROL_SC
 
 class PrincipalCreate(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
-    principal_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    principal_id: Identifier
     kind: Annotated[str, Field(pattern=r"^(human|agent)$")]
     display_name: Annotated[str, Field(min_length=1, max_length=200)]
 
@@ -337,8 +338,8 @@ class CredentialListResponse(BaseModel):
 
 class GrantCreate(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
-    grant_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
-    principal_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    grant_id: Identifier
+    principal_id: Identifier
     action: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_.:-]{1,63}$")]
     resource: Resource
     effect: Literal["allow"]
@@ -406,7 +407,7 @@ class GrantListResponse(BaseModel):
 
 class ModelAliasCreate(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
-    model_alias_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    model_alias_id: Identifier
     alias: Annotated[str, Field(pattern=r"^[a-z][a-z0-9-]{1,62}[a-z0-9]$")]
     concrete_model: Annotated[str, Field(pattern=r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$")]
     router: Literal["openrouter"]
@@ -414,7 +415,7 @@ class ModelAliasCreate(BaseModel):
     # Additive ADMIN-authoritative catalog projection for llm_model. All
     # optional so pre-T6 creates keep working; when absent the projection
     # derives owner/source_ref from the alias with a private default.
-    owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")] | None = None
+    owner_id: Identifier | None = None
     source: Literal["model_alias"] | None = None
     source_ref: (
         Annotated[
@@ -471,7 +472,7 @@ class CatalogCreate(BaseModel):
     resource_id: Annotated[
         str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
     ]
-    owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    owner_id: Identifier
     source: Literal["mcp", "skill", "bok", "incident_workflow", "deploy_executor"]
     source_ref: Annotated[
         str, Field(min_length=1, max_length=200, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$")
@@ -487,7 +488,7 @@ class SkillPublishRequest(BaseModel):
         str,
         Field(max_length=32, pattern=r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"),
     ]
-    owner_id: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{2,63}$")]
+    owner_id: Identifier
     manifest: SkillManifest
 
     @model_validator(mode="after")
@@ -880,7 +881,7 @@ class ControlService:  # noqa: E305
     async def get_principal(self, principal_id: str, authorization: str | None) -> JSONResponse:
         request_id, started = uuid4(), monotonic()
         operation, action = "principals.get", "admin.read"
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
+        if not is_identifier(principal_id):
             return await self._finish(
                 request_id,
                 started,
@@ -962,7 +963,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="authentication_failed",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
+        if not is_identifier(principal_id):
             return await self._finish(
                 request_id,
                 started,
@@ -1072,7 +1073,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="invalid_idempotency_key",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None:
+        if not is_identifier(principal_id):
             return await self._finish(
                 request_id,
                 started,
@@ -1224,11 +1225,7 @@ class ControlService:  # noqa: E305
             ListPrincipalsQuery.model_validate({"limit": parsed_limit})
         except (TypeError, ValueError, ValidationError):
             parsed_limit = 0
-        if (
-            re.match(r"^[a-z][a-z0-9_-]{2,63}$", principal_id) is None
-            or extra_params
-            or not 1 <= parsed_limit <= 100
-        ):
+        if not is_identifier(principal_id) or extra_params or not 1 <= parsed_limit <= 100:
             return await self._finish(
                 request_id,
                 started,
@@ -1306,7 +1303,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="authentication_failed",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", credential_id) is None:
+        if not is_identifier(credential_id):
             return await self._finish(
                 request_id,
                 started,
@@ -1387,7 +1384,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="invalid_idempotency_key",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", credential_id) is None:
+        if not is_identifier(credential_id):
             return await self._finish(
                 request_id,
                 started,
@@ -1758,14 +1755,13 @@ class ControlService:  # noqa: E305
             ListPrincipalsQuery.model_validate({"limit": parsed_limit})
         except (TypeError, ValueError, ValidationError):
             parsed_limit = 0
-        identifier_pattern = r"^[a-z][a-z0-9_-]{2,63}$"
         exactly_one_filter = (principal_id is None) != (resource_id is None)
         filter_value = principal_id if principal_id is not None else resource_id
         if (
             extra_params
             or not exactly_one_filter
             or filter_value is None
-            or re.match(identifier_pattern, filter_value) is None
+            or not is_identifier(filter_value)
             or not 1 <= parsed_limit <= 100
         ):
             return await self._finish(
@@ -1845,7 +1841,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="authentication_failed",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", grant_id) is None:
+        if not is_identifier(grant_id):
             return await self._finish(
                 request_id,
                 started,
@@ -2149,7 +2145,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="authentication_failed",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", model_alias_id) is None:
+        if not is_identifier(model_alias_id):
             return await self._finish(
                 request_id,
                 started,
@@ -2224,7 +2220,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="authentication_failed",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", model_alias_id) is None:
+        if not is_identifier(model_alias_id):
             return await self._finish(
                 request_id,
                 started,
@@ -2338,7 +2334,7 @@ class ControlService:  # noqa: E305
                 action,
                 error_code="authentication_failed",
             )
-        if re.match(r"^[a-z][a-z0-9_-]{2,63}$", model_alias_id) is None:
+        if not is_identifier(model_alias_id):
             return await self._finish(
                 request_id,
                 started,
@@ -2663,7 +2659,7 @@ class ControlService:  # noqa: E305
                 raise ValueError
             if resource_type is not None and resource_type not in valid_types:
                 raise ValueError
-            if owner_id is not None and re.match(r"^[a-z][a-z0-9_-]{2,63}$", owner_id) is None:
+            if owner_id is not None and not is_identifier(owner_id):
                 raise ValueError
             if status is not None and status not in valid_status:
                 raise ValueError
@@ -3503,7 +3499,7 @@ def control_router(service: ControlService) -> APIRouter:
     async def get_principal(
         principal_id: Annotated[
             str,
-            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+            WithJsonSchema({"type": "string", "pattern": IDENTIFIER_PATTERN}),
         ],
         request: Request,
         response: Response,
@@ -3756,13 +3752,13 @@ def control_router(service: ControlService) -> APIRouter:
                     "name": "principal_id",
                     "in": "query",
                     "required": False,
-                    "schema": {"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"},
+                    "schema": {"type": "string", "pattern": IDENTIFIER_PATTERN},
                 },
                 {
                     "name": "resource_id",
                     "in": "query",
                     "required": False,
-                    "schema": {"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"},
+                    "schema": {"type": "string", "pattern": IDENTIFIER_PATTERN},
                 },
                 {
                     "name": "limit",
@@ -3940,7 +3936,7 @@ def control_router(service: ControlService) -> APIRouter:
     async def get_alias(
         alias_id: Annotated[
             str,
-            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+            WithJsonSchema({"type": "string", "pattern": IDENTIFIER_PATTERN}),
         ],
         request: Request,
         response: Response,
@@ -3978,7 +3974,7 @@ def control_router(service: ControlService) -> APIRouter:
     async def replace_alias_assignment(
         alias_id: Annotated[
             str,
-            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+            WithJsonSchema({"type": "string", "pattern": IDENTIFIER_PATTERN}),
         ],
         request: Request,
         response: Response,
@@ -4018,7 +4014,7 @@ def control_router(service: ControlService) -> APIRouter:
     async def replace_alias_status(
         alias_id: Annotated[
             str,
-            WithJsonSchema({"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"}),
+            WithJsonSchema({"type": "string", "pattern": IDENTIFIER_PATTERN}),
         ],
         request: Request,
         response: Response,
@@ -4103,7 +4099,7 @@ def control_router(service: ControlService) -> APIRouter:
                     "name": "owner_id",
                     "in": "query",
                     "required": False,
-                    "schema": {"type": "string", "pattern": r"^[a-z][a-z0-9_-]{2,63}$"},
+                    "schema": {"type": "string", "pattern": IDENTIFIER_PATTERN},
                 },
                 {
                     "name": "status",
