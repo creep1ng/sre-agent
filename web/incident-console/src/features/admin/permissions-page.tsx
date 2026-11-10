@@ -28,13 +28,12 @@ import {
   adminApi,
   GRANT_ACTIONS,
   SLUG,
-  type AdminError,
   type CatalogResource,
   type Grant,
   type Principal,
   type ResourceRef,
 } from "@/lib/admin-api";
-import { useAdminQuery, useRetryKey } from "./use-admin-query";
+import { useAdminMutation, useAdminQuery, useRetryKey } from "./use-admin-query";
 import { AdminPage, Empty, ErrorNote, Field, Mono, Panel, ROW, Select, StatusBadge, TD, TH, Table, useResourceType } from "./ui";
 
 type By = "principal" | "resource";
@@ -248,8 +247,7 @@ function CreateGrantDialog({
   const [resource, setResource] = useState("");
   const [action, setAction] = useState("");
   const [checked, setChecked] = useState(false);
-  const [error, setError] = useState<AdminError | "local" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAdminMutation<"local">();
   const retry = useRetryKey("grant-create");
 
   // Active catalog entries plus the seeded administrative resources the catalog never lists.
@@ -288,14 +286,8 @@ function CreateGrantDialog({
       return;
     }
     const body = { grant_id: grantId.trim(), principal_id: principalId, action, resource: target };
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.createGrant(body, retry.keyFor(body));
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
+    const result = await run(() => adminApi.createGrant(body, retry.keyFor(body)));
+    if (!result.ok) return;
     retry.settle();
     toast.success(t("permissions.created", { id: body.grant_id }));
     onCreated({ ...body, ...result.body });
@@ -418,19 +410,12 @@ function RevokeDialog({
 }) {
   const t = useT("admin");
   const typeLabel = useResourceType();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AdminError | null>(null);
+  const { busy, error, setError, run } = useAdminMutation();
 
   const confirm = async () => {
     if (!grant) return;
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.revokeGrant(grant.grant_id);
-    setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
+    const result = await run(() => adminApi.revokeGrant(grant.grant_id));
+    if (!result.ok) return;
     toast.success(t("permissions.revoked", { id: grant.grant_id }));
     onClose();
     onDone();

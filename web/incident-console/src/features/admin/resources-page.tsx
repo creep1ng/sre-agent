@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useT } from "@/i18n";
-import { adminApi, CONCRETE_MODEL, type AdminError, type ModelAlias } from "@/lib/admin-api";
-import { useAdminQuery } from "./use-admin-query";
+import { adminApi, CONCRETE_MODEL, type ModelAlias } from "@/lib/admin-api";
+import { useAdminMutation, useAdminQuery } from "./use-admin-query";
 import { AdminPage, Empty, ErrorNote, Facts, Field, Mono, Panel, ROW, StatusBadge, TD, TH, Table, Timestamp, useResourceType } from "./ui";
 
 const aliasIdOf = (alias: ModelAlias) => alias.model_alias_id || alias.alias;
@@ -273,8 +273,7 @@ function AssignmentForm({
   const [router, setRouter] = useState(alias.router);
   const [provider, setProvider] = useState(alias.inference_provider);
   const [checked, setChecked] = useState(false);
-  const [error, setError] = useState<AdminError | "local" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { busy, error, setError, run } = useAdminMutation<"local">();
 
   const modelOk = CONCRETE_MODEL.test(model.trim());
   const routerOk = router.trim() === "openrouter";
@@ -286,17 +285,13 @@ function AssignmentForm({
       setError("local");
       return;
     }
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.replaceAssignment(aliasIdOf(alias), {
+    const result = await run(() => adminApi.replaceAssignment(aliasIdOf(alias), {
       concrete_model: model.trim(),
       router: router.trim(),
       inference_provider: provider.trim(),
       expected_updated_at: alias.updated_at,
-    });
-    setBusy(false);
+    }));
     if (!result.ok) {
-      setError(result.error);
       if (result.error === "conflict") onConflict();
       return;
     }
@@ -380,16 +375,11 @@ function DeactivateAliasDialog({
   onDone: () => void;
 }) {
   const t = useT("admin");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<AdminError | null>(null);
+  const { busy, error, setError, run } = useAdminMutation();
 
   const confirm = async () => {
-    setBusy(true);
-    setError(null);
-    const result = await adminApi.deactivateAlias(aliasIdOf(alias), alias.updated_at);
-    setBusy(false);
+    const result = await run(() => adminApi.deactivateAlias(aliasIdOf(alias), alias.updated_at));
     if (!result.ok) {
-      setError(result.error);
       if (result.error === "conflict") onDone();
       return;
     }

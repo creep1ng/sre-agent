@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure the EP-14 code-quality indicators I01-I36 of a full git checkout (#1016).
+"""Measure the EP-14 code-quality indicators I01-I37 of a full git checkout (#1016).
 
 Usage: quality_indicators.py [REPO] [--json]. Definitions, baselines and targets are in
 docs/quality-indicators.md. The script needs git, ripgrep and a .git in REPO; when any of
@@ -245,6 +245,19 @@ def measure() -> dict[str, object]:
     out["I35 web store.ts lines / scenarios.ts in src/lib"] = f"{store_lines} / {scenarios}"
     out[f"I36 scenarios.ts strings in the console bundle ({CONSOLE}/dist)"] = (
         bundled_scenario_strings()
+    )
+    admin = {
+        path: Path(path).read_text()
+        for path in required(
+            "git ls-files admin pages", git_files(f"{CONSOLE}/src/features/admin/*-page.tsx")
+        )
+    }
+    out["I37 busy/error state pairs in administration pages"] = sum(
+        min(
+            len(re.findall(r"const \[busy, setBusy\] = useState\b", text)),
+            len(re.findall(r"const \[error, setError\] = useState\b", text)),
+        )
+        for text in admin.values()
     )
     dirty = bool(run("git", "status", "--porcelain"))
     return {"commit": run("git", "rev-parse", "HEAD")[0], "dirty": dirty, "indicators": out}
