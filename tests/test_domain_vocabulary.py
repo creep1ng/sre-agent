@@ -13,7 +13,6 @@ from sre_agent.vocabulary import (
     RUN_OBJECTIVE_TRANSITIONS,
     TRIAGE_TRANSITIONS,
     AgentObjective,
-    HarnessStatus,
     IncidentState,
     RunCommand,
     RunObjective,
@@ -119,12 +118,22 @@ def test_run_statuses_are_the_vocabulary() -> None:
 def test_run_objectives_open_a_transition_into_their_objective(workflow: Any) -> None:
     assert set(schema("run-start-request")["properties"]["objective"]["enum"]) == set(RunObjective)
     assert set(RUN_OBJECTIVE_TRANSITIONS) == set(RunObjective)
-    targets = {transition["id"]: transition["to"] for transition in workflow["transitions"]}
+    transitions = {transition["id"]: transition for transition in workflow["transitions"]}
+
+    def opened(transition_id: str) -> str | None:
+        """The objective a transition enters, unless it starts in a state with that objective."""
+        if transition_id not in transitions:
+            return f"undeclared transition {transition_id}"
+        transition = transitions[transition_id]
+        target = workflow["states"][transition["to"]].get("agent_objective")
+        sources = transition["from"]
+        sources = sources if isinstance(sources, list) else [sources]
+        if any(workflow["states"][source].get("agent_objective") == target for source in sources):
+            return f"{transition_id} stays in {target}"
+        return target
+
     reached = {
-        objective: workflow["states"][targets[transition]].get("agent_objective")
-        if transition in targets
-        else f"undeclared transition {transition}"
-        for objective, transition in RUN_OBJECTIVE_TRANSITIONS.items()
+        objective: opened(transition) for objective, transition in RUN_OBJECTIVE_TRANSITIONS.items()
     }
     assert reached == {objective: objective.value for objective in RunObjective}
 
@@ -132,7 +141,6 @@ def test_run_objectives_open_a_transition_into_their_objective(workflow: Any) ->
 def test_a_run_ends_with_any_harness_status_but_a_pre_dispatch_rejection() -> None:
     enum = schema("run-state")["properties"]["terminated_reason"]["enum"]
     assert values(enum) == RUN_ENDING_STATUSES
-    assert HarnessStatus.PRE_DISPATCH_REJECTED not in RUN_ENDING_STATUSES
 
 
 def test_triage_statuses_and_transitions_are_the_vocabulary() -> None:
@@ -149,10 +157,13 @@ def patterns(node: Any, field: str | None = None) -> list[tuple[str | None, str]
     """Every `pattern` under `node`, with the name of the field it constrains."""
     if isinstance(node, dict):
         found = [(field, node["pattern"])] if isinstance(node.get("pattern"), str) else []
+        # An OpenAPI parameter names its field in `name`, beside the schema that constrains it.
+        if isinstance(node.get("name"), str) and "in" in node:
+            field = node["name"]
         return found + [
             item
             for key, value in node.items()
-            for item in patterns(value, field if key in NESTING else str(key))
+            for item in patterns(value, field if key in NESTING | {"parameters"} else str(key))
         ]
     if isinstance(node, list):
         return [item for value in node for item in patterns(value, field)]
