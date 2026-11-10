@@ -18,3 +18,5 @@ schemas/tooling/.tmp/
 /otel-demo/
 /.demo-state/
 /artifacts/
+# Evidence is attached to PRs (docs/pr-evidence.md); docs/evidence left git in #1018.
+/docs/evidence/

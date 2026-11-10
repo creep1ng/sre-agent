@@ -1,8 +1,0 @@
-{
-  "evidence_kind": "controlled integration",
-  "observed": {
-    "error": "storage_unavailable",
-    "http_status": 503
-  },
-  "scenario": "storage-outage"
-}

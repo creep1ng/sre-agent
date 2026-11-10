@@ -1,7 +1,0 @@
-01:13:17 start
-01:14:25 stack ready, chat linked
-01:14:29 boundaries checked
-01:14:29 fault injected: paymentUnreachable on
-01:14:46 flow done: approved in Telegram, flag.set ran, alert resolved
-01:14:47 verification_passed recorded on inc-8c4c7920f3695a42972e851487601ed8
-01:15:04 captured: incident page, /app/acciones, chat transcript, Bot API calls

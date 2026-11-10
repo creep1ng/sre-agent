@@ -1,9 +1,0 @@
-# Tested 394359a6181da378c24877e91cd7169cb7fb16f9 on main d55087fd57bd8717299a1be617202cf3b6b1cfd5, scripts/run_incident_console_e2e.sh
-✓  1 e2e/incident-live.spec.ts:162:3 › incidente RC-2 contra la API real › la página se lee: título corto, hipótesis en partes, etapas con hora, resultados de las consultas y nada se sale (34.5s)
-✓  2 e2e/incident-live.spec.ts:262:3 › incidente RC-2 contra la API real › las afirmaciones de la hipótesis muestran su evidencia y llevan a su paso; aprobar envía el comando gobernado (38.1s)
-✓  3 e2e/incident-live.spec.ts:362:3 › incidente RC-2 contra la API real › rechazar envía reject_mitigation y la historia lo registra (21.7s)
-✓  4 e2e/incident-live.spec.ts:399:3 › incidente RC-2 contra la API real › una decisión tomada en otro canal aparece con quién decidió, en inglés (35.0s)
-✓  5 e2e/incident-live.spec.ts:444:3 › incidente RC-2 contra la API real › tras aprobar, la verificación cuenta cuándo Grafana dejó de alertar (52.0s)
-✓  6 e2e/incident-live.spec.ts:498:3 › incidente RC-2 contra la API real › la propuesta nombra su operación del catálogo; una aprobación rechazada no mueve nada y la que corre deja su recibo (37.8s)
-✓  7 e2e/incident-live.spec.ts:580:3 › incidente RC-2 contra la API real › un despacho fallido muestra su causa y solo una persona lo reintenta (22.6s)
-incident console journeys PASS [7 passed]
