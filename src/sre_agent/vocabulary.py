@@ -134,6 +134,9 @@ RUN_OBJECTIVE_TRANSITIONS: dict[str, TransitionId] = {
     RunObjective.POSTMORTEM: TransitionId.START_POSTMORTEM,
 }
 
+# The harness statuses a run can end with (`run-state.terminated_reason`).
+RUN_ENDING_STATUSES = frozenset(HarnessStatus) - {HarnessStatus.PRE_DISPATCH_REJECTED}
+
 TRIAGE_TRANSITIONS = (
     TransitionId.OPEN_TRIAGE,
     TransitionId.TRIAGE_DISMISS,

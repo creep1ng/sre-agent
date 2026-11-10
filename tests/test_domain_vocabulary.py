@@ -9,6 +9,7 @@ import yaml
 from sre_agent.vocabulary import (
     AGENT_OBJECTIVES,
     IDENTIFIER_PATTERN,
+    RUN_ENDING_STATUSES,
     RUN_OBJECTIVE_TRANSITIONS,
     TRIAGE_TRANSITIONS,
     AgentObjective,
@@ -24,6 +25,16 @@ from sre_agent.vocabulary import (
 ROOT = Path(__file__).parents[1]
 SCHEMAS = ROOT / "agent" / "schemas"
 
+# Fields whose pattern in agent/ is the identifier, whatever the pattern looks like.
+IDENTIFIER_FIELDS = {
+    "incident_id",
+    "alert_id",
+    "linked_incident_id",
+    "target_incident_id",
+    "principal_id",
+    "task_id",
+    "IncidentId",
+}
 # Patterns in agent/ that start like the identifier and are other formats on purpose.
 DISTINCT_PATTERNS = {
     "^[a-z][a-z0-9_]{2,63}$": "run-event reason_code",
@@ -105,15 +116,23 @@ def test_run_statuses_are_the_vocabulary() -> None:
         assert values(enum) == set(RunStatus), name
 
 
-def test_run_objectives_open_a_declared_transition() -> None:
+def test_run_objectives_open_a_transition_into_their_objective(workflow: Any) -> None:
     assert set(schema("run-start-request")["properties"]["objective"]["enum"]) == set(RunObjective)
     assert set(RUN_OBJECTIVE_TRANSITIONS) == set(RunObjective)
-    assert set(RUN_OBJECTIVE_TRANSITIONS.values()) <= set(TransitionId)
+    targets = {transition["id"]: transition["to"] for transition in workflow["transitions"]}
+    reached = {
+        objective: workflow["states"][targets[transition]].get("agent_objective")
+        if transition in targets
+        else f"undeclared transition {transition}"
+        for objective, transition in RUN_OBJECTIVE_TRANSITIONS.items()
+    }
+    assert reached == {objective: objective.value for objective in RunObjective}
 
 
 def test_a_run_ends_with_any_harness_status_but_a_pre_dispatch_rejection() -> None:
     enum = schema("run-state")["properties"]["terminated_reason"]["enum"]
-    assert values(enum) == set(HarnessStatus) - {HarnessStatus.PRE_DISPATCH_REJECTED}
+    assert values(enum) == RUN_ENDING_STATUSES
+    assert HarnessStatus.PRE_DISPATCH_REJECTED not in RUN_ENDING_STATUSES
 
 
 def test_triage_statuses_and_transitions_are_the_vocabulary() -> None:
@@ -122,27 +141,43 @@ def test_triage_statuses_and_transitions_are_the_vocabulary() -> None:
     assert enum == list(TRIAGE_TRANSITIONS)
 
 
-def patterns(node: Any) -> list[str]:
+# Keywords that nest a schema without naming the field it describes.
+NESTING = {"items", "schema", "oneOf", "anyOf", "allOf", "properties", "if", "then", "else"}
+
+
+def patterns(node: Any, field: str | None = None) -> list[tuple[str | None, str]]:
+    """Every `pattern` under `node`, with the name of the field it constrains."""
     if isinstance(node, dict):
-        found = [node["pattern"]] if isinstance(node.get("pattern"), str) else []
-        return found + [item for value in node.values() for item in patterns(value)]
+        found = [(field, node["pattern"])] if isinstance(node.get("pattern"), str) else []
+        return found + [
+            item
+            for key, value in node.items()
+            for item in patterns(value, field if key in NESTING else str(key))
+        ]
     if isinstance(node, list):
-        return [item for value in node for item in patterns(value)]
+        return [item for value in node for item in patterns(value, field)]
     return []
 
 
 def test_identifier_copies_in_agent_contracts_are_the_vocabulary_pattern() -> None:
     files = sorted((ROOT / "agent").glob("**/*.yaml"))
     found = [
-        (path.relative_to(ROOT), pattern)
+        (str(path.relative_to(ROOT)), field, pattern)
         for path in files
-        for pattern in patterns(load(path))
-        if pattern.startswith("^[a-z][a-z0-9")
+        for field, pattern in patterns(load(path))
     ]
-    assert any(pattern == IDENTIFIER_PATTERN for _, pattern in found)
+    assert any(pattern == IDENTIFIER_PATTERN for _, _, pattern in found)
+    on_identifiers = [
+        (path, field, pattern)
+        for path, field, pattern in found
+        if field in IDENTIFIER_FIELDS and pattern != IDENTIFIER_PATTERN
+    ]
+    assert on_identifiers == []
     drifted = [
-        (str(path), pattern)
-        for path, pattern in found
-        if pattern != IDENTIFIER_PATTERN and pattern not in DISTINCT_PATTERNS
+        (path, field, pattern)
+        for path, field, pattern in found
+        if pattern.startswith("^[a-z][a-z0-9")
+        and pattern != IDENTIFIER_PATTERN
+        and pattern not in DISTINCT_PATTERNS
     ]
     assert drifted == []
