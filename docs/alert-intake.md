@@ -122,8 +122,8 @@ $C down -v --remove-orphans
 Local `paymentFailure`: set `paymentFailure.defaultVariant` in `.demo-state/flagd/demo.flagd.json`
 and restart `flagd` (what `demo_env.py fail` does for its flag). flagd-ui's write API changes
 upstream's file, which the local flagd does not read. One injection opens two incidents,
-`payment` and `checkout`, each with its own investigation; record in
-`docs/evidence/issue-765/local-paymentfailure.json`.
+`payment` and `checkout`, each with its own investigation; a recorded run is
+[`docs/evidence/issue-765/local-paymentfailure.json`](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-765/local-paymentfailure.json).
 
 ## Known limits
 

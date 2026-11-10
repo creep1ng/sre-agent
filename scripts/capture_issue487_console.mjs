@@ -7,7 +7,7 @@
 // Containerized usage (reviewer-repeatable, no host package tools):
 //   docker compose --profile e2e run --rm \
 //     -v "$PWD/scripts/capture_issue487_console.mjs:/e2e/capture.mjs:ro" \
-//     -v "$PWD/docs/evidence:/evidence" e2e node /e2e/capture.mjs
+//     -v "$PWD/artifacts:/evidence" e2e node /e2e/capture.mjs
 import { writeFileSync } from "node:fs";
 import { chromium } from "playwright";
 

@@ -92,7 +92,7 @@ Current admin audit evidence carries opaque HMAC incident/run/task references,
 and the existing UI intentionally renders those as inert text rather than
 turning them into links; the observed request-ID “View correlated events”
 navigation points to a fixed same-origin audit destination and does not decode
-references. See [issue-25 correlation navigation evidence](../evidence/issue-25-correlation-link.md)
+references. See [issue-25 correlation navigation evidence](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-25-correlation-link.md)
 and gateway/audit_reads.py. Existing incident/run API routes
 (gateway/incidents.py:383-412) do not establish a usage-attribution link
 contract. Therefore this 2.8.0 projection explicitly reports incident/run

@@ -94,22 +94,22 @@ its issue is closed. [#30](https://github.com/creep1ng/sre-agent/issues/30) rema
 [PR #477](https://github.com/creep1ng/sre-agent/pull/477) were merged on 2026-10-04 (America/Bogota);
 that integration does not establish full story acceptance.
 
-The [GREEN acceptance records](evidence/issue30-acceptance.jsonl) belong to tested
+The [GREEN acceptance records](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl) belong to tested
 SHA `be422443b1a20fe059ec86b6b5eb6c9552f005ba`, replay window
 `2026-10-03T23:27:48.178107Z`–`2026-10-03T23:28:35.011308Z`: ten scenarios,
-nine selected audit rows. The [invocation PNG](evidence/issue30-invocation.png)
+nine selected audit rows. The [invocation PNG](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-invocation.png)
 belongs to a **separate** browser POST/window, recorded on JSONL line 14 at the
-same tested SHA; it is not replay evidence. The [infrastructure RED records](evidence/issue30-infrastructure.jsonl)
+same tested SHA; it is not replay evidence. The [infrastructure RED records](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-infrastructure.jsonl)
 belong to `d7518ac637c3af31ce6c417869e364b802f82b51`, with four missing-success-correlation
 assertions. None of those captures, records, outcomes or SHAs is changed or relabeled.
 
 | Criterion | Current acceptance status | Evidence and comparison with current source |
 | --- | --- | --- |
-| CA1 | Partial | [GREEN line 12](evidence/issue30-acceptance.jsonl#L12): 200, normalized vector(1), one relay `tools/call` and one real forward. Current [gateway][invoke-source] retains one call and `X-Request-ID`, but its result adapter changed since the tested SHA; no new current-main replay. |
-| CA2 | Partial | [GREEN lines 5–7](evidence/issue30-acceptance.jsonl#L5-L7): no grant/nonvisible tool/invalid credential = 403/403/401, safe errors and zero calls/forwards. Current authorization still precedes execution; no new current-main counter evidence. |
-| CA3 | Partial | [GREEN lines 8–11](evidence/issue30-acceptance.jsonl#L8-L11): 422/504/503/502 with safe published [MCP errors](../schemas/mcp/1.0.0/grafana-mcp.yaml). Validation makes zero calls; injected faults make one relay attempt but zero real forwards. Current input validation/error mapping exists; transport/result handling changed, so historical success is not a new execution. |
-| CA4 | Partial; interpretation satisfied | [GREEN lines 3–12](evidence/issue30-acceptance.jsonl#L3-L12): correlated metadata-only rows with stage-appropriate HMAC attribution; line 8 retains action/correlation/error and omits the three fields exactly as approved. Current schema/projector agree. The 401 has zero `mcp.invoke` rows; the 422 decision does not approve that separate boundary. No new current-main SQL evidence or full audit-schema validation of persisted rows. |
-| CA5 | Partial | [GREEN lines 3–4](evidence/issue30-acceptance.jsonl#L3-L4): known ID before any discovery, 200/403, call/forward 1/1 and 0/0. The [replay client](../scripts/issue30_capture.py) still orders these first; current invocation does not require discovery. No new current-main replay. |
+| CA1 | Partial | [GREEN line 12](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L12): 200, normalized vector(1), one relay `tools/call` and one real forward. Current [gateway][invoke-source] retains one call and `X-Request-ID`, but its result adapter changed since the tested SHA; no new current-main replay. |
+| CA2 | Partial | [GREEN lines 5–7](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L5-L7): no grant/nonvisible tool/invalid credential = 403/403/401, safe errors and zero calls/forwards. Current authorization still precedes execution; no new current-main counter evidence. |
+| CA3 | Partial | [GREEN lines 8–11](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L8-L11): 422/504/503/502 with safe published [MCP errors](../schemas/mcp/1.0.0/grafana-mcp.yaml). Validation makes zero calls; injected faults make one relay attempt but zero real forwards. Current input validation/error mapping exists; transport/result handling changed, so historical success is not a new execution. |
+| CA4 | Partial; interpretation satisfied | [GREEN lines 3–12](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L3-L12): correlated metadata-only rows with stage-appropriate HMAC attribution; line 8 retains action/correlation/error and omits the three fields exactly as approved. Current schema/projector agree. The 401 has zero `mcp.invoke` rows; the 422 decision does not approve that separate boundary. No new current-main SQL evidence or full audit-schema validation of persisted rows. |
+| CA5 | Partial | [GREEN lines 3–4](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue30-acceptance.jsonl#L3-L4): known ID before any discovery, 200/403, call/forward 1/1 and 0/0. The [replay client](../scripts/issue30_capture.py) still orders these first; current invocation does not require discovery. No new current-main replay. |
 
 All GREEN references in the table mean **historical evidence**, not tests run in
 this documentation review. The runner, audit helper, browser client, overlays and

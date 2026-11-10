@@ -17,7 +17,7 @@ import { connectConsole } from "../tests/browser/support/console-session.mjs";
 const phase = process.argv[2];
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://web";
 const { DEMO_HUMAN_API_KEY: key, INCIDENT_ID: incident, RUN_ID: run } = process.env;
-const out = process.env.EVIDENCE_DIR ?? "docs/evidence";
+const out = process.env.EVIDENCE_DIR ?? "artifacts";
 if (!["verify", "postmortem", "close"].includes(phase)) throw new Error("unknown phase");
 if (!key || !incident || !run) throw new Error("DEMO_HUMAN_API_KEY, INCIDENT_ID and RUN_ID are required.");
 

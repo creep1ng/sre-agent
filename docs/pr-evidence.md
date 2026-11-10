@@ -73,7 +73,7 @@ Container pitfalls that silently invalidate evidence:
   loopback origin `http://127.0.0.1:4173`: run Playwright in the server container's network
   namespace. A non-loopback HTTP origin such as `http://web` is not a secure context and lacks
   `crypto.randomUUID`; never stub it or weaken assertions to pass. See
-  [issue 25 closure verification](evidence/issue-25-closure-verification.md).
+  [issue 25 closure verification](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-25-closure-verification.md).
 
 This policy governs contributor-facing PR reproduction and demo commands. It does not prescribe
 or validate internal GitHub Actions runner steps. The current metadata validator checks only a

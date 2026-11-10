@@ -352,7 +352,7 @@ provider's only in the first case below; the others are rejected with 502 `upstr
 ## Demo model
 
 Issue #880 measured the demo's model on 2026-10-31 with the real investigator and governed gateway
-([measurements](evidence/issue-880/README.md)). The demo uses `anthropic/claude-haiku-5.5` on
+([measurements](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-880/README.md)). The demo uses `anthropic/claude-haiku-5.5` on
 provider `anthropic` (`TRIAGE_AGENT_MODEL`, `TRIAGE_AGENT_PROVIDER`) with the default
 `OPENROUTER_TIMEOUT_SECONDS=30`: the investigator then waits 45 s per model call, 75 s with
 `OPENROUTER_MANAGEMENT_API_KEY`. Its calls took 1.6 to 8.1 s and a whole investigation 24 to 27 s,

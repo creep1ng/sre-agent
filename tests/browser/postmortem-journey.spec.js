@@ -4,7 +4,7 @@ import { connectConsole } from "./support/console-session.mjs";
 
 // Real-stack journey (#43): a resolved incident to an approved postmortem in the console, then the
 // close through the Decisiones link. Needs POSTMORTEM_INCIDENT (a resolved incident, e.g. from
-// docs/evidence/43/to_resolved.py) and a demo-human key with run.read_context.
+// to_resolved.py in https://github.com/creep1ng/sre-agent/tree/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/43) and a demo-human key with run.read_context.
 const INCIDENT = process.env.POSTMORTEM_INCIDENT;
 const OUT = process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results";
 test.skip(!INCIDENT, "Set POSTMORTEM_INCIDENT to a resolved incident of the stack under test.");

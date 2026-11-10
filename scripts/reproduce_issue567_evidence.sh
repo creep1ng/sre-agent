@@ -4,6 +4,8 @@ set -eu
 ISSUE567_OUTPUT=${1:?Provide an absolute persistent output directory outside the checkout}
 case "$ISSUE567_OUTPUT" in /*) ;; *) echo 'Output path must be absolute' >&2; exit 2 ;; esac
 cd "$(git rev-parse --show-toplevel)"
+# docs/evidence left git in #1018; the overlay this reads is still in a checkout of 0cb2ad44.
+test -f docs/evidence/issue-567/compose.yaml || { echo 'Run this from a checkout of 0cb2ad44 or earlier' >&2; exit 2; }
 checkout=$(pwd -P)
 mkdir -p "$ISSUE567_OUTPUT"
 ISSUE567_OUTPUT=$(cd "$ISSUE567_OUTPUT" && pwd -P)

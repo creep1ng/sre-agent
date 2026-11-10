@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 const baseURL = process.env.PLAYWRIGHT_BASE_URL || "http://web";
 const existingTests = ["api-seam.spec.js", "production-proxy.spec.js", "grants-client-seam.spec.js", "consumption-client-seam.spec.js", "console-shell.spec.js", "console-incidents.spec.js", "war-room-runs-real.spec.js", "war-room-reasoning-real.spec.js", "review-mitigation-real.spec.js", "war-room-follow-real.spec.js", "change-events-real.spec.js", "incident-list-real.spec.js", "service-operation-grant-real.spec.js"];
 
-// The postmortem journey needs a resolved incident of the stack under test (docs/evidence/43).
+// The postmortem journey needs a resolved incident of the stack under test (see https://github.com/creep1ng/sre-agent/tree/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/43).
 const postmortemJourney = process.env.POSTMORTEM_INCIDENT ? ["postmortem-journey.spec.js"] : [];
 // The output-language journey runs a paid investigation, so it runs only when asked (#717).
 const languageJourney = process.env.EXPECTED_OUTPUT_LANGUAGE ? ["investigator-language-real.spec.js"] : [];

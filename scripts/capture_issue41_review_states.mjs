@@ -37,7 +37,7 @@ function story(currentState, version) {
 const browser = await chromium.launch();
 
 async function shoot(page, name, state) {
-  const file = `docs/evidence/41-review-fixtures-${name}.png`;
+  const file = `artifacts/41-review-fixtures-${name}.png`;
   const contentHeight = await page.evaluate(() => document.body.scrollHeight);
   await page.setViewportSize({ width: 1440, height: Math.min(contentHeight, 4000) });
   await page.waitForTimeout(200);

@@ -2,7 +2,7 @@
 // of the closed inc-recall-first. Needs the data the recall E2E leaves in python-checks-db, served
 // by the real API and web proxy (see the PR's reproduction commands):
 //   docker compose --profile e2e run --rm --no-deps -v ./scripts:/e2e/scripts:ro \
-//     -v ./docs/evidence:/e2e/docs/evidence -e DEMO_HUMAN_API_KEY=<the E2E's demo key> \
+//     -v ./artifacts:/e2e/artifacts -e DEMO_HUMAN_API_KEY=<the E2E's demo key> \
 //     e2e node scripts/capture_issue773_war_room_memory.mjs
 import { chromium } from "@playwright/test";
 import { connectConsole } from "../tests/browser/support/console-session.mjs";
@@ -22,7 +22,7 @@ try {
   await page.waitForTimeout(300);
   await reasoning
     .locator("xpath=ancestor::section[1]")
-    .screenshot({ path: "docs/evidence/issue-773/war-room-memory.png" });
+    .screenshot({ path: "artifacts/issue-773/war-room-memory.png" });
 } finally {
   await browser.close();
 }

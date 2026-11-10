@@ -6,7 +6,7 @@ Principal. It does not enumerate upstream tools.
 
 ## Passed replay and provenance
 
-[`issue-29-live-evidence.json`](evidence/issue-29-live-evidence.json) records
+[`issue-29-live-evidence.json`](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-29-live-evidence.json) records
 the sanitized, isolated replay tested at PR368 descendant
 `944f658f5a951c6506c6545e4fabf0c4ecd6ee43`, **not** a live execution on PR367.
 The immediately prior PR367 matrix and 5cc9 replay are preserved unchanged at
@@ -64,8 +64,8 @@ string methods map to `other`. The versioned implementation is in PR368 at
 
 ## Browser screenshot and separate failed attempt
 
-The real-browser screenshot is [`issue-29-current-discovery.png`](evidence/issue-29-current-discovery.png)
-with [separate provenance](evidence/issue-29-current-discovery.provenance.json).
+The real-browser screenshot is [`issue-29-current-discovery.png`](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-29-current-discovery.png)
+with [separate provenance](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-29-current-discovery.provenance.json).
 It shows a real FastAPI JSON response with both published tools, status 200,
 request ID `4b405cb1-f7bc-4085-a41e-c699ddafc498`, captured at
 `2026-10-03T17:31:18.350Z` (HTTP `Date`: `Sat, 03 Oct 2026 17:31:17 GMT`). This
@@ -134,12 +134,12 @@ complete or integrate until the human review and repository checks permit it.
 
 ## Exact foundation candidate browser evidence
 
-- PR365: [actual discovery response](evidence/issue-29-pr365-current.png),
-  [provenance](evidence/issue-29-pr365-current.provenance.json). Executed at
+- PR365: [actual discovery response](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-29-pr365-current.png),
+  [provenance](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-29-pr365-current.provenance.json). Executed at
   `b8eb3267eff76673adf00e7ffb006e03f576627a`, HTTP200/two tools, separate
   request `dffded0d-fc40-4d1a-be39-249bfb6fa4ac` on2026-10-03T17:37:48.980Z.
-- PR366: [actual OpenAPI response](evidence/issue-29-pr366-current.png),
-  [provenance](evidence/issue-29-pr366-current.provenance.json). Executed at
+- PR366: [actual OpenAPI response](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-29-pr366-current.png),
+  [provenance](https://github.com/creep1ng/sre-agent/blob/0cb2ad441e4f9923f3ff6d804dc59a6cfc51aa63/docs/evidence/issue-29-pr366-current.provenance.json). Executed at
   `15eb71c60f30e7d009d688e54576b0030a6f1d10`, GET/openapi.json HTTP200 at
   2026-10-03T17:41:49.255Z; required body, typed oneOf and both request examples
   inspected. This is schema evidence, not execution of illustrative requests.
