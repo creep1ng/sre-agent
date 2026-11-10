@@ -541,7 +541,7 @@ class InvestigationRunDispatcher:
                     InvestigationRequest(
                         incident_id=incident_id,
                         run_id=run_id,
-                        objective="verify" if verifying else "investigate",
+                        objective=self.runtime.workflow.agent_objective(self._state(run_id)),
                         context=context,
                         authorized_capabilities=capabilities,
                         service_operations=operations,

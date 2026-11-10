@@ -221,6 +221,10 @@ class IncidentRuntime:
         self._id_factory = id_factory
         self._snapshot_interval = snapshot_interval
 
+    @property
+    def workflow(self) -> IncidentWorkflow:
+        return self._workflow
+
     async def current(self, incident_id: str, run_id: str) -> IncidentView:
         async with self._unit_of_work() as work:
             incident = await work.incidents.get(incident_id)

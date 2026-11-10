@@ -9,6 +9,8 @@ from typing import Any
 
 import yaml
 
+from sre_agent.vocabulary import AgentObjective
+
 SUPPORTED_WORKFLOWS = {"incident-response": "1.0.0"}
 
 
@@ -41,12 +43,20 @@ class IncidentWorkflow:
     terminal_states: frozenset[str]
     states: frozenset[str]
     transitions: Mapping[str, Transition]
+    objectives: Mapping[str, AgentObjective]
 
     def transition(self, transition_id: str) -> Transition:
         try:
             return self.transitions[transition_id]
         except KeyError as error:
             raise InvalidWorkflowError(f"unknown transition '{transition_id}'") from error
+
+    def agent_objective(self, state: str) -> AgentObjective:
+        """The objective of the agentic step the workflow allows in a state."""
+        try:
+            return self.objectives[state]
+        except KeyError as error:
+            raise InvalidWorkflowError(f"state '{state}' allows no agentic step") from error
 
     @classmethod
     def from_document(
@@ -71,6 +81,25 @@ class IncidentWorkflow:
         terminal_states = frozenset(str(name) for name in document.get("terminal_states", ()))
         if initial_state not in states or not terminal_states <= states:
             raise InvalidWorkflowError("workflow initial or terminal state is undeclared")
+
+        objectives: dict[str, AgentObjective] = {}
+        for name, definition in raw_states.items():
+            definition = definition or {}
+            if not isinstance(definition, Mapping):
+                raise InvalidWorkflowError(f"state '{name}' must be an object")
+            objective = definition.get("agent_objective")
+            if bool(definition.get("allows_agentic_step")) != (objective is not None):
+                raise InvalidWorkflowError(
+                    f"state '{name}' must declare an agent_objective exactly when it allows "
+                    "an agentic step"
+                )
+            if objective is not None:
+                try:
+                    objectives[str(name)] = AgentObjective(objective)
+                except ValueError as error:
+                    raise InvalidWorkflowError(
+                        f"state '{name}' declares an unknown agent_objective '{objective}'"
+                    ) from error
 
         transitions: dict[str, Transition] = {}
         for raw in raw_transitions:
@@ -107,6 +136,7 @@ class IncidentWorkflow:
             terminal_states=terminal_states,
             states=states,
             transitions=transitions,
+            objectives=objectives,
         )
 
 
