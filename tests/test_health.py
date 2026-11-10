@@ -2,8 +2,7 @@ import os
 
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
+from database_support import alembic_head
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
@@ -19,25 +18,7 @@ DATABASE_URL = os.environ.get(
 
 
 def test_readiness_requires_current_migration_head() -> None:
-    assert REQUIRED_SCHEMA_VERSION == "20261103_01"
-
-
-@pytest.fixture(scope="module")
-def migrated_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, consumption_reservations, "
-            "consumption_limit_policies, "
-            "bok_section_chunks, bok_documents, "
-            "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
-            "principals, idempotency_records, mcp_tools, mcp_servers, alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
+    assert REQUIRED_SCHEMA_VERSION == alembic_head()
 
 
 @pytest.mark.usefixtures("migrated_database")
@@ -76,7 +57,9 @@ def test_readiness_rejects_previous_database_migration_head() -> None:
         assert response.json() == {"status": "unavailable", "dependency": "postgresql"}
     finally:
         with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-            connection.execute("UPDATE alembic_version SET version_num = '20261103_01'")
+            connection.execute(
+                "UPDATE alembic_version SET version_num = %s", (REQUIRED_SCHEMA_VERSION,)
+            )
 
 
 def test_liveness_does_not_call_readiness_dependency() -> None:

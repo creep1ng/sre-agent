@@ -5,6 +5,7 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from database_support import reset_database
 
 from sre_agent.governance.dto import MCPServer, MCPTool
 from sre_agent.persistence.database import Database
@@ -21,20 +22,8 @@ NOW = datetime(2026, 9, 21, 12, tzinfo=UTC)
 
 
 @pytest.fixture(scope="module", autouse=True)
-def migrated_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, consumption_limit_policies, "
-            "bok_section_chunks, bok_documents, "
-            "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, "
-            "resources, alert_triage, mcp_tools, mcp_servers, "
-            "principals, idempotency_records, "
-            "alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
+def upgraded_database() -> None:
+    reset_database(DATABASE_URL)
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", DATABASE_URL)
     command.upgrade(config, "20260822_01")

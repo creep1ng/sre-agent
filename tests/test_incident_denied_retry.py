@@ -15,7 +15,7 @@ from test_incident_investigator_http import (
     _grant_run_access,
     _serve,
     _start,
-    migrated_database,  # noqa: F401 -- a fresh synthetic DB with no agent MCP grant yet
+    seeded_database,  # noqa: F401 -- a fresh synthetic DB with no agent MCP grant yet
 )
 
 

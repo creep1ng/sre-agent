@@ -6,22 +6,13 @@ from datetime import UTC, datetime
 from unittest.mock import ANY, AsyncMock
 
 import pytest
+from control_testkit import _Audit, _TargetAccessed
 
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.control.service import ControlService
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
 from sre_agent.governance.dto import PolicyDecision, Principal, PrincipalContext
-
-
-class _Audit:
-    async def append(self, event: object) -> object:
-        return event
-
-
-class _TargetAccessed:
-    def __init__(self, *_args: object, **_kwargs: object) -> None:
-        raise AssertionError("target repository access must follow authorization")
 
 
 def _context() -> PrincipalContext:

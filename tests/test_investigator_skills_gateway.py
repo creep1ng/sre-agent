@@ -16,8 +16,14 @@ import httpx
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from test_control_acceptance import ADMIN_KEY, AUDIT_KEY, DATABASE_URL, SEED_ENV, headers
-from test_control_acceptance import client as _client_fixture  # noqa: F401
+from test_control_acceptance import (
+    ADMIN_KEY,
+    AUDIT_KEY,
+    DATABASE_URL,
+    SEED_ENV,
+    audit_key,  # noqa: F401
+    headers,
+)
 from test_control_acceptance import migrated_acceptance_database as _database_fixture  # noqa: F401
 from test_investigator_loop import HYPOTHESIS, TOOL, Provider, ScriptedGateway, ids
 from test_investigator_skills import request_for
@@ -35,11 +41,6 @@ DEMO = {
 }
 TRIAGE, POSTMORTEM = DEMO["incident-triage"], DEMO["postmortem-writer"]
 SECOND = {**TRIAGE, "version": "2.0.0", "manifest": {**TRIAGE["manifest"], "instructions": "v2"}}
-
-
-@pytest.fixture
-def client(request: pytest.FixtureRequest) -> TestClient:
-    return request.getfixturevalue("_client_fixture")
 
 
 def set_status(client: TestClient, skill: dict[str, Any], status: str) -> None:

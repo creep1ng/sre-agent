@@ -5,19 +5,20 @@ import json
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
-from test_control_acceptance import ADMIN_KEY, DATABASE_URL, RESTRICTED_KEY, SEED_ENV, headers
-from test_control_acceptance import client as _client_fixture  # noqa: F401
+from test_control_acceptance import (
+    ADMIN_KEY,
+    DATABASE_URL,
+    RESTRICTED_KEY,
+    SEED_ENV,
+    audit_key,  # noqa: F401
+    headers,
+)
 from test_control_acceptance import migrated_acceptance_database as _database_fixture  # noqa: F401
 
 from sre_agent.gateway.skills import SkillResolutionResponse
 from sre_agent.persistence import repositories
 
 INCIDENT_KEY = SEED_ENV["INCIDENT_HARNESS_API_KEY"]
-
-
-@pytest.fixture
-def client(request: pytest.FixtureRequest) -> TestClient:
-    return request.getfixturevalue("_client_fixture")
 
 
 def publish(

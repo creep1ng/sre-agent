@@ -35,7 +35,7 @@ from test_incident_investigator_http import (
     _grant_run_access,
     _serve,
     _start,
-    migrated_database,  # noqa: F401 -- a fresh synthetic DB: this module adds a principal
+    seeded_database,  # noqa: F401 -- a fresh synthetic DB: this module adds a principal
 )
 
 SCHEMA = yaml.safe_load((ROOT / "agent/schemas/run-context.schema.yaml").read_text())

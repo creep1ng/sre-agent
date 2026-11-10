@@ -35,7 +35,7 @@ from test_incident_investigator_http import (  # noqa: F401  (module fixture)
     _grant_run_access,
     _incident,
     _serve,
-    migrated_database,
+    seeded_database,
 )
 from test_incident_memory_e2e import ARTIFACTS, CONTENT, _grant_context_read
 

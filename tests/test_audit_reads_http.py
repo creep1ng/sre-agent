@@ -10,8 +10,7 @@ from uuid import UUID
 
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
+from database_support import migrate_database
 from fastapi.testclient import TestClient
 from jsonschema import Draft202012Validator, FormatChecker
 from referencing import Registry, Resource
@@ -108,17 +107,7 @@ def audit_http_database() -> None:
 
 
 def prepare_audit_http_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        tables = connection.execute(
-            "SELECT tablename FROM pg_tables WHERE schemaname='public'"
-        ).fetchall()
-        for (table,) in tables:
-            connection.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
+    migrate_database(DATABASE_URL)
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "INSERT INTO principals VALUES "

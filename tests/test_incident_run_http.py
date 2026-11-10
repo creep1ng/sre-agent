@@ -18,9 +18,8 @@ from typing import Any
 
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
 from fastapi.testclient import TestClient
+from incident_http_testkit import _assert_run_lookup_is_scoped, _client
 from sqlalchemy import event
 
 from sre_agent.application import create_application
@@ -79,23 +78,7 @@ def _base_state() -> dict[str, Any]:
 
 
 @pytest.fixture(scope="module", autouse=True)
-def authorized_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, alert_triage, consumption_limit_policies, "
-            "bok_section_chunks, bok_documents, "
-            "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, "
-            "resources, mcp_tools, mcp_servers, "
-            "principals, idempotency_records, "
-            "alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
+def authorized_database(migrated_database: None) -> None:
     with psycopg.connect(DATABASE_URL) as connection:
         connection.execute(
             "INSERT INTO principals VALUES "
@@ -145,10 +128,6 @@ def authorized_database() -> None:
     asyncio.run(database.dispose())
 
 
-def _client() -> TestClient:
-    return TestClient(create_application(Settings(DATABASE_URL)))
-
-
 def _body(objective: str = "triage", **extra: Any) -> dict[str, Any]:
     return {"workflow_version": "1.0.0", "objective": objective, **extra}
 
@@ -196,26 +175,6 @@ def _start_with_query_log(
     finally:
         event.remove(engine, "before_cursor_execute", capture)
     return response, statements
-
-
-def _assert_run_lookup_is_scoped(
-    statements: list[tuple[str, Any]], *, incident_id: str, run_id: str
-) -> None:
-    run_queries = [
-        (statement.lower(), parameters)
-        for statement, parameters in statements
-        if "from incident.runs" in statement.lower()
-    ]
-    assert run_queries
-    for statement, parameters in run_queries:
-        normalized = " ".join(statement.split())
-        assert "where run_id=" in normalized and "and incident_id=" in normalized, normalized
-        assert run_id in str(parameters)
-        assert incident_id in str(parameters)
-    assert not any(
-        "from incident.snapshots" in query.lower() or "from incident.run_events" in query.lower()
-        for query, _ in statements
-    )
 
 
 def _run_ids() -> list[str]:

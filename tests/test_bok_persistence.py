@@ -7,10 +7,7 @@ demo bootstrap that is not deterministic or does not create two collections.
 
 import os
 
-import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
 from sqlalchemy import text
 
 from sre_agent.bok.owner import (
@@ -27,24 +24,7 @@ DATABASE_URL = os.environ.get(
 )
 
 
-@pytest.fixture(scope="module", autouse=True)
-def migrated_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, consumption_reservations, "
-            "consumption_limit_policies, "
-            "bok_section_chunks, bok_documents, "
-            "bok_collection_versions, "
-            "audit_events, skill_versions, grants, credentials, resources, alert_triage, "
-            "principals, "
-            "idempotency_records, "
-            "mcp_tools, mcp_servers, alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
+pytestmark = pytest.mark.usefixtures("migrated_database")
 
 
 def bundle(collection_id: str = "manual", version: str = "1.0.0", content: str = "alpha"):

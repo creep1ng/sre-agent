@@ -4,7 +4,6 @@ import asyncio
 import hashlib
 import hmac
 import importlib.util
-import os
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
@@ -12,8 +11,7 @@ from typing import Any
 
 import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
+from database_support import DATABASE_URL, migrate_database
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 
@@ -22,10 +20,6 @@ from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import SeedSettings, seed
 from sre_agent.settings import Settings
 
-DATABASE_URL = os.environ.get(
-    "AUDIT_READS_DATABASE_URL",
-    os.environ.get("TEST_DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:55432/postgres"),
-)
 AUDIT_KEY = "issue25-audit-reads-test-key"
 ADMIN_KEY = "sre_admn_0123456789abcdefghijklmnop"
 DEMO_KEY = "sre_demo_0123456789abcdefghijklmnop"
@@ -60,24 +54,11 @@ def _terminal_capture_module() -> ModuleType:
 
 @pytest.fixture(scope="module", autouse=True)
 def migrated_audit_database() -> Iterator[None]:
-    """Reset only the explicitly configured isolated acceptance database."""
+    """Reset the test database, and only when it is one this module may reset."""
     with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
         if connection.info.dbname not in {"python_checks", "sre_agent_issue25_audit"}:
             pytest.fail("audit HTTP acceptance requires its dedicated test database")
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        connection.execute("DROP TABLE IF EXISTS consumption_reservations CASCADE")
-        connection.execute(
-            "DROP TABLE IF EXISTS request_attributions, alert_triage, consumption_limit_policies, "
-            "bok_section_chunks, "
-            "bok_documents, "
-            "bok_collection_versions, audit_events, skill_versions, grants, credentials, "
-            "resources, mcp_tools, mcp_servers, principals, idempotency_records, "
-            "alembic_version CASCADE"
-        )
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
+    migrate_database(DATABASE_URL)
 
     async def bootstrap() -> None:
         database = Database(DATABASE_URL)
@@ -91,10 +72,8 @@ def migrated_audit_database() -> Iterator[None]:
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    app = create_application(Settings(DATABASE_URL, audit_hmac_key=AUDIT_KEY))
-    with TestClient(app, raise_server_exceptions=False) as test_client:
-        yield test_client
+def audit_key() -> str:
+    return AUDIT_KEY
 
 
 def _projection_rows(*, request_id: str | None = None) -> list[dict[str, Any]]:

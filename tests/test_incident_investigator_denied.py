@@ -27,7 +27,7 @@ from test_incident_investigator_http import (
     _grant_run_access,
     _serve,
     _start,
-    migrated_database,  # noqa: F401 -- a fresh synthetic DB: this module revokes a grant
+    seeded_database,  # noqa: F401 -- a fresh synthetic DB: this module revokes a grant
 )
 
 from sre_agent.gateway.providers import ProviderRequest, ProviderResult

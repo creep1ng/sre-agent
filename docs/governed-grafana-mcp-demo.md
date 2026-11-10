@@ -468,13 +468,13 @@ docker run --rm --user "$(id -u):$(id -g)" \
 
 
 The failure-scenario functional check is versioned at
-`tests/test_issue29_counting_relay.py`; it starts the real relay subprocess and a
+`tests/test_mcp_counting_relay.py`; it starts the real relay subprocess and a
 local HTTP stub, verifies pass-through status/body/headers and method classification,
 checks a refused-upstream safe 502 and ensures counters/control operations behave
 as documented. Run it with the repository's isolated checks DB:
 
 ```sh
-compose --profile checks run --build --rm python-checks pytest -q tests/test_issue29_counting_relay.py
+compose --profile checks run --build --rm python-checks pytest -q tests/test_mcp_counting_relay.py
 ```
 
 ## Stop safely

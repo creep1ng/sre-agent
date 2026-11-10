@@ -4,10 +4,7 @@ import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-import psycopg
 import pytest
-from alembic import command
-from alembic.config import Config
 
 from sre_agent.governance.dto import AuditEvent
 from sre_agent.persistence.database import Database
@@ -81,19 +78,7 @@ def make_event(
     )
 
 
-@pytest.fixture(scope="module", autouse=True)
-def audit_database() -> None:
-    with psycopg.connect(DATABASE_URL, autocommit=True) as connection:
-        connection.execute("DROP SCHEMA IF EXISTS incident CASCADE")
-        tables = connection.execute(
-            "SELECT tablename FROM pg_tables WHERE schemaname='public'"
-        ).fetchall()
-        for (table,) in tables:
-            connection.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
-        connection.execute("DROP FUNCTION IF EXISTS reject_audit_mutation() CASCADE")
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", DATABASE_URL)
-    command.upgrade(config, "head")
+pytestmark = pytest.mark.usefixtures("migrated_database")
 
 
 async def _query(**kwargs):

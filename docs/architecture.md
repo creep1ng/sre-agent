@@ -147,12 +147,13 @@ Several invariants are repeated across code, schema, and tests. Extend them toge
 work unit:
 
 - **New Alembic revision.** Set `REQUIRED_SCHEMA_VERSION` in `src/sre_agent/gateway/health.py`
-  to the new head, otherwise `/health/ready` returns `503`. Update the tests that pin the exact
-  head (for example `tests/test_health.py`, `tests/test_migrations.py`,
-  `tests/test_skill_migration_compatibility.py`).
-- **New table.** Add it to the manual `DROP TABLE` reset lists of the PostgreSQL-backed tests
-  (for example `tests/issue454_support.py`), children before parents, or later tests fail with
-  `DuplicateTable`.
+  to the new head, otherwise `/health/ready` returns `503`; `tests/test_health.py` compares it
+  with the head Alembic computes. Other tests still pin the head as a literal: list them with
+  `git grep -nF PREVIOUS_HEAD tests/`, where `PREVIOUS_HEAD` is the revision id the new one
+  replaces, and update each.
+- **New table or schema.** No test change: the `migrated_database` fixture in
+  `tests/conftest.py` drops every schema, `public` included, before it migrates
+  (`reset_database()` in `tests/database_support.py`).
 - **New governed control route.** Register it in both `CONTROL_SCOPES`
   (`src/sre_agent/control/scopes.py`) and `CONTROL_OPERATIONS`
   (`src/sre_agent/control/service.py`), and update the tests that compare the two registries and
