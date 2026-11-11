@@ -29,6 +29,13 @@ OUTBOX = 17801
 FLAG_TOKEN = STATE / "flag-write.env"
 FLAG_PORT = 17802
 FLAG_WRITE = threading.Lock()
+# Upstream flushes span metrics once a minute and tells Grafana so (timeInterval 60s), so the
+# Demo Dashboard's $__rate_interval spans 4 min and shows a recovery minutes after the alert
+# resolves. Every 5 s, on both sides, shows a fault or a recovery within seconds, so a visitor
+# walks the whole loop in about a minute (2026-11-10 expo).
+COLLECTOR_EXTRAS = STATE / "otelcol-config-extras.yml"
+DATASOURCES = STATE / "datasources"
+METRICS_INTERVAL = "5s"
 
 
 def compose(*args):
@@ -86,6 +93,25 @@ def private_secret(path, name):
         raise RuntimeError("remote token must be a private regular file")
 
 
+def metrics_interval():
+    """Write the collector's extra layer and a copy of upstream's datasources with the faster
+    interval. Both are read inside containers by non-root users, hence 0644."""
+    COLLECTOR_EXTRAS.write_text(
+        f"connectors:\n  span_metrics:\n    metrics_flush_interval: {METRICS_INTERVAL}\n"
+    )
+    COLLECTOR_EXTRAS.chmod(0o644)
+    shutil.rmtree(DATASOURCES, ignore_errors=True)
+    shutil.copytree(ROOT / "src" / "grafana" / "provisioning" / "datasources", DATASOURCES)
+    source = DATASOURCES / "default.yaml"
+    text = source.read_text()
+    if text.count('timeInterval: "60s"') != 1:
+        raise RuntimeError("upstream Prometheus datasource changed; review its timeInterval")
+    source.write_text(text.replace('timeInterval: "60s"', f'timeInterval: "{METRICS_INTERVAL}"'))
+    DATASOURCES.chmod(0o755)
+    for path in DATASOURCES.iterdir():
+        path.chmod(0o644)
+
+
 def prepare():
     STATE.mkdir(mode=0o700, exist_ok=True)
     if STATE.is_symlink() or STATE.stat().st_mode & 0o077:
@@ -96,10 +122,14 @@ def prepare():
     if not FLAGS.exists():
         shutil.copytree(ROOT / "src" / "flagd", FLAGS.parent)
         variants()
+    metrics_interval()
     layer = {
         "services": {
             "flagd": {"volumes": [str(FLAGS.parent) + ":/etc/flagd"]},
             "checkout": {"environment": {"FLAGD_CACHE": "disabled"}},
+            "otel-collector": {
+                "volumes": [f"{COLLECTOR_EXTRAS}:/etc/otelcol-config-extras.yml:ro"]
+            },
             # Provisioning outside upstream's bind mount, so nothing is created in its checkout.
             "grafana": {
                 # Upstream caps Grafana at 175M; loading the Demo Dashboard peaks near 275M, the
@@ -113,10 +143,11 @@ def prepare():
                 "env_file": [str(INTAKE)],
                 "extra_hosts": ["host.docker.internal:host-gateway"],
                 "volumes": [
-                    f"{ROOT}/src/grafana/provisioning/{name}:/etc/midnight-provisioning/{name}:ro"
-                    for name in ("datasources", "dashboards")
-                ]
-                + [f"{RULES}:/etc/midnight-provisioning/alerting:ro"],
+                    f"{ROOT}/src/grafana/provisioning/dashboards:"
+                    "/etc/midnight-provisioning/dashboards:ro",
+                    f"{DATASOURCES}:/etc/midnight-provisioning/datasources:ro",
+                    f"{RULES}:/etc/midnight-provisioning/alerting:ro",
+                ],
             },
             "grafana-mcp": {
                 "image": settings()["mcp_image"],

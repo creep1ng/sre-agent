@@ -5,14 +5,16 @@
 #   errors:  paymentFailure, paymentUnreachable, cartFailure, productCatalogFailure, adFailure,
 #            recommendationCacheFailure, failedReadinessProbe, sre-checkout 1.5.0
 #   latency: imageSlowLoad, intlShippingSlowdown, adHighCpu, adManualGc, emailMemoryLeak
-# Span metrics reach Prometheus once a minute, hence the 2 min windows; sre-checkout pushes its
+# Upstream's span metrics reach Prometheus once a minute; on EC2 every 5 s (see
+# scripts/otel_demo/mcp_guest.py), hence 1 min windows; sre-checkout pushes its
 # own counter every 5 s. Each rule names where its evidence lives, because the alert text is
 # all an investigation starts from. Grafana expands ${...} from its own environment:
 # ALERT_INTAKE_URL and ALERT_INTAKE_GRAFANA_SECRET.
-# Each rule must hold for 1 min before it fires, so a flapping signal does not open a new paid
-# investigation on every flap; notifications group per rule and service, so one service's alert
-# never travels with another's. severity uses Grafana's usual values, which intake maps to
-# critical -> sev1, warning -> sev2, info -> sev3.
+# Each rule must hold for 15 s before it fires, short enough to walk the demo in about a minute;
+# a flap joins the service's open incident instead of paying for a new investigation (intake);
+# notifications group per rule and service, so one service's alert never travels with another's.
+# severity uses Grafana's usual values, which intake maps to critical -> sev1, warning -> sev2,
+# info -> sev3.
 apiVersion: 1
 
 contactPoints:
@@ -34,6 +36,9 @@ groups:
     folder: Midnight
     interval: 10s
     rules:
+      # flagd's evaluation stream reconnects about every 10 min and records one error span; in a
+      # service with few spans, such as payment (~8/min), that alone tops 5% of a 1 min window.
+      # It is the flag client's housekeeping, not a failed request, so the ratio leaves it out.
       - uid: midnight-service-error-rate
         title: service-error-rate
         condition: threshold
@@ -46,8 +51,8 @@ groups:
               instant: true
               range: false
               expr: >-
-                sum by (service_name) (increase(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"}[2m]))
-                / sum by (service_name) (increase(traces_span_metrics_calls_total[2m]))
+                sum by (service_name) (increase(traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR",span_name!="flagd.evaluation.v2.Service/EventStream"}[1m]))
+                / sum by (service_name) (increase(traces_span_metrics_calls_total{span_name!="flagd.evaluation.v2.Service/EventStream"}[1m]))
           - refId: threshold
             datasourceUid: __expr__
             model:
@@ -56,7 +61,7 @@ groups:
               expression: ratio
               conditions:
                 - evaluator: {type: gt, params: [0.05]}
-        for: 1m
+        for: 15s
         noDataState: OK
         execErrState: KeepLast
         labels:
@@ -64,7 +69,7 @@ groups:
         annotations:
           summary: >-
             {{ $labels.service_name }}: {{ with $values.ratio }}{{ humanizePercentage .Value }}{{ end }} of spans
-            failed over the last 2 min (threshold 5%).
+            failed over the last 1 min (threshold 5%).
           description: >-
             Evidence: Prometheus datasource webstore-metrics, metric traces_span_metrics_calls_total
             with service_name="{{ $labels.service_name }}" and status_code="STATUS_CODE_ERROR" for
@@ -90,7 +95,7 @@ groups:
               range: false
               expr: >-
                 histogram_quantile(0.95, sum by (service_name, le)
-                (rate(traces_span_metrics_duration_milliseconds_bucket{span_kind="SPAN_KIND_SERVER"}[2m])))
+                (rate(traces_span_metrics_duration_milliseconds_bucket{span_kind="SPAN_KIND_SERVER"}[1m])))
           - refId: threshold
             datasourceUid: __expr__
             model:
@@ -99,7 +104,7 @@ groups:
               expression: p95
               conditions:
                 - evaluator: {type: gt, params: [2000]}
-        for: 1m
+        for: 15s
         noDataState: OK
         execErrState: KeepLast
         labels:
@@ -107,7 +112,7 @@ groups:
         annotations:
           summary: >-
             {{ $labels.service_name }}: p95 of server spans is {{ with $values.p95 }}{{ printf "%.0f" .Value }}{{ end }} ms
-            over the last 2 min (threshold 2000 ms).
+            over the last 1 min (threshold 2000 ms).
           description: >-
             Evidence: Prometheus datasource webstore-metrics, histogram
             traces_span_metrics_duration_milliseconds_bucket with service_name="{{ $labels.service_name }}"
@@ -144,7 +149,7 @@ groups:
               expression: ratio
               conditions:
                 - evaluator: {type: gt, params: [0.1]}
-        for: 1m
+        for: 15s
         noDataState: OK
         execErrState: KeepLast
         labels:

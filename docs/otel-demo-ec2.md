@@ -229,6 +229,17 @@ Grafana's anonymous user is Admin upstream, so anyone who reaches `/grafana` thr
 `connect` can read the contact point and its secret. The secret guards only this
 demo's intake.
 
+Upstream flushes span metrics once a minute and declares `timeInterval: 60s` on the
+Prometheus datasource, so the Demo Dashboard's `$__rate_interval` spans 4 min and a
+recovery shows minutes after the alert resolves. `prepare-mcp` sets both to 5 s: a
+collector layer mounted over `/etc/otelcol-config-extras.yml`
+(`connectors.span_metrics.metrics_flush_interval`) and a copy of upstream's datasources
+under `/var/lib/otel-demo-sre/datasources`. The demo rules use 1 min windows and fire after 15 s, and the error-rate rule leaves out
+flagd's `EventStream` reconnects: one error span every ~10 min against payment's ~8 spans a
+minute tops 5 % over 1 min and opened false payment incidents. The
+overlay check refuses an instance prepared before this change; use a new instance. Open
+the dashboard with `&from=now-15m&to=now&refresh=5s`, since upstream sets no refresh.
+
 ## The executor turns the fault off (#724)
 
 `prepare-mcp` also starts the instance's flag listener (`mcp_guest.py serve-flags`, loopback
