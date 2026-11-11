@@ -189,6 +189,11 @@ CASES = [
          invalid=("/v1/incidents/X/postmortem", None, 422)),  # postmortems
     Case("GET", "/v1/incident-memory/changes", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200,
          403),  # postmortems
+    Case("POST", "/v1/incidents/{mitigating}/runs/{approving}/commands", "DEMO_HUMAN",
+         "RESTRICTED_HARNESS", 202, 403, COMMAND, {"Idempotency-Key": "gate-1021-command"},
+         effect=RUN_EVENTS, invalid=(RUN + "/commands", {}, 422)),  # runs
+    Case("POST", INCIDENT + "/runs", "DEMO_HUMAN", "RESTRICTED_HARNESS", 201, 403, START, KEY,
+         effect=RUNS, invalid=(INCIDENT + "/runs", {}, 422)),  # runs
 ]  # fmt: skip
 
 
@@ -350,6 +355,10 @@ def facts(client: TestClient) -> dict[str, Any]:
     facts["opened"] = _sql(text(query), incident=facts["closing"])[0]["event_id"]
     written = client.put(CLOSING.format(**facts), headers=human, json=_postmortem(facts))
     assert written.status_code == 201, written.text
+    # An incident whose run awaits the operator's approval of its mitigation.
+    facts["mitigating"] = "inc-gate-mitigating"
+    pending = {"status": "awaiting_human", "pending_command": "approve_mitigation"}
+    facts["approving"] = _seed(facts["mitigating"], "mitigating", pending)
     return facts
 
 
