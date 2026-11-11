@@ -130,6 +130,16 @@ CASES = [
          invalid=(INCIDENT + "/runs/bad", None, 422)),  # incidents
     Case("GET", RUN + "/events", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          invalid=(RUN + "/events?limit=0", None, 422)),  # incidents
+    Case("PUT", INCIDENT + "/postmortem", "DEMO_HUMAN", "RESTRICTED_HARNESS", 404, 403,
+         POSTMORTEM,
+         invalid=(INCIDENT + "/postmortem", {}, 422)),  # postmortems
+    Case("POST", INCIDENT + "/postmortem/reviews", "DEMO_HUMAN", "RESTRICTED_HARNESS", 404, 403,
+         {"version": 1, "outcome": "approved"},
+         invalid=(INCIDENT + "/postmortem/reviews", {}, 422)),  # postmortems
+    Case("GET", INCIDENT + "/postmortem", "DEMO_HUMAN", "RESTRICTED_HARNESS", 404, 403,
+         invalid=("/v1/incidents/X/postmortem", None, 422)),  # postmortems
+    Case("GET", "/v1/incident-memory/changes", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200,
+         403),  # postmortems
 ]  # fmt: skip
 
 
