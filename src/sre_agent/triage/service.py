@@ -208,7 +208,7 @@ class TriageService:
             allowed.append(operation)
         return allowed
 
-    def _check(
+    def check(
         self,
         operation: str,
         alert_id: str,
@@ -291,7 +291,7 @@ class TriageService:
         idempotency_key: str,
         responsible_system: str | None = None,
     ) -> TriageResult:
-        self._check(
+        self.check(
             operation,
             alert_id,
             expected_version,
