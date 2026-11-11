@@ -209,6 +209,10 @@ CASES = [
     Case("POST", "/v1/responses", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          {"model": "triage-agent", "input": "Summarize."}, audited=True, challenge=False,
          invalid=("/v1/responses", {"model": "X"}, 422)),  # responses
+    Case("POST", BOK + "/search", "INCIDENT_HARNESS", "DEMO_HUMAN", 200, 403,
+         {"query": "checkout"}, audited=True, invalid=(BOK + "/search", {}, 422)),  # bok
+    Case("GET", BOK + "/chunks/doc/sec/0", "INCIDENT_HARNESS", "DEMO_HUMAN", 404, 403,
+         audited=True),  # bok
 ]  # fmt: skip
 
 
