@@ -11,12 +11,12 @@ from typing import Any
 from sre_agent import control, incident
 from sre_agent.bok.retrieval import BoKRetrievalService, bok_router
 from sre_agent.chat.taps import TapWorker
+from sre_agent.gate.errors import GovernedError, governed_error_handler
 from sre_agent.gateway import health
 from sre_agent.gateway.alert_intake import AlertIntakeService, alert_intake_router
 from sre_agent.gateway.alerts import LiveAlertsService, alerts_router
 from sre_agent.gateway.changes import ChangeEventsService, changes_router
 from sre_agent.gateway.event_decisions import EventDecisionsService, event_decisions_router
-from sre_agent.gateway.authentication import AuthenticationFailed, authentication_failed_handler
 from sre_agent.gateway.health import ReadinessProbe
 from sre_agent.gateway.identity import router as identity_router
 from sre_agent.gateway.openrouter import OpenRouterProvider
@@ -284,7 +284,7 @@ def create_application(
                 )
             )
         )
-    application.add_exception_handler(AuthenticationFailed, authentication_failed_handler)
+    application.add_exception_handler(GovernedError, governed_error_handler)
     # A dispatch that a restart cut short has no process left to end it (#704). Without a
     # gateway a dispatch ends its run in the same call, so only an investigating API sweeps.
     if runtime_settings.investigator_gateway is not None:

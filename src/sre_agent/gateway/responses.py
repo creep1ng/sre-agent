@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
+from sre_agent.gate.errors import ErrorEnvelope
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.attribution import RequestAttribution
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
@@ -115,54 +116,6 @@ class ResponsesResponse(BaseModel):
     output: Annotated[list[ResponseOutput], Field(min_length=1)]
     request_id: UUID
     metadata: ResponseMetadata
-
-
-class ErrorDetail(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    field: Annotated[str, Field(min_length=1, max_length=100)]
-    message: Annotated[
-        str,
-        Field(
-            min_length=1,
-            max_length=200,
-            json_schema_extra={"pattern": r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"},
-        ),
-    ]
-
-
-class ErrorBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")]
-    message: Annotated[
-        str,
-        Field(
-            min_length=1,
-            max_length=300,
-            json_schema_extra={"pattern": r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"},
-        ),
-    ]
-    details: Annotated[list[ErrorDetail], Field(max_length=16)] = None  # type: ignore[assignment]
-
-
-class ErrorEnvelope(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "error": {
-                        "code": "contract_validation_failed",
-                        "message": "Request validation failed.",
-                    },
-                    "request_id": "00000000-0000-4000-8000-000000000001",
-                    "retryable": False,
-                }
-            ]
-        },
-    )
-    error: ErrorBody
-    request_id: UUID
-    retryable: bool
 
 
 class AuditStore(Protocol):

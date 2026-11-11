@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from sre_agent.gateway.authentication import authenticate_principal
+from sre_agent.gate.authentication import authenticate_principal
 from sre_agent.governance.dto import PrincipalContext
 
 

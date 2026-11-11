@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sre_agent.bok.owner import BoKVersionCollision
 from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, BoKVersionRecord, BoKVersionSummary, publish_bok_version, read_bok_version  # fmt: skip
 from sre_agent.control.scopes import CONTROL_SCOPES
+from sre_agent.gate.authentication import bearer_key
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.responses import TransactionalAuditStore
@@ -38,7 +39,6 @@ from sre_agent.governance.dto import (
     SkillManifest,
     SkillVersionRecord,
 )
-from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
 from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
 
@@ -564,8 +564,8 @@ class ControlService:  # noqa: E305
         return value is None or re.match(IDEMPOTENCY_KEY_PATTERN, value) is None
 
     async def _authenticate(self, authorization: str | None) -> PrincipalContext | None:
-        scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
+        key = bearer_key(authorization)
+        if key is None:
             return None
         async with self.sessions() as session:
             return await CredentialRepository(session).resolve_authorization_context(key)
