@@ -14,15 +14,20 @@ import logging
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Response
 
+from sre_agent.gate.errors import GovernedError
+from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope
 from sre_agent.gateway.execution import ExecutionRefused, OperationExecutor
 from sre_agent.gateway.incidents import (
+    INVALID,
+    NOT_FOUND,
     RETRY_AFTER_SECONDS,
+    UNAUTHENTICATED,
+    UNAVAILABLE,
     WORKFLOW_RESOURCE_TYPE,
     IncidentWorkflowResourceReader,
     consistent_run_state,
@@ -31,7 +36,7 @@ from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationEvaluation,
 )
-from sre_agent.governance.dto import Principal
+from sre_agent.governance.dto import Principal, PrincipalContext
 from sre_agent.incident.commands import HumanCommand, resolve
 from sre_agent.incident.persistence import (
     IncidentIdempotencyConflictError,
@@ -55,12 +60,7 @@ from sre_agent.incident.runtime import (
     RunStart,
 )
 from sre_agent.incident.workflow import IncidentWorkflow
-from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import (
-    CredentialRepository,
-    GrantRepository,
-    PrincipalRepository,
-)
+from sre_agent.persistence.repositories import GrantRepository, PrincipalRepository
 from sre_agent.vocabulary import (
     RUN_OBJECTIVE_TRANSITIONS,
     RunCommand,
@@ -77,38 +77,30 @@ START_ACTION = "run.start"
 IDEMPOTENCY_KEY_PATTERN = r"^\S{8,200}$"
 START_REQUEST_FIELDS = frozenset({"workflow_version", "objective", "resume_from_run_id"})
 
-ERRORS = {
-    401: ("authentication_failed", "Authentication is required."),
-    403: ("not_authorized", "The principal is not authorized to start runs on this workflow."),
-    404: ("incident_not_found", "The requested incident was not found."),
-    409: ("run_conflict", "The request conflicts with the current state of the run."),
-    422: ("validation_error", "The request is invalid."),
-    503: ("storage_unavailable", "Incident storage is temporarily unavailable."),
-}
-RUN_NOT_FOUND = ("run_not_found", "The requested incident run was not found.")
+START_DENIED = GovernedError(
+    403, "not_authorized", "The principal is not authorized to start runs on this workflow."
+)
+RUN_CONFLICT = GovernedError(
+    409, "run_conflict", "The request conflicts with the current state of the run."
+)
+CONFLICTS = (
+    ApprovalRequiredError,
+    IncidentIdempotencyConflictError,
+    IncidentStaleWriteError,
+    InvalidTransitionError,
+)
 
 Authorizer = Callable[[Any, Principal], Awaitable[AuthorizationEvaluation]]
 
 
-def error_envelope(
-    request_id: UUID, status: int, code_and_message: tuple[str, str] | None = None
-) -> JSONResponse:
-    """One error shape for every run route, headers included."""
-
-    code, message = code_and_message or ERRORS[status]
-    response = JSONResponse(
-        {
-            "error": {"code": code, "message": message},
-            "request_id": str(request_id),
-            "retryable": status == 503,
-        },
-        status,
-    )
+def status_error(status: int, code: str, message: str) -> GovernedError:
+    """A refusal another component reports by status (the deploy-executor), as the run routes
+    word theirs: retryable with `Retry-After` when unavailable, a challenge when unauthenticated."""
     if status == 401:
-        response.headers["WWW-Authenticate"] = "Bearer"
+        return GovernedError(status, code, message, headers={"WWW-Authenticate": "Bearer"})
     if status == 503:
-        response.headers["Retry-After"] = RETRY_AFTER_SECONDS
-    return response
+        return GovernedError(status, code, message, retryable=True, retry_after=RETRY_AFTER_SECONDS)
+    return GovernedError(status, code, message)
 
 
 class RunStartService:
@@ -126,6 +118,12 @@ class RunStartService:
         self.sessions, self.workflow, self.runtime, self.units = sessions, workflow, runtime, units
         self._authorizer = authorizer or self._default_authorizer
         self.investigator = investigator
+        self.scope = Scope(START_ACTION, WORKFLOW_RESOURCE_TYPE, workflow.workflow_id)
+        self._gate: Gate[None] = Gate(
+            sessions,
+            Refusals(unauthenticated=UNAUTHENTICATED, denied=START_DENIED, unavailable=UNAVAILABLE),
+            authorizer=lambda session, context, scope: self._authorizer(session, context.principal),
+        )
 
     async def _default_authorizer(
         self, session: Any, principal: Principal
@@ -136,32 +134,6 @@ class RunStartService:
         return await engine.evaluate(
             principal, START_ACTION, WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id
         )
-
-    def _error(
-        self,
-        request_id: UUID,
-        status: int,
-        code_and_message: tuple[str, str] | None = None,
-    ) -> JSONResponse:
-        return error_envelope(request_id, status, code_and_message)
-
-    async def _authorized_principal(
-        self, request_id: UUID, authorization: str | None
-    ) -> tuple[Principal | None, JSONResponse | None]:
-        scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
-            return None, self._error(request_id, 401)
-        try:
-            async with self.sessions() as session:
-                context = await CredentialRepository(session).authenticate(key)
-                if context is None:
-                    return None, self._error(request_id, 401)
-                evaluation = await self._authorizer(session, context.principal)
-        except Exception:
-            return None, self._error(request_id, 503)
-        if evaluation.decision.decision != "allow":
-            return None, self._error(request_id, 403)
-        return context.principal, None
 
     def _invalid_request(self, incident_id: str, idempotency_key: str | None, body: Any) -> bool:
         if not is_identifier(incident_id):
@@ -186,27 +158,24 @@ class RunStartService:
         body: Any,
         authorization: str | None,
         idempotency_key: str | None,
-    ) -> JSONResponse:
-        request_id = uuid4()
-        if self._invalid_request(incident_id, idempotency_key, body):
-            return self._error(request_id, 422)
-        principal, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        assert principal is not None and idempotency_key is not None
-        resume = body.get("resume_from_run_id")
-        if resume is not None:
-            return await self._resume(request_id, incident_id, str(resume))
-        return await self._open(request_id, incident_id, body, principal, idempotency_key)
+    ) -> Response:
+        def validate() -> None:
+            if self._invalid_request(incident_id, idempotency_key, body):
+                raise INVALID
+
+        async def start(admission: Admission, _: None) -> Released:
+            assert idempotency_key is not None
+            resume = body.get("resume_from_run_id")
+            if resume is not None:
+                return await self._resume(incident_id, str(resume))
+            principal = admission.context.principal
+            return await self._open(incident_id, body, principal, idempotency_key)
+
+        return await self._gate.run(authorization, self.scope, start, validate=validate)
 
     async def _open(
-        self,
-        request_id: UUID,
-        incident_id: str,
-        body: dict[str, Any],
-        principal: Principal,
-        idempotency_key: str,
-    ) -> JSONResponse:
+        self, incident_id: str, body: dict[str, Any], principal: Principal, idempotency_key: str
+    ) -> Released:
         human = principal.kind == "human"
         try:
             result = await self.runtime.start_run(
@@ -221,71 +190,54 @@ class RunStartService:
                 )
             )
         except IncidentNotFoundError:
-            return self._error(request_id, 404)
+            raise NOT_FOUND["incident_not_found"] from None
         except RunNotFoundError:
-            return self._error(request_id, 404, RUN_NOT_FOUND)
-        except (
-            ApprovalRequiredError,
-            IncidentIdempotencyConflictError,
-            IncidentStaleWriteError,
-            InvalidTransitionError,
-            PreconditionFailedError,
-        ):
-            return self._error(request_id, 409)
-        except Exception:
-            return self._error(request_id, 503)
+            raise NOT_FOUND["run_not_found"] from None
+        except (*CONFLICTS, PreconditionFailedError):
+            raise RUN_CONFLICT from None
         sequence = max((event.sequence for event in result.events), default=-1)
         run = result.run
         if body["objective"] == RunObjective.INVESTIGATE and self.investigator is not None:
-            try:
-                await self.investigator.after_start(result)
-                async with self.units() as work:
-                    found = await consistent_run_state(work, result.run.run_id, incident_id)
-                if found is None:
-                    return self._error(request_id, 404, RUN_NOT_FOUND)
-                run, sequence = found
-            except Exception:
-                return self._error(request_id, 503)
-        try:
-            payload = project_run_state(run, self.workflow, event_sequence=sequence)
-        except UnsupportedWorkflowDataError:
-            return self._error(request_id, 422)
-        return JSONResponse(payload, 200 if result.replayed else 201)
+            await self.investigator.after_start(result)
+            async with self.units() as work:
+                found = await consistent_run_state(work, result.run.run_id, incident_id)
+            if found is None:
+                raise NOT_FOUND["run_not_found"]
+            run, sequence = found
+        return self._state(run, sequence, 200 if result.replayed else 201)
 
-    async def _resume(self, request_id: UUID, incident_id: str, run_id: str) -> JSONResponse:
+    def _state(self, run: Any, sequence: int, status: int) -> Released:
+        try:
+            return Released(project_run_state(run, self.workflow, event_sequence=sequence), status)
+        except UnsupportedWorkflowDataError:
+            raise INVALID from None
+
+    async def _resume(self, incident_id: str, run_id: str) -> Released:
         """Return the run the caller asks to resume, from the authoritative store.
 
         Resuming reads: the run keeps its identity and its correlation, and the
         caller drives it further with commands. Nothing is transitioned here.
         """
 
-        try:
-            async with self.units() as work:
-                incident = await work.incidents.get(incident_id)
-                if incident is None:
-                    return self._error(request_id, 404)
-                # The state and its cursor come from one read point, as in the
-                # run reads: a transition that lands between reading the run and
-                # its events is read again, never returned as an old state with
-                # a newer cursor. A read that keeps racing is a retryable 503.
-                found = await consistent_run_state(work, run_id, incident_id)
-            if found is None:
-                return self._error(request_id, 404, RUN_NOT_FOUND)
-            run, sequence = found
-        except Exception:
-            return self._error(request_id, 503)
-        try:
-            payload = project_run_state(run, self.workflow, event_sequence=sequence)
-        except UnsupportedWorkflowDataError:
-            return self._error(request_id, 422)
-        return JSONResponse(payload, 200)
+        async with self.units() as work:
+            if await work.incidents.get(incident_id) is None:
+                raise NOT_FOUND["incident_not_found"]
+            # The state and its cursor come from one read point, as in the
+            # run reads: a transition that lands between reading the run and
+            # its events is read again, never returned as an old state with
+            # a newer cursor. A read that keeps racing is a retryable 503.
+            found = await consistent_run_state(work, run_id, incident_id)
+        if found is None:
+            raise NOT_FOUND["run_not_found"]
+        run, sequence = found
+        return self._state(run, sequence, 200)
 
 
 def runs_router(service: RunStartService) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/incidents/{incident_id}/runs")
-    async def start_run(incident_id: str, request: Request) -> JSONResponse:
+    async def start_run(incident_id: str, request: Request) -> Response:
         try:
             body = await request.json()
         except ValueError:
@@ -339,18 +291,21 @@ EXPLICIT_APPROVAL_COMMANDS = frozenset({RunCommand.CLOSE_INCIDENT})
 DISPOSITIONS = frozenset({"dismiss", "link", "declare"})
 TURN_ID_PATTERN = r"^turn_[a-z0-9]{8,32}$"
 MAX_COMMENT = 2000
-COMMAND_DENIED = ("not_authorized", "The principal is not authorized to send this command.")
-ATTRIBUTION_MISMATCH = (
-    "actor_attribution_mismatch",
-    "Actor attribution must match the authenticated principal.",
+COMMAND_REFUSALS = Refusals(
+    unauthenticated=UNAUTHENTICATED,
+    denied=GovernedError(
+        403, "not_authorized", "The principal is not authorized to send this command."
+    ),
+    unavailable=UNAVAILABLE,
 )
-PRECONDITION_FAILED = (
-    "precondition_failed",
-    "The incident does not meet the command's workflow precondition.",
+ATTRIBUTION_MISMATCH = GovernedError(
+    403, "actor_attribution_mismatch", "Actor attribution must match the authenticated principal."
 )
-COMMAND_CONFLICT = (
-    "run_conflict",
-    "The command is not permitted from the run's current state.",
+PRECONDITION_FAILED = GovernedError(
+    409, "precondition_failed", "The incident does not meet the command's workflow precondition."
+)
+COMMAND_CONFLICT = GovernedError(
+    409, "run_conflict", "The command is not permitted from the run's current state."
 )
 
 
@@ -378,6 +333,13 @@ class RunCommandService:
         self.sessions, self.workflow, self.runtime = sessions, workflow, runtime
         self._authorizer = authorizer or self._default_authorizer
         self.executor, self.verifier = executor, verifier
+        self._gate: Gate[str] = Gate(
+            sessions,
+            COMMAND_REFUSALS,
+            authorizer=lambda session, context, scope: self._authorizer(
+                session, context.principal, scope.action
+            ),
+        )
 
     async def _default_authorizer(
         self, session: Any, principal: Principal, action: str
@@ -389,31 +351,17 @@ class RunCommandService:
             principal, action, WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id
         )
 
-    async def _authorized_principal(
-        self, request_id: UUID, authorization: str | None, action: str, linked: str | None = None
-    ) -> tuple[Principal | None, JSONResponse | None]:
-        scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if linked is None and (
-            not separator or scheme.casefold() != "bearer" or not is_api_key(key)
-        ):
-            return None, error_envelope(request_id, 401)
-        try:
-            async with self.sessions() as session:
-                if linked is None:
-                    context = await CredentialRepository(session).authenticate(key)
-                    principal = context.principal if context is not None else None
-                else:
-                    principal = await PrincipalRepository(session).get(linked)
-                    if principal is not None and principal.status != "active":
-                        principal = None
-                if principal is None:
-                    return None, error_envelope(request_id, 401)
-                evaluation = await self._authorizer(session, principal, action)
-        except Exception:
-            return None, error_envelope(request_id, 503)
-        if evaluation.decision.decision != "allow":
-            return None, error_envelope(request_id, 403, COMMAND_DENIED)
-        return principal, None
+    async def _linked(self, principal_id: str, channel: str) -> PrincipalContext | None:
+        """The active principal a chat link names; the link stands in for the credential."""
+        async with self.sessions() as session:
+            principal = await PrincipalRepository(session).get(principal_id)
+        if principal is None or principal.status != "active":
+            return None
+        return PrincipalContext(
+            principal=principal,
+            credential_id=f"chat_link_{channel}",
+            authenticated_at=datetime.now(UTC),
+        )
 
     def _invalid_reference(self, reference: Any) -> bool:
         if not isinstance(reference, dict) or set(reference) - {
@@ -507,7 +455,7 @@ class RunCommandService:
         run_id: str,
         body: Any,
         idempotency_key: str,
-    ) -> JSONResponse:
+    ) -> Response:
         """Deliver a command from a linked chat, as the human principal the link names (#767).
 
         The chat gateway has no bearer key to forward: the link record stands in for the
@@ -526,17 +474,39 @@ class RunCommandService:
         idempotency_key: str | None,
         *,
         linked: tuple[str, str] | None = None,
-    ) -> JSONResponse:
-        request_id = uuid4()
-        if self._invalid_request(incident_id, run_id, idempotency_key, body):
-            return error_envelope(request_id, 422)
-        command = str(body["command"])
-        principal, error = await self._authorized_principal(
-            request_id, authorization, COMMAND_ACTIONS[command], linked and linked[0]
+    ) -> Response:
+        def validate() -> str:
+            if self._invalid_request(incident_id, run_id, idempotency_key, body):
+                raise INVALID
+            return str(body["command"])
+
+        async def command(admission: Admission, command: str) -> Released:
+            assert idempotency_key is not None
+            return await self._command(
+                admission, incident_id, run_id, body, idempotency_key, linked
+            )
+
+        return await self._gate.run(
+            authorization,
+            lambda command: Scope(
+                COMMAND_ACTIONS[command], WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id
+            ),
+            command,
+            validate=validate,
+            authenticate=(lambda _: self._linked(*linked)) if linked else None,
         )
-        if error is not None:
-            return error
-        assert principal is not None and idempotency_key is not None
+
+    async def _command(
+        self,
+        admission: Admission,
+        incident_id: str,
+        run_id: str,
+        body: dict[str, Any],
+        idempotency_key: str,
+        linked: tuple[str, str] | None,
+    ) -> Released:
+        principal, request_id = admission.context.principal, admission.request_id
+        command = str(body["command"])
         # Commands are human-only (run-command:2.0.0 and 2.1.0). The actor type and the
         # reference the body asserts must both describe the authenticated
         # principal: an agent credential holding the action, by grant or by
@@ -545,7 +515,7 @@ class RunCommandService:
             principal.kind != "human"
             or body["actor_reference"]["principal_id"] != principal.principal_id
         ):
-            return error_envelope(request_id, 403, ATTRIBUTION_MISMATCH)
+            raise ATTRIBUTION_MISMATCH
         request = HumanCommand(
             command_id=idempotency_key,
             incident_id=incident_id,
@@ -582,27 +552,20 @@ class RunCommandService:
                     denial=refused.status == 403,
                 )
             except Exception as error:
-                # Only the type is logged, never the content.
+                # Only the type is logged, never the content; the refusal still answers.
                 logger.error("approval_refusal_record_failed error=%s", type(error).__name__)
-            return error_envelope(request_id, refused.status, (refused.code, refused.message))
+            raise status_error(refused.status, refused.code, refused.message) from None
         except IncidentNotFoundError:
-            return error_envelope(request_id, 404)
+            raise NOT_FOUND["incident_not_found"] from None
         except RunNotFoundError:
-            return error_envelope(request_id, 404, RUN_NOT_FOUND)
+            raise NOT_FOUND["run_not_found"] from None
         except MissingIncidentVersionError:
-            return error_envelope(request_id, 422)
+            raise INVALID from None
         except PreconditionFailedError:
             # A guard of the runtime refused it, before anything was written.
-            return error_envelope(request_id, 409, PRECONDITION_FAILED)
-        except (
-            ApprovalRequiredError,
-            IncidentIdempotencyConflictError,
-            IncidentStaleWriteError,
-            InvalidTransitionError,
-        ):
-            return error_envelope(request_id, 409, COMMAND_CONFLICT)
-        except Exception:
-            return error_envelope(request_id, 503)
+            raise PRECONDITION_FAILED from None
+        except CONFLICTS:
+            raise COMMAND_CONFLICT from None
         if transition.execution is not None and self.verifier is not None:
             # It ran: the agent measures the service once the delay passes (#723).
             self.verifier.after_approval(incident_id, run_id)
@@ -616,15 +579,15 @@ class RunCommandService:
         try:
             payload = project_run_state(result.run, self.workflow, event_sequence=sequence)
         except UnsupportedWorkflowDataError:
-            return error_envelope(request_id, 422)
-        return JSONResponse(payload, 202)
+            raise INVALID from None
+        return Released(payload, 202)
 
 
 def commands_router(service: RunCommandService) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/incidents/{incident_id}/runs/{run_id}/commands")
-    async def send_command(incident_id: str, run_id: str, request: Request) -> JSONResponse:
+    async def send_command(incident_id: str, run_id: str, request: Request) -> Response:
         try:
             body = await request.json()
         except ValueError:
