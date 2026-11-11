@@ -54,6 +54,11 @@ class ExecutionRefused(Exception):
         self.status, self.code, self.message, self.reason = status, code, message, reason
 
 
+# How reading the executor's answer fails: transport, a body that is not JSON, or JSON of
+# another shape. Anything else is a defect here and is not passed off as an unreadable executor.
+UNREADABLE = (httpx.HTTPError, ValueError, LookupError, TypeError, AttributeError, AssertionError)
+
+
 async def service_operations(
     executor_url: str | None, service: str
 ) -> tuple[ServiceOperations | None, bool]:
@@ -75,7 +80,7 @@ async def service_operations(
             flags=body.get("flags") or {},
             operations=body["operations"],
         )
-    except Exception:
+    except UNREADABLE:
         return None, True
     return view, False
 
@@ -91,7 +96,7 @@ async def executor_catalog(executor_url: str) -> list[dict[str, Any]] | None:
         for entry in services:
             assert isinstance(entry["service"], str)
             assert all(isinstance(item["parameters"], list) for item in entry["operations"])
-    except Exception:
+    except UNREADABLE:
         return None
     return list(services)
 
@@ -265,7 +270,7 @@ class OperationExecutor:
                 # A flag.set (#724) touches no image: its change is in the operation's parameters.
                 return {name: value for name, value in receipt.items() if value is not None}
             code = str(result["error"]["code"])
-        except Exception:
+        except UNREADABLE:
             # Nothing to read: retrying sends the same key, which replays and never runs twice.
             raise ExecutionRefused(
                 503,
