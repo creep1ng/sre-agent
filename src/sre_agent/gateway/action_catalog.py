@@ -12,12 +12,11 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from typing import Any
-from uuid import uuid4
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Response
 from sqlalchemy import text
 
+from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.execution import OperationExecutor, executor_catalog, service_operations
 from sre_agent.gateway.incidents import IncidentQueryService
 from sre_agent.incident.persistence import IncidentUnitOfWork
@@ -43,17 +42,13 @@ class ActionCatalogService(IncidentQueryService):
         super().__init__(sessions, workflow, units)
         self.executor = executor
 
-    async def read(self, authorization: str | None) -> JSONResponse:
-        request_id = uuid4()
-        _, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        try:
-            status, offered = await self._offered()
-            runner = await self._runner(offered)
-            executions = await self._executions(offered)
-        except Exception:
-            return self._error(request_id, 503)
+    async def read(self, authorization: str | None) -> Response:
+        return await self._read(authorization, lambda: None, self._catalog)
+
+    async def _catalog(self, admission: Admission, _: None) -> Released:
+        status, offered = await self._offered()
+        runner = await self._runner(offered)
+        executions = await self._executions(offered)
         services: dict[str, list[dict[str, Any]]] = {}
         for (service, operation), parameters in offered.items():
             services.setdefault(service, []).append(
@@ -71,7 +66,7 @@ class ActionCatalogService(IncidentQueryService):
                 for service, operations in sorted(services.items())
             ],
         }
-        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+        return Released(body, headers={"Cache-Control": "no-store"})
 
     async def _offered(self) -> tuple[str, dict[tuple[str, str], list[dict[str, Any]] | None]]:
         """Each (service, operation) with its parameters; the registered resources when the
@@ -215,7 +210,7 @@ def action_catalog_router(service: ActionCatalogService) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/action-catalog")
-    async def action_catalog(request: Request) -> JSONResponse:
+    async def action_catalog(request: Request) -> Response:
         return await service.read(request.headers.get("authorization"))
 
     return router
