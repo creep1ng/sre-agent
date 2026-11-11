@@ -220,6 +220,10 @@ CASES = [
          audited=True, invalid=("/v1/usage/consumption?from=x", None, 422)),  # usage1
     Case("GET", "/v1/usage/requests?month=2026-11", "ADMIN_HUMAN", "DEMO_HUMAN", 200, 403,
          audited=True, invalid=("/v1/usage/requests?from=x", None, 422)),  # usage2
+    Case("GET", "/v1/audit-events?decision=deny", "ADMIN_HUMAN", "DEMO_HUMAN", 200, 403,
+         audited=True, invalid=("/v1/audit-events", None, 422)),  # audit
+    Case("GET", "/v1/audit-events/" + EVENT, "ADMIN_HUMAN", "DEMO_HUMAN", 404, 403,
+         audited=True, invalid=("/v1/audit-events/" + EVENT + "?content=1", None, 422)),  # audit
 ]  # fmt: skip
 
 

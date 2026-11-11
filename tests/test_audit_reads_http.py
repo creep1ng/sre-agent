@@ -349,13 +349,11 @@ def test_detail_metadata_conforms_and_404() -> None:
         "event_id"
     ]
     assert client.get(f"/v1/audit-events/{event_id}").status_code == 401
-    assert (
-        client.get(
-            f"/v1/audit-events/{event_id}?raw_content=true",
-            headers={"Authorization": BEARERS["bystander"]},
-        ).status_code
-        == 403
-    )
+    bystander = {"Authorization": BEARERS["bystander"]}
+    assert client.get(f"/v1/audit-events/{event_id}", headers=bystander).status_code == 403
+    # A content parameter is invalid before any grant is read (#1021).
+    raw = client.get(f"/v1/audit-events/{event_id}?raw_content=true", headers=bystander)
+    assert raw.status_code == 422
     detail = client.get(f"/v1/audit-events/{event_id}", headers=headers)
     assert detail.status_code == 200
     assert list(_metadata_validator().iter_errors(detail.json())) == []
@@ -530,22 +528,24 @@ def test_nonempty_get_bodies_are_rejected_and_audited(target, body, content_type
     ("/v1/audit-events?decision=deny", f"/v1/audit-events/{DIGIT_EVENT_ID}"),
     ids=("list", "detail"),
 )
-def test_nonempty_get_body_preserves_authentication_and_grant_order(target) -> None:
+def test_nonempty_get_body_is_refused_before_authentication_and_grant(target) -> None:
+    # Validation precedes authentication and authorization (#1021): a body is refused as
+    # invalid before any credential or grant is read.
     client = _client()
     body = b'{"raw_content":"ISSUE25_PRIVATE_BODY"}'
     anonymous = client.request("GET", target, content=body)
-    assert anonymous.status_code == 401
+    assert anonymous.status_code == 422
     assert "ISSUE25_PRIVATE_BODY" not in anonymous.text
-    _assert_terminal_validation_record(anonymous, 401, "authentication")
+    _assert_terminal_validation_record(anonymous, 422, "validation")
     restricted = client.request(
         "GET",
         target,
         content=body,
         headers={"Authorization": BEARERS["bystander"]},
     )
-    assert restricted.status_code == 403
+    assert restricted.status_code == 422
     assert "ISSUE25_PRIVATE_BODY" not in restricted.text
-    _assert_terminal_validation_record(restricted, 403, "authorization")
+    _assert_terminal_validation_record(restricted, 422, "validation")
 
 
 @pytest.mark.parametrize("field", ("from", "to"))
