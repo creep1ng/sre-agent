@@ -224,6 +224,9 @@ CASES = [
          audited=True, invalid=("/v1/audit-events", None, 422)),  # audit
     Case("GET", "/v1/audit-events/{event}", "ADMIN_HUMAN", "DEMO_HUMAN", 200, 403, audited=True,
          invalid=("/v1/audit-events/{event}?content=1", None, 422)),  # audit
+    Case("GET", "/v1/mcp/discovery", "INCIDENT_HARNESS", "RESTRICTED_HARNESS", 200, 403,
+         audited=True, audits_401=False,
+         invalid=("/v1/mcp/discovery?query=1", None, 422)),  # mcp1
 ]  # fmt: skip
 
 
