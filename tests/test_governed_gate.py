@@ -26,9 +26,7 @@ EXEMPT = {
     ("POST", "/v1/alert-intake/grafana"): "webhook secret",
 }
 # Gateway operations not moved yet; each layer of #1021 empties its part of this set.
-NOT_YET_MIGRATED: set[tuple[str, str]] = {
-    ("POST", "/v1/mcp/tools/{tool_id}"),
-}
+NOT_YET_MIGRATED: set[tuple[str, str]] = set()
 # Path values and bodies that reach each handler; the probe carries no valid credential.
 PATH_VALUES = {"version": "1.0.0", "chunk_index": "0", "tool_id": "query_prometheus",
                "id": "00000000-0000-4000-8000-000000001021"}  # fmt: skip
