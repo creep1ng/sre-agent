@@ -227,6 +227,10 @@ CASES = [
     Case("GET", "/v1/mcp/discovery", "INCIDENT_HARNESS", "RESTRICTED_HARNESS", 200, 403,
          audited=True, audits_401=False,
          invalid=("/v1/mcp/discovery?query=1", None, 422)),  # mcp1
+    Case("POST", "/v1/mcp/tools/query_prometheus", "INCIDENT_HARNESS", "RESTRICTED_HARNESS",
+         200, 403, {"datasource_uid": "webstore-metrics", "expr": "up", "query_type": "instant",
+                    "end_time": "now"}, audited=True, audits_401=False,
+         invalid=("/v1/mcp/tools/query_prometheus", {}, 422)),  # mcp2
 ]  # fmt: skip
 
 
