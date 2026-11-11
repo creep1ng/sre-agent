@@ -214,6 +214,8 @@ CASES = [
          invalid=(BOK + "/search", {}, 422), audits_invalid=False),  # bok
     Case("GET", BOK + "/chunks/{chunk}", "INCIDENT_HARNESS", "DEMO_HUMAN", 200, 403,
          audited=True, audits_401=False),  # bok
+    Case("GET", "/v1/skills/gate-skill/1.0.0/resolve", "INCIDENT_HARNESS", "DEMO_HUMAN", 200,
+         404, audited=True, invalid=("/v1/skills/X/1.0.0/resolve", None, 422)),  # skills
 ]  # fmt: skip
 
 
