@@ -15,16 +15,21 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from secrets import token_hex
 from typing import Annotated, Any, Literal
-from uuid import uuid4
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Response
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import text
 
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError
+from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope
 
 WORKFLOW = ("incident_workflow", "incident-response")
+REFUSALS = Refusals(
+    unauthenticated=AuthenticationFailed(),
+    denied=GovernedError(403, "not_authorized"),
+    unavailable=GovernedError(503, "storage_unavailable", retryable=True, retry_after="15"),
+)
+INVALID = GovernedError(422, "contract_validation_failed")
 Service = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")]
 # A clock a little ahead is tolerated; an event dated later than this is refused.
 FUTURE_SKEW = timedelta(minutes=5)
@@ -83,88 +88,74 @@ def _view(row: Any) -> dict[str, Any]:
     return event
 
 
-class ChangeEventsService:
-    def __init__(self, sessions: Any) -> None:
-        self._sessions = sessions
-
-    @staticmethod
-    def _error(request_id: str, status: int, code: str, detail: str | None = None) -> JSONResponse:
-        headers = {401: {"WWW-Authenticate": "Bearer"}, 503: {"Retry-After": "15"}}.get(status)
-        error = {"code": code, "message": detail or code.replace("_", " ").capitalize() + "."}
-        body = {"error": error, "request_id": request_id, "retryable": status == 503}
-        return JSONResponse(body, status_code=status, headers=headers)
-
-    def _invalid(self, request_id: str, error: ValidationError) -> JSONResponse:
+def validated(model: type[Any], raw: Any) -> Any:
+    """The request as `model`, or the 422 naming each field that failed."""
+    try:
+        return model.model_validate(raw)
+    except ValidationError as error:
         detail = "; ".join(
             ".".join(map(str, item["loc"])) + ": " + item["msg"] for item in error.errors()
         )
-        return self._error(request_id, 422, "contract_validation_failed", detail or None)
+        raise INVALID.with_message(detail) if detail else INVALID from None
 
-    async def _authorize(self, request_id: str, authorization: str | None, action: str) -> Any:
-        try:
-            context, evaluation = await authorize_governed_access(
-                self._sessions, authorization, action, *WORKFLOW
-            )
-        except AuthenticationFailed:
-            return self._error(request_id, 401, "authentication_failed")
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        if evaluation.decision.decision != "allow":
-            return self._error(request_id, 403, "not_authorized")
-        return context
 
-    async def record(self, authorization: str | None, body: Any) -> JSONResponse:
-        request_id = str(uuid4())
-        context = await self._authorize(request_id, authorization, "change.write")
-        if isinstance(context, JSONResponse):
-            return context
-        try:
-            event = ChangeEventIn.model_validate(body)
-        except ValidationError as error:
-            return self._invalid(request_id, error)
+class ChangeEventsService:
+    def __init__(self, sessions: Any) -> None:
+        self._sessions = sessions
+        self._gate: Gate[Any] = Gate(sessions, REFUSALS)
+
+    async def record(self, authorization: str | None, body: Any) -> Response:
+        return await self._gate.run(
+            authorization,
+            Scope("change.write", *WORKFLOW),
+            self._record,
+            validate=lambda: self._change(body),
+        )
+
+    @staticmethod
+    def _change(body: Any) -> ChangeEventIn:
+        event = validated(ChangeEventIn, body)
+        if event.occurred_at is not None and event.occurred_at > datetime.now(UTC) + FUTURE_SKEW:
+            raise INVALID.with_message("occurred_at: more than 5 minutes in the future")
+        return event
+
+    async def _record(self, admission: Admission, event: ChangeEventIn) -> Released:
         now = datetime.now(UTC)
-        if event.occurred_at is not None and event.occurred_at > now + FUTURE_SKEW:
-            detail = "occurred_at: more than 5 minutes in the future"
-            return self._error(request_id, 422, "contract_validation_failed", detail)
         values = event.model_dump() | {
             "change_id": f"chg_{token_hex(8)}",
             "occurred_at": event.occurred_at or now,
             "recorded_at": now,
-            "recorded_by": context.principal.principal_id,
+            "recorded_by": admission.context.principal.principal_id,
         }
-        try:
-            async with self._sessions() as session, session.begin():
-                inserted = (await session.execute(_INSERT, values)).mappings().one_or_none()
-                row = inserted or (await session.execute(_STORED, values)).mappings().one()
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
+        async with self._sessions() as session, session.begin():
+            inserted = (await session.execute(_INSERT, values)).mappings().one_or_none()
+            row = inserted or (await session.execute(_STORED, values)).mappings().one()
         # Without its own time, a resend keeps the stored one; every other field must match.
         sent = event.model_dump(exclude={"occurred_at"} if event.occurred_at is None else None)
         if inserted is None and any(row[name] != value for name, value in sent.items()):
             detail = "This (source, external_id, service) was recorded with another payload."
-            return self._error(request_id, 409, "change_conflict", detail)
-        return JSONResponse(
-            {"change": _view(row), "created": inserted is not None, "request_id": request_id},
-            status_code=201 if inserted is not None else 200,
+            raise GovernedError(409, "change_conflict", detail)
+        return Released(
+            {"change": _view(row), "created": inserted is not None,
+             "request_id": str(admission.request_id)},
+            status=201 if inserted is not None else 200,
+        )  # fmt: skip
+
+    async def list(self, authorization: str | None, params: dict[str, str]) -> Response:
+        return await self._gate.run(
+            authorization,
+            Scope("change.read", *WORKFLOW),
+            self._list,
+            validate=lambda: validated(ChangeQuery, params),
         )
 
-    async def list(self, authorization: str | None, params: dict[str, str]) -> JSONResponse:
-        request_id = str(uuid4())
-        context = await self._authorize(request_id, authorization, "change.read")
-        if isinstance(context, JSONResponse):
-            return context
-        try:
-            query = ChangeQuery.model_validate(params)
-        except ValidationError as error:
-            return self._invalid(request_id, error)
-        try:
-            async with self._sessions() as session:
-                rows = (await session.execute(_LIST, query.model_dump())).mappings()
-                changes = [_view(row) for row in rows]
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        return JSONResponse(
-            {"changes": changes, "request_id": request_id}, headers={"Cache-Control": "no-store"}
+    async def _list(self, admission: Admission, query: ChangeQuery) -> Released:
+        async with self._sessions() as session:
+            rows = (await session.execute(_LIST, query.model_dump())).mappings()
+            changes = [_view(row) for row in rows]
+        return Released(
+            {"changes": changes, "request_id": str(admission.request_id)},
+            headers={"Cache-Control": "no-store"},
         )
 
 
@@ -172,7 +163,7 @@ def changes_router(service: ChangeEventsService) -> APIRouter:
     router = APIRouter()
 
     @router.post("/v1/changes")
-    async def record_change(request: Request) -> JSONResponse:
+    async def record_change(request: Request) -> Response:
         try:
             body = await request.json()
         except ValueError:
@@ -180,7 +171,7 @@ def changes_router(service: ChangeEventsService) -> APIRouter:
         return await service.record(request.headers.get("authorization"), body)
 
     @router.get("/v1/changes")
-    async def list_changes(request: Request) -> JSONResponse:
+    async def list_changes(request: Request) -> Response:
         return await service.list(request.headers.get("authorization"), dict(request.query_params))
 
     return router
