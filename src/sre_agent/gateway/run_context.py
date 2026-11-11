@@ -6,22 +6,13 @@ run.read_context, guards it, so watching a run with run.read is not reading it."
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Response
 
-from sre_agent.gateway.incidents import (
-    WORKFLOW_RESOURCE_TYPE,
-    IncidentQueryService,
-    IncidentWorkflowResourceReader,
-)
-from sre_agent.governance.authorization import AuthorizationDecisionEngine, AuthorizationEvaluation
-from sre_agent.governance.dto import Principal
+from sre_agent.gate.pipeline import Admission, Released
+from sre_agent.gateway.incidents import NOT_FOUND, IncidentQueryService, _identifiers
 from sre_agent.incident.persistence import TextContextRecord
-from sre_agent.incident.projections import RUN_ID_PATTERN, utc_iso
-from sre_agent.persistence.repositories import GrantRepository
-from sre_agent.vocabulary import IDENTIFIER_PATTERN
+from sre_agent.incident.projections import utc_iso
 
 CONTEXT_ACTION = "run.read_context"
 TURN_FIELDS = ("assembled_input", "model_output", "tool_invocation", "request_id")
@@ -91,36 +82,18 @@ def project_run_context(
 
 
 class RunContextService(IncidentQueryService):
-    """The incident reads' authentication, errors and membership, with their own action."""
+    """The incident reads' gate, errors and membership, with their own action."""
 
-    async def _default_authorizer(
-        self, session: Any, principal: Principal
-    ) -> AuthorizationEvaluation:
-        engine = AuthorizationDecisionEngine(
-            IncidentWorkflowResourceReader(self.workflow), GrantRepository(session)
-        )
-        return await engine.evaluate(
-            principal, CONTEXT_ACTION, WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id
-        )
+    action = CONTEXT_ACTION
 
     async def get_run_context(
         self, incident_id: str, run_id: str, authorization: str | None
-    ) -> JSONResponse:
-        request_id = uuid4()
-        if not self._valid_identifier(incident_id, IDENTIFIER_PATTERN):
-            return self._error(request_id, 422)
-        if not self._valid_identifier(run_id, RUN_ID_PATTERN):
-            return self._error(request_id, 422)
-        _, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        _, error = await self._incident_or_error(request_id, incident_id)
-        if error is not None:
-            return error
-        try:
+    ) -> Response:
+        async def run_context(admission: Admission, _: None) -> Released:
+            await self._incident(incident_id)
             async with self.units() as work:
                 if await work.runs.get_for_incident(run_id, incident_id) is None:
-                    return self._error(request_id, 404, "run_not_found")
+                    raise NOT_FOUND["run_not_found"]
                 contexts = await work.text_context.list(run_id)
                 # Read after the run check, in the same unit: the reasoning is current.
                 incident = await work.incidents.get(incident_id)
@@ -131,17 +104,19 @@ class RunContextService(IncidentQueryService):
                 datetime.now(UTC),
                 incident.state if incident is not None else None,
             )
-        except Exception:
-            return self._error(request_id, 503)
-        # Prompts and tool arguments never stay in a browser or proxy cache.
-        return JSONResponse(payload, status_code=200, headers={"Cache-Control": "no-store"})
+            # Prompts and tool arguments never stay in a browser or proxy cache.
+            return Released(payload, headers={"Cache-Control": "no-store"})
+
+        return await self._read(
+            authorization, lambda: _identifiers(incident_id, run_id), run_context
+        )
 
 
 def run_context_router(service: RunContextService) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/incidents/{incident_id}/runs/{run_id}/context")
-    async def run_context(incident_id: str, run_id: str, request: Request) -> JSONResponse:
+    async def run_context(incident_id: str, run_id: str, request: Request) -> Response:
         return await service.get_run_context(
             incident_id, run_id, request.headers.get("authorization")
         )
