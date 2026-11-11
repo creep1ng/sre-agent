@@ -14,14 +14,13 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 from urllib.parse import urlencode
-from uuid import uuid4
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
+from fastapi import APIRouter, Request, Response
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
-from sre_agent.gateway.changes import ChangeEventsService
+from sre_agent.gate.pipeline import Admission, Released, Scope
+from sre_agent.gateway.changes import INVALID, WORKFLOW, ChangeEventsService, validated
 
 DECISIONS = ("ignore", "remember", "digest", "interrupt")
 _LIST = text("""SELECT d.decision_id, d.event_kind, d.event_id, d.service,
@@ -73,43 +72,48 @@ def _view(row: Any) -> dict[str, Any]:
 
 
 class EventDecisionsService(ChangeEventsService):
-    """Reuses the change routes' authorization and error bodies; only `list` is routed."""
+    """Shares the change routes' gate and error bodies; only `list` is routed."""
 
-    async def list(self, authorization: str | None, params: dict[str, str]) -> JSONResponse:
-        request_id = str(uuid4())
-        context = await self._authorize(request_id, authorization, "alert.read")
-        if isinstance(context, JSONResponse):
-            return context
-        try:
-            query = DecisionQuery.model_validate(params)
-        except ValidationError as error:
-            return self._invalid(request_id, error)
+    async def list(self, authorization: str | None, params: dict[str, str]) -> Response:
+        return await self._gate.run(
+            authorization,
+            Scope("alert.read", *WORKFLOW),
+            self._decisions,
+            validate=lambda: self._period(params),
+        )
+
+    @staticmethod
+    def _period(params: dict[str, str]) -> tuple[DecisionQuery, datetime, datetime]:
+        query = validated(DecisionQuery, params)
         until = query.until or datetime.now(UTC)
         since = query.since or until - timedelta(days=1)
         if since >= until:
-            return self._error(request_id, 422, "contract_validation_failed", "since: not < until")
+            raise INVALID.with_message("since: not < until")
+        return query, since, until
+
+    async def _decisions(
+        self, admission: Admission, period: tuple[DecisionQuery, datetime, datetime]
+    ) -> Released:
+        query, since, until = period
         values = query.model_dump() | {"since": since, "until": until}
-        try:
-            async with self._sessions() as session:
-                rows = (await session.execute(_LIST, values)).mappings().all()
-                counts = dict((await session.execute(_COUNTS, values)).tuples().all())
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
+        async with self._sessions() as session:
+            rows = (await session.execute(_LIST, values)).mappings().all()
+            counts = dict((await session.execute(_COUNTS, values)).tuples().all())
         totals = {name: counts.get(name, 0) for name in DECISIONS}
         body = {
             "period": {"since": _iso(since), "until": _iso(until)},
             "counts": {"events": sum(totals.values()), "messages": totals["interrupt"]} | totals,
             "decisions": [_view(row) for row in rows],
-            "request_id": request_id,
+            "request_id": str(admission.request_id),
         }
-        return JSONResponse(body, headers={"Cache-Control": "no-store"})
+        return Released(body, headers={"Cache-Control": "no-store"})
 
 
 def event_decisions_router(service: EventDecisionsService) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/event-decisions")
-    async def list_event_decisions(request: Request) -> JSONResponse:
+    async def list_event_decisions(request: Request) -> Response:
         return await service.list(request.headers.get("authorization"), dict(request.query_params))
 
     return router
