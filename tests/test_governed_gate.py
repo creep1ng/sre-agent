@@ -40,7 +40,6 @@ NOT_YET_MIGRATED: set[tuple[str, str]] = {
     ("GET", "/v1/usage/requests"),
     ("POST", "/v1/bok/collections/{collection_id}/versions/{version}/search"),
     ("POST", "/v1/mcp/tools/{tool_id}"),
-    ("POST", "/v1/responses"),
 }
 # Path values and bodies that reach each handler; the probe carries no valid credential.
 PATH_VALUES = {"version": "1.0.0", "chunk_index": "0", "tool_id": "query_prometheus",
