@@ -576,15 +576,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 try:
                     return await route_handler(request)
                 except RequestValidationError:
-                    if request.url.path in OPERATIONS:
-                        return await read(request, None, body=b"invalid")
-                    return await finish(
-                        request,
-                        status=422,
-                        stage="validation",
-                        code="validation_error",
-                        message="Exactly one bounded usage selector is required.",
-                    )
+                    return await read(request, None, body=b"invalid")
 
             return validation_audited_handler
 
@@ -690,13 +682,14 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
     ) -> Response:
         async def requests(admission: Admission, filters: dict[str, Any]) -> Released:
             admission.facts["admitted"] = True
-            try:
-                result = await read_requests(projection, **filters)
-            except UsageReadLimitExceeded:
-                raise SCOPE_TOO_LARGE from None
-            # A malformed snapshot or consumption evidence fails validation here and is
-            # answered as unavailable, never as raw persisted data.
-            response = UsageRequestsResponse.model_validate_json(json.dumps(result))
+            # A storage failure, a malformed snapshot or consumption evidence is answered as
+            # unavailable, never as raw persisted data.
+            with failing_as(REFUSALS.unavailable):
+                try:
+                    result = await read_requests(projection, **filters)
+                except UsageReadLimitExceeded:
+                    raise SCOPE_TOO_LARGE from None
+                response = UsageRequestsResponse.model_validate_json(json.dumps(result))
             return Released(response.model_dump(mode="json"))
 
         return await read(request, requests, body=await request.body())
