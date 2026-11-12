@@ -21,7 +21,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationErro
 from sqlalchemy import text
 
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope
+from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, declare, failing_as
 
 WORKFLOW = ("incident_workflow", "incident-response")
 REFUSALS = Refusals(
@@ -30,6 +30,10 @@ REFUSALS = Refusals(
     unavailable=GovernedError(503, "storage_unavailable", retryable=True, retry_after="15"),
 )
 INVALID = GovernedError(422, "contract_validation_failed")
+RECORD = declare("POST", "/v1/changes", action="change.write", resource_type=WORKFLOW[0],
+                 resource_id=WORKFLOW[1])  # fmt: skip
+LIST = declare("GET", "/v1/changes", action="change.read", resource_type=WORKFLOW[0],
+               resource_id=WORKFLOW[1])  # fmt: skip
 Service = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")]
 # A clock a little ahead is tolerated; an event dated later than this is refused.
 FUTURE_SKEW = timedelta(minutes=5)
@@ -106,6 +110,7 @@ class ChangeEventsService:
 
     async def record(self, authorization: str | None, body: Any) -> Response:
         return await self._gate.run(
+            RECORD,
             authorization,
             Scope("change.write", *WORKFLOW),
             self._record,
@@ -127,9 +132,10 @@ class ChangeEventsService:
             "recorded_at": now,
             "recorded_by": admission.context.principal.principal_id,
         }
-        async with self._sessions() as session, session.begin():
-            inserted = (await session.execute(_INSERT, values)).mappings().one_or_none()
-            row = inserted or (await session.execute(_STORED, values)).mappings().one()
+        with failing_as(REFUSALS.unavailable):
+            async with self._sessions() as session, session.begin():
+                inserted = (await session.execute(_INSERT, values)).mappings().one_or_none()
+                row = inserted or (await session.execute(_STORED, values)).mappings().one()
         # Without its own time, a resend keeps the stored one; every other field must match.
         sent = event.model_dump(exclude={"occurred_at"} if event.occurred_at is None else None)
         if inserted is None and any(row[name] != value for name, value in sent.items()):
@@ -143,6 +149,7 @@ class ChangeEventsService:
 
     async def list(self, authorization: str | None, params: dict[str, str]) -> Response:
         return await self._gate.run(
+            LIST,
             authorization,
             Scope("change.read", *WORKFLOW),
             self._list,
@@ -150,9 +157,10 @@ class ChangeEventsService:
         )
 
     async def _list(self, admission: Admission, query: ChangeQuery) -> Released:
-        async with self._sessions() as session:
-            rows = (await session.execute(_LIST, query.model_dump())).mappings()
-            changes = [_view(row) for row in rows]
+        with failing_as(REFUSALS.unavailable):
+            async with self._sessions() as session:
+                rows = (await session.execute(_LIST, query.model_dump())).mappings()
+                changes = [_view(row) for row in rows]
         return Released(
             {"changes": changes, "request_id": str(admission.request_id)},
             headers={"Cache-Control": "no-store"},

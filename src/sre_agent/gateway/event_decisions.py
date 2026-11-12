@@ -19,10 +19,18 @@ from fastapi import APIRouter, Request, Response
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
-from sre_agent.gate.pipeline import Admission, Released, Scope
-from sre_agent.gateway.changes import INVALID, WORKFLOW, ChangeEventsService, validated
+from sre_agent.gate.pipeline import Admission, Released, Scope, declare, failing_as
+from sre_agent.gateway.changes import (
+    INVALID,
+    REFUSALS,
+    WORKFLOW,
+    ChangeEventsService,
+    validated,
+)
 
 DECISIONS = ("ignore", "remember", "digest", "interrupt")
+LIST = declare("GET", "/v1/event-decisions", action="alert.read", resource_type=WORKFLOW[0],
+               resource_id=WORKFLOW[1])  # fmt: skip
 _LIST = text("""SELECT d.decision_id, d.event_kind, d.event_id, d.service,
     COALESCE(d.incident_id, e.incident_id) AS incident_id, d.title, d.occurred_at, d.decision,
     d.rule, d.reason, d.decided_at
@@ -76,6 +84,7 @@ class EventDecisionsService(ChangeEventsService):
 
     async def list(self, authorization: str | None, params: dict[str, str]) -> Response:
         return await self._gate.run(
+            LIST,
             authorization,
             Scope("alert.read", *WORKFLOW),
             self._decisions,
@@ -96,9 +105,10 @@ class EventDecisionsService(ChangeEventsService):
     ) -> Released:
         query, since, until = period
         values = query.model_dump() | {"since": since, "until": until}
-        async with self._sessions() as session:
-            rows = (await session.execute(_LIST, values)).mappings().all()
-            counts = dict((await session.execute(_COUNTS, values)).tuples().all())
+        with failing_as(REFUSALS.unavailable):
+            async with self._sessions() as session:
+                rows = (await session.execute(_LIST, values)).mappings().all()
+                counts = dict((await session.execute(_COUNTS, values)).tuples().all())
         totals = {name: counts.get(name, 0) for name in DECISIONS}
         body = {
             "period": {"since": _iso(since), "until": _iso(until)},
