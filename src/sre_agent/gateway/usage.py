@@ -21,7 +21,16 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from sre_agent.gate.authentication import authorize_governed_access
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, Terminal, declare
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.usage_requests import read_requests
 from sre_agent.gateway.usage_requests_models import UsageRequestsResponse
@@ -456,6 +465,7 @@ USAGE_DECLARED = [
     )
     for path in ("/v1/usage/consumption",)
 ]
+OPERATIONS = {declaration.path: declaration for declaration in USAGE_DECLARED}
 REFUSALS = Refusals(
     denied=GovernedError(403, "resource_unavailable", "Administrative read is not authorized."),
     unavailable=GovernedError(
@@ -549,7 +559,9 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         return {name: UUID(value) if name == "request_id" else value}
 
     async def read(request: Request, use_case: Any, *, body: bytes = b"") -> Response:
+        operation = OPERATIONS[request.url.path]
         return await gate.run(
+            operation,
             request.headers.get("authorization"),
             USAGE,
             use_case,
@@ -670,7 +682,15 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
                 try:
                     return await route_handler(request)
                 except RequestValidationError:
-                    return await read(request, None, body=b"invalid")
+                    if request.url.path in OPERATIONS:
+                        return await read(request, None, body=b"invalid")
+                    return await finish(
+                        request,
+                        status=422,
+                        stage="validation",
+                        code="validation_error",
+                        message="Exactly one bounded usage selector is required.",
+                    )
 
             return validation_audited_handler
 
@@ -721,12 +741,13 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
     ) -> Response:
         async def consumption(admission: Admission, filters: dict[str, Any]) -> Released:
             admission.facts["admitted"] = True
-            try:
-                result = await projection.read(**filters)
-            except UsageReadLimitExceeded:
-                raise SCOPE_TOO_LARGE from None
-            except ValueError:
-                raise SELECTOR_INVALID from None
+            with failing_as(REFUSALS.unavailable):
+                try:
+                    result = await projection.read(**filters)
+                except UsageReadLimitExceeded:
+                    raise SCOPE_TOO_LARGE from None
+                except ValueError:
+                    raise SELECTOR_INVALID from None
             return Released(UsageReadResponse.model_validate(result))
 
         return await read(request, consumption)
