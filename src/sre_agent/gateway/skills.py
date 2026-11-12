@@ -8,10 +8,19 @@ from fastapi import APIRouter, Path, Request, Response, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 
-from sre_agent.gate.errors import ErrorEnvelope, GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, Terminal, declare
+from sre_agent.gate.errors import GovernedError
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.responses import AuditStore
+from sre_agent.gateway.responses import AuditStore, ErrorEnvelope
 from sre_agent.governance.dto import SkillVersionRecord
 from sre_agent.persistence.repositories import SkillVersionRepository
 
@@ -87,10 +96,16 @@ class SkillResolutionService:
                 ).model_dump(mode="json")
             )
 
+        async def guarded(admission: Admission, resource_id: str) -> Released:
+            # Every read and grant check failed as audit_unavailable before the gate.
+            with failing_as(REFUSALS.unavailable):
+                return await resolve(admission, resource_id)
+
         return await self.gate.run(
+            RESOLVE,
             authorization,
             lambda resource_id: Scope("invoke", "skill", resource_id),
-            resolve,
+            guarded,
             validate=validate,
             request_id=request_id,
         )
