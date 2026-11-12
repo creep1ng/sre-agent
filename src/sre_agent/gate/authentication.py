@@ -62,9 +62,10 @@ async def authenticate_principal(
 async def authorize_governed_access(
     sessions: Any, authorization: str | None, action: str, resource_type: str, resource_id: str
 ) -> tuple[PrincipalContext, AuthorizationEvaluation]:
-    """Authenticate (an inactive principal is not authenticated) and evaluate one scope against
-    the owner rows, in one call: a gate's `admit` for a route that checks scope by scope."""
-    context = await principal_for(sessions, authorization)
+    """Authenticate (an inactive principal raises `InactivePrincipal`) and evaluate one scope
+    against the owner rows, in one call: a gate's `admit` for a route that checks scope by
+    scope."""
+    context = await active_principal(sessions, authorization)
     if context is None:
         raise AuthenticationFailed
     async with sessions() as session:
