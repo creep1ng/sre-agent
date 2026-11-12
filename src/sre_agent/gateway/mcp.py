@@ -22,12 +22,7 @@ from pydantic import (
     model_validator,
 )
 
-from sre_agent.gate.errors import (
-    AuthenticationFailed,
-    ErrorEnvelope,
-    GovernedError,
-    InactivePrincipal,
-)
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError, InactivePrincipal
 from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, Terminal, declare
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import authorize_governed_access
@@ -43,6 +38,8 @@ logger = logging.getLogger(__name__)
 REFUSALS = Refusals(
     denied=GovernedError(403, "resource_unavailable"),
     unavailable=GovernedError(503, "storage_unavailable", retryable=True),
+    # A failure authenticating or authorizing escaped as a 500 before the gate, and still does.
+    unavailable_on=(),
 )
 INVALID = GovernedError(422, "contract_validation_failed", stage="validation")
 UPSTREAM_TIMEOUT = GovernedError(504, "upstream_timeout", retryable=True, stage="upstream")
@@ -312,6 +309,17 @@ class MCPDiscoveryResponse(BaseModel):
     tools: list[MCPDiscoveryToolResponse]
 
 
+class MCPErrorDetail(BaseModel):
+    code: str
+    message: str
+
+
+class MCPErrorResponse(BaseModel):
+    error: MCPErrorDetail
+    request_id: UUID
+    retryable: bool
+
+
 class MCPAuditRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -421,6 +429,7 @@ class MCPGatewayService:
             )
 
         return await self.gate.run(
+            DISCOVERY,
             authorization,
             Scope("mcp.discovery", "mcp_server", MCP_SERVER_ID),
             discover,
@@ -459,6 +468,7 @@ class MCPGatewayService:
             return Released(public_result, headers={"X-Request-ID": str(admission.request_id)})
 
         return await self.gate.run(
+            INVOKE,
             authorization,
             Scope("mcp.invoke", "mcp_tool", tool_id),
             call,
@@ -630,8 +640,11 @@ class MCPGatewayService:
         return payload
 
     async def _audit(self, terminal: Terminal) -> None:
-        if self.audit is None or terminal.status == 401 or terminal.facts.get("unaudited"):
-            return  # Authentication failures and an inactive contract are not audited.
+        unaudited_401 = terminal.status == 401 and not terminal.inactive
+        if self.audit is None or unaudited_401 or terminal.facts.get("unaudited"):
+            # A missing or unknown credential and an inactive contract are not audited; an
+            # inactive principal is.
+            return
         assert terminal.scope is not None
         operation, (resource_type, resource_id) = (
             terminal.scope.action,
@@ -673,7 +686,7 @@ class MCPGatewayService:
 def _error_documentation(code: str, status: int) -> dict[str, Any]:
     message = code.replace("_", " ").capitalize() + "."
     return {
-        "model": ErrorEnvelope,
+        "model": MCPErrorResponse,
         "description": message,
         "content": {
             "application/json": {
@@ -819,7 +832,7 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
             "requestBody": {
                 "required": True,
                 "description": (
-                    "Select the JSON example matching tool_id. Validation precedes authorization."
+                    "Select the JSON example matching tool_id. Authorization precedes validation."
                 ),
                 "content": {
                     "application/json": {
