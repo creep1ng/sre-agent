@@ -679,6 +679,9 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             route_handler = super().get_route_handler()
 
             async def validation_audited_handler(request: Request):
+                # The routes not moved to the gate yet read these in finish().
+                request.state.usage_request_id = uuid4()
+                request.state.usage_started = monotonic()
                 try:
                     return await route_handler(request)
                 except RequestValidationError:
