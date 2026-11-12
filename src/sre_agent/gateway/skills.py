@@ -61,7 +61,7 @@ class SkillResolutionService:
                 raise INVALID
             return f"{skill_id}@{version}"
 
-        async def resolve(admission: Admission, resource_id: str) -> Released:
+        async def read(admission: Admission) -> tuple[SkillVersionRecord, list[SkillVersionRecord]]:
             async with self.sessions() as session:
                 skill = await SkillVersionRepository(session).get(skill_id, version)
             if skill is None:
@@ -87,6 +87,13 @@ class SkillResolutionService:
                         admission.facts.update(evaluation=evaluation, resource_id=dependency_id)
                         raise UNAVAILABLE
                     resolved.append(found)
+            return skill, resolved
+
+        async def resolve(admission: Admission, resource_id: str) -> Released:
+            # Every read and grant check failed as audit_unavailable before the gate; building
+            # the answer did not.
+            with failing_as(REFUSALS.unavailable):
+                skill, resolved = await read(admission)
             return Released(
                 SkillResolutionResponse(
                     skill=skill,
@@ -96,16 +103,11 @@ class SkillResolutionService:
                 ).model_dump(mode="json")
             )
 
-        async def guarded(admission: Admission, resource_id: str) -> Released:
-            # Every read and grant check failed as audit_unavailable before the gate.
-            with failing_as(REFUSALS.unavailable):
-                return await resolve(admission, resource_id)
-
         return await self.gate.run(
             RESOLVE,
             authorization,
             lambda resource_id: Scope("invoke", "skill", resource_id),
-            guarded,
+            resolve,
             validate=validate,
             request_id=request_id,
         )
