@@ -24,7 +24,6 @@ from sre_agent.bok.owner import BoKVersionCollision
 from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, BoKVersionRecord, BoKVersionSummary, publish_bok_version, read_bok_version  # fmt: skip
 from sre_agent.control.scopes import CONTROL_SCOPES
 from sre_agent.gate.authentication import bearer_key
-from sre_agent.gate.errors import ErrorEnvelope
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.responses import TransactionalAuditStore
@@ -240,6 +239,43 @@ class PrincipalCreate(BaseModel):
 class ListPrincipalsQuery(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     limit: int = Field(default=100, ge=1, le=100)
+
+
+SAFE_ERROR_MESSAGE_PATTERN = r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"
+
+
+class ErrorFieldDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    field: Annotated[str, Field(min_length=1, max_length=100)]
+    message: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=200,
+            json_schema_extra={"pattern": SAFE_ERROR_MESSAGE_PATTERN},
+        ),
+    ]
+
+
+class ErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")]
+    message: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=300,
+            json_schema_extra={"pattern": SAFE_ERROR_MESSAGE_PATTERN},
+        ),
+    ]
+    details: Annotated[list[ErrorFieldDetail], Field(max_length=16)] = Field(default_factory=list)
+
+
+class ErrorEnvelope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    error: ErrorDetail
+    request_id: UUID
+    retryable: bool
 
 
 class PrincipalListResponse(BaseModel):
