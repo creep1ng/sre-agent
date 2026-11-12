@@ -19,18 +19,18 @@ from typing import Any
 
 from fastapi import APIRouter, Request, Response
 
-from sre_agent.gate.errors import GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope
+from sre_agent.gate.errors import GovernedError, refusal
+from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, failing_as
 from sre_agent.gateway.execution import ExecutionRefused, OperationExecutor
 from sre_agent.gateway.incidents import (
     INVALID,
     NOT_FOUND,
-    RETRY_AFTER_SECONDS,
     UNAUTHENTICATED,
     UNAVAILABLE,
     WORKFLOW_RESOURCE_TYPE,
     IncidentWorkflowResourceReader,
     consistent_run_state,
+    read_operation,
 )
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
@@ -91,16 +91,11 @@ CONFLICTS = (
 )
 
 Authorizer = Callable[[Any, Principal], Awaitable[AuthorizationEvaluation]]
-
-
-def status_error(status: int, code: str, message: str) -> GovernedError:
-    """A refusal another component reports by status (the deploy-executor), as the run routes
-    word theirs: retryable with `Retry-After` when unavailable, a challenge when unauthenticated."""
-    if status == 401:
-        return GovernedError(status, code, message, headers={"WWW-Authenticate": "Bearer"})
-    if status == 503:
-        return GovernedError(status, code, message, retryable=True, retry_after=RETRY_AFTER_SECONDS)
-    return GovernedError(status, code, message)
+START = read_operation("POST", "/v1/incidents/{incident_id}/runs", START_ACTION)
+# The action depends on the command; the declaration names the one most commands need.
+COMMAND = read_operation(
+    "POST", "/v1/incidents/{incident_id}/runs/{run_id}/commands", "run.command"
+)
 
 
 class RunStartService:
@@ -171,7 +166,7 @@ class RunStartService:
             principal = admission.context.principal
             return await self._open(incident_id, body, principal, idempotency_key)
 
-        return await self._gate.run(authorization, self.scope, start, validate=validate)
+        return await self._gate.run(START, authorization, self.scope, start, validate=validate)
 
     async def _open(
         self, incident_id: str, body: dict[str, Any], principal: Principal, idempotency_key: str
@@ -195,15 +190,18 @@ class RunStartService:
             raise NOT_FOUND["run_not_found"] from None
         except (*CONFLICTS, PreconditionFailedError):
             raise RUN_CONFLICT from None
+        except Exception:
+            raise UNAVAILABLE from None
         sequence = max((event.sequence for event in result.events), default=-1)
         run = result.run
         if body["objective"] == RunObjective.INVESTIGATE and self.investigator is not None:
-            await self.investigator.after_start(result)
-            async with self.units() as work:
-                found = await consistent_run_state(work, result.run.run_id, incident_id)
-            if found is None:
-                raise NOT_FOUND["run_not_found"]
-            run, sequence = found
+            with failing_as(UNAVAILABLE):
+                await self.investigator.after_start(result)
+                async with self.units() as work:
+                    found = await consistent_run_state(work, result.run.run_id, incident_id)
+                if found is None:
+                    raise NOT_FOUND["run_not_found"]
+                run, sequence = found
         return self._state(run, sequence, 200 if result.replayed else 201)
 
     def _state(self, run: Any, sequence: int, status: int) -> Released:
@@ -219,14 +217,15 @@ class RunStartService:
         caller drives it further with commands. Nothing is transitioned here.
         """
 
-        async with self.units() as work:
-            if await work.incidents.get(incident_id) is None:
-                raise NOT_FOUND["incident_not_found"]
-            # The state and its cursor come from one read point, as in the
-            # run reads: a transition that lands between reading the run and
-            # its events is read again, never returned as an old state with
-            # a newer cursor. A read that keeps racing is a retryable 503.
-            found = await consistent_run_state(work, run_id, incident_id)
+        with failing_as(UNAVAILABLE):
+            async with self.units() as work:
+                if await work.incidents.get(incident_id) is None:
+                    raise NOT_FOUND["incident_not_found"]
+                # The state and its cursor come from one read point, as in the
+                # run reads: a transition that lands between reading the run and
+                # its events is read again, never returned as an old state with
+                # a newer cursor. A read that keeps racing is a retryable 503.
+                found = await consistent_run_state(work, run_id, incident_id)
         if found is None:
             raise NOT_FOUND["run_not_found"]
         run, sequence = found
@@ -487,6 +486,7 @@ class RunCommandService:
             )
 
         return await self._gate.run(
+            COMMAND,
             authorization,
             lambda command: Scope(
                 COMMAND_ACTIONS[command], WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id
@@ -554,7 +554,7 @@ class RunCommandService:
             except Exception as error:
                 # Only the type is logged, never the content; the refusal still answers.
                 logger.error("approval_refusal_record_failed error=%s", type(error).__name__)
-            raise status_error(refused.status, refused.code, refused.message) from None
+            raise refusal(refused.status, refused.code, refused.message) from None
         except IncidentNotFoundError:
             raise NOT_FOUND["incident_not_found"] from None
         except RunNotFoundError:
@@ -566,6 +566,8 @@ class RunCommandService:
             raise PRECONDITION_FAILED from None
         except CONFLICTS:
             raise COMMAND_CONFLICT from None
+        except Exception:
+            raise UNAVAILABLE from None
         if transition.execution is not None and self.verifier is not None:
             # It ran: the agent measures the service once the delay passes (#723).
             self.verifier.after_approval(incident_id, run_id)
