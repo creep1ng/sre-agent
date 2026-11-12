@@ -170,6 +170,12 @@ work unit:
   (`src/sre_agent/control/scopes.py`) and `CONTROL_OPERATIONS`
   (`src/sre_agent/control/service.py`), and update the tests that compare the two registries and
   enumerate every `/v1/` route.
+- **New governed operation.** Register it with `declare(...)` from
+  `src/sre_agent/gate/pipeline.py` and answer through `Gate.run` with that declaration, the
+  route's validation and its use case. Use the declaration's `openapi_extra` only when the
+  operation documents `x-governed-scope`. `tests/test_governed_gate.py` fails for a route that is
+  neither registered nor exempt, for one that answers without the gate, and for a documented
+  scope the gate does not hold.
 - **New resource type or audit operation.** These are closed vocabularies repeated in the
   `governance/dto.py` Literals, the `ck_resources_type` and `ck_audit_events_operation` database
   checks, and the release schema enums. Extend every copy, or `AuditEvent` validation rejects the

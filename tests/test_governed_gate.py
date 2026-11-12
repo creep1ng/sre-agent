@@ -9,11 +9,12 @@ registration but answers by hand fails the second walk.
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from sre_agent.application import create_application
-from sre_agent.gate.pipeline import governed_operations, served_operations
+from sre_agent.gate.pipeline import Gate, governed_operations
 from sre_agent.settings import Settings
 
 # The control plane's routes move to the gate with its own refactor (#1022).
@@ -114,13 +115,24 @@ def test_every_documented_governed_scope_is_registered_in_the_gate() -> None:
     assert outside == [], f"governed operations outside the gate: {outside}"
 
 
-def test_every_gateway_route_is_registered_and_answers_through_the_gate() -> None:
+def test_every_gateway_route_is_registered_and_answers_through_the_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     application = _application()
     operations = _gateway_operations(application) - set(EXEMPT)
     registered = set(governed_operations())
     assert not NOT_YET_MIGRATED & registered, "a migrated operation is still listed as pending"
     unregistered = sorted(operations - registered - NOT_YET_MIGRATED)
     assert unregistered == [], f"governed operations outside the gate: {unregistered}"
+    # The operations each probe takes into the gate, recorded for that probe alone.
+    reached: list[tuple[str, str]] = []
+    run = Gate.run
+
+    def observed(gate: Gate[Any], operation: Any, *args: Any, **options: Any) -> Any:
+        reached.append((operation.method, operation.path))
+        return run(gate, operation, *args, **options)
+
+    monkeypatch.setattr(Gate, "run", observed)
     by_hand = []
     with TestClient(application, raise_server_exceptions=False) as client:
         for method, path in sorted(operations & registered):
@@ -128,7 +140,8 @@ def test_every_gateway_route_is_registered_and_answers_through_the_gate() -> Non
             for name in [part[1:-1] for part in path.split("/") if part.startswith("{")]:
                 url = url.replace("{" + name + "}", PATH_VALUES.get(name, "gate-probe"))
             body = BODIES.get(path, {}) if method in {"POST", "PUT"} else None
+            reached.clear()
             client.request(method, url, json=body, headers={"Authorization": "Basic gate"})
-            if (method, path) not in served_operations():
+            if (method, path) not in reached:
                 by_hand.append((method, path))
     assert by_hand == [], f"registered operations answered without the gate: {by_hand}"
