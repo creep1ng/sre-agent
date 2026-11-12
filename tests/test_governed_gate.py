@@ -38,8 +38,6 @@ NOT_YET_MIGRATED: set[tuple[str, str]] = {
         "/v1/bok/collections/{collection_id}/versions/{version}/chunks/"
         "{document_id}/{section_id}/{chunk_index}",
     ),
-    ("GET", "/v1/changes"),
-    ("GET", "/v1/event-decisions"),
     ("GET", "/v1/incident-memory/changes"),
     ("GET", "/v1/incidents"),
     ("GET", "/v1/incidents/{incident_id}"),
@@ -55,7 +53,6 @@ NOT_YET_MIGRATED: set[tuple[str, str]] = {
     ("GET", "/v1/usage/requests"),
     ("POST", "/v1/alerts/{alert_id}/triage/commands"),
     ("POST", "/v1/bok/collections/{collection_id}/versions/{version}/search"),
-    ("POST", "/v1/changes"),
     ("POST", "/v1/incidents/{incident_id}/postmortem/reviews"),
     ("POST", "/v1/incidents/{incident_id}/runs"),
     ("POST", "/v1/incidents/{incident_id}/runs/{run_id}/commands"),

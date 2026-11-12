@@ -109,6 +109,7 @@ BOK = "/v1/bok/collections/otel-demo-store/versions/1.0.0"
 CASES = [
     Case("GET", "/v1/alerts", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403),  # alerts
     Case("POST", "/v1/changes", "DEPLOY_EXECUTOR", "DEMO_HUMAN", 201, 403, CHANGE,
+         effect=CHANGES, vary=lambda body, label: body | {"external_id": _slug(label)},
          invalid=("/v1/changes", {}, 422)),  # changes
     Case("GET", "/v1/changes", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          invalid=("/v1/changes?limit=0", None, 422)),  # changes
