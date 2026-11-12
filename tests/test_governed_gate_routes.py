@@ -115,7 +115,7 @@ CASES = [
          invalid=("/v1/changes?limit=0", None, 422)),  # changes
     Case("GET", "/v1/event-decisions", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          invalid=("/v1/event-decisions?limit=0", None, 422)),  # changes
-    Case("GET", RUN + "/context", "DEMO_HUMAN", "RESTRICTED_HARNESS", 404, 403,
+    Case("GET", RUN + "/context", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          invalid=(INCIDENT + "/runs/bad/context", None, 422)),  # context
     Case("GET", "/v1/action-catalog", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403),  # context
 ]  # fmt: skip

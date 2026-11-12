@@ -16,9 +16,9 @@ from typing import Any
 from fastapi import APIRouter, Request, Response
 from sqlalchemy import text
 
-from sre_agent.gate.pipeline import Admission, Released
+from sre_agent.gate.pipeline import Admission, Released, failing_as
 from sre_agent.gateway.execution import OperationExecutor, executor_catalog, service_operations
-from sre_agent.gateway.incidents import IncidentQueryService
+from sre_agent.gateway.incidents import UNAVAILABLE, IncidentQueryService, read_operation
 from sre_agent.incident.persistence import IncidentUnitOfWork
 from sre_agent.incident.projections import actor_reference, utc_iso
 from sre_agent.incident.workflow import IncidentWorkflow
@@ -26,6 +26,7 @@ from sre_agent.investigator.contract import ProposedOperation
 
 # Attempts read from the audit, runs an attempt may belong to, attempts shown per operation.
 AUDIT_WINDOW, RUN_WINDOW, EXECUTIONS_SHOWN = 50, 200, 5
+CATALOG = read_operation("GET", "/v1/action-catalog")
 OUTCOMES = {"success": "succeeded", "denied": "refused", "error": "failed"}
 
 
@@ -43,12 +44,13 @@ class ActionCatalogService(IncidentQueryService):
         self.executor = executor
 
     async def read(self, authorization: str | None) -> Response:
-        return await self._read(authorization, lambda: None, self._catalog)
+        return await self._read(CATALOG, authorization, lambda: None, self._catalog)
 
     async def _catalog(self, admission: Admission, _: None) -> Released:
-        status, offered = await self._offered()
-        runner = await self._runner(offered)
-        executions = await self._executions(offered)
+        with failing_as(UNAVAILABLE):
+            status, offered = await self._offered()
+            runner = await self._runner(offered)
+            executions = await self._executions(offered)
         services: dict[str, list[dict[str, Any]]] = {}
         for (service, operation), parameters in offered.items():
             services.setdefault(service, []).append(

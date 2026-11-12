@@ -20,7 +20,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
-from sre_agent.gate.pipeline import Gate, Refusals, Scope
+from sre_agent.gate.pipeline import Gate, Refusals, Scope, ScopeDeclaration, declare, failing_as
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationEvaluation,
@@ -95,6 +95,14 @@ NOT_FOUND = {
         ("snapshot_absent", "No snapshot exists for this run yet."),
     )
 }
+
+
+def read_operation(method: str, path: str, action: str = READ_ACTION) -> ScopeDeclaration:
+    """An incident read on the pinned workflow, registered in the gate."""
+    return declare(method, path, action=action, resource_type=WORKFLOW_RESOURCE_TYPE,
+                   resource_id="incident-response")  # fmt: skip
+
+
 REFUSALS = Refusals(unauthenticated=UNAUTHENTICATED, denied=DENIED, unavailable=UNAVAILABLE)
 
 
@@ -202,13 +210,20 @@ class IncidentQueryService:
             return await CredentialRepository(session).authenticate(key)
 
     async def _read(
-        self, authorization: str | None, validate: Callable[[], Any], use_case: Any
+        self,
+        operation: ScopeDeclaration,
+        authorization: str | None,
+        validate: Callable[[], Any],
+        use_case: Any,
     ) -> Response:
-        return await self._gate.run(authorization, self.scope, use_case, validate=validate)
+        return await self._gate.run(
+            operation, authorization, self.scope, use_case, validate=validate
+        )
 
     async def _incident(self, incident_id: str) -> IncidentRecord:
-        async with self.units() as work:
-            record = await work.incidents.get(incident_id)
+        with failing_as(UNAVAILABLE):
+            async with self.units() as work:
+                record = await work.incidents.get(incident_id)
         if record is None:
             raise NOT_FOUND["incident_not_found"]
         return record

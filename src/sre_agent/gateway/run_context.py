@@ -9,12 +9,19 @@ from typing import Any
 
 from fastapi import APIRouter, Request, Response
 
-from sre_agent.gate.pipeline import Admission, Released
-from sre_agent.gateway.incidents import NOT_FOUND, IncidentQueryService, _identifiers
+from sre_agent.gate.pipeline import Admission, Released, failing_as
+from sre_agent.gateway.incidents import (
+    NOT_FOUND,
+    UNAVAILABLE,
+    IncidentQueryService,
+    _identifiers,
+    read_operation,
+)
 from sre_agent.incident.persistence import TextContextRecord
 from sre_agent.incident.projections import utc_iso
 
 CONTEXT_ACTION = "run.read_context"
+CONTEXT = read_operation("GET", "/v1/incidents/{incident_id}/runs/{run_id}/context", CONTEXT_ACTION)
 TURN_FIELDS = ("assembled_input", "model_output", "tool_invocation", "request_id")
 # The allow-listed subset of the incident-state artifacts the reasoning carries.
 HYPOTHESIS_FIELDS = (
@@ -91,24 +98,25 @@ class RunContextService(IncidentQueryService):
     ) -> Response:
         async def run_context(admission: Admission, _: None) -> Released:
             await self._incident(incident_id)
-            async with self.units() as work:
-                if await work.runs.get_for_incident(run_id, incident_id) is None:
-                    raise NOT_FOUND["run_not_found"]
-                contexts = await work.text_context.list(run_id)
-                # Read after the run check, in the same unit: the reasoning is current.
-                incident = await work.incidents.get(incident_id)
-            payload = project_run_context(
-                incident_id,
-                run_id,
-                contexts,
-                datetime.now(UTC),
-                incident.state if incident is not None else None,
-            )
+            with failing_as(UNAVAILABLE):
+                async with self.units() as work:
+                    if await work.runs.get_for_incident(run_id, incident_id) is None:
+                        raise NOT_FOUND["run_not_found"]
+                    contexts = await work.text_context.list(run_id)
+                    # Read after the run check, in the same unit: the reasoning is current.
+                    incident = await work.incidents.get(incident_id)
+                payload = project_run_context(
+                    incident_id,
+                    run_id,
+                    contexts,
+                    datetime.now(UTC),
+                    incident.state if incident is not None else None,
+                )
             # Prompts and tool arguments never stay in a browser or proxy cache.
             return Released(payload, headers={"Cache-Control": "no-store"})
 
         return await self._read(
-            authorization, lambda: _identifiers(incident_id, run_id), run_context
+            CONTEXT, authorization, lambda: _identifiers(incident_id, run_id), run_context
         )
 
 
