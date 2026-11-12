@@ -7,7 +7,17 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 
 from sre_agent.gate.errors import GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope
+from sre_agent.gate.errors import refusal as status_refusal
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    ScopeDeclaration,
+    declare,
+    failing_as,
+)
 from sre_agent.incident.workflow import IncidentWorkflow
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.repositories import ResourceRepository
@@ -26,6 +36,20 @@ KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 RETRY_AFTER_SECONDS = "5"
 MALFORMED = object()
 WORKFLOW = (WORKFLOW_TYPE, WORKFLOW_ID)
+TRIAGE_PATH = "/v1/alerts/{alert_id}/triage"
+
+
+def _operation(method: str, path: str, action: str) -> ScopeDeclaration:
+    return declare(
+        method, path, action=action, resource_type=WORKFLOW_TYPE, resource_id=WORKFLOW_ID
+    )
+
+
+STATE = _operation("GET", TRIAGE_PATH, READ_ACTION)
+CONTEXT = _operation("GET", TRIAGE_PATH + "/context", READ_ACTION)
+ELIGIBLE = _operation("GET", TRIAGE_PATH + "/eligible-incidents", READ_ACTION)
+# The action depends on the operation; the declaration names the first triage step's.
+COMMAND = _operation("POST", TRIAGE_PATH + "/commands", ACTIONS[TransitionId.OPEN_TRIAGE])
 
 # Closed command payloads mirrored from triage-command.schema.yaml (no new
 # runtime dependency to load it here): unknown operations and extra keys are
@@ -54,13 +78,7 @@ MESSAGES = {
 
 def refusal(status: int, code: str) -> GovernedError:
     """A triage refusal by status, worded as the triage contract words it."""
-    if status == 401:
-        return GovernedError(status, code, MESSAGES[status], headers={"WWW-Authenticate": "Bearer"})
-    if status == 503:
-        return GovernedError(
-            status, code, MESSAGES[status], retryable=True, retry_after=RETRY_AFTER_SECONDS
-        )
-    return GovernedError(status, code, MESSAGES[status])
+    return status_refusal(status, code, MESSAGES[status], retry_after=RETRY_AFTER_SECONDS)
 
 
 REFUSALS = Refusals(
@@ -88,10 +106,11 @@ class TriageHttpService:
         self._gate: Gate[Any] = Gate(self._sessions, REFUSALS, facts=ResourceRepository)
 
     async def _domain(self, call: Any) -> Any:
-        try:
-            return await call
-        except TriageError as error:
-            raise refusal(error.http_status, error.code) from None
+        with failing_as(REFUSALS.unavailable):
+            try:
+                return await call
+            except TriageError as error:
+                raise refusal(error.http_status, error.code) from None
 
     async def post_command(
         self,
@@ -175,13 +194,16 @@ class TriageHttpService:
             )
 
         return await self._gate.run(
+            COMMAND,
             authorization,
             lambda operation: Scope(ACTIONS[operation], *WORKFLOW),
             command,
             validate=validate,
         )
 
-    async def _read(self, alert_id: str, authorization: str | None, read: Any) -> Response:
+    async def _read(
+        self, operation: ScopeDeclaration, alert_id: str, authorization: str | None, read: Any
+    ) -> Response:
         def validate() -> None:
             if not isinstance(alert_id, str) or not is_identifier(alert_id):
                 raise refusal(400, "invalid_command")
@@ -190,12 +212,13 @@ class TriageHttpService:
             return Released(await self._domain(read(admission.context.principal)))
 
         return await self._gate.run(
-            authorization, Scope(READ_ACTION, *WORKFLOW), use_case, validate=validate
+            operation, authorization, Scope(READ_ACTION, *WORKFLOW), use_case, validate=validate
         )
 
     async def get_state(self, alert_id: str, authorization: str | None) -> Response:
         """Contract getAlertTriage: current triage state, no mutation."""
         return await self._read(
+            STATE,
             alert_id,
             authorization,
             lambda principal: self._service.read_state(principal, alert_id=alert_id),
@@ -204,6 +227,7 @@ class TriageHttpService:
     async def get_context(self, alert_id: str, authorization: str | None) -> Response:
         """Return advisory state and domain-authorized next actions."""
         return await self._read(
+            CONTEXT,
             alert_id,
             authorization,
             lambda principal: self._service.read_context(principal, alert_id=alert_id),
@@ -212,6 +236,7 @@ class TriageHttpService:
     async def get_eligible_incidents(self, alert_id: str, authorization: str | None) -> Response:
         """List eligible link destinations without checking alert inventory or triage state."""
         return await self._read(
+            ELIGIBLE,
             alert_id,
             authorization,
             lambda principal: self._service.list_eligible_incidents(principal),
@@ -239,7 +264,7 @@ def triage_router(service: TriageHttpService) -> APIRouter:
     ) -> Response:
         try:
             raw = await request.json()
-        except ValueError:
+        except Exception:
             raw = MALFORMED
         return await service.post_command(
             alert_id,
