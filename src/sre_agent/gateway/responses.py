@@ -15,8 +15,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
-from sre_agent.gate.errors import ErrorEnvelope, GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, Terminal, declare
+from sre_agent.gate.errors import GovernedError
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.attribution import RequestAttribution
 from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
@@ -115,6 +124,54 @@ class ResponsesResponse(BaseModel):
     output: Annotated[list[ResponseOutput], Field(min_length=1)]
     request_id: UUID
     metadata: ResponseMetadata
+
+
+class ErrorDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    field: Annotated[str, Field(min_length=1, max_length=100)]
+    message: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=200,
+            json_schema_extra={"pattern": r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"},
+        ),
+    ]
+
+
+class ErrorBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")]
+    message: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=300,
+            json_schema_extra={"pattern": r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"},
+        ),
+    ]
+    details: Annotated[list[ErrorDetail], Field(max_length=16)] = None  # type: ignore[assignment]
+
+
+class ErrorEnvelope(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "error": {
+                        "code": "contract_validation_failed",
+                        "message": "Request validation failed.",
+                    },
+                    "request_id": "00000000-0000-4000-8000-000000000001",
+                    "retryable": False,
+                }
+            ]
+        },
+    )
+    error: ErrorBody
+    request_id: UUID
+    retryable: bool
 
 
 class AuditStore(Protocol):
@@ -232,6 +289,7 @@ class ResponsesService:  # noqa: E305
                 raise failure(422, "validation") from None
 
         return await self.gate.run(
+            CREATE,
             authorization,
             lambda request: Scope("invoke", "llm_model", request.model),
             self._respond,
@@ -243,8 +301,9 @@ class ResponsesService:  # noqa: E305
         identifiers = _identifiers(request)
         facts = admission.facts
         facts.update(context=context, alias=request.model, decision=decision, identifiers=identifiers)
-        async with self.sessions() as session:
-            assignment = await ResourceRepository(session).resolve_assignment("llm_model", request.model)
+        with failing_as(REFUSALS.unavailable):
+            async with self.sessions() as session:
+                assignment = await ResourceRepository(session).resolve_assignment("llm_model", request.model)
         if assignment is None:
             facts.update(reason="routing_unavailable", retryable=True)
             raise failure(503, "routing")
