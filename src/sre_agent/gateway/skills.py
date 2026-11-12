@@ -10,14 +10,13 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict
 
-from sre_agent.gate.errors import ErrorEnvelope
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import (
     AuthenticationFailed,
     authorize_governed_access,
     authorize_governed_access_for_context,
 )
-from sre_agent.gateway.responses import AuditStore
+from sre_agent.gateway.responses import AuditStore, ErrorEnvelope
 from sre_agent.governance.dto import SkillVersionRecord
 from sre_agent.persistence.repositories import SkillVersionRepository
 

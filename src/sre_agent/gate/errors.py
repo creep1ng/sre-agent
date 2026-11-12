@@ -5,48 +5,10 @@ turns it into the common envelope `{error, request_id, retryable}`, with `WWW-Au
 an authentication failure and the `Retry-After` the error carries.
 """
 
-from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
-
-SAFE_MESSAGE = {"pattern": r"^(?!.*(?:Authorization|Bearer\s|sk-[A-Za-z0-9])).*$"}
-
-
-class ErrorDetail(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    field: Annotated[str, Field(min_length=1, max_length=100)]
-    message: Annotated[str, Field(min_length=1, max_length=200, json_schema_extra=SAFE_MESSAGE)]
-
-
-class ErrorBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    code: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")]
-    message: Annotated[str, Field(min_length=1, max_length=300, json_schema_extra=SAFE_MESSAGE)]
-    details: Annotated[list[ErrorDetail], Field(max_length=16)] = None  # type: ignore[assignment]
-
-
-class ErrorEnvelope(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-        json_schema_extra={
-            "examples": [
-                {
-                    "error": {
-                        "code": "contract_validation_failed",
-                        "message": "Request validation failed.",
-                    },
-                    "request_id": "00000000-0000-4000-8000-000000000001",
-                    "retryable": False,
-                }
-            ]
-        },
-    )
-    error: ErrorBody
-    request_id: UUID
-    retryable: bool
 
 
 class GovernedError(Exception):
@@ -96,6 +58,22 @@ class AuthenticationFailed(GovernedError):
             headers={"WWW-Authenticate": "Bearer"},
             stage="authentication",
         )
+
+
+class InactivePrincipal(Exception):
+    """A valid credential of an inactive principal. The gate answers it as any authentication
+    failure; a route that audits records that the principal was refused."""
+
+
+def refusal(status: int, code: str, message: str, *, retry_after: str = "5") -> GovernedError:
+    """An error worded by its status: a 401 challenges with `WWW-Authenticate: Bearer`, a 503 is
+    retryable with `Retry-After`; for a status another component reports (the deploy-executor,
+    the triage service)."""
+    if status == 401:
+        return GovernedError(status, code, message, headers={"WWW-Authenticate": "Bearer"})
+    if status == 503:
+        return GovernedError(status, code, message, retryable=True, retry_after=retry_after)
+    return GovernedError(status, code, message)
 
 
 def error_response(error: GovernedError, request_id: UUID | str) -> JSONResponse:

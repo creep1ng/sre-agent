@@ -4,7 +4,7 @@ from typing import Annotated, Any
 
 from fastapi import Header, Request
 
-from sre_agent.gate.errors import AuthenticationFailed
+from sre_agent.gate.errors import AuthenticationFailed, InactivePrincipal
 from sre_agent.governance.dto import PrincipalContext
 from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import CredentialRepository
@@ -28,6 +28,19 @@ async def principal_for(sessions: Any, authorization: str | None) -> PrincipalCo
         return None
     async with sessions() as session:
         return await CredentialRepository(session).authenticate(key)
+
+
+async def active_principal(sessions: Any, authorization: str | None) -> PrincipalContext | None:
+    """As `principal_for`, but an inactive principal raises `InactivePrincipal`, so a route that
+    audits can record the refusal; the answer is the same 401."""
+    key = bearer_key(authorization)
+    if key is None:
+        return None
+    async with sessions() as session:
+        context = await CredentialRepository(session).resolve_authorization_context(key)
+    if context is not None and context.principal.status != "active":
+        raise InactivePrincipal
+    return context
 
 
 async def authenticate_principal(
