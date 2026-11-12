@@ -14,7 +14,15 @@ from typing import Any
 from fastapi import APIRouter, Request, Response
 
 from sre_agent.gate.errors import GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    ScopeDeclaration,
+    failing_as,
+)
 from sre_agent.gateway.incidents import (
     INVALID,
     NOT_FOUND,
@@ -22,6 +30,7 @@ from sre_agent.gateway.incidents import (
     UNAVAILABLE,
     WORKFLOW_RESOURCE_TYPE,
     IncidentWorkflowResourceReader,
+    read_operation,
 )
 from sre_agent.governance.dto import Principal
 from sre_agent.incident.persistence import IncidentStaleWriteError, IncidentUnitOfWork
@@ -42,6 +51,11 @@ WRITE_ACTION, REVIEW_ACTION, READ_ACTION, CONTENT_ACTION = (
     "run.read_context",
 )
 MAX_COMMENT = 2000
+POSTMORTEM_PATH = "/v1/incidents/{incident_id}/postmortem"
+WRITE = read_operation("PUT", POSTMORTEM_PATH, WRITE_ACTION)
+REVIEW = read_operation("POST", POSTMORTEM_PATH + "/reviews", REVIEW_ACTION)
+READ = read_operation("GET", POSTMORTEM_PATH, READ_ACTION)
+MEMORY = read_operation("GET", "/v1/incident-memory/changes", CONTENT_ACTION)
 DENIED = GovernedError(
     403, "not_authorized", "The principal is not authorized for this postmortem operation."
 )
@@ -95,6 +109,17 @@ class PostmortemService:
         self._gate: Gate[Any] = Gate(
             sessions, REFUSALS, facts=lambda _: IncidentWorkflowResourceReader(workflow)
         )
+
+    async def _run(
+        self, operation: ScopeDeclaration, authorization: str | None, use_case: Any, validate: Any
+    ) -> Response:
+        async def guarded(admission: Admission, request: Any) -> Any:
+            # A failure of the incident store is the routes' 503, as it was before the gate.
+            with failing_as(UNAVAILABLE):
+                return await use_case(admission, request)
+
+        scope = self._scope(operation.action)
+        return await self._gate.run(operation, authorization, scope, guarded, validate=validate)
 
     def _scope(self, action: str) -> Scope:
         return Scope(action, WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id)
@@ -153,9 +178,7 @@ class PostmortemService:
             assert record is not None
             return Released(project(record, with_content=False), 201 if version == 0 else 200)
 
-        return await self._gate.run(
-            authorization, self._scope(WRITE_ACTION), write, validate=validate
-        )
+        return await self._run(WRITE, authorization, write, validate)
 
     async def review(self, incident_id: str, body: Any, authorization: str | None) -> Response:
         def validate() -> None:
@@ -200,9 +223,7 @@ class PostmortemService:
             assert record is not None
             return Released(project(record, with_content=False), 201)
 
-        return await self._gate.run(
-            authorization, self._scope(REVIEW_ACTION), review, validate=validate
-        )
+        return await self._run(REVIEW, authorization, review, validate)
 
     async def read(self, incident_id: str, authorization: str | None) -> Response:
         def validate() -> None:
@@ -221,9 +242,7 @@ class PostmortemService:
             with_content = content.decision.decision == "allow"
             return Released(project(record, with_content=with_content))
 
-        return await self._gate.run(
-            authorization, self._scope(READ_ACTION), read, validate=validate
-        )
+        return await self._run(READ, authorization, read, validate)
 
     async def memory_changes(self, authorization: str | None) -> Response:
         """The incident memory change log (#773): what entered, when and from which incident.
@@ -255,7 +274,7 @@ class PostmortemService:
                 }
             )
 
-        return await self._gate.run(authorization, self._scope(CONTENT_ACTION), changes)
+        return await self._run(MEMORY, authorization, changes, None)
 
 
 def postmortems_router(service: PostmortemService) -> APIRouter:
