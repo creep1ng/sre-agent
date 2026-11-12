@@ -3,19 +3,34 @@
 import re
 from copy import deepcopy
 from datetime import datetime
+from time import monotonic
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Path, Request, Response, Security
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, Terminal, declare
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.governance.dto import AuditEvent
+from sre_agent.governance.authorization import AuthorizationDecisionEngine
+from sre_agent.governance.dto import AuditEvent, PrincipalContext
+from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.models import AuditEventRow
 from sre_agent.persistence.repositories import (
     AuditRepository,
+    CredentialRepository,
+    GrantRepository,
     ResourceRepository,
 )
 from sre_agent.vocabulary import IDENTIFIER_PATTERN, is_identifier
@@ -142,6 +157,15 @@ def _event_id_json_schema(schema: dict[str, Any]) -> None:
     schema.update(AUDIT_EVENT_ID_SCHEMA)
 
 
+ERRORS = {
+    401: ("authentication_failed", "Authentication is required."),
+    403: ("resource_unavailable", "Resource unavailable."),
+    404: ("resource_not_found", "The requested resource was not found."),
+    422: ("validation_error", "Request validation failed."),
+    503: ("audit_unavailable", "Audit storage is temporarily unavailable."),
+}
+
+
 UNAVAILABLE = GovernedError(
     503, "audit_unavailable", "Audit storage is temporarily unavailable.", retryable=True
 )
@@ -235,6 +259,100 @@ class AuditReadsService:
         )
         await self.audit.append(event)
 
+    def _error(
+        self, request_id: UUID, status: int, headers: dict[str, str] | None = None
+    ) -> JSONResponse:
+        code, message = ERRORS[status][0], ERRORS[status][1]
+        response = JSONResponse(
+            {
+                "error": {"code": code, "message": message},
+                "request_id": str(request_id),
+                "retryable": status == 503,
+            },
+            status,
+        )
+        for name, value in dict(headers or {}).items():
+            response.headers[name] = value
+        return response
+
+    async def _authenticate(self, authorization: str | None) -> PrincipalContext | None:
+        scheme, sep, key = authorization.partition(" ") if authorization else ("", "", "")
+        if not sep or scheme.casefold() != "bearer" or not is_api_key(key):
+            return None
+        async with self.sessions() as session:
+            return await CredentialRepository(session).authenticate(key)
+
+    async def _authorized(
+        self,
+        authorization: str | None,
+    ) -> tuple[PrincipalContext | None, Any | None, int | None]:
+        try:
+            context = await self._authenticate(authorization)
+            if context is None:
+                return None, None, 401
+            async with self.sessions() as session:
+                evaluation = await AuthorizationDecisionEngine(
+                    ResourceRepository(session), GrantRepository(session)
+                ).evaluate(context.principal, READ_ACTION, RESOURCE_TYPE, RESOURCE_ID)
+        except Exception:
+            return None, None, 503
+        if evaluation.decision.decision != "allow":
+            return context, evaluation, 403
+        return context, evaluation, None
+
+    async def _finish(
+        self,
+        request_id: UUID,
+        started: float,
+        status: int,
+        stage: str,
+        *,
+        error_code: str | None = None,
+        payload: dict[str, Any] | None = None,
+        context: PrincipalContext | None = None,
+        evaluation: Any | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> JSONResponse:
+        try:
+            audit_reason = {
+                "validation_error": "contract_validation_failed",
+            }.get(error_code or "", error_code)
+            event = self._projector.control_event(
+                request_id,
+                status,
+                max(0, int((monotonic() - started) * 1000)),
+                stage,
+                operation="audit.project",
+                action="read_metadata",
+                reason=audit_reason,
+                retryable=status == 503,
+                context=context if stage == "authorization" else None,
+                resource_ref=("administrative_control", "audit")
+                if stage == "authorization"
+                else None,
+                decision=evaluation.decision if stage == "authorization" else None,
+                authorization_denial_cause=(
+                    evaluation.denial_cause
+                    if stage == "authorization" and status in {403, 404}
+                    else None
+                ),
+            )
+            await self.audit.append(event)
+        except Exception:
+            return self._error(request_id, 503)
+        if payload is not None:
+            return JSONResponse(payload, status_code=status)
+        code = error_code or ERRORS[status][0]
+        return JSONResponse(
+            {
+                "error": {"code": code, "message": ERRORS[status][1]},
+                "request_id": str(request_id),
+                "retryable": status == 503,
+            },
+            status_code=status,
+            headers=headers,
+        )
+
     def _digest(self, domain: str, value: str) -> str:
         return self._projector.reference(domain, value).digest
 
@@ -320,10 +438,11 @@ class AuditReadsService:
 
         async def events(admission: Admission, filters: dict[str, Any]) -> Released:
             limit = filters.pop("limit")
-            async with self.sessions() as session:
-                events, has_more = await AuditRepository(session).query_filtered(
-                    limit=limit, **filters
-                )
+            with failing_as(UNAVAILABLE):
+                async with self.sessions() as session:
+                    events, has_more = await AuditRepository(session).query_filtered(
+                        limit=limit, **filters
+                    )
             return Released(
                 {
                     "items": [project_metadata(e.model_dump(mode="json")) for e in events],
@@ -332,7 +451,7 @@ class AuditReadsService:
                 }
             )
 
-        return await self.gate.run(authorization, SCOPE, events, validate=validate)
+        return await self.gate.run(LIST, authorization, SCOPE, events, validate=validate)
 
     async def get_event(
         self,
@@ -356,18 +475,19 @@ class AuditReadsService:
             return event_id
 
         async def event(admission: Admission, lookup_id: str) -> Released:
-            async with self.sessions() as session:
-                row = await session.get(AuditEventRow, lookup_id)
-                event = None
-                if row is not None:
-                    from sre_agent.persistence.projections import project_audit_event
+            with failing_as(UNAVAILABLE):
+                async with self.sessions() as session:
+                    row = await session.get(AuditEventRow, lookup_id)
+                    event = None
+                    if row is not None:
+                        from sre_agent.persistence.projections import project_audit_event
 
-                    event = project_audit_event(row)
+                        event = project_audit_event(row)
             if event is None:
                 raise NOT_FOUND
             return Released(project_metadata(event.model_dump(mode="json")))
 
-        return await self.gate.run(authorization, SCOPE, event, validate=validate)
+        return await self.gate.run(GET, authorization, SCOPE, event, validate=validate)
 
 
 def audit_reads_router(service: AuditReadsService) -> APIRouter:
