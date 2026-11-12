@@ -15,10 +15,7 @@ from datetime import datetime
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from uuid import UUID
-
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import JSONResponse
 
 from sre_agent.gate.authentication import principal_for
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
@@ -67,20 +64,6 @@ LIST_MAX_LIMIT = 100
 STATE_READ_ATTEMPTS = 3
 # The most events the event repository returns in one call.
 EVENT_PAGE = 1000
-
-ERRORS = {
-    401: ("authentication_failed", "Authentication is required."),
-    403: ("not_authorized", "The principal is not authorized to read this incident."),
-    404: ("incident_not_found", "The requested incident was not found."),
-    422: ("validation_error", "The request is invalid."),
-    503: ("storage_unavailable", "Incident storage is temporarily unavailable."),
-}
-NOT_FOUND_CODES = {
-    "run_absent": "The incident has no runs yet.",
-    "run_not_found": "The requested incident run was not found.",
-    "snapshot_absent": "No snapshot exists for this run yet.",
-}
-
 
 UNAUTHENTICATED = AuthenticationFailed("Authentication is required.")
 DENIED = GovernedError(
@@ -242,63 +225,6 @@ class IncidentQueryService:
         if record is None:
             raise NOT_FOUND["incident_not_found"]
         return record
-
-    def _error(
-        self,
-        request_id: UUID,
-        status: int,
-        code: str | None = None,
-        headers: dict[str, str] | None = None,
-    ) -> JSONResponse:
-        default_code, message = ERRORS[status][0], ERRORS[status][1]
-        code = code or default_code
-        if code in NOT_FOUND_CODES:
-            message = NOT_FOUND_CODES[code]
-        response = JSONResponse(
-            {
-                "error": {"code": code, "message": message},
-                "request_id": str(request_id),
-                "retryable": status == 503,
-            },
-            status,
-        )
-        merged = dict(headers or {})
-        if status == 503:
-            merged.setdefault("Retry-After", RETRY_AFTER_SECONDS)
-        for name, value in merged.items():
-            response.headers[name] = value
-        return response
-
-    async def _authorized_principal(
-        self, request_id: UUID, authorization: str | None
-    ) -> tuple[Principal | None, JSONResponse | None]:
-        try:
-            context = await self._authenticate(authorization)
-            if context is None:
-                return None, self._error(request_id, 401, headers={"WWW-Authenticate": "Bearer"})
-            async with self.sessions() as session:
-                evaluation = await self._authorizer(session, context.principal)
-        except Exception:
-            return None, self._error(request_id, 503)
-        if evaluation.decision.decision != "allow":
-            return None, self._error(request_id, 403)
-        return context.principal, None
-
-    @staticmethod
-    def _valid_identifier(value: str, pattern: str) -> bool:
-        return re.fullmatch(pattern, value) is not None
-
-    async def _incident_or_error(
-        self, request_id: UUID, incident_id: str
-    ) -> tuple[IncidentRecord | None, JSONResponse | None]:
-        try:
-            async with self.units() as work:
-                record = await work.incidents.get(incident_id)
-        except Exception:
-            return None, self._error(request_id, 503)
-        if record is None:
-            return None, self._error(request_id, 404, "incident_not_found")
-        return record, None
 
     async def _resolve_run(self, incident_id: str, run_id: str | None) -> RunRecord:
         async with self.units() as work:
