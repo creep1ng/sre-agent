@@ -54,9 +54,18 @@ class ExecutionRefused(Exception):
         self.status, self.code, self.message, self.reason = status, code, message, reason
 
 
-# How reading the executor's answer fails: transport, a body that is not JSON, or JSON of
-# another shape. Anything else is a defect here and is not passed off as an unreadable executor.
-UNREADABLE = (httpx.HTTPError, ValueError, LookupError, TypeError, AttributeError, AssertionError)
+# How reading the executor's answer fails: an executor URL httpx cannot use, transport, a body
+# that is not JSON, or JSON of another shape. Anything else is a defect here and is not passed
+# off as an unreadable executor.
+UNREADABLE = (
+    httpx.InvalidURL,
+    httpx.HTTPError,
+    ValueError,
+    LookupError,
+    TypeError,
+    AttributeError,
+    AssertionError,
+)
 
 
 async def service_operations(
