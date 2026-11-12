@@ -7,8 +7,9 @@ the request there: a denied request never reaches its use case. A route that aud
 every terminal outcome through its auditor before the response is released; when that write
 fails, the route answers its `audit_unavailable` error instead.
 
-Only the failures a route names become its typed errors (`failing_as`); any other exception is
-a defect and escapes as a logged 500, as it did before the gate.
+A route maps a failure to its typed error only inside a `failing_as` block, which catches any
+exception unless the route names narrower ones, as the routes' own `except Exception` did before
+the gate. Outside those blocks an exception is a defect and escapes as a logged 500.
 """
 
 from collections.abc import Awaitable, Callable, Iterator, Mapping
@@ -76,7 +77,6 @@ class ScopeDeclaration:
 _DECLARED: dict[tuple[str, str], ScopeDeclaration] = {}
 # The operations `Gate.run` answered in this process: a declared operation that answers by
 # hand never appears here.
-_SERVED: set[tuple[str, str]] = set()
 
 
 def declare(
@@ -92,10 +92,6 @@ def declare(
 
 def governed_operations() -> Mapping[tuple[str, str], ScopeDeclaration]:
     return dict(_DECLARED)
-
-
-def served_operations() -> frozenset[tuple[str, str]]:
-    return frozenset(_SERVED)
 
 
 @contextmanager
@@ -237,7 +233,6 @@ class Gate(Generic[T]):
         returns what the use case and a scope computed from the request receive. `authenticate`
         replaces the bearer lookup for one request whose caller another record vouches for (a
         linked chat)."""
-        _SERVED.add((operation.method, operation.path))
         request_id, started = request_id or uuid4(), monotonic()
         context: PrincipalContext | None = None
         evaluation: AuthorizationEvaluation | None = None
