@@ -7,7 +7,8 @@ never a name in the body. Reading the progress (`run.read`) is not reading the
 text: content and review comments leave only with `run.read_context`.
 """
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -113,13 +114,21 @@ class PostmortemService:
     async def _run(
         self, operation: ScopeDeclaration, authorization: str | None, use_case: Any, validate: Any
     ) -> Response:
-        async def guarded(admission: Admission, request: Any) -> Any:
-            # A failure of the incident store is the routes' 503, as it was before the gate.
-            with failing_as(UNAVAILABLE):
-                return await use_case(admission, request)
-
         scope = self._scope(operation.action)
-        return await self._gate.run(operation, authorization, scope, guarded, validate=validate)
+        return await self._gate.run(operation, authorization, scope, use_case, validate=validate)
+
+    @staticmethod
+    @asynccontextmanager
+    async def _store(unit: Any) -> AsyncIterator[Any]:
+        """The incident store, whose failure is the routes' 503 as it was before the gate. What
+        the routes made of the store's answer (a stale write, a projection) stays outside."""
+        try:
+            async with unit as work:
+                yield work
+        except (GovernedError, IncidentStaleWriteError):
+            raise
+        except Exception:
+            raise UNAVAILABLE from None
 
     def _scope(self, action: str) -> Scope:
         return Scope(action, WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id)
@@ -151,7 +160,7 @@ class PostmortemService:
             version, cited = request
             principal = self._human(admission)
             try:
-                async with self.units() as work:
+                async with self._store(self.units()) as work:
                     await work.postmortems.get(incident_id, lock=True)
                     incident = await work.incidents.get(incident_id)
                     if incident is None:
@@ -200,7 +209,7 @@ class PostmortemService:
 
         async def review(admission: Admission, _: None) -> Released:
             principal = self._human(admission)
-            async with self.units() as work:
+            async with self._store(self.units()) as work:
                 record = await work.postmortems.get(incident_id, lock=True)
                 incident = await work.incidents.get(incident_id)
                 if incident is None:
@@ -232,8 +241,9 @@ class PostmortemService:
 
         async def read(admission: Admission, _: None) -> Released:
             # Reading the progress is not reading the text: content needs its own action.
-            content = await self._gate.authorize(admission.context, self._scope(CONTENT_ACTION))
-            async with self.units() as work:
+            with failing_as(UNAVAILABLE):
+                content = await self._gate.authorize(admission.context, self._scope(CONTENT_ACTION))
+            async with self._store(self.units()) as work:
                 if await work.incidents.get(incident_id) is None:
                     raise INCIDENT_NOT_FOUND
                 record = await work.postmortems.get(incident_id)
@@ -251,7 +261,7 @@ class PostmortemService:
         """
 
         async def changes(admission: Admission, _: None) -> Released:
-            async with self.sessions() as session:
+            async with self._store(self.sessions()) as session:
                 changes = await PostgresIncidentMemoryRepository(session).changes()
             return Released(
                 {
