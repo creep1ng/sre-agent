@@ -43,8 +43,6 @@ NOT_YET_MIGRATED: set[tuple[str, str]] = {
     ("GET", "/v1/usage/requests"),
     ("POST", "/v1/alerts/{alert_id}/triage/commands"),
     ("POST", "/v1/bok/collections/{collection_id}/versions/{version}/search"),
-    ("POST", "/v1/incidents/{incident_id}/runs"),
-    ("POST", "/v1/incidents/{incident_id}/runs/{run_id}/commands"),
     ("POST", "/v1/mcp/tools/{tool_id}"),
     ("POST", "/v1/responses"),
 }
