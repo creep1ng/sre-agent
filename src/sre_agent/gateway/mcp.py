@@ -24,10 +24,10 @@ from pydantic import (
     model_validator,
 )
 
-from sre_agent.gate.authentication import authorize_governed_access
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError, InactivePrincipal
 from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, Terminal, declare
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.authentication import authorize_governed_access
 from sre_agent.gateway.responses import AuditStore
 from sre_agent.governance.authorization import AuthorizationEvaluation
 from sre_agent.governance.dto import MCPServer, MCPTool, PrincipalContext
@@ -360,11 +360,15 @@ class MCPGatewayService:
         self, authorization: str | None, scope: Scope
     ) -> tuple[PrincipalContext | None, AuthorizationEvaluation | None]:
         try:
-            return await authorize_governed_access(
+            context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, scope.action, scope.resource_type, scope.resource_id
             )
         except AuthenticationFailed:
             return None, None
+        # The gateway's check evaluates an inactive principal; the gate does not authenticate it.
+        if context.principal.status != "active":
+            raise InactivePrincipal
+        return context, evaluation
 
     async def discovery(self, authorization: str | None, query: str = "") -> Response:
         def validate() -> None:
@@ -374,9 +378,13 @@ class MCPGatewayService:
         async def discover(admission: Admission, _: None) -> Released:
             visible_ids: list[str] = []
             for tool_id in MCP_TOOL_IDS:
-                tool_context, tool_evaluation = await self._admit(
-                    authorization, Scope("mcp.invoke", "mcp_tool", tool_id)
-                )
+                try:
+                    tool_context, tool_evaluation = await self._admit(
+                        authorization, Scope("mcp.invoke", "mcp_tool", tool_id)
+                    )
+                except InactivePrincipal:
+                    # Deactivated during the request: its grants no longer allow the tool.
+                    continue
                 if tool_context is None:
                     raise REFUSALS.unauthenticated
                 if tool_context.principal.principal_id != admission.context.principal.principal_id:
@@ -430,7 +438,7 @@ class MCPGatewayService:
             context, evaluation = await authorize_governed_access(
                 self.sessions, authorization, "mcp.invoke", "mcp_tool", tool_id
             )
-        except (AuthenticationFailed, InactivePrincipal):
+        except AuthenticationFailed:
             return JSONResponse(
                 {
                     "error": {"code": "authentication_failed", "message": "Authentication failed."},
