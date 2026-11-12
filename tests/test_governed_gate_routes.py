@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import yaml
 from database_support import migrate_database
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -33,6 +34,7 @@ from sre_agent.gate import pipeline
 from sre_agent.gate.pipeline import Admission, Gate
 from sre_agent.gateway.providers import ProviderRequest, ProviderResult
 from sre_agent.persistence.database import Database
+from sre_agent.persistence.incidents import PostgresIncidentUnitOfWork
 from sre_agent.persistence.seeds import SeedSettings, seed, seed_mcp_demo
 from sre_agent.settings import Settings
 
@@ -65,6 +67,9 @@ CHANGES = "SELECT count(*) FROM incident.change_events"
 TRIAGE = "SELECT count(*) FROM alert_triage WHERE status <> 'open'"
 RUN_EVENTS = "SELECT count(*) FROM incident.run_events"
 POSTMORTEMS = "SELECT count(*) FROM incident.postmortem_revisions"
+REVIEWS = "SELECT count(*) FROM incident.postmortem_reviews"
+# The store requires a run's updated_at at or after its incident's created_at.
+SEEDED_AT = datetime.now(UTC) - timedelta(hours=1)
 
 
 @dataclass
@@ -96,6 +101,7 @@ class Case:
 
 CHANGE = {"source": "ci", "external_id": "run-1021", "service": "checkout", "kind": "deploy"}
 INCIDENT = "/v1/incidents/{incident}"
+CLOSING = "/v1/incidents/{closing}/postmortem"
 RUN = INCIDENT + "/runs/{run}"
 KEY = {"Idempotency-Key": "gate-1021-request"}
 START = {"workflow_version": "1.0.0", "objective": "investigate"}
@@ -105,6 +111,47 @@ COMMAND = {"command": "approve_mitigation", "actor": "human", "actor_reference":
 DECLARE = {"operation": "triage_declare", "expected_version": 1, "reason": "Payment fails.",
            "severity": "sev1", "impact": "Customers cannot pay."}  # fmt: skip
 BOK = "/v1/bok/collections/otel-demo-store/versions/1.0.0"
+
+SEEDED = Path(__file__).parents[1] / "agent/fixtures/incidents/otel-payment-failure"
+MITIGATION = {"mitigation_id": "mit_gate", "description": "d", "steps": ["s"], "risk": "low",
+              "verification_check": "v", "approval_status": "pending", "execution_mode": "human",
+              "created_by": "agent", "created_at": "2026-11-01T00:00:00Z"}  # fmt: skip
+
+
+def _postmortem(facts: dict[str, Any]) -> dict[str, Any]:
+    """The next version of the seeded postmortem, citing the event that opened it."""
+    cited = [{"event_id": facts["opened"], "description": "Postmortem opened."}]
+    content = {"summary": "s", "impact": "i", "strategy": "s", "verification": "v",
+               "cause": {"statement": "c", "certainty": "unknown"}, "timeline": cited,
+               "actions_taken": [], "pending": [], "unknowns": []}  # fmt: skip
+    return {"expected_version": _version(facts), "content": content}
+
+
+def _version(facts: dict[str, Any]) -> int:
+    query = text("SELECT version FROM incident.postmortems WHERE incident_id = :incident")
+    return next((row["version"] for row in _sql(query, incident=facts["closing"])), 0)
+
+
+def _seed(incident: str, state: str, run: dict[str, Any]) -> str:
+    """An incident in `state` with one run, stored as the incident tests store theirs."""
+    document = yaml.safe_load((SEEDED / "initial-state.yaml").read_text())
+    document |= {"state": state, "incident_id": incident, "severity": "sev2",
+                 "mitigation_strategy": MITIGATION}  # fmt: skip
+    run_id = "run_" + incident.replace("-", "")
+
+    async def store() -> None:
+        database = Database(URL)
+        try:
+            async with PostgresIncidentUnitOfWork(database) as work:
+                await work.incidents.add(incident, document, now=SEEDED_AT)
+                state_of_run = run | {"workflow_version": "1.0.0", "current_state": state}
+                await work.runs.add(run_id, incident, state_of_run, now=SEEDED_AT)
+        finally:
+            await database.dispose()
+
+    asyncio.run(store())
+    return run_id
+
 
 CASES = [
     Case("GET", "/v1/alerts", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403),  # alerts
@@ -130,6 +177,18 @@ CASES = [
          invalid=(INCIDENT + "/runs/bad", None, 422)),  # incidents
     Case("GET", RUN + "/events", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          invalid=(RUN + "/events?limit=0", None, 422)),  # incidents
+    Case("PUT", CLOSING, "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403, _postmortem,
+         effect=POSTMORTEMS, vary=lambda body, label: body | {"content": body["content"]
+                                                              | {"summary": label}},
+         invalid=(CLOSING, {}, 422)),  # postmortems
+    Case("POST", CLOSING + "/reviews", "DEMO_HUMAN", "RESTRICTED_HARNESS", 201, 403,
+         lambda facts: {"version": _version(facts), "outcome": "approved"}, effect=REVIEWS,
+         vary=lambda body, label: body | {"outcome": "changes_requested", "comment": label},
+         invalid=(CLOSING + "/reviews", {}, 422)),  # postmortems
+    Case("GET", CLOSING, "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=("/v1/incidents/X/postmortem", None, 422)),  # postmortems
+    Case("GET", "/v1/incident-memory/changes", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200,
+         403),  # postmortems
 ]  # fmt: skip
 
 
@@ -278,6 +337,19 @@ def facts(client: TestClient) -> dict[str, Any]:
         "chunk": f"{chunk['document_id']}/{chunk['section_id']}/{chunk['chunk_index']}",
         "event": event["event_id"],
     }
+    # A resolved incident whose postmortem the operator opened and wrote once.
+    facts["closing"] = "inc-gate-closing"
+    _seed(facts["closing"], "resolved", {"status": "completed"})
+    opened = client.post(
+        f"/v1/incidents/{facts['closing']}/runs",
+        headers=human | {"Idempotency-Key": "gate-1021-postmortem"},
+        json=START | {"objective": "postmortem"},
+    )
+    assert opened.status_code == 201, opened.text
+    query = "SELECT event_id FROM incident.run_events WHERE incident_id = :incident LIMIT 1"
+    facts["opened"] = _sql(text(query), incident=facts["closing"])[0]["event_id"]
+    written = client.put(CLOSING.format(**facts), headers=human, json=_postmortem(facts))
+    assert written.status_code == 201, written.text
     return facts
 
 
