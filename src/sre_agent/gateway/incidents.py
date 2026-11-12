@@ -15,11 +15,23 @@ from datetime import datetime
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from uuid import UUID
+
 from fastapi import APIRouter, Request, Response
+from fastapi.responses import JSONResponse
 
 from sre_agent.gate.authentication import principal_for
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    ScopeDeclaration,
+    declare,
+    failing_as,
+)
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationEvaluation,
@@ -56,6 +68,20 @@ STATE_READ_ATTEMPTS = 3
 # The most events the event repository returns in one call.
 EVENT_PAGE = 1000
 
+ERRORS = {
+    401: ("authentication_failed", "Authentication is required."),
+    403: ("not_authorized", "The principal is not authorized to read this incident."),
+    404: ("incident_not_found", "The requested incident was not found."),
+    422: ("validation_error", "The request is invalid."),
+    503: ("storage_unavailable", "Incident storage is temporarily unavailable."),
+}
+NOT_FOUND_CODES = {
+    "run_absent": "The incident has no runs yet.",
+    "run_not_found": "The requested incident run was not found.",
+    "snapshot_absent": "No snapshot exists for this run yet.",
+}
+
+
 UNAUTHENTICATED = AuthenticationFailed("Authentication is required.")
 DENIED = GovernedError(
     403, "not_authorized", "The principal is not authorized to read this incident."
@@ -78,6 +104,21 @@ NOT_FOUND = {
         ("snapshot_absent", "No snapshot exists for this run yet."),
     )
 }
+
+
+def read_operation(method: str, path: str, action: str = READ_ACTION) -> ScopeDeclaration:
+    """An incident read on the pinned workflow, registered in the gate."""
+    return declare(method, path, action=action, resource_type=WORKFLOW_RESOURCE_TYPE,
+                   resource_id="incident-response")  # fmt: skip
+
+
+INCIDENT_PATH = "/v1/incidents/{incident_id}"
+LIST = read_operation("GET", "/v1/incidents")
+DETAIL = read_operation("GET", INCIDENT_PATH)
+TIMELINE = read_operation("GET", INCIDENT_PATH + "/timeline")
+SNAPSHOT = read_operation("GET", INCIDENT_PATH + "/snapshot")
+RUN_STATE = read_operation("GET", INCIDENT_PATH + "/runs/{run_id}")
+RUN_EVENTS = read_operation("GET", INCIDENT_PATH + "/runs/{run_id}/events")
 REFUSALS = Refusals(unauthenticated=UNAUTHENTICATED, denied=DENIED, unavailable=UNAVAILABLE)
 
 
@@ -181,16 +222,83 @@ class IncidentQueryService:
         return await principal_for(self.sessions, authorization)
 
     async def _read(
-        self, authorization: str | None, validate: Callable[[], Any], use_case: Any
+        self,
+        operation: ScopeDeclaration,
+        authorization: str | None,
+        validate: Callable[[], Any],
+        use_case: Any,
     ) -> Response:
-        return await self._gate.run(authorization, self.scope, use_case, validate=validate)
+        async def read(admission: Admission, request: Any) -> Any:
+            # Reading the store or projecting what it holds fails as the reads' 503, as before.
+            with failing_as(UNAVAILABLE):
+                return await use_case(admission, request)
+
+        return await self._gate.run(operation, authorization, self.scope, read, validate=validate)
 
     async def _incident(self, incident_id: str) -> IncidentRecord:
-        async with self.units() as work:
-            record = await work.incidents.get(incident_id)
+        with failing_as(UNAVAILABLE):
+            async with self.units() as work:
+                record = await work.incidents.get(incident_id)
         if record is None:
             raise NOT_FOUND["incident_not_found"]
         return record
+
+    def _error(
+        self,
+        request_id: UUID,
+        status: int,
+        code: str | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> JSONResponse:
+        default_code, message = ERRORS[status][0], ERRORS[status][1]
+        code = code or default_code
+        if code in NOT_FOUND_CODES:
+            message = NOT_FOUND_CODES[code]
+        response = JSONResponse(
+            {
+                "error": {"code": code, "message": message},
+                "request_id": str(request_id),
+                "retryable": status == 503,
+            },
+            status,
+        )
+        merged = dict(headers or {})
+        if status == 503:
+            merged.setdefault("Retry-After", RETRY_AFTER_SECONDS)
+        for name, value in merged.items():
+            response.headers[name] = value
+        return response
+
+    async def _authorized_principal(
+        self, request_id: UUID, authorization: str | None
+    ) -> tuple[Principal | None, JSONResponse | None]:
+        try:
+            context = await self._authenticate(authorization)
+            if context is None:
+                return None, self._error(request_id, 401, headers={"WWW-Authenticate": "Bearer"})
+            async with self.sessions() as session:
+                evaluation = await self._authorizer(session, context.principal)
+        except Exception:
+            return None, self._error(request_id, 503)
+        if evaluation.decision.decision != "allow":
+            return None, self._error(request_id, 403)
+        return context.principal, None
+
+    @staticmethod
+    def _valid_identifier(value: str, pattern: str) -> bool:
+        return re.fullmatch(pattern, value) is not None
+
+    async def _incident_or_error(
+        self, request_id: UUID, incident_id: str
+    ) -> tuple[IncidentRecord | None, JSONResponse | None]:
+        try:
+            async with self.units() as work:
+                record = await work.incidents.get(incident_id)
+        except Exception:
+            return None, self._error(request_id, 503)
+        if record is None:
+            return None, self._error(request_id, 404, "incident_not_found")
+        return record, None
 
     async def _resolve_run(self, incident_id: str, run_id: str | None) -> RunRecord:
         async with self.units() as work:
@@ -216,7 +324,7 @@ class IncidentQueryService:
             except UnsupportedWorkflowDataError:
                 raise INVALID from None
 
-        return await self._read(authorization, lambda: _identifiers(incident_id), detail)
+        return await self._read(DETAIL, authorization, lambda: _identifiers(incident_id), detail)
 
     async def get_timeline(
         self,
@@ -225,7 +333,10 @@ class IncidentQueryService:
         after: str | None,
         limit: Any,
         authorization: str | None,
+        operation: "ScopeDeclaration | None" = None,
     ) -> Response:
+        operation = operation or TIMELINE
+
         def page_request() -> tuple[int, int]:
             _identifiers(incident_id, run_id)
             try:
@@ -270,7 +381,7 @@ class IncidentQueryService:
                 }
             )
 
-        return await self._read(authorization, page_request, timeline)
+        return await self._read(operation, authorization, page_request, timeline)
 
     async def get_snapshot(
         self, incident_id: str, run_id: str | None, authorization: str | None
@@ -287,7 +398,9 @@ class IncidentQueryService:
             except UnsupportedWorkflowDataError:
                 raise INVALID from None
 
-        return await self._read(authorization, lambda: _identifiers(incident_id, run_id), snapshot)
+        return await self._read(
+            SNAPSHOT, authorization, lambda: _identifiers(incident_id, run_id), snapshot
+        )
 
     async def get_run_state(self, incident_id: str, run_id: str, authorization: str | None) -> Response:  # fmt: skip
         """GET /v1/incidents/{incident_id}/runs/{run_id}: the run-state projection.
@@ -308,7 +421,9 @@ class IncidentQueryService:
             except UnsupportedWorkflowDataError:
                 raise INVALID from None
 
-        return await self._read(authorization, lambda: _identifiers(incident_id, run_id), run_state)
+        return await self._read(
+            RUN_STATE, authorization, lambda: _identifiers(incident_id, run_id), run_state
+        )
 
     async def list_incidents(
         self,
@@ -364,7 +479,7 @@ class IncidentQueryService:
                 headers={"Cache-Control": "no-store"},
             )
 
-        return await self._read(authorization, query, incidents)
+        return await self._read(LIST, authorization, query, incidents)
 
 
 def incident_router(service: IncidentQueryService) -> APIRouter:
@@ -420,6 +535,7 @@ def incident_router(service: IncidentQueryService) -> APIRouter:
             params.get("after"),
             params.get("limit"),
             request.headers.get("authorization"),
+            RUN_EVENTS,
         )
 
     return router
