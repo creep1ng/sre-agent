@@ -37,20 +37,16 @@ NOT_YET_MIGRATED: set[tuple[str, str]] = {
         "/v1/bok/collections/{collection_id}/versions/{version}/chunks/"
         "{document_id}/{section_id}/{chunk_index}",
     ),
-    ("GET", "/v1/incident-memory/changes"),
-    ("GET", "/v1/incidents/{incident_id}/postmortem"),
     ("GET", "/v1/mcp/discovery"),
     ("GET", "/v1/skills/{skill_id}/{version}/resolve"),
     ("GET", "/v1/usage/consumption"),
     ("GET", "/v1/usage/requests"),
     ("POST", "/v1/alerts/{alert_id}/triage/commands"),
     ("POST", "/v1/bok/collections/{collection_id}/versions/{version}/search"),
-    ("POST", "/v1/incidents/{incident_id}/postmortem/reviews"),
     ("POST", "/v1/incidents/{incident_id}/runs"),
     ("POST", "/v1/incidents/{incident_id}/runs/{run_id}/commands"),
     ("POST", "/v1/mcp/tools/{tool_id}"),
     ("POST", "/v1/responses"),
-    ("PUT", "/v1/incidents/{incident_id}/postmortem"),
 }
 # Path values and bodies that reach each handler; the probe carries no valid credential.
 PATH_VALUES = {"version": "1.0.0", "chunk_index": "0", "tool_id": "query_prometheus",
