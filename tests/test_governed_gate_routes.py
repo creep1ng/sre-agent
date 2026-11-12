@@ -210,9 +210,10 @@ CASES = [
          {"model": "triage-agent", "input": "Summarize."}, audited=True, challenge=False,
          invalid=("/v1/responses", {"model": "X"}, 422)),  # responses
     Case("POST", BOK + "/search", "INCIDENT_HARNESS", "DEMO_HUMAN", 200, 403,
-         {"query": "checkout"}, audited=True, invalid=(BOK + "/search", {}, 422)),  # bok
-    Case("GET", BOK + "/chunks/doc/sec/0", "INCIDENT_HARNESS", "DEMO_HUMAN", 404, 403,
-         audited=True),  # bok
+         {"query": "checkout"}, audited=True, audits_401=False,
+         invalid=(BOK + "/search", {}, 422), audits_invalid=False),  # bok
+    Case("GET", BOK + "/chunks/{chunk}", "INCIDENT_HARNESS", "DEMO_HUMAN", 200, 403,
+         audited=True, audits_401=False),  # bok
 ]  # fmt: skip
 
 

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Body, Path, Response, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.gate.errors import GovernedError
@@ -20,6 +21,7 @@ from sre_agent.gate.pipeline import (
     Scope,
     Terminal,
     declare,
+    failing_as,
 )
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import AuditStore
@@ -236,6 +238,7 @@ class Retrieval:
 REFUSALS = Refusals(
     denied=GovernedError(403, "resource_unavailable", stage="authorization"),
     unavailable=GovernedError(503, "storage_unavailable", retryable=True),
+    unavailable_on=(SQLAlchemyError,),
     audit_unavailable=GovernedError(503, "audit_unavailable", "Audit unavailable.", retryable=True),
 )
 INDEX_UNAVAILABLE = GovernedError(503, "index_unavailable", retryable=True)
@@ -309,35 +312,37 @@ class BoKRetrievalService:
         retrieval = Retrieval(action, f"{collection_id}@{version}", collection_id, version)
 
         async def retrieve(admission: Admission, retrieval: Retrieval) -> Released:
-            async with self.sessions() as session, session.begin():
-                repository = BoKOwnerRepository(session)
-                denial_cause = await repository.lock_current_authority(
-                    admission.context, action, retrieval.resource_id
-                )
-                if denial_cause is not None:
-                    admission.facts["evaluation"] = AuthorizationEvaluation(
-                        PolicyDecision(
-                            decision="deny", reason_code="no_matching_grant", policy_id=None
-                        ),
-                        denial_cause,
+            with failing_as(REFUSALS.unavailable, (SQLAlchemyError,)):
+                async with self.sessions() as session, session.begin():
+                    repository = BoKOwnerRepository(session)
+                    denial_cause = await repository.lock_current_authority(
+                        admission.context, action, retrieval.resource_id
                     )
-                    raise REFUSALS.denied
-                if not await repository.lock_active_version(collection_id, version):
-                    raise INDEX_UNAVAILABLE
-                # Count content-repository operations (including authorized no-match searches).
-                self.content_reads_by_collection[retrieval.resource_id] += 1
-                result = await content_query(repository)
+                    if denial_cause is not None:
+                        admission.facts["evaluation"] = AuthorizationEvaluation(
+                            PolicyDecision(
+                                decision="deny", reason_code="no_matching_grant", policy_id=None
+                            ),
+                            denial_cause,
+                        )
+                        raise REFUSALS.denied
+                    if not await repository.lock_active_version(collection_id, version):
+                        raise INDEX_UNAVAILABLE
+                    # Count content-repository operations (including authorized no-match searches).
+                    self.content_reads_by_collection[retrieval.resource_id] += 1
+                    result = await content_query(repository)
             if read_operation and result is None:
                 raise NOT_FOUND
             return Released({"results": result} if not read_operation else result)
 
+        operation = SEARCH if action == "bok.search" else READ
         return await self.gate.run(
-            authorization, retrieval.scope, retrieve, validate=lambda: retrieval
+            operation, authorization, retrieval.scope, retrieve, validate=lambda: retrieval
         )
 
     async def _audit(self, terminal: Terminal) -> None:
-        if terminal.status == 401:
-            return  # Authentication failures are not audited here.
+        if terminal.status == 401 and not terminal.inactive:
+            return  # A missing or unknown credential is not audited here; an inactive principal is.
         retrieval: Retrieval = terminal.request
         stage, context = terminal.stage, terminal.context
         evaluation = terminal.facts.get("evaluation", terminal.evaluation)
