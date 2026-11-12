@@ -5,17 +5,19 @@ audited route without its audit row; validation reported after authentication; a
 principal accepted; a malformed header accepted; an envelope with other keys, or a 401 without
 `WWW-Authenticate`. Per route: one allowed and one denied request, a malformed and an unknown
 credential, an inactive principal and, where the route validates, an invalid request with a bad
-and with an ungranted credential. A route that writes is checked by its rows: the allowed
-request writes, no refusal does. A route that audits is checked by the audit rows of each
-request, found by its `request_id`. With GATE_EVIDENCE set, every request is written there as
-JSON lines.
+and with an ungranted credential. The use case the gate admits is observed directly: the allowed
+request reaches it once, no refusal reaches it. A route that writes is also checked by its rows:
+the allowed request writes, no refusal does, and each refusal carries its own body and
+idempotency key, so it is not a replay of the allowed one. A route that audits is checked by the
+audit rows of each request, found by its `request_id`. With GATE_EVIDENCE set, every request is
+written there as JSON lines.
 """
 
 import asyncio
 import json
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -28,7 +30,7 @@ from sqlalchemy import text
 
 from sre_agent.application import create_application
 from sre_agent.gate import pipeline
-from sre_agent.gate.pipeline import Admission
+from sre_agent.gate.pipeline import Admission, Gate
 from sre_agent.gateway.providers import ProviderRequest, ProviderResult
 from sre_agent.persistence.database import Database
 from sre_agent.persistence.seeds import SeedSettings, seed, seed_mcp_demo
@@ -68,7 +70,8 @@ POSTMORTEMS = "SELECT count(*) FROM incident.postmortem_revisions"
 @dataclass
 class Case:
     method: str
-    # Formatted with the fixture's facts: {incident}, {run}, {alert}, {chunk}, {event}.
+    # Formatted with the fixture's facts: {incident}, {run}, {alert}, {declared}, {chunk},
+    # {event}; a callable body is called with the facts.
     path: str
     allowed: str
     denied: str
@@ -85,10 +88,10 @@ class Case:
     challenge: bool = True
     # A count the allowed request raises and no refusal changes.
     effect: str | None = None
+    # A refusal's own body, from the allowed body and the refusal's label.
+    vary: Callable[[Any, str], Any] | None = None
     # An invalid form of the request and the status it gets with a bad or an ungranted key.
     invalid: tuple[str, Any, int] | None = None
-    # Why an allowed request ends in 404 or 409 instead of a success.
-    note: str = ""
 
 
 CHANGE = {"source": "ci", "external_id": "run-1021", "service": "checkout", "kind": "deploy"}
@@ -97,18 +100,12 @@ RUN = INCIDENT + "/runs/{run}"
 KEY = {"Idempotency-Key": "gate-1021-request"}
 START = {"workflow_version": "1.0.0", "objective": "investigate"}
 ACTOR = {"reference_version": "1.0.0", "principal_id": "demo-human"}
-COMMAND = {"command": "cancel_run", "actor": "human", "actor_reference": ACTOR}
-CITED = [{"event_id": "evt_gate", "description": "Alert fired."}]
-POSTMORTEM = {
-    "expected_version": 0,
-    "content": {"summary": "s", "impact": "i", "strategy": "s", "verification": "v",
-                "cause": {"statement": "c", "certainty": "unknown"}, "timeline": CITED,
-                "actions_taken": [], "pending": [], "unknowns": []},
-}  # fmt: skip
+COMMAND = {"command": "approve_mitigation", "actor": "human", "actor_reference": ACTOR,
+           "expected_incident_version": 0}  # fmt: skip
 DECLARE = {"operation": "triage_declare", "expected_version": 1, "reason": "Payment fails.",
            "severity": "sev1", "impact": "Customers cannot pay."}  # fmt: skip
 BOK = "/v1/bok/collections/otel-demo-store/versions/1.0.0"
-NOT_OPEN = "the incident is not in its postmortem state, so the route answers 409 after the gate"
+
 CASES = [
     Case("GET", "/v1/alerts", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403),  # alerts
 ]  # fmt: skip
@@ -195,7 +192,7 @@ def client() -> Iterator[TestClient]:
 
 
 @pytest.fixture(scope="module")
-def facts(client: TestClient) -> dict[str, str]:
+def facts(client: TestClient) -> dict[str, Any]:
     """An incident with a run, a second untriaged alert, a BoK chunk and an audit event."""
     human = {"Authorization": "Bearer " + KEYS["DEMO_HUMAN"]}
     for service in ("checkout", "payment"):
@@ -207,12 +204,16 @@ def facts(client: TestClient) -> dict[str, str]:
         assert delivered.status_code == 200, delivered.text
     listed = client.get("/v1/alerts", headers=human).json()["alerts"]
     alerts = {item["service"]: item for item in listed}
-    first = alerts["checkout"]
-    context = {key: first[key] for key in ("service", "summary", "observed_at", "source")}
+    first, second = alerts["checkout"], alerts["payment"]
+
+    def context(alert: dict[str, Any]) -> dict[str, Any]:
+        fields = ("service", "summary", "observed_at", "source", "severity")
+        return {key: alert[key] for key in fields}
+
     declared = client.post(
         f"/v1/alerts/{first['alert_id']}/triage/commands",
         headers=human | {"Idempotency-Key": "gate-1021-declare"},
-        json=DECLARE | {"alert_context": {**context, "severity": first["severity"]}},
+        json=DECLARE | {"alert_context": context(first)},
     )
     assert declared.status_code == 201, declared.text
     incident = declared.json()["incident_id"]
@@ -246,13 +247,20 @@ def facts(client: TestClient) -> dict[str, str]:
         )
     )
     [event] = _sql(text("SELECT event_id FROM audit_events ORDER BY occurred_at LIMIT 1"))
-    return {
+    facts = {
         "incident": incident,
         "run": started.json()["run_id"],
-        "alert": alerts["payment"]["alert_id"],
+        "alert": second["alert_id"],
+        "declared": first["alert_id"],
+        "context": context(second),
         "chunk": f"{chunk['document_id']}/{chunk['section_id']}/{chunk['chunk_index']}",
         "event": event["event_id"],
     }
+    return facts
+
+
+def _slug(label: str) -> str:
+    return "gate-1021-" + label.replace(",", "").replace(" ", "-")
 
 
 def _record(line: dict[str, Any]) -> None:
@@ -263,20 +271,27 @@ def _record(line: dict[str, Any]) -> None:
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: f"{case.method} {case.path}")
 def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
-    client: TestClient, facts: dict[str, str], case: Case, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, facts: dict[str, Any], case: Case, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The request id of an admitted request whose answer does not carry one.
+    # Every use case the gate admits, observed where the gate calls it.
     admitted: list[Admission] = []
+    run = Gate.run
 
-    def admission(*args: Any, **kwargs: Any) -> Admission:
-        admitted.append(made := Admission(*args, **kwargs))
-        return made
+    def observed(gate: Gate[Any], operation: Any, authorization: Any, scope: Any,
+                 use_case: Any, **options: Any) -> Any:  # fmt: skip
+        async def reached(admission: Admission, request: Any) -> Any:
+            admitted.append(admission)
+            return await use_case(admission, request)
 
-    monkeypatch.setattr(pipeline, "Admission", admission)
+        return run(gate, operation, authorization, scope, reached, **options)
+
+    monkeypatch.setattr(pipeline.Gate, "run", observed)
     path = case.path.format(**facts)
 
     def send(label: str, url: str, body: Any, authorization: str | None) -> Any:
         headers = case.headers | ({"Authorization": authorization} if authorization else {})
+        if label != "allowed" and "Idempotency-Key" in headers:
+            headers["Idempotency-Key"] += "-" + _slug(label)
         before, written = len(admitted), _count(case.effect)
         response = client.request(case.method, url, headers=headers, json=body)
         assert response.headers["content-type"].startswith("application/json"), response.text
@@ -294,16 +309,21 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
                 "www_authenticate": response.headers.get("www-authenticate"),
                 "error": answer.get("error") if isinstance(answer, dict) else None,
                 "request_id": request_id,
+                "use_case_reached": len(admitted) - before,
                 "rows_written": effect,
                 "audit_rows": audit,
-                "note": case.note if label == "allowed" else "",
             }
         )
+        assert len(admitted) - before == (label == "allowed"), f"{label}: use case reached"
         return response, effect, audit
 
-    allowed, effect, audit = send("allowed", path, case.body, "Bearer " + KEYS[case.allowed])
+    def vary(body: Any, label: str) -> Any:
+        return body if case.vary is None else case.vary(body, label)
+
+    body = case.body(facts) if callable(case.body) else case.body
+    allowed, effect, audit = send("allowed", path, body, "Bearer " + KEYS[case.allowed])
     assert allowed.status_code == case.allowed_status, allowed.text
-    if case.effect is not None and case.allowed_status < 400:
+    if case.effect is not None:
         assert effect and effect > 0, "the allowed request wrote nothing"
     if case.audited:
         assert [row["outcome"] for row in audit] == ["success"], audit
@@ -314,7 +334,7 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
         ("unknown", "Bearer sre_unkn0123456789abcdefghijklmnopqrstuv", 401),
     ]
     for label, authorization, status in refusals:
-        refused, effect, audit = send(label, path, case.body, authorization)
+        refused, effect, audit = send(label, path, vary(body, label), authorization)
         assert refused.status_code == status, (label, refused.text)
         assert set(refused.json()) == {"error", "request_id", "retryable"}
         assert not effect, f"{label}: the request wrote"
@@ -329,14 +349,11 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
             assert [(row["stage"], row["response_status"]) for row in audit] == expected, audit
 
     if case.invalid is not None:
-        url, body, status = case.invalid
+        url, invalid, status = case.invalid
         url = url.format(**facts)
         ungranted = "Bearer " + KEYS[case.denied]
-        for label, key in (
-            ("invalid, bad credential", "Basic x"),
-            ("invalid, ungranted", ungranted),
-        ):
-            refused, effect, audit = send(label, url, body, key)
+        for label, key in (("invalid, bad key", "Basic x"), ("invalid, ungranted", ungranted)):
+            refused, effect, audit = send(label, url, invalid, key)
             assert refused.status_code == status, (label, refused.text)
             assert not effect, f"{label}: the request wrote"
             if case.audited:
@@ -350,7 +367,8 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
     )
     try:
         own = "Bearer " + KEYS[case.allowed]
-        inactive, effect, audit = send("inactive principal", path, case.body, own)
+        refused = vary(body, "inactive principal")
+        inactive, effect, audit = send("inactive principal", path, refused, own)
     finally:
         _sql(
             text("UPDATE principals SET status = 'active' WHERE principal_id = :principal"),
