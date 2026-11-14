@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, Request, Security
+from fastapi import APIRouter, Request, Response, Security
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import (
@@ -24,8 +24,10 @@ from pydantic import (
     model_validator,
 )
 
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError, InactivePrincipal
+from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Scope, Terminal, declare
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gateway.authentication import authorize_governed_access
 from sre_agent.gateway.responses import AuditStore
 from sre_agent.governance.authorization import AuthorizationEvaluation
 from sre_agent.governance.dto import MCPServer, MCPTool, PrincipalContext
@@ -35,6 +37,23 @@ from sre_agent.persistence.repositories import MCPOwnerRepository
 MCP_TIMEOUT_SECONDS = 30.0
 _TIME_PATTERN = r"^(now|now-[1-9][0-9]*[smhd])$"
 logger = logging.getLogger(__name__)
+REFUSALS = Refusals(
+    denied=GovernedError(403, "resource_unavailable"),
+    unavailable=GovernedError(503, "storage_unavailable", retryable=True),
+    # A failure authenticating or authorizing escaped as a 500 before the gate, and still does.
+    unavailable_on=(),
+)
+INVALID = GovernedError(422, "contract_validation_failed", stage="validation")
+UPSTREAM_TIMEOUT = GovernedError(504, "upstream_timeout", retryable=True, stage="upstream")
+UPSTREAM_UNAVAILABLE = GovernedError(503, "upstream_unavailable", retryable=True, stage="upstream")
+UPSTREAM_INVALID = GovernedError(502, "upstream_invalid", stage="upstream")
+DISCOVERY = declare(
+    "GET",
+    "/v1/mcp/discovery",
+    action="mcp.discovery",
+    resource_type="mcp_server",
+    resource_id=MCP_SERVER_ID,
+)
 
 
 class MCPInvalidReason(StrEnum):
@@ -335,93 +354,49 @@ class MCPGatewayService:
         self.audit = audit
         self.projector = projector
         self.owner_repository_factory = owner_repository_factory
+        self.gate: Gate[Any] = Gate(sessions, REFUSALS, admit=self._admit, audit=self._audit)
 
-    async def discovery(self, authorization: str | None, query: str = "") -> JSONResponse:
-        request_id = str(uuid4())
-        started = monotonic()
+    async def _admit(
+        self, authorization: str | None, scope: Scope
+    ) -> tuple[PrincipalContext | None, AuthorizationEvaluation | None]:
         try:
             context, evaluation = await authorize_governed_access(
-                self.sessions, authorization, "mcp.discovery", "mcp_server", MCP_SERVER_ID
+                self.sessions, authorization, scope.action, scope.resource_type, scope.resource_id
             )
         except AuthenticationFailed:
-            return JSONResponse(
+            return None, None
+        # The gateway's check evaluates an inactive principal; the gate does not authenticate it.
+        if context.principal.status != "active":
+            raise InactivePrincipal
+        return context, evaluation
+
+    async def discovery(self, authorization: str | None, query: str = "") -> Response:
+        def validate() -> None:
+            if query:
+                raise INVALID
+
+        async def discover(admission: Admission, _: None) -> Released:
+            visible_ids: list[str] = []
+            for tool_id in MCP_TOOL_IDS:
+                try:
+                    tool_context, tool_evaluation = await self._admit(
+                        authorization, Scope("mcp.invoke", "mcp_tool", tool_id)
+                    )
+                except InactivePrincipal:
+                    # Deactivated during the request: its grants no longer allow the tool.
+                    continue
+                if tool_context is None:
+                    raise REFUSALS.unauthenticated
+                if tool_context.principal.principal_id != admission.context.principal.principal_id:
+                    raise REFUSALS.denied
+                if tool_evaluation is not None and tool_evaluation.decision.decision == "allow":
+                    visible_ids.append(tool_id)
+            server, tools = await self._active_contract(visible_ids=visible_ids)
+            if server is None or tools is None:
+                raise REFUSALS.denied
+            return Released(
                 {
-                    "error": {"code": "authentication_failed", "message": "Authentication failed."},
-                    "request_id": request_id,
-                    "retryable": False,
-                },
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        if evaluation.decision.decision != "allow":
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._unavailable(request_id),
-                operation="mcp.discovery",
-                stage="authorization",
-                context=context,
-                evaluation=evaluation,
-            )
-        if query:
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._error(request_id, 422, "contract_validation_failed", False),
-                operation="mcp.discovery",
-                stage="response",
-                context=context,
-                evaluation=evaluation,
-                reason="contract_validation_failed",
-            )
-        visible_ids: list[str] = []
-        for tool_id in MCP_TOOL_IDS:
-            try:
-                tool_context, tool_evaluation = await authorize_governed_access(
-                    self.sessions, authorization, "mcp.invoke", "mcp_tool", tool_id
-                )
-            except AuthenticationFailed:
-                return JSONResponse(
-                    {
-                        "error": {
-                            "code": "authentication_failed",
-                            "message": "Authentication failed.",
-                        },
-                        "request_id": request_id,
-                        "retryable": False,
-                    },
-                    status_code=401,
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-            if tool_context.principal.principal_id != context.principal.principal_id:
-                return await self._audited(
-                    UUID(request_id),
-                    started,
-                    self._unavailable(request_id),
-                    operation="mcp.discovery",
-                    stage="response",
-                    context=context,
-                    evaluation=evaluation,
-                )
-            if tool_evaluation.decision.decision == "allow":
-                visible_ids.append(tool_id)
-        server, tools = await self._active_contract(visible_ids=visible_ids)
-        if server is None or tools is None:
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._unavailable(request_id),
-                operation="mcp.discovery",
-                stage="response",
-                context=context,
-                evaluation=evaluation,
-            )
-        return await self._audited(
-            UUID(request_id),
-            started,
-            JSONResponse(
-                {
-                    "request_id": request_id,
+                    "request_id": str(admission.request_id),
                     "contract_version": MCP_CONTRACT_VERSION,
                     "server": {
                         "resource_type": "mcp_server",
@@ -446,11 +421,14 @@ class MCPGatewayService:
                         for tool in tools
                     ],
                 }
-            ),
-            operation="mcp.discovery",
-            stage="response",
-            context=context,
-            evaluation=evaluation,
+            )
+
+        return await self.gate.run(
+            DISCOVERY,
+            authorization,
+            Scope("mcp.discovery", "mcp_server", MCP_SERVER_ID),
+            discover,
+            validate=validate,
         )
 
     async def invoke(self, tool_id: str, raw: Any, authorization: str | None) -> JSONResponse:
@@ -784,6 +762,49 @@ class MCPGatewayService:
             )
         return response
 
+    async def _audit(self, terminal: Terminal) -> None:
+        unaudited_401 = terminal.status == 401 and not terminal.inactive
+        if self.audit is None or unaudited_401 or terminal.facts.get("unaudited"):
+            # A missing or unknown credential and an inactive contract are not audited; an
+            # inactive principal is.
+            return
+        assert terminal.scope is not None
+        operation, (resource_type, resource_id) = (
+            terminal.scope.action,
+            (
+                terminal.scope.resource_type,
+                terminal.scope.resource_id,
+            ),
+        )
+        context, evaluation = terminal.context, terminal.evaluation
+        # A refusal names no reason; validation and upstream failures name theirs.
+        error = terminal.error
+        reason = error.code if error is not None and error.status != 403 else None
+        if self.projector is None:
+            event: Any = MCPAuditRecord(
+                operation=operation,
+                request_id=terminal.request_id,
+                status=terminal.status,
+                server_id=MCP_SERVER_ID,
+                tool_id=resource_id if resource_type == "mcp_tool" else None,
+                principal_kind=context.principal.kind if context else None,
+                decision=evaluation.decision.decision if evaluation else None,
+                latency_ms=terminal.latency_ms,
+            )
+        else:
+            event = self.projector.mcp_event(
+                terminal.request_id,
+                terminal.status,
+                terminal.latency_ms,
+                terminal.stage,
+                operation=operation,
+                context=context,
+                decision=evaluation.decision if evaluation else None,
+                resource_ref=(resource_type, resource_id),
+                reason=reason,
+            )
+        await self.audit.append(event)
+
 
 def _error_documentation(code: str, status: int) -> dict[str, Any]:
     message = code.replace("_", " ").capitalize() + "."
@@ -854,7 +875,7 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
     }
 
     @router.get(
-        "/v1/mcp/discovery",
+        DISCOVERY.path,
         response_model=MCPDiscoveryResponse,
         responses={
             200: {
@@ -879,18 +900,12 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
             422: _error_documentation("contract_validation_failed", 422),
             503: _error_documentation("audit_unavailable", 503),
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "mcp.discovery",
-                "resource_type": "mcp_server",
-                "resource_id": MCP_SERVER_ID,
-            }
-        },
+        openapi_extra=DISCOVERY.openapi_extra,
     )
     async def discovery(
         request: Request,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
-    ) -> JSONResponse:
+    ) -> Response:
         return await service.discovery(request.headers.get("authorization"), request.url.query)
 
     @router.post(
@@ -985,7 +1000,7 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
         request: Request,
         tool_id: str,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)] = None,
-    ) -> JSONResponse:
+    ) -> Response:
         try:
             body = await request.json()
         except ValueError:
