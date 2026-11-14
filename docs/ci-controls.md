@@ -59,8 +59,8 @@ first.
 | Deploy executor | The deploy-executor journey over docker-socket-proxy, then with the proxy stopped | Signed operations, rollback/restart idempotency and the proxy deny list |
 | Quality gate | Candidate/head/base summary retained 30 days | No skipped or failed required stage becomes an approval |
 
-The check image is separate from runtime. It owns Ruff, Import Linter, mypy,
-pip-audit and mutation tooling; the runtime image copies only the production
+The check image is separate from runtime. It owns Ruff, Import Linter, mypy
+and mutation tooling; the runtime image copies only the production
 virtual environment. Both images install Python dependencies from `uv.lock`.
 Python, Node, Nginx and PostgreSQL bases are version-tagged and digest-pinned;
 the Playwright runner is likewise pinned to the lockfile's `1.63.0` package.
@@ -146,12 +146,10 @@ The executor journey builds the host-wide `demo/probe:1.0.0` and `1.1.0` tags.
 ## Informational diagnostics
 
 `Quality diagnostics` runs weekly and by manual dispatch. It is not a required
-PR check and never changes dependencies. It builds the locked checks image and:
+PR check and never changes dependencies. It does not audit dependencies: #1082 removed the
+`pip-audit` and `npm audit` jobs, which had failed on every run. It builds the locked checks
+image and:
 
-- audits Python dependencies with pinned `pip-audit`, reporting unavailable or
-  malformed results rather than a false clean state;
-- audits both locked Node installations (the root and `schemas/tooling`) in a
-  digest-pinned Node container; each matrix result is informative and visible;
 - measures branch coverage over `src/sre_agent` in the existing locked Compose
   checks container, with no threshold or exclusions;
 - copies the complete `src` package into an isolated temporary workspace, then
