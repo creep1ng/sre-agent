@@ -21,7 +21,7 @@ optimize for clear, repeatable behavior over operational coverage.
 2. Select the direct or SDD route before changing code; record that route in the pull request.
 3. Run the relevant checks, collect evidence at the tested SHA, and complete every required PR
    evidence field.
-4. Request human review. CI validates structure but does not require separate approval
+4. Request human review. CI does not read the PR description and requires no separate approval
    comments, labels, or commit confirmations. Integrate only after required checks,
    evidence review, and repository protection rules succeed.
 
@@ -107,8 +107,8 @@ work around RDD on another contributor's behalf.
 
 ## Required PR evidence
 
-When a PR requests acceptance, it must provide all of the following. The canonical field syntax
-and validator behavior are in [PR evidence requirements](pr-evidence.md).
+When a PR requests acceptance, it must provide all of the following. The fields are described
+in [PR evidence requirements](pr-evidence.md).
 
 | Requirement | What the reviewer must be able to verify |
 | --- | --- |
@@ -122,12 +122,12 @@ and validator behavior are in [PR evidence requirements](pr-evidence.md).
 Evidence is tied to the tested SHA. If behavior changes, update it. If a later SHA reuses evidence,
 the author explains why it remains valid and the reviewer confirms that explanation.
 
-Keep PRs focused enough to review safely. CI reports size metadata but does not enforce a
+Keep PRs focused enough to review safely. CI does not enforce a
 fixed line limit or require a size-exception label; the maintainer evaluates scope when merging.
 When a change grows beyond one reviewable PR (see the 400-line guidance in `AGENTS.md`), prefer a
 feature branch delivered as a stack of PRs managed with `gh stack` over a size exception.
 
-Automated validation can check field presence and references. It requires a real screenshot, and accepts only a real video link or the exact documented no-video sentence; it cannot establish that media proves behavior. The human reviewer owns that judgement.
+No automated check reads these fields (#1081). The reviewer judges whether the screenshot and any video prove the behavior.
 
 ### Containerized PR reproduction
 
@@ -153,7 +153,7 @@ This exercise tests the workflow, not an individual's memory or private setup.
 The author supplies accurate evidence and updates it when needed. The reviewer independently
 checks scope, reproducibility, evidence sufficiency, and sanitization. Maintainers decide a
 size exception and administer branch/ruleset protection after a pilot proves the controls block
-invalid PRs. GitHub Actions validates only untrusted PR metadata; it must not execute commands or
+invalid PRs. No workflow may execute commands or
 download arbitrary URLs supplied by a PR description.
 
 The repository accepts only merge commits; squash and rebase merges are disabled, so integrate
