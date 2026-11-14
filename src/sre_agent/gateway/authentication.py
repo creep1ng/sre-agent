@@ -1,36 +1,28 @@
-"""FastAPI bearer authentication boundary."""
+"""Authorization for routes that have not moved to the gate (`sre_agent.gate`) yet."""
 
-from typing import Annotated, Any
-from uuid import UUID, uuid4
+from typing import Any
 
-from fastapi import Header, Request
-from fastapi.responses import JSONResponse
-
+from sre_agent.gate.authentication import authenticate_principal, bearer_key
+from sre_agent.gate.errors import AuthenticationFailed
+from sre_agent.gate.errors import governed_error_handler as authentication_failed_handler
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationEvaluation,
 )
 from sre_agent.governance.dto import PrincipalContext
-from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.repositories import (
     CredentialRepository,
     GrantRepository,
     OwnerResourceFactReader,
 )
 
-
-class AuthenticationFailed(Exception):
-    """Secret-free authentication failure shared by every credential condition."""
-
-
-async def authenticate_principal(
-    request: Request,
-    authorization: Annotated[str | None, Header()] = None,
-) -> PrincipalContext:
-    context = await _authorization_context(request.app.state.session_provider, authorization)
-    if context.principal.status != "active":
-        raise AuthenticationFailed
-    return context
+__all__ = [
+    "AuthenticationFailed",
+    "authenticate_principal",
+    "authentication_failed_handler",
+    "authorize_governed_access",
+    "authorize_governed_access_for_context",
+]
 
 
 async def authorize_governed_access(
@@ -64,31 +56,11 @@ async def authorize_governed_access_for_context(
 
 
 async def _authorization_context(sessions: Any, authorization: str | None) -> PrincipalContext:
-    scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-    if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
+    key = bearer_key(authorization)
+    if key is None:
         raise AuthenticationFailed
     async with sessions() as session:
         context = await CredentialRepository(session).resolve_authorization_context(key)
     if context is None:
         raise AuthenticationFailed
     return context
-
-
-async def authentication_failed_handler(
-    request: Request, error: AuthenticationFailed
-) -> JSONResponse:
-    del error
-    supplied_request_id = request.headers.get("x-request-id")
-    try:
-        request_id = str(UUID(supplied_request_id)) if supplied_request_id else str(uuid4())
-    except ValueError:
-        request_id = str(uuid4())
-    return JSONResponse(
-        status_code=401,
-        headers={"WWW-Authenticate": "Bearer"},
-        content={
-            "error": {"code": "authentication_failed", "message": "Authentication failed."},
-            "request_id": request_id,
-            "retryable": False,
-        },
-    )
