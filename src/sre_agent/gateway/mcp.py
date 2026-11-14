@@ -4,14 +4,12 @@ import json
 import logging
 from asyncio import Lock, wait_for
 from enum import StrEnum
-from time import monotonic
 from typing import Annotated, Any, Literal, Protocol
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx
 from fastapi import APIRouter, Request, Response, Security
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import (
     BaseModel,
@@ -53,6 +51,13 @@ DISCOVERY = declare(
     action="mcp.discovery",
     resource_type="mcp_server",
     resource_id=MCP_SERVER_ID,
+)
+INVOKE = declare(
+    "POST",
+    "/v1/mcp/tools/{tool_id}",
+    action="mcp.invoke",
+    resource_type="mcp_tool",
+    resource_id="path.tool_id",
 )
 
 
@@ -431,105 +436,44 @@ class MCPGatewayService:
             validate=validate,
         )
 
-    async def invoke(self, tool_id: str, raw: Any, authorization: str | None) -> JSONResponse:
-        request_id = str(uuid4())
-        started = monotonic()
-        try:
-            context, evaluation = await authorize_governed_access(
-                self.sessions, authorization, "mcp.invoke", "mcp_tool", tool_id
-            )
-        except AuthenticationFailed:
-            return JSONResponse(
-                {
-                    "error": {"code": "authentication_failed", "message": "Authentication failed."},
-                    "request_id": request_id,
-                    "retryable": False,
-                },
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        if evaluation.decision.decision != "allow":
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._unavailable(request_id),
-                operation="mcp.invoke",
-                stage="authorization",
-                context=context,
-                evaluation=evaluation,
-                tool_id=tool_id,
-            )
-        _, tools = await self._active_contract(tool_id)
-        tool = tools[0] if tools else None
-        if tool is None:
-            return self._unavailable(request_id)
-        try:
-            arguments = self._validate_input(tool_id, raw)
-        except ValidationError:
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._error(request_id, 422, "contract_validation_failed", False),
-                operation="mcp.invoke",
-                stage="validation",
-                reason="contract_validation_failed",
-                tool_id=tool_id,
-            )
-        try:
-            result = await wait_for(
-                self.client.call_tool(tool.upstream_name, arguments), MCP_TIMEOUT_SECONDS
-            )
-            public_result = self._map_result(tool_id, result)
-            return await self._audited(
-                UUID(request_id),
-                started,
-                JSONResponse(
-                    public_result,
-                    headers={"X-Request-ID": request_id},
-                ),
-                operation="mcp.invoke",
-                stage="response",
-                context=context,
-                evaluation=evaluation,
-                tool_id=tool_id,
-            )
-        except (TimeoutError, MCPUpstreamTimeout):
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._error(request_id, 504, "upstream_timeout", True),
-                operation="mcp.invoke",
-                stage="upstream",
-                context=context,
-                evaluation=evaluation,
-                reason="upstream_timeout",
-                tool_id=tool_id,
-            )
-        except MCPUpstreamUnavailable:
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._error(request_id, 503, "upstream_unavailable", True),
-                operation="mcp.invoke",
-                stage="upstream",
-                context=context,
-                evaluation=evaluation,
-                reason="upstream_unavailable",
-                tool_id=tool_id,
-            )
-        except MCPUpstreamInvalid as error:
-            logger.warning("mcp_upstream_invalid request_id=%s reason=%s", request_id, error.reason)
-            return await self._audited(
-                UUID(request_id),
-                started,
-                self._error(request_id, 502, "upstream_invalid", False),
-                operation="mcp.invoke",
-                stage="upstream",
-                context=context,
-                evaluation=evaluation,
-                reason="upstream_invalid",
-                tool_id=tool_id,
-            )
+    async def invoke(self, tool_id: str, raw: Any, authorization: str | None) -> Response:
+        def validate() -> dict[str, Any]:
+            try:
+                return self._validate_input(tool_id, raw)
+            except ValidationError:
+                raise INVALID from None
+
+        async def call(admission: Admission, arguments: dict[str, Any]) -> Released:
+            _, tools = await self._active_contract(tool_id)
+            if not tools:
+                # An inactive contract answers like a denial and is not audited.
+                admission.facts["unaudited"] = True
+                raise REFUSALS.denied
+            try:
+                result = await wait_for(
+                    self.client.call_tool(tools[0].upstream_name, arguments), MCP_TIMEOUT_SECONDS
+                )
+                public_result = self._map_result(tool_id, result)
+            except (TimeoutError, MCPUpstreamTimeout):
+                raise UPSTREAM_TIMEOUT from None
+            except MCPUpstreamUnavailable:
+                raise UPSTREAM_UNAVAILABLE from None
+            except MCPUpstreamInvalid as error:
+                logger.warning(
+                    "mcp_upstream_invalid request_id=%s reason=%s",
+                    admission.request_id,
+                    error.reason,
+                )
+                raise UPSTREAM_INVALID from None
+            return Released(public_result, headers={"X-Request-ID": str(admission.request_id)})
+
+        return await self.gate.run(
+            INVOKE,
+            authorization,
+            Scope("mcp.invoke", "mcp_tool", tool_id),
+            call,
+            validate=validate,
+        )
 
     async def _active_contract(
         self, tool_id: str | None = None, *, visible_ids: list[str] | None = None
@@ -695,73 +639,6 @@ class MCPGatewayService:
                 raise MCPUpstreamInvalid(MCPInvalidReason.CONTENT_INVALID) from None
         return payload
 
-    @staticmethod
-    def _unavailable(request_id: str) -> JSONResponse:
-        return MCPGatewayService._error(request_id, 403, "resource_unavailable", False)
-
-    @staticmethod
-    def _error(request_id: str, status: int, code: str, retryable: bool) -> JSONResponse:
-        return JSONResponse(
-            {
-                "error": {"code": code, "message": code.replace("_", " ").capitalize() + "."},
-                "request_id": request_id,
-                "retryable": retryable,
-            },
-            status_code=status,
-        )
-
-    async def _audited(
-        self,
-        request_id: UUID,
-        started: float,
-        response: JSONResponse,
-        *,
-        operation: str,
-        stage: str,
-        context: PrincipalContext | None = None,
-        evaluation: AuthorizationEvaluation | None = None,
-        server_id: str = MCP_SERVER_ID,
-        tool_id: str | None = None,
-        reason: str | None = None,
-    ) -> JSONResponse:
-        if self.audit is None:
-            return response
-        try:
-            if self.projector is None:
-                event = MCPAuditRecord(
-                    operation=operation,
-                    request_id=request_id,
-                    status=response.status_code,
-                    server_id=server_id,
-                    tool_id=tool_id,
-                    principal_kind=context.principal.kind if context else None,
-                    decision=evaluation.decision.decision if evaluation else None,
-                    latency_ms=max(0, int((monotonic() - started) * 1000)),
-                )
-            else:
-                event = self.projector.mcp_event(
-                    request_id,
-                    response.status_code,
-                    max(0, int((monotonic() - started) * 1000)),
-                    stage,
-                    operation=operation,
-                    context=context,
-                    decision=evaluation.decision if evaluation else None,
-                    resource_ref=("mcp_tool", tool_id) if tool_id else ("mcp_server", server_id),
-                    reason=reason,
-                )
-            await self.audit.append(event)
-        except Exception:
-            return JSONResponse(
-                {
-                    "error": {"code": "audit_unavailable", "message": "Audit unavailable."},
-                    "request_id": str(request_id),
-                    "retryable": True,
-                },
-                status_code=503,
-            )
-        return response
-
     async def _audit(self, terminal: Terminal) -> None:
         unaudited_401 = terminal.status == 401 and not terminal.inactive
         if self.audit is None or unaudited_401 or terminal.facts.get("unaudited"):
@@ -909,7 +786,7 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
         return await service.discovery(request.headers.get("authorization"), request.url.query)
 
     @router.post(
-        "/v1/mcp/tools/{tool_id}",
+        INVOKE.path,
         response_model=PrometheusResult | ElasticsearchResult,
         responses={
             200: {
@@ -951,11 +828,7 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
             504: _error_documentation("upstream_timeout", 504),
         },
         openapi_extra={
-            "x-governed-scope": {
-                "action": "mcp.invoke",
-                "resource_type": "mcp_tool",
-                "resource_id": "path.tool_id",
-            },
+            **INVOKE.openapi_extra,
             "requestBody": {
                 "required": True,
                 "description": (
