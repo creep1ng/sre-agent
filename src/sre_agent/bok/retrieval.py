@@ -1,21 +1,29 @@
 """Authorized, bounded PostgreSQL retrieval over BoK owner chunks."""
 
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from time import monotonic
 from typing import Annotated, Any
-from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Body, Path, Security
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Path, Response, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sre_agent.gate.errors import GovernedError
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.responses import AuditStore
 from sre_agent.governance.authorization import (
     AuthorizationDenialCause,
@@ -213,6 +221,30 @@ class BoKOwnerRepository:
         }
 
 
+@dataclass(frozen=True)
+class Retrieval:
+    """One retrieval: its action names the audited operation."""
+
+    action: str
+    resource_id: str
+    collection_id: str
+    version: str
+
+    @property
+    def scope(self) -> Scope:
+        return Scope(self.action, "bok_collection", self.resource_id)
+
+
+REFUSALS = Refusals(
+    denied=GovernedError(403, "resource_unavailable", stage="authorization"),
+    unavailable=GovernedError(503, "storage_unavailable", retryable=True),
+    unavailable_on=(SQLAlchemyError,),
+    audit_unavailable=GovernedError(503, "audit_unavailable", "Audit unavailable.", retryable=True),
+)
+INDEX_UNAVAILABLE = GovernedError(503, "index_unavailable", retryable=True)
+NOT_FOUND = GovernedError(404, "resource_not_found")
+
+
 class BoKRetrievalService:
     """Authenticate and authorize exact collection versions before content access."""
 
@@ -227,6 +259,7 @@ class BoKRetrievalService:
         self.projector = projector
         # In-memory non-content instrumentation; keys are exact resource IDs.
         self.content_reads_by_collection: Counter[str] = Counter()
+        self.gate: Gate[Retrieval] = Gate(sessions, REFUSALS, audit=self._audit)
 
     async def search(
         self,
@@ -234,7 +267,7 @@ class BoKRetrievalService:
         version: str,
         body: BoKSearchRequest,
         authorization: str | None,
-    ) -> JSONResponse:
+    ) -> Response:
         return await self._retrieve(
             collection_id,
             version,
@@ -254,7 +287,7 @@ class BoKRetrievalService:
         section_id: str,
         chunk_index: int,
         authorization: str | None,
-    ) -> JSONResponse:
+    ) -> Response:
         return await self._retrieve(
             collection_id,
             version,
@@ -275,183 +308,81 @@ class BoKRetrievalService:
         action: str,
         read_operation: bool,
         content_query: Any,
-    ) -> JSONResponse:
-        request_id = uuid4()
-        started = monotonic()
-        resource_id = f"{collection_id}@{version}"
-        operation = "bok.read" if read_operation else "bok.search"
-        try:
-            context, evaluation = await authorize_governed_access(
-                self.sessions, authorization, action, "bok_collection", resource_id
-            )
-        except AuthenticationFailed:
-            return JSONResponse(
-                {
-                    "error": {"code": "authentication_failed", "message": "Authentication failed."},
-                    "request_id": str(request_id),
-                    "retryable": False,
-                },
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except SQLAlchemyError:
-            # Authentication/authorization is not complete: do not invent a subject or decision.
-            return await self._finish(
-                request_id,
-                started,
-                503,
-                "storage_unavailable",
-                operation,
-                "authentication",
-                None,
-                None,
-                resource_id,
-            )
-        if evaluation.decision.decision != "allow":
-            return await self._finish(
-                request_id,
-                started,
-                403,
-                "resource_unavailable",
-                operation,
-                "authorization",
-                context,
-                evaluation,
-                resource_id,
-            )
+    ) -> Response:
+        retrieval = Retrieval(action, f"{collection_id}@{version}", collection_id, version)
 
-        try:
-            async with self.sessions() as session, session.begin():
-                repository = BoKOwnerRepository(session)
-                denial_cause = await repository.lock_current_authority(context, action, resource_id)
-                if denial_cause is not None:
-                    denied_evaluation = AuthorizationEvaluation(
-                        PolicyDecision(
-                            decision="deny", reason_code="no_matching_grant", policy_id=None
-                        ),
-                        denial_cause,
+        async def retrieve(admission: Admission, retrieval: Retrieval) -> Released:
+            with failing_as(REFUSALS.unavailable, (SQLAlchemyError,)):
+                async with self.sessions() as session, session.begin():
+                    repository = BoKOwnerRepository(session)
+                    denial_cause = await repository.lock_current_authority(
+                        admission.context, action, retrieval.resource_id
                     )
-                    return await self._finish(
-                        request_id,
-                        started,
-                        403,
-                        "resource_unavailable",
-                        operation,
-                        "authorization",
-                        context,
-                        denied_evaluation,
-                        resource_id,
-                    )
-                if not await repository.lock_active_version(collection_id, version):
-                    return await self._finish(
-                        request_id,
-                        started,
-                        503,
-                        "index_unavailable",
-                        operation,
-                        "response",
-                        context,
-                        evaluation,
-                        resource_id,
-                    )
-                # Count content-repository operations (including authorized no-match searches).
-                self.content_reads_by_collection[resource_id] += 1
-                result = await content_query(repository)
-        except SQLAlchemyError:
-            return await self._finish(
-                request_id,
-                started,
-                503,
-                "storage_unavailable",
-                operation,
-                "upstream",
-                context,
-                evaluation,
-                resource_id,
-            )
-        if read_operation and result is None:
-            return await self._finish(
-                request_id,
-                started,
-                404,
-                "resource_not_found",
-                operation,
-                "response",
-                context,
-                evaluation,
-                resource_id,
-            )
-        payload = {"results": result} if not read_operation else result
-        return await self._finish(
-            request_id,
-            started,
-            200,
-            None,
-            operation,
-            "response",
-            context,
-            evaluation,
-            resource_id,
-            payload=payload,
+                    if denial_cause is not None:
+                        admission.facts["evaluation"] = AuthorizationEvaluation(
+                            PolicyDecision(
+                                decision="deny", reason_code="no_matching_grant", policy_id=None
+                            ),
+                            denial_cause,
+                        )
+                        raise REFUSALS.denied
+                    if not await repository.lock_active_version(collection_id, version):
+                        raise INDEX_UNAVAILABLE
+                    # Count content-repository operations (including authorized no-match searches).
+                    self.content_reads_by_collection[retrieval.resource_id] += 1
+                    result = await content_query(repository)
+            if read_operation and result is None:
+                raise NOT_FOUND
+            return Released({"results": result} if not read_operation else result)
+
+        operation = SEARCH if action == "bok.search" else READ
+        return await self.gate.run(
+            operation, authorization, retrieval.scope, retrieve, validate=lambda: retrieval
         )
 
-    async def _finish(
-        self,
-        request_id: UUID,
-        started: float,
-        status: int,
-        reason: str | None,
-        operation: str,
-        stage: str,
-        context: PrincipalContext | None,
-        evaluation: AuthorizationEvaluation | None,
-        resource_id: str,
-        *,
-        payload: dict[str, Any] | None = None,
-    ) -> JSONResponse:
-        response = (
-            JSONResponse(payload, status_code=status)
-            if payload is not None
-            else JSONResponse(
-                {
-                    "error": {
-                        "code": reason or "resource_unavailable",
-                        "message": (
-                            (reason or "resource_unavailable").replace("_", " ").capitalize() + "."
-                        ),
-                    },
-                    "request_id": str(request_id),
-                    "retryable": status >= 500,
-                },
-                status_code=status,
-            )
+    async def _audit(self, terminal: Terminal) -> None:
+        if terminal.status == 401 and not terminal.inactive:
+            return  # A missing or unknown credential is not audited here; an inactive principal is.
+        retrieval: Retrieval = terminal.request
+        stage, context = terminal.stage, terminal.context
+        evaluation = terminal.facts.get("evaluation", terminal.evaluation)
+        if terminal.error is REFUSALS.unavailable:
+            # Before an allow there is no subject to record; after it, storage is upstream.
+            stage = "upstream" if stage == "response" else "authentication"
+            context = context if stage == "upstream" else None
+            evaluation = evaluation if stage == "upstream" else None
+        event = self.projector.control_event(
+            terminal.request_id,
+            terminal.status,
+            terminal.latency_ms,
+            stage,
+            operation=retrieval.action,
+            action="read_metadata",
+            reason=terminal.error.code if terminal.error is not None else None,
+            retryable=terminal.status >= 500,
+            context=context,
+            resource_ref=("bok_collection", retrieval.resource_id) if context is not None else None,
+            decision=evaluation.decision if evaluation else None,
+            authorization_denial_cause=evaluation.denial_cause if evaluation else None,
         )
-        try:
-            event = self.projector.control_event(
-                request_id,
-                status,
-                max(0, int((monotonic() - started) * 1000)),
-                stage,
-                operation=operation,
-                action="read_metadata",
-                reason=reason,
-                retryable=status >= 500,
-                context=context,
-                resource_ref=("bok_collection", resource_id) if context is not None else None,
-                decision=evaluation.decision if evaluation else None,
-                authorization_denial_cause=evaluation.denial_cause if evaluation else None,
-            )
-            await self.audit.append(event)
-        except Exception:
-            return JSONResponse(
-                {
-                    "error": {"code": "audit_unavailable", "message": "Audit unavailable."},
-                    "request_id": str(request_id),
-                    "retryable": True,
-                },
-                status_code=503,
-            )
-        return response
+        await self.audit.append(event)
+
+
+VERSION_PATH = "/v1/bok/collections/{collection_id}/versions/{version}"
+SEARCH = declare(
+    "POST",
+    VERSION_PATH + "/search",
+    action="bok.search",
+    resource_type="bok_collection",
+    resource_id="path.collection_id@version",
+)
+READ = declare(
+    "GET",
+    VERSION_PATH + "/chunks/{document_id}/{section_id}/{chunk_index}",
+    action="bok.read",
+    resource_type="bok_collection",
+    resource_id="path.collection_id@version",
+)
 
 
 def bok_router(service: BoKRetrievalService) -> APIRouter:
@@ -461,26 +392,20 @@ def bok_router(service: BoKRetrievalService) -> APIRouter:
     version_param = Path(pattern=r"^[0-9A-Za-z][0-9A-Za-z.+-]{0,63}$")
 
     @router.post(
-        "/v1/bok/collections/{collection_id}/versions/{version}/search",
+        SEARCH.path,
         responses={
             401: {"description": "Authentication failed."},
             403: {"description": "Collection version unavailable."},
             503: {"description": "Collection index or storage unavailable."},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "bok.search",
-                "resource_type": "bok_collection",
-                "resource_id": "path.collection_id@version",
-            }
-        },
+        openapi_extra=SEARCH.openapi_extra,
     )
     async def search(
         body: Annotated[BoKSearchRequest, Body()],
         bearer_credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)],
         collection_id: str = collection_id_param,
         version: str = version_param,
-    ) -> JSONResponse:
+    ) -> Response:
         return await service.search(
             collection_id,
             version,
@@ -489,21 +414,14 @@ def bok_router(service: BoKRetrievalService) -> APIRouter:
         )
 
     @router.get(
-        "/v1/bok/collections/{collection_id}/versions/{version}/chunks/"
-        "{document_id}/{section_id}/{chunk_index}",
+        READ.path,
         responses={
             401: {"description": "Authentication failed."},
             403: {"description": "Collection version unavailable."},
             404: {"description": "Chunk unavailable."},
             503: {"description": "Collection index or storage unavailable."},
         },
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "bok.read",
-                "resource_type": "bok_collection",
-                "resource_id": "path.collection_id@version",
-            }
-        },
+        openapi_extra=READ.openapi_extra,
     )
     async def read_chunk(
         bearer_credentials: Annotated[HTTPAuthorizationCredentials | None, Security(bearer)],
@@ -512,7 +430,7 @@ def bok_router(service: BoKRetrievalService) -> APIRouter:
         document_id: str = Path(pattern=r"^[a-z0-9][a-z0-9-]{0,99}$"),
         section_id: str = Path(pattern=r"^[a-z0-9][a-z0-9-]{0,99}$"),
         chunk_index: int = Path(ge=0, le=1_000_000),
-    ) -> JSONResponse:
+    ) -> Response:
         return await service.read_chunk(
             collection_id,
             version,
