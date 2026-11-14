@@ -10,7 +10,7 @@ from time import monotonic
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Query, Request, Security
+from fastapi import APIRouter, Query, Request, Response, Security
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -19,8 +19,19 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from sre_agent.gate.authentication import authorize_governed_access
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.usage_requests import read_requests
 from sre_agent.gateway.usage_requests_models import UsageRequestsResponse
 from sre_agent.governance.dto import AuthorizationDenialCause
@@ -443,8 +454,119 @@ class UsageReadProjection:
         return f"{digits[:-scale]}.{digits[-scale:]}"
 
 
+USAGE = Scope("admin.read", "administrative_control", "usage")
+USAGE_DECLARED = [
+    declare(
+        "GET",
+        path,
+        action="admin.read",
+        resource_type="administrative_control",
+        resource_id="usage",
+    )
+    for path in ("/v1/usage/consumption",)
+]
+OPERATIONS = {declaration.path: declaration for declaration in USAGE_DECLARED}
+REFUSALS = Refusals(
+    denied=GovernedError(403, "resource_unavailable", "Administrative read is not authorized."),
+    unavailable=GovernedError(
+        503,
+        "storage_unavailable",
+        "Usage storage is temporarily unavailable.",
+        retryable=True,
+        stage="audit",
+    ),
+)
+SELECTOR_REQUIRED = GovernedError(
+    422, "validation_error", "Exactly one bounded usage selector is required."
+)
+SELECTOR_INVALID = GovernedError(
+    422, "validation_error", "The usage selector is invalid.", stage="validation"
+)
+SCOPE_TOO_LARGE = GovernedError(
+    413, "usage_scope_too_large", "The usage scope exceeds the read limit.", stage="validation"
+)
+REASONS = {
+    "validation_error": "contract_validation_failed",
+    "usage_scope_too_large": "contract_validation_failed",
+    "storage_unavailable": "upstream_unavailable",
+    "authentication_failed": "authentication_failed",
+    "resource_unavailable": "no_matching_grant",
+}
+
+
 def usage_router(projection: UsageReadProjection) -> APIRouter:
     """Expose the usage projection only behind the governed administrator scope."""
+
+    async def audit_usage(terminal: Terminal) -> None:
+        if projection._audit_store is None:
+            raise RuntimeError("usage audit storage unavailable")
+        # Usage records its subject on a denial, and on every outcome once it was admitted.
+        subject = terminal.facts.get("admitted", False) or (
+            terminal.stage == "authorization" and terminal.evaluation is not None
+        )
+        evaluation = terminal.evaluation if subject else None
+        code = terminal.error.code if terminal.error is not None else None
+        event = projection._audit.control_event(
+            terminal.request_id,
+            terminal.status,
+            terminal.latency_ms,
+            "authorization" if terminal.error is None else terminal.stage,
+            operation="usage.read",
+            action="admin.read",
+            reason=REASONS.get(code, code),
+            retryable=terminal.status in {500, 503, 504},
+            context=terminal.context if subject else None,
+            resource_ref=("administrative_control", "usage") if subject else None,
+            decision=evaluation.decision if evaluation is not None else None,
+            authorization_denial_cause=(
+                evaluation.denial_cause
+                if evaluation is not None and terminal.error is REFUSALS.denied
+                else None
+            ),
+        )
+        await projection._audit_store.append(event)
+
+    async def admit(authorization: str | None, scope: Scope) -> tuple[Any, Any]:
+        try:
+            return await authorize_governed_access(
+                projection._sessions,
+                authorization,
+                scope.action,
+                scope.resource_type,
+                scope.resource_id,
+            )
+        except AuthenticationFailed:
+            return None, None
+
+    gate: Gate[dict[str, Any]] = Gate(
+        projection._sessions, REFUSALS, admit=admit, audit=audit_usage
+    )
+
+    def selector(request: Request, *, body: bytes = b"") -> dict[str, Any]:
+        """The one bounded selector of a usage read, or the audited 422."""
+        supplied = list(request.query_params.multi_items())
+        names = [name for name, _ in supplied]
+        if (
+            body
+            or any(name not in selector_names for name in names)
+            or any(name in known_unbounded for name in names)
+            or len(supplied) != 1
+        ):
+            raise SELECTOR_REQUIRED
+        name, value = supplied[0]
+        if name == "month" and re.fullmatch(SUPPORTED_MONTH_PATTERN, value) is None:
+            raise SELECTOR_INVALID
+        return {name: UUID(value) if name == "request_id" else value}
+
+    async def read(request: Request, use_case: Any, *, body: bytes = b"") -> Response:
+        operation = OPERATIONS[request.url.path]
+        return await gate.run(
+            operation,
+            request.headers.get("authorization"),
+            USAGE,
+            use_case,
+            validate=lambda: selector(request, body=body),
+        )
 
     async def finish(
         request: Request,
@@ -557,11 +679,14 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             route_handler = super().get_route_handler()
 
             async def validation_audited_handler(request: Request):
+                # The routes not moved to the gate yet read these in finish().
                 request.state.usage_request_id = uuid4()
                 request.state.usage_started = monotonic()
                 try:
                     return await route_handler(request)
                 except RequestValidationError:
+                    if request.url.path in OPERATIONS:
+                        return await read(request, None, body=b"invalid")
                     return await finish(
                         request,
                         status=422,
@@ -605,11 +730,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         openapi_extra={
             "x-required-query-one-of": ["request_id", "incident_id", "month"],
             "x-maximum-evidence-rows": UsageReadProjection.MAX_ROWS,
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "usage",
-            },
+            **USAGE_DECLARED[0].openapi_extra,
         },
     )
     async def read_usage(
@@ -620,93 +741,19 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         incident_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         month: Annotated[str | None, Query(pattern=SUPPORTED_MONTH_PATTERN)] = None,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_usage_bearer)] = None,
-    ) -> UsageReadResponse | JSONResponse:
-        request.state.usage_request_id = uuid4()
-        supplied = list(request.query_params.multi_items())
-        supplied_names = [name for name, _ in supplied]
-        if (
-            any(name not in selector_names for name in supplied_names)
-            or any(name in known_unbounded for name in supplied_names)
-            or len(supplied) != 1
-        ):
-            return await finish(
-                request,
-                status=422,
-                stage="validation",
-                code="validation_error",
-                message="Exactly one bounded usage selector is required.",
-            )
+    ) -> Response:
+        async def consumption(admission: Admission, filters: dict[str, Any]) -> Released:
+            admission.facts["admitted"] = True
+            with failing_as(REFUSALS.unavailable):
+                try:
+                    result = await projection.read(**filters)
+                except UsageReadLimitExceeded:
+                    raise SCOPE_TOO_LARGE from None
+                except ValueError:
+                    raise SELECTOR_INVALID from None
+            return Released(UsageReadResponse.model_validate(result))
 
-        filters: dict[str, Any] = {
-            "request_id": request_id,
-            "incident_id": incident_id,
-            "month": month,
-        }
-        filters = {name: value for name, value in filters.items() if value is not None}
-        if len(filters) != 1:
-            return await finish(
-                request,
-                status=422,
-                stage="validation",
-                code="validation_error",
-                message="Exactly one bounded usage selector is required.",
-            )
-        if month is not None and re.fullmatch(SUPPORTED_MONTH_PATTERN, month) is None:
-            return await finish(
-                request,
-                status=422,
-                stage="validation",
-                code="validation_error",
-                message="The usage selector is invalid.",
-            )
-
-        _context, evaluation, denial = await authorize_usage(request)
-        if denial is not None:
-            return denial
-
-        try:
-            result = await projection.read(**filters)
-        except UsageReadLimitExceeded:
-            return await finish(
-                request,
-                status=413,
-                stage="validation",
-                code="usage_scope_too_large",
-                message="The usage scope exceeds the read limit.",
-                context=_context,
-                decision=evaluation.decision,
-                resource_ref=("administrative_control", "usage"),
-            )
-        except ValueError:
-            return await finish(
-                request,
-                status=422,
-                stage="validation",
-                code="validation_error",
-                message="The usage selector is invalid.",
-                context=_context,
-                decision=evaluation.decision,
-                resource_ref=("administrative_control", "usage"),
-            )
-        except Exception:
-            return await finish(
-                request,
-                status=503,
-                stage="audit",
-                code="storage_unavailable",
-                context=_context,
-                decision=evaluation.decision,
-                resource_ref=("administrative_control", "usage"),
-            )
-        return await finish(
-            request,
-            status=200,
-            stage="authorization",
-            payload=UsageReadResponse.model_validate(result),
-            context=_context,
-            decision=evaluation.decision,
-            resource_ref=("administrative_control", "usage"),
-        )
+        return await read(request, consumption)
 
     @router.get(
         "/v1/usage/requests",
