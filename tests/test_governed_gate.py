@@ -27,8 +27,6 @@ EXEMPT = {
 }
 # Gateway operations not moved yet; each layer of #1021 empties its part of this set.
 NOT_YET_MIGRATED: set[tuple[str, str]] = {
-    ("GET", "/v1/audit-events"),
-    ("GET", "/v1/audit-events/{id}"),
     ("GET", "/v1/mcp/discovery"),
     ("POST", "/v1/mcp/tools/{tool_id}"),
 }

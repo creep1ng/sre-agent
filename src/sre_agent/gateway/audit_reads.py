@@ -5,12 +5,23 @@ from copy import deepcopy
 from datetime import datetime
 from time import monotonic
 from typing import Annotated, Any
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from fastapi import APIRouter, Path, Request, Security
+from fastapi import APIRouter, Path, Request, Response, Security
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import AuditEvent, PrincipalContext
@@ -125,11 +136,7 @@ AUDIT_QUERY_PARAMETERS = [
 ]
 AUDIT_LIST_REQUIRED_FILTERS = FILTER_KEYS.copy()
 AUDIT_FORBIDDEN_QUERY_PARAMETERS = FORBIDDEN_PARAMS.copy()
-AUDIT_SCOPE = {
-    "action": READ_ACTION,
-    "resource_type": RESOURCE_TYPE,
-    "resource_id": RESOURCE_ID,
-}
+SCOPE = Scope(READ_ACTION, RESOURCE_TYPE, RESOURCE_ID)
 AUDIT_ERROR_DESCRIPTIONS = {
     401: "Authentication failed before lookup",
     403: "Authenticated Principal is not permitted",
@@ -157,6 +164,33 @@ ERRORS = {
     422: ("validation_error", "Request validation failed."),
     503: ("audit_unavailable", "Audit storage is temporarily unavailable."),
 }
+
+
+UNAVAILABLE = GovernedError(
+    503, "audit_unavailable", "Audit storage is temporarily unavailable.", retryable=True
+)
+REFUSALS = Refusals(
+    unauthenticated=AuthenticationFailed("Authentication is required."),
+    denied=GovernedError(403, "resource_unavailable", "Resource unavailable."),
+    unavailable=UNAVAILABLE,
+    audit_unavailable=UNAVAILABLE,
+)
+INVALID = GovernedError(422, "validation_error", "Request validation failed.")
+NOT_FOUND = GovernedError(404, "resource_not_found", "The requested resource was not found.")
+LIST = declare(
+    "GET",
+    "/v1/audit-events",
+    action=READ_ACTION,
+    resource_type=RESOURCE_TYPE,
+    resource_id=RESOURCE_ID,
+)
+GET = declare(
+    "GET",
+    "/v1/audit-events/{id}",
+    action=READ_ACTION,
+    resource_type=RESOURCE_TYPE,
+    resource_id=RESOURCE_ID,
+)
 
 
 def project_metadata(values: dict[str, Any]) -> dict[str, Any]:
@@ -193,6 +227,37 @@ class AuditReadsService:
     def __init__(self, sessions: Any, hmac_key: bytes, audit: Any) -> None:
         self.sessions, self.audit = sessions, audit
         self._projector = AuditProjector(hmac_key)
+        self.gate: Gate[Any] = Gate(sessions, REFUSALS, facts=ResourceRepository, audit=self._audit)
+
+    async def _audit(self, terminal: Terminal) -> None:
+        # Once a request is admitted, every outcome carries its subject; before, none does.
+        if terminal.stage == "response":
+            stage = "authorization"
+        elif terminal.error is UNAVAILABLE:
+            stage = "audit"
+        else:
+            stage = terminal.stage
+        subject = stage == "authorization"
+        code = terminal.error.code if terminal.error is not None else None
+        event = self._projector.control_event(
+            terminal.request_id,
+            terminal.status,
+            terminal.latency_ms,
+            stage,
+            operation="audit.project",
+            action="read_metadata",
+            reason={"validation_error": "contract_validation_failed"}.get(code or "", code),
+            retryable=terminal.status == 503,
+            context=terminal.context if subject else None,
+            resource_ref=("administrative_control", "audit") if subject else None,
+            decision=terminal.evaluation.decision if subject else None,  # type: ignore[union-attr]
+            authorization_denial_cause=(
+                terminal.evaluation.denial_cause  # type: ignore[union-attr]
+                if subject and terminal.status in {403, 404}
+                else None
+            ),
+        )
+        await self.audit.append(event)
 
     def _error(
         self, request_id: UUID, status: int, headers: dict[str, str] | None = None
@@ -364,71 +429,29 @@ class AuditReadsService:
         raw: dict[str, Any],
         authorization: str | None,
         has_body: bool = False,
-    ) -> JSONResponse:
-        request_id, started = uuid4(), monotonic()
-        filters = self._filters(raw)
-        if filters is None:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                error_code="validation_error",
+    ) -> Response:
+        def validate() -> dict[str, Any]:
+            filters = self._filters(raw)
+            if filters is None or has_body:
+                raise INVALID
+            return filters
+
+        async def events(admission: Admission, filters: dict[str, Any]) -> Released:
+            limit = filters.pop("limit")
+            with failing_as(UNAVAILABLE):
+                async with self.sessions() as session:
+                    events, has_more = await AuditRepository(session).query_filtered(
+                        limit=limit, **filters
+                    )
+            return Released(
+                {
+                    "items": [project_metadata(e.model_dump(mode="json")) for e in events],
+                    "limit": limit,
+                    "truncated": has_more,
+                }
             )
-        context, evaluation, auth_status = await self._authorized(authorization)
-        if auth_status is not None:
-            stage = (
-                "authentication"
-                if auth_status == 401
-                else ("authorization" if auth_status == 403 else "audit")
-            )
-            return await self._finish(
-                request_id,
-                started,
-                auth_status,
-                stage,
-                error_code=ERRORS[auth_status][0],
-                context=context,
-                evaluation=evaluation,
-                headers={"WWW-Authenticate": "Bearer"} if auth_status == 401 else None,
-            )
-        if has_body:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                error_code="validation_error",
-            )
-        limit = filters.pop("limit")
-        try:
-            async with self.sessions() as session:
-                events, has_more = await AuditRepository(session).query_filtered(
-                    limit=limit, **filters
-                )
-        except Exception:
-            return await self._finish(
-                request_id,
-                started,
-                503,
-                "authorization",
-                error_code="audit_unavailable",
-                context=context,
-                evaluation=evaluation,
-            )
-        return await self._finish(
-            request_id,
-            started,
-            200,
-            "authorization",
-            context=context,
-            evaluation=evaluation,
-            payload={
-                "items": [project_metadata(e.model_dump(mode="json")) for e in events],
-                "limit": limit,
-                "truncated": has_more,
-            },
-        )
+
+        return await self.gate.run(LIST, authorization, SCOPE, events, validate=validate)
 
     async def get_event(
         self,
@@ -436,94 +459,35 @@ class AuditReadsService:
         authorization: str | None,
         query_params: dict[str, Any] | None = None,
         has_body: bool = False,
-    ) -> JSONResponse:
-        request_id, started = uuid4(), monotonic()
-        if not _valid_event_id(event_id):
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                error_code="validation_error",
-            )
-        context, evaluation, auth_status = await self._authorized(authorization)
-        if auth_status is not None:
-            stage = (
-                "authentication"
-                if auth_status == 401
-                else ("authorization" if auth_status == 403 else "audit")
-            )
-            return await self._finish(
-                request_id,
-                started,
-                auth_status,
-                stage,
-                error_code=ERRORS[auth_status][0],
-                context=context,
-                evaluation=evaluation,
-                headers={"WWW-Authenticate": "Bearer"} if auth_status == 401 else None,
-            )
-        if any(
-            key in (query_params or {})
-            for key in ("content", "raw_content", "redacted_content", "include_content")
-        ):
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                error_code="validation_error",
-            )
-        if has_body:
-            return await self._finish(
-                request_id,
-                started,
-                422,
-                "validation",
-                error_code="validation_error",
-            )
-        lookup_id = (
-            str(UUID(event_id))
-            if re.fullmatch(CANONICAL_UUID_PATTERN, event_id) is not None
-            else event_id
-        )
-        try:
-            async with self.sessions() as session:
-                row = await session.get(AuditEventRow, lookup_id)
-                event = None
-                if row is not None:
-                    from sre_agent.persistence.projections import project_audit_event
+    ) -> Response:
+        def validate() -> str:
+            if (
+                not _valid_event_id(event_id)
+                or has_body
+                or any(
+                    key in (query_params or {})
+                    for key in ("content", "raw_content", "redacted_content", "include_content")
+                )
+            ):
+                raise INVALID
+            if re.fullmatch(CANONICAL_UUID_PATTERN, event_id) is not None:
+                return str(UUID(event_id))
+            return event_id
 
-                    event = project_audit_event(row)
-        except Exception:
-            return await self._finish(
-                request_id,
-                started,
-                503,
-                "authorization",
-                error_code="audit_unavailable",
-                context=context,
-                evaluation=evaluation,
-            )
-        if event is None:
-            return await self._finish(
-                request_id,
-                started,
-                404,
-                "authorization",
-                error_code="resource_not_found",
-                context=context,
-                evaluation=evaluation,
-            )
-        return await self._finish(
-            request_id,
-            started,
-            200,
-            "authorization",
-            context=context,
-            evaluation=evaluation,
-            payload=project_metadata(event.model_dump(mode="json")),
-        )
+        async def event(admission: Admission, lookup_id: str) -> Released:
+            with failing_as(UNAVAILABLE):
+                async with self.sessions() as session:
+                    row = await session.get(AuditEventRow, lookup_id)
+                    event = None
+                    if row is not None:
+                        from sre_agent.persistence.projections import project_audit_event
+
+                        event = project_audit_event(row)
+            if event is None:
+                raise NOT_FOUND
+            return Released(project_metadata(event.model_dump(mode="json")))
+
+        return await self.gate.run(GET, authorization, SCOPE, event, validate=validate)
 
 
 def audit_reads_router(service: AuditReadsService) -> APIRouter:
@@ -550,7 +514,7 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
         return has_body
 
     @router.get(
-        "/v1/audit-events",
+        LIST.path,
         operation_id="listAuditEvents",
         summary="List filtered audit metadata",
         description=(
@@ -568,13 +532,13 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
             "parameters": AUDIT_QUERY_PARAMETERS,
             "x-required-query-any-of": AUDIT_LIST_REQUIRED_FILTERS,
             "x-forbidden-query-parameters": AUDIT_FORBIDDEN_QUERY_PARAMETERS,
-            "x-governed-scope": AUDIT_SCOPE,
+            **LIST.openapi_extra,
         },
     )
     async def list_events(
         request: Request,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
-    ) -> JSONResponse:
+    ) -> Response:
         return await service.list_events(
             dict(request.query_params),
             request.headers.get("authorization"),
@@ -582,7 +546,7 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
         )
 
     @router.get(
-        "/v1/audit-events/{id}",
+        GET.path,
         operation_id="getAuditEvent",
         summary="Get audit metadata",
         description=(
@@ -597,15 +561,13 @@ def audit_reads_router(service: AuditReadsService) -> APIRouter:
                 },
             },
         },
-        openapi_extra={
-            "x-governed-scope": AUDIT_SCOPE,
-        },
+        openapi_extra=GET.openapi_extra,
     )
     async def get_event(
         id: Annotated[str, Path(json_schema_extra=_event_id_json_schema)],
         request: Request,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_audit_bearer)] = None,
-    ) -> JSONResponse:
+    ) -> Response:
         return await service.get_event(
             id,
             request.headers.get("authorization"),
