@@ -11,17 +11,31 @@ could not open stays ``new`` for the operator.
 
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Response
 from sqlalchemy import text
 
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    declare,
+    failing_as,
+)
 from sre_agent.vocabulary import TriageStatus
 
 INTAKE_DETECTOR = "grafana-alerting"
-WORKFLOW = ("incident_workflow", "incident-response")
+READ = Scope("alert.read", "incident_workflow", "incident-response")
+LIST = declare("GET", "/v1/alerts", action=READ.action, resource_type=READ.resource_type,
+               resource_id=READ.resource_id)  # fmt: skip
+REFUSALS = Refusals(
+    unauthenticated=AuthenticationFailed(),
+    denied=GovernedError(403, "not_authorized"),
+    unavailable=GovernedError(503, "storage_unavailable", retryable=True, retry_after="15"),
+)
 # Triage store status -> alert triage_status; an alert without a stored decision is `new`.
 TRIAGE_STATUS = {
     TriageStatus.OPEN: "triaging",
@@ -43,41 +57,19 @@ def _iso(moment: datetime) -> str:
 class LiveAlertsService:
     def __init__(self, sessions: Any) -> None:
         self._sessions = sessions
+        self._gate: Gate[None] = Gate(sessions, REFUSALS)
 
-    def _error(self, request_id: str, status: int, code: str, retryable: bool) -> JSONResponse:
-        headers = {"Retry-After": "15"} if retryable else {}
-        headers |= {"WWW-Authenticate": "Bearer"} if status == 401 else {}
-        return JSONResponse(
-            {
-                "error": {"code": code, "message": code.replace("_", " ").capitalize() + "."},
-                "request_id": request_id,
-                "retryable": retryable,
-            },
-            status_code=status,
-            headers=headers,
-        )
+    async def list_alerts(self, authorization: str | None) -> Response:
+        return await self._gate.run(LIST, authorization, READ, self._list)
 
-    async def list_alerts(self, authorization: str | None) -> JSONResponse:
-        request_id = str(uuid4())
-        try:
-            _, evaluation = await authorize_governed_access(
-                self._sessions, authorization, "alert.read", *WORKFLOW
-            )
-        except AuthenticationFailed:
-            return self._error(request_id, 401, "authentication_failed", False)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable", True)
-        if evaluation.decision.decision != "allow":
-            return self._error(request_id, 403, "not_authorized", False)
+    async def _list(self, admission: Admission, request: None) -> Released:
         evaluated_at = datetime.now(UTC)
-        try:
+        with failing_as(REFUSALS.unavailable):
             async with self._sessions() as session:
                 episodes = [self._episode(row) for row in await session.execute(_EPISODES)]
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable", True)
         alerts = [alert for firing, alert in episodes if firing]
         resolved = [alert for firing, alert in episodes if not firing]
-        return JSONResponse(
+        return Released(
             {"evaluated_at": _iso(evaluated_at), "alerts": alerts, "resolved": resolved},
             headers={"Cache-Control": "no-store"},
         )
@@ -112,7 +104,7 @@ def alerts_router(service: LiveAlertsService) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/alerts")
-    async def list_alerts(request: Request) -> JSONResponse:
+    async def list_alerts(request: Request) -> Response:
         return await service.list_alerts(request.headers.get("authorization"))
 
     return router
