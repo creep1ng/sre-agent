@@ -206,6 +206,9 @@ CASES = [
          vary=lambda body, label: body | {"reason": f"Payment fails ({label})."},
          invalid=("/v1/alerts/{alert}/triage/commands",
                   {"operation": "triage_dismiss", "expected_version": 1}, 422)),  # triage
+    Case("POST", "/v1/responses", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         {"model": "triage-agent", "input": "Summarize."}, audited=True, challenge=False,
+         invalid=("/v1/responses", {"model": "X"}, 422)),  # responses
 ]  # fmt: skip
 
 

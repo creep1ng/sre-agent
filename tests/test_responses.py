@@ -186,7 +186,7 @@ def test_denial_never_resolves_an_assignment(monkeypatch: pytest.MonkeyPatch) ->
     assert response.status_code == 403
 
 
-def test_inactive_principal_reaches_the_engine_before_all_authorization_reads(
+def test_inactive_principal_is_refused_before_all_authorization_reads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = {"resource": 0, "grant": 0, "routing": 0}
@@ -217,10 +217,11 @@ def test_inactive_principal_reaches_the_engine_before_all_authorization_reads(
                 "UPDATE principals SET status = 'active' WHERE principal_id = 'incident-harness'"
             )
 
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "resource_unavailable"
-    assert event[0:2] == ("authorization", 403)
-    assert event[7]["authorization_denial_cause"] == "principal_inactive"
+    # An inactive principal is not authenticated on any governed route (#1021).
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "authentication_failed"
+    assert event[0:2] == ("authentication", 401)
+    assert event[7]["authorization_denial_cause"] is None
     assert calls == {"resource": 0, "grant": 0, "routing": 0}
     assert provider.requests == []
 

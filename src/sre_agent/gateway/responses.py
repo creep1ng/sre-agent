@@ -5,20 +5,29 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from time import monotonic
 from typing import Annotated, Any, Literal, Protocol
-from uuid import UUID, uuid4
+from uuid import UUID
 
-from fastapi import APIRouter, Body, Request, Security
+from fastapi import APIRouter, Body, Request, Response, Security
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
+from sre_agent.gate.errors import GovernedError
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    Terminal,
+    declare,
+    failing_as,
+)
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.attribution import RequestAttribution
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.gateway.consumption_admission import ConsumptionAdmissionService
 from sre_agent.gateway.consumption_affordability import text_input_bound
 from sre_agent.gateway.providers import LLMProvider, ProviderFailure, ProviderRequest
@@ -224,6 +233,31 @@ ERROR_MESSAGES = {
 }
 
 
+REASONS = {
+    "validation": "contract_validation_failed",
+    "authentication": "authentication_failed",
+    "audit": "audit_unavailable",
+}
+REFUSALS = Refusals(
+    # The 401 carries no WWW-Authenticate challenge, as before the gate; see the PR.
+    unauthenticated=GovernedError(401, "authentication_failed", "Authentication failed.", stage="authentication"),
+    denied=GovernedError(403, "resource_unavailable", "Resource unavailable."),
+    unavailable=GovernedError(503, "audit_unavailable", "Audit unavailable.", retryable=True, stage="audit"),
+)
+
+
+def failure(status: int, stage: str, *, code: str | None = None, retry_after: Any = None) -> GovernedError:
+    """A response refusal worded by its status, as the responses contract words it."""
+    code = code or ERRORS[status][0]
+    return GovernedError(status, code, ERROR_MESSAGES.get(code, ERRORS[status][1]),
+                         retryable=status in {429, 503, 504},
+                         retry_after=str(retry_after) if retry_after else None, stage=stage)
+
+
+def _identifiers(request: ResponsesRequest) -> dict[str, str]:
+    return {name: value for name in ("incident_id", "run_id", "task_id") if (value := getattr(request, name))}
+
+
 def _empty_consumption(availability: Literal["absent", "unavailable"]) -> Consumption:
     return Consumption(
         availability=availability,
@@ -245,47 +279,40 @@ class ResponsesService:  # noqa: E305
         self.sessions, self.provider, self.audit, self.projector = sessions, provider, audit, projector
         self.admission, self.endpoint_catalog = admission, endpoint_catalog
         self.provider_timeout_seconds = provider_timeout_seconds
+        self.gate: Gate[ResponsesRequest] = Gate(sessions, REFUSALS, audit=self._audit)
 
-    async def create(self, raw: Any, authorization: str | None) -> JSONResponse:
-        request_id, started = uuid4(), monotonic()
-        try:
-            request = ResponsesRequest.model_validate(raw)
-        except ValidationError:
-            return await self._finish(request_id, started, 422, "validation",
-                                      reason="contract_validation_failed")
-        identifiers = {name: value for name in ("incident_id", "run_id", "task_id")
-                       if (value := getattr(request, name))}
-        try:
-            context, evaluation = await authorize_governed_access(
-                self.sessions, authorization, "invoke", "llm_model", request.model
-            )
-            decision = evaluation.decision
-            if decision.decision == "deny":
-                return await self._finish(request_id, started, 403, "authorization", context=context,
-                                          alias=request.model, decision=decision, reason="no_matching_grant",
-                                          authorization_denial_cause=evaluation.denial_cause,
-                                          identifiers=identifiers)
+    async def create(self, raw: Any, authorization: str | None) -> Response:
+        def validate() -> ResponsesRequest:
+            try:
+                return ResponsesRequest.model_validate(raw)
+            except ValidationError:
+                raise failure(422, "validation") from None
+
+        return await self.gate.run(
+            CREATE,
+            authorization,
+            lambda request: Scope("invoke", "llm_model", request.model),
+            self._respond,
+            validate=validate,
+        )
+
+    async def _respond(self, admission: Admission, request: ResponsesRequest) -> Released:
+        request_id, context, decision = admission.request_id, admission.context, admission.evaluation.decision  # type: ignore[union-attr]  # fmt: skip
+        identifiers = _identifiers(request)
+        facts = admission.facts
+        facts.update(context=context, alias=request.model, decision=decision, identifiers=identifiers)
+        with failing_as(REFUSALS.unavailable):
             async with self.sessions() as session:
                 assignment = await ResourceRepository(session).resolve_assignment("llm_model", request.model)
-        except AuthenticationFailed:
-            return await self._finish(request_id, started, 401, "authentication",
-                                      reason="authentication_failed", identifiers=identifiers)
-        except Exception:
-            return await self._finish(request_id, started, 503, "audit",
-                                      reason="audit_unavailable", retryable=True,
-                                      identifiers=identifiers,
-                                      error_code="audit_unavailable")
         if assignment is None:
-            return await self._finish(request_id, started, 503, "routing", context=context,
-                                      alias=request.model, decision=decision,
-                                      reason="routing_unavailable", retryable=True,
-                                      identifiers=identifiers)
+            facts.update(reason="routing_unavailable", retryable=True)
+            raise failure(503, "routing")
         # Admission is unconditional: it is what enforces an active limit and
         # reserves the exposure. Gating it on catalog configuration let an
         # active provider with no catalog reach the provider unchecked.
         service = self.admission or ConsumptionAdmissionService(self.sessions)
         # The catalog prices the routed model; the alias is only our own name for it.
-        admission = await service.admit(
+        admission_result = await service.admit(
             incident_id=identifiers.get("incident_id"), model=assignment.concrete_model,
             provider=assignment.inference_provider, catalog=self.endpoint_catalog,
             now=datetime.now(UTC),
@@ -293,72 +320,55 @@ class ResponsesService:  # noqa: E305
             # The contract's input is one text message with no instructions or tools.
             input_tokens=text_input_bound((request.input,)),
         )
-        if not admission.allowed:
-            status = (503 if admission.retryable
-                      else 422 if admission.denial_reason == "resource_not_found" else 429)
-            return await self._finish(request_id, started, status, "authorization",
-                                      context=context, alias=request.model, decision=decision,
-                                      reason=admission.denial_reason or "consumption_bounds_unavailable",
-                                      error_code="incident_not_found" if status == 422 else None,
-                                      retryable=status in {429, 503, 504}, identifiers=identifiers,
-                                      consumption_policy_version=(
-                                          None if admission.denial_reason == "policy_unavailable"
-                                          else admission.policy_version
-                                      ))
+        if not admission_result.allowed:
+            status = (503 if admission_result.retryable
+                      else 422 if admission_result.denial_reason == "resource_not_found" else 429)
+            facts.update(reason=admission_result.denial_reason or "consumption_bounds_unavailable",
+                         retryable=status in {429, 503, 504},
+                         consumption_policy_version=(
+                             None if admission_result.denial_reason == "policy_unavailable"
+                             else admission_result.policy_version))
+            raise failure(status, "authorization",
+                          code="incident_not_found" if status == 422 else None)
+        facts["consumption_policy_version"] = admission_result.policy_version
         try:
             provider_request = ProviderRequest(
                 input=request.input,
                 model=assignment.concrete_model,
                 provider=assignment.inference_provider,
-                max_output_tokens=admission.max_output_tokens,
+                max_output_tokens=admission_result.max_output_tokens,
             )
         except ValidationError:
             # Persisted routing data can outlive provider identifier rules. Do
             # not let that configuration fault escape as an unaudited ASGI 500.
-            return await self._finish(request_id, started, 503, "routing", context=context,
-                                      alias=request.model, decision=decision,
-                                      reason="routing_unavailable", retryable=True,
-                                      identifiers=identifiers,
-                                      consumption_policy_version=admission.policy_version)
+            facts.update(reason="routing_unavailable", retryable=True)
+            raise failure(503, "routing") from None
         # Freeze the already-loaded alias assignment at the invocation boundary.
         # No database alias lookup is performed after this point.
         invocation_attribution = RequestAttribution.from_assignment(request_id, assignment)
+        facts["assignment"] = assignment
         try:
             result = await self._provider_create(provider_request)
-            attribution = invocation_attribution.with_credit(
-                model=result.credited_model,
-                provider=result.credited_provider,
-            )
-            consumption = result.consumption or _empty_consumption("absent")
-            await self._settle_exact(admission.reservation_id, consumption)
-            payload = {"id": result.response_id, "object": "response", "status": "completed", "model": result.model, "output": [{"type": "message", "role": "assistant",
-                       "content": [{"type": "output_text", "text": result.text}]}],
-                       "request_id": str(request_id), "metadata": {"requested_model_alias": request.model,
-                       "router": assignment.router, "inference_provider": result.provider,
-                       "consumption": consumption.model_dump(mode="json")}}
-            return await self._finish(request_id, started, 200, "response", payload=payload,
-                                      context=context, alias=request.model, decision=decision,
-                                      assignment=assignment, identifiers=identifiers,
-                                      consumption=consumption,
-                                      attribution=attribution,
-                                      consumption_policy_version=admission.policy_version)
-        except ProviderFailure as failure:
+        except ProviderFailure as failed:
             status, reason, code = {"timeout": (504, "upstream_failed", "upstream_timeout"),
                                     "unavailable": (503, "upstream_unavailable", "upstream_unavailable"),
                                     "evidence_invalid": (502, "upstream_invalid", "provider_evidence_invalid")}.get(
-                                        failure.kind, (502, "upstream_invalid", "upstream_invalid_response"))
-            await self._settle_exact(admission.reservation_id,
-                                     failure.consumption or _empty_consumption("unavailable"))
-            return await self._finish(request_id, started, status, "upstream", context=context,
-                                      alias=request.model, decision=decision, assignment=assignment,
-                                      reason=reason, retryable=status in {503, 504}, identifiers=identifiers,
-                                      error_code=code, retry_after=failure.retry_after,
-                                      consumption=failure.consumption or _empty_consumption("unavailable"),
-                                      attribution=invocation_attribution.with_credit(
-                                          model=failure.credited_model,
-                                          provider=failure.credited_provider,
-                                      ),
-                                      consumption_policy_version=admission.policy_version)
+                                        failed.kind, (502, "upstream_invalid", "upstream_invalid_response"))
+            consumption = failed.consumption or _empty_consumption("unavailable")
+            await self._settle_exact(admission_result.reservation_id, consumption)
+            facts.update(reason=reason, retryable=status in {503, 504}, consumption=consumption,
+                         attribution=invocation_attribution.with_credit(
+                             model=failed.credited_model, provider=failed.credited_provider))
+            raise failure(status, "upstream", code=code, retry_after=failed.retry_after) from None
+        consumption = result.consumption or _empty_consumption("absent")
+        await self._settle_exact(admission_result.reservation_id, consumption)
+        facts.update(consumption=consumption, attribution=invocation_attribution.with_credit(
+            model=result.credited_model, provider=result.credited_provider))
+        return Released({"id": result.response_id, "object": "response", "status": "completed", "model": result.model, "output": [{"type": "message", "role": "assistant",
+                         "content": [{"type": "output_text", "text": result.text}]}],
+                         "request_id": str(request_id), "metadata": {"requested_model_alias": request.model,
+                         "router": assignment.router, "inference_provider": result.provider,
+                         "consumption": consumption.model_dump(mode="json")}})
 
     async def _provider_create(self, provider_request: ProviderRequest):
         """Retry once only a fast, uncharged HTTP 503 (#719): unstreamed, it carries no output.
@@ -384,30 +394,32 @@ class ResponsesService:  # noqa: E305
         except TimeoutError:
             raise ProviderFailure("timeout", consumption=_empty_consumption("unavailable")) from None
 
-    async def _finish(self, request_id, started, status, stage, *, payload=None,
-                      error_code=None, retry_after=None, consumption: Consumption | None = None,
-                      attribution: RequestAttribution | None = None,
-                      **facts):
-        event = self.projector.event(request_id, status, max(0, int((monotonic() - started) * 1000)),
-                                     stage, consumption=consumption, **facts)
-        try:
-            append_response = getattr(self.audit, "append_response", None)
-            if attribution is not None:
-                if not callable(append_response):
-                    raise RuntimeError("atomic response attribution storage unavailable")
-                await append_response(event, attribution)
-            else:
-                await self.audit.append(event)
-        except Exception:
-            error_code, status, payload = "audit_unavailable", 503, None
-        if payload is not None:
-            return JSONResponse(payload, status_code=status)
-        code, message = error_code or ERRORS[status][0], ERRORS[status][1]
-        message = ERROR_MESSAGES.get(code, message)
-        headers = {"Retry-After": str(retry_after)} if retry_after else None
-        return JSONResponse({"error": {"code": code, "message": message},
-                             "request_id": str(request_id), "retryable": status in {429, 503, 504}},
-                            status, headers=headers)
+    async def _audit(self, terminal: Terminal) -> None:
+        """The terminal audit of one request, committed before its result is released."""
+        facts = dict(terminal.facts)
+        identifiers = _identifiers(terminal.request) if terminal.request is not None else None
+        if terminal.stage in {"validation", "authentication", "audit"}:
+            # No subject evidence before authorization, nor after an audit-stage failure.
+            facts = {"reason": REASONS[terminal.stage], "retryable": terminal.stage == "audit"}
+            if identifiers is not None:
+                facts["identifiers"] = identifiers
+        elif not facts:
+            assert terminal.evaluation is not None
+            facts = {"context": terminal.context, "alias": terminal.request.model,
+                     "decision": terminal.evaluation.decision, "reason": "no_matching_grant",
+                     "authorization_denial_cause": terminal.evaluation.denial_cause,
+                     "identifiers": identifiers}  # fmt: skip
+        attribution = facts.pop("attribution", None)
+        event = self.projector.event(
+            terminal.request_id, terminal.status, terminal.latency_ms, terminal.stage, **facts
+        )
+        if attribution is None:
+            await self.audit.append(event)
+            return
+        append_response = getattr(self.audit, "append_response", None)
+        if not callable(append_response):
+            raise RuntimeError("atomic response attribution storage unavailable")
+        await append_response(event, attribution)
 
     async def _settle_exact(self, reservation: str | None, consumption: Consumption) -> None:
         if reservation is None or consumption.availability != "complete":
@@ -420,8 +432,11 @@ class ResponsesService:  # noqa: E305
                                  tokens=consumption.total_tokens or 0,
                                  usd_cost=Decimal(consumption.billed_usd)
                                  if consumption.billed_usd else None)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass  # uncertain settlement stays reserved; never fail the response
+
+
+CREATE = declare("POST", "/v1/responses", action="invoke", resource_type="llm_model", resource_id="body.model")
 
 
 def responses_router(service: ResponsesService) -> APIRouter:
@@ -434,8 +449,8 @@ def responses_router(service: ResponsesService) -> APIRouter:
                     return await route_handler(request)
                 except RequestValidationError:
                     return await service.create(None, request.headers.get("authorization"))
-                except HTTPException as failure:
-                    if failure.status_code != 400:
+                except HTTPException as refused:
+                    if refused.status_code != 400:
                         raise
                     return await service.create(None, request.headers.get("authorization"))
 
@@ -484,7 +499,7 @@ def responses_router(service: ResponsesService) -> APIRouter:
     }
 
     @router.post(
-        "/v1/responses",
+        CREATE.path,
         response_model=ResponsesResponse,
         responses=error_responses,
         summary="Create a completed textual response",
@@ -495,13 +510,7 @@ def responses_router(service: ResponsesService) -> APIRouter:
         ),
         response_description="Completed textual response",
         tags=["Responses"],
-        openapi_extra={
-            "x-governed-scope": {
-                "action": "invoke",
-                "resource_type": "llm_model",
-                "resource_id": "body.model",
-            }
-        },
+        openapi_extra=CREATE.openapi_extra,
     )
     async def create(
         request: Request,
@@ -513,7 +522,7 @@ def responses_router(service: ResponsesService) -> APIRouter:
             HTTPAuthorizationCredentials | None,
             Security(bearer),
         ] = None,
-    ) -> JSONResponse:
+    ) -> Response:
         return await service.create(body, request.headers.get("authorization"))
 
     return router
