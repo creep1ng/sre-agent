@@ -16,9 +16,11 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError
+from sre_agent.gate.pipeline import Gate, Refusals, Scope, ScopeDeclaration, declare, failing_as
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationEvaluation,
@@ -69,6 +71,39 @@ NOT_FOUND_CODES = {
     "run_not_found": "The requested incident run was not found.",
     "snapshot_absent": "No snapshot exists for this run yet.",
 }
+
+
+UNAUTHENTICATED = AuthenticationFailed("Authentication is required.")
+DENIED = GovernedError(
+    403, "not_authorized", "The principal is not authorized to read this incident."
+)
+INVALID = GovernedError(422, "validation_error", "The request is invalid.")
+INVALID_CURSOR = GovernedError(422, "invalid_cursor", "The request is invalid.")
+UNAVAILABLE = GovernedError(
+    503,
+    "storage_unavailable",
+    "Incident storage is temporarily unavailable.",
+    retryable=True,
+    retry_after=RETRY_AFTER_SECONDS,
+)
+NOT_FOUND = {
+    code: GovernedError(404, code, message)
+    for code, message in (
+        ("incident_not_found", "The requested incident was not found."),
+        ("run_absent", "The incident has no runs yet."),
+        ("run_not_found", "The requested incident run was not found."),
+        ("snapshot_absent", "No snapshot exists for this run yet."),
+    )
+}
+
+
+def read_operation(method: str, path: str, action: str = READ_ACTION) -> ScopeDeclaration:
+    """An incident read on the pinned workflow, registered in the gate."""
+    return declare(method, path, action=action, resource_type=WORKFLOW_RESOURCE_TYPE,
+                   resource_id="incident-response")  # fmt: skip
+
+
+REFUSALS = Refusals(unauthenticated=UNAUTHENTICATED, denied=DENIED, unavailable=UNAVAILABLE)
 
 
 class IncidentWorkflowResourceReader:
@@ -130,8 +165,17 @@ async def consistent_run_state(
     raise StateReadRaceError(run_id)
 
 
+def _identifiers(incident_id: str, run_id: str | None = None) -> None:
+    if re.fullmatch(IDENTIFIER_PATTERN, incident_id) is None:
+        raise INVALID
+    if run_id is not None and re.fullmatch(RUN_ID_PATTERN, run_id) is None:
+        raise INVALID
+
+
 class IncidentQueryService:
     """Read-only incident queries over the authoritative unit of work."""
+
+    action = READ_ACTION
 
     def __init__(
         self,
@@ -142,13 +186,20 @@ class IncidentQueryService:
     ) -> None:
         self.sessions, self.workflow, self.units = sessions, workflow, units
         self._authorizer = authorizer or self._default_authorizer
+        self.scope = Scope(self.action, WORKFLOW_RESOURCE_TYPE, workflow.workflow_id)
+        self._gate: Gate[Any] = Gate(
+            sessions,
+            REFUSALS,
+            authenticate=lambda authorization: self._authenticate(authorization),
+            authorizer=lambda session, context, scope: self._authorizer(session, context.principal),
+        )
 
     async def _default_authorizer(self, session: Any, principal: Principal) -> AuthorizationEvaluation:  # fmt: skip
         engine = AuthorizationDecisionEngine(
             IncidentWorkflowResourceReader(self.workflow), GrantRepository(session)
         )
         return await engine.evaluate(
-            principal, READ_ACTION, WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id
+            principal, self.action, WORKFLOW_RESOURCE_TYPE, self.workflow.workflow_id
         )
 
     async def _authenticate(self, authorization: str | None) -> PrincipalContext | None:
@@ -157,6 +208,25 @@ class IncidentQueryService:
             return None
         async with self.sessions() as session:
             return await CredentialRepository(session).authenticate(key)
+
+    async def _read(
+        self,
+        operation: ScopeDeclaration,
+        authorization: str | None,
+        validate: Callable[[], Any],
+        use_case: Any,
+    ) -> Response:
+        return await self._gate.run(
+            operation, authorization, self.scope, use_case, validate=validate
+        )
+
+    async def _incident(self, incident_id: str) -> IncidentRecord:
+        with failing_as(UNAVAILABLE):
+            async with self.units() as work:
+                record = await work.incidents.get(incident_id)
+        if record is None:
+            raise NOT_FOUND["incident_not_found"]
+        return record
 
     def _error(
         self,
