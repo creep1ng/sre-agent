@@ -121,5 +121,5 @@ findings, assigning remediation separately rather than hiding failures.
 CI retains sanitized candidate-bound aggregate results for 30 days. Keep acceptance
 media in durable, access-appropriate links reviewed by a human. Do not upload raw
 request/response traces, production data, environment files or entire service dumps.
-Coverage and dependency audits are informative, with no invented thresholds or
-automatic dependency edits. See [CI controls](ci-controls.md).
+Coverage and mutation diagnostics are informative, with no invented thresholds.
+The weekly dependency audits were removed by #1082. See [CI controls](ci-controls.md).
