@@ -30,7 +30,6 @@ NOT_YET_MIGRATED: set[tuple[str, str]] = {
     ("GET", "/v1/audit-events"),
     ("GET", "/v1/audit-events/{id}"),
     ("GET", "/v1/mcp/discovery"),
-    ("GET", "/v1/skills/{skill_id}/{version}/resolve"),
     ("GET", "/v1/usage/consumption"),
     ("GET", "/v1/usage/requests"),
     ("POST", "/v1/mcp/tools/{tool_id}"),
