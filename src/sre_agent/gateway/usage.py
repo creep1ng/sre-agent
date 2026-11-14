@@ -6,13 +6,11 @@ import json
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
-from time import monotonic
 from typing import Annotated, Any, Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response, Security
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -34,7 +32,6 @@ from sre_agent.gate.pipeline import (
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.usage_requests import read_requests
 from sre_agent.gateway.usage_requests_models import UsageRequestsResponse
-from sre_agent.governance.dto import AuthorizationDenialCause
 from sre_agent.persistence.models import AuditEventRow
 
 SUPPORTED_MONTH_PATTERN = (
@@ -463,7 +460,7 @@ USAGE_DECLARED = [
         resource_type="administrative_control",
         resource_id="usage",
     )
-    for path in ("/v1/usage/consumption",)
+    for path in ("/v1/usage/consumption", "/v1/usage/requests")
 ]
 OPERATIONS = {declaration.path: declaration for declaration in USAGE_DECLARED}
 REFUSALS = Refusals(
@@ -568,132 +565,15 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             validate=lambda: selector(request, body=body),
         )
 
-    async def finish(
-        request: Request,
-        *,
-        status: int,
-        stage: str,
-        code: str | None = None,
-        message: str | None = None,
-        payload: dict[str, Any] | UsageReadResponse | None = None,
-        context: Any = None,
-        decision: Any = None,
-        authorization_denial_cause: AuthorizationDenialCause | None = None,
-        resource_ref: tuple[str, str] | None = None,
-    ) -> JSONResponse | UsageReadResponse:
-        request_id = UUID(str(getattr(request.state, "usage_request_id", None) or UUID(int=0)))
-        started = getattr(request.state, "usage_started", monotonic())
-        reason = {
-            "validation_error": "contract_validation_failed",
-            "usage_scope_too_large": "contract_validation_failed",
-            "storage_unavailable": "upstream_unavailable",
-            "authentication_failed": "authentication_failed",
-            "resource_unavailable": "no_matching_grant",
-        }.get(code, code)
-        if projection._audit_store is None:
-            audit_failed = True
-        else:
-            try:
-                event = projection._audit.control_event(
-                    request_id,
-                    status,
-                    max(0, int((monotonic() - started) * 1000)),
-                    stage,
-                    operation="usage.read",
-                    action="admin.read",
-                    reason=reason,
-                    retryable=status in {500, 503, 504},
-                    context=context,
-                    resource_ref=resource_ref,
-                    decision=decision,
-                    authorization_denial_cause=authorization_denial_cause,
-                )
-                await projection._audit_store.append(event)
-                audit_failed = False
-            except Exception:
-                audit_failed = True
-        if audit_failed:
-            return JSONResponse(
-                {
-                    "error": {"code": "audit_unavailable", "message": "Audit unavailable."},
-                    "request_id": str(request_id),
-                    "retryable": True,
-                },
-                status_code=503,
-            )
-        if isinstance(payload, UsageReadResponse):
-            return payload
-        if payload is not None:
-            return JSONResponse(payload, status_code=status)
-        public_code = code or "storage_unavailable"
-        public_message = message or "Usage storage is temporarily unavailable."
-        return JSONResponse(
-            {
-                "error": {"code": public_code, "message": public_message},
-                "request_id": str(request_id),
-                "retryable": status in {500, 503, 504},
-            },
-            status_code=status,
-            headers={"WWW-Authenticate": "Bearer"} if status == 401 else None,
-        )
-
-    async def authorize_usage(request: Request) -> tuple[Any, Any, JSONResponse | None]:
-        """Share the governed authorization and audited denial path across usage reads."""
-        try:
-            context, evaluation = await authorize_governed_access(
-                projection._sessions,
-                request.headers.get("authorization"),
-                "admin.read",
-                "administrative_control",
-                "usage",
-            )
-        except AuthenticationFailed:
-            denied = await finish(
-                request,
-                status=401,
-                stage="authentication",
-                code="authentication_failed",
-                message="Authentication failed.",
-            )
-            return None, None, denied
-        except Exception:
-            denied = await finish(request, status=503, stage="audit", code="storage_unavailable")
-            return None, None, denied
-        if evaluation.decision.decision == "deny":
-            denied = await finish(
-                request,
-                status=403,
-                stage="authorization",
-                code="resource_unavailable",
-                message="Administrative read is not authorized.",
-                context=context,
-                decision=evaluation.decision,
-                authorization_denial_cause=evaluation.denial_cause,
-                resource_ref=("administrative_control", "usage"),
-            )
-            return None, None, denied
-        return context, evaluation, None
-
     class UsageReadRoute(APIRoute):
         def get_route_handler(self):
             route_handler = super().get_route_handler()
 
             async def validation_audited_handler(request: Request):
-                # The routes not moved to the gate yet read these in finish().
-                request.state.usage_request_id = uuid4()
-                request.state.usage_started = monotonic()
                 try:
                     return await route_handler(request)
                 except RequestValidationError:
-                    if request.url.path in OPERATIONS:
-                        return await read(request, None, body=b"invalid")
-                    return await finish(
-                        request,
-                        status=422,
-                        stage="validation",
-                        code="validation_error",
-                        message="Exactly one bounded usage selector is required.",
-                    )
+                    return await read(request, None, body=b"invalid")
 
             return validation_audited_handler
 
@@ -787,11 +667,7 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
             "x-required-query-one-of": ["request_id", "incident_id", "month"],
             "x-maximum-evidence-rows": UsageReadProjection.MAX_ROWS,
             "x-reject-unknown-query-parameters": True,
-            "x-governed-scope": {
-                "action": "admin.read",
-                "resource_type": "administrative_control",
-                "resource_id": "usage",
-            },
+            **USAGE_DECLARED[1].openapi_extra,
         },
     )
     async def read_usage_requests(
@@ -800,81 +676,19 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
         incident_id: Annotated[str | None, Query(min_length=1, max_length=128)] = None,
         month: Annotated[str | None, Query(pattern=SUPPORTED_MONTH_PATTERN)] = None,
         _bearer: Annotated[HTTPAuthorizationCredentials | None, Security(_usage_bearer)] = None,
-    ) -> UsageRequestsResponse | JSONResponse:
-        request.state.usage_request_id = uuid4()
-        supplied = list(request.query_params.multi_items())
-        supplied_names = [name for name, _ in supplied]
-        if (
-            await request.body()
-            or any(name not in selector_names for name in supplied_names)
-            or any(name in known_unbounded for name in supplied_names)
-            or len(supplied) != 1
-        ):
-            return await finish(
-                request,
-                status=422,
-                stage="validation",
-                code="validation_error",
-                message="Exactly one bounded usage selector is required.",
-            )
+    ) -> Response:
+        async def requests(admission: Admission, filters: dict[str, Any]) -> Released:
+            admission.facts["admitted"] = True
+            # A storage failure, a malformed snapshot or consumption evidence is answered as
+            # unavailable, never as raw persisted data.
+            with failing_as(REFUSALS.unavailable):
+                try:
+                    result = await read_requests(projection, **filters)
+                except UsageReadLimitExceeded:
+                    raise SCOPE_TOO_LARGE from None
+                response = UsageRequestsResponse.model_validate_json(json.dumps(result))
+            return Released(response.model_dump(mode="json"))
 
-        filters: dict[str, Any] = {
-            name: value
-            for name, value in {
-                "request_id": request_id,
-                "incident_id": incident_id,
-                "month": month,
-            }.items()
-            if value is not None
-        }
-        if len(filters) != 1 or (
-            month is not None and re.fullmatch(SUPPORTED_MONTH_PATTERN, month) is None
-        ):
-            return await finish(
-                request,
-                status=422,
-                stage="validation",
-                code="validation_error",
-                message="The usage selector is invalid.",
-            )
-
-        context, evaluation, denial = await authorize_usage(request)
-        if denial is not None:
-            return denial
-        try:
-            result = await read_requests(projection, **filters)
-            response = UsageRequestsResponse.model_validate_json(json.dumps(result))
-        except UsageReadLimitExceeded:
-            return await finish(
-                request,
-                status=413,
-                stage="validation",
-                code="usage_scope_too_large",
-                message="The usage scope exceeds the read limit.",
-                context=context,
-                decision=evaluation.decision,
-                resource_ref=("administrative_control", "usage"),
-            )
-        except Exception:
-            # Any malformed snapshot, consumption evidence, or storage failure is
-            # sanitized as unavailable rather than returning raw persisted data.
-            return await finish(
-                request,
-                status=503,
-                stage="audit",
-                code="storage_unavailable",
-                context=context,
-                decision=evaluation.decision,
-                resource_ref=("administrative_control", "usage"),
-            )
-        return await finish(
-            request,
-            status=200,
-            stage="authorization",
-            payload=response.model_dump(mode="json"),
-            context=context,
-            decision=evaluation.decision,
-            resource_ref=("administrative_control", "usage"),
-        )
+        return await read(request, requests, body=await request.body())
 
     return router
