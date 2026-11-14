@@ -3,17 +3,29 @@
 
 import re
 from typing import Any
-from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, Request, Response
 
-from sre_agent.governance.dto import PrincipalContext
+from sre_agent.gate.errors import GovernedError
+from sre_agent.gate.errors import refusal as status_refusal
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    ScopeDeclaration,
+    declare,
+    failing_as,
+)
 from sre_agent.incident.workflow import IncidentWorkflow
-from sre_agent.persistence.api_keys import is_api_key
 from sre_agent.persistence.database import Database
-from sre_agent.persistence.repositories import CredentialRepository
+from sre_agent.persistence.repositories import ResourceRepository
 from sre_agent.triage.service import (
+    ACTIONS,
+    READ_ACTION,
+    WORKFLOW_ID,
+    WORKFLOW_TYPE,
     InvestigationDispatcher,
     TriageError,
     TriageService,
@@ -23,6 +35,21 @@ from sre_agent.vocabulary import TransitionId, is_identifier
 KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 RETRY_AFTER_SECONDS = "5"
 MALFORMED = object()
+WORKFLOW = (WORKFLOW_TYPE, WORKFLOW_ID)
+TRIAGE_PATH = "/v1/alerts/{alert_id}/triage"
+
+
+def _operation(method: str, path: str, action: str) -> ScopeDeclaration:
+    return declare(
+        method, path, action=action, resource_type=WORKFLOW_TYPE, resource_id=WORKFLOW_ID
+    )
+
+
+STATE = _operation("GET", TRIAGE_PATH, READ_ACTION)
+CONTEXT = _operation("GET", TRIAGE_PATH + "/context", READ_ACTION)
+ELIGIBLE = _operation("GET", TRIAGE_PATH + "/eligible-incidents", READ_ACTION)
+# The action depends on the operation; the declaration names the first triage step's.
+COMMAND = _operation("POST", TRIAGE_PATH + "/commands", ACTIONS[TransitionId.OPEN_TRIAGE])
 
 # Closed command payloads mirrored from triage-command.schema.yaml (no new
 # runtime dependency to load it here): unknown operations and extra keys are
@@ -49,6 +76,18 @@ MESSAGES = {
 }
 
 
+def refusal(status: int, code: str) -> GovernedError:
+    """A triage refusal by status, worded as the triage contract words it."""
+    return status_refusal(status, code, MESSAGES[status], retry_after=RETRY_AFTER_SECONDS)
+
+
+REFUSALS = Refusals(
+    unauthenticated=refusal(401, "authentication_failed"),
+    denied=refusal(403, "not_authorized"),
+    unavailable=refusal(503, "storage_unavailable"),
+)
+
+
 class TriageHttpService:
     """HTTP boundary for triage commands; the service decides everything else."""
 
@@ -62,35 +101,16 @@ class TriageHttpService:
         self._sessions = database.sessions
         self._investigator = investigator
         self._service = TriageService(database, workflow)
+        # The workflow's own resource row, as the triage service reads it. The service checks
+        # the grant again inside its transaction, with the human identity linking needs.
+        self._gate: Gate[Any] = Gate(self._sessions, REFUSALS, facts=ResourceRepository)
 
-    async def _authenticate(self, authorization: str | None) -> PrincipalContext | None:
-        scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
-            return None
-        async with self._sessions() as session:
-            return await CredentialRepository(session).authenticate(key)
-
-    def _error(
-        self,
-        request_id: Any,
-        status: int,
-        code: str,
-        headers: dict[str, str] | None = None,
-    ) -> JSONResponse:
-        response = JSONResponse(
-            {
-                "error": {"code": code, "message": MESSAGES[status]},
-                "request_id": str(request_id),
-                "retryable": status == 503,
-            },
-            status,
-        )
-        merged = dict(headers or {})
-        if status == 503:
-            merged.setdefault("Retry-After", RETRY_AFTER_SECONDS)
-        for name, value in merged.items():
-            response.headers[name] = value
-        return response
+    async def _domain(self, call: Any) -> Any:
+        with failing_as(REFUSALS.unavailable):
+            try:
+                return await call
+            except TriageError as error:
+                raise refusal(error.http_status, error.code) from None
 
     async def post_command(
         self,
@@ -99,159 +119,149 @@ class TriageHttpService:
         authorization: str | None,
         idempotency_key: str | None,
         background: BackgroundTasks | None = None,
-    ) -> JSONResponse:
-        request_id = uuid4()
-        if idempotency_key is None or re.fullmatch(KEY_PATTERN, idempotency_key) is None:
-            return self._error(request_id, 400, "invalid_idempotency_key")
-        if raw is MALFORMED:
-            return self._error(request_id, 400, "invalid_command")
-        operation = raw.get("operation") if isinstance(raw, dict) else None
-        allowed_keys = ALLOWED_KEYS.get(operation) if isinstance(operation, str) else None
-        if allowed_keys is None or set(raw) - allowed_keys:
-            return self._error(request_id, 422, "validation_error")
-        expected_version = raw.get("expected_version")
-        if isinstance(expected_version, bool) or not isinstance(expected_version, int):
-            return self._error(request_id, 400, "invalid_command")
-        for field in ("reason", "severity", "impact", "target_incident_id"):
-            value = raw.get(field)
-            if value is not None and not isinstance(value, str):
-                return self._error(request_id, 400, "invalid_command")
-        try:
-            context = await self._authenticate(authorization)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        if context is None:
-            return self._error(
-                request_id, 401, "authentication_failed", headers={"WWW-Authenticate": "Bearer"}
+    ) -> Response:
+        def validate() -> str:
+            if idempotency_key is None or re.fullmatch(KEY_PATTERN, idempotency_key) is None:
+                raise refusal(400, "invalid_idempotency_key")
+            if raw is MALFORMED:
+                raise refusal(400, "invalid_command")
+            operation = raw.get("operation") if isinstance(raw, dict) else None
+            allowed_keys = ALLOWED_KEYS.get(operation) if isinstance(operation, str) else None
+            if allowed_keys is None or set(raw) - allowed_keys:
+                raise refusal(422, "validation_error")
+            expected_version = raw.get("expected_version")
+            if isinstance(expected_version, bool) or not isinstance(expected_version, int):
+                raise refusal(400, "invalid_command")
+            for field in ("reason", "severity", "impact", "target_incident_id"):
+                value = raw.get(field)
+                if value is not None and not isinstance(value, str):
+                    raise refusal(400, "invalid_command")
+            try:
+                self._service.check(
+                    raw["operation"],
+                    alert_id,
+                    expected_version,
+                    raw.get("reason"),
+                    raw.get("severity"),
+                    raw.get("impact"),
+                    raw.get("target_incident_id"),
+                    raw.get("alert_context"),
+                    idempotency_key,
+                )
+            except TriageError as error:
+                raise refusal(error.http_status, error.code) from None
+            return raw["operation"]
+
+        async def command(admission: Admission, operation: str) -> Released:
+            result = await self._domain(
+                self._service.execute(
+                    admission.context.principal,
+                    alert_id=alert_id,
+                    operation=operation,
+                    expected_version=raw["expected_version"],
+                    reason=raw.get("reason"),
+                    severity=raw.get("severity"),
+                    impact=raw.get("impact"),
+                    alert_context=raw.get("alert_context"),
+                    target_incident_id=raw.get("target_incident_id"),
+                    idempotency_key=idempotency_key,
+                )
             )
-        try:
-            result = await self._service.execute(
-                context.principal,
-                alert_id=alert_id,
-                operation=raw["operation"],
-                expected_version=raw["expected_version"],
-                reason=raw.get("reason"),
-                severity=raw.get("severity"),
-                impact=raw.get("impact"),
-                alert_context=raw.get("alert_context"),
-                target_incident_id=raw.get("target_incident_id"),
-                idempotency_key=idempotency_key,
+            if (
+                result.investigation_run_id is not None
+                and result.incident_id is not None
+                and self._investigator is not None
+                and background is not None
+            ):
+                background.add_task(
+                    self._investigator.dispatch,
+                    result.incident_id,
+                    result.investigation_run_id,
+                )
+            return Released(
+                {
+                    "alert_id": alert_id,
+                    "status": result.status,
+                    "incident_id": result.incident_id,
+                    "expected_version": result.expected_version,
+                    "reason": raw.get("reason"),
+                    "actor": result.actor,
+                    "decided_at": result.decided_at,
+                    "decision_origin": result.decision_origin,
+                    "responsible_system": result.responsible_system,
+                },
+                result.http_status,
             )
-        except TriageError as error:
-            return self._error(request_id, error.http_status, error.code)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        if (
-            result.investigation_run_id is not None
-            and result.incident_id is not None
-            and self._investigator is not None
-            and background is not None
-        ):
-            background.add_task(
-                self._investigator.dispatch,
-                result.incident_id,
-                result.investigation_run_id,
-            )
-        return JSONResponse(
-            {
-                "alert_id": alert_id,
-                "status": result.status,
-                "incident_id": result.incident_id,
-                "expected_version": result.expected_version,
-                "reason": raw.get("reason"),
-                "actor": result.actor,
-                "decided_at": result.decided_at,
-                "decision_origin": result.decision_origin,
-                "responsible_system": result.responsible_system,
-            },
-            status_code=result.http_status,
+
+        return await self._gate.run(
+            COMMAND,
+            authorization,
+            lambda operation: Scope(ACTIONS[operation], *WORKFLOW),
+            command,
+            validate=validate,
         )
 
-    async def get_state(self, alert_id: str, authorization: str | None) -> JSONResponse:
+    async def _read(
+        self, operation: ScopeDeclaration, alert_id: str, authorization: str | None, read: Any
+    ) -> Response:
+        def validate() -> None:
+            if not isinstance(alert_id, str) or not is_identifier(alert_id):
+                raise refusal(400, "invalid_command")
+
+        async def use_case(admission: Admission, _: None) -> Released:
+            return Released(await self._domain(read(admission.context.principal)))
+
+        return await self._gate.run(
+            operation, authorization, Scope(READ_ACTION, *WORKFLOW), use_case, validate=validate
+        )
+
+    async def get_state(self, alert_id: str, authorization: str | None) -> Response:
         """Contract getAlertTriage: current triage state, no mutation."""
-        request_id = uuid4()
-        if not isinstance(alert_id, str) or not is_identifier(alert_id):
-            return self._error(request_id, 400, "invalid_command")
-        try:
-            context = await self._authenticate(authorization)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        if context is None:
-            return self._error(
-                request_id, 401, "authentication_failed", headers={"WWW-Authenticate": "Bearer"}
-            )
-        try:
-            read = await self._service.read_state(context.principal, alert_id=alert_id)
-        except TriageError as error:
-            return self._error(request_id, error.http_status, error.code)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        return JSONResponse(read, status_code=200)
+        return await self._read(
+            STATE,
+            alert_id,
+            authorization,
+            lambda principal: self._service.read_state(principal, alert_id=alert_id),
+        )
 
-    async def get_context(self, alert_id: str, authorization: str | None) -> JSONResponse:
+    async def get_context(self, alert_id: str, authorization: str | None) -> Response:
         """Return advisory state and domain-authorized next actions."""
-        request_id = uuid4()
-        if not isinstance(alert_id, str) or not is_identifier(alert_id):
-            return self._error(request_id, 400, "invalid_command")
-        try:
-            context = await self._authenticate(authorization)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        if context is None:
-            return self._error(
-                request_id, 401, "authentication_failed", headers={"WWW-Authenticate": "Bearer"}
-            )
-        try:
-            projection = await self._service.read_context(context.principal, alert_id=alert_id)
-        except TriageError as error:
-            return self._error(request_id, error.http_status, error.code)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        return JSONResponse(projection, status_code=200)
+        return await self._read(
+            CONTEXT,
+            alert_id,
+            authorization,
+            lambda principal: self._service.read_context(principal, alert_id=alert_id),
+        )
 
-    async def get_eligible_incidents(
-        self, alert_id: str, authorization: str | None
-    ) -> JSONResponse:
+    async def get_eligible_incidents(self, alert_id: str, authorization: str | None) -> Response:
         """List eligible link destinations without checking alert inventory or triage state."""
-        request_id = uuid4()
-        if not isinstance(alert_id, str) or not is_identifier(alert_id):
-            return self._error(request_id, 400, "invalid_command")
-        try:
-            context = await self._authenticate(authorization)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        if context is None:
-            return self._error(
-                request_id, 401, "authentication_failed", headers={"WWW-Authenticate": "Bearer"}
-            )
-        try:
-            result = await self._service.list_eligible_incidents(context.principal)
-        except TriageError as error:
-            return self._error(request_id, error.http_status, error.code)
-        except Exception:
-            return self._error(request_id, 503, "storage_unavailable")
-        return JSONResponse(result, status_code=200)
+        return await self._read(
+            ELIGIBLE,
+            alert_id,
+            authorization,
+            lambda principal: self._service.list_eligible_incidents(principal),
+        )
 
 
 def triage_router(service: TriageHttpService) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/alerts/{alert_id}/triage")
-    async def get_state(alert_id: str, request: Request) -> JSONResponse:
+    async def get_state(alert_id: str, request: Request) -> Response:
         return await service.get_state(alert_id, request.headers.get("authorization"))
 
     @router.get("/v1/alerts/{alert_id}/triage/context")
-    async def get_context(alert_id: str, request: Request) -> JSONResponse:
+    async def get_context(alert_id: str, request: Request) -> Response:
         return await service.get_context(alert_id, request.headers.get("authorization"))
 
     @router.get("/v1/alerts/{alert_id}/triage/eligible-incidents")
-    async def get_eligible_incidents(alert_id: str, request: Request) -> JSONResponse:
+    async def get_eligible_incidents(alert_id: str, request: Request) -> Response:
         return await service.get_eligible_incidents(alert_id, request.headers.get("authorization"))
 
     @router.post("/v1/alerts/{alert_id}/triage/commands")
     async def post_command(
         alert_id: str, request: Request, background: BackgroundTasks
-    ) -> JSONResponse:
+    ) -> Response:
         try:
             raw = await request.json()
         except Exception:

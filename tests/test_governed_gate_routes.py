@@ -194,6 +194,18 @@ CASES = [
          effect=RUN_EVENTS, invalid=(RUN + "/commands", {}, 422)),  # runs
     Case("POST", INCIDENT + "/runs", "DEMO_HUMAN", "RESTRICTED_HARNESS", 201, 403, START, KEY,
          effect=RUNS, invalid=(INCIDENT + "/runs", {}, 422)),  # runs
+    Case("GET", "/v1/alerts/{declared}/triage", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=("/v1/alerts/X/triage", None, 400)),  # triage
+    Case("GET", "/v1/alerts/{declared}/triage/context", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200,
+         403, invalid=("/v1/alerts/X/triage/context", None, 400)),  # triage
+    Case("GET", "/v1/alerts/{alert}/triage/eligible-incidents", "DEMO_HUMAN",
+         "RESTRICTED_HARNESS", 200, 403),  # triage
+    Case("POST", "/v1/alerts/{alert}/triage/commands", "DEMO_HUMAN", "RESTRICTED_HARNESS", 201,
+         403, lambda facts: DECLARE | {"alert_context": facts["context"]},
+         {"Idempotency-Key": "gate-1021-triage-key"}, effect=TRIAGE,
+         vary=lambda body, label: body | {"reason": f"Payment fails ({label})."},
+         invalid=("/v1/alerts/{alert}/triage/commands",
+                  {"operation": "triage_dismiss", "expected_version": 1}, 422)),  # triage
 ]  # fmt: skip
 
 
