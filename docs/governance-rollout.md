@@ -9,8 +9,11 @@ publication instead of assuming another task's work has landed.
 
 - Shared workflow, evidence template, metadata policy, locked images, import/type gates, production-image browser stage and diagnostics: published as a draft PR stack. Local verification includes the static browser lane (2/2), production-image browser lane (4/4) with no API/web source mounts or host ports, and a bounded authorization mutation run (83/83 killed); hosted checks are pilot evidence, not active merge protection.
 - Native GitHub secret scanning and push protection: enabled with API readback.
-- Required quality/evidence checks, stale-approval dismissal and governance review:
+- Required quality checks, stale-approval dismissal and governance review:
   **enforcement partial**, pending administrative activation after the live pilot.
+- `pr-governance` metadata check: retired by #1081. It validated the shape of the PR
+  description, not delivery. The slice table below still lists it as slice 3 because that table
+  records how #183 was published.
 - Team onboarding, responsible reviewers and estimation: human coordination remains
   required. Keep assignees/labels in GitHub, SP and capacity in Projects, and
   dependencies in native `blocked by`/`blocks`; do not invent planning metadata.
@@ -45,12 +48,7 @@ consumer/configuration changes needed to validate that lock. Stage `compose.yaml
 replacements (6 changed lines) belong to slice 5; its 51-line E2E block belongs
 to slice 7. Do not combine the total worktree into one review unit.
 
-The trusted `pr-governance` workflow loads its helper from the default branch,
-not the PR candidate. It therefore cannot validate its own first landing. Bootstrap
-slice 3 through ordinary independent review, then run the hosted pilot before
-requiring `pr-governance` as a protected context. A policy PR initially fails the old
-default policy; use one explicit admin ruleset bypass only for that bootstrap, then update
-the ruleset and read it back. Do not change live settings or merge as part of this record.
+Do not change live settings or merge as part of this record.
 
 Publication planning for #183 is authorized, but every actual PR still needs
 current-base metadata and maintainer review. CI requires no approval comment,
@@ -61,28 +59,18 @@ remaining hosted and human acceptance evidence.
 
 ## Pilot before required checks
 
-The trusted metadata helper must first land on the default branch. Its workflow
-never loads helper code from a PR even during bootstrap. Do not change that rule
-just to make the first PR green. Use a team-authorized sandbox for hosted negative
+Use a team-authorized sandbox for hosted negative
 cases, or a real contribution for the positive path; do not manufacture noisy PRs
 against production. Local API simulations complement but do not replace this pilot.
 
 Record candidate/base/tested SHA, workflow URL, observed status and a sanitized screenshot of the actual acceptance result for these scenarios. A video is optional; use its real link or the documented no-video sentence, never a fabricated URL:
 
-- Both small and large PRs report valid size metadata without a custom approval gate.
-- Missing screenshot or commands fails; a video passes only as a real link or the documented no-video sentence; empty templates fail.
-- Change base/head: recompute metadata and reevaluate evidence freshness during merge review.
 - Manifest/lock mismatch, direct/indirect forbidden import against a copied candidate, and scoped type mismatch fail their respective stage.
 - Candidate API/web images run with no source mount or host ports; the ordinary and bad-proxy browser scenarios pass/fail as designed.
 - Failure, cancellation, skip or missing mandatory CI job fails Quality gate.
 - A later push dismisses approval after ruleset activation.
-- PR commands/URLs containing shell syntax never execute or get downloaded.
 - A reviewer rejects structurally present but irrelevant evidence.
 - Another contributor reproduces the result without author assistance.
-
-GitHub status updates are asynchronous. Base/permission changes are additionally
-reconciled on a 15-minute schedule that GitHub may delay. Manually dispatch and
-wait for a fresh result after revocation; do not claim an atomic merge-time check.
 
 ## Administrative activation
 
@@ -92,15 +80,13 @@ durable operator backup. The initial local pre-state is in
 `/tmp/issue183-admin-backup`; temporary storage is not a disaster-recovery archive.
 
 1. Read the live check-run/status names and GitHub App identities on the exact pilot
-   head. Require `Quality gate` (check run) and `pr-governance` (commit status),
-   binding each to the observed GitHub Actions integration. Never guess a display
+   head. Require `Quality gate` (check run), bound to the observed GitHub Actions integration. Never guess a display
    prefix or use a similarly named check from another application.
 2. In quality ruleset `20580391`, require current-base successful checks, `0` native
    required approvals, stale-review dismissal, latest-push approval and resolution of
    conversations. The maintainer's merge decision is the human acceptance step. Remove blanket quality
    bypass. Preserve existing deletion, force-push and allowed-merge-method rules.
-3. Preserve merger-authorization ruleset `21689570` unchanged. The metadata policy
-   does not add separate comment, label, or per-commit approvals for governance changes.
+3. Preserve merger-authorization ruleset `21689570` unchanged.
 4. Read both rulesets back and exercise a real blocked integration. Export the
    effective rule and evidence. Only then replace "enforcement partial" with the
    exact activated state. Never assert protection from YAML presence alone.

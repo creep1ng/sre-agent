@@ -166,8 +166,8 @@ missing assertion for an already specified behavior.
 
 ## Administrative controls outside the repository
 
-After a hosted pilot, require the exact observed `Quality gate` check run and
-`pr-governance` status, stale-review dismissal, latest-push approval, and resolved
+After a hosted pilot, require the exact observed `Quality gate` check run,
+stale-review dismissal, latest-push approval, and resolved
 conversations. Set GitHub's native required-approval count to `0`; the maintainer's
 merge decision is the human acceptance step, without separate custom confirmations.
 Restrict governance, CI, lockfile, image, import-boundary and production-browser changes
