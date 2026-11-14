@@ -118,6 +118,18 @@ CASES = [
     Case("GET", RUN + "/context", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          invalid=(INCIDENT + "/runs/bad/context", None, 422)),  # context
     Case("GET", "/v1/action-catalog", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403),  # context
+    Case("GET", "/v1/incidents", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=("/v1/incidents?limit=0", None, 422)),  # incidents
+    Case("GET", INCIDENT, "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=("/v1/incidents/X", None, 422)),  # incidents
+    Case("GET", INCIDENT + "/timeline", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=(INCIDENT + "/timeline?limit=0", None, 422)),  # incidents
+    Case("GET", INCIDENT + "/snapshot", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=(INCIDENT + "/snapshot?run_id=bad", None, 422)),  # incidents
+    Case("GET", RUN, "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=(INCIDENT + "/runs/bad", None, 422)),  # incidents
+    Case("GET", RUN + "/events", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
+         invalid=(RUN + "/events?limit=0", None, 422)),  # incidents
 ]  # fmt: skip
 
 

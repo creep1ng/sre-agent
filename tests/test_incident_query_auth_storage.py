@@ -7,8 +7,10 @@ Malformed credentials still yield 401 without touching the repository.
 """
 
 import asyncio
-from uuid import uuid4
+from unittest.mock import patch
 
+from sre_agent.gate import pipeline
+from sre_agent.gate.pipeline import Admission
 from sre_agent.gateway.incidents import IncidentQueryService
 from sre_agent.incident.workflow import load_incident_workflow
 from sre_agent.persistence.repositories import CredentialRepository
@@ -66,4 +68,14 @@ def test_malformed_bearer_returns_401_without_repository(monkeypatch) -> None:
 
 
 def _run(authorization):
-    return asyncio.run(_service()._authorized_principal(uuid4(), authorization))
+    # The gate authenticates before the route's use case: the principal it admits to the use
+    # case, if any, and the route's response.
+    admitted = []
+
+    def admission(*args, **kwargs):
+        admitted.append(made := Admission(*args, **kwargs))
+        return made
+
+    with patch.object(pipeline, "Admission", admission):
+        response = asyncio.run(_service().get_detail("inc_storage", authorization))
+    return (admitted[0].context.principal if admitted else None), response

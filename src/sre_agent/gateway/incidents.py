@@ -14,13 +14,24 @@ import re
 from datetime import datetime
 from collections.abc import Awaitable, Callable
 from typing import Any
-from uuid import UUID, uuid4
+
+from uuid import UUID
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 
+from sre_agent.gate.authentication import principal_for
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
-from sre_agent.gate.pipeline import Gate, Refusals, Scope, ScopeDeclaration, declare, failing_as
+from sre_agent.gate.pipeline import (
+    Admission,
+    Gate,
+    Refusals,
+    Released,
+    Scope,
+    ScopeDeclaration,
+    declare,
+    failing_as,
+)
 from sre_agent.governance.authorization import (
     AuthorizationDecisionEngine,
     AuthorizationEvaluation,
@@ -30,7 +41,6 @@ from sre_agent.governance.dto import Principal, PrincipalContext, ResourceType
 from sre_agent.incident.persistence import IncidentRecord, IncidentUnitOfWork, RunRecord
 from sre_agent.incident.projections import (
     RUN_ID_PATTERN,
-    MissingDecisionError,
     UnsupportedWorkflowDataError,
     decode_cursor,
     encode_cursor,
@@ -41,8 +51,7 @@ from sre_agent.incident.projections import (
     project_snapshot,
 )
 from sre_agent.incident.workflow import IncidentWorkflow
-from sre_agent.persistence.api_keys import is_api_key
-from sre_agent.persistence.repositories import CredentialRepository, GrantRepository
+from sre_agent.persistence.repositories import GrantRepository
 from sre_agent.vocabulary import IDENTIFIER_PATTERN
 
 WORKFLOW_RESOURCE_TYPE: ResourceType = "incident_workflow"
@@ -103,6 +112,13 @@ def read_operation(method: str, path: str, action: str = READ_ACTION) -> ScopeDe
                    resource_id="incident-response")  # fmt: skip
 
 
+INCIDENT_PATH = "/v1/incidents/{incident_id}"
+LIST = read_operation("GET", "/v1/incidents")
+DETAIL = read_operation("GET", INCIDENT_PATH)
+TIMELINE = read_operation("GET", INCIDENT_PATH + "/timeline")
+SNAPSHOT = read_operation("GET", INCIDENT_PATH + "/snapshot")
+RUN_STATE = read_operation("GET", INCIDENT_PATH + "/runs/{run_id}")
+RUN_EVENTS = read_operation("GET", INCIDENT_PATH + "/runs/{run_id}/events")
 REFUSALS = Refusals(unauthenticated=UNAUTHENTICATED, denied=DENIED, unavailable=UNAVAILABLE)
 
 
@@ -203,11 +219,7 @@ class IncidentQueryService:
         )
 
     async def _authenticate(self, authorization: str | None) -> PrincipalContext | None:
-        scheme, separator, key = authorization.partition(" ") if authorization else ("", "", "")
-        if not separator or scheme.casefold() != "bearer" or not is_api_key(key):
-            return None
-        async with self.sessions() as session:
-            return await CredentialRepository(session).authenticate(key)
+        return await principal_for(self.sessions, authorization)
 
     async def _read(
         self,
@@ -216,9 +228,12 @@ class IncidentQueryService:
         validate: Callable[[], Any],
         use_case: Any,
     ) -> Response:
-        return await self._gate.run(
-            operation, authorization, self.scope, use_case, validate=validate
-        )
+        async def read(admission: Admission, request: Any) -> Any:
+            # Reading the store or projecting what it holds fails as the reads' 503, as before.
+            with failing_as(UNAVAILABLE):
+                return await use_case(admission, request)
+
+        return await self._gate.run(operation, authorization, self.scope, read, validate=validate)
 
     async def _incident(self, incident_id: str) -> IncidentRecord:
         with failing_as(UNAVAILABLE):
@@ -285,50 +300,31 @@ class IncidentQueryService:
             return None, self._error(request_id, 404, "incident_not_found")
         return record, None
 
-    async def _resolve_run(
-        self, request_id: UUID, incident_id: str, run_id: str | None
-    ) -> tuple[RunRecord | None, JSONResponse | None]:
-        try:
-            async with self.units() as work:
-                if run_id is not None:
-                    run = await work.runs.get_for_incident(run_id, incident_id)
-                    if run is None:
-                        return None, self._error(request_id, 404, "run_not_found")
-                    return run, None
+    async def _resolve_run(self, incident_id: str, run_id: str | None) -> RunRecord:
+        async with self.units() as work:
+            if run_id is None:
                 run_ids = await work.runs.list_ids(incident_id)
                 if not run_ids:
-                    return None, self._error(request_id, 404, "run_absent")
-                run = await work.runs.get_for_incident(run_ids[-1], incident_id)
-                if run is None:
-                    return None, self._error(request_id, 404, "run_not_found")
-                return run, None
-        except Exception:
-            return None, self._error(request_id, 503)
+                    raise NOT_FOUND["run_absent"]
+                run_id = run_ids[-1]
+            run = await work.runs.get_for_incident(run_id, incident_id)
+        if run is None:
+            raise NOT_FOUND["run_not_found"]
+        return run
 
-    async def get_detail(self, incident_id: str, authorization: str | None) -> JSONResponse:
-        request_id = uuid4()
-        if not self._valid_identifier(incident_id, IDENTIFIER_PATTERN):
-            return self._error(request_id, 422)
-        _, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        record, error = await self._incident_or_error(request_id, incident_id)
-        if error is not None:
-            return error
-        assert record is not None
-        try:
+    async def get_detail(self, incident_id: str, authorization: str | None) -> Response:
+        async def detail(admission: Admission, _: None) -> Released:
+            record = await self._incident(incident_id)
             async with self.units() as work:
                 run_ids = await work.runs.list_ids(incident_id)
-                fetched = [
-                    await work.runs.get_for_incident(run_id, incident_id) for run_id in run_ids
-                ]
+                fetched = [await work.runs.get_for_incident(run, incident_id) for run in run_ids]
             runs = [run for run in fetched if run is not None]
-            payload = project_detail(record, runs, self.workflow)
-        except UnsupportedWorkflowDataError:
-            return self._error(request_id, 422, "validation_error")
-        except Exception:
-            return self._error(request_id, 503)
-        return JSONResponse(payload, status_code=200)
+            try:
+                return Released(project_detail(record, runs, self.workflow))
+            except UnsupportedWorkflowDataError:
+                raise INVALID from None
+
+        return await self._read(DETAIL, authorization, lambda: _identifiers(incident_id), detail)
 
     async def get_timeline(
         self,
@@ -337,33 +333,27 @@ class IncidentQueryService:
         after: str | None,
         limit: Any,
         authorization: str | None,
-    ) -> JSONResponse:
-        request_id = uuid4()
-        if not self._valid_identifier(incident_id, IDENTIFIER_PATTERN):
-            return self._error(request_id, 422)
-        if run_id is not None and not self._valid_identifier(run_id, RUN_ID_PATTERN):
-            return self._error(request_id, 422)
-        try:
-            parsed_limit = int(limit) if limit is not None else DEFAULT_LIMIT
-        except (TypeError, ValueError):
-            return self._error(request_id, 422)
-        if not 1 <= parsed_limit <= MAX_LIMIT:
-            return self._error(request_id, 422)
-        try:
-            sequence = decode_cursor(after)
-        except ValueError:
-            return self._error(request_id, 422, "invalid_cursor")
-        _, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        record, error = await self._incident_or_error(request_id, incident_id)
-        if error is not None:
-            return error
-        run, error = await self._resolve_run(request_id, incident_id, run_id)
-        if error is not None:
-            return error
-        assert run is not None
-        try:
+        operation: "ScopeDeclaration | None" = None,
+    ) -> Response:
+        operation = operation or TIMELINE
+
+        def page_request() -> tuple[int, int]:
+            _identifiers(incident_id, run_id)
+            try:
+                parsed_limit = int(limit) if limit is not None else DEFAULT_LIMIT
+            except (TypeError, ValueError):
+                raise INVALID from None
+            if not 1 <= parsed_limit <= MAX_LIMIT:
+                raise INVALID
+            try:
+                return parsed_limit, decode_cursor(after)
+            except ValueError:
+                raise INVALID_CURSOR from None
+
+        async def timeline(admission: Admission, page_request: tuple[int, int]) -> Released:
+            parsed_limit, sequence = page_request
+            await self._incident(incident_id)
+            run = await self._resolve_run(incident_id, run_id)
             async with self.units() as work:
                 stored = await work.events.list_after(
                     run.run_id, sequence=sequence, limit=parsed_limit + 1
@@ -380,84 +370,60 @@ class IncidentQueryService:
                     payload = event.payload if isinstance(event.payload, dict) else {}
                     decision_id = payload.get("decision_id")
                     document = decisions.get(decision_id) if isinstance(decision_id, str) else None
+                    # A missing decision or unsupported data is a storage fault: the gate's 503.
                     page.append(project_event(event, document))
-        except (MissingDecisionError, UnsupportedWorkflowDataError):
-            return self._error(request_id, 503)
-        except Exception:
-            return self._error(request_id, 503)
-        watermark = max([sequence] + [item["sequence"] for item in page])
-        return JSONResponse(
-            {
-                "events": page,
-                "next_cursor": encode_cursor(watermark),
-                "has_more": len(stored) > parsed_limit,
-            },
-            status_code=200,
-        )
+            watermark = max([sequence] + [item["sequence"] for item in page])
+            return Released(
+                {
+                    "events": page,
+                    "next_cursor": encode_cursor(watermark),
+                    "has_more": len(stored) > parsed_limit,
+                }
+            )
+
+        return await self._read(operation, authorization, page_request, timeline)
 
     async def get_snapshot(
         self, incident_id: str, run_id: str | None, authorization: str | None
-    ) -> JSONResponse:
-        request_id = uuid4()
-        if not self._valid_identifier(incident_id, IDENTIFIER_PATTERN):
-            return self._error(request_id, 422)
-        if run_id is not None and not self._valid_identifier(run_id, RUN_ID_PATTERN):
-            return self._error(request_id, 422)
-        _, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        record, error = await self._incident_or_error(request_id, incident_id)
-        if error is not None:
-            return error
-        run, error = await self._resolve_run(request_id, incident_id, run_id)
-        if error is not None:
-            return error
-        assert record is not None
-        assert run is not None
-        try:
+    ) -> Response:
+        async def snapshot(admission: Admission, _: None) -> Released:
+            await self._incident(incident_id)
+            run = await self._resolve_run(incident_id, run_id)
             async with self.units() as work:
-                snapshot = await work.snapshots.latest(run.run_id)
-                if snapshot is None:
-                    return self._error(request_id, 404, "snapshot_absent")
-            payload = project_snapshot(snapshot, self.workflow)
-        except UnsupportedWorkflowDataError:
-            return self._error(request_id, 422, "validation_error")
-        except Exception:
-            return self._error(request_id, 503)
-        return JSONResponse(payload, status_code=200)
+                latest = await work.snapshots.latest(run.run_id)
+            if latest is None:
+                raise NOT_FOUND["snapshot_absent"]
+            try:
+                return Released(project_snapshot(latest, self.workflow))
+            except UnsupportedWorkflowDataError:
+                raise INVALID from None
 
-    async def get_run_state(
-        self, incident_id: str, run_id: str, authorization: str | None
-    ) -> JSONResponse:
+        return await self._read(
+            SNAPSHOT, authorization, lambda: _identifiers(incident_id, run_id), snapshot
+        )
+
+    async def get_run_state(self, incident_id: str, run_id: str, authorization: str | None) -> Response:  # fmt: skip
         """GET /v1/incidents/{incident_id}/runs/{run_id}: the run-state projection.
 
         The run must belong to the incident in the path; a run of another incident is
         404, exactly like one that does not exist, so the route cannot confirm it.
         """
 
-        request_id = uuid4()
-        if not self._valid_identifier(incident_id, IDENTIFIER_PATTERN):
-            return self._error(request_id, 422)
-        if not self._valid_identifier(run_id, RUN_ID_PATTERN):
-            return self._error(request_id, 422)
-        _, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        _, error = await self._incident_or_error(request_id, incident_id)
-        if error is not None:
-            return error
-        try:
+        async def run_state(admission: Admission, _: None) -> Released:
+            await self._incident(incident_id)
             async with self.units() as work:
                 found = await consistent_run_state(work, run_id, incident_id)
             if found is None:
-                return self._error(request_id, 404, "run_not_found")
+                raise NOT_FOUND["run_not_found"]
             run, sequence = found
-            payload = project_run_state(run, self.workflow, event_sequence=sequence)
-        except UnsupportedWorkflowDataError:
-            return self._error(request_id, 422, "validation_error")
-        except Exception:
-            return self._error(request_id, 503)
-        return JSONResponse(payload, status_code=200)
+            try:
+                return Released(project_run_state(run, self.workflow, event_sequence=sequence))
+            except UnsupportedWorkflowDataError:
+                raise INVALID from None
+
+        return await self._read(
+            RUN_STATE, authorization, lambda: _identifiers(incident_id, run_id), run_state
+        )
 
     async def list_incidents(
         self,
@@ -465,7 +431,7 @@ class IncidentQueryService:
         since: str | None,
         limit: Any,
         authorization: str | None,
-    ) -> JSONResponse:
+    ) -> Response:
         """GET /v1/incidents: incidents most recently updated first, each with its latest run
         and the decision it waits for, if any.
 
@@ -474,24 +440,23 @@ class IncidentQueryService:
         after an ISO 8601 instant with its offset.
         """
 
-        request_id = uuid4()
-        status = status or "recent"
-        try:
-            parsed_limit = int(limit) if limit is not None else LIST_DEFAULT_LIMIT
-            parsed_since = datetime.fromisoformat(since) if since is not None else None
-        except (TypeError, ValueError):
-            return self._error(request_id, 422)
-        if (
-            status not in LIST_STATUSES
-            or not 1 <= parsed_limit <= LIST_MAX_LIMIT
-            or (parsed_since is not None and parsed_since.tzinfo is None)
-        ):
-            return self._error(request_id, 422)
-        _, error = await self._authorized_principal(request_id, authorization)
-        if error is not None:
-            return error
-        excluded = tuple(self.workflow.terminal_states) if status == "open" else ()
-        try:
+        def query() -> tuple[str, datetime | None, int]:
+            try:
+                parsed_limit = int(limit) if limit is not None else LIST_DEFAULT_LIMIT
+                parsed_since = datetime.fromisoformat(since) if since is not None else None
+            except (TypeError, ValueError):
+                raise INVALID from None
+            if (
+                (status or "recent") not in LIST_STATUSES
+                or not 1 <= parsed_limit <= LIST_MAX_LIMIT
+                or (parsed_since is not None and parsed_since.tzinfo is None)
+            ):
+                raise INVALID
+            return status or "recent", parsed_since, parsed_limit
+
+        async def incidents(admission: Admission, query: tuple[str, datetime | None, int]) -> Released:  # fmt: skip
+            listed, parsed_since, parsed_limit = query
+            excluded = tuple(self.workflow.terminal_states) if listed == "open" else ()
             async with self.units() as work:
                 records = await work.incidents.list_recent(
                     exclude_states=excluded, since=parsed_since, limit=parsed_limit + 1
@@ -499,29 +464,29 @@ class IncidentQueryService:
                 runs = await work.runs.latest_for(
                     [record.incident_id for record in records[:parsed_limit]]
                 )
-            items = [
-                project_list_item(record, runs.get(record.incident_id), self.workflow)
-                for record in records[:parsed_limit]
-            ]
-        except UnsupportedWorkflowDataError:
-            return self._error(request_id, 422, "validation_error")
-        except Exception:
-            return self._error(request_id, 503)
-        return JSONResponse(
-            {
-                "incidents": [item for item in items if item is not None],
-                "has_more": len(records) > parsed_limit,
-            },
-            status_code=200,
-            headers={"Cache-Control": "no-store"},
-        )
+            try:
+                items = [
+                    project_list_item(record, runs.get(record.incident_id), self.workflow)
+                    for record in records[:parsed_limit]
+                ]
+            except UnsupportedWorkflowDataError:
+                raise INVALID from None
+            return Released(
+                {
+                    "incidents": [item for item in items if item is not None],
+                    "has_more": len(records) > parsed_limit,
+                },
+                headers={"Cache-Control": "no-store"},
+            )
+
+        return await self._read(LIST, authorization, query, incidents)
 
 
 def incident_router(service: IncidentQueryService) -> APIRouter:
     router = APIRouter()
 
     @router.get("/v1/incidents")
-    async def incidents(request: Request) -> JSONResponse:
+    async def incidents(request: Request) -> Response:
         params = request.query_params
         return await service.list_incidents(
             params.get("status"),
@@ -531,11 +496,11 @@ def incident_router(service: IncidentQueryService) -> APIRouter:
         )
 
     @router.get("/v1/incidents/{incident_id}")
-    async def detail(incident_id: str, request: Request) -> JSONResponse:
+    async def detail(incident_id: str, request: Request) -> Response:
         return await service.get_detail(incident_id, request.headers.get("authorization"))
 
     @router.get("/v1/incidents/{incident_id}/timeline")
-    async def timeline(incident_id: str, request: Request) -> JSONResponse:
+    async def timeline(incident_id: str, request: Request) -> Response:
         params = request.query_params
         return await service.get_timeline(
             incident_id,
@@ -546,7 +511,7 @@ def incident_router(service: IncidentQueryService) -> APIRouter:
         )
 
     @router.get("/v1/incidents/{incident_id}/snapshot")
-    async def snapshot(incident_id: str, request: Request) -> JSONResponse:
+    async def snapshot(incident_id: str, request: Request) -> Response:
         return await service.get_snapshot(
             incident_id,
             request.query_params.get("run_id"),
@@ -554,13 +519,13 @@ def incident_router(service: IncidentQueryService) -> APIRouter:
         )
 
     @router.get("/v1/incidents/{incident_id}/runs/{run_id}")
-    async def run_state(incident_id: str, run_id: str, request: Request) -> JSONResponse:
+    async def run_state(incident_id: str, run_id: str, request: Request) -> Response:
         return await service.get_run_state(
             incident_id, run_id, request.headers.get("authorization")
         )
 
     @router.get("/v1/incidents/{incident_id}/runs/{run_id}/events")
-    async def run_events(incident_id: str, run_id: str, request: Request) -> JSONResponse:
+    async def run_events(incident_id: str, run_id: str, request: Request) -> Response:
         # The timeline of one run: the same page, cursor and projection, with the
         # run fixed by the path instead of chosen by a query parameter.
         params = request.query_params
@@ -570,6 +535,7 @@ def incident_router(service: IncidentQueryService) -> APIRouter:
             params.get("after"),
             params.get("limit"),
             request.headers.get("authorization"),
+            RUN_EVENTS,
         )
 
     return router
