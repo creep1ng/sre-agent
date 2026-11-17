@@ -192,10 +192,13 @@ CASES = [
          invalid=("/v1/incidents/X/postmortem", None, 422)),  # postmortems
     Case("GET", "/v1/incident-memory/changes", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200,
          403),  # postmortems
+    # The denied human sends the command in their own name, as the use case requires.
     Case("POST", "/v1/incidents/{mitigating}/runs/{approving}/commands", "DEMO_HUMAN",
-         "RESTRICTED_HARNESS", 202, 403, COMMAND, {"Idempotency-Key": "gate-1021-command"},
-         effect=RUN_EVENTS, invalid=(RUN + "/commands", {}, 422)),  # runs
-    Case("POST", INCIDENT + "/runs", "DEMO_HUMAN", "RESTRICTED_HARNESS", 201, 403, START, KEY,
+         "ADMIN_HUMAN", 202, 403, COMMAND, {"Idempotency-Key": "gate-1021-command"},
+         effect=RUN_EVENTS, vary=lambda body, label: body | {"actor_reference": ACTOR | {
+             "principal_id": "admin-human" if label == "denied" else "demo-human"}},
+         invalid=(RUN + "/commands", {}, 422)),  # runs
+    Case("POST", INCIDENT + "/runs", "DEMO_HUMAN", "ADMIN_HUMAN", 201, 403, START, KEY,
          effect=RUNS, invalid=(INCIDENT + "/runs", {}, 422)),  # runs
 ]  # fmt: skip
 
