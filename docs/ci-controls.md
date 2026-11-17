@@ -24,6 +24,11 @@ reads `PYTEST_SHARD=<index>/<total>` and gives every test file to exactly one sh
 the slowest files first; without the variable, `pytest` runs the whole suite as before.
 Each shard ends with `alembic check` on a freshly migrated database.
 
+A job does not repeat another job's work in the same run: the shards skip the lint and typing
+that `checks-image` ran, and `compose-smoke` runs the contract harness on the composed stack
+without rerunning `tests/test_responses.py`, which belongs to `unit`. The `issue-14-harness`
+Compose service stays for running those tests alone on a workstation.
+
 The one exception is a documentation-only pull request. The `changes` job runs first and
 classifies the pull request as documentation-only when every changed path is under `docs/` or
 is a root-level `*.md` file, and no file outside `docs/` and `*.md` names that path. For
@@ -62,7 +67,7 @@ first.
 | Configuration lock | Build the runtime image with `uv sync --locked --no-dev` | Manifest/lock drift and runtime dependency resolution |
 | Checks image | Ruff, `lint-imports`, scoped strict mypy, shell and declarative validators | Style, architecture imports, typed interfaces and contract metadata |
 | Unit and contracts | Locked Compose Python tests in four shards, and Node harness | Application behavior and published schemas |
-| Compose smoke | Candidate API, web, database, migration, seed and harness | Startup and composed-service behavior |
+| Compose smoke | Candidate API, web, database, migration, seed and contract harness | Startup and composed-service behavior |
 | Production browser | Containerized Playwright against the candidate API/web images and isolated PostgreSQL | Delivered image, proxy, network and browser behavior |
 | Real journeys | The seeded real-stack incident journeys on their own candidate stack | War room, mitigation review and postmortem against the real API |
 | Deploy executor | The deploy-executor journey over docker-socket-proxy, then with the proxy stopped | Signed operations, rollback/restart idempotency and the proxy deny list |
