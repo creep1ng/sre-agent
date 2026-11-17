@@ -169,7 +169,8 @@ class Terminal:
     inactive: bool = False
 
 
-Auditor = Callable[[Terminal], Awaitable[None]]
+# Writes the terminal audit: of the `Terminal` itself, or of what the gate's `project` made of it.
+Auditor = Callable[[Any], Awaitable[None]]
 Authenticator = Callable[[str | None], Awaitable[PrincipalContext | None]]
 # Authenticates and evaluates one scope in a single call; None as the context is unauthenticated.
 Admitter = Callable[
@@ -192,12 +193,15 @@ class Gate(Generic[T]):
         authorizer: Authorizer | None = None,
         admit: Admitter | None = None,
         audit: Auditor | None = None,
+        project: Callable[[Terminal], Any] | None = None,
     ) -> None:
         self.sessions, self.refusals, self._facts = sessions, refusals, facts
         self._authenticate = authenticate or self._principal
         self._authorizer = authorizer or self._evaluate
         self._admit = admit
         self._audit = audit
+        # Shapes the audit record before the write; its failure is a defect, not the write's.
+        self._project = project
 
     async def _principal(self, authorization: str | None) -> PrincipalContext | None:
         return await active_principal(self.sessions, authorization)
@@ -286,8 +290,9 @@ class Gate(Generic[T]):
                 resolved,
                 inactive,
             )
+            record = terminal if self._project is None else self._project(terminal)
             try:
-                await self._audit(terminal)
+                await self._audit(record)
             except Exception:
                 return error_response(self._audit_failure(error), request_id)
         return error_response(error, request_id) if error is not None else response

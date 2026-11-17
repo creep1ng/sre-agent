@@ -279,7 +279,9 @@ class ResponsesService:  # noqa: E305
         self.sessions, self.provider, self.audit, self.projector = sessions, provider, audit, projector
         self.admission, self.endpoint_catalog = admission, endpoint_catalog
         self.provider_timeout_seconds = provider_timeout_seconds
-        self.gate: Gate[ResponsesRequest] = Gate(sessions, REFUSALS, audit=self._audit)
+        self.gate: Gate[ResponsesRequest] = Gate(
+            sessions, REFUSALS, audit=self._audit, project=self._project
+        )
 
     async def create(self, raw: Any, authorization: str | None) -> Response:
         def validate() -> ResponsesRequest:
@@ -394,8 +396,9 @@ class ResponsesService:  # noqa: E305
         except TimeoutError:
             raise ProviderFailure("timeout", consumption=_empty_consumption("unavailable")) from None
 
-    async def _audit(self, terminal: Terminal) -> None:
-        """The terminal audit of one request, committed before its result is released."""
+    def _project(self, terminal: Terminal) -> tuple[Any, RequestAttribution | None]:
+        """The terminal audit event of one request and its attribution, built before the write as
+        `main` built them: a defect here is a logged 500, not `audit_unavailable`."""
         facts = dict(terminal.facts)
         identifiers = _identifiers(terminal.request) if terminal.request is not None else None
         if terminal.stage in {"validation", "authentication", "audit"}:
@@ -413,6 +416,11 @@ class ResponsesService:  # noqa: E305
         event = self.projector.event(
             terminal.request_id, terminal.status, terminal.latency_ms, terminal.stage, **facts
         )
+        return event, attribution
+
+    async def _audit(self, record: tuple[Any, RequestAttribution | None]) -> None:
+        """The terminal audit write, committed before the request's result is released."""
+        event, attribution = record
         if attribution is None:
             await self.audit.append(event)
             return
