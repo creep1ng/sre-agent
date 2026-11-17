@@ -179,11 +179,12 @@ CASES = [
          invalid=(INCIDENT + "/runs/bad", None, 422)),  # incidents
     Case("GET", RUN + "/events", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
          invalid=(RUN + "/events?limit=0", None, 422)),  # incidents
-    Case("PUT", CLOSING, "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403, _postmortem,
+    # A human without the grant is refused by the gate; the use case refuses an agent itself.
+    Case("PUT", CLOSING, "DEMO_HUMAN", "ADMIN_HUMAN", 200, 403, _postmortem,
          effect=POSTMORTEMS, vary=lambda body, label: body | {"content": body["content"]
                                                               | {"summary": label}},
          invalid=(CLOSING, {}, 422)),  # postmortems
-    Case("POST", CLOSING + "/reviews", "DEMO_HUMAN", "RESTRICTED_HARNESS", 201, 403,
+    Case("POST", CLOSING + "/reviews", "DEMO_HUMAN", "ADMIN_HUMAN", 201, 403,
          lambda facts: {"version": _version(facts), "outcome": "approved"}, effect=REVIEWS,
          vary=lambda body, label: body | {"outcome": "changes_requested", "comment": label},
          invalid=(CLOSING + "/reviews", {}, 422)),  # postmortems
