@@ -17,7 +17,8 @@ concurrency:
 jobs:
   # A pull request that only changes documentation no code reads skips every build and test
   # job, and one that changes no contract input skips contracts. Pushes to main and scheduled
-  # runs always run them all.
+  # runs always run them all. The jobs after checks-image say `!cancelled()`, not `always()`: a
+  # scheduled run goes on after a failure, and a run that a newer push replaced stops.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -79,9 +80,10 @@ jobs:
       - name: Build the locked runtime candidate
         run: docker build --target runtime --tag sre-agent-runtime:${{ github.sha }} -f docker/api.Dockerfile .
 
+  # Not behind configuration-lock: the checks image builds on the same locked base stage.
   checks-image:
-    needs: configuration-lock
-    if: ${{ always() && (github.event_name == 'schedule' || needs.configuration-lock.result == 'success') }}
+    needs: changes
+    if: ${{ needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -98,7 +100,8 @@ jobs:
           shellcheck docker/harness-entrypoint.sh scripts/worktree-compose scripts/run_real_journeys.sh &&
           ruff check --no-cache . && ruff format --check --no-cache . &&
           uv lock --check --no-cache && lint-imports --no-cache &&
-          mypy --cache-dir=/tmp/mypy src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py
+          mypy --cache-dir=/tmp/mypy src/sre_agent/incident/commands.py
+          src/sre_agent/incident/persistence.py src/sre_agent/incident/runtime.py
           src/sre_agent/governance/dto.py src/sre_agent/governance/authorization.py
           src/sre_agent/investigator &&
           python scripts/validate_incident_contracts.py &&
@@ -108,24 +111,39 @@ jobs:
 
   unit:
     needs: checks-image
-    if: ${{ always() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # tests/conftest.py gives each test file to exactly one shard (PYTEST_SHARD). A pull request
+    # stops at the first failing shard; main and the schedule report them all.
+    strategy:
+      fail-fast: ${{ github.event_name == 'pull_request' }}
+      matrix:
+        shard: [1, 2, 3, 4]
     env:
       PYTEST_ADDOPTS: ${{ github.event_name == 'pull_request' && '--maxfail=1' || '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Create local-only Compose inputs
         run: cp .env.example .env
-      - name: Run the locked Python checks container
-        run: docker compose --project-name ci-unit-${{ github.run_id }} --profile checks run --build --rm -e "PYTEST_ADDOPTS=-p no:cacheprovider ${{ env.PYTEST_ADDOPTS }}" python-checks
+      # checks-image already ran the image's lint and typing. `alembic check` needs the head
+      # schema, which the last test module of a shard does not always leave behind.
+      - name: Run one shard of the Python tests in the locked checks container
+        run: >-
+          docker compose --project-name ci-unit-${{ github.run_id }} --profile checks run --build --rm
+          -e "PYTEST_ADDOPTS=-p no:cacheprovider ${{ env.PYTEST_ADDOPTS }}"
+          -e PYTEST_SHARD=${{ matrix.shard }}/${{ strategy.job-total }}
+          python-checks sh -c
+          'python scripts/assert_test_database_isolated.py && pytest &&
+          PYTHONPATH=tests python -c "from database_support import migrate_database; migrate_database()" &&
+          alembic check'
       - name: Remove disposable check services
         if: always()
         run: docker compose --project-name ci-unit-${{ github.run_id }} --profile checks down -v --remove-orphans
 
   contracts:
     needs: [changes, checks-image]
-    if: ${{ always() && needs.changes.outputs.contracts != 'false' && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
+    if: ${{ !cancelled() && needs.changes.outputs.contracts != 'false' && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -167,7 +185,7 @@ jobs:
 
   static-web:
     needs: checks-image
-    if: ${{ always() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -183,10 +201,11 @@ jobs:
       - name: Run static showcase browser smoke
         run: npm run test:browser
 
-  # The composed stack builds its own images, so it runs alongside unit and contracts.
+  # The composed stack, the browser suite and the journeys each build their own images, so they
+  # run alongside unit and contracts.
   compose-smoke:
     needs: checks-image
-    if: ${{ always() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -237,8 +256,8 @@ jobs:
         run: docker compose --project-name ci-smoke-${{ github.run_id }} down -v --remove-orphans
 
   production-browser:
-    needs: compose-smoke
-    if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
+    needs: checks-image
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -292,8 +311,8 @@ jobs:
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-browser-${{ github.run_id }} down -v --remove-orphans
 
   real-journeys:
-    needs: compose-smoke
-    if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
+    needs: checks-image
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -323,8 +342,8 @@ jobs:
         run: docker compose -f compose.yaml -f compose.e2e.yaml --project-name ci-journeys-${{ github.run_id }} --profile e2e down -v --remove-orphans
 
   deploy-executor:
-    needs: compose-smoke
-    if: ${{ always() && (github.event_name == 'schedule' || needs.compose-smoke.result == 'success') }}
+    needs: checks-image
+    if: ${{ !cancelled() && (github.event_name == 'schedule' || needs.checks-image.result == 'success') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -367,6 +386,8 @@ jobs:
       - production-browser
       - real-journeys
       - deploy-executor
+    # always(), unlike the jobs above: a required check that is skipped counts as passed, so a
+    # cancelled run must still end in a failed gate.
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
