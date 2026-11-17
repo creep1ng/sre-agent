@@ -9,11 +9,20 @@ only after the hosted pilot and administrative activation in
 
 Each required job has a timeout, Actions permissions are `contents: read`, and
 all actions use reviewed full SHAs. Pull requests stop before expensive stages
-when the runtime or checks image fails. After the checks image, the unit, contract,
-static-web and composed-stack paths run in parallel, so a unit failure no longer
-holds back the browser jobs; scheduled diagnostics retain `always()` paths for
-investigation. The final gate accepts only `success` from every
-required job; failed, cancelled, skipped, neutral, or missing work fails closed.
+when the checks image fails; it builds on the same locked base stage as the runtime
+image, so `configuration-lock` runs beside it. After the checks image, the unit,
+contract, static-web, composed-stack, browser and journey jobs run in parallel: each
+builds its own images, so none waits for another. Their conditions say `!cancelled()`:
+a scheduled run continues after a failure for investigation, and a run that a newer
+push replaced stops instead of holding the runners and the new run. Only the gate keeps
+`always()`, because a skipped required check would count as passed. The final gate
+accepts only `success` from every required job; failed, cancelled, skipped, neutral,
+or missing work fails closed.
+
+`unit` runs as four shards, each on its own runner and database. `tests/conftest.py`
+reads `PYTEST_SHARD=<index>/<total>` and gives every test file to exactly one shard,
+the slowest files first; without the variable, `pytest` runs the whole suite as before.
+Each shard ends with `alembic check` on a freshly migrated database.
 
 The one exception is a documentation-only pull request. The `changes` job runs first and
 classifies the pull request as documentation-only when every changed path is under `docs/` or
@@ -52,7 +61,7 @@ first.
 | Changes | Classify the pull request's changed paths | Only documentation no code reads skips the path; only a contract input runs contracts |
 | Configuration lock | Build the runtime image with `uv sync --locked --no-dev` | Manifest/lock drift and runtime dependency resolution |
 | Checks image | Ruff, `lint-imports`, scoped strict mypy, shell and declarative validators | Style, architecture imports, typed interfaces and contract metadata |
-| Unit and contracts | Locked Compose Python checks and Node harness | Application behavior and published schemas |
+| Unit and contracts | Locked Compose Python tests in four shards, and Node harness | Application behavior and published schemas |
 | Compose smoke | Candidate API, web, database, migration, seed and harness | Startup and composed-service behavior |
 | Production browser | Containerized Playwright against the candidate API/web images and isolated PostgreSQL | Delivered image, proxy, network and browser behavior |
 | Real journeys | The seeded real-stack incident journeys on their own candidate stack | War room, mitigation review and postmortem against the real API |
