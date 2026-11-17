@@ -206,7 +206,9 @@ CASES = [
          403, invalid=("/v1/alerts/X/triage/context", None, 400)),  # triage
     Case("GET", "/v1/alerts/{alert}/triage/eligible-incidents", "DEMO_HUMAN",
          "RESTRICTED_HARNESS", 200, 403),  # triage
-    Case("POST", "/v1/alerts/{alert}/triage/commands", "DEMO_HUMAN", "RESTRICTED_HARNESS", 201,
+    # The triage service checks the gate's grant again in its transaction: no caller the gate
+    # refuses can make it write, so here the rows cannot catch a write outside the use case.
+    Case("POST", "/v1/alerts/{alert}/triage/commands", "DEMO_HUMAN", "ADMIN_HUMAN", 201,
          403, lambda facts: DECLARE | {"alert_context": facts["context"]},
          {"Idempotency-Key": "gate-1021-triage-key"}, effect=TRIAGE,
          vary=lambda body, label: body | {"reason": f"Payment fails ({label})."},
