@@ -75,8 +75,6 @@ class ScopeDeclaration:
 
 
 _DECLARED: dict[tuple[str, str], ScopeDeclaration] = {}
-# The operations `Gate.run` answered in this process: a declared operation that answers by
-# hand never appears here.
 
 
 def declare(
