@@ -6,11 +6,13 @@ principal accepted; a malformed header accepted; an envelope with other keys, or
 `WWW-Authenticate`. Per route: one allowed and one denied request, a malformed and an unknown
 credential, an inactive principal and, where the route validates, an invalid request with a bad
 and with an ungranted credential. The use case the gate admits is observed directly: the allowed
-request reaches it once, no refusal reaches it. A route that writes is also checked by its rows:
-the allowed request writes, no refusal does, and each refusal carries its own body and
-idempotency key, so it is not a replay of the allowed one. A route that audits is checked by the
-audit rows of each request, found by its `request_id`. With GATE_EVIDENCE set, every request is
-written there as JSON lines.
+request reaches it once, no refusal reaches it. A route that writes is also checked by its rows,
+so a handler that writes outside the use case it hands the gate is caught too: every refusal is
+sent before the allowed request, with its own idempotency key and a body built when it is sent,
+and the denied caller is one the use case itself would accept where one exists, so that the
+refusal would write if it ran; no refusal writes, and the allowed request then does. A route
+that audits is checked by the audit rows of each request, found by its `request_id`. With
+GATE_EVIDENCE set, every request is written there as JSON lines.
 """
 
 import asyncio
@@ -317,16 +319,11 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
         assert len(admitted) - before == (label == "allowed"), f"{label}: use case reached"
         return response, effect, audit
 
-    def vary(body: Any, label: str) -> Any:
-        return body if case.vary is None else case.vary(body, label)
-
-    body = case.body(facts) if callable(case.body) else case.body
-    allowed, effect, audit = send("allowed", path, body, "Bearer " + KEYS[case.allowed])
-    assert allowed.status_code == case.allowed_status, allowed.text
-    if case.effect is not None:
-        assert effect and effect > 0, "the allowed request wrote nothing"
-    if case.audited:
-        assert [row["outcome"] for row in audit] == ["success"], audit
+    def body(label: str) -> Any:
+        """The request's body as of now: the refusals go first, each one a request that would
+        write if it ran, and the allowed request last."""
+        current = case.body(facts) if callable(case.body) else case.body
+        return current if case.vary is None or label == "allowed" else case.vary(current, label)
 
     refusals = [
         ("denied", "Bearer " + KEYS[case.denied], case.denied_status),
@@ -334,7 +331,7 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
         ("unknown", "Bearer sre_unkn0123456789abcdefghijklmnopqrstuv", 401),
     ]
     for label, authorization, status in refusals:
-        refused, effect, audit = send(label, path, vary(body, label), authorization)
+        refused, effect, audit = send(label, path, body(label), authorization)
         assert refused.status_code == status, (label, refused.text)
         assert set(refused.json()) == {"error", "request_id", "retryable"}
         assert not effect, f"{label}: the request wrote"
@@ -367,7 +364,7 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
     )
     try:
         own = "Bearer " + KEYS[case.allowed]
-        refused = vary(body, "inactive principal")
+        refused = body("inactive principal")
         inactive, effect, audit = send("inactive principal", path, refused, own)
     finally:
         _sql(
@@ -379,3 +376,10 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
         assert [(row["stage"], row["response_status"]) for row in audit] == [
             ("authentication", 401)
         ], audit
+
+    allowed, effect, audit = send("allowed", path, body("allowed"), "Bearer " + KEYS[case.allowed])
+    assert allowed.status_code == case.allowed_status, allowed.text
+    if case.effect is not None:
+        assert effect and effect > 0, "the allowed request wrote nothing"
+    if case.audited:
+        assert [row["outcome"] for row in audit] == ["success"], audit
