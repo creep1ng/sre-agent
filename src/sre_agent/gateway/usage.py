@@ -32,6 +32,7 @@ from sre_agent.gate.pipeline import (
     failing_as,
 )
 from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.authentication import authorize_governed_access as authorize_unmoved
 from sre_agent.gateway.usage_requests import read_requests
 from sre_agent.gateway.usage_requests_models import UsageRequestsResponse
 from sre_agent.governance.dto import AuthorizationDenialCause
@@ -639,8 +640,10 @@ def usage_router(projection: UsageReadProjection) -> APIRouter:
 
     async def authorize_usage(request: Request) -> tuple[Any, Any, JSONResponse | None]:
         """Share the governed authorization and audited denial path across usage reads."""
+        # The route not moved to the gate yet keeps main's semantics: an inactive principal is
+        # authenticated and refused at authorization.
         try:
-            context, evaluation = await authorize_governed_access(
+            context, evaluation = await authorize_unmoved(
                 projection._sessions,
                 request.headers.get("authorization"),
                 "admin.read",
