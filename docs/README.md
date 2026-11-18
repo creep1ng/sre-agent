@@ -9,6 +9,7 @@ What each live document covers. Start with the [vision](vision.md), then the
 - [Vision and values](vision.md): what Midnight is for and the seven values a change is weighed against.
 - [Product direction](product-direction-2026-10-28.md): the maintainer's decisions, round by round. Dated by design and kept live.
 - [Backlog to 2026-12-04](backlog-2026-12-04.md): milestones and the stories in each. Dated by design and kept live.
+- [Professor feedback, 2026-11-03](feedback/2026-11-03.md): what two feedback sessions left and where each finding goes.
 
 ## Architecture and contracts
 
