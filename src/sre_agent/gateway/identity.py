@@ -2,12 +2,11 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
-from sre_agent.gateway.authentication import authenticate_principal
+from sre_agent.gate.authentication import authenticate_principal
 from sre_agent.governance.dto import PrincipalContext
 
 
@@ -38,10 +37,9 @@ _bearer_docs = HTTPBearer(auto_error=False)
     },
 )
 async def who_am_i(
+    response: Response,
     _bearer: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer_docs)],
     context: Annotated[PrincipalContext, Depends(authenticate_principal)],
-) -> JSONResponse:
-    return JSONResponse(
-        content=WhoAmIResponse(principal_id=context.principal.principal_id).model_dump(),
-        headers={"Cache-Control": "no-store"},
-    )
+) -> WhoAmIResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return WhoAmIResponse(principal_id=context.principal.principal_id)

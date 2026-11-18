@@ -80,6 +80,14 @@ def _tool(tool_id: str, status: str = "active") -> MCPTool:
     )
 
 
+VALID_QUERY = {
+    "datasource_uid": "webstore-metrics",
+    "expr": "up",
+    "query_type": "instant",
+    "end_time": "now",
+}
+
+
 class MemoryOwner:
     def __init__(self, *, server: MCPServer | None = None) -> None:
         self.server = server or _server()
@@ -662,7 +670,8 @@ async def test_denied_invocation_stops_before_owner_lookup_and_transport(
     service = mcp.MCPGatewayService(
         MemorySessions(owner), client, owner_repository_factory=lambda session: session
     )
-    response = await service.invoke("query_prometheus", {}, AUTHORIZATION)
+    # A valid body: validation precedes authorization (#1021), so only a valid call is denied.
+    response = await service.invoke("query_prometheus", VALID_QUERY, AUTHORIZATION)
 
     assert response.status_code == 403
     assert owner.reads == []
@@ -688,7 +697,9 @@ async def test_denied_invocation_is_audited_metadata_only_without_owner_or_trans
         projector=AuditProjector(b"mcp-audit-key"),
         owner_repository_factory=lambda session: session,
     )
-    response = await service.invoke("query_prometheus", {"expr": "sensitive-query"}, AUTHORIZATION)
+    response = await service.invoke(
+        "query_prometheus", {**VALID_QUERY, "expr": "sensitive-query"}, AUTHORIZATION
+    )
 
     assert response.status_code == 403
     assert json.loads(response.body)["error"]["code"] == "resource_unavailable"
@@ -930,10 +941,11 @@ async def test_http_discovery_returns_401_without_credentials(
 
 
 @pytest.mark.asyncio
-async def test_http_discovery_authenticates_before_validating_the_request(
+async def test_http_discovery_validates_before_authenticating_the_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Authorization precedes validation, so an unknown query is still a 401."""
+    """Validation precedes authentication (#1021): an unknown query is a 422 even without a
+    valid credential, audited at the validation stage with no subject."""
     audit = RecordingAudit()
     service, _ = _service(
         monkeypatch, MemoryOwner(), audit=audit, projector=AuditProjector(b"mcp-audit-key")
@@ -948,9 +960,10 @@ async def test_http_discovery_authenticates_before_validating_the_request(
     ) as client:
         response = await client.get("/v1/mcp/discovery?unexpected=1")
 
-    assert response.status_code == 401
-    assert response.json()["error"]["code"] == "authentication_failed"
-    assert audit.events == []
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "contract_validation_failed"
+    assert [event.stage for event in audit.events] == ["validation"]
+    assert audit.events[0].identity is None
 
 
 @pytest.mark.asyncio
@@ -1021,8 +1034,10 @@ async def test_http_discovery_rejects_unknown_query_with_published_error(
     assert client_stub.calls == []
     assert len(audit.events) == 1
     event = audit.events[0].model_dump(mode="json")
-    assert event["identity"] is not None
-    assert event["policy_decision"]["decision"] == "allow"
+    # Validation precedes authorization (#1021): the refusal carries no subject or decision.
+    assert event["stage"] == "validation"
+    assert event["identity"] is None
+    assert event["policy_decision"] is None
     assert event["correlation"]["request_id"] == response.json()["request_id"]
 
 
@@ -1042,7 +1057,7 @@ async def test_http_invocation_returns_403_before_owner_or_upstream(
         response = await client.post(
             "/v1/mcp/tools/query_prometheus",
             headers={"Authorization": AUTHORIZATION},
-            json={},
+            json=VALID_QUERY,
         )
 
     assert response.status_code == 403
