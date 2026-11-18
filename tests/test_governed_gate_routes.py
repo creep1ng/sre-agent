@@ -91,8 +91,6 @@ class Case:
     audited: bool = False
     audits_401: bool = True
     audits_invalid: bool = True
-    # Whether a 401 carries `WWW-Authenticate: Bearer`.
-    challenge: bool = True
     # A count the allowed request raises and no refusal changes.
     effect: str | None = None
     # A refusal's own body, from the allowed body and the refusal's label.
@@ -215,7 +213,7 @@ CASES = [
          invalid=("/v1/alerts/{alert}/triage/commands",
                   {"operation": "triage_dismiss", "expected_version": 1}, 422)),  # triage
     Case("POST", "/v1/responses", "DEMO_HUMAN", "RESTRICTED_HARNESS", 200, 403,
-         {"model": "triage-agent", "input": "Summarize."}, audited=True, challenge=False,
+         {"model": "triage-agent", "input": "Summarize."}, audited=True,
          invalid=("/v1/responses", {"model": "X"}, 422)),  # responses
     Case("POST", BOK + "/search", "INCIDENT_HARNESS", "DEMO_HUMAN", 200, 403,
          {"query": "checkout"}, audited=True, audits_401=False,
@@ -481,7 +479,7 @@ def test_route_refuses_before_its_use_case_and_audits_where_it_audits(
         assert refused.status_code == status, (label, refused.text)
         assert set(refused.json()) == {"error", "request_id", "retryable"}
         assert not effect, f"{label}: the request wrote"
-        if status == 401 and case.challenge:
+        if status == 401:
             assert refused.headers["www-authenticate"] == "Bearer"
         if case.audited and label == "denied":
             assert [(row["stage"], row["outcome"]) for row in audit] == [

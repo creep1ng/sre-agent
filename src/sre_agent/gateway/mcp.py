@@ -832,7 +832,8 @@ def mcp_router(service: MCPGatewayService) -> APIRouter:
             "requestBody": {
                 "required": True,
                 "description": (
-                    "Select the JSON example matching tool_id. Authorization precedes validation."
+                    "Select the JSON example matching tool_id. Validation precedes "
+                    "authentication and authorization."
                 ),
                 "content": {
                     "application/json": {

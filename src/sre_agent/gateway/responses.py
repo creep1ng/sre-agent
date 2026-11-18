@@ -239,8 +239,6 @@ REASONS = {
     "audit": "audit_unavailable",
 }
 REFUSALS = Refusals(
-    # The 401 carries no WWW-Authenticate challenge, as before the gate; see the PR.
-    unauthenticated=GovernedError(401, "authentication_failed", "Authentication failed.", stage="authentication"),
     denied=GovernedError(403, "resource_unavailable", "Resource unavailable."),
     unavailable=GovernedError(503, "audit_unavailable", "Audit unavailable.", retryable=True, stage="audit"),
 )
