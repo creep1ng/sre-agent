@@ -1,0 +1,107 @@
+# Code owners: who GitHub asks for a review, by path (#1094).
+#
+# The maintainer confirmed three areas on 2026-11-17, each with one owner:
+#   Platform and product                  @creep1ng   (Ricardo)
+#   Investigation, data and evaluation    @dagovas27  (Daniel)
+#   Security and governance               @Mariog89   (Mario)
+#
+# GitHub reads this file from the base branch of a pull request. The last matching pattern
+# wins, so each section goes from the general rule to its exceptions, and a later section
+# overrides an earlier one. docs/governance-rollout.md says what the review requirement
+# enforces today.
+
+# Platform and product. Also the owner of every path no later rule names: the executor and its
+# catalog, the incident workflow, the chat channels, the operator console, the landing, Compose,
+# infrastructure, migrations and CI.
+*                                                                       @creep1ng
+
+# gateway/ still holds modules of the three areas, so it is listed file by file. A module not
+# named here falls to security and governance, because every route enters through the governed
+# gate. #1023 is expected to replace this list with package boundaries.
+/src/sre_agent/gateway/                                                 @Mariog89
+/src/sre_agent/gateway/action_catalog.py                                @creep1ng
+/src/sre_agent/gateway/execution.py                                     @creep1ng
+/src/sre_agent/gateway/health.py                                        @creep1ng
+/src/sre_agent/gateway/incidents.py                                     @creep1ng
+/src/sre_agent/gateway/postmortems.py                                   @creep1ng
+/src/sre_agent/gateway/runs.py                                          @creep1ng
+/src/sre_agent/gateway/alert_intake.py                                  @dagovas27
+/src/sre_agent/gateway/alerts.py                                        @dagovas27
+/src/sre_agent/gateway/changes.py                                       @dagovas27
+/src/sre_agent/gateway/endpoint_catalog.py                              @dagovas27
+/src/sre_agent/gateway/event_decisions.py                               @dagovas27
+/src/sre_agent/gateway/investigation.py                                 @dagovas27
+/src/sre_agent/gateway/mcp.py                                           @dagovas27
+/src/sre_agent/gateway/openrouter.py                                    @dagovas27
+/src/sre_agent/gateway/providers.py                                     @dagovas27
+/src/sre_agent/gateway/reinvestigation.py                               @dagovas27
+/src/sre_agent/gateway/responses.py                                     @dagovas27
+/src/sre_agent/gateway/run_context.py                                   @dagovas27
+/src/sre_agent/gateway/skills.py                                        @dagovas27
+/src/sre_agent/gateway/triage.py                                        @dagovas27
+
+# Security and governance: what is not authorized does not happen, and everything leaves a
+# receipt. Identities, credentials, grants, audit, consumption and the signature of each
+# operation.
+/src/sre_agent/governance/                                              @Mariog89
+/src/sre_agent/control/                                                 @Mariog89
+/src/sre_agent/executor/signature.py                                    @Mariog89
+/src/sre_agent/persistence/api_keys.py                                  @Mariog89
+/src/sre_agent/persistence/repositories.py                              @Mariog89
+/src/sre_agent/persistence/reservations.py                              @Mariog89
+/agent/api/authorization*                                               @Mariog89
+/docs/security/                                                         @Mariog89
+/web/incident-console/src/features/admin/                               @Mariog89
+/web/incident-console/e2e/admin.spec.ts                                 @Mariog89
+/tests/control_testkit.py                                               @Mariog89
+/tests/request_attribution_support.py                                   @Mariog89
+/tests/test_api_key_persistence.py                                      @Mariog89
+/tests/test_audit*                                                      @Mariog89
+/tests/test_authentication.py                                           @Mariog89
+/tests/test_authorization.py                                            @Mariog89
+/tests/test_consumption_*                                               @Mariog89
+/tests/test_control_*                                                   @Mariog89
+/tests/test_database_secrecy.py                                         @Mariog89
+/tests/test_governance_dto.py                                           @Mariog89
+/tests/test_governed_authorization.py                                   @Mariog89
+/tests/test_incident_authorization.py                                   @Mariog89
+/tests/test_incident_authorized_reads.py                                @Mariog89
+/tests/test_request_attribution_*                                       @Mariog89
+/tests/test_security_catalogs.py                                        @Mariog89
+/tests/test_usage_read_*                                                @Mariog89
+
+# Investigation, data and evaluation: what the agent knows, how it reasons and how we measure it.
+# The two administration pages below are the knowledge base and the Skills.
+/src/sre_agent/investigator/                                            @dagovas27
+/src/sre_agent/bok/                                                     @dagovas27
+/src/sre_agent/triage/                                                  @dagovas27
+/src/sre_agent/mcp/                                                     @dagovas27
+/src/sre_agent/persistence/memories.py                                  @dagovas27
+/agent/signals/                                                         @dagovas27
+/agent/fixtures/signals/                                                @dagovas27
+/agent/api/triage.openapi.yaml                                          @dagovas27
+/agent/schemas/triage-*                                                 @dagovas27
+/schemas/mcp/                                                           @dagovas27
+/docs/alert-intake.md                                                   @dagovas27
+/docs/bok-retrieval.md                                                  @dagovas27
+/docs/change-events.md                                                  @dagovas27
+/docs/investigator.md                                                   @dagovas27
+/web/incident-console/src/features/admin/knowledge-page.tsx             @dagovas27
+/web/incident-console/src/features/admin/skills-page.tsx                @dagovas27
+/web/incident-console/src/features/incident/agent-work.tsx              @dagovas27
+/web/incident-console/src/features/incident/findings.tsx                @dagovas27
+/web/incident-console/src/features/incident/technical-details.tsx       @dagovas27
+/tests/test_bok_*                                                       @dagovas27
+/tests/test_incident_investigator_*                                     @dagovas27
+/tests/test_incident_memory_e2e.py                                      @dagovas27
+/tests/test_incident_recall_e2e.py                                      @dagovas27
+/tests/test_investigator_*                                              @dagovas27
+/tests/test_live_alerts_http.py                                         @dagovas27
+/tests/test_mcp_*                                                       @dagovas27
+/tests/test_openrouter*                                                 @dagovas27
+/tests/test_otel_signal_adapter.py                                      @dagovas27
+/tests/test_responses*                                                  @dagovas27
+/tests/test_routing.py                                                  @dagovas27
+/tests/test_skill_*                                                     @dagovas27
+/tests/test_triage_*                                                    @dagovas27
+/tests/triage_testkit.py                                                @dagovas27

@@ -14,13 +14,20 @@ publication instead of assuming another task's work has landed.
 - `pr-governance` metadata check: retired by #1081. It validated the shape of the PR
   description, not delivery. The slice table below still lists it as slice 3 because that table
   records how #183 was published.
+- Code owner review (#1094): [`.github/CODEOWNERS`](../.github/CODEOWNERS) maps paths to the
+  three area owners, and GitHub asks the owner for a review on every PR that touches their
+  paths. Ruleset `20580391` has `require_code_owner_review: true` since 2026-11-17, read back
+  through the API. **It blocks no merge today**: `21689570` lets only an administrator merge,
+  and the administrator role is exempt from `20580391`. The requirement binds when step 2 of
+  [Administrative activation](#administrative-activation) removes that exemption.
 - Team onboarding, responsible reviewers and estimation: human coordination remains
   required. Keep assignees/labels in GitHub, SP and capacity in Projects, and
   dependencies in native `blocked by`/`blocks`; do not invent planning metadata.
 
 The current quality ruleset is `20580391`; merger authorization is separately
 controlled by `21689570`. Do not remove the latter's administrator exception or
-silently expand who may integrate. Neither ruleset was changed in this delivery.
+silently expand who may integrate. Neither ruleset was changed in the #183 delivery; #1094
+changed one field of `20580391`, the code owner review above.
 
 ## Publish in reviewable work units
 
