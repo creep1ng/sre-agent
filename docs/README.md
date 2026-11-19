@@ -57,7 +57,8 @@ What each live document covers. Start with the [vision](vision.md), then the
 - Designs of one story: [historical request attribution](design/issue-454-historical-attribution.md)
   and [controlled external effects](design/issue-567-controlled-effects.md).
 - Spikes: [harness evaluation](spikes/ht-06-harness-evaluation.md) and
-  [Jev as a mitigation scorer](spikes/jev-decision-model.md).
+  [Jev as a mitigation scorer](spikes/jev-decision-model.md); draft:
+  [remediation scope](spikes/remediation-scope.md).
 
 ## Historical material
 

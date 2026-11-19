@@ -344,19 +344,39 @@ unavailable` with the registered `service_operation` resources and unknown param
 
 ## What the vendors do
 
-Official documentation, read on 2026-10-22; marketing claims are left out.
+Official documentation; marketing claims are left out. PagerDuty, Rootly and incident.io were read
+on 2026-10-22; Datadog was read again and the other rows were added on 2026-11-14.
 
 | Vendor | Executes remediation? | Model | Human gate |
 | --- | --- | --- | --- |
-| [Datadog](https://docs.datadoghq.com/actions/private_actions/execution_policies/) | Yes: Workflow Automation, Bits one-click Kubernetes actions (preview) | Private Action Runner in the Agent, polling outbound; Execution Policies allow or deny actions per Agent and namespace; "the default Execution Policies cover read-only actions only" | [Guardrails](https://docs.datadoghq.com/bits_ai/bits_remediation/) per action set and scope: Ask (named approvers) or Deny; no Allow |
+| [Datadog](https://docs.datadoghq.com/actions/private_actions/execution_policies/) | Yes: Workflow Automation, and Bits [one-click actions](https://docs.datadoghq.com/bits_ai/bits_remediation/infrastructure_actions/) in preview: twelve for Kubernetes (scale, roll back, restart, patch, `deletePod`, `deleteJob`) and seven for AWS (Lambda invoke, concurrency and configuration; EC2 reboot, start and stop; ECS `UpdateService`) | Kubernetes: Private Action Runner in the Agent, polling outbound; Execution Policies allow or deny actions per Agent and namespace; "the default Execution Policies cover read-only actions only". AWS: Datadog assumes the integration's IAM role, with no runner | [Guardrails](https://docs.datadoghq.com/bits_ai/bits_remediation/) per action set and scope: Ask (named approvers) or Deny; no Allow |
 | [PagerDuty](https://docs.pagerduty.com/ai-automation/automation/automation-actions) | Yes: Automation Actions (scripts or Rundeck jobs) on a self-hosted runner; the SRE Agent recommends | Per action: "allow invocation manually", "from event orchestration", "only on unresolved incidents"; Rundeck ACL per job; single execution by default | Roles; no native approval step in Rundeck |
 | [Rootly](https://docs.rootly.com/private-agent) | Workflows with HTTP, Redis and Heroku actions; Edge Connector scripts (enterprise); AI SRE is "not a read-only guarantee" | Private Agent registers typed capabilities in read, sensitive-read and write tiers; "Rootly can narrow local access, but it cannot expand it" | None documented; "no Private Agent capability pauses for interactive approval" |
 | [incident.io](https://docs.incident.io/investigations/trust-and-safety) | No: "Investigations don't take action on your behalf without your request or approval"; only webhooks to an external runner | Workflow "Ask first": Run or Dismiss, first answer wins, 24 h expiry, conditions re-checked | Yes, on the workflow; investigation budgets degrade to confirmation |
+| [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/working-with-devops-agent-working-with-directed-actions.html) | Yes: "directed actions", disabled by default; without them it gives manual steps | AWS SDK operations the model proposes, each run with a session policy scoped to the approved operation and resource and composed only from "a curated list of supported AWS IAM actions"; third-party and MCP tools are classified `READ_ONLY`, `MUTATIVE` or `DESTRUCTIVE`. It refuses delete-class operations, changes to permissions boundaries and operations that need `iam:PassRole`, and never invokes a `DESTRUCTIVE` tool | Operator approval per action, only in chat: a mutating call during an autonomous investigation fails. An approval is single-use or reusable for up to 4 hours |
+| [Azure SRE Agent](https://learn.microsoft.com/en-us/azure/sre-agent/execute-mitigations) | Yes: "any Azure action through Azure CLI commands", then it verifies the result | Commands the model generates, bounded by the Azure roles of the agent's managed identity. `delete` and `remove` commands and every `az keyvault` command are blocked; ReadOnly locks are respected | [Run modes](https://learn.microsoft.com/en-us/azure/sre-agent/run-modes) Review or Autonomous, set per response plan or scheduled task, both defaulting to Autonomous (the agent-level fallback defaults to Review). Review gates only Azure infrastructure writes |
+| [Google Gemini Cloud Assist](https://docs.cloud.google.com/cloud-assist/create-investigation) | Generates a remediation plan; "you can click Run to perform the actions described in the plan" | "Concrete actions such as `gcloud` commands or Kubernetes manifests"; the investigation's access "is limited to the access that you have" | The user reviews the plan and clicks Run |
+| [Resolve.ai](https://docs.resolve.ai/security-and-administration) | Read-only by default; opt-in alert silences and downtimes, fix pull requests, and (preview) dispatch, retry and cancel of GitHub Actions runs | Typed tools; "the AI model that generates proposals never has direct access to write APIs", and a separate engine executes | Each tool defaults to human approval; an admin can opt a GitHub Actions tool into automatic execution; silences and pull requests always need approval |
+| [Sentry Seer](https://docs.sentry.io/product/ai-in-sentry/seer/autofix) | No production change: root cause, plan and optionally a pull request, which the user merges | Code changes through the repository integration | Automation runs up to a per-project stopping point (root cause, plan, or pull request drafted) for an issue with 10 or more events in the last 14 days and "a sufficient fixability score" |
+| [Vercel Agent](https://vercel.com/docs/agent/chat/permissions) (public beta) | Yes, on Vercel: configuration, environment variables, alerts, storage and deployments, or a pull request | The user's own Vercel and GitHub permissions; read-only by default | Approval per plan, covering only its listed targets and operations: "approval does not grant a session-wide permission" |
 
 Takeaways this design applies: typed named actions, not scripts (Rootly's Private Agent, against
 PagerDuty's script actions); two enforcement layers, control plane and local allow-list (Datadog's
 policies plus the Agent's `actions_allowlist`; here the gateway's grant plus the proxy); write
 actions are an explicit grant, read is the default (Datadog); autonomy decided by static,
-reviewable policy, never by the model's confidence (no vendor scores risk at execution time); a
+reviewable policy, never by the model's confidence (the one model score found, Sentry's
+fixability, only decides how far an analysis goes toward a draft pull request); a
 budget degrades to approval and never queues (incident.io, Rootly cooldowns); and attribution
-follows the human who approved, not the agent (incident.io).
+follows the human who approved, not the agent (incident.io, AWS, Vercel).
+
+Three things the pages read on 2026-11-14 do not describe; their absence there does not prove a
+product lacks them:
+
+- **Reversibility as a property of each action.** The lists separate reading from writing and
+  block deletion of resources, but none states whether an action can be undone or loses data.
+  AWS refuses delete-class operations, yet the approval example in its own documentation is
+  `sqs:PurgeQueue`.
+- **A handoff to the person.** No page describes a mode in which a person takes over the incident
+  and the agent keeps observing and recording.
+- **Native typed actions beyond the vendor's own platform.** Datadog covers Kubernetes and AWS;
+  AWS reaches other systems only through third-party and MCP tools that the customer classifies.
