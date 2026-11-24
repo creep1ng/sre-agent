@@ -26,11 +26,10 @@ from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.principals import public_principal as _public_principal
 from sre_agent.control.service import (
     ControlService,
-    SkillPublishRequest,
     _key_digest,
     _payload_sha256,
 )
-from sre_agent.control.skills import SkillRoutes, skills_router
+from sre_agent.control.skills import SkillPublishRequest, SkillRoutes, skills_router
 from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
