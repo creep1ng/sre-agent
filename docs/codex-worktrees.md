@@ -118,8 +118,9 @@ the image while online first.
 
 **The checks image cannot write to `/app` and bakes the source.** `python-checks` runs as user
 65532 over a root-owned `/app` whose source was copied in at build time, so tools cannot write
-caches there. Run lint with the exact commands of `ci.yml`
-(`ruff check --no-cache`, `lint-imports --no-cache`, `mypy --cache-dir=/tmp/mypy`), add `--build`
+caches there. Run lint with the cache flags `ci.yml` uses (`ruff check --no-cache`,
+`ruff format --check --no-cache`, `uv lock --check --no-cache`, `lint-imports --no-cache`,
+`mypy --cache-dir=/tmp/mypy`), add `--build`
 to `run` after you edit files, and have tests write artifacts under `tempfile.gettempdir()` (with an
 environment override) rather than under the checkout.
 

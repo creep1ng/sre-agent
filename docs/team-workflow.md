@@ -157,13 +157,13 @@ invalid PRs. No workflow may execute commands or
 download arbitrary URLs supplied by a PR description.
 
 The repository accepts only merge commits; squash and rebase merges are disabled, so integrate
-with `gh pr merge --merge`. Head branches are deleted automatically on merge; check that any
+an unstacked PR with `gh pr merge --merge`. Head branches are deleted automatically on merge; check that any
 stacked PR now targets the intended base before integrating it.
 
 Land a stack with `gh stack merge <top-pr> --merge --yes`; `gh pr merge` and `gh pr edit --base`
 fail on stacked PRs. To insert a PR in the middle of a stack, run `gh stack unstack <N>`,
-`gh pr edit --base`, then `gh stack link --base main <PRs bottom to top>`. `main` has no required
-checks, so confirm that CI is green yourself before merging.
+`gh pr edit --base`, then `gh stack link --base main <PRs bottom to top>`. No status check is
+configured as required on `main`, so confirm that CI is green yourself before merging.
 
 For staged rollout, see [governance rollout](governance-rollout.md). For CI control ownership and
 non-blocking diagnostic proposals, see [CI control inventory](ci-controls.md).
