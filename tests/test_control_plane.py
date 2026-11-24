@@ -20,15 +20,13 @@ from sre_agent.control.aliases import AliasRoutes, aliases_router
 from sre_agent.control.bok import BoKRoutes, bok_router
 from sre_agent.control.catalog import CatalogRoutes, catalog_router
 from sre_agent.control.credentials import CredentialRoutes, credentials_router
+from sre_agent.control.governed import key_digest as _key_digest
+from sre_agent.control.governed import payload_sha256 as _payload_sha256
 from sre_agent.control.grants import GrantRoutes, grants_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.principals import public_principal as _public_principal
-from sre_agent.control.service import (
-    ControlService,
-    _key_digest,
-    _payload_sha256,
-)
+from sre_agent.control.service import ControlService
 from sre_agent.control.skills import SkillPublishRequest, SkillRoutes, skills_router
 from sre_agent.gate.pipeline import Gate
 from sre_agent.gateway.audit import AuditProjector
