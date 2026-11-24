@@ -747,15 +747,13 @@ class CatalogRepository:
         owner_id: str | None = None,
         status: str | None = None,
         visibility: str | None = None,
-        excluded_visibility: tuple[str, ...] = (),
-        excluded_status: tuple[str, ...] = (),
+        excluding: dict[str, tuple[str, ...]] | None = None,
         limit: int,
     ) -> tuple[list[ResourceCatalogEntry], bool]:
+        """`excluding` names, per column (`visibility`, `status`), the values a list leaves out."""
         statement = select(ResourceRow).where(ResourceRow.resource_type.in_(self.CATALOG_TYPES))
-        if excluded_visibility:
-            statement = statement.where(ResourceRow.visibility.not_in(excluded_visibility))
-        if excluded_status:
-            statement = statement.where(ResourceRow.status.not_in(excluded_status))
+        for column, values in (excluding or {}).items():
+            statement = statement.where(getattr(ResourceRow, column).not_in(values))
         if resource_type is not None:
             statement = statement.where(ResourceRow.resource_type == resource_type)
         if owner_id is not None:

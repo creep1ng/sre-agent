@@ -189,7 +189,7 @@ class Catalog:
             return {"items": [], "limit": limit, "truncated": False}
         async with self.sessions() as session:
             items, truncated = await CatalogRepository(session).list(
-                **filters, excluded_visibility=HIDDEN, excluded_status=INACTIVE, limit=limit
+                **filters, excluding={"visibility": HIDDEN, "status": INACTIVE}, limit=limit
             )
         return {
             "items": [item.model_dump(mode="json") for item in items],

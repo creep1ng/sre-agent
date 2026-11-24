@@ -23,8 +23,7 @@ from sre_agent.gate.errors import GovernedError
 from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Terminal, failing_as
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.authorization import AuthorizationEvaluation
-from sre_agent.governance.dto import AuditEvent, PrincipalContext
+from sre_agent.governance.dto import AuditEvent
 
 T = TypeVar("T")
 
@@ -126,30 +125,22 @@ class ControlAudit:
         self.store, self.projector = store, projector
 
     def event(
-        self,
-        operation: ControlOperation,
-        request_id: Any,
-        status: int,
-        latency_ms: int,
-        stage: str,
-        *,
-        context: PrincipalContext | None,
-        evaluation: AuthorizationEvaluation | None,
-        reason: str | None,
+        self, operation: ControlOperation, terminal: Terminal, reason: str | None
     ) -> AuditEvent:
         # Identity, resource and decision only once the principal was authorized; validation,
         # authentication and storage failures carry no subject evidence.
-        subject = stage in {"authorization", "response"} and evaluation is not None
+        evaluation, status = terminal.evaluation, terminal.status
+        subject = terminal.stage in {"authorization", "response"} and evaluation is not None
         return self.projector.control_event(
-            request_id,
+            terminal.request_id,
             status,
-            latency_ms,
+            terminal.latency_ms,
             "authorization" if subject else "audit",
             operation=operation.name,
             action=operation.action,
             reason=REASONS.get(reason, reason),
             retryable=status in {500, 503, 504},
-            context=context if subject else None,
+            context=terminal.context if subject else None,
             resource_ref=(RESOURCE_TYPE, operation.resource_id) if subject else None,
             decision=evaluation.decision if subject and evaluation else None,
             authorization_denial_cause=(
@@ -170,16 +161,18 @@ class ControlAudit:
         # A failed write is answered as `audit_unavailable` and not audited again.
         admission.facts[_SETTLED] = AUDIT_UNAVAILABLE.status
         with failing_as(AUDIT_UNAVAILABLE):
-            event = self.event(
-                operation,
+            # The answer this transaction commits with, as the gate records a released one.
+            terminal = Terminal(
                 admission.request_id,
-                status,
                 _latency(admission.facts),
+                status,
                 "authorization",
-                context=admission.context,
-                evaluation=admission.evaluation,
-                reason=reason,
+                admission.context,
+                admission.evaluation,
+                None,
+                admission.facts,
             )
+            event = self.event(operation, terminal, reason)
             await self.store.append_in_transaction(event, session)
         admission.facts[_SETTLED] = status
 
@@ -237,15 +230,4 @@ class ControlGate(Generic[T]):
             return
         error = terminal.error
         reason = error.code if error is not None else terminal.facts.get(_REASON, self.reason)
-        await self.audit.store.append(
-            self.audit.event(
-                self.operation,
-                terminal.request_id,
-                terminal.status,
-                terminal.latency_ms,
-                terminal.stage,
-                context=terminal.context,
-                evaluation=terminal.evaluation,
-                reason=reason,
-            )
-        )
+        await self.audit.store.append(self.audit.event(self.operation, terminal, reason))

@@ -276,6 +276,7 @@ def test_control_audit_maps_terminal_attempts_to_valid_control_audit() -> None:
     denied 403 at authorization (what ControlService._finish projected before the gate)."""
     from sre_agent.control.governed import ControlAudit
     from sre_agent.control.operations import CONTROL
+    from sre_agent.gate.pipeline import Terminal
     from sre_agent.governance.dto import PolicyDecision
 
     audit = ControlAudit(None, AuditProjector(b"x" * 32))  # type: ignore[arg-type]
@@ -291,26 +292,18 @@ def test_control_audit_maps_terminal_attempts_to_valid_control_audit() -> None:
             "authenticated_at": now,
         },
     )()
+    allowed = AuthorizationEvaluation(allow, None)
+    denied = AuthorizationEvaluation(deny, AuthorizationDenialCause.GRANT_NOT_APPLICABLE)
     appended = [
         audit.event(
             CONTROL[("GET", "/v1/principals")],
-            uuid4(),
-            200,
-            0,
-            "audit",
-            context=context,
-            evaluation=AuthorizationEvaluation(allow, None),
-            reason=None,
+            Terminal(uuid4(), 0, 200, "audit", context, allowed, None, {}),
+            None,
         ),
         audit.event(
             CONTROL[("POST", "/v1/principals")],
-            uuid4(),
-            403,
-            0,
-            "authorization",
-            context=context,
-            evaluation=AuthorizationEvaluation(deny, AuthorizationDenialCause.GRANT_NOT_APPLICABLE),
-            reason="resource_unavailable",
+            Terminal(uuid4(), 0, 403, "authorization", context, denied, None, {}),
+            "resource_unavailable",
         ),
     ]
     assert [event.response_status for event in appended] == [200, 403]

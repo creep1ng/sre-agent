@@ -121,34 +121,36 @@ class RotationRefused(GovernedError):
         }
 
 
+async def _claim(
+    session: Any, caller: PrincipalContext, path: str, key: str, body: Any, target: str
+) -> Any:
+    return await IdempotencyRepository(session).claim_or_replay(
+        scope=f"{caller.principal.principal_id}|POST|{path}",
+        key_digest=key_digest(key),
+        payload_sha256=payload_sha256(body.model_dump(mode="json")),
+        principal_id=caller.principal.principal_id,
+        method="POST",
+        canonical_path=path,
+        binding="principal_lifetime",
+        outcome=IdempotencyOutcome(response_status=201, resource_id=target, replayed=False),
+    )
+
+
+async def _remember(
+    session: Any, caller: PrincipalContext, path: str, key: str, payload: Any
+) -> None:
+    await IdempotencyRepository(session).set_response_payload(
+        scope=f"{caller.principal.principal_id}|POST|{path}",
+        key_digest=key_digest(key),
+        response_payload=payload,
+    )
+
+
 class Credentials:
     """Issue, list, revoke and rotate the credentials of principals."""
 
     def __init__(self, sessions: Any) -> None:
         self.sessions = sessions
-
-    async def _claim(
-        self, session: Any, caller: PrincipalContext, path: str, key: str, body: Any, target: str
-    ) -> Any:
-        return await IdempotencyRepository(session).claim_or_replay(
-            scope=f"{caller.principal.principal_id}|POST|{path}",
-            key_digest=key_digest(key),
-            payload_sha256=payload_sha256(body.model_dump(mode="json")),
-            principal_id=caller.principal.principal_id,
-            method="POST",
-            canonical_path=path,
-            binding="principal_lifetime",
-            outcome=IdempotencyOutcome(response_status=201, resource_id=target, replayed=False),
-        )
-
-    async def _remember(
-        self, session: Any, caller: PrincipalContext, path: str, key: str, payload: Any
-    ) -> None:
-        await IdempotencyRepository(session).set_response_payload(
-            scope=f"{caller.principal.principal_id}|POST|{path}",
-            key_digest=key_digest(key),
-            response_payload=payload,
-        )
 
     async def issue(
         self, caller: PrincipalContext, principal_id: str, body: CredentialIssue, key: str
@@ -159,7 +161,7 @@ class Credentials:
             async with self.sessions() as session, session.begin():
                 if await PrincipalRepository(session).get(principal_id) is None:
                     raise NOT_FOUND
-                binding = await self._claim(session, caller, path, key, body, principal_id)
+                binding = await _claim(session, caller, path, key, body, principal_id)
                 if binding.replayed:
                     return binding.outcome.response_payload
                 with failing_as(ISSUANCE_FAILED):
@@ -171,7 +173,7 @@ class Credentials:
                     "replaced_credential_id": None,
                     "secret_revealed": False,
                 }
-                await self._remember(session, caller, path, key, metadata)
+                await _remember(session, caller, path, key, metadata)
         except IdempotencyConflictError:
             raise IDEMPOTENCY_CONFLICT from None
         return {**metadata, "key": issued.key, "secret_revealed": True}
@@ -207,7 +209,7 @@ class Credentials:
                 old = await repository.get(credential_id)
                 if old is None:
                     raise NOT_FOUND
-                binding = await self._claim(session, caller, path, key, body, credential_id)
+                binding = await _claim(session, caller, path, key, body, credential_id)
                 if binding.replayed:
                     return {**binding.outcome.response_payload, "replayed": True}
                 if old.status != "active":
@@ -228,7 +230,7 @@ class Credentials:
                     "transition_count": 1,
                     "replayed": False,
                 }
-                await self._remember(session, caller, path, key, metadata)
+                await _remember(session, caller, path, key, metadata)
         except IdempotencyConflictError:
             raise IDEMPOTENCY_CONFLICT from None
         issuance = {**metadata["issuance"], "key": issued.key, "secret_revealed": True}
