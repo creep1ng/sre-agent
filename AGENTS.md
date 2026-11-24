@@ -22,7 +22,10 @@ Read [the team workflow](docs/team-workflow.md) before contributing and
   7. Pocket-sized economics: under USD 1 per user per month.
 - Real evidence only: never use invented SVGs nor generated captures. Provide real
   FastAPI output, SQL queries, UI, or exact instructions to repeat the expected behavior.
-- Use direct work for bounded, understood changes. Record the selected route in the PR.
+- Every change follows one path; there is no SDD route. Before human review, an agent that
+  did not write the change verifies it against the issue's criteria and the evidence, and the
+  PR records the result under `Agent verification`
+  ([team workflow](docs/team-workflow.md#agent-verification)).
 - GitHub Projects is the authoritative reference for developing issues. Always consult
   GitHub Projects when scoping or implementing an issue. Do not use prior memories
   or snapshots as a substitute.
