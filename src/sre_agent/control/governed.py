@@ -3,17 +3,24 @@
 A control route validates, authenticates, authorizes, runs its use case, audits and answers
 through `Gate.run`, with the control wording: a 401 without a challenge, a denial as 403
 `resource_unavailable`, and one control audit event per request (subject evidence only once the
-principal was authorized).
+principal was authorized). A mutation that must not persist without its audit writes that event
+inside its own transaction (`ControlAudit.within`): the write and the mutation commit or roll back
+together, and the gate's auditor does not write it again.
 """
 
+import hashlib
+import json
+import re
 from collections.abc import Awaitable, Callable
+from time import monotonic
 from typing import Any, Generic, TypeVar
 
 from fastapi import Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.control.operations import RESOURCE_TYPE, ControlOperation
 from sre_agent.gate.errors import GovernedError
-from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Terminal
+from sre_agent.gate.pipeline import Admission, Gate, Refusals, Released, Terminal, failing_as
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
 from sre_agent.governance.authorization import AuthorizationEvaluation
@@ -21,11 +28,25 @@ from sre_agent.governance.dto import AuditEvent, PrincipalContext
 
 T = TypeVar("T")
 
+IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
+INVALID_IDEMPOTENCY_KEY = GovernedError(
+    400,
+    "invalid_idempotency_key",
+    "The Idempotency-Key header is missing or invalid.",
+    stage="validation",
+)
+INVALID = GovernedError(422, "validation_error", "The request is invalid.", stage="validation")
 UNAUTHENTICATED = GovernedError(
     401, "authentication_failed", "Authentication failed.", stage="authentication"
 )
 UNAVAILABLE = GovernedError(
     403, "resource_unavailable", "Resource unavailable.", stage="authorization"
+)
+IDEMPOTENCY_CONFLICT = GovernedError(
+    409, "idempotency_conflict", "The Idempotency-Key was already used with another payload."
+)
+STATUS_CONFLICT = GovernedError(
+    409, "status_conflict", "The status was changed by another request."
 )
 AUDIT_UNAVAILABLE = GovernedError(
     503, "audit_unavailable", "Audit unavailable.", retryable=True, stage="audit"
@@ -51,10 +72,31 @@ REASONS = {
     "resource_unavailable": "no_matching_grant",
     "policy_unavailable": "upstream_unavailable",
 }
+# Facts a route's use case leaves for the auditor (`Admission.facts`).
+_STARTED, _SETTLED = "control.started", "control.settled"
+
+
+def canonical_payload(payload: Any) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def payload_sha256(payload: Any) -> str:
+    return hashlib.sha256(canonical_payload(payload).encode()).hexdigest()
+
+
+def key_digest(key: str) -> str:
+    return hashlib.sha256(f"sre-idempotency-v1\0{key}".encode()).hexdigest()
+
+
+def idempotency_key(value: str | None) -> str:
+    """The request's Idempotency-Key, or the control refusal of a missing or malformed one."""
+    if value is None or re.match(IDEMPOTENCY_KEY_PATTERN, value) is None:
+        raise INVALID_IDEMPOTENCY_KEY
+    return value
 
 
 class ControlAudit:
-    """The control audit event of a request."""
+    """The control audit event of a request, written after it ends or inside its transaction."""
 
     def __init__(self, store: TransactionalAuditStore, projector: AuditProjector) -> None:
         self.store, self.projector = store, projector
@@ -81,7 +123,7 @@ class ControlAudit:
             "authorization" if subject else "audit",
             operation=operation.name,
             action=operation.action,
-            reason=REASONS.get(reason, reason) if reason is not None else None,
+            reason=REASONS.get(reason, reason),
             retryable=status in {500, 503, 504},
             context=context if subject else None,
             resource_ref=(RESOURCE_TYPE, operation.resource_id) if subject else None,
@@ -90,6 +132,41 @@ class ControlAudit:
                 evaluation.denial_cause if subject and evaluation and status in {403, 404} else None
             ),
         )
+
+    async def within(
+        self,
+        operation: ControlOperation,
+        admission: Admission,
+        session: AsyncSession,
+        status: int,
+        reason: str | None,
+    ) -> None:
+        """Write the request's audit in the mutation's transaction; a failed write answers
+        `audit_unavailable`, and raising it inside the transaction rolls the mutation back."""
+        # A failed write is answered as `audit_unavailable` and not audited again.
+        admission.facts[_SETTLED] = AUDIT_UNAVAILABLE.status
+        with failing_as(AUDIT_UNAVAILABLE):
+            event = self.event(
+                operation,
+                admission.request_id,
+                status,
+                _latency(admission.facts),
+                "authorization",
+                context=admission.context,
+                evaluation=admission.evaluation,
+                reason=reason,
+            )
+            await self.store.append_in_transaction(event, session)
+        admission.facts[_SETTLED] = status
+
+
+def _latency(facts: dict[str, Any]) -> int:
+    return max(0, int((monotonic() - facts[_STARTED]) * 1000))
+
+
+# Writes the request's audit, answering the given status, inside the given transaction; the use
+# case calls it before its transaction commits.
+Record = Callable[[AsyncSession, int], Awaitable[None]]
 
 
 class ControlGate(Generic[T]):
@@ -115,11 +192,25 @@ class ControlGate(Generic[T]):
         use_case: Callable[[Admission, T], Awaitable[Released | Response]],
         validate: Callable[[], T] | None = None,
     ) -> Response:
+        started = monotonic()
+
+        async def timed(admission: Admission, request: T) -> Released | Response:
+            admission.facts[_STARTED] = started
+            return await use_case(admission, request)
+
         return await self.gate.run(
-            self.declaration, authorization, self.operation.scope, use_case, validate=validate
+            self.declaration, authorization, self.operation.scope, timed, validate=validate
+        )
+
+    def record(self, admission: Admission) -> Record:
+        """The in-transaction audit of this request."""
+        return lambda session, status: self.audit.within(
+            self.operation, admission, session, status, self.reason
         )
 
     async def _audit(self, terminal: Terminal) -> None:
+        if terminal.facts.get(_SETTLED) == terminal.status:
+            return
         reason = terminal.error.code if terminal.error is not None else self.reason
         await self.audit.store.append(
             self.audit.event(

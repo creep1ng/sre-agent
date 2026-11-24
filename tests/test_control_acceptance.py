@@ -344,9 +344,10 @@ def test_consumption_policy_put_is_guarded_idempotent_versioned_and_persists(
     }
     key = "consumption-policy-write-0001"
 
-    unauthenticated = client.put(path, json=payload)
+    unauthenticated = client.put(path, json=payload, headers={"Idempotency-Key": key})
     assert unauthenticated.status_code == 401, unauthenticated.text
-    assert client.put(path, json=payload, headers=headers(RESTRICTED_KEY)).status_code == 403
+    restricted = headers(RESTRICTED_KEY, idempotency_key=key)
+    assert client.put(path, json=payload, headers=restricted).status_code == 403
     assert client.put(path, json=payload, headers=headers()).status_code == 400
 
     updated = client.put(path, json=payload, headers=headers(idempotency_key=key))

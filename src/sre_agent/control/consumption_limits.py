@@ -1,27 +1,33 @@
 """Protected read and versioned writes for the single-workspace consumption policy."""
 
-import re
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
-from functools import partial
-from time import monotonic
 from typing import Annotated, Any
-from uuid import uuid4
 
 from fastapi import APIRouter, Body, Header, Response, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
-from sre_agent.control.governed import REFUSALS, ControlAudit, ControlGate
-from sre_agent.control.operations import CONTROL, CONTROL_SCOPES
-from sre_agent.control.service import ControlService, _key_digest, _payload_sha256
+from sre_agent.control.governed import (
+    IDEMPOTENCY_CONFLICT,
+    INVALID,
+    REFUSALS,
+    STATUS_CONFLICT,
+    ControlAudit,
+    ControlGate,
+    Record,
+    idempotency_key,
+    key_digest,
+    payload_sha256,
+)
+from sre_agent.control.operations import CONTROL
 from sre_agent.gate.errors import AuthenticationFailed, GovernedError
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
-from sre_agent.gateway.authentication import authorize_governed_access
 from sre_agent.gateway.responses import TransactionalAuditStore
+from sre_agent.governance.dto import PrincipalContext
 from sre_agent.persistence.models import ConsumptionLimitPolicyRow
 from sre_agent.persistence.repositories import (
     IdempotencyConflictError,
@@ -29,7 +35,6 @@ from sre_agent.persistence.repositories import (
     IdempotencyRepository,
 )
 
-IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[\x20-\x7E]{16,128}$")
 MONTHLY_USD_PATTERN = r"^(?:0|[1-9][0-9]{0,19})(?:\.[0-9]{1,12})?$"
 MAX_SIGNED_BIGINT = 9_223_372_036_854_775_807
 
@@ -51,12 +56,16 @@ class ConsumptionLimitPolicyUpdate(BaseModel):
     monthly_usd_limit: Annotated[str, Field(pattern=MONTHLY_USD_PATTERN)] | None
 
 
-class StalePolicyVersion(RuntimeError):
-    """The compare-and-set version was not current when the policy row was locked."""
-
-
-class PolicyUnavailable(RuntimeError):
-    """The singleton policy row is missing or cannot be updated."""
+POLICY_UNAVAILABLE = GovernedError(
+    503,
+    "policy_unavailable",
+    "The consumption policy is unavailable.",
+    retryable=True,
+    stage="audit",
+)
+# The policy routes challenge an unauthenticated caller, unlike the other control routes.
+CHALLENGED = replace(REFUSALS, unauthenticated=AuthenticationFailed())
+PATH = "/v1/consumption-limits"
 
 
 def _policy_response(policy: ConsumptionLimitPolicyRow) -> dict[str, Any]:
@@ -73,18 +82,6 @@ def _policy_response(policy: ConsumptionLimitPolicyRow) -> dict[str, Any]:
     }
 
 
-POLICY_UNAVAILABLE = GovernedError(
-    503,
-    "policy_unavailable",
-    "The consumption policy is unavailable.",
-    retryable=True,
-    stage="audit",
-)
-# The policy routes challenge an unauthenticated caller, unlike the other control routes.
-CHALLENGED = replace(REFUSALS, unauthenticated=AuthenticationFailed())
-PATH = "/v1/consumption-limits"
-
-
 class ConsumptionLimits:
     """The workspace's consumption policy: one row, replaced by compare-and-set on its version."""
 
@@ -98,6 +95,64 @@ class ConsumptionLimits:
             raise POLICY_UNAVAILABLE
         return _policy_response(policy)
 
+    async def replace(
+        self,
+        caller: PrincipalContext,
+        body: ConsumptionLimitPolicyUpdate,
+        key: str,
+        record: Record,
+    ) -> tuple[dict[str, Any], int]:
+        """Replace the policy, or replay the answer of the same key and payload; the audit is
+        written in the same transaction."""
+        binding_scope = f"{caller.principal.principal_id}|PUT|{PATH}"
+        try:
+            async with self.sessions() as session, session.begin():
+                repository = IdempotencyRepository(session)
+                binding = await repository.claim_or_replay(
+                    scope=binding_scope,
+                    key_digest=key_digest(key),
+                    payload_sha256=payload_sha256(body.model_dump(mode="json")),
+                    principal_id=caller.principal.principal_id,
+                    method="PUT",
+                    canonical_path=PATH,
+                    binding="at_least_24h",
+                    outcome=IdempotencyOutcome(
+                        response_status=200, resource_id="workspace", replayed=False
+                    ),
+                )
+                if binding.replayed:
+                    payload = binding.outcome.response_payload
+                else:
+                    payload = _policy_response(await self._compare_and_set(session, body))
+                    await repository.set_response_payload(
+                        scope=binding_scope, key_digest=key_digest(key), response_payload=payload
+                    )
+                await record(session, binding.outcome.response_status)
+        except IdempotencyConflictError:
+            raise IDEMPOTENCY_CONFLICT from None
+        return payload, binding.outcome.response_status
+
+    async def _compare_and_set(
+        self, session: Any, body: ConsumptionLimitPolicyUpdate
+    ) -> ConsumptionLimitPolicyRow:
+        policy = await session.scalar(
+            select(ConsumptionLimitPolicyRow)
+            .where(ConsumptionLimitPolicyRow.policy_id == 1)
+            .with_for_update()
+        )
+        if policy is None:
+            raise POLICY_UNAVAILABLE
+        if body.expected_version != policy.version or policy.version == MAX_SIGNED_BIGINT:
+            raise STATUS_CONFLICT
+        policy.version += 1
+        policy.incident_token_limit = body.incident_token_limit
+        policy.monthly_usd_limit = (
+            Decimal(body.monthly_usd_limit) if body.monthly_usd_limit is not None else None
+        )
+        policy.updated_at = datetime.now(UTC)
+        await session.flush()
+        return policy
+
 
 class ConsumptionLimitRoutes:
     """The policy routes on the gate."""
@@ -110,9 +165,9 @@ class ConsumptionLimitRoutes:
         self.reading: ControlGate[None] = ControlGate(
             sessions, control, CONTROL[("GET", PATH)], refusals=CHALLENGED
         )
-        self.replace_policy = ConsumptionLimitPolicyService(
-            sessions, audit, projector
-        ).replace_policy
+        self.replacing: ControlGate[tuple[ConsumptionLimitPolicyUpdate, str]] = ControlGate(
+            sessions, control, CONTROL[("PUT", PATH)], refusals=CHALLENGED
+        )
 
     async def get_policy(self, authorization: str | None) -> Response:
         async def read(_admission: Admission, _request: None) -> Released:
@@ -120,112 +175,26 @@ class ConsumptionLimitRoutes:
 
         return await self.reading.run(authorization, read)
 
-
-class ConsumptionLimitPolicyService(ControlService):
     async def replace_policy(
-        self,
-        raw: Any,
-        authorization: str | None,
-        idempotency_key: str | None,
+        self, raw: Any, authorization: str | None, key: str | None
     ) -> Response:
-        finish = partial(
-            self._finish,
-            uuid4(),
-            monotonic(),
-            operation="consumption_limits.replace",
-            action="admin.write",
-        )
-        try:
-            context, evaluation = await authorize_governed_access(
-                self.sessions, authorization, *CONTROL_SCOPES[("PUT", "/v1/consumption-limits")]
-            )
-        except AuthenticationFailed:
-            response = await finish(401, "authentication", error_code="authentication_failed")
-            if response.status_code == 401:
-                response.headers["WWW-Authenticate"] = "Bearer"
-            return response
-        finish = partial(
-            finish,
-            context=context,
-            resource_ref=("administrative_control", "consumption_limits"),
-            decision=evaluation.decision,
-            authorization_denial_cause=evaluation.denial_cause,
-        )
-        if evaluation.decision.decision == "deny":
-            return await finish(403, "authorization", error_code="resource_unavailable")
-        if idempotency_key is None or IDEMPOTENCY_KEY_PATTERN.fullmatch(idempotency_key) is None:
-            return await finish(400, "validation", error_code="invalid_idempotency_key")
-        try:
-            body = ConsumptionLimitPolicyUpdate.model_validate(raw)
-        except (TypeError, ValidationError):
-            return await finish(422, "validation", error_code="validation_error")
+        def validate() -> tuple[ConsumptionLimitPolicyUpdate, str]:
+            valid_key = idempotency_key(key)
+            try:
+                return ConsumptionLimitPolicyUpdate.model_validate(raw), valid_key
+            except (TypeError, ValidationError):
+                raise INVALID from None
 
-        path = "/v1/consumption-limits"
-        binding_scope = f"{context.principal.principal_id}|PUT|{path}"
-        key_digest = _key_digest(idempotency_key)
-        payload_sha256 = _payload_sha256(body.model_dump(mode="json"))
-        try:
-            async with self.sessions() as session, session.begin():
-                repository = IdempotencyRepository(session)
-                binding = await repository.claim_or_replay(
-                    scope=binding_scope,
-                    key_digest=key_digest,
-                    payload_sha256=payload_sha256,
-                    principal_id=context.principal.principal_id,
-                    method="PUT",
-                    canonical_path=path,
-                    binding="at_least_24h",
-                    outcome=IdempotencyOutcome(
-                        response_status=200,
-                        resource_id="workspace",
-                        replayed=False,
-                    ),
-                )
-                if binding.replayed:
-                    response_payload = binding.outcome.response_payload
-                else:
-                    policy = await session.scalar(
-                        select(ConsumptionLimitPolicyRow)
-                        .where(ConsumptionLimitPolicyRow.policy_id == 1)
-                        .with_for_update()
-                    )
-                    if policy is None:
-                        raise PolicyUnavailable
-                    if (
-                        body.expected_version != policy.version
-                        or policy.version == MAX_SIGNED_BIGINT
-                    ):
-                        raise StalePolicyVersion
-                    policy.version += 1
-                    policy.incident_token_limit = body.incident_token_limit
-                    policy.monthly_usd_limit = (
-                        Decimal(body.monthly_usd_limit)
-                        if body.monthly_usd_limit is not None
-                        else None
-                    )
-                    policy.updated_at = datetime.now(UTC)
-                    await session.flush()
-                    response_payload = _policy_response(policy)
-                    await repository.set_response_payload(
-                        scope=binding_scope,
-                        key_digest=key_digest,
-                        response_payload=response_payload,
-                    )
-                result = await finish(
-                    binding.outcome.response_status,
-                    "authorization",
-                    payload=response_payload,
-                    audit_session=session,
-                )
-                if result.status_code == 503:
-                    await session.rollback()
-                return result
-        except IdempotencyConflictError:
-            return await finish(409, "authorization", error_code="idempotency_conflict")
-        except StalePolicyVersion:
-            return await finish(409, "authorization", error_code="status_conflict")
-        except PolicyUnavailable:
-            return await finish(503, "audit", error_code="policy_unavailable")
+        async def replace(
+            admission: Admission, request: tuple[ConsumptionLimitPolicyUpdate, str]
+        ) -> Released:
+            body, valid_key = request
+            payload, status = await self.limits.replace(
+                admission.context, body, valid_key, self.replacing.record(admission)
+            )
+            return Released(payload, status)
+
+        return await self.replacing.run(authorization, replace, validate)
 
 
 def consumption_limits_router(service: ConsumptionLimitRoutes) -> APIRouter:

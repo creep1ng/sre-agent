@@ -1,6 +1,5 @@
 # ruff: noqa: E501, I001
 
-import hashlib
 import json
 import re
 from time import monotonic
@@ -22,6 +21,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.bok.owner import BoKVersionCollision
 from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, BoKVersionRecord, BoKVersionSummary, publish_bok_version, read_bok_version  # fmt: skip
+from sre_agent.control.governed import IDEMPOTENCY_KEY_PATTERN
+from sre_agent.control.governed import canonical_payload as _canonical_payload
+from sre_agent.control.governed import key_digest as _key_digest
+from sre_agent.control.governed import payload_sha256 as _payload_sha256
 from sre_agent.control.operations import CONTROL, CONTROL_SCOPES
 from sre_agent.gate.authentication import bearer_key
 from sre_agent.gateway.audit import AuditProjector
@@ -42,7 +45,6 @@ from sre_agent.governance.dto import (
 from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
 from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
 
-IDEMPOTENCY_KEY_PATTERN = r"^[\x20-\x7E]{16,128}$"
 ERRORS: dict[int, tuple[str, str]] = {
     400: ("invalid_idempotency_key", "The Idempotency-Key header is missing or invalid."),
     401: ("authentication_failed", "Authentication failed."),
@@ -370,18 +372,6 @@ class ActiveInactiveStatus(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     status: Literal["active", "inactive"]
     expected_updated_at: AwareDatetime
-
-
-def _canonical_payload(payload: Any) -> str:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
-
-
-def _payload_sha256(payload: Any) -> str:
-    return hashlib.sha256(_canonical_payload(payload).encode()).hexdigest()
-
-
-def _key_digest(key: str) -> str:
-    return hashlib.sha256(f"sre-idempotency-v1\0{key}".encode()).hexdigest()
 
 
 def _public_principal(principal: Principal) -> dict[str, Any]:
