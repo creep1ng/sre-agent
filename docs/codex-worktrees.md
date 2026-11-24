@@ -116,6 +116,19 @@ cluster.
 for a service with a `build` section, and `docker compose run` has no `--no-build` option. Build
 the image while online first.
 
+**The checks image cannot write to `/app` and bakes the source.** `python-checks` runs as user
+65532 over a root-owned `/app` whose source was copied in at build time, so tools cannot write
+caches there. Run lint with the exact commands of `ci.yml`
+(`ruff check --no-cache`, `lint-imports --no-cache`, `mypy --cache-dir=/tmp/mypy`), add `--build`
+to `run` after you edit files, and have tests write artifacts under `tempfile.gettempdir()` (with an
+environment override) rather than under the checkout.
+
+**A copied `.env` still has placeholders.** Bootstrap copies `.env.example` verbatim, so its
+`<...>` values remain and `seed` exits 1. Fill the `sre_`-prefixed keys (each with a unique
+8-character prefix), `AUDIT_HMAC_KEY`, the intake and executor secrets and the demo model as in
+[local flow step 0](local-flow/README.md). A fresh stack also needs `seeds --seed-mcp` and then
+`scripts/provision_demo.py` before the demo grants exist.
+
 **Do not mount the checkout over `/app`.** The API and checks images keep their virtual
 environment in `/app/.venv` and bake source and docs into `/app`. A bind mount over `/app` hides
 the environment. Mount only the paths you need, or rebuild the image.

@@ -55,6 +55,12 @@ Read [the team workflow](docs/team-workflow.md) before contributing and
   `uv`, `npm`, and similar tools run only inside those containers. The host supplies
   Git, Docker, and safe local configuration setup. This applies to PR demonstrations,
   not to internal GitHub Actions runner commands.
+- Screenshots of screens that show agent-written text use real model output, at 1280 and
+  390 px wide, in light and dark themes, and the agent reviews them before the maintainer sees
+  them.
+- Never merge another PR's branch into yours: stack on it with `gh stack` and say so in the PR.
+  After a restack that touches your paths, rerun the evidence. The reviewer compares
+  `git diff --stat` with the declared scope.
 - Count all additions plus deletions against the current base. Above 400 lines,
   prefer a feature branch split into a stack of cohesive PRs managed with
   `gh stack` (`gh extension install github/gh-stack`); ask for explicit maintainer
