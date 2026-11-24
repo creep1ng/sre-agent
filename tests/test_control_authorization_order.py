@@ -9,6 +9,7 @@ from unittest.mock import ANY, AsyncMock
 import pytest
 from control_testkit import _Audit, _TargetAccessed
 
+from sre_agent.control.aliases import AliasRoutes
 from sre_agent.control.credentials import CredentialRoutes
 from sre_agent.control.grants import GrantRoutes
 from sre_agent.control.operations import CONTROL_SCOPES
@@ -48,54 +49,6 @@ def _context() -> PrincipalContext:
 @pytest.mark.parametrize(
     ("operation", "invoke", "expected_status"),
     [
-        (
-            ("POST", "/v1/model-aliases"),
-            lambda service: service.create_alias(
-                {
-                    "model_alias_id": "target-alias",
-                    "alias": "target-alias",
-                    "concrete_model": "openai/gpt-4o-mini",
-                    "router": "openrouter",
-                    "inference_provider": "openai",
-                },
-                "Bearer safe-key",
-                "create-target-alias",
-            ),
-            403,
-        ),
-        (
-            ("GET", "/v1/model-aliases"),
-            lambda service: service.list_aliases("Bearer safe-key", "100", {}),
-            403,
-        ),
-        (
-            ("GET", "/v1/model-aliases/{id}"),
-            lambda service: service.get_alias("target-alias", "Bearer safe-key"),
-            403,
-        ),
-        (
-            ("PUT", "/v1/model-aliases/{id}/assignment"),
-            lambda service: service.replace_alias_assignment(
-                "target-alias",
-                {
-                    "concrete_model": "openai/gpt-4o-mini",
-                    "router": "openrouter",
-                    "inference_provider": "openai",
-                    "expected_updated_at": "2026-09-18T00:00:00Z",
-                },
-                "Bearer safe-key",
-            ),
-            403,
-        ),
-        (
-            ("PUT", "/v1/model-aliases/{id}/status"),
-            lambda service: service.replace_alias_status(
-                "target-alias",
-                {"status": "inactive", "expected_updated_at": "2026-09-18T00:00:00Z"},
-                "Bearer safe-key",
-            ),
-            403,
-        ),
         (
             ("POST", "/v1/catalog/resources"),
             lambda service: service.create_catalog_resource(
@@ -169,8 +122,6 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
     assert response.status_code == expected_status
     action, resource_type, resource_id = CONTROL_SCOPES[operation]
     if operation in {
-        ("POST", "/v1/model-aliases"),
-        ("GET", "/v1/model-aliases"),
         ("POST", "/v1/catalog/resources"),
         ("GET", "/v1/catalog/resources"),
     }:
@@ -282,6 +233,59 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
             GrantRoutes,
             ("DELETE", "/v1/grants/{id}"),
             lambda routes: routes.revoke_grant("grant-target-human", "Bearer safe-key"),
+            403,
+        ),
+        (
+            AliasRoutes,
+            ("POST", "/v1/model-aliases"),
+            lambda routes: routes.create_alias(
+                {
+                    "model_alias_id": "target-alias",
+                    "alias": "target-alias",
+                    "concrete_model": "openai/gpt-4o-mini",
+                    "router": "openrouter",
+                    "inference_provider": "openai",
+                },
+                "Bearer safe-key",
+                "create-target-alias",
+            ),
+            403,
+        ),
+        (
+            AliasRoutes,
+            ("GET", "/v1/model-aliases"),
+            lambda routes: routes.list_aliases("Bearer safe-key", "100", {}),
+            403,
+        ),
+        (
+            AliasRoutes,
+            ("GET", "/v1/model-aliases/{id}"),
+            lambda routes: routes.get_alias("target-alias", "Bearer safe-key"),
+            403,
+        ),
+        (
+            AliasRoutes,
+            ("PUT", "/v1/model-aliases/{id}/assignment"),
+            lambda routes: routes.replace_alias_assignment(
+                "target-alias",
+                {
+                    "concrete_model": "openai/gpt-4o-mini",
+                    "router": "openrouter",
+                    "inference_provider": "openai",
+                    "expected_updated_at": "2026-09-18T00:00:00Z",
+                },
+                "Bearer safe-key",
+            ),
+            403,
+        ),
+        (
+            AliasRoutes,
+            ("PUT", "/v1/model-aliases/{id}/status"),
+            lambda routes: routes.replace_alias_status(
+                "target-alias",
+                {"status": "inactive", "expected_updated_at": "2026-09-18T00:00:00Z"},
+                "Bearer safe-key",
+            ),
             403,
         ),
     ],
