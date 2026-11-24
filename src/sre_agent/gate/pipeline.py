@@ -16,12 +16,13 @@ from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from time import monotonic
-from typing import Any, Generic, TypeVar
+from typing import Any, Generic, cast
 from uuid import UUID, uuid4
 
 from fastapi import Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
+from typing_extensions import TypeVar
 
 from sre_agent.gate.authentication import active_principal
 from sre_agent.gate.errors import (
@@ -169,8 +170,9 @@ class Terminal:
     inactive: bool = False
 
 
-# Writes the terminal audit: of the `Terminal` itself, or of what the gate's `project` made of it.
-Auditor = Callable[[Any], Awaitable[None]]
+# What a route's auditor writes: the `Terminal` itself, or what the route's `project` made of it.
+R = TypeVar("R", default=Terminal)
+Auditor = Callable[[R], Awaitable[None]]
 Authenticator = Callable[[str | None], Awaitable[PrincipalContext | None]]
 # Authenticates and evaluates one scope in a single call; None as the context is unauthenticated.
 Admitter = Callable[
@@ -180,7 +182,7 @@ Authorizer = Callable[[Any, PrincipalContext, Scope], Awaitable[AuthorizationEva
 UseCase = Callable[[Admission, T], Awaitable[Released | Response]]
 
 
-class Gate(Generic[T]):
+class Gate(Generic[T, R]):
     """Validate, authenticate, authorize, run, audit and respond, in that order."""
 
     def __init__(
@@ -192,8 +194,8 @@ class Gate(Generic[T]):
         authenticate: Authenticator | None = None,
         authorizer: Authorizer | None = None,
         admit: Admitter | None = None,
-        audit: Auditor | None = None,
-        project: Callable[[Terminal], Any] | None = None,
+        audit: Auditor[R] | None = None,
+        project: Callable[[Terminal], R] | None = None,
     ) -> None:
         self.sessions, self.refusals, self._facts = sessions, refusals, facts
         self._authenticate = authenticate or self._principal
@@ -290,7 +292,8 @@ class Gate(Generic[T]):
                 resolved,
                 inactive,
             )
-            record = terminal if self._project is None else self._project(terminal)
+            # Without a projection the record is the Terminal (R's default).
+            record = cast(R, terminal) if self._project is None else self._project(terminal)
             try:
                 await self._audit(record)
             except Exception:

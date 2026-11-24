@@ -138,7 +138,7 @@ class ControlAudit:
             "authorization" if subject else "audit",
             operation=operation.name,
             action=operation.action,
-            reason=REASONS.get(reason, reason),
+            reason=REASONS.get(reason, reason) if reason is not None else None,
             retryable=status in {500, 503, 504},
             context=terminal.context if subject else None,
             resource_ref=(RESOURCE_TYPE, operation.resource_id) if subject else None,

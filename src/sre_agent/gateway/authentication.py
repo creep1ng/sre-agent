@@ -1,4 +1,9 @@
-"""Authorization for routes that have not moved to the gate (`sre_agent.gate`) yet."""
+"""One-call authentication and scope evaluation for the gateway routes that ask for a second
+scope after the gate admitted them: MCP tool discovery and invocation (`authorize_governed_access`
+as the gate's `admit`) and the investigator's evidence reads
+(`authorize_governed_access_for_context`). An inactive principal's credential authenticates here
+and the engine denies it; the gate's own `sre_agent.gate.authentication` refuses it as
+unauthenticated."""
 
 from typing import Any
 
