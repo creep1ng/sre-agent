@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError
 from pydantic.json_schema import WithJsonSchema
 from sqlalchemy.exc import IntegrityError
 
@@ -12,6 +12,7 @@ from sre_agent.control.governed import (
     IDEMPOTENCY_CONFLICT,
     INVALID,
     NOT_FOUND,
+    STATUS_CONFLICT,
     ControlAudit,
     ControlGate,
     Record,
@@ -43,12 +44,15 @@ from sre_agent.persistence.repositories import (
     IdempotencyOutcome,
     IdempotencyRepository,
     ModelAliasRepository,
+    StaleWriteError,
 )
 from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
 
 CREATE = CONTROL[("POST", "/v1/model-aliases")]
 LIST = CONTROL[("GET", "/v1/model-aliases")]
 GET = CONTROL[("GET", "/v1/model-aliases/{id}")]
+ASSIGNMENT = CONTROL[("PUT", "/v1/model-aliases/{id}/assignment")]
+STATUS = CONTROL[("PUT", "/v1/model-aliases/{id}/status")]
 CONCRETE_MODEL = r"^[A-Za-z0-9._-]+/[A-Za-z0-9._:-]+$"
 Tag = Annotated[str, Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9._-]*$")]
 
@@ -84,8 +88,22 @@ class ModelAliasListResponse(BaseModel):
     truncated: bool
 
 
+class ModelAliasAssignment(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    concrete_model: Annotated[str, Field(pattern=CONCRETE_MODEL)]
+    router: Literal["openrouter"]
+    inference_provider: Annotated[str, Field(min_length=1, max_length=100)]
+    expected_updated_at: AwareDatetime
+
+
+class ActiveInactiveStatus(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    status: Literal["active", "inactive"]
+    expected_updated_at: AwareDatetime
+
+
 class Aliases:
-    """Create, list and read model aliases."""
+    """Create, list, read, reassign and (de)activate model aliases."""
 
     def __init__(self, sessions: Any) -> None:
         self.sessions = sessions
@@ -153,6 +171,48 @@ class Aliases:
             raise NOT_FOUND
         return alias.model_dump(mode="json")
 
+    async def reassign(
+        self, model_alias_id: str, body: ModelAliasAssignment, record: Record
+    ) -> dict[str, Any]:
+        """Assign another model; the answer, found or not, is audited in the same transaction."""
+        return await self._replace(
+            model_alias_id,
+            record,
+            lambda repository: repository.replace_assignment(
+                model_alias_id,
+                concrete_model=body.concrete_model,
+                router=body.router,
+                inference_provider=body.inference_provider,
+                expected_updated_at=body.expected_updated_at,
+            ),
+        )
+
+    async def replace_status(
+        self, model_alias_id: str, body: ActiveInactiveStatus, record: Record
+    ) -> dict[str, Any]:
+        """(De)activate; the answer, found or not, is audited in the same transaction."""
+        return await self._replace(
+            model_alias_id,
+            record,
+            lambda repository: repository.replace_status(
+                model_alias_id, body.status, expected_updated_at=body.expected_updated_at
+            ),
+        )
+
+    async def _replace(self, model_alias_id: str, record: Record, change: Any) -> dict[str, Any]:
+        async with self.sessions() as session, session.begin():
+            try:
+                alias = await change(ModelAliasRepository(session))
+            except StaleWriteError:
+                raise STATUS_CONFLICT from None
+            if alias is None:
+                await record(session, NOT_FOUND.status, NOT_FOUND.code)
+            else:
+                await record(session, 200)
+        if alias is None:
+            raise NOT_FOUND
+        return alias.model_dump(mode="json")
+
 
 def _stored(payload: Any, scope: str) -> dict[str, Any]:
     """The alias a replay answers, as it was stored; anything else is a conflict."""
@@ -168,6 +228,13 @@ def _identifier(value: str) -> str:
     return value
 
 
+def _body(model: type[BaseModel], raw: Any) -> Any:
+    try:
+        return model.model_validate_json(canonical_payload(raw))
+    except (TypeError, ValidationError):
+        raise INVALID from None
+
+
 class AliasRoutes:
     """The alias routes on the gate: validate, then run the use case once authorized."""
 
@@ -181,6 +248,7 @@ class AliasRoutes:
             return ControlGate(sessions, control, operation, reason="grant_matched")
 
         self.creating, self.listing, self.reading = gate(CREATE), gate(LIST), gate(GET)
+        self.reassigning, self.replacing = gate(ASSIGNMENT), gate(STATUS)
 
     async def create_alias(self, raw: Any, authorization: str | None, key: str | None) -> Response:
         def validate() -> tuple[ModelAliasCreate, str]:
@@ -217,6 +285,32 @@ class AliasRoutes:
             return Released(await self.aliases.get(valid_id))
 
         return await self.reading.run(authorization, get, lambda: _identifier(model_alias_id))
+
+    async def replace_alias_assignment(
+        self, model_alias_id: str, raw: Any, authorization: str | None
+    ) -> Response:
+        def validate() -> ModelAliasAssignment:
+            _identifier(model_alias_id)
+            return _body(ModelAliasAssignment, raw)
+
+        async def reassign(admission: Admission, body: ModelAliasAssignment) -> Released:
+            record = self.reassigning.record(admission)
+            return Released(await self.aliases.reassign(model_alias_id, body, record))
+
+        return await self.reassigning.run(authorization, reassign, validate)
+
+    async def replace_alias_status(
+        self, model_alias_id: str, raw: Any, authorization: str | None
+    ) -> Response:
+        def validate() -> ActiveInactiveStatus:
+            _identifier(model_alias_id)
+            return _body(ActiveInactiveStatus, raw)
+
+        async def replace(admission: Admission, body: ActiveInactiveStatus) -> Released:
+            record = self.replacing.record(admission)
+            return Released(await self.aliases.replace_status(model_alias_id, body, record))
+
+        return await self.replacing.run(authorization, replace, validate)
 
 
 AliasId = Annotated[str, WithJsonSchema({"type": "string", "pattern": IDENTIFIER_PATTERN})]
@@ -273,5 +367,35 @@ def aliases_router(routes: AliasRoutes) -> APIRouter:
         credentials: HTTPAuthorizationCredentials | None = credentials_of,
     ) -> Response:
         return await routes.get_alias(alias_id, authorization_from(credentials, request))
+
+    @router.put(
+        ASSIGNMENT.route,
+        response_model=ModelAlias,
+        responses=errors(401, 403, 404, 409, 422, 503),
+        openapi_extra={**request_body(ModelAliasAssignment), **ASSIGNMENT.openapi_extra},
+    )
+    async def replace_alias_assignment(
+        alias_id: AliasId,
+        request: Request,
+        credentials: HTTPAuthorizationCredentials | None = credentials_of,
+    ) -> Response:
+        return await routes.replace_alias_assignment(
+            alias_id, await raw_json(request), authorization_from(credentials, request)
+        )
+
+    @router.put(
+        STATUS.route,
+        response_model=ModelAlias,
+        responses=errors(401, 403, 404, 409, 422, 503),
+        openapi_extra={**request_body(ActiveInactiveStatus), **STATUS.openapi_extra},
+    )
+    async def replace_alias_status(
+        alias_id: AliasId,
+        request: Request,
+        credentials: HTTPAuthorizationCredentials | None = credentials_of,
+    ) -> Response:
+        return await routes.replace_alias_status(
+            alias_id, await raw_json(request), authorization_from(credentials, request)
+        )
 
     return router

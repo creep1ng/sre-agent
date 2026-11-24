@@ -1610,7 +1610,8 @@ def test_alias_assignment_replace_is_guarded_replay_safe_and_metadata_only(
     token = stored["updated_at"]
     path = "/v1/model-aliases/t5-assignment/assignment"
 
-    assert client.put(path, json=assignment_payload()).status_code == 401
+    unauthenticated = {**assignment_payload(), "expected_updated_at": token}
+    assert client.put(path, json=unauthenticated).status_code == 401
     denied = client.put(
         path,
         json={**assignment_payload(), "expected_updated_at": token},

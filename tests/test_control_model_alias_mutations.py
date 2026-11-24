@@ -18,12 +18,10 @@ from control_testkit import _context, _deny, _service, _TargetAccessed
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from sre_agent.control.aliases import AliasRoutes, aliases_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.service import (
     ControlService,
-)
-from sre_agent.control.service import (
-    control_router as build_control_router,
 )
 from sre_agent.governance.dto import AuditEvent
 
@@ -180,17 +178,17 @@ def test_alias_mutations_reject_unauthenticated_before_lookup(method: str) -> No
     assert response.status_code == 401
 
 
-def _stub_mutation_service():
-    service = ControlService.__new__(ControlService)
+def _stub_mutation_routes() -> AliasRoutes:
+    routes = AliasRoutes.__new__(AliasRoutes)
     mutated = JSONResponse({**ASSIGNMENT_BODY, "model_alias_id": "t5-alias"}, 200)
-    service.replace_alias_assignment = AsyncMock(return_value=mutated)
-    service.replace_alias_status = AsyncMock(return_value=mutated)
-    return service
+    routes.replace_alias_assignment = AsyncMock(return_value=mutated)
+    routes.replace_alias_status = AsyncMock(return_value=mutated)
+    return routes
 
 
 def test_router_exposes_alias_assignment_and_status_replace() -> None:
     app = FastAPI()
-    app.include_router(build_control_router(_stub_mutation_service()))
+    app.include_router(aliases_router(_stub_mutation_routes()))
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
 
     assert ("/v1/model-aliases/{alias_id}/assignment", ("PUT",)) in routes
@@ -211,7 +209,7 @@ def test_router_exposes_alias_assignment_and_status_replace() -> None:
 
 def test_alias_mutation_openapi_marks_closed_cas_bodies_without_idempotency_key() -> None:
     app = FastAPI()
-    app.include_router(build_control_router(_stub_mutation_service()))
+    app.include_router(aliases_router(_stub_mutation_routes()))
     paths = app.openapi()["paths"]
 
     for route, required in (
