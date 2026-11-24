@@ -340,7 +340,6 @@ def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
 
 def _stub_service(monkey_result=None, status=201, payload=None):
     service = ControlService.__new__(ControlService)
-    service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
     service.create_alias = AsyncMock(return_value=JSONResponse({}, 201))
     service.list_aliases = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
@@ -373,6 +372,7 @@ def _stub_principals(status=201, payload=None) -> PrincipalRoutes:
 def _stub_grants() -> GrantRoutes:
     routes = GrantRoutes.__new__(GrantRoutes)
     routes.revoke_grant = AsyncMock(return_value=Response(status_code=204))
+    routes.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
     routes.list_grants = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )

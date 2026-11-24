@@ -298,6 +298,17 @@ class IdempotencyBinding:
     replayed: bool
 
 
+class GrantConflictError(RuntimeError):
+    """A new grant repeats an existing one: its `grant_id` (active or revoked), or the active
+    grant with the same principal, action and resource; None when the database did not say."""
+
+    REPEATS = {"grants_pkey": "grant_id", "uq_grants_active_direct": "active_grant"}
+
+    def __init__(self, repeats: str | None) -> None:
+        super().__init__(repeats or "grant")
+        self.repeats = repeats
+
+
 class IdempotencyConflictError(RuntimeError):
     """The retained key binding conflicts with the request payload hash."""
 
@@ -1007,7 +1018,12 @@ class GrantRepository:
             created_at=now or datetime.now(UTC),
         )
         self._session.add(row)
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as error:
+            diagnostic = getattr(error.orig, "diag", None)
+            constraint = getattr(diagnostic, "constraint_name", None)
+            raise GrantConflictError(GrantConflictError.REPEATS.get(constraint or "")) from error
         return self._project(row)
 
     async def list_filtered(

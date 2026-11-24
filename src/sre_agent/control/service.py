@@ -41,7 +41,7 @@ from sre_agent.governance.dto import (
     SkillManifest,
     SkillVersionRecord,
 )
-from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
+from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantConflictError, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ModelAliasRepository, PrincipalRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
 from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
 
 ERRORS: dict[int, tuple[str, str]] = {
@@ -161,11 +161,10 @@ def _grant_action_admitted(resource_type: str, action: str) -> bool:
 
 
 def _grant_conflict_code(error: Exception) -> str:
-    """Name the constraint a new grant violated, not a generic idempotency conflict (#759)."""
-    diag = getattr(getattr(error, "orig", None), "diag", None)
-    constraint = getattr(diag, "constraint_name", None)
-    return {"grants_pkey": "grant_id_conflict", "uq_grants_active_direct": "grant_conflict"}.get(
-        constraint, "idempotency_conflict"
+    """Name what a new grant repeats, not a generic idempotency conflict (#759)."""
+    repeats = getattr(error, "repeats", None)
+    return {"grant_id": "grant_id_conflict", "active_grant": "grant_conflict"}.get(
+        repeats or "", "idempotency_conflict"
     )
 
 
@@ -584,7 +583,7 @@ class ControlService:  # noqa: E305
                     status_code=binding.outcome.response_status,
                     media_type="application/json",
                 )
-        except (IdempotencyConflictError, IntegrityError) as conflict:
+        except (IdempotencyConflictError, IntegrityError, GrantConflictError) as conflict:
             return await self._finish(
                 request_id,
                 started,
@@ -2251,53 +2250,6 @@ def control_router(service: ControlService) -> APIRouter:
         if credentials is not None:
             return f"{credentials.scheme} {credentials.credentials}"
         return request.headers.get("authorization")
-
-    @router.post(
-        "/v1/grants",
-        status_code=201,
-        response_model=Grant,
-        responses={
-            400: {"model": ErrorEnvelope},
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            404: {"model": ErrorEnvelope},
-            409: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "Idempotency-Key",
-                    "in": "header",
-                    "required": True,
-                    "schema": {
-                        "type": "string",
-                        "minLength": 16,
-                        "maxLength": 128,
-                        "pattern": IDEMPOTENCY_KEY_PATTERN,
-                    },
-                }
-            ],
-            "requestBody": {
-                "required": True,
-                "content": {"application/json": {"schema": GrantCreate.model_json_schema()}},
-            },
-            **CONTROL[("POST", "/v1/grants")].openapi_extra,
-        },
-    )
-    async def create_grant(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.create_grant(
-            await raw_json(request),
-            authorization_from(credentials, request),
-            request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
 
     @router.post(
         "/v1/model-aliases",

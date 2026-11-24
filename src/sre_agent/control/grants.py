@@ -1,18 +1,25 @@
 """Grants: which principal may take which action on which resource."""
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from sqlalchemy.exc import IntegrityError
 
 from sre_agent.control.governed import (
+    IDEMPOTENCY_CONFLICT,
     INVALID,
     NOT_FOUND,
     ControlAudit,
     ControlGate,
     Record,
+    canonical_payload,
+    idempotency_key,
+    key_digest,
     page_limit,
+    payload_sha256,
+    unaudited,
 )
 from sre_agent.control.operations import CONTROL
 from sre_agent.control.routing import (
@@ -21,19 +28,90 @@ from sre_agent.control.routing import (
     authorization_from,
     bearer_credentials,
     errors,
+    idempotency_key_parameter,
+    raw_json,
+    request_body,
     unknown_query,
 )
+from sre_agent.gate.errors import GovernedError
 from sre_agent.gate.pipeline import Admission, Released
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
-from sre_agent.governance.dto import Grant
+from sre_agent.governance.dto import Grant, PrincipalContext, Resource
 from sre_agent.persistence.repositories import (
+    GrantConflictError,
     GrantRepository,
+    IdempotencyConflictError,
+    IdempotencyOutcome,
+    IdempotencyRepository,
+    PrincipalRepository,
+    ResourceRepository,
 )
-from sre_agent.vocabulary import IDENTIFIER_PATTERN, is_identifier
+from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
 
+CREATE = CONTROL[("POST", "/v1/grants")]
 LIST = CONTROL[("GET", "/v1/grants")]
 REVOKE = CONTROL[("DELETE", "/v1/grants/{id}")]
+# A new grant that repeats an existing one is named for what it repeats (#759).
+CONFLICTS = {
+    "grant_id": GovernedError(
+        409, "grant_id_conflict", "A grant with this grant_id already exists, active or revoked."
+    ),
+    "active_grant": GovernedError(
+        409,
+        "grant_conflict",
+        "An active grant with this principal, action and resource already exists.",
+    ),
+}
+
+# Admitted grant actions per resource contract (#423 CA3). Exact membership in
+# the per-type sets below: the resource-catalog owner/state/action matrix
+# (schemas/releases/*/conformance/resource-catalog-matrix.yaml) plus the
+# vocabularies the runtime actually evaluates: bare "invoke" on skill
+# (gateway/skills.py) alongside skill.invoke, admin.read/admin.write over
+# administrative_control (CONTROL_SCOPES), and the run.*, alert.*,
+# incident.declare and change.* (#770) actions over incident_workflow
+# (agent/api/authorization.v1.yaml and agent/api/triage.openapi.yaml). Dotted refinements such
+# as "invoke.delete" or "run.start.unpublished" are absent from those closed contracts and the
+# engine matches grant.action exactly, so they are rejected without mutation.
+# This is a pure lookup: it never touches a repository, so a denied caller
+# still receives 403 before any target access.
+# mitigation.execute over service_operation comes from the `governance` block of
+# schemas/executor/1.0.0/deploy-executor.yaml (#722).
+GRANT_ADMITTED_ACTIONS: dict[str, frozenset[str]] = {
+    "llm_model": frozenset({"admin.read", "admin.write", "invoke"}),
+    "mcp_server": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
+    "mcp_tool": frozenset({"admin.write", "mcp.discovery", "mcp.invoke"}),
+    "skill": frozenset({"admin.write", "skill.discovery", "skill.read", "skill.invoke", "invoke"}),
+    "bok_collection": frozenset({"admin.write", "bok.discovery", "bok.search", "bok.read"}),
+    "incident_workflow": frozenset(
+        {
+            "run.start",
+            "run.read",
+            "run.command",
+            "run.approve",
+            "run.read_context",
+            "alert.read",
+            "alert.triage",
+            "alert.dismiss",
+            "alert.associate",
+            "incident.declare",
+            "change.read",
+            "change.write",
+        }
+    ),
+    "administrative_control": frozenset({"admin.read", "admin.write"}),
+    "service_operation": frozenset({"mitigation.execute"}),
+}
+
+
+class GrantCreate(BaseModel):
+    model_config = ConfigDict(strict=True, extra="forbid")
+    grant_id: Identifier
+    principal_id: Identifier
+    action: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_.:-]{1,63}$")]
+    resource: Resource
+    effect: Literal["allow"]
 
 
 class GrantListResponse(BaseModel):
@@ -43,10 +121,75 @@ class GrantListResponse(BaseModel):
 
 
 class Grants:
-    """List and revoke grants."""
+    """Create, list and revoke grants."""
 
     def __init__(self, sessions: Any) -> None:
         self.sessions = sessions
+
+    async def create(
+        self, caller: PrincipalContext, body: GrantCreate, key: str, record: Record
+    ) -> tuple[dict[str, Any], int, bool]:
+        """The new grant, audited in its transaction; or the answer a replay of the same key and
+        payload already got, unaudited (the last item says which)."""
+        path = CREATE.path
+        scope = f"{caller.principal.principal_id}|POST|{path}"
+        payload_hash = payload_sha256(body.model_dump(mode="json"))
+        try:
+            async with self.sessions() as session, session.begin():
+                idempotency = IdempotencyRepository(session)
+                prior = await idempotency.peek(
+                    scope=scope, key_digest=key_digest(key), payload_sha256=payload_hash
+                )
+                if prior is not None:
+                    stored = _stored(prior.outcome.response_payload, scope)
+                    return stored, prior.outcome.response_status, True
+                await self._admit(session, body)
+                binding = await idempotency.claim_or_replay(
+                    scope=scope,
+                    key_digest=key_digest(key),
+                    payload_sha256=payload_hash,
+                    principal_id=caller.principal.principal_id,
+                    method="POST",
+                    canonical_path=path,
+                    binding="at_least_24h",
+                    outcome=IdempotencyOutcome(
+                        response_status=201, resource_id=body.grant_id, replayed=False
+                    ),
+                )
+                status = binding.outcome.response_status
+                if binding.replayed:
+                    return _stored(binding.outcome.response_payload, scope), status, True
+                grant = await GrantRepository(session).create(
+                    body.grant_id,
+                    body.principal_id,
+                    body.action,
+                    body.resource.resource_type,
+                    body.resource.resource_id,
+                )
+                payload = grant.model_dump(mode="json")
+                await idempotency.set_response_payload(
+                    scope=scope, key_digest=key_digest(key), response_payload=payload
+                )
+                await record(session, status)
+        except GrantConflictError as conflict:
+            raise CONFLICTS.get(conflict.repeats or "", IDEMPOTENCY_CONFLICT) from None
+        except (IdempotencyConflictError, IntegrityError):
+            raise IDEMPOTENCY_CONFLICT from None
+        return payload, status, False
+
+    async def _admit(self, session: Any, body: GrantCreate) -> None:
+        """An active principal, an active resource and an action its contract admits."""
+        principal = await PrincipalRepository(session).get(body.principal_id)
+        if principal is None or principal.status != "active":
+            raise NOT_FOUND
+        resource = body.resource
+        fact = await ResourceRepository(session).authorization_view(
+            resource.resource_type, resource.resource_id
+        )
+        if fact is None or fact.status != "active":
+            raise NOT_FOUND
+        if body.action not in GRANT_ADMITTED_ACTIONS.get(resource.resource_type, frozenset()):
+            raise INVALID
 
     async def list(
         self, principal_id: str | None, resource_id: str | None, limit: int
@@ -73,6 +216,18 @@ class Grants:
             raise NOT_FOUND
 
 
+def _stored(payload: Any, scope: str) -> dict[str, Any]:
+    """The grant a replay answers, as it was stored; anything else is a conflict."""
+    try:
+        return Grant.model_validate_json(canonical_payload(payload)).model_dump(mode="json")
+    except ValidationError:
+        raise IdempotencyConflictError(scope) from None
+
+
+def _json(payload: Any, status: int) -> Response:
+    return Response(canonical_payload(payload), status_code=status, media_type="application/json")
+
+
 class GrantRoutes:
     """The grant routes on the gate: validate, then run the use case once authorized."""
 
@@ -82,8 +237,29 @@ class GrantRoutes:
         self.grants = Grants(sessions)
         control = ControlAudit(audit, projector)
         matched = {"reason": "grant_matched"}
+        self.creating: ControlGate[tuple[GrantCreate, str]] = ControlGate(
+            sessions, control, CREATE, **matched
+        )
         self.listing: ControlGate[int] = ControlGate(sessions, control, LIST, **matched)
         self.revoking: ControlGate[str] = ControlGate(sessions, control, REVOKE, **matched)
+
+    async def create_grant(self, raw: Any, authorization: str | None, key: str | None) -> Response:
+        def validate() -> tuple[GrantCreate, str]:
+            valid_key = idempotency_key(key)
+            try:
+                return GrantCreate.model_validate(raw), valid_key
+            except ValidationError:
+                raise INVALID from None
+
+        async def create(admission: Admission, request: tuple[GrantCreate, str]) -> Response:
+            payload, status, replayed = await self.grants.create(
+                admission.context, *request, self.creating.record(admission)
+            )
+            if replayed:
+                unaudited(admission, status)
+            return _json(payload, status)
+
+        return await self.creating.run(authorization, create, validate)
 
     async def list_grants(
         self,
@@ -123,6 +299,26 @@ def grants_router(routes: GrantRoutes) -> APIRouter:
     credentials_of: Any = bearer_credentials()
     filter_parameter = {"in": "query", "required": False}
     identifier = {"schema": {"type": "string", "pattern": IDENTIFIER_PATTERN}}
+
+    @router.post(
+        CREATE.route,
+        status_code=201,
+        response_model=Grant,
+        responses=errors(400, 401, 403, 404, 409, 422, 503),
+        openapi_extra={
+            "parameters": [idempotency_key_parameter()],
+            **request_body(GrantCreate),
+            **CREATE.openapi_extra,
+        },
+    )
+    async def create_grant(
+        request: Request, credentials: HTTPAuthorizationCredentials | None = credentials_of
+    ) -> Response:
+        return await routes.create_grant(
+            await raw_json(request),
+            authorization_from(credentials, request),
+            request.headers.get("idempotency-key"),
+        )
 
     @router.get(
         LIST.route,
