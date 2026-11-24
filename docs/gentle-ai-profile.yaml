@@ -28,20 +28,6 @@ shared:
     Host package-manager commands are not acceptable; tools run inside containers.
     This does not prescribe internal GitHub Actions runner commands.
   skill_inventory:
-    - name: sdd-propose
-      purpose: Capture a durable change proposal.
-    - name: sdd-spec
-      purpose: Define verifiable requirement scenarios.
-    - name: sdd-design
-      purpose: Record implementation decisions before build work.
-    - name: sdd-tasks
-      purpose: Break an approved change into executable work.
-    - name: sdd-apply
-      purpose: Implement approved SDD tasks.
-    - name: sdd-verify
-      purpose: Prove implemented behavior against the change artifacts.
-    - name: sdd-archive
-      purpose: Sync accepted change deltas into the durable specification.
     - name: issue-creation
       purpose: Create evidence-based GitHub issues.
     - name: branch-pr

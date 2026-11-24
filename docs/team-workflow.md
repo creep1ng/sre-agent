@@ -1,7 +1,7 @@
 # Shared agentic delivery workflow
 
 Every contribution follows one reproducible path: **triage → verifiable criteria →
-implementation → agent verification → evidence → human review → integration**. Gentle AI
+implementation → evidence → agent verification → human review → integration**. Gentle AI
 helps contributors follow the path; repository documentation and GitHub controls make the result
 visible to the whole team.
 
@@ -19,12 +19,13 @@ optimize for clear, repeatable behavior over operational coverage.
 1. Start from an issue with a bounded problem, owner, estimate, dependencies, and verifiable
    acceptance criteria.
 2. Implement the change and run the relevant checks.
-3. Have an independent agent verify the change against the issue's acceptance criteria (see
-   [Agent verification](#agent-verification)). Resolve its findings before going further.
-4. Collect evidence at the tested SHA and complete every required PR evidence field.
+3. Collect evidence at the tested SHA and complete every required PR evidence field.
+4. Have an independent agent verify the change and the evidence against the issue's acceptance
+   criteria (see [Agent verification](#agent-verification)). Resolve its findings before going
+   further.
 5. Request human review. CI does not read the PR description and requires no separate approval
-   comments, labels, or commit confirmations. Integrate only after required checks,
-   evidence review, and repository protection rules succeed.
+   comments, labels, or commit confirmations. Integrate only after CI passes, evidence review
+   succeeds, and repository protection rules allow it.
 
 The issue remains the planning record. A partial PR must state what it covers and must not claim
 to close the full issue.
@@ -72,8 +73,8 @@ production data, or generated traces containing sensitive values.
 > [`openspec/`](../openspec/) directory stays as a historical record; it is no longer the
 > authority for new work.
 
-Verification by an agent is a mandatory phase, not an optional extra. After implementation and
-before human review, an agent that did not write the change checks it against the issue's
+Verification by an agent is a mandatory phase, not an optional extra. After the evidence is
+collected and before human review, an agent that did not write the change checks it against the issue's
 acceptance criteria and the collected evidence:
 
 - each covered criterion is met by behavior that was actually exercised, not only by green checks;
