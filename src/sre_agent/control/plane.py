@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from sre_agent.control.aliases import AliasRoutes, aliases_router
+from sre_agent.control.catalog import CatalogRoutes, catalog_router
 from sre_agent.control.consumption_limits import ConsumptionLimitRoutes, consumption_limits_router
 from sre_agent.control.credentials import CredentialRoutes, credentials_router
 from sre_agent.control.grants import GrantRoutes, grants_router
@@ -25,6 +26,7 @@ class ControlPlane:
         self.credentials = CredentialRoutes(sessions, audit, projector)
         self.grants = GrantRoutes(sessions, audit, projector)
         self.aliases = AliasRoutes(sessions, audit, projector)
+        self.catalog = CatalogRoutes(sessions, audit, projector)
         # The routes that have not moved to their resource module yet (#1022).
         self.service = ControlService(sessions, audit, projector)
 
@@ -35,5 +37,6 @@ class ControlPlane:
             credentials_router(self.credentials),
             grants_router(self.grants),
             aliases_router(self.aliases),
+            catalog_router(self.catalog),
             control_router(self.service),
         ]

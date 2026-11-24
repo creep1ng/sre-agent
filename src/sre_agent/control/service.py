@@ -39,7 +39,7 @@ from sre_agent.governance.dto import (
     SkillVersionRecord,
 )
 from sre_agent.persistence.repositories import CatalogRepository, CredentialRepository, GrantRepository, IdempotencyConflictError, IdempotencyOutcome, IdempotencyRepository, ResourceRepository, SkillVersionConflictError, SkillVersionRepository, StaleWriteError  # fmt: skip
-from sre_agent.vocabulary import IDENTIFIER_PATTERN, Identifier, is_identifier
+from sre_agent.vocabulary import Identifier, is_identifier
 
 ERRORS: dict[int, tuple[str, str]] = {
     400: ("invalid_idempotency_key", "The Idempotency-Key header is missing or invalid."),
@@ -173,12 +173,6 @@ class SkillStatusResponse(BaseModel):
     resource_id: str
     status: Literal["active", "inactive"]
     updated_at: AwareDatetime
-
-
-class CatalogListResponse(BaseModel):
-    items: list[ResourceCatalogEntry]
-    limit: int
-    truncated: bool
 
 
 class ActiveInactiveStatus(BaseModel):
@@ -1292,128 +1286,6 @@ def control_router(service: ControlService) -> APIRouter:
             await raw_json(request),
             authorization_from(credentials, request),
             request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/catalog/resources",
-        response_model=CatalogListResponse,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "resource_type",
-                    "in": "query",
-                    "required": False,
-                    "schema": {
-                        "enum": ["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"]
-                    },
-                },
-                {
-                    "name": "owner_id",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"type": "string", "pattern": IDENTIFIER_PATTERN},
-                },
-                {
-                    "name": "status",
-                    "in": "query",
-                    "required": False,
-                    "schema": {
-                        "enum": [
-                            "registered",
-                            "draft",
-                            "published",
-                            "indexing",
-                            "active",
-                            "inactive",
-                            "revoked",
-                        ]
-                    },
-                },
-                {
-                    "name": "visibility",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"enum": ["public", "private", "hidden"]},
-                },
-                {
-                    "name": "limit",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
-                },
-            ],
-            "x-forbidden-query-parameters": [
-                "cursor",
-                "page",
-                "offset",
-                "continuation_token",
-                "next",
-            ],
-            **CONTROL[("GET", "/v1/catalog/resources")].openapi_extra,
-        },
-    )
-    async def list_catalog_resources(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        known = {"resource_type", "owner_id", "status", "visibility", "limit"}
-        result = await service.list_catalog_resources(
-            authorization_from(credentials, request),
-            request.query_params.get("resource_type"),
-            request.query_params.get("owner_id"),
-            request.query_params.get("status"),
-            request.query_params.get("visibility"),
-            request.query_params.get("limit", "100"),
-            {key: value for key, value in request.query_params.items() if key not in known},
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/catalog/resources/{resource_type}/{id}",
-        response_model=ResourceCatalogEntry,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            404: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra=CONTROL[("GET", "/v1/catalog/resources/{type}/{id}")].openapi_extra,
-    )
-    async def get_catalog_resource(
-        resource_type: Annotated[
-            str,
-            WithJsonSchema(
-                {"enum": ["llm_model", "mcp_server", "mcp_tool", "skill", "bok_collection"]}
-            ),
-        ],
-        id: Annotated[
-            str,
-            WithJsonSchema(
-                {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 200,
-                    "pattern": r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$",
-                }
-            ),
-        ],
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.get_catalog_resource(
-            resource_type, id, authorization_from(credentials, request)
         )
         response.status_code = result.status_code
         return result

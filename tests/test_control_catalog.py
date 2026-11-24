@@ -15,6 +15,7 @@ from control_testkit import _context, _deny, _service
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from sre_agent.control.catalog import CatalogRoutes, catalog_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.service import ControlService
 from sre_agent.control.service import control_router as build_control_router
@@ -272,19 +273,22 @@ def test_catalog_denial_precedes_lookup(monkeypatch) -> None:
     assert asyncio.run(run_read()).status_code == 403
 
 
-def _stub_catalog_service():
+def _stub_catalog_app() -> FastAPI:
     service = ControlService.__new__(ControlService)
     service.create_catalog_resource = AsyncMock(return_value=JSONResponse(CATALOG_BODY, 201))
-    service.list_catalog_resources = AsyncMock(
+    routes = CatalogRoutes.__new__(CatalogRoutes)
+    routes.list_catalog_resources = AsyncMock(
         return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
     )
-    service.get_catalog_resource = AsyncMock(return_value=JSONResponse(CATALOG_BODY, 200))
-    return service
+    routes.get_catalog_resource = AsyncMock(return_value=JSONResponse(CATALOG_BODY, 200))
+    app = FastAPI()
+    app.include_router(catalog_router(routes))
+    app.include_router(build_control_router(service))
+    return app
 
 
 def test_router_exposes_catalog_routes() -> None:
-    app = FastAPI()
-    app.include_router(build_control_router(_stub_catalog_service()))
+    app = _stub_catalog_app()
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
     assert ("/v1/catalog/resources", ("GET",)) in routes or any(
         p == "/v1/catalog/resources" and "GET" in m for p, m in routes
