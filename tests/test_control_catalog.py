@@ -11,7 +11,7 @@ from typing import get_args
 from unittest.mock import AsyncMock
 
 import pytest
-from control_testkit import _context, _deny, _service
+from control_testkit import _context, _deny, _gate, _routes
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
@@ -82,7 +82,7 @@ def test_catalog_operations_match_scopes() -> None:
     ],
 )
 def test_catalog_create_rejects_non_closed_bodies(body: dict) -> None:
-    service = _service()
+    service = _routes(CatalogRoutes)
 
     async def run():
         return await service.create_catalog_resource(body, "Bearer sre_valid_key", "k" * 16)
@@ -93,7 +93,7 @@ def test_catalog_create_rejects_non_closed_bodies(body: dict) -> None:
 
 
 def test_catalog_create_requires_idempotency_key() -> None:
-    service = _service()
+    service = _routes(CatalogRoutes)
 
     async def run():
         return await service.create_catalog_resource(CATALOG_BODY, "Bearer sre_valid_key", None)
@@ -122,7 +122,7 @@ def test_catalog_create_requires_idempotency_key() -> None:
 def test_catalog_list_rejects_bad_limits_filters_and_unknown_params(
     limit: str, extra: dict
 ) -> None:
-    service = _service()
+    service = _routes(CatalogRoutes)
 
     async def run():
         return await service.list_catalog_resources(
@@ -144,9 +144,9 @@ def test_catalog_list_rejects_bad_limits_filters_and_unknown_params(
     assert response.status_code == 422
 
 
-def test_catalog_read_rejects_malformed_identifiers() -> None:
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
+def test_catalog_read_rejects_malformed_identifiers(monkeypatch) -> None:
+    service = _routes(CatalogRoutes)
+    _gate(monkeypatch, _context())
 
     async def run():
         return await service.get_catalog_resource("unknown_type", "server-tools", "Bearer k")
@@ -158,22 +158,15 @@ def test_catalog_read_rejects_malformed_identifiers() -> None:
 def test_catalog_reads_admit_incident_workflow(monkeypatch) -> None:
     from contextlib import asynccontextmanager
 
-    import sre_agent.control.service as service_module
+    import sre_agent.control.catalog as service_module
     from sre_agent.governance.dto import CatalogDiscoverability, ResourceCatalogEntry
 
-    service = _service()
     context = _context()
     allowed = AuthorizationEvaluation(
         PolicyDecision(decision="allow", reason_code="grant_matched", policy_id="test-policy"),
         None,
     )
-
-    async def governed_access(*_args: object, **_kwargs: object):
-        return context, allowed
-
-    monkeypatch.setattr(service_module, "authorize_governed_access", governed_access)
-    service._authenticate = AsyncMock(return_value=context)
-    service._authorize = AsyncMock(return_value=allowed)
+    _gate(monkeypatch, context, allowed)
 
     entry = ResourceCatalogEntry(
         resource_type="incident_workflow",
@@ -207,7 +200,7 @@ def test_catalog_reads_admit_incident_workflow(monkeypatch) -> None:
     async def sessions():
         yield object()
 
-    service.sessions = sessions
+    service = _routes(CatalogRoutes, sessions)
 
     async def run():
         listed = await service.list_catalog_resources(
@@ -225,7 +218,7 @@ def test_catalog_reads_admit_incident_workflow(monkeypatch) -> None:
 
 
 def test_catalog_denial_precedes_lookup(monkeypatch) -> None:
-    import sre_agent.control.service as service_module
+    import sre_agent.control.catalog as service_module
 
     for repository in ("CatalogRepository", "ModelAliasRepository"):
         if not hasattr(service_module, repository):
@@ -243,21 +236,14 @@ def test_catalog_denial_precedes_lookup(monkeypatch) -> None:
                 },
             ),
         )
-    service = _service()
-    service._authenticate = AsyncMock(return_value=_context())
-    service._authorize = AsyncMock(return_value=_deny())
-
-    async def denied_access(*_args: object, **_kwargs: object):
-        return _context(), _deny()
-
-    monkeypatch.setattr(service_module, "authorize_governed_access", denied_access)
+    _gate(monkeypatch, _context(), _deny())
     from contextlib import asynccontextmanager
 
     @asynccontextmanager
     async def sessions():
         yield object()
 
-    service.sessions = sessions
+    service = _routes(CatalogRoutes, sessions)
 
     async def run_list():
         return await service.list_catalog_resources(

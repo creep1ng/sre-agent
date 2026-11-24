@@ -4,17 +4,17 @@ import asyncio
 import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 from control_testkit import _Audit, _TargetAccessed
 
 from sre_agent.control.aliases import AliasRoutes
+from sre_agent.control.catalog import CatalogRoutes
 from sre_agent.control.credentials import CredentialRoutes
 from sre_agent.control.grants import GrantRoutes
 from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.control.principals import PrincipalRoutes
-from sre_agent.control.service import ControlService
 from sre_agent.gate.pipeline import Gate, Scope
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.governance.authorization import AuthorizationDenialCause, AuthorizationEvaluation
@@ -46,98 +46,8 @@ def _context() -> PrincipalContext:
     )
 
 
-@pytest.mark.parametrize(
-    ("operation", "invoke", "expected_status"),
-    [
-        (
-            ("POST", "/v1/catalog/resources"),
-            lambda service: service.create_catalog_resource(
-                {
-                    "resource_type": "mcp_server",
-                    "resource_id": "server-tools",
-                    "owner_id": "mcp-platform",
-                    "source": "mcp",
-                    "source_ref": "mcp-platform/server-tools",
-                    "status": "registered",
-                    "discoverability": {
-                        "display_name": "Tool server",
-                        "visibility": "private",
-                        "description": "Registered MCP tool server.",
-                        "tags": ["mcp"],
-                    },
-                },
-                "Bearer safe-key",
-                "create-target-catalog",
-            ),
-            403,
-        ),
-        (
-            ("GET", "/v1/catalog/resources"),
-            lambda service: service.list_catalog_resources(
-                "Bearer safe-key", None, None, None, None, "100", {}
-            ),
-            403,
-        ),
-        (
-            ("GET", "/v1/catalog/resources/{type}/{id}"),
-            lambda service: service.get_catalog_resource(
-                "mcp_server", "server-tools", "Bearer safe-key"
-            ),
-            403,
-        ),
-    ],
-)
-def test_engine_denial_precedes_target_access_for_every_control_operation(
-    monkeypatch: pytest.MonkeyPatch,
-    operation: tuple[str, str],
-    invoke: object,
-    expected_status: int,
-) -> None:
-    """A denied control action cannot probe any target principal or credential."""
-    import sre_agent.control.service as service_module
-
-    for repository in REPOSITORIES:
-        if hasattr(service_module, repository):
-            monkeypatch.setattr(service_module, repository, _TargetAccessed)
-
-    service = ControlService.__new__(ControlService)
-    service.audit = _Audit()
-    service.projector = AuditProjector(b"x" * 32)
-    service._authenticate = AsyncMock(return_value=_context())
-    denied = AuthorizationEvaluation(
-        decision=PolicyDecision(decision="deny", reason_code="no_matching_grant", policy_id=None),
-        denial_cause=AuthorizationDenialCause.GRANT_NOT_APPLICABLE,
-    )
-    service._authorize = AsyncMock(return_value=denied)
-
-    @asynccontextmanager
-    async def sessions():
-        yield object()
-
-    service.sessions = sessions
-    shared = AsyncMock(return_value=(_context(), denied))
-    monkeypatch.setattr(service_module, "authorize_governed_access", shared)
-    response = asyncio.run(invoke(service))
-
-    assert response.status_code == expected_status
-    action, resource_type, resource_id = CONTROL_SCOPES[operation]
-    if operation in {
-        ("POST", "/v1/catalog/resources"),
-        ("GET", "/v1/catalog/resources"),
-    }:
-        shared.assert_awaited_once_with(
-            service.sessions, "Bearer safe-key", action, resource_type, resource_id
-        )
-    else:
-        service._authorize.assert_awaited_once_with(
-            ANY,
-            _context().principal,
-            (action, resource_type, resource_id),
-        )
-
-
-# Operations served on the gate: the routes of their resource module, authenticated and
-# authorized by the gate (`active_principal`, `Gate.authorize`).
+# Every control operation is served on the gate by the routes of its resource module,
+# authenticated and authorized by the gate (`active_principal`, `Gate.authorize`).
 @pytest.mark.parametrize(
     ("routes_of", "operation", "invoke", "expected_status"),
     [
@@ -288,9 +198,48 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
             ),
             403,
         ),
+        (
+            CatalogRoutes,
+            ("POST", "/v1/catalog/resources"),
+            lambda routes: routes.create_catalog_resource(
+                {
+                    "resource_type": "mcp_server",
+                    "resource_id": "server-tools",
+                    "owner_id": "mcp-platform",
+                    "source": "mcp",
+                    "source_ref": "mcp-platform/server-tools",
+                    "status": "registered",
+                    "discoverability": {
+                        "display_name": "Tool server",
+                        "visibility": "private",
+                        "description": "Registered MCP tool server.",
+                        "tags": ["mcp"],
+                    },
+                },
+                "Bearer safe-key",
+                "create-target-catalog",
+            ),
+            403,
+        ),
+        (
+            CatalogRoutes,
+            ("GET", "/v1/catalog/resources"),
+            lambda routes: routes.list_catalog_resources(
+                "Bearer safe-key", None, None, None, None, "100", {}
+            ),
+            403,
+        ),
+        (
+            CatalogRoutes,
+            ("GET", "/v1/catalog/resources/{type}/{id}"),
+            lambda routes: routes.get_catalog_resource(
+                "mcp_server", "server-tools", "Bearer safe-key"
+            ),
+            403,
+        ),
     ],
 )
-def test_engine_denial_precedes_target_access_for_every_gated_control_operation(
+def test_engine_denial_precedes_target_access_for_every_control_operation(
     monkeypatch: pytest.MonkeyPatch,
     routes_of: type,
     operation: tuple[str, str],
