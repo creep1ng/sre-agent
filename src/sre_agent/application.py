@@ -33,7 +33,7 @@ from sre_agent.gateway.mcp import (
 )
 from sre_agent.control.service import ControlService, control_router
 from sre_agent.control.consumption_limits import (
-    ConsumptionLimitPolicyService,
+    ConsumptionLimitRoutes,
     consumption_limits_router,
 )
 from sre_agent.gateway.responses import AuditStore, PostgresAuditStore, ResponsesService, responses_router  # noqa: E501  # fmt: skip
@@ -224,9 +224,7 @@ def create_application(
             )
         )
         application.include_router(
-            consumption_limits_router(
-                ConsumptionLimitPolicyService(database.sessions, store, projector)
-            )
+            consumption_limits_router(ConsumptionLimitRoutes(database.sessions, store, projector))
         )
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))

@@ -7,6 +7,8 @@ the audit names and the `x-governed-scope` OpenAPI extras derive from it.
 from dataclasses import dataclass
 from typing import Any
 
+from sre_agent.gate.pipeline import Scope, ScopeDeclaration, declare
+
 RESOURCE_TYPE = "administrative_control"
 
 
@@ -26,6 +28,20 @@ class ControlOperation:
     @property
     def key(self) -> tuple[str, str]:
         return self.method, self.path
+
+    @property
+    def scope(self) -> Scope:
+        return Scope(self.action, RESOURCE_TYPE, self.resource_id)
+
+    def declare(self) -> ScopeDeclaration:
+        """Register the operation in the gate; the module that serves it on the gate calls this."""
+        return declare(
+            self.method,
+            self.route,
+            action=self.action,
+            resource_type=RESOURCE_TYPE,
+            resource_id=self.resource_id,
+        )
 
     @property
     def openapi_extra(self) -> dict[str, Any]:

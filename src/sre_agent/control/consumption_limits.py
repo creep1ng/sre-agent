@@ -1,6 +1,7 @@
 """Protected read and versioned writes for the single-workspace consumption policy."""
 
 import re
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from functools import partial
@@ -13,9 +14,14 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
+from sre_agent.control.governed import REFUSALS, ControlAudit, ControlGate
 from sre_agent.control.operations import CONTROL, CONTROL_SCOPES
 from sre_agent.control.service import ControlService, _key_digest, _payload_sha256
-from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
+from sre_agent.gate.errors import AuthenticationFailed, GovernedError
+from sre_agent.gate.pipeline import Admission, Released
+from sre_agent.gateway.audit import AuditProjector
+from sre_agent.gateway.authentication import authorize_governed_access
+from sre_agent.gateway.responses import TransactionalAuditStore
 from sre_agent.persistence.models import ConsumptionLimitPolicyRow
 from sre_agent.persistence.repositories import (
     IdempotencyConflictError,
@@ -67,38 +73,55 @@ def _policy_response(policy: ConsumptionLimitPolicyRow) -> dict[str, Any]:
     }
 
 
-class ConsumptionLimitPolicyService(ControlService):
-    async def get_policy(self, authorization: str | None) -> Response:
-        action, resource_type, resource_id = CONTROL_SCOPES[("GET", "/v1/consumption-limits")]
-        finish = partial(
-            self._finish, uuid4(), monotonic(), operation="consumption_limits.get", action=action
-        )
-        try:
-            context, evaluation = await authorize_governed_access(
-                self.sessions, authorization, action, resource_type, resource_id
-            )
-        except AuthenticationFailed:
-            response = await finish(401, "authentication", error_code="authentication_failed")
-            if response.status_code == 401:
-                response.headers["WWW-Authenticate"] = "Bearer"
-            return response
-        finish = partial(
-            finish,
-            context=context,
-            resource_ref=(resource_type, resource_id),
-            decision=evaluation.decision,
-            authorization_denial_cause=evaluation.denial_cause,
-        )
-        if evaluation.decision.decision == "deny":
-            return await finish(403, "authorization", error_code="resource_unavailable")
+POLICY_UNAVAILABLE = GovernedError(
+    503,
+    "policy_unavailable",
+    "The consumption policy is unavailable.",
+    retryable=True,
+    stage="audit",
+)
+# The policy routes challenge an unauthenticated caller, unlike the other control routes.
+CHALLENGED = replace(REFUSALS, unauthenticated=AuthenticationFailed())
+PATH = "/v1/consumption-limits"
 
+
+class ConsumptionLimits:
+    """The workspace's consumption policy: one row, replaced by compare-and-set on its version."""
+
+    def __init__(self, sessions: Any) -> None:
+        self.sessions = sessions
+
+    async def read(self) -> dict[str, Any]:
         async with self.sessions() as session:
             policy = await session.get(ConsumptionLimitPolicyRow, 1)
         if policy is None:
-            return await finish(503, "audit", error_code="policy_unavailable")
+            raise POLICY_UNAVAILABLE
+        return _policy_response(policy)
 
-        return await finish(200, "authorization", payload=_policy_response(policy))
 
+class ConsumptionLimitRoutes:
+    """The policy routes on the gate."""
+
+    def __init__(
+        self, sessions: Any, audit: TransactionalAuditStore, projector: AuditProjector
+    ) -> None:
+        self.limits = ConsumptionLimits(sessions)
+        control = ControlAudit(audit, projector)
+        self.reading: ControlGate[None] = ControlGate(
+            sessions, control, CONTROL[("GET", PATH)], refusals=CHALLENGED
+        )
+        self.replace_policy = ConsumptionLimitPolicyService(
+            sessions, audit, projector
+        ).replace_policy
+
+    async def get_policy(self, authorization: str | None) -> Response:
+        async def read(_admission: Admission, _request: None) -> Released:
+            return Released(await self.limits.read())
+
+        return await self.reading.run(authorization, read)
+
+
+class ConsumptionLimitPolicyService(ControlService):
     async def replace_policy(
         self,
         raw: Any,
@@ -205,7 +228,7 @@ class ConsumptionLimitPolicyService(ControlService):
             return await finish(503, "audit", error_code="policy_unavailable")
 
 
-def consumption_limits_router(service: ConsumptionLimitPolicyService) -> APIRouter:
+def consumption_limits_router(service: ConsumptionLimitRoutes) -> APIRouter:
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False, description="Administrative bearer credential")
     bearer_credentials: Any = Security(bearer)
