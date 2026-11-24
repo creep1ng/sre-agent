@@ -148,11 +148,13 @@ async def provision_executor_changes(service, bearer, key):
     """
     from datetime import UTC, datetime
 
+    from sre_agent.control.principals import PrincipalRoutes
     from sre_agent.persistence.api_keys import api_key_prefix, hash_api_key, verify_api_key
     from sre_agent.persistence.models import CredentialRow
 
+    principals = PrincipalRoutes(service.sessions, service.audit, service.projector)
     body = {"principal_id": "deploy-executor", "kind": "agent", "display_name": "Deploy executor"}
-    response = await service.create_principal(body, bearer, "setup-v1-principal-deploy-executor")
+    response = await principals.create_principal(body, bearer, "setup-v1-principal-deploy-executor")
     if response.status_code not in (200, 201, 409):
         raise RuntimeError("deploy-executor principal conflict")
     async with service.sessions() as session, session.begin():
