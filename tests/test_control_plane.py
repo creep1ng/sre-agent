@@ -16,6 +16,7 @@ from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
 from sre_agent.control import operations as scopes
+from sre_agent.control.credentials import CredentialRoutes, credentials_router
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
 from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.principals import public_principal as _public_principal
@@ -372,10 +373,13 @@ def _stub_principals(status=201, payload=None) -> PrincipalRoutes:
     return routes
 
 
-def _control_app(service, principals) -> FastAPI:
+def _control_app(service, principals, credentials=None) -> FastAPI:
     """Every control router, as the application mounts them."""
     app = FastAPI()
     app.include_router(principals_router(principals))
+    app.include_router(
+        credentials_router(credentials or CredentialRoutes.__new__(CredentialRoutes))
+    )
     app.include_router(control_router(service))
     return app
 
