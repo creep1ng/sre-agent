@@ -9,6 +9,7 @@ from unittest.mock import ANY, AsyncMock
 import pytest
 from control_testkit import _Audit, _TargetAccessed
 
+from sre_agent.control.credentials import CredentialRoutes
 from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.control.principals import PrincipalRoutes
 from sre_agent.control.service import ControlService
@@ -46,36 +47,6 @@ def _context() -> PrincipalContext:
 @pytest.mark.parametrize(
     ("operation", "invoke", "expected_status"),
     [
-        (
-            ("POST", "/v1/principals/{id}/credentials"),
-            lambda service: service.issue_credential(
-                "target-human",
-                {},
-                "Bearer safe-key",
-                "issue-target-human",
-            ),
-            403,
-        ),
-        (
-            ("GET", "/v1/principals/{id}/credentials"),
-            lambda service: service.list_credentials("target-human", "Bearer safe-key", "100", {}),
-            404,
-        ),
-        (
-            ("DELETE", "/v1/credentials/{id}"),
-            lambda service: service.revoke_credential("credential-target-human", "Bearer safe-key"),
-            403,
-        ),
-        (
-            ("POST", "/v1/credentials/{id}/rotation"),
-            lambda service: service.rotate_credential(
-                "credential-target-human",
-                {},
-                "Bearer safe-key",
-                "rotate-target-human",
-            ),
-            403,
-        ),
         (
             ("POST", "/v1/grants"),
             lambda service: service.create_grant(
@@ -273,6 +244,40 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
                 "target-human",
                 {"status": "inactive", "expected_updated_at": "2026-09-07T00:00:00Z"},
                 "Bearer safe-key",
+            ),
+            403,
+        ),
+        (
+            CredentialRoutes,
+            ("POST", "/v1/principals/{id}/credentials"),
+            lambda routes: routes.issue_credential(
+                "target-human",
+                {},
+                "Bearer safe-key",
+                "issue-target-human",
+            ),
+            403,
+        ),
+        (
+            CredentialRoutes,
+            ("GET", "/v1/principals/{id}/credentials"),
+            lambda routes: routes.list_credentials("target-human", "Bearer safe-key", "100", {}),
+            404,
+        ),
+        (
+            CredentialRoutes,
+            ("DELETE", "/v1/credentials/{id}"),
+            lambda routes: routes.revoke_credential("credential-target-human", "Bearer safe-key"),
+            403,
+        ),
+        (
+            CredentialRoutes,
+            ("POST", "/v1/credentials/{id}/rotation"),
+            lambda routes: routes.rotate_credential(
+                "credential-target-human",
+                {},
+                "Bearer safe-key",
+                "rotate-target-human",
             ),
             403,
         ),
