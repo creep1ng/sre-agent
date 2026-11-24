@@ -13,8 +13,9 @@ verification:
   health_diagnostic: "gentle-ai doctor"
 
 shared:
-  artifact_store: openspec
-  sdd_orchestrator_mode: multi
+  # SDD was dropped on 2026-11-24 (docs/team-workflow.md#agent-verification): no OpenSpec
+  # artifact store and no sdd-* skills. openspec/ remains as a historical record.
+  artifact_store: none
   review_mode: opt-in
   required_pr_evidence:
     - screenshot
