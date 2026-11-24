@@ -15,8 +15,8 @@ from fastapi.responses import JSONResponse, Response
 from jsonschema import Draft202012Validator
 from pydantic import ValidationError
 
-from sre_agent.control import scopes
-from sre_agent.control.scopes import CONTROL_SCOPES
+from sre_agent.control import operations as scopes
+from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.control.service import (
     CONTROL_OPERATIONS,
     ControlService,
@@ -53,7 +53,7 @@ def test_administrative_control_is_a_governed_resource_type() -> None:
 
 
 def test_control_grant_actions_cover_read_and_write() -> None:
-    from sre_agent.control.scopes import CONTROL_SCOPES
+    from sre_agent.control.operations import CONTROL_SCOPES
 
     assert CONTROL_SCOPES[("GET", "/v1/principals")] == (
         "admin.read",

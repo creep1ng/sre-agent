@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.bok.owner import BoKVersionCollision
 from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, BoKVersionRecord, BoKVersionSummary, publish_bok_version, read_bok_version  # fmt: skip
-from sre_agent.control.scopes import CONTROL_SCOPES
+from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.gate.authentication import bearer_key
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access

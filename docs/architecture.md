@@ -166,10 +166,10 @@ work unit:
 - **New table or schema.** No test change: the `migrated_database` fixture in
   `tests/conftest.py` drops every schema, `public` included, before it migrates
   (`reset_database()` in `tests/database_support.py`).
-- **New governed control route.** Register it in both `CONTROL_SCOPES`
-  (`src/sre_agent/control/scopes.py`) and `CONTROL_OPERATIONS`
-  (`src/sre_agent/control/service.py`), and update the tests that compare the two registries and
-  enumerate every `/v1/` route.
+- **New governed control route.** Add one line to `OPERATIONS` in
+  `src/sre_agent/control/operations.py` (audit name, method, scope path, served path, action and
+  resource id); `CONTROL_SCOPES`, `CONTROL_OPERATIONS` and the route's `x-governed-scope` derive
+  from it. Update the tests that enumerate every control route.
 - **New governed operation.** Register it with `declare(...)` from
   `src/sre_agent/gate/pipeline.py` and answer through `Gate.run` with that declaration, the
   route's validation and its use case. Use the declaration's `openapi_extra` only when the

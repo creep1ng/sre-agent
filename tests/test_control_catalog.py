@@ -15,7 +15,7 @@ from control_testkit import _context, _deny, _service
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
-from sre_agent.control.scopes import CONTROL_SCOPES
+from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.control.service import CONTROL_OPERATIONS, ControlService
 from sre_agent.control.service import control_router as build_control_router
 from sre_agent.governance.authorization import AuthorizationEvaluation

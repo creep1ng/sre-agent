@@ -13,7 +13,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 
-from sre_agent.control.scopes import CONTROL_SCOPES
+from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.control.service import ControlService, _key_digest, _payload_sha256
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
 from sre_agent.persistence.models import ConsumptionLimitPolicyRow
