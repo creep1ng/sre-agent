@@ -10,6 +10,7 @@ import pytest
 from control_testkit import _Audit, _TargetAccessed
 
 from sre_agent.control.credentials import CredentialRoutes
+from sre_agent.control.grants import GrantRoutes
 from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.control.principals import PrincipalRoutes
 from sre_agent.control.service import ControlService
@@ -47,31 +48,6 @@ def _context() -> PrincipalContext:
 @pytest.mark.parametrize(
     ("operation", "invoke", "expected_status"),
     [
-        (
-            ("POST", "/v1/grants"),
-            lambda service: service.create_grant(
-                {
-                    "grant_id": "grant-target-human",
-                    "principal_id": "target-human",
-                    "action": "invoke",
-                    "resource": {"resource_type": "llm_model", "resource_id": "target-model"},
-                    "effect": "allow",
-                },
-                "Bearer safe-key",
-                "create-target-grant",
-            ),
-            403,
-        ),
-        (
-            ("GET", "/v1/grants"),
-            lambda service: service.list_grants("Bearer safe-key", "target-human", None, "100", {}),
-            403,
-        ),
-        (
-            ("DELETE", "/v1/grants/{id}"),
-            lambda service: service.revoke_grant("grant-target-human", "Bearer safe-key"),
-            403,
-        ),
         (
             ("POST", "/v1/model-aliases"),
             lambda service: service.create_alias(
@@ -192,8 +168,6 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
     assert response.status_code == expected_status
     action, resource_type, resource_id = CONTROL_SCOPES[operation]
     if operation in {
-        ("POST", "/v1/grants"),
-        ("GET", "/v1/grants"),
         ("POST", "/v1/model-aliases"),
         ("GET", "/v1/model-aliases"),
         ("POST", "/v1/catalog/resources"),
@@ -279,6 +253,34 @@ def test_engine_denial_precedes_target_access_for_every_control_operation(
                 "Bearer safe-key",
                 "rotate-target-human",
             ),
+            403,
+        ),
+        (
+            GrantRoutes,
+            ("POST", "/v1/grants"),
+            lambda routes: routes.create_grant(
+                {
+                    "grant_id": "grant-target-human",
+                    "principal_id": "target-human",
+                    "action": "invoke",
+                    "resource": {"resource_type": "llm_model", "resource_id": "target-model"},
+                    "effect": "allow",
+                },
+                "Bearer safe-key",
+                "create-target-grant",
+            ),
+            403,
+        ),
+        (
+            GrantRoutes,
+            ("GET", "/v1/grants"),
+            lambda routes: routes.list_grants("Bearer safe-key", "target-human", None, "100", {}),
+            403,
+        ),
+        (
+            GrantRoutes,
+            ("DELETE", "/v1/grants/{id}"),
+            lambda routes: routes.revoke_grant("grant-target-human", "Bearer safe-key"),
             403,
         ),
     ],

@@ -143,7 +143,10 @@ async def provision(service, bearer: str) -> ProvisionResult:
 
 
 async def revoke_run_read(service, bearer: str) -> int:
-    response = await service.revoke_grant(GRANT_BODY["grant_id"], bearer)
+    from sre_agent.control.grants import GrantRoutes
+
+    grants = GrantRoutes(service.sessions, service.audit, service.projector)
+    response = await grants.revoke_grant(GRANT_BODY["grant_id"], bearer)
     return response.status_code
 
 
