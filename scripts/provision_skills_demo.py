@@ -42,7 +42,7 @@ async def converge(service, bearer: str, body: dict) -> str:
     )
     if published.status_code != 201:
         raise RuntimeError(f"{skill_id}@{version}: publish refused ({published.status_code})")
-    status = await service.service.get_skill_status(skill_id, version, bearer)
+    status = await service.skills.get_skill_status(skill_id, version, bearer)
     if status.status_code == 200 and _payload(status).get("status") != "active":
         # An admin deactivated this version on purpose; never undo that silently.
         raise RuntimeError(f"{skill_id}@{version}: deactivated by an admin, left inactive")
@@ -51,7 +51,7 @@ async def converge(service, bearer: str, body: dict) -> str:
         stored = await service.skills.get_skill_version(skill_id, version, bearer)
         if stored.status_code != 200:
             raise RuntimeError(f"{skill_id}@{version}: version unreadable ({stored.status_code})")
-        changed = await service.service.replace_skill_status(
+        changed = await service.skills.replace_skill_status(
             skill_id,
             version,
             {"status": "active", "expected_updated_at": _payload(stored)["created_at"]},
@@ -61,7 +61,7 @@ async def converge(service, bearer: str, body: dict) -> str:
             raise RuntimeError(f"{skill_id}@{version}: activation refused ({changed.status_code})")
     elif status.status_code != 200:
         raise RuntimeError(f"{skill_id}@{version}: status unreadable ({status.status_code})")
-    confirmed = await service.service.get_skill_status(skill_id, version, bearer)
+    confirmed = await service.skills.get_skill_status(skill_id, version, bearer)
     if confirmed.status_code != 200 or _payload(confirmed).get("status") != "active":
         raise RuntimeError(f"{skill_id}@{version}: not active after activation")
     return f"{skill_id}@{version}"
