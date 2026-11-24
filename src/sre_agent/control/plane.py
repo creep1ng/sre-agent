@@ -6,12 +6,13 @@ from typing import Any
 from fastapi import APIRouter
 
 from sre_agent.control.aliases import AliasRoutes, aliases_router
+from sre_agent.control.bok import BoKRoutes, bok_router
 from sre_agent.control.catalog import CatalogRoutes, catalog_router
 from sre_agent.control.consumption_limits import ConsumptionLimitRoutes, consumption_limits_router
 from sre_agent.control.credentials import CredentialRoutes, credentials_router
 from sre_agent.control.grants import GrantRoutes, grants_router
 from sre_agent.control.principals import PrincipalRoutes, principals_router
-from sre_agent.control.service import ControlService, control_router
+from sre_agent.control.service import ControlService
 from sre_agent.control.skills import SkillRoutes, skills_router
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.responses import TransactionalAuditStore
@@ -29,6 +30,7 @@ class ControlPlane:
         self.aliases = AliasRoutes(sessions, audit, projector)
         self.catalog = CatalogRoutes(sessions, audit, projector)
         self.skills = SkillRoutes(sessions, audit, projector)
+        self.bok = BoKRoutes(sessions, audit, projector)
         # The routes that have not moved to their resource module yet (#1022).
         self.service = ControlService(sessions, audit, projector)
 
@@ -41,5 +43,5 @@ class ControlPlane:
             aliases_router(self.aliases),
             catalog_router(self.catalog),
             skills_router(self.skills),
-            control_router(self.service),
+            bok_router(self.bok),
         ]

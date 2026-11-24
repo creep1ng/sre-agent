@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from sre_agent.control import operations as scopes
 from sre_agent.control.aliases import AliasRoutes, aliases_router
+from sre_agent.control.bok import BoKRoutes, bok_router
 from sre_agent.control.catalog import CatalogRoutes, catalog_router
 from sre_agent.control.credentials import CredentialRoutes, credentials_router
 from sre_agent.control.grants import GrantRoutes, grants_router
@@ -28,7 +29,6 @@ from sre_agent.control.service import (
     SkillPublishRequest,
     _key_digest,
     _payload_sha256,
-    control_router,
 )
 from sre_agent.control.skills import SkillRoutes, skills_router
 from sre_agent.gate.pipeline import Gate
@@ -341,11 +341,6 @@ def test_finish_maps_terminal_attempts_to_valid_control_audit() -> None:
     assert appended[1].authorization_denial_cause == "grant_not_applicable"
 
 
-def _stub_service(monkey_result=None, status=201, payload=None):
-    service = ControlService.__new__(ControlService)
-    return service
-
-
 def _stub_principals(status=201, payload=None) -> PrincipalRoutes:
     routes = PrincipalRoutes.__new__(PrincipalRoutes)
     routes.create_principal = AsyncMock(
@@ -392,7 +387,7 @@ def _stub_catalog() -> CatalogRoutes:
     return routes
 
 
-def _control_app(service, principals, credentials=None, grants=None) -> FastAPI:
+def _control_app(principals, credentials=None, grants=None) -> FastAPI:
     """Every control router, as the application mounts them."""
     app = FastAPI()
     app.include_router(principals_router(principals))
@@ -403,12 +398,12 @@ def _control_app(service, principals, credentials=None, grants=None) -> FastAPI:
     app.include_router(aliases_router(_stub_aliases()))
     app.include_router(catalog_router(_stub_catalog()))
     app.include_router(skills_router(SkillRoutes.__new__(SkillRoutes)))
-    app.include_router(control_router(service))
+    app.include_router(bok_router(BoKRoutes.__new__(BoKRoutes)))
     return app
 
 
 def test_router_exposes_all_control_routes() -> None:
-    app = _control_app(_stub_service(), _stub_principals())
+    app = _control_app(_stub_principals())
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
 
     assert ("/v1/principals", ("GET",)) in routes
@@ -465,8 +460,7 @@ def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
         async def append(self, event):
             appended.append(event)
 
-    service = ControlService(None, Audit(), AuditProjector(b"x" * 32))
-    app = _control_app(service, PrincipalRoutes(None, Audit(), AuditProjector(b"x" * 32)))
+    app = _control_app(PrincipalRoutes(None, Audit(), AuditProjector(b"x" * 32)))
 
     async def exercise() -> tuple[httpx.Response, ...]:
         async with httpx.AsyncClient(
@@ -505,8 +499,7 @@ def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
         async def append(self, event):
             raise RuntimeError("sink rejected")
 
-    service = ControlService(None, RejectingAudit(), AuditProjector(b"x" * 32))
-    app = _control_app(service, PrincipalRoutes(None, RejectingAudit(), AuditProjector(b"x" * 32)))
+    app = _control_app(PrincipalRoutes(None, RejectingAudit(), AuditProjector(b"x" * 32)))
 
     async def exercise() -> httpx.Response:
         async with httpx.AsyncClient(
@@ -523,7 +516,7 @@ def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
 
 
 def test_control_openapi_publishes_request_success_and_error_schemas() -> None:
-    app = _control_app(_stub_service(), _stub_principals())
+    app = _control_app(_stub_principals())
     paths = app.openapi()["paths"]
 
     create = paths["/v1/principals"]["post"]
@@ -579,7 +572,7 @@ def test_control_openapi_error_responses_match_canonical_fixtures() -> None:
     }
     payloads = {name: json.loads(path.read_text())["data"] for name, path in fixtures.items()}
 
-    app = _control_app(_stub_service(), _stub_principals())
+    app = _control_app(_stub_principals())
     document = app.openapi()
     validator = Draft202012Validator(document)
 

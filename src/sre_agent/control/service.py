@@ -7,25 +7,20 @@ from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import (
-    APIRouter,
-    Request,
     Response,
-    Security,
 )
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, ValidationError, model_validator
-from pydantic.json_schema import WithJsonSchema
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sre_agent.bok.owner import BoKVersionCollision
-from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, BoKVersionRecord, BoKVersionSummary, publish_bok_version, read_bok_version  # fmt: skip
+from sre_agent.bok.publication import BOK_SLUG_PATTERN, SEMVER_PATTERN, BoKAuthorRefused, BoKPublishRequest, publish_bok_version, read_bok_version  # fmt: skip
 from sre_agent.control.governed import IDEMPOTENCY_KEY_PATTERN
 from sre_agent.control.governed import canonical_payload as _canonical_payload
 from sre_agent.control.governed import key_digest as _key_digest
 from sre_agent.control.governed import payload_sha256 as _payload_sha256
-from sre_agent.control.operations import CONTROL, CONTROL_SCOPES
+from sre_agent.control.operations import CONTROL_SCOPES
 from sre_agent.gate.authentication import bearer_key
 from sre_agent.gateway.audit import AuditProjector
 from sre_agent.gateway.authentication import AuthenticationFailed, authorize_governed_access
@@ -795,104 +790,3 @@ class ControlService:  # noqa: E305
                 resource_ref=("administrative_control", "catalog"),
                 decision=evaluation.decision,
             )
-
-
-def control_router(service: ControlService) -> APIRouter:
-    """Typed administrative control-plane router with Issue #184 catalog reads/writes."""
-    router = APIRouter()
-    bearer_scheme = HTTPBearer(auto_error=False, description="Administrative bearer credential")
-    bearer_credentials: Any = Security(bearer_scheme)
-
-    async def raw_json(request: Request) -> Any:
-        try:
-            return await request.json()
-        except Exception:
-            return None
-
-    def authorization_from(
-        credentials: HTTPAuthorizationCredentials | None, request: Request
-    ) -> str | None:
-        if credentials is not None:
-            return f"{credentials.scheme} {credentials.credentials}"
-        return request.headers.get("authorization")
-
-    @router.post(
-        "/v1/bok/collections/versions",
-        status_code=201,
-        response_model=BoKVersionSummary,
-        responses={
-            200: {"model": BoKVersionSummary},
-            400: {"model": ErrorEnvelope},
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            409: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "Idempotency-Key",
-                    "in": "header",
-                    "required": True,
-                    "schema": {
-                        "type": "string",
-                        "minLength": 16,
-                        "maxLength": 128,
-                        "pattern": IDEMPOTENCY_KEY_PATTERN,
-                    },
-                }
-            ],
-            "requestBody": {
-                "required": True,
-                "content": {"application/json": {"schema": BoKPublishRequest.model_json_schema()}},
-            },
-            **CONTROL[("POST", "/v1/bok/collections/versions")].openapi_extra,
-        },
-    )
-    async def publish_bok_version(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.publish_bok_version(
-            await raw_json(request),
-            authorization_from(credentials, request),
-            request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/bok/collections/{collection_id}/versions/{version}",
-        response_model=BoKVersionRecord,
-        responses={
-            401: {"model": ErrorEnvelope},
-            403: {"model": ErrorEnvelope},
-            404: {"model": ErrorEnvelope},
-            422: {"model": ErrorEnvelope},
-            503: {"model": ErrorEnvelope},
-        },
-        openapi_extra=CONTROL[
-            ("GET", "/v1/bok/collections/{collection_id}/versions/{version}")
-        ].openapi_extra,
-    )
-    async def get_bok_version(
-        collection_id: Annotated[
-            str, WithJsonSchema({"type": "string", "pattern": BOK_SLUG_PATTERN})
-        ],
-        version: Annotated[
-            str,
-            WithJsonSchema({"type": "string", "maxLength": 32, "pattern": SEMVER_PATTERN}),
-        ],
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        result = await service.get_bok_version(
-            collection_id, version, authorization_from(credentials, request)
-        )
-        response.status_code = result.status_code
-        return result
-
-    return router
