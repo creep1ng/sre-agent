@@ -31,6 +31,7 @@ from sre_agent.gateway.mcp import (
     MCPUpstreamClient,
     mcp_router,
 )
+from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.service import ControlService, control_router
 from sre_agent.control.consumption_limits import (
     ConsumptionLimitRoutes,
@@ -225,6 +226,9 @@ def create_application(
         )
         application.include_router(
             consumption_limits_router(ConsumptionLimitRoutes(database.sessions, store, projector))
+        )
+        application.include_router(
+            principals_router(PrincipalRoutes(database.sessions, store, projector))
         )
         application.include_router(
             control_router(ControlService(database.sessions, store, projector))

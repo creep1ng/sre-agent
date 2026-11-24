@@ -699,9 +699,12 @@ def test_conflict_inactive_auth_and_hidden_denial_audit(
         == 200
     )
     inactive_denial = client.get("/v1/principals", headers=headers(issued["key"]))
-    assert inactive_denial.status_code == 403
-    inactive_cause, *_ = audit_row(inactive_denial.json()["request_id"])
-    assert inactive_cause == "principal_inactive"
+    assert inactive_denial.status_code == 401
+    assert inactive_denial.json()["error"]["code"] == "authentication_failed"
+    inactive_cause, inactive_status, inactive_identity, *_ = audit_row(
+        inactive_denial.json()["request_id"]
+    )
+    assert (inactive_cause, inactive_status, inactive_identity) == (None, 401, None)
 
     denied_existing = client.get("/v1/principals/admin-human", headers=headers(RESTRICTED_KEY))
     denied_missing = client.get("/v1/principals/not-present-human", headers=headers(RESTRICTED_KEY))

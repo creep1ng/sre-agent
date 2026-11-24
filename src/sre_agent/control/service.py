@@ -114,12 +114,6 @@ class ErrorEnvelope(BaseModel):
     retryable: bool
 
 
-class PrincipalListResponse(BaseModel):
-    items: list[Principal]
-    limit: int
-    truncated: bool
-
-
 class StatusReplace(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
     status: Literal["active", "inactive"]
@@ -3255,69 +3249,6 @@ def control_router(service: ControlService) -> APIRouter:
             body,
             authorization or request.headers.get("authorization"),
             request.headers.get("idempotency-key"),
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/principals",
-        response_model=PrincipalListResponse,
-        responses={
-            401: {"model": ErrorEnvelope, "description": "Authentication failed"},
-            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
-            422: {"model": ErrorEnvelope, "description": "Validation error"},
-            503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
-        },
-        openapi_extra={
-            "parameters": [
-                {
-                    "name": "limit",
-                    "in": "query",
-                    "required": False,
-                    "schema": {"type": "integer", "default": 100, "minimum": 1, "maximum": 100},
-                }
-            ],
-            **CONTROL[("GET", "/v1/principals")].openapi_extra,
-        },
-    )
-    async def list_principals(
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        limit = request.query_params.get("limit", "100")
-        params = {k: v for k, v in request.query_params.items() if k != "limit"}
-        authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
-        result = await service.list_principals(
-            authorization or request.headers.get("authorization"), limit, params
-        )
-        response.status_code = result.status_code
-        return result
-
-    @router.get(
-        "/v1/principals/{principal_id}",
-        response_model=Principal,
-        responses={
-            401: {"model": ErrorEnvelope, "description": "Authentication failed"},
-            403: {"model": ErrorEnvelope, "description": "Resource unavailable"},
-            404: {"model": ErrorEnvelope, "description": "Resource not found"},
-            422: {"model": ErrorEnvelope, "description": "Validation error"},
-            503: {"model": ErrorEnvelope, "description": "Audit unavailable"},
-        },
-        openapi_extra=CONTROL[("GET", "/v1/principals/{id}")].openapi_extra,
-    )
-    async def get_principal(
-        principal_id: Annotated[
-            str,
-            WithJsonSchema({"type": "string", "pattern": IDENTIFIER_PATTERN}),
-        ],
-        request: Request,
-        response: Response,
-        credentials: HTTPAuthorizationCredentials | None = bearer_credentials,
-    ) -> Response:
-        authorization = f"{credentials.scheme} {credentials.credentials}" if credentials else None
-        result = await service.get_principal(
-            principal_id, authorization or request.headers.get("authorization")
         )
         response.status_code = result.status_code
         return result

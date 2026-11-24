@@ -42,6 +42,7 @@ UNAUTHENTICATED = GovernedError(
 UNAVAILABLE = GovernedError(
     403, "resource_unavailable", "Resource unavailable.", stage="authorization"
 )
+NOT_FOUND = GovernedError(404, "resource_not_found", "The requested resource was not found.")
 IDEMPOTENCY_CONFLICT = GovernedError(
     409, "idempotency_conflict", "The Idempotency-Key was already used with another payload."
 )
@@ -86,6 +87,19 @@ def payload_sha256(payload: Any) -> str:
 
 def key_digest(key: str) -> str:
     return hashlib.sha256(f"sre-idempotency-v1\0{key}".encode()).hexdigest()
+
+
+def page_limit(limit: Any, extra: dict[str, Any]) -> int:
+    """A list's `limit` (1 to 100, digits only); any other query parameter is invalid."""
+    try:
+        parsed = int(limit)
+        if isinstance(limit, str) and not limit.isdigit():
+            raise ValueError
+    except (TypeError, ValueError):
+        parsed = 0
+    if extra or not 1 <= parsed <= 100:
+        raise INVALID
+    return parsed
 
 
 def idempotency_key(value: str | None) -> str:

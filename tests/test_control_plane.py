@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from sre_agent.control import operations as scopes
 from sre_agent.control.operations import CONTROL_OPERATIONS, CONTROL_SCOPES
+from sre_agent.control.principals import PrincipalRoutes, principals_router
 from sre_agent.control.service import (
     ControlService,
     SkillPublishRequest,
@@ -343,12 +344,6 @@ def _stub_service(monkey_result=None, status=201, payload=None):
     service.create_principal = AsyncMock(
         return_value=JSONResponse(payload or _public_principal(_principal("new-human")), status)
     )
-    service.list_principals = AsyncMock(
-        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
-    )
-    service.get_principal = AsyncMock(
-        return_value=JSONResponse(_public_principal(_principal()), 200)
-    )
     service.revoke_grant = AsyncMock(return_value=Response(status_code=204))
     service.create_grant = AsyncMock(return_value=JSONResponse({}, 201))
     service.list_grants = AsyncMock(
@@ -369,9 +364,27 @@ def _stub_service(monkey_result=None, status=201, payload=None):
     return service
 
 
-def test_router_exposes_all_control_routes() -> None:
+def _stub_principals() -> PrincipalRoutes:
+    routes = PrincipalRoutes.__new__(PrincipalRoutes)
+    routes.list_principals = AsyncMock(
+        return_value=JSONResponse({"items": [], "limit": 100, "truncated": False}, 200)
+    )
+    routes.get_principal = AsyncMock(
+        return_value=JSONResponse(_public_principal(_principal()), 200)
+    )
+    return routes
+
+
+def _control_app(service, principals) -> FastAPI:
+    """Every control router, as the application mounts them."""
     app = FastAPI()
-    app.include_router(control_router(_stub_service()))
+    app.include_router(principals_router(principals))
+    app.include_router(control_router(service))
+    return app
+
+
+def test_router_exposes_all_control_routes() -> None:
+    app = _control_app(_stub_service(), _stub_principals())
     routes = {(r.path, tuple(sorted(r.methods))) for r in app.routes if r.path.startswith("/v1/")}
 
     assert ("/v1/principals", ("GET",)) in routes
@@ -431,8 +444,7 @@ def test_router_audits_invalid_inputs_with_contract_envelopes() -> None:
             appended.append(event)
 
     service = ControlService(None, Audit(), AuditProjector(b"x" * 32))
-    app = FastAPI()
-    app.include_router(control_router(service))
+    app = _control_app(service, PrincipalRoutes(None, Audit(), AuditProjector(b"x" * 32)))
 
     async def exercise() -> tuple[httpx.Response, ...]:
         async with httpx.AsyncClient(
@@ -474,8 +486,7 @@ def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
             raise RuntimeError("sink rejected")
 
     service = ControlService(None, RejectingAudit(), AuditProjector(b"x" * 32))
-    app = FastAPI()
-    app.include_router(control_router(service))
+    app = _control_app(service, PrincipalRoutes(None, RejectingAudit(), AuditProjector(b"x" * 32)))
 
     async def exercise() -> httpx.Response:
         async with httpx.AsyncClient(
@@ -492,8 +503,7 @@ def test_invalid_input_is_suppressed_when_audit_sink_rejects() -> None:
 
 
 def test_control_openapi_publishes_request_success_and_error_schemas() -> None:
-    app = FastAPI()
-    app.include_router(control_router(_stub_service()))
+    app = _control_app(_stub_service(), _stub_principals())
     paths = app.openapi()["paths"]
 
     create = paths["/v1/principals"]["post"]
@@ -549,8 +559,7 @@ def test_control_openapi_error_responses_match_canonical_fixtures() -> None:
     }
     payloads = {name: json.loads(path.read_text())["data"] for name, path in fixtures.items()}
 
-    app = FastAPI()
-    app.include_router(control_router(_stub_service()))
+    app = _control_app(_stub_service(), _stub_principals())
     document = app.openapi()
     validator = Draft202012Validator(document)
 
