@@ -16,7 +16,7 @@ from referencing.jsonschema import DRAFT202012
 from sqlalchemy.exc import StatementError
 
 from sre_agent.application import create_application
-from sre_agent.control.service import RotationIssuanceFailure
+from sre_agent.control.credentials import RotationIssuanceFailure
 from sre_agent.governance.authorization import AuthorizationDecisionEngine
 from sre_agent.governance.dto import SkillManifest
 from sre_agent.persistence.database import Database
